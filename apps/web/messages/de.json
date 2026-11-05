@@ -8517,6 +8517,7 @@
   "library_my_ratings_page_order": "Die Seiten folgen den ursprünglichen Fragen- und Subject-Schlüsseln. Pro Seite höchstens 20 Bewertungen, nicht nach Datum sortiert.",
   "library_my_ratings_next": "Nächste Bewertungsseite",
   "library_my_ratings_first": "Erste Bewertungsseite",
+  "library_my_ratings_previous": "Vorherige Bewertungsseite",
   "library_my_ratings_subject": "Subject",
   "library_my_ratings_original_key": "Ursprüngliches Subject und Frage",
   "library_my_ratings_question": "Frage",

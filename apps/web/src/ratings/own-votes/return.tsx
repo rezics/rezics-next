@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { useRouter, useRouterState } from '@tanstack/react-router';
 import { getLocale } from '../../paraglide/runtime.js';
 import type { OwnVotesRead } from './actions';
-import { indexOwnVotes, votePairKey, type VotePair } from './inventory';
+import { indexOwnVotes, OWN_VOTES_PREDECESSOR_LIMIT, votePairKey, type VotePair } from './inventory';
 import type { OwnVoteEntry, OwnVotesPage } from './types';
 
 export type OwnVotesReturnOwner = {
@@ -32,6 +32,33 @@ export type OwnVotesReturnReceipt = {
   focusVersion: number;
 };
 
+export type OwnVotesCoordinateMove = {
+  kind: 'first' | 'previous' | 'continue';
+  cursor: string | null;
+};
+
+type PendingCoordinateMove = OwnVotesCoordinateMove & {
+  id: string;
+  authorityKey: string;
+  from: string | null;
+  responseVersion: number;
+  previousIndex: number;
+  readState: 'staged' | 'failed';
+};
+
+type CoordinateVisit = {
+  authorityKey: string;
+  cursors: Array<string | null>;
+  currentIndex: number;
+  pending: PendingCoordinateMove | null;
+};
+
+type OwnVotesCoordinateSnapshot = {
+  hasPrevious: boolean;
+  previousCursor: string | null;
+  pending: PendingCoordinateMove | null;
+};
+
 type ReturnState = {
   receipt: OwnVotesReturnReceipt | null;
   depart: (
@@ -44,6 +71,18 @@ type ReturnState = {
   resolve: (id: string) => number | null;
   clear: (id?: string) => void;
   focusUnchanged: (version: number) => boolean;
+  pendingCoordinate: () => PendingCoordinateMove | null;
+  coordinates: (authorityKey: string, cursor: string | null) => OwnVotesCoordinateSnapshot;
+  stageCoordinateMove: (
+    authorityKey: string,
+    cursor: string | null,
+    responseVersion: number,
+    move: OwnVotesCoordinateMove,
+  ) => string | null;
+  admitCoordinate: (authorityKey: string, cursor: string | null) => void;
+  failCoordinateRead: (id: string) => void;
+  cancelCoordinateMove: (id: string) => void;
+  clearCoordinates: () => void;
 };
 
 const noReturnState: ReturnState = {
@@ -57,6 +96,13 @@ const noReturnState: ReturnState = {
   resolve: () => null,
   clear: () => undefined,
   focusUnchanged: () => false,
+  pendingCoordinate: () => null,
+  coordinates: () => ({ hasPrevious: false, previousCursor: null, pending: null }),
+  stageCoordinateMove: () => null,
+  admitCoordinate: () => undefined,
+  failCoordinateRead: () => undefined,
+  cancelCoordinateMove: () => undefined,
+  clearCoordinates: () => undefined,
 };
 const OwnVotesReturnContext = createContext<ReturnState>(noReturnState);
 const localePrefix = /^\/(?:en|zh-Hant|zh-Hans|ja|ko|de|fr|es)(?=\/|$)/;
@@ -90,6 +136,8 @@ export function OwnVotesReturnProvider({ children }: { children: ReactNode }) {
   const [receipt, setReceipt] = useState<OwnVotesReturnReceipt | null>(null);
   const receiptRef = useRef(receipt);
   const focusVersion = useRef(0);
+  const coordinateVisit = useRef<CoordinateVisit | null>(null);
+  const [coordinateVersion, setCoordinateVersion] = useState(0);
 
   const publish = useCallback((next: OwnVotesReturnReceipt | null) => {
     receiptRef.current = next;
@@ -144,12 +192,117 @@ export function OwnVotesReturnProvider({ children }: { children: ReactNode }) {
     [publish],
   );
   const focusUnchanged = useCallback((version: number) => focusVersion.current === version, []);
+  const publishCoordinates = useCallback((next: CoordinateVisit | null) => {
+    coordinateVisit.current = next;
+    setCoordinateVersion((version) => version + 1);
+  }, []);
+  const pendingCoordinate = useCallback(() => coordinateVisit.current?.pending ?? null, []);
+  const coordinates = useCallback((authorityKey: string, cursor: string | null): OwnVotesCoordinateSnapshot => {
+    const visit = coordinateVisit.current;
+    if (!visit || visit.authorityKey !== authorityKey || visit.cursors[visit.currentIndex] !== cursor)
+      return { hasPrevious: false, previousCursor: null, pending: visit?.pending ?? null };
+    return {
+      hasPrevious: visit.currentIndex > 0,
+      previousCursor: visit.currentIndex > 0 ? visit.cursors[visit.currentIndex - 1]! : null,
+      pending: visit.pending,
+    };
+  }, []);
+  const stageCoordinateMove = useCallback<ReturnState['stageCoordinateMove']>(
+    (authorityKey, cursor, responseVersion, move) => {
+      const visit = coordinateVisit.current;
+      if (!visit || visit.authorityKey !== authorityKey || visit.pending) return null;
+      const currentCursor = visit.cursors[visit.currentIndex];
+      if (currentCursor !== cursor && !(move.kind === 'first' && move.cursor === null)) return null;
+      if (move.kind === 'first' && move.cursor !== null) return null;
+      if (move.kind === 'previous' && (visit.currentIndex === 0 || visit.cursors[visit.currentIndex - 1] !== move.cursor))
+        return null;
+      const pending: PendingCoordinateMove = {
+        ...move,
+        id: crypto.randomUUID(),
+        authorityKey,
+        from: cursor,
+        responseVersion,
+        previousIndex: visit.currentIndex,
+        readState: 'staged',
+      };
+      publishCoordinates({ ...visit, pending });
+      return pending.id;
+    },
+    [publishCoordinates],
+  );
+  const admitCoordinate = useCallback(
+    (authorityKey: string, cursor: string | null) => {
+      const visit = coordinateVisit.current;
+      if (visit?.authorityKey === authorityKey && visit.pending?.authorityKey === authorityKey) {
+        const pending = visit.pending;
+        if (pending.cursor === cursor) {
+          let cursors: Array<string | null>;
+          let currentIndex: number;
+          if (pending.kind === 'first') {
+            cursors = [null];
+            currentIndex = 0;
+          } else if (pending.kind === 'previous') {
+            cursors = visit.cursors.slice(0, pending.previousIndex);
+            currentIndex = cursors.length - 1;
+          } else {
+            cursors = [...visit.cursors.slice(0, pending.previousIndex + 1), cursor];
+            if (cursors.length > OWN_VOTES_PREDECESSOR_LIMIT + 1)
+              cursors = cursors.slice(cursors.length - (OWN_VOTES_PREDECESSOR_LIMIT + 1));
+            currentIndex = cursors.length - 1;
+          }
+          publishCoordinates({ authorityKey, cursors, currentIndex, pending: null });
+          return;
+        }
+      }
+      if (visit?.authorityKey === authorityKey && visit.cursors[visit.currentIndex] === cursor) return;
+      publishCoordinates({ authorityKey, cursors: [cursor], currentIndex: 0, pending: null });
+    },
+    [publishCoordinates],
+  );
+  const cancelCoordinateMove = useCallback(
+    (id: string) => {
+      const visit = coordinateVisit.current;
+      if (visit?.pending?.id === id) publishCoordinates({ ...visit, pending: null });
+    },
+    [publishCoordinates],
+  );
+  const failCoordinateRead = useCallback(
+    (id: string) => {
+      const visit = coordinateVisit.current;
+      if (visit?.pending?.id === id && visit.pending.readState !== 'failed')
+        publishCoordinates({ ...visit, pending: { ...visit.pending, readState: 'failed' } });
+    },
+    [publishCoordinates],
+  );
+  const clearCoordinates = useCallback(() => {
+    if (coordinateVisit.current) publishCoordinates(null);
+  }, [publishCoordinates]);
 
   useEffect(() => {
     if (!router) return;
     const stop = router.subscribe('onBeforeNavigate', ({ fromLocation, toLocation }) => {
       if (!fromLocation) return;
       const current = receiptRef.current;
+      const fromPath = routePath(fromLocation.pathname);
+      const toPath = routePath(toLocation.pathname);
+      if (fromPath === '/library/ratings' && toPath === '/library/ratings') {
+        const pending = coordinateVisit.current?.pending;
+        const fromSearch = fromLocation.search as Record<string, unknown>;
+        const toSearch = toLocation.search as Record<string, unknown>;
+        const fromCursor = typeof fromSearch.cursor === 'string' ? fromSearch.cursor : null;
+        const toCursor = typeof toSearch.cursor === 'string' ? toSearch.cursor : null;
+        if (!pending || pending.from !== fromCursor || pending.cursor !== toCursor) clearCoordinates();
+      } else if (fromPath === '/library/ratings' && !toPath.startsWith('/subjects/')) {
+        clearCoordinates();
+      } else if (fromPath !== '/library/ratings' && toPath === '/library/ratings') {
+        const returning =
+          !!current &&
+          current.phase === 'departed' &&
+          sameReturnAddress(toLocation, current) &&
+          current.owner.locale === getLocale() &&
+          current.owner.eligible();
+        if (!returning) clearCoordinates();
+      }
       if (!current) return;
       if (
         current.phase === 'departed' &&
@@ -182,7 +335,10 @@ export function OwnVotesReturnProvider({ children }: { children: ReactNode }) {
         current.owner.eligible()
       )
         publish({ ...current, phase: 'arrived', focusVersion: focusVersion.current });
-      else publish(null);
+      else {
+        publish(null);
+        clearCoordinates();
+      }
     };
     document.addEventListener('focusin', focus, true);
     window.addEventListener('pageshow', show);
@@ -191,11 +347,44 @@ export function OwnVotesReturnProvider({ children }: { children: ReactNode }) {
       document.removeEventListener('focusin', focus, true);
       window.removeEventListener('pageshow', show);
     };
-  }, [router, publish]);
+  }, [router, publish, clearCoordinates]);
 
   const value = useMemo<ReturnState>(
-    () => ({ receipt, depart, begin, owns, fail, resolve, clear, focusUnchanged }),
-    [receipt, depart, begin, owns, fail, resolve, clear, focusUnchanged],
+    () => ({
+      receipt,
+      depart,
+      begin,
+      owns,
+      fail,
+      resolve,
+      clear,
+      focusUnchanged,
+      pendingCoordinate,
+      coordinates,
+      stageCoordinateMove,
+      admitCoordinate,
+      failCoordinateRead,
+      cancelCoordinateMove,
+      clearCoordinates,
+    }),
+    [
+      receipt,
+      depart,
+      begin,
+      owns,
+      fail,
+      resolve,
+      clear,
+      focusUnchanged,
+      pendingCoordinate,
+      coordinates,
+      stageCoordinateMove,
+      admitCoordinate,
+      failCoordinateRead,
+      cancelCoordinateMove,
+      clearCoordinates,
+      coordinateVersion,
+    ],
   );
   return <OwnVotesReturnContext.Provider value={value}>{children}</OwnVotesReturnContext.Provider>;
 }
@@ -222,6 +411,24 @@ export function useOwnVotesReturnReceipt(historyKey: string, cursor: string | nu
     if (receipt && onRatings && receipt.phase !== 'bfcache-away' && !valid) state.clear(receipt.id);
   }, [receipt, valid, onRatings, state]);
   return onRatings && valid ? receipt : null;
+}
+
+export function useOwnVotesCoordinates(authorityKey: string, cursor: string | null) {
+  const state = useContext(OwnVotesReturnContext);
+  return {
+    ...state.coordinates(authorityKey, cursor),
+    stage: (responseVersion: number, move: OwnVotesCoordinateMove) =>
+      state.stageCoordinateMove(authorityKey, cursor, responseVersion, move),
+    admit: (admittedCursor: string | null) => state.admitCoordinate(authorityKey, admittedCursor),
+    fail: state.failCoordinateRead,
+    cancel: state.cancelCoordinateMove,
+    retire: state.clearCoordinates,
+  };
+}
+
+export function useOwnVotesPendingCoordinate(cursor: string | null, responseVersion: number) {
+  const pending = useContext(OwnVotesReturnContext).pendingCoordinate();
+  return pending?.readState === 'staged' && pending.cursor === cursor && responseVersion > pending.responseVersion;
 }
 
 export function useOwnVotesReturn({

@@ -8525,6 +8525,7 @@
   "library_my_ratings_page_order": "頁面依原始問題與主題鍵排序。每頁最多顯示 20 筆評分，不依日期排序。",
   "library_my_ratings_next": "下一頁評分",
   "library_my_ratings_first": "第一頁評分",
+  "library_my_ratings_previous": "上一頁評分",
   "library_my_ratings_subject": "主題",
   "library_my_ratings_original_key": "原始主題與問題",
   "library_my_ratings_question": "問題",

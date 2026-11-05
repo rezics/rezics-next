@@ -32,7 +32,8 @@ type Mode =
   | 'return-refreshing'
   | 'return-failed'
   | 'return-found'
-  | 'return-missing';
+  | 'return-missing'
+  | 'previous';
 type Fixture = { mode: Mode; locale: (typeof locales)[number] };
 const FixtureContext = createContext<Fixture>({ mode: 'ready', locale: 'en' });
 const Root = createRootRoute({ component: Outlet });
@@ -161,7 +162,9 @@ function StoryScreen() {
           mode === 'denied' ? 'denied' : failed ? 'unavailable' : mode === 'return-refreshing' ? 'preparing' : 'ready'
         }
         page={mode === 'denied' || failed || mode === 'return-refreshing' ? null : page}
-        cursor={null}
+        cursor={mode === 'previous' ? 'sealed-current-cursor' : null}
+        hasPrevious={mode === 'previous'}
+        previousCursor={mode === 'previous' ? 'sealed-prior-cursor' : null}
         locale={locale}
         isCurrent={() => true}
         returnPending={mode === 'return-refreshing'}
@@ -189,8 +192,14 @@ function Story({ mode, locale = 'en' }: { mode: Mode; locale?: (typeof locales)[
   setLocale(locale, { reload: false });
   const fixtureValue = useMemo(() => ({ mode, locale }), [mode, locale]);
   const router = useMemo(
-    () => createRouter({ routeTree: tree, history: createMemoryHistory({ initialEntries: ['/library/ratings'] }) }),
-    [],
+    () =>
+      createRouter({
+        routeTree: tree,
+        history: createMemoryHistory({
+          initialEntries: [mode === 'previous' ? '/library/ratings?cursor=sealed-current-cursor' : '/library/ratings'],
+        }),
+      }),
+    [mode],
   );
   return (
     <FixtureContext.Provider value={fixtureValue}>
@@ -204,6 +213,14 @@ export default meta;
 type StoryType = StoryObj<typeof meta>;
 
 export const Ready: StoryType = { render: () => <Story mode="ready" /> };
+export const PreviousPage: StoryType = {
+  render: () => <Story mode="previous" />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('link', { name: m.library_my_ratings_previous() })).toBeVisible();
+    await expect(canvas.getByRole('link', { name: m.library_my_ratings_first() })).toBeVisible();
+  },
+};
 export const Empty: StoryType = { render: () => <Story mode="empty" /> };
 export const SparseContinuation: StoryType = { render: () => <Story mode="sparse" /> };
 export const RetiredQuestion: StoryType = { render: () => <Story mode="retired" /> };

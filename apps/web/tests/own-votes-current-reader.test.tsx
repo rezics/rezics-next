@@ -15,6 +15,9 @@ type ReadCall = ReturnType<typeof deferred<OwnVotesRead>> & { subject: string; c
 const reads: ReadCall[] = [];
 const readWaiters: (() => void)[] = [];
 let activeSubject = '11111111-1111-4111-8111-111111111111';
+let routeLoaderReads = false;
+let routeReadPlan: ((subject: string, cursor: string | null) => OwnVotesRead) | null = null;
+let commandPlan: (input: { data: unknown }) => Promise<unknown> = async () => ({ kind: 'rejected' });
 mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('../src/kernel/client', () => ({ configured: () => false }));
 mock.module('../src/ratings/own-votes/actions', () => ({
@@ -22,9 +25,14 @@ mock.module('../src/ratings/own-votes/actions', () => ({
     const call = { ...deferred<OwnVotesRead>(), subject: activeSubject, cursor: data.cursor ?? null };
     reads.push(call);
     for (const wake of readWaiters.splice(0)) wake();
+    if (routeReadPlan) {
+      const result = routeReadPlan(activeSubject, call.cursor);
+      call.resolve(result);
+      return Promise.resolve(result);
+    }
     return call.promise;
   },
-  executeOwnVoteIntent: async () => ({ kind: 'rejected' }),
+  executeOwnVoteIntent: (input: { data: unknown }) => commandPlan(input),
   voteReadbackForIntent: async () => ({ kind: 'unavailable' }),
 }));
 
@@ -68,6 +76,7 @@ const { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet,
   await import('@tanstack/react-router');
 const { sessionQuery } = await import('../src/session/query');
 const { viewerExposureLifetime, viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
+const { readOwnVotesForViewer } = await import('../src/ratings/own-votes/actions');
 const { CurrentViewerOwnVotesPage } = await import('../src/ratings/own-votes/page');
 const { OwnVotesReturnProvider } = await import('../src/ratings/own-votes/return');
 const { ownVotesQuery } = await import('../src/ratings/own-votes/current-origin');
@@ -99,16 +108,34 @@ function row(): OwnVoteEntry {
   };
 }
 const pageFor = (subject: string): OwnVotesPage => ({ viewer: { accountId: subject }, votes: [row()], next: null });
-const nativeRead = (subject = account, cursor: string | null = null, locale = getLocale()): OwnVotesRead => ({
+const nativeRead = (
+  subject = account,
+  cursor: string | null = null,
+  locale = getLocale(),
+  page = pageFor(subject),
+): OwnVotesRead => ({
   state: 'ready',
-  page: pageFor(subject),
+  page,
   subject,
   cursor,
   locale,
   source: 'rating.own_votes_page/v1',
 });
 const rootRoute = createRootRoute({
-  component: () => createElement(OwnVotesReturnProvider, null, createElement(Outlet)),
+  component: function RootReader() {
+    const cursor = useRouterState({
+      select: ({ location }) => {
+        const search = location.search as Record<string, unknown>;
+        return typeof search.cursor === 'string' ? search.cursor : null;
+      },
+    });
+    return createElement(
+      'div',
+      null,
+      createElement(OwnVotesReturnProvider, null, createElement(Outlet)),
+      createElement('output', { 'data-test-route-cursor': true }, `route:${cursor ?? 'first'}`),
+    );
+  },
 });
 const ratingsRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -116,10 +143,19 @@ const ratingsRoute = createRoute({
   validateSearch: (search: Record<string, unknown>) => ({
     ...(typeof search.cursor === 'string' ? { cursor: search.cursor } : {}),
   }),
+  loaderDeps: ({ search }) => ({ cursor: typeof search.cursor === 'string' ? search.cursor : null }),
+  loader: ({ deps }) =>
+    routeLoaderReads
+      ? readOwnVotesForViewer({ data: deps.cursor === null ? {} : { cursor: deps.cursor } })
+      : nativeRead(account, deps.cursor),
   component: function RatingsRoute() {
     const search = useRouterState({ select: (state) => state.location.search });
     const cursor = typeof search.cursor === 'string' ? search.cursor : null;
-    return createElement(CurrentViewerOwnVotesPage, { initial: nativeRead(account, cursor), cursor });
+    const initial = ratingsRoute.useLoaderData();
+    const responseVersion = useRouterState({
+      select: ({ matches }) => matches.find((match) => match.routeId === '/library/ratings')?.updatedAt ?? 0,
+    });
+    return createElement(CurrentViewerOwnVotesPage, { initial, cursor, responseVersion });
   },
 });
 const subjectRoute = createRoute({
@@ -158,6 +194,7 @@ function ready(call: ReadCall, subject = call.subject, cursor = call.cursor) {
 }
 
 async function mounted(initialPath = '/library/ratings') {
+  activeSubject = account;
   const host = document.createElement('main');
   document.body.append(host);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -175,16 +212,22 @@ async function mounted(initialPath = '/library/ratings') {
     act(async () => {
       await work();
     });
-  function expose(subject: string, csrfToken: string) {
+  function applyViewer(subject: string, csrfToken: string) {
     activeSubject = subject;
+    client.setQueryData(sessionQuery.queryKey, session(subject, csrfToken));
+    const current = viewerExposureLifetime(client).getSnapshot();
+    if (current.state !== 'signed-in') throw new Error('Expected replacement browser observation');
+    client.setQueryData(viewerExposureQuery(current.observation).queryKey, {
+      subject: current.observation.subject,
+      admitted: ['personal_library'],
+    });
+  }
+  function expose(subject: string, csrfToken: string) {
+    return perform(() => applyViewer(subject, csrfToken));
+  }
+  function exposeSequence(subjects: string[]) {
     return perform(() => {
-      client.setQueryData(sessionQuery.queryKey, session(subject, csrfToken));
-      const current = viewerExposureLifetime(client).getSnapshot();
-      if (current.state !== 'signed-in') throw new Error('Expected replacement browser observation');
-      client.setQueryData(viewerExposureQuery(current.observation).queryKey, {
-        subject: current.observation.subject,
-        admitted: ['personal_library'],
-      });
+      subjects.forEach((subject, index) => applyViewer(subject, `csrf-sequence-${index}`));
     });
   }
   const tree = createElement(QueryClientProvider, { client }, createElement(RouterProvider, { router }));
@@ -214,6 +257,20 @@ async function mounted(initialPath = '/library/ratings') {
   };
 }
 
+async function waitForCursor(view: Awaited<ReturnType<typeof mounted>>, cursor: string | null) {
+  return waitForText(view.host, `route:${cursor ?? 'first'}`);
+}
+async function waitForBodyText(view: Awaited<ReturnType<typeof mounted>>, text: string) {
+  return waitForText(view.window.document.body, text);
+}
+function bodyButton(view: Awaited<ReturnType<typeof mounted>>, name: string) {
+  const button = [...view.window.document.body.querySelectorAll('button')].find(
+    (candidate) => candidate.textContent?.trim() === name,
+  );
+  if (!button) throw new Error(`Expected ${name} button`);
+  return button;
+}
+
 async function visitSubject(view: Awaited<ReturnType<typeof mounted>>) {
   const link = [...view.host.querySelectorAll('a')].find((node) => node.textContent === 'Kokoro');
   if (!link) throw new Error('Expected the disclosed terminal Subject link');
@@ -225,6 +282,26 @@ async function back(view: Awaited<ReturnType<typeof mounted>>, index = reads.len
     await tick();
   });
   return waitForRead(index);
+}
+
+async function editDraft(view: Awaited<ReturnType<typeof mounted>>, value = '2') {
+  const findButton = (name: string) => {
+    const button = [...view.host.querySelectorAll('button')].find((candidate) => candidate.textContent?.trim() === name);
+    if (!button) throw new Error(`Expected ${name} button`);
+    return button;
+  };
+  await view.click(findButton(m.library_my_ratings_inspect()));
+  await view.click(findButton(m.library_my_ratings_edit()));
+  const input = view.host.querySelector<HTMLInputElement>('input');
+  if (!input) throw new Error('Expected the selected answer editor');
+  const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input), 'value')?.set;
+  if (!setter) throw new Error('Expected an input value setter');
+  await view.perform(() => {
+    setter.call(input, value);
+    input.dispatchEvent(new window.Event('input', { bubbles: true }));
+    input.dispatchEvent(new window.Event('change', { bubbles: true }));
+  });
+  return input;
 }
 
 afterAll(async () => {
@@ -404,6 +481,305 @@ test('bfcache refresh is reader-local and two mounted readers cannot consume one
   } finally {
     await first.close();
     if (!secondClosed) await second.close();
+  }
+});
+
+test('real route pagination retries the exact cursor, preserves sparse and terminal pages, and truncates a branch', async () => {
+  reads.length = 0;
+  readWaiters.length = 0;
+  routeLoaderReads = true;
+  const firstPage: OwnVotesPage = { viewer: { accountId: account }, votes: [row()], next: 'cursor-a' };
+  const sparseB: OwnVotesPage = { viewer: { accountId: account }, votes: [], next: 'cursor-b' };
+  const sparseC: OwnVotesPage = { viewer: { accountId: account }, votes: [], next: 'cursor-c' };
+  const terminal: OwnVotesPage = { viewer: { accountId: account }, votes: [], next: null };
+  const unavailable = (cursor: string): OwnVotesRead => ({
+    state: 'unavailable',
+    page: null,
+    subject: account,
+    cursor,
+    locale: getLocale(),
+    source: null,
+  });
+  const result = (cursor: string | null, page: OwnVotesPage) => nativeRead(account, cursor, getLocale(), page);
+  const plans = new Map<string, OwnVotesRead[]>([
+    ['first', [result(null, firstPage), result(null, firstPage)]],
+    ['cursor-a', [unavailable('cursor-a'), result('cursor-a', sparseB), result('cursor-a', sparseC), result('cursor-a', sparseC)]],
+    ['cursor-b', [result('cursor-b', terminal)]],
+    ['cursor-c', [result('cursor-c', terminal)]],
+  ]);
+  routeReadPlan = (_subject, cursor) => {
+    const queue = plans.get(cursor ?? 'first');
+    if (!queue?.length) throw new Error(`No route read was planned for ${cursor ?? 'first'}`);
+    return queue.shift()!;
+  };
+  const view = await mounted();
+  const findLink = (name: string) => {
+    const link = [...view.host.querySelectorAll('a')].find((candidate) => candidate.textContent?.trim() === name);
+    if (!link) throw new Error(`Expected ${name} link`);
+    return link;
+  };
+  const moveAndRead = async (name: string, cursor: string | null, marker?: string) => {
+    const index = reads.length;
+    await view.click(findLink(name));
+    const read = await waitForRead(index);
+    expect(read.cursor).toBe(cursor);
+    await act(async () => read.promise);
+    expect(await waitForCursor(view, cursor)).toBe(true);
+    if (marker) expect(await waitForText(view.host, marker)).toBe(true);
+    return read;
+  };
+  try {
+    expect(reads.map((read) => read.cursor)).toEqual([null]);
+    await moveAndRead(m.library_my_ratings_continue(), 'cursor-a', m.library_my_ratings_unavailable());
+    expect(view.host.querySelector('button')?.textContent).toBe(m.library_my_ratings_retry_page());
+
+    const retryIndex = reads.length;
+    const retry = [...view.host.querySelectorAll('button')].find(
+      (candidate) => candidate.textContent === m.library_my_ratings_retry_page(),
+    );
+    if (!retry) throw new Error('Expected exact page retry');
+    await view.click(retry);
+    const retryRead = await waitForRead(retryIndex);
+    expect(retryRead.cursor).toBe('cursor-a');
+    await act(async () => retryRead.promise);
+    expect(await waitForText(view.host, m.library_my_ratings_sparse())).toBe(true);
+    expect(view.host.querySelector('a[href*="cursor-b"]')).not.toBeNull();
+
+    await moveAndRead(m.library_my_ratings_continue(), 'cursor-b', m.library_my_ratings_empty());
+    await moveAndRead(m.library_my_ratings_previous(), 'cursor-a', m.library_my_ratings_sparse());
+    expect(view.host.querySelector('a[href*="cursor-c"]')).not.toBeNull();
+    await moveAndRead(m.library_my_ratings_continue(), 'cursor-c', m.library_my_ratings_empty());
+    await moveAndRead(m.library_my_ratings_previous(), 'cursor-a', m.library_my_ratings_sparse());
+    await moveAndRead(m.library_my_ratings_first(), null, 'Kokoro');
+
+    expect(reads.map((read) => read.cursor)).toEqual([
+      null,
+      'cursor-a',
+      'cursor-a',
+      'cursor-b',
+      'cursor-a',
+      'cursor-c',
+      'cursor-a',
+      null,
+    ]);
+    expect(view.host.querySelector('a')?.textContent).not.toBe(m.library_my_ratings_previous());
+    expect(view.host.querySelectorAll('[data-own-vote-pair]')).toHaveLength(1);
+  } finally {
+    await view.close();
+    routeLoaderReads = false;
+    routeReadPlan = null;
+  }
+});
+
+test('the route retains eight predecessor cursors and each Previous performs a fresh bounded read', async () => {
+  reads.length = 0;
+  readWaiters.length = 0;
+  routeLoaderReads = true;
+  routeReadPlan = (_subject, cursor) => {
+    const number = cursor === null ? 0 : Number(cursor.slice('cursor-'.length));
+    const next = number === 10 ? null : `cursor-${number + 1}`;
+    const page =
+      number === 0
+        ? { viewer: { accountId: account }, votes: [row()], next }
+        : {
+            viewer: { accountId: account },
+            votes: [
+              {
+                ...row(),
+                question: { ...row().question, label: `Page ${number}` },
+              },
+            ],
+            next,
+          };
+    return nativeRead(account, cursor, getLocale(), page);
+  };
+  const view = await mounted();
+  const findLink = (name: string) => {
+    const link = [...view.host.querySelectorAll('a')].find((candidate) => candidate.textContent?.trim() === name);
+    if (!link) throw new Error(`Expected ${name} link`);
+    return link;
+  };
+  const moveAndRead = async (name: string, number: number) => {
+    const cursor = number === 0 ? null : `cursor-${number}`;
+    const index = reads.length;
+    await view.click(findLink(name));
+    const read = await waitForRead(index);
+    expect(read.cursor).toBe(cursor);
+    await act(async () => read.promise);
+    expect(await waitForCursor(view, cursor)).toBe(true);
+    if (number > 0) expect(await waitForText(view.host, `Page ${number}`)).toBe(true);
+  };
+  try {
+    for (let page = 1; page <= 10; page += 1) await moveAndRead(m.library_my_ratings_continue(), page);
+    expect(view.host.querySelector('a[href*="cursor-11"]')).toBeNull();
+    for (let page = 9; page >= 2; page -= 1) await moveAndRead(m.library_my_ratings_previous(), page);
+    expect(view.host.querySelector('a[href*="cursor-1"]')).toBeNull();
+    expect(reads.map((read) => read.cursor)).toEqual([
+      null,
+      ...Array.from({ length: 10 }, (_, index) => `cursor-${index + 1}`),
+      ...Array.from({ length: 8 }, (_, index) => `cursor-${9 - index}`),
+    ]);
+  } finally {
+    await view.close();
+    routeLoaderReads = false;
+    routeReadPlan = null;
+  }
+});
+
+test('dirty movement keeps the draft on Stay, retires it on Leave, then returns to the accepted cursor', async () => {
+  reads.length = 0;
+  readWaiters.length = 0;
+  routeLoaderReads = true;
+  routeReadPlan = (subject, cursor) => {
+    const next = cursor === null ? 'cursor-next' : 'cursor-tail';
+    return nativeRead(subject, cursor, getLocale(), {
+      viewer: { accountId: subject },
+      votes: [row()],
+      next: cursor === null ? next : cursor === 'cursor-next' ? 'cursor-tail' : null,
+    });
+  };
+  const view = await mounted();
+  const findLink = (name: string) => {
+    const link = [...view.host.querySelectorAll('a')].find((candidate) => candidate.textContent?.trim() === name);
+    if (!link) throw new Error(`Expected ${name} link`);
+    return link;
+  };
+  const findButton = (name: string) => {
+    const button = [...view.host.querySelectorAll('button')].find((candidate) => candidate.textContent?.trim() === name);
+    if (!button) throw new Error(`Expected ${name} button`);
+    return button;
+  };
+  try {
+    const draft = await editDraft(view);
+    const continueName = m.library_my_ratings_continue();
+    await view.click(findLink(continueName));
+    expect(await waitForBodyText(view, m.library_my_ratings_departure_title())).toBe(true);
+    await view.click(bodyButton(view, m.library_my_ratings_stay()));
+    expect(view.host.querySelector('[data-test-route-cursor]')?.textContent).toBe('route:first');
+    expect((view.host.querySelector('input') as HTMLInputElement | null)?.value).toBe('2');
+
+    const leaveIndex = reads.length;
+    await view.click(findLink(continueName));
+    expect(await waitForBodyText(view, m.library_my_ratings_departure_title())).toBe(true);
+    await view.click(bodyButton(view, m.library_my_ratings_leave()));
+    const targetRead = await waitForRead(leaveIndex);
+    expect(targetRead.cursor).toBe('cursor-next');
+    await act(async () => targetRead.promise);
+    expect(await waitForCursor(view, 'cursor-next')).toBe(true);
+    expect(view.host.querySelector('input')).toBeNull();
+
+    const subject = [...view.host.querySelectorAll('a')].find((link) => link.textContent?.trim() === 'Kokoro');
+    if (!subject) throw new Error('Expected the admitted Subject return link');
+    await view.click(subject);
+    expect(view.host.textContent).toContain('Subject reader');
+    const returnRead = await back(view);
+    expect(returnRead.cursor).toBe('cursor-next');
+    await act(async () => returnRead.promise);
+    expect(await waitForText(view.host, m.library_my_ratings_return_found())).toBe(true);
+    expect(view.host.querySelector('[data-test-route-cursor]')?.textContent).toBe('route:cursor-next');
+    expect(view.host.querySelector('input')).toBeNull();
+    expect(view.host.textContent).not.toContain(m.library_my_ratings_edit());
+    expect(draft.value).toBe('2');
+  } finally {
+    await view.close();
+    routeLoaderReads = false;
+    routeReadPlan = null;
+  }
+});
+
+test('pending and uncertain commands lock staged movement; source and A/B/A replacement cancel the prompt', async () => {
+  reads.length = 0;
+  readWaiters.length = 0;
+  routeLoaderReads = true;
+  routeReadPlan = (subject, cursor) =>
+    nativeRead(subject, cursor, getLocale(), {
+      viewer: { accountId: subject },
+      votes: [row()],
+      next: cursor === null ? 'cursor-next' : null,
+    });
+  const commandCalls: unknown[] = [];
+  const pendingCommand = deferred<unknown>();
+  commandPlan = ({ data }) => {
+    commandCalls.push(data);
+    return commandCalls.length === 1 ? pendingCommand.promise : Promise.resolve({ kind: 'uncertain' });
+  };
+  const view = await mounted();
+  const findLink = (name: string) => {
+    const link = [...view.host.querySelectorAll('a')].find((candidate) => candidate.textContent?.trim() === name);
+    if (!link) throw new Error(`Expected ${name} link`);
+    return link;
+  };
+  const findButton = (name: string) => {
+    const button = [...view.host.querySelectorAll('button')].find((candidate) => candidate.textContent?.trim() === name);
+    if (!button) throw new Error(`Expected ${name} button`);
+    return button;
+  };
+  try {
+    await editDraft(view);
+    await view.click(findButton(m.library_my_ratings_save()));
+    await view.click(findLink(m.library_my_ratings_continue()));
+    expect(await waitForBodyText(view, m.library_my_ratings_departure_locked())).toBe(true);
+    expect(view.window.document.body.textContent).not.toContain(m.library_my_ratings_leave());
+    await view.click(bodyButton(view, m.library_my_ratings_stay()));
+    expect(view.host.querySelector('[data-test-route-cursor]')?.textContent).toBe('route:first');
+    pendingCommand.resolve({ kind: 'uncertain' });
+    await act(async () => pendingCommand.promise);
+    expect(await waitForText(view.host, m.library_my_ratings_retry_original())).toBe(true);
+
+    await view.click(findLink(m.library_my_ratings_continue()));
+    expect(await waitForBodyText(view, m.library_my_ratings_departure_locked())).toBe(true);
+    expect(view.window.document.body.textContent).not.toContain(m.library_my_ratings_leave());
+    await view.click(bodyButton(view, m.library_my_ratings_stay()));
+    expect(view.host.querySelector('[data-test-route-cursor]')?.textContent).toBe('route:first');
+    await view.click(findButton(m.library_my_ratings_retry_original()));
+    await act(async () => Promise.resolve());
+    expect(commandCalls).toHaveLength(2);
+    expect(commandCalls[1]).toBe(commandCalls[0]);
+    expect(reads.every((read) => read.cursor !== 'cursor-next')).toBe(true);
+  } finally {
+    await view.close();
+    routeLoaderReads = false;
+    routeReadPlan = null;
+    commandPlan = async () => ({ kind: 'rejected' });
+  }
+
+  for (const replace of [
+    (view: Awaited<ReturnType<typeof mounted>>) => view.expose('55555555-5555-4555-8555-555555555555', 'csrf-b'),
+    (view: Awaited<ReturnType<typeof mounted>>) => view.exposeSequence(['55555555-5555-4555-8555-555555555555', account]),
+  ]) {
+    reads.length = 0;
+    readWaiters.length = 0;
+    routeLoaderReads = true;
+    routeReadPlan = (subject, cursor) =>
+      nativeRead(subject, cursor, getLocale(), {
+        viewer: { accountId: subject },
+        votes: [row()],
+        next: cursor === null ? 'cursor-next' : null,
+      });
+    const replaced = await mounted();
+    try {
+      await editDraft(replaced);
+      await replaced.click(
+        [...replaced.host.querySelectorAll('a')].find(
+          (candidate) => candidate.textContent?.trim() === m.library_my_ratings_continue(),
+        )!,
+      );
+      expect(await waitForBodyText(replaced, m.library_my_ratings_departure_title())).toBe(true);
+      await replace(replaced);
+      if (replaced.window.document.body.textContent?.includes(m.library_my_ratings_leave())) {
+        const leave = [...replaced.window.document.body.querySelectorAll('button')].find(
+          (candidate) => candidate.textContent?.trim() === m.library_my_ratings_leave(),
+        );
+        if (leave) await replaced.click(leave);
+      }
+      await act(async () => tick());
+      expect(replaced.host.querySelector('[data-test-route-cursor]')?.textContent).toBe('route:first');
+      expect(reads.every((read) => read.cursor !== 'cursor-next')).toBe(true);
+    } finally {
+      await replaced.close();
+      routeLoaderReads = false;
+      routeReadPlan = null;
+    }
   }
 });
 

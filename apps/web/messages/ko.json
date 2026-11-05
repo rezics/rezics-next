@@ -8517,6 +8517,7 @@
   "library_my_ratings_page_order": "원래 질문과 Subject 키 순서입니다. 한 페이지에 최대 20개이며 날짜순이 아닙니다.",
   "library_my_ratings_next": "다음 평가 페이지",
   "library_my_ratings_first": "첫 평가 페이지",
+  "library_my_ratings_previous": "이전 평가 페이지",
   "library_my_ratings_subject": "Subject",
   "library_my_ratings_original_key": "원래 Subject와 질문",
   "library_my_ratings_question": "질문",

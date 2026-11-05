@@ -6,6 +6,7 @@ export const OWN_VOTES_CONTEXT = { operation: OWN_VOTES_OPERATION, exposure: 'pe
 export const OWN_VOTES_SOURCE = 'rating.own_votes_page/v1' as const;
 export const OWN_VOTES_PAGE_LIMIT = 20;
 export const OWN_VOTES_CURSOR_LIMIT = 4096;
+export const OWN_VOTES_PREDECESSOR_LIMIT = 8;
 
 export type VotePair = Pick<OwnVoteEntry, 'questionId' | 'targetId'>;
 

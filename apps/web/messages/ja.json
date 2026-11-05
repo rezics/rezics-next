@@ -8520,6 +8520,7 @@
   "library_my_ratings_page_order": "元の質問と Subject のキー順で表示します。1ページは最大20件で、日付順ではありません。",
   "library_my_ratings_next": "評価の次のページ",
   "library_my_ratings_first": "評価の最初のページ",
+  "library_my_ratings_previous": "前の評価ページ",
   "library_my_ratings_subject": "Subject",
   "library_my_ratings_original_key": "元の Subject と質問",
   "library_my_ratings_question": "質問",
