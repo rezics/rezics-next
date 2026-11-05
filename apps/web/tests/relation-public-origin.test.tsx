@@ -295,7 +295,7 @@ test('mounted menu and production relation route gate unsupported origins before
     await navigate(fresh!);
     await waitFor(() => expect(host.textContent).toContain(m.relation_public_fresh_notice()));
     const returnLink = host.querySelector<HTMLAnchorElement>('a[href*="#connections"]');
-    expect(returnLink?.getAttribute('href')).toBe(`${subject}#connections`);
+    expect(returnLink?.getAttribute('href')).toBe(`${subjectPath}#connections`);
     expect(rootReads.length).toBeGreaterThan(outerCounts[0]!);
     expect(pageReads.length).toBeGreaterThan(outerCounts[1]!);
 
