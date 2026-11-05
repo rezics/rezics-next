@@ -10,8 +10,16 @@ const target = '00000000-0000-4000-8000-00000000d103';
 const contextA = '00000000-0000-4000-8000-000000000021';
 const contextB = '00000000-0000-4000-8000-000000000022';
 const realm = '00000000-0000-4000-8000-000000000023';
+const callerA = '00000000-0000-4000-8000-00000000d201';
+const callerB = '00000000-0000-4000-8000-00000000d202';
+const sessionObservations = new Map([
+  [callerA, { state: 'signed-in' as const, subject: callerA, csrfToken: 'caller-a-token' }],
+  [callerB, { state: 'signed-in' as const, subject: callerB, csrfToken: 'caller-b-token' }],
+]);
+let sessionObservation = sessionObservations.get(callerA)!;
 let release: unknown;
 let nativeClient: unknown;
+const readerCalls: string[] = [];
 
 function serverFunction() {
   let validate: ((data: unknown) => unknown) | undefined;
@@ -31,8 +39,15 @@ function serverFunction() {
 mock.module('@tanstack/react-start', () => ({ ...start, createServerFn: serverFunction }));
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
+mock.module('../src/session/query', () => ({
+  useSession: () => sessionObservation,
+  sessionQuery: { queryKey: ['session'] },
+}));
 mock.module('../src/features/pages/graph-browser/actions', () => ({
-  exploreContext: async () => ({ client: nativeClient, authorization: undefined }),
+  exploreContext: async (_locale: string, expectedReader?: string | null) => {
+    readerCalls.push(expectedReader ?? '');
+    return { client: nativeClient, authorization: undefined };
+  },
 }));
 const originalDefinitionGuide = await import('../src/features/catalogue/definition-guide');
 mock.module('../src/features/catalogue/definition-guide', () => ({
@@ -183,6 +198,7 @@ afterAll(async () => {
 test('selected Context stays bound through the Subject entry, route, session, action and native reading', async () => {
   subjectCalls.length = 0;
   relationCalls.length = 0;
+  readerCalls.length = 0;
   const { readSubjectMusicContext } = await import('../src/features/catalogue/music-context-profile/actions');
   const compatibleReturn = `/en/subjects/${anchor}/harbor-stage/quotations?context=${contextA}`;
   const entryMarkup = renderToStaticMarkup(
@@ -258,7 +274,11 @@ test('selected Context stays bound through the Subject entry, route, session, ac
   expect(subjectCalls).toHaveLength(0);
 
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  queryClient.setQueryData(sessionQuery.queryKey, { state: 'signed-out', csrfToken: null, subject: null });
+  const setCaller = (subject: string) => {
+    sessionObservation = sessionObservations.get(subject)!;
+    queryClient.setQueryData(sessionQuery.queryKey, sessionObservation);
+  };
+  setCaller(callerA);
   const host = window.document.createElement('main');
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
@@ -315,17 +335,27 @@ test('selected Context stays bound through the Subject entry, route, session, ac
     await until(() => subjectCalls.length === 3);
     expect(subjectCalls.map((call) => call.query.context)).toEqual([contextA, contextB, contextA]);
 
+    setCaller(callerB);
+    await render(contextA);
+    await until(() => subjectCalls.length === 4);
+    setCaller(callerA);
+    await render(contextA);
+    await until(() => subjectCalls.length === 5);
+    expect(readerCalls).toEqual([callerA, callerA, callerA, callerB, callerA]);
+
     await resolve(0, contextA, 'Retired Context A');
     await resolve(1, contextB, 'Retired Context B');
-    await resolve(2, contextA, 'Current Context A');
-    await until(() => relationCalls.length === 3 && host.textContent?.includes('Current Context A') === true);
+    await resolve(2, contextA, 'Retired Caller A');
+    await resolve(3, contextA, 'Retired Caller B');
+    await resolve(4, contextA, 'Current Context A');
+    await until(() => relationCalls.length === 5 && host.textContent?.includes('Current Context A') === true);
     expect(host.textContent).toContain('Current Context A');
     expect(host.textContent).not.toContain('Retired Context A');
     expect(host.textContent).not.toContain('Retired Context B');
     expect(host.querySelector('[data-context]')?.getAttribute('data-context')).toBe(contextA);
-    expect(relationCalls.map((call) => call.query.context)).toEqual([contextA, contextB, contextA]);
-    expect(subjectCalls[2]?.fetch).toEqual({ cache: 'no-store', redirect: 'manual' });
-    expect(relationCalls[2]?.fetch).toEqual({ cache: 'no-store', redirect: 'manual' });
+    expect(relationCalls.map((call) => call.query.context)).toEqual([contextA, contextB, contextA, contextA, contextA]);
+    expect(subjectCalls[4]?.fetch).toEqual({ cache: 'no-store', redirect: 'manual' });
+    expect(relationCalls[4]?.fetch).toEqual({ cache: 'no-store', redirect: 'manual' });
 
     const next = [...host.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
       button.textContent?.includes('Next page'),
@@ -335,12 +365,16 @@ test('selected Context stays bound through the Subject entry, route, session, ac
       next.click();
       await Promise.resolve();
     });
-    await until(() => subjectCalls.length === 4);
-    await resolve(3, contextA, 'Continued Context A');
-    await until(() => relationCalls.length === 4 && host.textContent?.includes('Continued Context A') === true);
+    await until(() => subjectCalls.length === 6);
+    await resolve(5, contextA, 'Continued Context A');
+    await until(() => relationCalls.length === 6 && host.textContent?.includes('Continued Context A') === true);
     await render(contextA);
-    expect(relationCalls[3]?.query).toMatchObject({ context: contextA, cursor: 'music-cursor-1' });
-    expect(addressChanges.at(-1)).toEqual({ context: contextA, stream: relationCalls[3]?.query.property, cursor: 'music-cursor-1' });
+    expect(relationCalls[5]?.query).toMatchObject({ context: contextA, cursor: 'music-cursor-1' });
+    expect(addressChanges.at(-1)).toEqual({
+      context: contextA,
+      stream: relationCalls[5]?.query.property,
+      cursor: 'music-cursor-1',
+    });
 
     const previous = [...host.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
       button.textContent?.includes('Previous page'),
@@ -350,12 +384,12 @@ test('selected Context stays bound through the Subject entry, route, session, ac
       previous.click();
       await Promise.resolve();
     });
-    await until(() => subjectCalls.length === 5);
-    await resolve(4, contextA, 'Fresh selected Previous');
-    await until(() => relationCalls.length === 5 && host.textContent?.includes('Fresh selected Previous') === true);
+    await until(() => subjectCalls.length === 7);
+    await resolve(6, contextA, 'Fresh selected Previous');
+    await until(() => relationCalls.length === 7 && host.textContent?.includes('Fresh selected Previous') === true);
     await render(contextA);
-    expect(relationCalls[4]?.query).toMatchObject({ context: contextA });
-    expect(relationCalls[4]?.query.cursor).toBeUndefined();
+    expect(relationCalls[6]?.query).toMatchObject({ context: contextA });
+    expect(relationCalls[6]?.query.cursor).toBeUndefined();
     expect(host.textContent).toContain('Fresh selected Previous');
 
     const targetLink = [...host.querySelectorAll<HTMLAnchorElement>('a')].find((link) => link.href.includes(target));
@@ -378,21 +412,21 @@ test('selected Context stays bound through the Subject entry, route, session, ac
     });
     expect(addressChanges.at(-1)).toEqual({ context: contextA, stream: alternateStream.value });
     await render(contextA);
-    await until(() => subjectCalls.length === 6);
+    await until(() => subjectCalls.length === 8);
     const nextRelease = `sha256:${'b'.repeat(64)}`;
     relationTargetType = 'schema:Thing';
-    await resolve(5, contextA, 'Changed source release', contextA, nextRelease);
+    await resolve(7, contextA, 'Changed source release', contextA, nextRelease);
     await until(() => host.querySelector('[role="alert"]') !== null);
     expect(host.textContent).not.toContain('Changed source release');
-    expect(relationCalls).toHaveLength(5);
+    expect(relationCalls).toHaveLength(7);
     const sourceRetry = [...host.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
       button.textContent?.includes('Retry this page'),
     );
     if (!sourceRetry) throw new Error('A source release change did not require a fresh read');
     await act(async () => sourceRetry.click());
-    await until(() => subjectCalls.length === 7);
-    await resolve(6, contextA, 'Fresh source release', contextA, nextRelease);
-    await until(() => relationCalls.length === 4 && host.textContent?.includes('Fresh source release') === true);
+    await until(() => subjectCalls.length === 9);
+    await resolve(8, contextA, 'Fresh source release', contextA, nextRelease);
+    await until(() => relationCalls.length === 8 && host.textContent?.includes('Fresh source release') === true);
     expect(relationCalls.at(-1)?.query.context).toBe(contextA);
     expect(host.textContent).toContain('exact selected Context');
     const generalTarget = [...host.querySelectorAll<HTMLAnchorElement>('a')].find(
@@ -404,38 +438,38 @@ test('selected Context stays bound through the Subject entry, route, session, ac
     expect(new URL(generalVia, 'https://site.test').searchParams.get('context')).toBe(contextA);
 
     await render(contextB);
-    await until(() => subjectCalls.length === 8);
-    await resolve(7, contextB, 'Mismatched Context', contextA);
+    await until(() => subjectCalls.length === 10);
+    await resolve(9, contextB, 'Mismatched Context', contextA);
     await until(() => host.querySelector('[role="alert"]') !== null);
     expect(host.textContent).not.toContain('Mismatched Context');
-    expect(relationCalls).toHaveLength(5);
+    expect(relationCalls).toHaveLength(8);
 
     await render(candidateContext);
-    await until(() => subjectCalls.length === 9);
-    await resolve(8, candidateContext, 'Explicit Global Context');
+    await until(() => subjectCalls.length === 11);
+    await resolve(10, candidateContext, 'Explicit Global Context');
     await until(() => host.textContent?.includes('Explicit Global Context') === true);
     expect(relationCalls.at(-1)?.query.context).toBe(candidateContext);
 
     await render();
-    await until(() => subjectCalls.length === 10);
-    await resolve(9, candidateContext, 'Legacy Global Default');
+    await until(() => subjectCalls.length === 12);
+    await resolve(11, candidateContext, 'Legacy Global Default');
     await until(() => host.textContent?.includes('Legacy Global Default') === true);
     expect(subjectCalls.at(-1)?.query.context).toBe(candidateContext);
     expect(relationCalls.at(-1)?.query.context).toBe(candidateContext);
 
     await render(contextA);
-    await until(() => subjectCalls.length === 11);
+    await until(() => subjectCalls.length === 13);
     relationFailureOnce = true;
-    await resolve(10, contextA, 'Unavailable selected Context');
+    await resolve(12, contextA, 'Unavailable selected Context');
     await until(() => host.querySelector('[role="alert"]') !== null);
     const retrySelected = [...host.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
       button.textContent?.includes('Retry this page'),
     );
     if (!retrySelected) throw new Error('An unavailable selected-Context page did not expose Retry');
     await act(async () => retrySelected.click());
-    await until(() => subjectCalls.length === 12);
-    await resolve(11, contextA, 'Retried selected Context');
-    await until(() => relationCalls.length === 10 && host.textContent?.includes('Retried selected Context') === true);
+    await until(() => subjectCalls.length === 14);
+    await resolve(13, contextA, 'Retried selected Context');
+    await until(() => relationCalls.length === 12 && host.textContent?.includes('Retried selected Context') === true);
     expect(subjectCalls.at(-1)?.query.context).toBe(contextA);
     expect(relationCalls.at(-1)?.query.context).toBe(contextA);
 
