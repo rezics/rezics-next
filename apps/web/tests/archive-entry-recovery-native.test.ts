@@ -275,7 +275,13 @@ test('Supplied native results expose only selected supported outcomes and checkp
         result,
       })),
     };
-    const selected = [{ ordinal: 0, section: 'entries' as const }];
+    const selected = [
+      {
+        ordinal: 0,
+        section: 'entries' as const,
+        choice: { ordinal: 0, kind: 'entry', subjectId: id, action: 'preserve' } as const,
+      },
+    ];
     expect(selectedArchiveRecoveryResults(native, selected)).toEqual({
       rows: [{ ordinal: 0, section: 'entries', status: 'recoverable', subjectId: null }],
       context: { uploadId: id, state: 'ready', next: 400 },
