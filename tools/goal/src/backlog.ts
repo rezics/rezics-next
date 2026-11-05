@@ -13,8 +13,11 @@ import {
   proposeContinuation,
   withContinuationAfter,
 } from './continuation.ts';
-import { readBriefContinuation, readResearchFanout } from './briefs.ts';
-import type { BriefContinuation } from './types.ts';
+import { parseBrief, readBriefContinuation, readResearchFanout, type RiskOwnership } from './briefs.ts';
+import type { Brief, BriefContinuation, Pool, PoolReading, Profile, TaskClass } from './types.ts';
+import { findAllowedPool, poolBurnStatus } from './allowance.ts';
+import { nearCeilingSweepAdmissions, readRetainedPoolReadings } from './pacing.ts';
+import { admissionProfiles, type RoutingTable } from './routing.ts';
 import {
   BACKLOG_DISPATCHED_DIRECTORY as DISPATCHED_DIRECTORY,
   BACKLOG_DISPATCHING_DIRECTORY as CLAIM_DIRECTORY,
@@ -87,6 +90,13 @@ export type BacklogRuntime = {
   /** Active-task cap; defaults to `maxWorkers` in `<state>/capacity.json`, else 32. */
   workerCap?: number;
   perSweep?: number;
+  /** When set, the sweep routes candidates and spends the allowance that exists. */
+  routing?: {
+    table: RoutingTable;
+    ownership: RiskOwnership;
+    pools: Pool[];
+    readings?: PoolReading[];
+  };
 };
 
 export type BacklogSweep = {
@@ -162,6 +172,69 @@ function activeTaskCount(db: Database): number {
   ).count;
 }
 
+function runningTaskCount(db: Database): number {
+  if (!tableExists(db, 'worker_tasks')) return 0;
+  const waiting = tableExists(db, 'worker_attempts')
+    ? " AND NOT EXISTS (SELECT 1 FROM worker_attempts a WHERE a.task_id = worker_tasks.id AND a.attempt = worker_tasks.current_attempt AND json_extract(a.body, '$.state') = 'waiting')"
+    : '';
+  return (
+    db
+      .query(
+        `SELECT count(*) AS count FROM worker_tasks WHERE coalesce(json_extract(body, '$.brief.urgent'),0) != 1 AND json_extract(body, '$.state') = 'running'${waiting}`,
+      )
+      .get() as { count: number }
+  ).count;
+}
+
+function storedAdmission(
+  body: { sequence?: number; taskClass?: TaskClass; brief?: Brief },
+  table: RoutingTable,
+): { first: Profile; fallbacks: Profile[] } | undefined {
+  const brief = body.brief;
+  if (!brief || typeof brief !== 'object') return undefined;
+  const sequence = Number.isSafeInteger(body.sequence) && (body.sequence ?? 0) > 0 ? body.sequence! : 1;
+  return admissionProfiles(brief, table, sequence);
+}
+
+type ActiveBreakdown = { running: number; readyOther: number; readyWaiting: number };
+
+function activeBreakdown(runtime: BacklogRuntime, now: number): ActiveBreakdown {
+  const { db } = runtime;
+  if (!runtime.routing || !tableExists(db, 'worker_tasks'))
+    return { running: activeTaskCount(db), readyOther: 0, readyWaiting: 0 };
+  const readings = runtime.routing.readings ?? readRetainedPoolReadings(runtime.stateDirectory);
+  const options = {
+    now,
+    spanMs: (runtime.policy ?? defaultPolicy).pacing.burnSpanMs,
+    history: readings,
+    policy: (runtime.policy ?? defaultPolicy).provider,
+  };
+  const rows = db
+    .query(
+      `SELECT sequence, body FROM worker_tasks WHERE coalesce(json_extract(body, '$.brief.urgent'),0) != 1 AND json_extract(body, '$.state') = 'ready'`,
+    )
+    .all() as { sequence: number; body: string }[];
+  let readyWaiting = 0;
+  let readyOther = 0;
+  for (const row of rows) {
+    let parsed: { sequence?: number; taskClass?: TaskClass; brief?: Brief };
+    try {
+      parsed = { ...(JSON.parse(row.body) as { taskClass?: TaskClass; brief?: Brief }), sequence: row.sequence };
+    } catch {
+      readyOther += 1;
+      continue;
+    }
+    const profiles = storedAdmission(parsed, runtime.routing.table);
+    if (!profiles) {
+      readyOther += 1;
+      continue;
+    }
+    if (findAllowedPool(profiles.first, profiles.fallbacks, runtime.routing.pools, readings, options)) readyOther += 1;
+    else readyWaiting += 1;
+  }
+  return { running: runningTaskCount(db), readyOther, readyWaiting };
+}
+
 function oneLine(text: string, limit: number): string {
   const line = text.replace(/\s+/g, ' ').trim();
   return line.length > limit ? `${line.slice(0, limit - 1)}…` : line;
@@ -192,10 +265,11 @@ function notifyRefusals(runtime: BacklogRuntime, goal: string, refused: { brief:
   });
 }
 
-type BriefPick = { goal: string; file: string };
+type BriefPick = { goal: string; file: string; allowed: boolean };
 
-function pickBriefs(runtime: BacklogRuntime, goals: string[], need: number, now: number): BriefPick[] {
-  if (need <= 0) return [];
+type GoalQueue = { goal: string; files: string[] };
+
+function goalDispatchOrder(runtime: BacklogRuntime, goals: string[], now: number): GoalQueue[] {
   const order = new Map(
     (
       runtime.db.query('SELECT goal, last_dispatch_at FROM backlog_goals').all() as {
@@ -205,7 +279,7 @@ function pickBriefs(runtime: BacklogRuntime, goals: string[], need: number, now:
     ).map((row) => [row.goal, row.last_dispatch_at ?? 0]),
   );
   // The Goal served longest ago goes first, so a run with one free slot does not always serve the same Goal.
-  const queues = goals
+  return goals
     .map((goal) => ({
       goal,
       files: briefs(
@@ -215,6 +289,9 @@ function pickBriefs(runtime: BacklogRuntime, goals: string[], need: number, now:
     }))
     .filter((queue) => queue.files.length)
     .sort((a, b) => (order.get(a.goal) ?? 0) - (order.get(b.goal) ?? 0) || a.goal.localeCompare(b.goal));
+}
+
+function takeRoundRobin(queues: GoalQueue[], need: number, allowed: boolean): BriefPick[] {
   const picks: BriefPick[] = [];
   while (picks.length < need) {
     let any = false;
@@ -222,12 +299,130 @@ function pickBriefs(runtime: BacklogRuntime, goals: string[], need: number, now:
       if (picks.length >= need) break;
       const file = queue.files.shift();
       if (!file) continue;
-      picks.push({ goal: queue.goal, file });
+      picks.push({ goal: queue.goal, file, allowed });
       any = true;
     }
     if (!any) break;
   }
   return picks;
+}
+
+function remainingNearCeilingStarts(
+  pool: Pool,
+  started: Map<string, number>,
+  burns: ReturnType<typeof poolBurnStatus>,
+  policy: ControlPolicy['pacing'],
+): number | undefined {
+  const status = burns.find((entry) => entry.name === pool.name);
+  if (status?.maxBurnPerHour === undefined) return undefined;
+  return nearCeilingSweepAdmissions(
+    status.burnPerHour,
+    status.maxBurnPerHour,
+    started.get(pool.allowanceKey) ?? 0,
+    policy,
+  );
+}
+
+function candidatePool(
+  markdown: string,
+  runtime: BacklogRuntime,
+  now: number,
+  readings: PoolReading[],
+  exclude: string[],
+): { allowed: boolean; pool?: Pool } {
+  const routing = runtime.routing;
+  if (!routing) return { allowed: true };
+  try {
+    if (readResearchFanout(markdown)) return { allowed: true };
+    const brief = parseBrief(markdown, routing.ownership, (runtime.policy ?? defaultPolicy).brief);
+    const profiles = admissionProfiles(brief, routing.table);
+    const found = findAllowedPool(profiles.first, profiles.fallbacks, routing.pools, readings, {
+      now,
+      spanMs: (runtime.policy ?? defaultPolicy).pacing.burnSpanMs,
+      history: readings,
+      policy: (runtime.policy ?? defaultPolicy).provider,
+      exclude,
+    });
+    return found ? { allowed: true, pool: found.pool } : { allowed: false };
+  } catch {
+    // Untrusted brief text: keep it in the waiting group so ordinary dispatch can refuse it.
+    return { allowed: false };
+  }
+}
+
+function pickBriefs(
+  runtime: BacklogRuntime,
+  goals: string[],
+  allowedNeed: number,
+  waiterNeed: number,
+  now: number,
+): BriefPick[] {
+  if (allowedNeed <= 0 && waiterNeed <= 0) return [];
+  const queues = goalDispatchOrder(runtime, goals, now);
+  if (!runtime.routing) return takeRoundRobin(queues, allowedNeed, true);
+  const policy = runtime.policy ?? defaultPolicy;
+  const readings = runtime.routing.readings ?? readRetainedPoolReadings(runtime.stateDirectory);
+  const burns = poolBurnStatus(runtime.routing.pools, readings, now, policy.pacing.burnSpanMs);
+  const started = new Map<string, number>();
+  const allowed: GoalQueue[] = queues.map((queue) => ({ goal: queue.goal, files: [] }));
+  const waiting: GoalQueue[] = queues.map((queue) => ({ goal: queue.goal, files: [] }));
+  const allowedByGoal = new Map(allowed.map((queue) => [queue.goal, queue]));
+  const waitingByGoal = new Map(waiting.map((queue) => [queue.goal, queue]));
+  for (const queue of queues) {
+    for (const file of queue.files) {
+      let markdown: string;
+      try {
+        markdown = readFileSync(file, 'utf8');
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
+        throw error;
+      }
+      const candidate = candidatePool(markdown, runtime, now, readings, []);
+      (candidate.allowed ? allowedByGoal : waitingByGoal).get(queue.goal)?.files.push(file);
+    }
+  }
+  const allowedPicks: BriefPick[] = [];
+  const allowedQueues = allowed.filter((queue) => queue.files.length);
+  while (allowedPicks.length < allowedNeed) {
+    let any = false;
+    for (const queue of allowedQueues) {
+      if (allowedPicks.length >= allowedNeed) break;
+      while (queue.files.length) {
+        const file = queue.files.shift();
+        if (!file) break;
+        let markdown: string;
+        try {
+          markdown = readFileSync(file, 'utf8');
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
+          throw error;
+        }
+        const exhausted = runtime.routing.pools
+          .filter((pool) => remainingNearCeilingStarts(pool, started, burns, policy.pacing) === 0)
+          .map((pool) => pool.name);
+        const candidate = candidatePool(markdown, runtime, now, readings, exhausted);
+        if (!candidate.allowed) continue;
+        if (candidate.pool) {
+          const remaining = remainingNearCeilingStarts(candidate.pool, started, burns, policy.pacing);
+          if (remaining === 0) continue;
+          if (remaining !== undefined)
+            started.set(candidate.pool.allowanceKey, (started.get(candidate.pool.allowanceKey) ?? 0) + 1);
+        }
+        allowedPicks.push({ goal: queue.goal, file, allowed: true });
+        any = true;
+        break;
+      }
+    }
+    if (!any) break;
+  }
+  return [
+    ...allowedPicks,
+    ...takeRoundRobin(
+      waiting.filter((queue) => queue.files.length),
+      Math.max(0, Math.min(waiterNeed, allowedNeed + waiterNeed - allowedPicks.length)),
+      false,
+    ),
+  ];
 }
 
 async function dispatchReady(
@@ -248,20 +443,34 @@ async function dispatchReady(
     runtime.workerCap ??
     backlogWorkerCap(runtime.stateDirectory, (runtime.policy ?? defaultPolicy).capacity.maxWorkers);
   const perSweep = runtime.perSweep ?? (runtime.policy ?? defaultPolicy).backlog.dispatchesPerSweep;
-  let available = Math.max(0, Math.min(cap - activeTaskCount(runtime.db), perSweep));
+  const policy = runtime.policy ?? defaultPolicy;
+  const breakdown = activeBreakdown(runtime, now);
+  const allowedSlots = Math.max(0, cap - breakdown.running - breakdown.readyOther);
+  const waiterSlots = Math.max(
+    0,
+    cap -
+      breakdown.running -
+      breakdown.readyOther -
+      Math.max(0, breakdown.readyWaiting - policy.backlog.allowanceWaitingBound),
+  );
+  let available = Math.max(0, Math.min(allowedSlots, perSweep));
+  let sweepLeft = perSweep;
   for (const goal of goals) {
     const research = await recoverResearchClaims(runtime, goal, available);
     for (const entry of research.dispatched) dispatched.push({ goal, ...entry });
     for (const completion of research.completed) recordGoalDispatch(runtime, completion.goal, completion.writtenMs);
     available -= research.started;
+    sweepLeft -= research.started;
     const recovered = recoverClaims(runtime, goal);
     for (const entry of recovered.dispatched) dispatched.push({ goal, ...entry });
     for (const entry of recovered.refused) refuse(goal, entry.brief, entry.reason);
   }
 
-  const need = available;
-  for (const pick of pickBriefs(runtime, goals, need, now)) {
-    if (available <= 0) break;
+  const waiterNeed = Math.max(0, Math.min(sweepLeft, waiterSlots));
+  let waiterLeft = waiterNeed;
+  for (const pick of pickBriefs(runtime, goals, available, waiterNeed, now)) {
+    if (sweepLeft <= 0) break;
+    if (pick.allowed ? available <= 0 : waiterLeft <= 0) continue;
     const goalDirectory = join(root, pick.goal);
     const claimDirectory = join(goalDirectory, CLAIM_DIRECTORY);
     const claimed = join(claimDirectory, basename(pick.file));
@@ -337,6 +546,7 @@ async function dispatchReady(
           groupedResearch = true;
           const group = await dispatchResearchClaim(runtime, pick.goal, claimed, markdown, written, available);
           available -= group.started;
+          sweepLeft -= group.started;
           for (const entry of group.dispatched) dispatched.push({ goal: pick.goal, ...entry });
           if (group.complete) recordGoalDispatch(runtime, pick.goal, group.writtenMs);
           continue;
@@ -367,7 +577,9 @@ async function dispatchReady(
     renameSync(claimed, join(target, targetName));
     // The write time lets turn accounting see a brief its manager wrote in a turn that the run already dispatched.
     recordGoalDispatch(runtime, pick.goal, written);
-    available -= 1;
+    sweepLeft -= 1;
+    if (pick.allowed) available -= 1;
+    else waiterLeft -= 1;
     if (continuation)
       continued.push({ goal: pick.goal, taskId, attempt: continuation.expectedAttempt, brief: basename(pick.file) });
     else
@@ -576,8 +788,8 @@ function wakeLowBacklogs(runtime: BacklogRuntime, now: number): string[] {
 
 /**
  * One controller run, in a child process the manager host starts each minute: cancel stopped tasks past their
- * limit, dispatch the oldest ready briefs round-robin across Goals while active tasks are below the cap, and wake
- * managers with a low backlog.
+ * limit, dispatch briefs that have an allowed pool now (then others) round-robin across Goals while active tasks are
+ * below the cap, and wake managers with a low backlog.
  */
 export async function sweepBacklog(runtime: BacklogRuntime): Promise<BacklogSweep> {
   // One run at a time, across host restarts too: claim recovery assumes no other run holds a claim.

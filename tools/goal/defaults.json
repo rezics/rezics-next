@@ -181,6 +181,7 @@
       "stoppedTaskLimitMs": 3600000,
       "stoppedTasksPerGoalPerRun": 20,
       "dispatchesPerSweep": 4,
+      "allowanceWaitingBound": 10,
       "settleMs": 10000,
       "refusalBriefs": 4,
       "refusalReasonCharacters": 160,
@@ -337,7 +338,9 @@
       "alertUnusedPercent": 20,
       "alertResetHours": 24,
       "alertEveryMs": 10800000,
-      "burnSpanMs": 5400000
+      "burnSpanMs": 5400000,
+      "nearCeilingPercent": 25,
+      "nearCeilingStarts": 2
     },
     "manager": {
       "sleepAlarmPerHour": 10,
