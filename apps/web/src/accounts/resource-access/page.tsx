@@ -528,7 +528,7 @@ export function ResourceAccessPage({
         discardAction: m.thread_authoring_leave(),
       }}
     >
-      <ResourceAccessEditor key={lifetime.version} initial={initial} io={io} recovery={recovery} />
+      <ResourceAccessEditor key={lifetime.version} initial={initial} io={io} {...(recovery ? { recovery } : {})} />
     </AuthoringDepartureBoundary>
   );
 }
