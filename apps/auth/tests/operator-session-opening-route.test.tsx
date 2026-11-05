@@ -115,9 +115,9 @@ async function open(
       confirm: () => flush(() => host.querySelector<HTMLInputElement>('#opening-confirm')!.click()),
       boundary: (cached: boolean) =>
         flush(() => {
-          if (!cached) return history.replace('/automated/open?replacement=1');
           window.dispatchEvent(new dom.Event('pagehide') as unknown as Event);
-          window.dispatchEvent(Object.assign(new dom.Event('pageshow'), { persisted: true }) as unknown as Event);
+          if (cached)
+            window.dispatchEvent(Object.assign(new dom.Event('pageshow'), { persisted: true }) as unknown as Event);
         }),
       async close() {
         await flush(() => root.unmount());
