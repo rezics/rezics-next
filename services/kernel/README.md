@@ -35,6 +35,10 @@ referenced by the public client entrypoint as well as mounted routes.
 Decision: publish the complete mounted and public-root declaration closure for every admitted Kernel input
 independently of future source candidates or unfinished consumers.
 
+Decision: public client aliases retain their names while referencing native modules; provisional transports are removed
+when complete mounted declarations provide their callables. Reviewed Person transport stays unchanged until its
+native Semantic operands are admitted.
+
 Decision: Account client exports project mounted route types and add no parallel producer for account profile, avatar,
 managed-account navigation or unread data.
 

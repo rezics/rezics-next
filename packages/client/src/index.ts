@@ -5,7 +5,7 @@ import type { ClientKernel as KernelType } from './kernel/http/kernel.ts';
 import type { subjectRoutes } from './kernel/semantic/http/subjects.ts';
 import type { ModerationDecisionPage } from './kernel/content/decision-page.ts';
 import type { PostHistoryPage as NativePostHistoryPage } from './kernel/content/history-page.ts';
-import type { WatchManagementKind, WatchManagementPage } from './kernel/content/watch-management-contract';
+import type { WatchManagementKind, WatchManagementPage } from './kernel/content/schemas';
 import type { LibraryExportFinalManifest, LibraryExportManifest } from './kernel/library/library-export-format.ts';
 import type { ExportRecord } from './kernel/library/library-export-source.ts';
 
@@ -55,21 +55,21 @@ export type {
   WatchManagementKind,
   WatchManagementPage,
   WatchManagementViewer,
-} from './kernel/content/watch-management-contract';
-export type { PreferencePage, PreferencePageAction, PreferencePageKind } from './kernel/access/preference-page';
+} from './kernel/content/schemas';
+export type { PreferencePage, PreferencePageAction, PreferencePageKind } from './kernel/access/preferences';
 export type {
-  RealmClaimReviewApprovalAdvice,
-  RealmClaimReviewClaimant,
+  RealmClaimApprovalAdvice as RealmClaimReviewApprovalAdvice,
+  RealmClaimantPresentation as RealmClaimReviewClaimant,
   RealmClaimReviewInspection,
   RealmClaimReviewItem,
-  RealmClaimReviewOperation,
   RealmClaimReviewPage,
   RealmClaimReviewPresentation,
-  RealmClaimReviewQuery,
-} from './kernel/community/claim-review-page';
+} from './kernel/community/realm-claim-review';
 export type { PublicationCommand, RealmPublicationPreparation } from './kernel/community/publication-preparation.ts';
 
 type Routes = KernelType['~Routes']['v1'];
+export type RealmClaimReviewOperation = Routes['realms'][':realmId']['claimRequests']['get'];
+export type RealmClaimReviewQuery = RealmClaimReviewOperation['query'];
 export type RatingQuestionDirectoryQuery = Routes['rating-questions']['get']['query'];
 export type RatingQuestionDirectory = Routes['rating-questions']['get']['response'][200];
 export type RatingQuestion = RatingQuestionDirectory['ratingQuestions'][number];
@@ -329,13 +329,6 @@ type LibraryExportsClient = ((params: { id: string }) => LibraryExportPath) & {
 
 type SubjectsClient = Treaty.Sign<{ subjects: SubjectRoutes }>['subjects'];
 type SubjectPath = ReturnType<SubjectsClient>;
-type ProvisionalClassificationsClient = import('./kernel/rating/source-classifications.ts').SourceClassificationsClient;
-// Preserve the existing consumer seam while publication is pending. Once installed, the mounted transport
-// supplies its complete mutation unions without intersection with the provisional narrowing.
-type ClassificationCompatibility<Path> = Path extends { 'source-classifications': unknown }
-  ? Path
-  : Path & { 'source-classifications': ProvisionalClassificationsClient };
-
 // These aliases become usable only when the mounted declaration publisher installs the actual methods.
 // No hand-maintained transport supplies a missing mounted route.
 type ClassificationMethod<Verb extends string> = SubjectRoutes extends {
@@ -380,9 +373,9 @@ type UnreadNoticeRead = Awaited<ReturnType<NoticeInboxClient['count']['get']>>;
 export type NoticeInboxPage = NonNullable<NoticeInboxRead['data']>;
 export type NoticeInboxItem = NoticeInboxPage['items'][number];
 export type UnreadNoticeSummary = NonNullable<UnreadNoticeRead['data']>;
-export type { InboxNoticeSelection } from './kernel/content/notice-inbox-selection.ts';
+export type { InboxSelection as InboxNoticeSelection } from './kernel/content/notice-inbox.ts';
 export type KernelSubjectsClient = Omit<SubjectsClient, keyof Function> &
-  ((...args: Parameters<SubjectsClient>) => ClassificationCompatibility<SubjectPath>);
+  ((...args: Parameters<SubjectsClient>) => SubjectPath);
 type MountedSubjectRead = SubjectRoutes[':id']['get']['response'][200];
 export type SubjectReadQuery = NonNullable<Parameters<SubjectPath['get']>[0]>['query'] & {
   includeViewerActions?: boolean;
