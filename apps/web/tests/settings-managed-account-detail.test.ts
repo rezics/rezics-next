@@ -330,26 +330,24 @@ test('Connect exact native Auth entries to deployed management destinations pres
 test('detail Refresh and feed reads drop stale Auth links immediately and older replies cannot override newer missing or denied observations', async () => {
   const { projectManagedAuthNavigation } = await import('../src/settings/managed-account-actions-read');
   const value = detail();
-  value.account.displayName = 'Older target';
+  value.account.displayName = 'Current target';
+  value.role = 'member';
+  value.operator = { ...value.account, id: actorId, kind: 'actor', displayName: 'Current operator' };
+  value.relation = { operatorAccountId: actorId, reservationId, version: 'current-relation' };
+  const olderValue = detail();
+  olderValue.account.displayName = 'Older target';
+  olderValue.relation = null;
   const operations = [
     { operationId: 'auth.organization.delete', action: 'account:delete', resource: { route: 0, id: accountId } },
   ];
-  const projectNavigation = (snapshot: ManagementDetail) =>
-    projectManagedAuthNavigation(
-      { state: 'ready', operations },
-      snapshot,
-      viewerId,
-      { AUTH_ISSUER: 'https://auth.test', AUTH_MANAGEMENT_PAGE_ROUTES: '["/organizations/delete"]' },
-    );
-  const authNavigation = projectNavigation(value);
+  const authNavigation = projectManagedAuthNavigation(
+    { state: 'ready', operations },
+    value,
+    viewerId,
+    { AUTH_ISSUER: 'https://auth.test', AUTH_MANAGEMENT_PAGE_ROUTES: '["/organizations/delete"]' },
+  );
   const positive: DetailResult = { ok: true, viewerId, value, authNavigation };
-  const current = detail();
-  current.account.displayName = 'Current target';
-  current.account.kind = 'actor';
-  current.self = true;
-  current.role = 'member';
-  current.operator = { ...current.account, id: actorId, displayName: 'Current operator' };
-  current.relation = null;
+  const olderPositive: DetailResult = { ok: true, viewerId, value: olderValue, authNavigation };
   const pending: ((result: DetailResult) => void)[] = [];
   let defer = false;
   const reader = new ManagedAccountReader(viewerId, accountId, async () =>
@@ -366,22 +364,22 @@ test('detail Refresh and feed reads drop stale Auth links immediately and older 
   expect(reader.snapshot().detail?.account).toEqual(value.account); // Read-only recovery retains its own content.
   const older = reader.load('members', memberCursor);
   const newer = reader.load('responsibilities', operatorCursor);
-  const denied = projectManagedAuthNavigation({ state: 'ready', operations: [] }, current, viewerId, {});
-  pending[2]!({ ok: true, viewerId, value: current, authNavigation: denied });
+  const denied = projectManagedAuthNavigation({ state: 'ready', operations: [] }, value, viewerId, {});
+  pending[2]!({ ok: true, viewerId, value, authNavigation: denied });
   await newer;
   expect(reader.snapshot().authNavigation?.actions.delete.state).toBe('denied');
-  pending[1]!(positive);
+  pending[1]!(olderPositive);
   await older;
   expect(reader.snapshot().authNavigation?.actions.delete.state).toBe('denied');
   expect(reader.snapshot().detail).toMatchObject({
-    account: current.account,
-    self: true,
+    account: value.account,
+    self: false,
     role: 'member',
-    operator: current.operator,
-    operated: false,
+    operator: value.operator,
+    operated: true,
   });
-  expect(reader.snapshot().members.page).toEqual(value.members);
-  expect(reader.snapshot().responsibilities.page).toEqual(current.responsibilities);
+  expect(reader.snapshot().members.page).toEqual(olderValue.members);
+  expect(reader.snapshot().responsibilities.page).toEqual(value.responsibilities);
   const rendered = markup(reader);
   expect(rendered).toContain('Current target');
   expect(rendered).toContain('Current operator');
@@ -389,10 +387,7 @@ test('detail Refresh and feed reads drop stale Auth links immediately and older 
   expect(rendered).not.toContain('Older target');
   expect(rendered).not.toContain('/organizations/delete');
   const missing = reader.load();
-  const latest = detail();
-  latest.account.displayName = 'Latest retained target';
-  latest.role = 'member';
-  pending[3]!({ ok: true, viewerId, value: latest, authNavigation: projectNavigation(latest) });
+  pending[3]!(positive);
   await missing;
   expect(reader.snapshot().authNavigation?.actions.delete.state).toBe('available');
   const olderMembers = reader.load('members', memberCursor);
@@ -400,10 +395,9 @@ test('detail Refresh and feed reads drop stale Auth links immediately and older 
   pending[5]!({ ok: false, failure: detailFailure(503, { code: 'dependency_unavailable' }) });
   await latestFailure;
   expect(reader.snapshot().authNavigation).toBeUndefined();
-  pending[4]!(positive);
+  pending[4]!(olderPositive);
   await olderMembers;
-  expect(reader.snapshot().detail?.account).toEqual(latest.account);
-  expect(reader.snapshot().detail?.role).toBe('member');
+  expect(reader.snapshot().detail).toMatchObject({ account: value.account, role: 'member', operator: value.operator });
   expect(reader.snapshot().authNavigation).toBeUndefined();
   const stale = reader.load();
   reader.clear(); // Viewer, CSRF and target changes replace/clear this immutable reader.
