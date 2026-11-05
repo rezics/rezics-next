@@ -79,6 +79,8 @@ These are authored native scenarios, not proof of current execution, upstream ob
 
 ## Receiving, browser and growth acceptance
 
+Decision: The anime visit shows currently selected TVAnime facts with their citations; archive aliases remain exact und names, and Episode, staff, cast and Character links follow current native relation IDs and return to the originating work.
+
 Pure conversion cases establish mapping, validation, provenance, bounds and determinism; they do not prove native acceptance/adoption, Context return, API receiving, visibility or growth.
 
 Retain import-to-discovery receiving obligations for selected Work, Edition and Release facts: propose, accept/adopt through Semantic, then verify current reads and shared meanings through Search/facets, Collections, Zones and TypeLists. Cover Context and public/private separation across importer proposals, editor actions, anonymous/editor reads and separate Alice/Bob populations, grants and state. Reduced, unscoped/delegated, suspended-valid and revoked callers repeat relevant reads and writes; private grants cannot leak. Hidden Concepts, source fences, aliases with hidden originals and late revocation affect membership, ordering, counts, cursors and disclosure.
