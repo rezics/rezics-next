@@ -95,7 +95,19 @@ test('reopen preserves the original response, current authority and terminal ref
     journal = new ShowcaseJournal(path);
   };
   try {
+    const acknowledge = journal.acknowledgeAction.bind(journal);
+    let receiptKey = '';
+    journal.acknowledgeAction = (key, id) => {
+      if (key.endsWith(':response')) {
+        receiptKey = key;
+        throw new Error('Process stopped after recording the response');
+      }
+      acknowledge(key, id);
+    };
+    await expect(run()).rejects.toThrow('Process stopped after recording the response');
+    reopen();
     expect(await run()).toEqual({ state: 'uploaded', uploadId, rows: 1 });
+    expect(journal.action(receiptKey)?.state).toBe('acknowledged');
     reopen();
     for (const current of [
       { ...identity, origin: 'https://other.test' },
@@ -104,7 +116,7 @@ test('reopen preserves the original response, current authority and terminal ref
       { ...identity, credential: { keyId: 'other-key' } },
     ])
       expect(await run(current)).toEqual({ state: 'unavailable', code: 'sealed-identity-changed' });
-    expect(calls).toBe(1);
+    expect(calls).toBe(2);
     for (const body of [
       { uploadId, rows: 2 },
       { uploadId: '01900000-0000-4000-8000-000000000002', rows: 1 },
