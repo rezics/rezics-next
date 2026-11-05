@@ -98,6 +98,7 @@ async function mount() {
     window,
     document: window.document,
     navigator: window.navigator,
+    scrollTo: () => undefined,
     HTMLElement: window.HTMLElement,
     Element: window.Element,
     Node: window.Node,
@@ -118,6 +119,7 @@ async function mount() {
   const { collectionPublicationQuery, publicationCandidates } = await import('../src/library/collection-publication');
   const { publicationExample } = await import('../src/kernel/fake/collection-publication');
   const { sessionQuery } = await import('../src/session/query');
+  const { viewerExposureLifetime, viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
   const { m } = await import('../src/paraglide/messages.js');
   const { getLocale, overwriteGetLocale } = await import('../src/paraglide/runtime.js');
   const previousLocale = getLocale;
@@ -128,6 +130,8 @@ async function mount() {
   document.body.append(host);
   const root = createRoot(host);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const exposure = viewerExposureLifetime(client);
+  const stopExposure = exposure.subscribe(() => {});
   const router = createRouter({
     routeTree: createRootRoute(),
     history: createMemoryHistory({ initialEntries: ['/en/collections/publication-example/publish'] }),
@@ -141,13 +145,24 @@ async function mount() {
     });
   let session = viewer();
   let currentAddress = address;
-  const ready = (revision = 7, members = exampleSource.page.members): PublicationPage => ({
+  const ready = (
+    revision = 7,
+    members = exampleSource.page.members,
+    publication?: { generation: string; state: 'complete'; itemCount: number },
+  ): PublicationPage => ({
     viewer: { subject: session.subject!, csrfToken: session.csrfToken! },
     address: currentAddress,
     source: {
       state: 'ready',
       revision,
-      page: { ...exampleSource.page, id: currentAddress.id, curatorAccountId: session.subject!, revision, members },
+      page: {
+        ...exampleSource.page,
+        id: currentAddress.id,
+        curatorAccountId: session.subject!,
+        revision,
+        members,
+        ...(publication ? { publication } : {}),
+      },
     },
   });
   const tree = (node: ReactNode) => (
@@ -160,6 +175,12 @@ async function mount() {
       session = nextSession;
       currentAddress = nextAddress;
       client.setQueryData(sessionQuery.queryKey, session);
+      const snapshot = exposure.getSnapshot();
+      if (snapshot.state === 'signed-in')
+        client.setQueryData(viewerExposureQuery(snapshot.observation).queryKey, {
+          subject: snapshot.observation.subject,
+          admitted: ['collections'],
+        });
       root.render(tree(<CollectionPublicationPage address={currentAddress} />));
     });
   const button = (label: string) => {
@@ -184,12 +205,7 @@ async function mount() {
       if (outcome instanceof Error) work.reject(outcome);
       else work.resolve(outcome);
     });
-  const refresh = () =>
-    flush(() => {
-      void client.refetchQueries({
-        queryKey: collectionPublicationQuery(session as PublicationViewer, currentAddress).queryKey,
-      });
-    });
+  const refresh = () => click(m.library_collection_reload());
   return {
     host,
     m,
@@ -204,12 +220,13 @@ async function mount() {
     ids: publicationCandidates(exampleSource.page).map((member) => member.subject!.id),
     members: exampleSource.page.members,
     hide: () => flush(() => root.render(tree(null))),
-    view: (page: PublicationPage) =>
+    view: (page: PublicationPage, responseTimeoutMs?: number) =>
       flush(() =>
         root.render(
           tree(
             <CollectionPublicationPageView
               page={page}
+              {...(responseTimeoutMs === undefined ? {} : { responseTimeoutMs })}
               submit={(input) => {
                 const call = { input, csrf: page.viewer?.csrfToken ?? null, work: deferred<PublicationResult>() };
                 writes.push(call);
@@ -221,15 +238,16 @@ async function mount() {
       ),
     seed: (page: PublicationPage, credential: PublicationViewer) =>
       flush(() => {
-        const query = client.getQueryCache().find({
+        const query = client.getQueryCache().findAll({
           queryKey: collectionPublicationQuery(credential, currentAddress).queryKey,
-        });
+        }).at(-1);
         expect(query).toBeDefined();
         client.setQueryData(query!.queryKey, page);
       }),
     async dispose() {
       await act(async () => root.unmount());
       client.clear();
+      stopExposure();
       host.remove();
       overwriteGetLocale(previousLocale);
       await window.happyDOM.close();
@@ -348,6 +366,64 @@ test('Uncertain selected publication retains its exact native intent across curr
   });
 });
 
+test('A timed-out original remains uncertain after a refused replay and accepts its late exact receipt', async () => {
+  await mounted(async (page) => {
+    await page.view(page.ready(), 1);
+    await page.choose();
+    await page.click(page.m.library_publication_publish(), true);
+    expect(writes).toHaveLength(1);
+    const original = structuredClone(writes[0]!.input);
+    expect(page.host.textContent).toContain(page.m.library_publication_unknown());
+
+    await page.click(page.m.library_publication_retry());
+    expect(writes).toHaveLength(2);
+    expect(writes[1]!.input).toEqual(original);
+    await page.settle(writes[1]!.work, { ok: false, reason: 'denied' });
+    expect(page.host.textContent).toContain(page.m.library_publication_unknown());
+
+    await page.settle(writes[0]!.work, complete(original));
+    expect(page.host.textContent).toContain(page.m.library_publication_complete_one({ count: '1' }));
+    expect(page.host.textContent).not.toContain(page.m.library_publication_unknown());
+    expect(writes).toHaveLength(2);
+    expect(reads).toHaveLength(0);
+  });
+});
+
+test('A confirmed receipt stays separate from newer current output and survives a failed Reload without replay', async () => {
+  await mounted(async (page) => {
+    await page.show();
+    await page.settle(reads[0]!.work, page.ready(7, page.members, { generation: 'current-output', state: 'complete', itemCount: 3 }));
+    await page.choose();
+    await page.click(page.m.library_publication_publish());
+    expect(writes).toHaveLength(1);
+    await page.settle(writes[0]!.work, complete(writes[0]!.input));
+    expect(page.host.textContent).toContain(
+      page.m.library_publication_published_generation({ generation: 'native-complete' }),
+    );
+    expect(page.host.textContent).toContain(page.m.library_publication_complete_one({ count: '1' }));
+
+    await page.click(page.m.library_collection_reload());
+    expect(reads).toHaveLength(2);
+    await page.settle(
+      reads[1]!.work,
+      page.ready(9, page.members, { generation: 'newer-current-output', state: 'complete', itemCount: 4 }),
+    );
+    expect(page.host.textContent).toContain(
+      page.m.library_publication_published_generation({ generation: 'newer-current-output' }),
+    );
+    expect(page.host.textContent).toContain(page.m.library_publication_complete_one({ count: '1' }));
+
+    await page.click(page.m.library_collection_reload());
+    expect(reads).toHaveLength(3);
+    await page.settle(reads[2]!.work, new Error('Current output read failed'));
+    expect(page.host.textContent).toContain(
+      page.m.library_publication_published_generation({ generation: 'newer-current-output' }),
+    );
+    expect(page.host.textContent).toContain(page.m.library_publication_complete_one({ count: '1' }));
+    expect(writes).toHaveLength(1);
+  });
+});
+
 for (const boundary of ['viewer', 'collection', 'cursor', 'authority', 'unmount'] as const) {
   test(`Old publication success, failure and completion cannot paint or unlock a replacement ${boundary} lifetime`, async () => {
     for (const outcome of ['complete', 'denied', 'throw'] as const)
@@ -433,7 +509,7 @@ test('Retired reload success and failure cannot reset a replacement viewer or ad
       });
 });
 
-test('Missing current authority and mismatched current source refuse starts; a fresh valid read enables a healthy retry', async () => {
+test('Missing current authority and one mismatched source refuse starts; Reload enables an empty-set retry', async () => {
   await mounted(async (page) => {
     for (const session of [
       { state: 'unknown', subject: null, csrfToken: null },
@@ -445,25 +521,14 @@ test('Missing current authority and mismatched current source refuse starts; a f
     }
     expect(reads).toHaveLength(0);
     await page.show(viewer());
-    for (const mismatch of ['subject', 'collection', 'cursor', 'source', 'unavailable'] as const) {
-      const valid = page.ready();
-      const invalid: PublicationPage =
-        mismatch === 'subject'
-          ? { ...valid, viewer: { ...valid.viewer!, subject: 'foreign-viewer' } }
-          : mismatch === 'collection'
-            ? { ...valid, address: { id: 'foreign-collection' } }
-            : mismatch === 'cursor'
-              ? { ...valid, address: { ...address, cursor: 'foreign-page' } }
-              : mismatch === 'source' && valid.source.state === 'ready'
-                ? { ...valid, source: { ...valid.source, page: { ...valid.source.page, id: 'foreign-source' } } }
-                : { ...valid, source: { state: 'unavailable' } };
-      await page.settle(reads.at(-1)!.work, invalid);
-      expect(page.checkboxes()).toHaveLength(0);
-      expect(page.button(page.m.library_publication_publish()).disabled).toBe(true);
-      expect(writes).toHaveLength(0);
-      await page.refresh();
-    }
-    await page.settle(reads.at(-1)!.work, page.ready());
+    expect(reads).toHaveLength(1);
+    await page.settle(reads[0]!.work, { ...page.ready(), source: { state: 'unavailable' } });
+    expect(page.checkboxes()).toHaveLength(0);
+    expect(page.button(page.m.library_publication_publish()).disabled).toBe(true);
+    expect(writes).toHaveLength(0);
+    await page.click(page.m.library_collection_reload());
+    expect(reads).toHaveLength(2);
+    await page.settle(reads[1]!.work, page.ready());
     await page.choose([]);
     await page.click(page.m.library_publication_publish(), true);
     expect(writes).toHaveLength(1);

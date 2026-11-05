@@ -9,8 +9,8 @@ import {
   publicationInput,
   publicationResponse,
   publicationSource,
-  publishSelectedRecord,
-  selectedPublicationAdapter,
+  publishSelectedNative,
+  publicationReadWithin,
   collectionPublicationQuery,
   loadCollectionPublication,
   type PublicationInput,
@@ -29,11 +29,29 @@ import { getLocale, overwriteGetLocale } from '../src/paraglide/runtime.js';
 
 const key = '0192f3a0-6c1e-7b2a-9d4e-0000000000aa';
 const input: PublicationInput = { collectionId: 'saved-dynamic', revision: 7, subjectIds: [], idempotencyKey: key };
+const csrfToken = 'A'.repeat(22);
 const write = () =>
   new Request('https://site.test/_serverFn/publication', {
     method: 'POST',
-    headers: { authorization: 'Bearer owner-token' },
+    headers: {
+      authorization: 'Bearer owner-token',
+      cookie: `__Host-rezics_session=${'a'.repeat(43)}`,
+      origin: 'https://site.test',
+      'X-CSRF-Token': csrfToken,
+    },
   });
+const sessionEnv: Partial<SessionEnv> = {
+  SITE_ORIGINS: 'https://site.test',
+  AUTH_ISSUER: 'https://auth.test',
+  API_RESOURCE: 'https://kernel.test',
+  WEBSITE_SCOPES: 'openid',
+  WEBSITE_CLIENT_ID: 'publication-test',
+  WEBSITE_CLIENT_KEY: 'unused',
+  SESSIONS: {
+    idFromName: (id: string) => id,
+    get: () => ({ signedIn: async () => ({ signedIn: true, csrfToken }) }),
+  } as unknown as DurableObjectNamespace<SessionStore>,
+};
 
 test('explicit empty and nonempty requests retain native revision and unique IDs, with a hard 100 selection limit', () => {
   expect(publicationInput(input)).toEqual(input);
@@ -138,16 +156,20 @@ test('the current dynamic reader preserves header revision and original IDs; sel
   expect(JSON.stringify(ordinary)).not.toContain('alias-a');
 });
 
-test('one guarded POST uses the exact selected native route and payload; unknown retries preserve the request and key', async () => {
+test('the installed generated operation sends the exact selected request; unknown retries preserve the request and key', async () => {
   const calls: Request[] = [];
-  const adapter = selectedPublicationAdapter('https://kernel.test', async (url, init) => {
-    calls.push(new Request(url, init));
-    if (calls.length === 1) throw new Error('Connection lost after dispatch');
-    return Response.json({ code: 'source_unavailable' }, { status: 503 });
+  const client = createKernelClient('https://kernel.test', {
+    fetch: async (url, init) => {
+      calls.push(new Request(url, init));
+      if (calls.length === 1) throw new Error('Connection lost after dispatch');
+      return Response.json({ code: 'source_unavailable' }, { status: 503 });
+    },
   });
   const selected = { ...input, subjectIds: ['canonical-a'] };
-  expect(await publishSelectedRecord(adapter, write(), {}, selected)).toEqual({ ok: false, reason: 'unknown' });
-  expect(await publishSelectedRecord(adapter, write(), {}, selected)).toEqual({ ok: false, reason: 'unavailable' });
+  const uncertain = await publishSelectedNative(client, write(), sessionEnv, selected);
+  expect(calls).toHaveLength(1);
+  expect(uncertain).toEqual({ ok: false, reason: 'unknown' });
+  expect(await publishSelectedNative(client, write(), sessionEnv, selected)).toEqual({ ok: false, reason: 'unavailable' });
   expect(calls).toHaveLength(2);
   for (const call of calls) {
     expect(call.method).toBe('POST');
@@ -157,27 +179,34 @@ test('one guarded POST uses the exact selected native route and payload; unknown
     expect(call.headers.get('idempotency-key')).toBe(key);
     expect(await call.json()).toEqual({ revision: 7, subjectIds: ['canonical-a'] });
   }
-  let dispatched = false;
-  const never = async () => {
-    dispatched = true;
-    return { status: 200, body: {} };
-  };
-  const refused = await publishSelectedRecord(
-    never,
+  const refusedClient = createKernelClient('https://kernel.test', {
+    fetch: async () => {
+      throw new Error('Must not dispatch');
+    },
+  });
+  const refused = await publishSelectedNative(
+    refusedClient,
     new Request('https://site.test', {
       method: 'POST',
       headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}`, origin: 'https://foreign.test' },
     }),
-    {},
+    sessionEnv,
     input,
   );
   expect(refused).toEqual({ ok: false, reason: 'denied' });
-  expect(dispatched).toBe(false);
-  expect(
-    await selectedPublicationAdapter(undefined, async () => {
-      throw new Error('Must not dispatch');
-    })(input, 'Bearer owner-token'),
-  ).toEqual({ status: 503, body: null });
+});
+
+test('a local response deadline terminates without cancelling its operation', async () => {
+  let finished = false;
+  const read = new Promise<string>((resolve) => {
+    setTimeout(() => {
+      finished = true;
+      resolve('late');
+    }, 15);
+  });
+  expect(await publicationReadWithin(read, 1, 'unavailable')).toBe('unavailable');
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(finished).toBe(true);
 });
 
 test('only the exact native complete response establishes publication; pending, denied, stale, malformed and sparse outcomes do not', () => {
@@ -249,6 +278,7 @@ test('Selected Collection publication communicates zero one and many selected it
     window,
     document: window.document,
     navigator: window.navigator,
+    scrollTo: () => undefined,
     HTMLElement: window.HTMLElement,
     Element: window.Element,
     Node: window.Node,

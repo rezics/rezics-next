@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
+import { collectionSelectedPublicationPlan, nativeReceiptBound, nativeWorkDimensions } from '../../src/library/collection-selected-publication-bounds.ts';
+import { withinCeiling } from '@rezics/bounds';
 import { builtinCollectionId } from '../../src/library/builtin-identity.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { createCollectionRulesFixture, type CollectionRulesFixture } from './support/collection-rules-fixture.ts';
@@ -15,6 +17,23 @@ afterAll(async () => {
   await f?.close();
 });
 const path = (id: string) => `/v1/collections/${id}:publishSelected`;
+
+test('selected publication declares an immutable nine-axis plan, including the full alias closure for each selection', () => {
+  const empty = collectionSelectedPublicationPlan(0);
+  const full = collectionSelectedPublicationPlan(100);
+  expect(Object.isFrozen(empty)).toBe(true);
+  expect(Object.isFrozen(full.terms.selectedBranches)).toBe(true);
+  expect(empty.terms.selectedBranches.candidateKeys).toBe(0);
+  expect(empty.perAttempt.nativeRows).toBeGreaterThan(0);
+  expect(full.terms.selectedBranches.candidateKeys).toBeGreaterThan(100);
+  expect(full.perAttempt.engineRequests).toBe(0);
+  expect(withinCeiling(full.perAttempt, full.ceiling)).toBe(true);
+  expect(nativeWorkDimensions(nativeReceiptBound({ reservationId: 'native', used: full.bindingWork }))).toEqual(
+    full.bindingWork,
+  );
+  expect(() => collectionSelectedPublicationPlan(101)).toThrow();
+});
+
 async function saved() {
   const response = await f.send('POST', '/v1/collections', {
     membershipKind: 'dynamic',

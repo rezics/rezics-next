@@ -506,20 +506,29 @@ self fallback. A selected nonmember is concealed, and an unproved selection retu
 without a write. No whole-source scan, result truncation, query count, Actor or permission payload is published.
 
 Preparation consumes the existing `bindOwnerFilterRead`, `CollectionSource`, `readOwnerFilterCandidateClosure`
-and scoped-observation declarations. The binding must supply the same actual command attempt T, source and scoped
-capture. The current native read binding and complete-original closure are typed unavailable adapters; the scoped
-Semantic producer also remains unavailable. Consequently this checkout cannot yet claim successful native selected
-publication, including empty publication. Their real producer modules replace those adapters; the publisher grants
-no allowance, readiness, positive/empty membership or permission in their place. It deliberately refuses an activated
-public output as evidence of current private saved-query membership. A producer must supply that owner Source before
-a later selection can be verified; changing a header alone never opens personal predicate output to public reads.
+and scoped-observation declarations. The immutable service plan composes the public nine-axis `@rezics/bounds`
+declarations with safe sums, bounded repeats and ceiling checks. For `n` raw IDs, one attempt includes binding and
+fixed Source/scope/private-authority work, bounded canonical deduplication, `n` selected branches, pre-receipt
+reauthorization and the native output transaction. Each branch pays the Source's 100-key canonical group and saved
+query probe ceiling, then the larger of a positive result with its complete closure or a complete negative scan.
+Probe work uses the native producer's full 32-label cap; owner-fact matching uses the accepted Members Source bound.
+The closure is capped independently at 100 references and 50 distinct originals, with disclosure repeated for each
+original; 100 selected IDs do not cap aliases. Empty `[]` still pays live Source preparation, private capture and
+command authority. The maximum operation is repeated by the existing three-attempt bound. `engineRequests` is
+translated explicitly to the legacy eight-axis native port and must be zero; it is never omitted from the plan.
 
-The consumer transfers one existing work reservation, holds conservative charges for the native output work before
-verification, and charges all raw identity/disclosure, Source and private fact work to the remainder. It allocates
-no extra raw100 budget for output. Exceeding any dimension is unavailable, even for a syntactically valid 100-ID
-selection. The final owning transaction compares the exact native source generation, visibility, incarnation,
-revision and stored definition and revalidates the scoped capture through its existing source-local `tx` port.
-No foreign home is opened while the parent is held. Relevant changes roll back the entire command.
+The selected consumer transfers that finite plan through the existing `NativeCollectionWork` port. It holds the full
+actual-size output, activation, History/events, receipt, serialization and rollback price before verification,
+then dispatches the bounded Source, disclosure and private fact callers from named plan terms. The Work binding's
+per-operation ceilings and measurement capture limits remain independent and unchanged; the selected plan does not
+raise a producer's own closure, query or result cap. Missing Source/capture/original-reference evidence remains
+unavailable. The final owning transaction compares the complete native header/rule, authorizes every private leaf,
+and revalidates scope before receipt lookup. No foreign home is opened while the parent is held. Relevant changes
+roll back the entire command and leave the prior selected output active.
+
+Decision: selected publication owns one immutable nine-axis plan for up to 100 disclosed canonical IDs and each
+complete native original closure; a timeout preserves the same uncertain receipt intent, and only the native receipt
+confirms it. The selected IDs and explicit empty set remain distinct from whole-query exhaustion.
 
 One authorized Core command changes public visibility/header revision, calls begin/append/complete on the existing
 output hooks, and emits the ordinary Collection updated/listing events and receipt. Only COMPLETE advances the

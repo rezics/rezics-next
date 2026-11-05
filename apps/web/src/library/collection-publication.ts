@@ -1,5 +1,5 @@
 import { queryOptions } from '@tanstack/react-query';
-import { isNotFound } from '@tanstack/react-router';
+import { isNotFound, isRedirect } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import type { KernelClient } from '@rezics/client';
@@ -7,7 +7,6 @@ import type { SessionEnv } from '../session/client';
 import { requestCsrfToken, sessionSubject } from '../session/request';
 import { personalRead } from '../kernel/query';
 import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
-import { readCollectionPage } from './collection-queries';
 import { collectionResultMatches, type CollectionPageResult } from './collection-load';
 import type { DynamicCollectionPage } from './dynamic-collection';
 import { asSession, isRecord, kernelHeaders, writeSession } from './collection-records';
@@ -34,6 +33,25 @@ export type PublicationPage = {
     | { state: 'ready'; page: DynamicCollectionPage; revision: number }
     | { state: 'denied' | 'unsupported' | 'unavailable' | 'preparing' };
 };
+
+export const COLLECTION_PUBLICATION_READ_RESPONSE_MS = 10_000;
+
+function unavailablePublicationPage(viewer: PublicationViewer | null, address: PublicationAddress): PublicationPage {
+  return { viewer, address, source: { state: 'unavailable' } };
+}
+
+/** Local response deadline; the server function/native operation keeps its own original lifetime. */
+export async function publicationReadWithin<T>(read: Promise<T>, milliseconds: number, timeoutValue: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const timeout = new Promise<T>((resolve) => {
+      timer = setTimeout(() => resolve(timeoutValue), milliseconds);
+    });
+    return await Promise.race([read, timeout]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
 
 const identifier = (value: unknown): value is string => typeof value === 'string' && /^[^/?:#\s]{1,128}$/u.test(value);
 const revision = (value: unknown): value is number =>
@@ -93,28 +111,6 @@ export function publicationSource(page: CollectionPageResult, owner: string): Pu
   };
 }
 
-/** Exact declared native wire; replace with the generated client method when that module is generated. */
-export const selectedPublicationRoute = (id: string) => `/v1/collections/${encodeURIComponent(id)}:publishSelected`;
-export type SelectedPublicationAdapter = (
-  input: PublicationInput,
-  authorization: string,
-) => Promise<{ status: number; body: unknown }>;
-
-/** An absent runtime is unavailable. Development recordings never stand in for native publication. */
-export function selectedPublicationAdapter(origin?: string, fetcher: typeof fetch = fetch): SelectedPublicationAdapter {
-  return async (input, authorization) => {
-    if (!origin) return { status: 503, body: null };
-    const response = await fetcher(new URL(selectedPublicationRoute(input.collectionId), origin), {
-      method: 'POST',
-      cache: 'no-store',
-      redirect: 'error',
-      headers: { authorization, 'content-type': 'application/json', 'idempotency-key': input.idempotencyKey },
-      body: JSON.stringify({ revision: input.revision, subjectIds: input.subjectIds }),
-    });
-    return { status: response.status, body: await response.json().catch(() => null) };
-  };
-}
-
 export function publicationResponse(status: number, body: unknown, input: PublicationInput): PublicationResult {
   if (isPlatformClosedProblem(status, body)) return { ok: false, reason: 'closed' };
   if (status === 409) return { ok: false, reason: 'stale' };
@@ -139,23 +135,6 @@ export function publicationResponse(status: number, body: unknown, input: Public
   };
 }
 
-export async function publishSelectedRecord(
-  adapter: SelectedPublicationAdapter,
-  request: Request,
-  sessionEnv: Partial<SessionEnv>,
-  input: PublicationInput,
-): Promise<PublicationResult> {
-  const validated = publicationInput(input);
-  const session = await writeSession(request, sessionEnv);
-  if (!asSession(session)) return { ok: false, reason: session.reason === 'unavailable' ? 'unavailable' : 'denied' };
-  try {
-    const result = await adapter(validated, session.authorization);
-    return publicationResponse(result.status, result.body, validated);
-  } catch (error) {
-    return { ok: false, reason: isPlatformClosedError(error) ? 'closed' : 'unknown' };
-  }
-}
-
 /** Exact generated `collections({id}).$publishSelected.post`; an absent runtime stays unavailable. */
 export async function publishSelectedNative(
   client: KernelClient,
@@ -164,41 +143,38 @@ export async function publishSelectedNative(
   input: PublicationInput,
 ): Promise<PublicationResult> {
   const validated = publicationInput(input);
-  const session = await writeSession(request, sessionEnv);
-  if (!asSession(session)) return { ok: false, reason: session.reason === 'unavailable' ? 'unavailable' : 'denied' };
+  let dispatched = false;
   try {
-    const result = await client
-      .collections({ collectionId: validated.collectionId })
-      .$publishSelected.post(
-        { revision: validated.revision, subjectIds: validated.subjectIds },
-        { headers: kernelHeaders(session.authorization, validated.idempotencyKey) },
-      );
+    const session = await writeSession(request, sessionEnv);
+    if (!asSession(session)) return { ok: false, reason: session.reason === 'unavailable' ? 'unavailable' : 'denied' };
+    const endpoint = client.collections({ collectionId: validated.collectionId }).$publishSelected;
+    if (!endpoint || typeof endpoint.post !== 'function') return { ok: false, reason: 'unavailable' };
+    dispatched = true;
+    const result = await endpoint.post(
+      { revision: validated.revision, subjectIds: validated.subjectIds },
+      { headers: kernelHeaders(session.authorization, validated.idempotencyKey) },
+    );
     const status = typeof result.status === 'number' ? result.status : (result.error?.status ?? 0);
     const body = result.data ?? result.error?.value ?? null;
+    // Eden represents a rejected fetch as an empty 503 error; no native outcome was observed.
+    if (status === 503 && isRecord(body) && Object.keys(body).length === 0) return { ok: false, reason: 'unknown' };
     return publicationResponse(status, body, validated);
   } catch (error) {
-    return { ok: false, reason: isPlatformClosedError(error) ? 'closed' : 'unknown' };
+    if (isRedirect(error) || isNotFound(error)) throw error;
+    return { ok: false, reason: isPlatformClosedError(error) ? 'closed' : dispatched ? 'unknown' : 'unavailable' };
   }
 }
 
 export const publishSelectedCollection = createServerFn({ method: 'POST' })
   .validator(publicationInput)
   .handler(async ({ data }): Promise<PublicationResult> => {
-    setResponseHeader('cache-control', 'private, no-store');
-    const { env } = await import('cloudflare:workers');
-    const origin = (env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN;
-    if (!origin && !import.meta.env.DEV) {
-      return publishSelectedRecord(
-        selectedPublicationAdapter(undefined),
-        getRequest(),
-        env as Partial<SessionEnv>,
-        data,
-      );
-    }
-    const { kernelClient } = await import('../kernel/client');
     try {
+      setResponseHeader('cache-control', 'private, no-store');
+      const { env } = await import('cloudflare:workers');
+      const { kernelClient } = await import('../kernel/client');
       return await publishSelectedNative(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
     } catch (error) {
+      if (isRedirect(error) || isNotFound(error)) throw error;
       return { ok: false, reason: isPlatformClosedError(error) ? 'closed' : 'unavailable' };
     }
   });
@@ -206,16 +182,21 @@ export const publishSelectedCollection = createServerFn({ method: 'POST' })
 export const readCollectionPublication = createServerFn({ method: 'GET' })
   .validator(publicationAddress)
   .handler(async ({ data }): Promise<PublicationPage> => {
-    setResponseHeader('cache-control', 'private, no-store');
-    const { env } = await import('cloudflare:workers');
-    if (!(env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN)
-      return { viewer: null, address: data, source: { state: 'unavailable' } };
-    const request = getRequest();
-    return loadCollectionPublication(request, data, () =>
-      readCollectionPage({
-        data: { ...data, credentialMode: 'session', editor: true, filterActive: false },
-      }),
-    );
+    try {
+      setResponseHeader('cache-control', 'private, no-store');
+      const { env } = await import('cloudflare:workers');
+      if (!(env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN) return unavailablePublicationPage(null, data);
+      const request = getRequest();
+      const { readCollectionPage } = await import('./collection-queries');
+      return await loadCollectionPublication(request, data, () =>
+        readCollectionPage({
+          data: { ...data, credentialMode: 'session', editor: true, filterActive: false },
+        }),
+      );
+    } catch (error) {
+      if (isRedirect(error) || isNotFound(error)) throw error;
+      return unavailablePublicationPage(null, data);
+    }
   });
 
 /** Only the actual page reader prepares a session. Its provenance also binds empty/preparing pages. */
@@ -232,7 +213,8 @@ export async function loadCollectionPublication(
       return { viewer: null, address, source: { state: 'denied' } };
     return { viewer: { subject, csrfToken }, address, source: publicationSource(page, subject) };
   } catch (error) {
-    return { viewer: null, address, source: { state: isNotFound(error) ? 'denied' : 'unavailable' } };
+    if (isRedirect(error) || isNotFound(error)) throw error;
+    return unavailablePublicationPage(null, address);
   }
 }
 
@@ -247,7 +229,12 @@ export function collectionPublicationQuery(
     queryKey: ['collection-publication', viewer.subject, viewer.csrfToken, address.id, address.cursor ?? null],
     queryFn: async ({ signal }): Promise<PublicationPage> => {
       if (!isCurrent()) throw new Error('Retired publication read');
-      const page = await readCollectionPublication({ data: address });
+      const timeoutPage = unavailablePublicationPage(viewer, address);
+      const page = await publicationReadWithin(
+        readCollectionPublication({ data: address }),
+        COLLECTION_PUBLICATION_READ_RESPONSE_MS,
+        timeoutPage,
+      );
       if (!isCurrent()) throw new Error('Retired publication read');
       signal.throwIfAborted();
       if (

@@ -1,11 +1,10 @@
 import { types, type Pool, type PoolClient, type QueryResult, type QueryConfig } from 'pg';
-import { deadlineClient } from '../access/authenticate.ts';
+import { declareBound, type Bound } from '@rezics/bounds';
 import {
   currentOperationalResources,
   hasLiveOperationalTransaction,
   type OperationalTransaction,
 } from '../command/operational.ts';
-import { deadlineClient } from '../access/authenticate.ts';
 import { accessRoot } from '../access/derived-access.ts';
 import { createResourcePublicEligibility } from '../access/public-eligibility.ts';
 import { admitGroup, PlatformClosedError } from '../access/gates/admission.ts';
@@ -208,6 +207,22 @@ const fixed = (rows: number, points: number, bytes: number) => () => ({
   nativeRows: rows,
   nativePoints: points,
   bytes,
+});
+/**
+ * One saved-Collection membership probe: current metadata (including a prior public output head), one entry
+ * check, copy and session points, and the complete 32-label native window. The saved-rule contract excludes
+ * the state-builtin compressed-pin branch. This bound is paired with the separate canonical group cap.
+ */
+export const COLLECTION_SOURCE_NATIVE_SAVED_PROBE_COST: Bound = declareBound({
+  candidateKeys: 35,
+  engineRequests: 0,
+  identityMetadataRows: 0,
+  nativeRows: 512,
+  emptySeeks: 16,
+  nativePoints: 64,
+  witnessKeys: 35,
+  statements: 16,
+  bytes: 2_200_000,
 });
 // These bounds count plan-node row work, including materialization/sort/joins, rather than result.rowCount.
 // Header/fence/reference/account/partition are exact native primary-key points with fixed-width projections.

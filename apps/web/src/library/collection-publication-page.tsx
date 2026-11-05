@@ -24,15 +24,19 @@ import {
   type PublicationInput,
   type PublicationPage,
   type PublicationResult,
+  publicationReadWithin,
 } from './collection-publication';
 import {
   SavedQueryAcceptedMeaning,
   SavedQueryPublishedMembership,
   acceptedMeaningFromPage,
-  publishedMembership,
+  publishedMembershipFromDto,
+  publishedMembershipFromComplete,
+  type PublishedMembership,
 } from './saved-query-publication';
 
 export type PublicationSubmit = (input: PublicationInput) => Promise<PublicationResult>;
+export const COLLECTION_PUBLICATION_WRITE_RESPONSE_MS = 25_000;
 
 type QuantityMessage = (input: { count: string }) => string;
 
@@ -58,6 +62,7 @@ type PublicationViewProps = {
   isOwnerCurrent?: () => boolean;
   canPublish?: () => boolean;
   captureSubmit?: () => PublicationSubmit | null;
+  responseTimeoutMs?: number;
 };
 
 /** Authenticated read identity owns selection; mutation credentials never identify the originating intent. */
@@ -82,6 +87,7 @@ type IntentState = {
   selected: string[];
   confirmed: boolean;
   attempt: {
+    token: object;
     input: PublicationInput;
     send: PublicationSubmit;
     sourceKey: string | null;
@@ -91,6 +97,8 @@ type IntentState = {
   result: PublicationResult | null;
   complete: PublicationComplete | null;
   publishedReview: PublicationReview | null;
+  currentPublished: PublishedMembership;
+  currentPublishedRevision: number | null;
   busy: boolean;
 };
 
@@ -102,6 +110,7 @@ function PublicationIntentView({
   isCurrent = () => true,
   canPublish = () => !!page.viewer?.csrfToken,
   captureSubmit,
+  responseTimeoutMs = COLLECTION_PUBLICATION_WRITE_RESPONSE_MS,
   isOwnerCurrent = isCurrent,
 }: PublicationViewProps) {
   const source = page.source;
@@ -123,6 +132,8 @@ function PublicationIntentView({
     result: null,
     complete: null,
     publishedReview: null,
+    currentPublished: { state: 'unavailable' },
+    currentPublishedRevision: null,
     busy: false,
   });
   // Events and completions share the same synchronous gate, including before React renders again.
@@ -149,7 +160,14 @@ function PublicationIntentView({
     }));
   }, [sourceKey]);
   const { selected, confirmed, result, complete, publishedReview, busy } = state;
-  const published = publishedMembership(complete, ready ? source.page : null);
+  const currentPagePublished = ready ? publishedMembershipFromDto(source.page) : { state: 'unavailable' as const };
+  const currentReadRevision = ready ? source.revision : null;
+  const published =
+    currentPagePublished.state === 'complete' &&
+    (state.currentPublishedRevision === null ||
+      (currentReadRevision !== null && currentReadRevision >= state.currentPublishedRevision))
+      ? currentPagePublished
+      : state.currentPublished;
   const ratio = rowRatio(candidates.map((member) => member.subject));
   // A refusal on a later retry proves nothing about the original dispatch's commit.
   const unknown = state.attempt?.uncertain === true;
@@ -160,14 +178,36 @@ function PublicationIntentView({
     ? (state.attempt?.review ?? (ready ? publicationReview(source.page, source.revision, selected) : null))
     : null;
 
+  useLayoutEffect(() => {
+    if (source.state !== 'ready' || currentPagePublished.state !== 'complete' || !Number.isSafeInteger(source.revision))
+      return;
+    update((previous) => {
+      const current = previous.currentPublished;
+      if (previous.currentPublishedRevision !== null && source.revision < previous.currentPublishedRevision)
+        return previous;
+      if (
+        current.state === 'complete' &&
+        current.generation === currentPagePublished.generation &&
+        current.itemCount === currentPagePublished.itemCount &&
+        previous.currentPublishedRevision === source.revision
+      )
+        return previous;
+      return {
+        ...previous,
+        currentPublished: currentPagePublished,
+        currentPublishedRevision: source.revision,
+      };
+    });
+  }, [ready, source, currentPagePublished]);
+
   async function publish() {
     const origin = current.current;
     const uncertain = origin.attempt?.uncertain === true;
     if (
       !active.current ||
       !isCurrent() ||
-      !canPublish() ||
-      !ready ||
+      (!canPublish() && !uncertain) ||
+      (!ready && !uncertain) ||
       !origin.confirmed ||
       origin.busy ||
       (origin.result?.ok === false && !uncertain) ||
@@ -185,46 +225,71 @@ function PublicationIntentView({
           };
     const send = origin.attempt?.send ?? (captureSubmit ? captureSubmit() : submit);
     if (!send) return;
-    update((previous) => ({
-      ...previous,
-      busy: true,
-      attempt: previous.attempt ?? {
+    const capturedAttempt =
+      origin.attempt ?? {
+        token: {},
         input,
         send,
         sourceKey: origin.sourceKey,
         review: publicationReview(source.page, input.revision, origin.selected),
         uncertain: false,
-      },
+      };
+    update((previous) => ({
+      ...previous,
+      busy: true,
+      attempt: previous.attempt ?? capturedAttempt,
     }));
-    let outcome: PublicationResult;
-    try {
-      if (!active.current || !isCurrent()) return;
-      outcome = await send(input);
-    } catch {
-      outcome = { ok: false, reason: 'unknown' };
-    }
-    if (!active.current || !isOwnerCurrent()) return;
-    update(
-      (previous) => ({
-        ...previous,
-        result: outcome,
-        busy: false,
-        attempt: previous.attempt && {
-          ...previous.attempt,
-          uncertain: previous.attempt.uncertain || (!outcome.ok && outcome.reason === 'unknown'),
-        },
-        ...(outcome.ok
-          ? {
+    if (!active.current || !isCurrent()) return;
+    const settle = (outcome: PublicationResult) => {
+      if (!active.current || !isOwnerCurrent()) return;
+      update(
+        (previous) => {
+          if (previous.attempt?.token !== capturedAttempt.token) return previous;
+          if (outcome.ok)
+            return {
+              ...previous,
+              result: outcome,
+              busy: false,
               complete: outcome,
-              publishedReview: previous.attempt?.review ?? previous.publishedReview,
+              publishedReview: capturedAttempt.review,
+              ...(previous.currentPublishedRevision === null ||
+              previous.currentPublishedRevision <= outcome.collection.revision
+                ? {
+                    currentPublished: publishedMembershipFromComplete(outcome),
+                    currentPublishedRevision: outcome.collection.revision,
+                  }
+                : {}),
               attempt: null,
               confirmed: false,
-              selected: previous.sourceKey === previous.attempt?.sourceKey ? previous.selected : [],
-            }
-          : {}),
-      }),
-      isOwnerCurrent,
-    );
+              selected: previous.sourceKey === capturedAttempt.sourceKey ? previous.selected : [],
+            };
+          const uncertain = previous.attempt.uncertain || outcome.reason === 'unknown';
+          return {
+            ...previous,
+            result: uncertain ? { ok: false, reason: 'unknown' } : outcome,
+            busy: false,
+            attempt: { ...capturedAttempt, uncertain },
+          };
+        },
+        isOwnerCurrent,
+      );
+    };
+    const timeout = Symbol('publication-response-timeout');
+    let timedOut = false;
+    const response = Promise.resolve()
+      .then(() => capturedAttempt.send(capturedAttempt.input))
+      .catch((): PublicationResult => ({ ok: false, reason: 'unknown' }));
+    void response.then((outcome) => {
+      if (timedOut) settle(outcome);
+    });
+    const outcome = await publicationReadWithin(response, responseTimeoutMs, timeout);
+    if (outcome === timeout) {
+      timedOut = true;
+      settle({ ok: false, reason: 'unknown' });
+    } else {
+      settle(outcome);
+    }
+    // The response race never aborts native work. A later result can settle only this captured attempt.
   }
 
   function reload() {
@@ -264,11 +329,15 @@ function PublicationIntentView({
                   : m.library_publication_unavailable()}
           </p>
           <p className="max-w-prose text-sm text-muted-foreground">{m.library_publication_previous()}</p>
-          <SavedQueryPublishedMembership published={published} review={publishedReview} />
+          <SavedQueryPublishedMembership published={published} />
           {unknown && review ? <CollectionPublicationReview review={review} /> : null}
           {feedback}
-          <Button type="button" disabled>
-            {m.library_publication_publish()}
+          <Button
+            type="button"
+            disabled={!unknown || busy || !isOwnerCurrent()}
+            onClick={() => void publish()}
+          >
+            {unknown ? m.library_publication_retry() : m.library_publication_publish()}
           </Button>
           {onReload && !busy ? (
             <Button type="button" variant="outline" onClick={reload}>
@@ -385,12 +454,17 @@ function PublicationIntentView({
                   type="button"
                   className="h-auto min-h-11 max-w-full whitespace-normal text-start"
                   aria-describedby="publication-bounds publication-replacement publication-privacy"
-                  disabled={!confirmed || busy || refused || !canPublish()}
+                  disabled={
+                    !confirmed ||
+                    busy ||
+                    refused ||
+                    (unknown ? !state.attempt || !isOwnerCurrent() : !canPublish())
+                  }
                   onClick={() => void publish()}
                 >
                   {unknown ? m.library_publication_retry() : m.library_publication_publish()}
                 </Button>
-                {onReload && !busy && !unknown ? (
+                {onReload && !busy ? (
                   <Button type="button" variant="outline" onClick={reload}>
                     {m.library_collection_reload()}
                   </Button>
@@ -398,7 +472,7 @@ function PublicationIntentView({
               </div>
             </div>
           </section>
-          <SavedQueryPublishedMembership published={published} review={publishedReview} />
+          <SavedQueryPublishedMembership published={published} />
           {source.page.next && !locked ? (
             <div className="space-y-1">
               <p className="text-sm text-muted-foreground">{m.library_publication_more_pages()}</p>

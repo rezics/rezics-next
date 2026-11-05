@@ -39,7 +39,15 @@ import {
   beginCollectionSourceOutput,
   completeCollectionSourceOutput,
 } from './collection-source-output.ts';
-import { NativeCollectionWork } from './collection-source-work.ts';
+import { NativeCollectionWork, withNativeCollectionWorkAllowance } from './collection-source-work.ts';
+import {
+  COLLECTION_SELECTED_PUBLICATION_DISCLOSURE_COST,
+  collectionSelectedPublicationOutputReservation,
+  collectionSelectedPublicationPlan,
+  nativeWorkAllowance,
+  nativeWorkDimensions,
+  type CollectionSelectedPublicationPlan,
+} from './collection-selected-publication-bounds.ts';
 import { revalidateNativeOwnerFilter, withNativeOwnerFilterSource } from './owner-filter-native-binding.ts';
 import { admitCollectionMemberQuery } from './owner-filter.ts';
 import {
@@ -49,6 +57,7 @@ import {
   type OwnerFilterReadBinding,
 } from './owner-filter-plan.ts';
 import { resolveSubject, SubjectIdentityUnavailableError } from './subject-anchor.ts';
+import { OWNER_FILTER_CLOSURE_ORIGINAL_LIMIT } from './owner-filter-native-closure.ts';
 
 type Dependencies = { pool: Pool; access: Access; tokens: KeyRing; clock?: KernelClock };
 export type CollectionPublicationInput = Readonly<{ revision: number; subjectIds: readonly string[] }>;
@@ -123,6 +132,7 @@ async function currentScope(
   deps: Dependencies,
   binding: OwnerFilterReadBinding,
   work: NativeCollectionWork,
+  ceiling: CollectionSelectedPublicationPlan['terms']['scopeCurrentness'],
   tx?: CommandTransaction,
 ) {
   const result = await work.compose(async (allowance) => {
@@ -145,7 +155,7 @@ async function currentScope(
         },
       },
     };
-  });
+  }, nativeWorkDimensions(ceiling));
   if (
     result.result.status !== 'current' ||
     result.result.observation.captureId !== binding.scope.captureId ||
@@ -161,6 +171,8 @@ type Prepared = {
   binding: OwnerFilterReadBinding;
   work: NativeCollectionWork;
   output: ReturnType<NativeCollectionWork['reserve']>;
+  reservationId: string;
+  plan: CollectionSelectedPublicationPlan;
   subjectIds: readonly string[];
 };
 
@@ -176,6 +188,7 @@ async function prepareSelection(
   raw: readonly string[],
   attempt: CommandAttempt,
   deadline: number,
+  plan: CollectionSelectedPublicationPlan,
 ): Promise<Prepared> {
   const saved = await withConnection(deps.pool, async (connection) => {
     const client = deadlineClient(connection, deadline);
@@ -204,7 +217,19 @@ async function prepareSelection(
   );
   if (!admission.filter || admission.releaseDigest !== saved.rule.releaseDigest) throw unavailable();
   const checks = await prepareCollectionRuleAuthority(deps, actor, admission.filter, attempt, deadline);
-  const bound = await bindOwnerFilterRead(deps, actor, collectionId, admission, deadline, attempt);
+  const bound = await bindOwnerFilterRead(
+    deps,
+    actor,
+    collectionId,
+    admission,
+    deadline,
+    attempt,
+    undefined,
+    {
+      total: nativeWorkDimensions(plan.perAttempt),
+      binding: plan.bindingWork,
+    },
+  );
   if (bound.status !== 'bound') throw unavailable();
   const binding = bound.binding;
   const sourceKey = binding.scope.key.source;
@@ -224,108 +249,135 @@ async function prepareSelection(
   const workingIdentity = sourceKey.identity;
   const work = new NativeCollectionWork(binding.input.allowance, deadline);
   return withNativeOwnerFilterSource(binding, work, async () => {
-    // One transferred reservation, never another raw100 allowance. Hold the entire known output work
-    // before verification: parent CAS, <=100 children, checkpoints, two retained headers and ordinary event/receipt.
-    // Conservative plan-work charges are not a claim of measured native/whole-command physical proof.
-    const output = work.reserve({
-      ...zero,
-      candidateKeys: raw.length,
-      nativeRows: 2048 + raw.length * 32,
-      nativePoints: 128 + raw.length * 8,
-      statements: 64,
-      bytes: 65536 + raw.length * 512,
-      emptySeeks: 32,
-    });
+    // Hold output, activation, History, events, receipt and rollback before Source verification begins.
+    const output = work.reserve(nativeWorkDimensions(collectionSelectedPublicationOutputReservation(raw.length)));
+    const reservationId = binding.input.allowance.reservationId;
     const source = createCollectionSource(deps);
-    const prepared = await work.compose((allowance) => source.prepare({ ...binding.input, allowance }));
-    if (
-      prepared.source.observation.collectionId !== collectionId ||
-      prepared.source.observation.route !== route ||
-      prepared.source.observation.revision !== saved.header.revision ||
-      prepared.source.observation.incarnation !== workingIdentity.incarnation ||
-      prepared.source.observation.authority.kind !== 'private_builtin' ||
-      prepared.source.observation.authority.curatorAccountId !== actor.accountId
-    )
-      throw unavailable();
-    await currentScope(deps, binding, work);
-    async function resolveCurrent(originalId: string) {
+    const selection = await withNativeCollectionWorkAllowance(
+      work,
+      nativeWorkAllowance(plan.terms.preparation, reservationId),
+      async () => {
+        const prepared = await work.compose(
+          (allowance) => source.prepare({ ...binding.input, allowance }),
+          nativeWorkDimensions(plan.terms.sourcePreparation),
+        );
+        if (
+          prepared.source.observation.collectionId !== collectionId ||
+          prepared.source.observation.route !== route ||
+          prepared.source.observation.revision !== saved.header.revision ||
+          prepared.source.observation.incarnation !== workingIdentity.incarnation ||
+          prepared.source.observation.authority.kind !== 'private_builtin' ||
+          prepared.source.observation.authority.curatorAccountId !== actor.accountId
+        )
+          throw unavailable();
+        await currentScope(deps, binding, work, plan.terms.scopeCurrentness);
+        async function resolveCurrent(originalId: string) {
       // Raw selections AND every complete-original fact reference pay original/terminal disclosure.
       // Source membership may return after one positive alias; it does not authorize the remaining closure.
-      const disclosure = work.reserve({
-        ...zero,
-        candidateKeys: 1,
-        nativeRows: 8192,
-        nativePoints: 128,
-        statements: 128,
-        bytes: 1024 * 1024,
-      });
+          const disclosure = work.reserve(
+            nativeWorkDimensions(COLLECTION_SELECTED_PUBLICATION_DISCLOSURE_COST),
+          );
       disclosure.dispatch();
-      let resolved;
-      try {
-        resolved = await resolveSubject(
-          deps,
-          actor,
-          originalId,
-          attempt.time,
-          commandAccessContext({ pool: deps.pool, deadline }, attempt),
-        );
-      } finally {
-        disclosure.settle();
-      }
-      if (!resolved) throw new ProblemError('not_found');
-      return resolved;
-    }
-    const verified: string[] = [];
-    for (const originalId of raw) {
-      const resolved = await resolveCurrent(originalId);
-      const membership = await work.compose((allowance) =>
-        source.containsSubject({
-          ...binding.input,
-          source: prepared.source,
-          allowance,
-          subjectId: resolved.subjectId,
-        }),
-      );
-      if (!sameSource(prepared.source.observation, membership.observation) || membership.result === 'not_proven')
-        throw unavailable();
-      if (!membership.result) throw new ProblemError('not_found');
-      const closure = await readOwnerFilterCandidateClosure(binding, prepared.source, resolved.subjectId, work);
-      if (closure.status !== 'complete') throw unavailable();
-      if (closure.closure.subjectId !== resolved.subjectId) throw unavailable();
-      // A canonical positive obtained from another alias cannot silently authorize an unobserved raw reference.
-      if (!closure.closure.originals.some((original) => original.subjectId === originalId)) throw unavailable();
-      for (const original of closure.closure.originals) {
-        const current = await resolveCurrent(original.subjectId);
-        if (current.subjectId !== resolved.subjectId) throw unavailable();
-      }
-      const snapshot = work.reserve({ ...zero, nativePoints: 1, statements: 3, bytes: 256 });
-      snapshot.dispatch();
-      let match;
-      try {
-        match = await withConnection(deps.pool, async (connection) => {
-          const client = deadlineClient(connection, deadline);
-          await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+          let resolved;
           try {
-            const result = await readOwnerFilterCandidate(client, admission, closure.closure, work);
-            await client.query('COMMIT');
-            return result;
-          } catch (error) {
-            await client.query('ROLLBACK');
-            throw error;
+            resolved = await resolveSubject(
+              deps,
+              actor,
+              originalId,
+              attempt.time,
+              commandAccessContext({ pool: deps.pool, deadline }, attempt),
+            );
+          } finally {
+            disclosure.settle();
           }
-        });
-      } finally {
-        snapshot.settle();
-      }
-      if (match === 'not_proven') throw unavailable();
-      if (!match) throw new ProblemError('not_found');
-      verified.push(resolved.subjectId);
-    }
-    const final = await work.compose((allowance) => source.prepare({ ...binding.input, allowance }));
-    if (!sameSource(prepared.source.observation, final.source.observation)) throw conflict();
-    await revalidateNativeOwnerFilter(binding, work);
-    await currentScope(deps, binding, work);
-    return { ...saved, checks, binding, work, output, subjectIds: [...new Set(verified)].sort() };
+          if (!resolved) throw new ProblemError('not_found');
+          return resolved;
+        }
+        const verified: string[] = [];
+        for (const originalId of raw) {
+          const branch = await withNativeCollectionWorkAllowance(
+            work,
+            nativeWorkAllowance(plan.terms.selectedBranch, reservationId),
+            async () => {
+              const resolved = await resolveCurrent(originalId);
+              const membership = await work.compose(
+                (allowance) =>
+                  source.containsSubject({
+                    ...binding.input,
+                    source: prepared.source,
+                    allowance,
+                    subjectId: resolved.subjectId,
+                  }),
+                nativeWorkDimensions(plan.terms.positiveMembership),
+              );
+              if (!sameSource(prepared.source.observation, membership.observation) || membership.result === 'not_proven')
+                throw unavailable();
+              if (!membership.result) throw new ProblemError('not_found');
+              const closure = await withNativeCollectionWorkAllowance(
+                work,
+                nativeWorkAllowance(plan.terms.closureAndOwnerFacts, reservationId),
+                () => readOwnerFilterCandidateClosure(binding, prepared.source, resolved.subjectId, work, true),
+              );
+              if (closure.status !== 'complete') throw unavailable();
+              if (closure.closure.subjectId !== resolved.subjectId) throw unavailable();
+              if (closure.closure.originals.length > OWNER_FILTER_CLOSURE_ORIGINAL_LIMIT) throw unavailable();
+              if (!closure.closure.originals.some((original) => original.subjectId === originalId)) throw unavailable();
+              const disclosed = new Map([[originalId, resolved.subjectId]]);
+              for (const original of closure.closure.originals) {
+                const terminal = disclosed.get(original.subjectId) ?? (await resolveCurrent(original.subjectId)).subjectId;
+                if (terminal !== resolved.subjectId) throw unavailable();
+                disclosed.set(original.subjectId, terminal);
+              }
+              const snapshot = work.reserve(nativeWorkDimensions(plan.terms.ownerFilterMatch));
+              snapshot.dispatch();
+              let match;
+              try {
+                match = await withConnection(deps.pool, async (connection) => {
+                  const client = deadlineClient(connection, deadline);
+                  await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+                  try {
+                    const result = await readOwnerFilterCandidate(client, admission, closure.closure, work);
+                    await client.query('COMMIT');
+                    return result;
+                  } catch (error) {
+                    await client.query('ROLLBACK');
+                    throw error;
+                  }
+                });
+              } finally {
+                snapshot.settle();
+              }
+              if (match === 'not_proven') throw unavailable();
+              if (!match) throw new ProblemError('not_found');
+              return resolved.subjectId;
+            },
+          );
+          verified.push(branch);
+        }
+        const final = await work.compose(
+          (allowance) => source.prepare({ ...binding.input, allowance }),
+          nativeWorkDimensions(plan.terms.sourcePreparation),
+        );
+        if (!sameSource(prepared.source.observation, final.source.observation)) throw conflict();
+        await withNativeCollectionWorkAllowance(
+          work,
+          nativeWorkAllowance(plan.terms.ownerFilterReauthorization, reservationId),
+          () => revalidateNativeOwnerFilter(binding, work),
+        );
+        await currentScope(deps, binding, work, plan.terms.scopeCurrentness);
+        return [...new Set(verified)].sort();
+      },
+    );
+    return {
+      ...saved,
+      checks,
+      binding,
+      work,
+      output,
+      reservationId,
+      plan,
+      subjectIds: selection,
+    };
   });
 }
 
@@ -353,6 +405,7 @@ export function createCollectionPublications(deps: Dependencies) {
       const identity = principalCommandIdentity(actor);
       const kind = 'library.collection.publish-selected';
       const generation = randomUUID();
+      const plan = collectionSelectedPublicationPlan(input.subjectIds.length);
       return runCommand(
         deps.pool,
         {
@@ -373,7 +426,7 @@ export function createCollectionPublications(deps: Dependencies) {
               const proof = await native.prepare!(attempt);
               attempts.set(
                 attempt.time,
-                await prepareSelection(deps, actor, route, collectionId, input.subjectIds, attempt, deadline),
+                await prepareSelection(deps, actor, route, collectionId, input.subjectIds, attempt, deadline, plan),
               );
               return proof;
             },
@@ -387,26 +440,33 @@ export function createCollectionPublications(deps: Dependencies) {
               }
               const prepared = attempts.get(attempt.time);
               if (!prepared) throw unavailable();
-              const compare = prepared.work.reserve({
-                ...zero,
-                nativeRows: 64,
-                nativePoints: 8,
-                statements: 2,
-                bytes: 65536,
-                emptySeeks: 2,
-              });
-              compare.dispatch();
-              try {
-                const current = await header(tx, route, collectionId, actor.accountId, true);
-                if (!current) throw new ProblemError('not_found');
-                if (canonicalize(current) !== canonicalize(prepared.header)) throw conflict();
-                const rule = await readSavedCollectionRule(tx, route, collectionId);
-                if (canonicalize(rule) !== canonicalize(prepared.rule)) throw conflict();
-              } finally {
-                compare.settle();
-              }
-              await authorizeCollectionRule(tx, attempt, prepared.checks);
-              await currentScope(deps, prepared.binding, prepared.work, tx);
+              await withNativeCollectionWorkAllowance(
+                prepared.work,
+                nativeWorkAllowance(prepared.plan.terms.preReceipt, prepared.reservationId),
+                async () => {
+                  const compare = prepared.work.reserve(
+                    nativeWorkDimensions(prepared.plan.terms.compareHeaderRule),
+                  );
+                  compare.dispatch();
+                  try {
+                    const current = await header(tx, route, collectionId, actor.accountId, true);
+                    if (!current) throw new ProblemError('not_found');
+                    if (canonicalize(current) !== canonicalize(prepared.header)) throw conflict();
+                    const rule = await readSavedCollectionRule(tx, route, collectionId);
+                    if (canonicalize(rule) !== canonicalize(prepared.rule)) throw conflict();
+                  } finally {
+                    compare.settle();
+                  }
+                  await authorizeCollectionRule(tx, attempt, prepared.checks);
+                  await currentScope(
+                    deps,
+                    prepared.binding,
+                    prepared.work,
+                    prepared.plan.terms.scopeCurrentness,
+                    tx,
+                  );
+                },
+              );
               // All of the above precedes Core receipt lookup, on replays as well as first execution.
               return 'execute';
             },
