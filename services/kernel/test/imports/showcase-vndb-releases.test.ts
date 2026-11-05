@@ -535,7 +535,16 @@ test('cross-media CLI retains selected release classifications through later voc
       expect(response.status).toBe(200);
       return (
         (await response.json()) as {
-          subject: { type: string; statements: Record<string, { value: { content: unknown } }[]> };
+          subject: {
+            type: string;
+            statements: Record<
+              string,
+              {
+                value: { content: unknown };
+                references?: { parts: { property: { id: string }; value: { content: unknown } }[] }[];
+              }[]
+            >;
+          };
         }
       ).subject;
     };
@@ -549,9 +558,15 @@ test('cross-media CLI retains selected release classifications through later voc
     expect(values(release, 'schema:inLanguage')).toEqual(['ja']);
     expect(values(release, 'schema:gamePlatform')).toHaveLength(1);
     expect(values(release, 'wdt:P437')).toHaveLength(1);
-    expect(values(release, 'schema:datePublished')[0]).toEqual(
+    const publishedDate = release.statements['schema:datePublished']?.[0];
+    expect(publishedDate?.value.content).toEqual(
       expect.objectContaining({ time: '+2020-02-29T00:00:00Z', precision: 11 }),
     );
+    expect(
+      publishedDate?.references?.[0]?.parts.some(
+        (part) => part.property.id === 'schema:url' && part.value.content === 'https://vndb.org/r1',
+      ),
+    ).toBe(true);
     const platformId = values(release, 'schema:gamePlatform')[0] as string;
     const mediumId = values(release, 'wdt:P437')[0] as string;
     expect(values((await readCurrent(platformId)) as typeof release, 'schema:url')).toEqual([
@@ -575,9 +590,15 @@ test('cross-media CLI retains selected release classifications through later voc
     const refreshedRelease = await readCurrent(releaseId!);
     expect(values(refreshedRelease, 'schema:exampleOfWork')).toEqual([workId]);
     expect(values(refreshedRelease, 'schema:inLanguage')).toEqual(['ja']);
-    expect(values(refreshedRelease, 'schema:datePublished')[0]).toEqual(
+    const refreshedDate = refreshedRelease.statements['schema:datePublished']?.[0];
+    expect(refreshedDate?.value.content).toEqual(
       expect.objectContaining({ time: '+2020-02-29T00:00:00Z', precision: 11 }),
     );
+    expect(
+      refreshedDate?.references?.[0]?.parts.some(
+        (part) => part.property.id === 'schema:url' && part.value.content === 'https://vndb.org/r1',
+      ),
+    ).toBe(true);
     const refreshedPlatforms = await Promise.all(
       values(refreshedRelease, 'schema:gamePlatform').map(async (id) =>
         values((await readCurrent(id as string)) as typeof release, 'schema:url'),
