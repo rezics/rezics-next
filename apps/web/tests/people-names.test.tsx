@@ -217,7 +217,9 @@ test('mounted signed-out search, overflow, exact copying, advice retry and A-B-A
     const termsAddress = new URL(host.querySelector('a')!.getAttribute('href')!, 'https://rezics.invalid');
     expect(termsAddress.pathname).toEndWith('/terms');
     expect(termsAddress.searchParams.get('realm')).toBe('00000000-0000-4000-8000-000000000777');
-    expect(new URL(host.querySelectorAll('a')[1]!.getAttribute('href')!, 'https://rezics.invalid').searchParams.get('realm')).toBe('00000000-0000-4000-8000-000000000777');
+    expect(
+      new URL(host.querySelectorAll('a')[1]!.getAttribute('href')!, 'https://rezics.invalid').searchParams.get('realm'),
+    ).toBe('00000000-0000-4000-8000-000000000777');
     await click(button('More names'));
     expect(host.textContent).toContain('alias-39');
     await click(button('Next language groups'));

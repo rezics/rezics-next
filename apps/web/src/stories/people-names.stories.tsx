@@ -17,7 +17,17 @@ function Example({
   advice = 'signed-out',
   kind = 'Person',
 }: {
-  state?: 'overflow' | 'fallback' | 'empty' | 'malformed' | 'oversized' | 'retired' | 'filtered' | 'changed' | 'evidence-unavailable' | 'unsupported-context';
+  state?:
+    | 'overflow'
+    | 'fallback'
+    | 'empty'
+    | 'malformed'
+    | 'oversized'
+    | 'retired'
+    | 'filtered'
+    | 'changed'
+    | 'evidence-unavailable'
+    | 'unsupported-context';
   kind?: 'Person' | 'Character';
   advice?: NamesAdvice;
 }) {
@@ -57,20 +67,30 @@ function Example({
             旅の人・Mél—旅人
           </h1>
           {state === 'evidence-unavailable' ? (
-            <SubjectSourcesPage result={{ kind: 'unavailable' }} locale={locale} returnTo={`${href}?context=${read.subject.context}#supplied-names`} />
+            <SubjectSourcesPage
+              result={{ kind: 'unavailable' }}
+              locale={locale}
+              returnTo={`${href}?context=${read.subject.context}#supplied-names`}
+            />
           ) : state === 'unsupported-context' ? (
             <PeopleNamesEntry reading={{ public: read, locale }} />
-          ) : <PeopleNamesView
-            names={names}
-            locale={locale}
-            retired={state === 'retired'}
-            advice={advice}
-            captureSourcesVisit
-            returnStatus={state === 'changed' ? 'changed' : state === 'filtered' ? 'restored' : 'none'}
-            restored={state === 'filtered' ? { query: 'Mél', page: 0, expanded: true, groups: [{ index: 0, page: 1, open: true }] } : undefined}
-            sourcesHref={`${href}/sources`}
-            termsHref={`${href}/terms`}
-          />}
+          ) : (
+            <PeopleNamesView
+              names={names}
+              locale={locale}
+              retired={state === 'retired'}
+              advice={advice}
+              captureSourcesVisit
+              returnStatus={state === 'changed' ? 'changed' : state === 'filtered' ? 'restored' : 'none'}
+              restored={
+                state === 'filtered'
+                  ? { query: 'Mél', page: 0, expanded: true, groups: [{ index: 0, page: 1, open: true }] }
+                  : undefined
+              }
+              sourcesHref={`${href}/sources`}
+              termsHref={`${href}/terms`}
+            />
+          )}
         </main>
       </AppShell>
     </PatternStory>
