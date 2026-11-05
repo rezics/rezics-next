@@ -25,7 +25,7 @@ export type PublicCollectionSummary = Readonly<{
 }>;
 
 export type PublicCollectionDiscoveryState =
-  | { status: 'ready'; collections: PublicCollectionSummary[]; next: string | null }
+  | { status: 'ready'; collections: PublicCollectionSummary[]; next: string | null; asOf: string }
   | { status: DiscoveryFailure['status'] };
 
 export type PublicCollectionDiscoverySender = Parameters<typeof readDiscovery>[1];
@@ -42,6 +42,8 @@ export async function readPublicCollectionPage(
 ): Promise<PublicCollectionDiscoveryState> {
   const { discovery } = await readDiscovery(publicCollectionDiscoveryRequest(locale, cursor), send);
   if (discovery.status !== 'ready') return { status: discovery.status };
+  if (discovery.page.next !== null && (!discovery.page.next.length || discovery.page.next.length > 4864))
+    return { status: 'unavailable' };
 
   const collections: PublicCollectionSummary[] = [];
   for (const hit of discovery.page.hits) {
@@ -74,7 +76,7 @@ export async function readPublicCollectionPage(
     });
   }
 
-  return { status: 'ready', collections, next: discovery.page.next };
+  return { status: 'ready', collections, next: discovery.page.next, asOf: discovery.page.as_of };
 }
 
 const inputSchema = v.object({

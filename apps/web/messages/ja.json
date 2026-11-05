@@ -6821,6 +6821,8 @@
   "collection_discovery_retry": "再試行",
   "collection_discovery_restart": "最初から見る",
   "collection_discovery_restart_required": "この続きは利用できません。最初のページからやり直してください。",
+  "collection_discovery_previous": "前へ",
+  "collection_discovery_first": "最初のページ",
   "collection_discovery_more": "さらに表示",
   "inbox_kind_thread_activity": "ウォッチ中のスレッドの更新",
   "inbox_kind_board_activity": "ウォッチ中の掲示板の更新",

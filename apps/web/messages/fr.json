@@ -6818,6 +6818,8 @@
   "collection_discovery_retry": "Réessayer",
   "collection_discovery_restart": "Recommencer",
   "collection_discovery_restart_required": "Cette suite n’est plus disponible. Reprenez depuis la première page.",
+  "collection_discovery_previous": "Précédent",
+  "collection_discovery_first": "Première page",
   "collection_discovery_more": "Plus de collections",
   "inbox_kind_thread_activity": "Activité d’une discussion suivie",
   "inbox_kind_board_activity": "Activité d’un forum suivi",
