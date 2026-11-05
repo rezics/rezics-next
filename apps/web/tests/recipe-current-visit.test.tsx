@@ -283,7 +283,13 @@ test('mounted recipe intent selects the exact duplicate occurrence and explains 
     expect(window.document.activeElement?.tagName).toBe('H1');
 
     if (returned.kind !== 'valid') throw new Error('Expected the acknowledged return intent');
-    const keyboardHref = recipeCurrentReturnHref(returnAddress, { ...returned.value, focus: 'keyboard' }, 'en')!;
+    const returnBase = new URL(returnAddress!, 'https://site.test');
+    returnBase.searchParams.delete('recipeReturn');
+    const keyboardHref = recipeCurrentReturnHref(
+      `${returnBase.pathname}${returnBase.search}`,
+      { ...returned.value, focus: 'keyboard' },
+      'en',
+    )!;
     const keyboard = parseRecipeCurrentReturn(keyboardHref, 'en');
     if (keyboard.kind !== 'valid') throw new Error('Expected a keyboard return intent');
     const renderReturn = (state: 'ready' | 'changed') => (
