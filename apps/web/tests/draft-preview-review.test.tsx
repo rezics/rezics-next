@@ -120,8 +120,7 @@ test('review keeps captured output frozen, diagnoses local targets, retries the 
     signal: AbortSignal;
     resolve: (value: DraftPreviewResult) => void;
   }[] = [];
-  const read: DraftPreviewRead = (input, signal) =>
-    new Promise((resolve) => calls.push({ input, signal, resolve }));
+  const read: DraftPreviewRead = (input, signal) => new Promise((resolve) => calls.push({ input, signal, resolve }));
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
   let returned = 0;
 
