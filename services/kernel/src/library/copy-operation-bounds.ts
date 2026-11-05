@@ -5,6 +5,7 @@ import type { PoolClient } from 'pg';
 import { currentCommandWorkAssociation } from '../command/work-context.ts';
 import readReceipt from '../command/read-receipt.sql';
 import eventFence from '../command/fence.sql';
+import timeRead from '../command/time.sql';
 import accountRead from '../access/account-read.sql';
 import accountStateRead from '../access/account-command-state.sql';
 import accountShare from '../access/account-share.sql';
@@ -191,8 +192,6 @@ function freezeDeep<T>(value: T): T {
 /** The existing native receipt is eight axes; Copy proves the ninth axis is zero. */
 export function copyWorkDimensions(bound: Bound): WorkDimensions {
   const complete = declareBound(bound);
-  if (complete.engineRequests !== 0)
-    throw new TypeError('Copy native work cannot map a nonzero Search engine request');
   return Object.freeze({
     candidateKeys: complete.candidateKeys,
     nativeRows: complete.nativeRows,
@@ -576,13 +575,19 @@ function commandEnvelope(input: {
   kind: string;
   requestKey: string;
   receiptKeys: number;
+  clientId: string;
+  requestedBy: string | null;
+  durationMs: number;
   commandInput: unknown;
   eventType: string;
   responseBytes: number;
+  clientId: string;
+  requestedBy: string | null;
+  durationMs: number;
 }) {
   const route = input.route;
   const partition = partitionOf(route);
-  const idempotencyKeys = Array.from({ length: input.receiptKeys }, () => `rk1.255.${'f'.repeat(43)}`);
+  const idempotencyKeys = [...Array.from({ length: input.receiptKeys }, () => `rk1.255.${'f'.repeat(43)}`), input.requestKey];
   const receiptInput = {
     partition_no: partition,
     principal_kind: 'account',
@@ -618,10 +623,10 @@ function commandEnvelope(input: {
     readReceipt.sql,
     receiptInput,
     {
-      candidateKeys: input.receiptKeys,
-      nativeRows: input.receiptKeys,
-      points: input.receiptKeys,
-      emptySeeks: input.receiptKeys,
+      candidateKeys: idempotencyKeys.length,
+      nativeRows: 1,
+      points: idempotencyKeys.length,
+      emptySeeks: idempotencyKeys.length,
       outputBytes: input.responseBytes + Buffer.byteLength(JSON.stringify({
         requestDigest: 'f'.repeat(64),
         epoch: 2_147_483_647,
@@ -638,7 +643,7 @@ function commandEnvelope(input: {
       partition_no: partition,
       transaction_id: UUID,
       receipt,
-      basis: { principal: { kind: 'account', id: input.accountId }, clientId: COPY_MAX_ID, requestedBy: UUID },
+      basis: { principal: { kind: 'account', id: input.accountId }, clientId: input.clientId, requestedBy: input.requestedBy },
       events: [event],
     },
     {
@@ -649,19 +654,8 @@ function commandEnvelope(input: {
       outputBytes: Buffer.byteLength(JSON.stringify({ epoch: 2_147_483_647, position: '-9223372036854775808' })),
     },
   );
-  const noEffectBound = operationSql(
-    noEffectFence.sql,
-    { partition_no: partition, transaction_id: UUID, receipt },
-    {
-      candidateKeys: 5,
-      nativeRows: 5,
-      points: 5,
-      emptySeeks: 1,
-      outputBytes: Buffer.byteLength(JSON.stringify({ epoch: 2_147_483_647, position: '-9223372036854775808' })),
-    },
-  );
   const partitionBound = sessionPartitionWork(partition);
-  const retryRecovery = sumBounds(readOnly, partitionBound);
+  const retryRecovery = repeatBound(sumBounds(readOnly, partitionBound), 1 + Math.ceil(input.durationMs / 25));
   const share = operationSql(
     accountShare.sql,
     accountInput,
@@ -695,8 +689,7 @@ function commandEnvelope(input: {
     time,
     transaction,
     terminal,
-    eventFence: eventBound,
-    noEffectFence: noEffectBound,
+    eventFence: sumBounds(eventBound, bytes(input.responseBytes)),
     retryRecovery,
     partition: partitionBound,
     controls: commandControls,
@@ -750,9 +743,8 @@ AND subject_id=:subject_id AND deletion_id IS NULL AND COALESCE(library_profile_
     bytes: projectedBytes(COPY_STORE_ROW, 6),
     engineRequests: 0,
   });
-  const rowCount = operation === 'insert' ? 1 : 1;
   return sumBounds(
-    repeatBound(copyRow, rowCount),
+    copyRow,
     profileMigration,
     operationSql(sourceHeadSql, input, { candidateKeys: 1, nativeRows: 1, points: 1, emptySeeks: 1 }),
     repeatBound(operationSql(nativeFenceSql, { ...input, owner_id: accountId }, {
@@ -760,7 +752,7 @@ AND subject_id=:subject_id AND deletion_id IS NULL AND COALESCE(library_profile_
       nativeRows: 1,
       points: 1,
       emptySeeks: 1,
-    }), operation === 'insert' ? 1 : 2),
+    }), operation === 'insert' ? 2 : 4),
     repeatBound(scope, operation === 'insert' ? 1 : 2),
   );
 }
@@ -772,6 +764,9 @@ export type CopyMutationOperationInput = Readonly<{
   copyId: string;
   requestKey: string;
   receiptKeys: number;
+  clientId: string;
+  requestedBy: string | null;
+  durationMs: number;
   commandInput: unknown;
   subjectId?: string;
   revision?: number;
@@ -802,12 +797,16 @@ export function copyMutationOperationPlan(
     commandInput: input.commandInput,
     eventType: operation === 'delete' ? COPY_DELETED_EVENT : COPY_EVENT,
     responseBytes: COPY_RESPONSE_BYTES,
+    clientId: input.clientId,
+    requestedBy: input.requestedBy,
+    durationMs: input.durationMs,
   });
   const shared = [
     component('command.account.floor', controls.account),
     component('command.account.fence', controls.share),
     component('command.time', controls.time),
     component('command.transaction.controls', controls.transaction),
+    component('command.terminal.commit-or-rollback', controls.terminal),
     component('command.receipt.lookup', controls.receipt),
     component('command.shelf', sessionShelfWork(input.route, input.accountId, false)),
     component('command.partition', controls.partition),
@@ -867,6 +866,7 @@ export function copyMutationOperationPlan(
     branches['fresh.create'] = sumBounds(
       insert,
       copyTriggerWork('insert', input.accountId, subject),
+      sourceCurrent!,
       controls.eventFence,
     );
   } else if (operation === 'update') {
@@ -897,7 +897,8 @@ export function copyMutationOperationPlan(
       sourceCurrent!,
       controls.eventFence,
     );
-    branches['no-change-patch'] = sumBounds(lock, read, currentFact, loan, sourceCurrent!, update, controls.noEffectFence);
+    // An empty patch is an ordinary revision and copy.updated event, including triggers.
+    branches['no-change-patch'] = branches['fresh.update']!;
   } else if (operation === 'delete') {
     const deletion = copyDeleteStatementPlan({
       route: input.route,
@@ -948,13 +949,14 @@ export function copyMutationOperationPlan(
     );
     branches['stale-expired-occupied'] = sumBounds(prepareRead, privateRead, retentionRead, controls.terminal);
   }
-  branches['receipt-replay'] = controls.terminal;
-  branches['pre-mutation-refusal'] = sumBounds(controls.terminal, operation === 'update' || operation === 'delete' ? read : bytes(0));
+  branches['receipt-replay'] = bytes(0);
+  branches['pre-mutation-refusal'] = operation === 'update' || operation === 'delete' ? sumBounds(lock, read) : bytes(0);
   const alternatives = maximumBound(...Object.values(branches));
   const branchComponents = [
     ...shared,
     ...(operation === 'update' || operation === 'delete' ? [component('command.preparation.copy-snapshot', sumBounds(prepareRead, read))] : []),
     ...(operation === 'create' || operation === 'update' ? [component('source.original', sourceInitial)] : []),
+    ...(operation === 'update' ? [component('copy.pre-profile-preparation-and-lock', repeatBound(sessionProfileMigrationWork(input.route, input.accountId), 2))] : []),
   ];
   return operationPlan(`command.${operation}`, 'native-attempt', {
     operation,
@@ -1094,8 +1096,9 @@ export function copyInventoryOperationPlan(input: CopyInventoryOperationInput): 
     }),
     sessionPartitionWork(partitionOf(input.route)),
   );
-  const pageBranch = sumBounds(readonly, page);
-  const maximumPage = sumBounds(readonly, page, sentinel);
+  const migration = sessionProfileMigrationWork(input.route, input.accountId);
+  const pageBranch = sumBounds(readonly, page, migration);
+  const maximumPage = sumBounds(readonly, page, sentinel, repeatBound(migration, 2));
   const observation = sumBounds(maximumBound(pageBranch, maximumPage), options);
   const distinctPins = repeatBound(sessionReleaseWork('sha256:' + 'f'.repeat(64)), 2 * MAX_COPY_FILTER_OPTIONS);
   const rawResponses = sumBounds(
