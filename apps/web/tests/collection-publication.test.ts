@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import './support/collection-publication-server-mock';
 import { dirname } from 'node:path';
 import { createKernelClient } from '@rezics/client';
 import { act, createElement, type ReactNode } from 'react';

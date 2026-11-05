@@ -1,7 +1,7 @@
 import { afterAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, type ReactNode } from 'react';
-import * as start from '../.storybook/react-start';
+import { reads, writes } from './support/collection-publication-server-mock';
 import type {
   PublicationAddress,
   PublicationInput,
@@ -21,54 +21,6 @@ function deferred<T>() {
   });
   return { promise, resolve, reject };
 }
-const reads: { address: PublicationAddress; work: ReturnType<typeof deferred<PublicationPage>> }[] = [];
-const writes: { input: PublicationInput; csrf: string | null; work: ReturnType<typeof deferred<PublicationResult>> }[] =
-  [];
-
-// Intercept only the two server functions at the existing validator boundary. Keep the production
-// collectionPublicationQuery queryFn, including its actual viewer/address validation, installed.
-mock.module('@tanstack/react-start', () => ({
-  ...start,
-  createServerFn() {
-    const delegate = start.createServerFn();
-    let validate: ((input: unknown) => unknown) | undefined;
-    const chain = {
-      validator(next: (input: unknown) => unknown) {
-        validate = next;
-        delegate.validator(next);
-        return chain;
-      },
-      handler<T extends (...args: never[]) => unknown>(handler: T): T {
-        const original = delegate.handler(handler);
-        return ((input?: { data: unknown; headers?: HeadersInit }) => {
-          if (validate?.name === 'expectedSubject')
-            return Promise.resolve({
-              subject: validate(input?.data),
-              admitted: ['collections'],
-            });
-          if (validate?.name === 'publicationAddress') {
-            const call = { address: validate(input?.data) as PublicationAddress, work: deferred<PublicationPage>() };
-            reads.push(call);
-            return call.work.promise;
-          }
-          if (validate?.name === 'publicationInput') {
-            const call = {
-              input: validate(input?.data) as PublicationInput,
-              csrf: new Headers(input?.headers).get('X-CSRF-Token'),
-              work: deferred<PublicationResult>(),
-            };
-            writes.push(call);
-            return call.work.promise;
-          }
-          return original(input as never);
-        }) as T;
-      },
-    };
-    return chain;
-  },
-}));
-mock.module('@tanstack/react-start/server', () => start);
-mock.module('cloudflare:workers', () => ({ env: {} }));
 afterAll(() => mock.restore());
 
 type Session = {
