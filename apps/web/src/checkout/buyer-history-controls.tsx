@@ -4,7 +4,15 @@ import { purchaseHistoryHref, type PurchaseHistoryPosition } from './purchase-re
 import type { BuyerHistoryList, BuyerHistoryMovement } from './buyer-history-windows';
 import type { BuyerHistoryNavigation } from './buyer-history-visit';
 
-export function BuyerHistoryControls({ list, locale, history, continuation, next, navigation, label }: {
+export function BuyerHistoryControls({
+  list,
+  locale,
+  history,
+  continuation,
+  next,
+  navigation,
+  label,
+}: {
   list: BuyerHistoryList;
   locale: string;
   history: PurchaseHistoryPosition;
@@ -15,11 +23,16 @@ export function BuyerHistoryControls({ list, locale, history, continuation, next
 }) {
   const previous = navigation?.previous;
   if (!continuation && !next && previous === undefined) return null;
-  const position = (cursor: string | null) => ({ ...history, [list === 'orders' ? 'ordersCursor' : 'entitlementsCursor']: cursor ?? undefined });
+  const position = (cursor: string | null) => ({
+    ...history,
+    [list === 'orders' ? 'ordersCursor' : 'entitlementsCursor']: cursor ?? undefined,
+  });
   const action = (movement: BuyerHistoryMovement, cursor: string | null, text: string) => (
-    <a href={purchaseHistoryHref(locale, list, position(cursor))}
+    <a
+      href={purchaseHistoryHref(locale, list, position(cursor))}
       onClick={(event) => navigation?.move(movement, cursor, event)}
-      className={buttonVariants({ variant: 'outline', className: 'min-h-11 whitespace-normal text-center' })}>
+      className={buttonVariants({ variant: 'outline', className: 'min-h-11 whitespace-normal text-center' })}
+    >
       {text}
     </a>
   );

@@ -108,7 +108,8 @@ class BrowserObservation {
   }
 
   private disconnectIfUnused(): void {
-    if (this.listeners.size === 0 && this.cacheListeners.size === 0 && this.retirements.size === 0) this.retireMountedIncarnation();
+    if (this.listeners.size === 0 && this.cacheListeners.size === 0 && this.retirements.size === 0)
+      this.retireMountedIncarnation();
   }
 
   private reconcile(forceFresh = false): void {

@@ -108,12 +108,14 @@ function CurrentOrdersRead({
     return isNotFound(query.error) ? (
       <NotFoundPage />
     ) : (
-      <ErrorPage
-        retrying={query.isFetching}
-        onRetry={() => {
-          if (origin.isCurrent()) void query.refetch();
-        }}
-      />
+      <div onClickCapture={navigation.retry}>
+        <ErrorPage
+          retrying={query.isFetching}
+          onRetry={() => {
+            if (origin.isCurrent()) void query.refetch();
+          }}
+        />
+      </div>
     );
   if (!matches(query.data, subject, address)) return <PendingPage />;
   return (

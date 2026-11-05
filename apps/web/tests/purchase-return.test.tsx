@@ -10,6 +10,7 @@ import { order } from './factories/buyer-history';
 import { m } from '../src/paraglide/messages.js';
 import { setLocale } from '../src/paraglide/runtime.js';
 
+const purchaseOrder = { ...order('A'), id: mappedEntitlement.orderId, entitlementId: mappedEntitlement.id };
 const history = { ordersCursor: 'orders/+?= &%#購入', entitlementsCursor: 'benefits/+?= &%#所有' };
 const url = (href: string) => new URL(href, 'https://site.test');
 
@@ -46,10 +47,10 @@ test('rendered lists, receipt destinations and benefit return links retain both 
         locale="en"
         history={history}
         continuation
-        page={{ orders: [order('A')], next: 'next orders/+=' }}
+        page={{ orders: [purchaseOrder], next: 'next orders/+=' }}
       />,
     );
-    const receipt = orderLinks.find((link) => link.pathname === `/en/orders/${order('A').id}`)!;
+    const receipt = orderLinks.find((link) => link.pathname === `/en/orders/${purchaseOrder.id}`)!;
     expect(purchaseHistorySearch(Object.fromEntries(receipt.searchParams))).toEqual(history);
     expect(orderLinks.find((link) => link.pathname === '/en/entitlements')!.searchParams.get('cursor')).toBe(
       history.entitlementsCursor,

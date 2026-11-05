@@ -2,7 +2,7 @@ import { useBuyerHistoryFocus, useBuyerHistoryNavigation, type BuyerHistoryNavig
 import type { PurchaseHistoryPosition } from './purchase-return';
 import { createPurchaseReaderOrigin } from './purchase-return';
 import { useRouter } from '@tanstack/react-router';
-import { useCallback, useState, type ComponentType } from 'react';
+import { useCallback, useState, type ComponentType, type MouseEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { personalRead } from '../kernel/query';
 import {
@@ -140,7 +140,12 @@ function EntitlementsRead<T extends Page>({
   origin,
   history,
 }: CurrentProps<T> & { subject: string; hydrated: boolean; seed: boolean; origin: BuyerCurrentOrigin }) {
-  const navigation = useBuyerHistoryNavigation('entitlements', address.kind === 'list' ? address.cursor : null, address.locale, origin);
+  const navigation = useBuyerHistoryNavigation(
+    'entitlements',
+    address.kind === 'list' ? address.cursor : null,
+    address.locale,
+    origin,
+  );
   const [lifetime] = useState(() => crypto.randomUUID());
   const router = useRouter();
   const onOpenReader = useCallback(
@@ -209,11 +214,18 @@ function EntitlementsRead<T extends Page>({
       page: query.data.kind === 'accepted' ? query.data.value.page : ({ kind: 'unavailable' } as T),
     });
   }
-  useBuyerHistoryFocus(navigation, address.kind === 'list' && display.page.kind === 'ready' && !query.isFetching,
-    display.page.kind !== 'ready' && display.page.kind !== 'preparing');
-  const retry = useCallback(() => {
-    if (origin.isCurrent()) void query.refetch();
-  }, [origin, query.refetch]);
+  useBuyerHistoryFocus(
+    navigation,
+    address.kind === 'list' && display.page.kind === 'ready' && !query.isFetching,
+    display.page.kind !== 'ready' && display.page.kind !== 'preparing',
+  );
+  const retry = useCallback(
+    (event?: MouseEvent<HTMLElement>) => {
+      if (event && address.kind === 'list') navigation.retry(event);
+      if (origin.isCurrent()) void query.refetch();
+    },
+    [origin, query.refetch, address.kind, navigation],
+  );
   return (
     <Presentation
       page={hydrated && !origin.isCurrent() ? ({ kind: 'preparing' } as T) : display.page}
