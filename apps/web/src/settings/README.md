@@ -128,9 +128,9 @@ as a whole against current advice, uncertain originals retry unchanged, and a si
 **Decision:** A current Reading read rebases fields without local intent onto native values. A matching receipt consumes
 only that command's fields. Edits outside the command or after dispatch, including an edit back to an earlier value,
 stay for review; Use current clears them. Explicit edits made during conflict or review remain intent even when they
-equal the older baseline. Every successful acknowledgement is followed by a separate current read; a read Retry-After
-does not block replay of the original write, and a write acknowledgement does not erase the read's absolute wait.
-A clean read does not open review or save.
+equal the older baseline. A successful acknowledgement needs a separate current read before it can establish current
+values; a live read Retry-After may defer that read without blocking replay of the original write, and the write
+acknowledgement does not erase the read's absolute wait. A clean read does not open review or save.
 
 **Decision:** Reset PATCHes the admitted native defaults with the reviewed version; missing or malformed choice/default
 advice leaves reset unavailable. Viewer state and read/update actions live as additive siblings of the notification
