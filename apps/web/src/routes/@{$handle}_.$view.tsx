@@ -1,4 +1,5 @@
-import { PublicAccountState, PublicRealmsPage } from '../accounts/public-profile/view';
+import { PublicRealmsRoute } from '../accounts/public-profile/realm-windows/route';
+import { PublicAccountState } from '../accounts/public-profile/view';
 import { useSuspenseQuery } from '@tanstack/react-query';
 import { createFileRoute, notFound, redirect, useLocation, useRouter } from '@tanstack/react-router';
 import { createIsomorphicFn } from '@tanstack/react-start';
@@ -41,6 +42,9 @@ const viewLabel = {
 
 export const Route = createFileRoute('/@{$handle}_/$view')({
   staticData: { publicCache: true },
+  gcTime: 0,
+  remountDeps: ({ params, loaderDeps }) => (params.view === 'realms' ? loaderDeps : undefined),
+  shouldReload: ({ params }) => (params.view === 'realms' ? true : undefined),
   validateSearch: (search: Record<string, unknown>): { cursor?: string } => ({
     ...(typeof search.cursor === 'string' && search.cursor.length <= 4096 ? { cursor: search.cursor } : {}),
   }),
@@ -51,10 +55,13 @@ export const Route = createFileRoute('/@{$handle}_/$view')({
     if (!view) throw notFound();
     const locale = getLocale();
     const query = agentViewQuery(params.handle, locale, view, deps.cursor, location.searchStr);
-    const page = await context.queryClient.fetchQuery({ ...query, staleTime: 0 }).catch((error: unknown) => {
-      context.queryClient.removeQueries({ queryKey: query.queryKey });
-      throw error;
-    });
+    const page =
+      view === 'realms'
+        ? await query.queryFn()
+        : await context.queryClient.fetchQuery({ ...query, staleTime: 0 }).catch((error: unknown) => {
+            context.queryClient.removeQueries({ queryKey: query.queryKey });
+            throw error;
+          });
     if (page.kind === 'redirect') {
       throw redirect({
         href: keepSearch(page.redirectTo, '', location.hash),
@@ -96,6 +103,15 @@ export const Route = createFileRoute('/@{$handle}_/$view')({
 });
 
 function AgentViewRoute() {
+  const data = Route.useLoaderData();
+  const { view } = Route.useParams();
+  const { cursor } = Route.useSearch();
+  if (view === 'realms' && data.kind !== 'redirect')
+    return <PublicRealmsRoute source={data} locale={getLocale()} cursor={cursor} />;
+  return <NamedAccountViewRoute />;
+}
+
+function NamedAccountViewRoute() {
   const { handle, view: rawView } = Route.useParams();
   const view = agentPathView(rawView);
   if (!view || view === 'overview') throw notFound();
@@ -116,17 +132,6 @@ function AgentViewRoute() {
   }
   if (data.kind === 'state')
     return <PublicAccountState page state={data.state} retry={() => void router.invalidate()} />;
-  if (view === 'realms')
-    return (
-      <PublicRealmsPage
-        handle={data.page.account!.handle}
-        title={data.title}
-        locale={locale}
-        result={data.realms ?? { state: 'unavailable' }}
-        search={searchStr}
-        retry={() => void router.invalidate()}
-      />
-    );
   return (
     <PublicProfilePage
       page={data.page}

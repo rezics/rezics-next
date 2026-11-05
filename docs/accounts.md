@@ -117,8 +117,14 @@ and organization speaker lists respect the account's publication settings; hidin
 underlying content permissions. See [account-data.ts][account-data], [public-views.ts][public-views] and
 [Public profile by handle][access-profile].
 
-Web public Realm pagination keeps the current profile and query context, replacing only the opaque cursor.
-Starting again removes every cursor parameter and loads the first page; only an unavailable read offers retry.
+Web public Realm pagination retains at most eight admitted preceding opaque coordinates plus the current one
+in a narrow live router visit bound to canonical account identity, locale and the Realms view. Each movement
+rereads anonymously and replaces the one native page; only an admitted successful replacement commits history.
+Previous uses a retained coordinate; direct later entry has no predecessor. First removes only cursor fields,
+keeping canonical profile, locale, unrelated query bytes and hash. Failed movement Retry repeats its exact target.
+Source, account, locale, publication replacement and disposal retire coordinates and callbacks, including equal
+address replacement and A/B/A. Only unavailable reads offer Retry; invalid cursors offer deliberate First.
+Keyboard focus transfers on admission only while the original action remains eligible.
 Web public account reads use ten-second phase deadlines through body decoding (primary/overview together,
 former-handle lookup, continuation, and Realm directory plus bounded hydration); optional operator labels use two
 seconds, caller cancellation composes with each deadline, and failures retain the existing unavailable/retry UI.
