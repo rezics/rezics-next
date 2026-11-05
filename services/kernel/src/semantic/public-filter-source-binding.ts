@@ -2034,6 +2034,7 @@ export function createPublicFilterSourceBinding(
   async function settleNative(
     request: Parameters<PublicFilterSourceBootstrapBinding['settle']>[0],
     context: PublicFilterConsumerContext,
+    publicationCost?: BindingCost,
   ) {
     const input = structuredClone(request),
       deadline = context.deadline;
@@ -2139,11 +2140,11 @@ export function createPublicFilterSourceBinding(
         return row;
       };
       const before = await authority();
-      const settled = await readPublicFilterRepairSettlement(
-        pool,
-        { queried: input.queried, execution: input.execution },
-        { deadline },
-      );
+      const readSettlement = () =>
+        readPublicFilterRepairSettlement(pool, { queried: input.queried, execution: input.execution }, { deadline });
+      const spent = publicationCost ? { ...publicationCost } : undefined;
+      if (spent) addCost(spent, cost);
+      const settled = await (spent ? withPublicFilterRepairAllowance(spent, readSettlement) : readSettlement());
       addCost(cost, settled.cost);
       if (settled.status !== 'settled') return { ...settled, cost };
       requireSameDefinition(cut.definition, settled.definition);
@@ -2942,7 +2943,7 @@ export function createPublicFilterSourceBinding(
       const adopted = await bootstrapBinding.adopt({ bootstrap, queried: native.queried }, { deadline });
       addCost(cost, adopted.cost);
       if (adopted.status !== 'adopted') return { ...adopted, cost };
-      const settled = await withPublicFilterRepairAllowance(cost, () => settleNative(publication, { deadline }));
+      const settled = await settleNative(publication, { deadline }, cost);
       addCost(cost, settled.cost);
       if (settled.status !== 'joined') return { ...settled, cost };
       // Clean current population alone cannot replace the independently verified original
