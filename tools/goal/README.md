@@ -2574,6 +2574,10 @@ quota-parser exports remain available for historical imports. Test an adapter th
 `withAgentAdapter`, whose binding stays local to that asynchronous lifecycle. Agents that cannot resume set
 `canResume` to false; retries then start a fresh session with the retry manifest.
 
+Codex keeps launch argv construction in `src/agents/codex-command.ts`, event normalization and incremental usage
+interpretation in `src/agents/codex-events.ts`, and adapter composition plus provider filesystem access in
+`src/agents/codex.ts`. The composition module retains the `parseCodexSessionUsage` and `parseCodexAllowance` exports.
+
 ## Baseline findings and release gates
 
 This policy supersedes the earlier `Development verification` overview above. `dev-verified` records verifier progress
