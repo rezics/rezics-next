@@ -183,7 +183,8 @@ test('mounted entry, contribution menu and authored route keep public intent out
     });
   const navigate = async (href: string) => {
     const url = new URL(href, window.location.origin);
-    await act(async () => router.history.push(`${url.pathname}${url.search}${url.hash}`));
+    const path = url.pathname.replace(/^\/en(?=\/)/u, '');
+    await act(async () => router.history.push(`${path}${url.search}${url.hash}`));
   };
   const loader = Route.options.loader as unknown as (input: {
     params: { id: string; slug: string };
