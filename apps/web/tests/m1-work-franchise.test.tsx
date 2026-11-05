@@ -591,7 +591,7 @@ test('each VN, anime and book relation stream keeps its selected region through 
     const restored = new URL(returned, 'https://rezics.invalid');
     expect(connectionReturnWindow(restored.hash)).toMatchObject({ cursor: 'opaque+cursor', control: 'evidence' });
     expect(restored.searchParams.get('via')).toBe(inspectedVia);
-    expect(new URL(inspectedVia, returned).searchParams.get('cursor')).toBe(cursor);
+    expect(new URL(inspectedVia, new URL(returned, 'https://rezics.invalid')).searchParams.get('cursor')).toBe(cursor);
     expect(subjectVisitReturn(returned, 'en')).toBeUndefined();
     expect(workFranchiseReturn(`${new URL(inspectedVia, finiteInspection!).hash}&focus=evidence`)).toBeUndefined();
   }

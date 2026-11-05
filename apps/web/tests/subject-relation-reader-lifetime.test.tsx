@@ -1126,7 +1126,10 @@ test('work region return focuses its actual inspection control once and retires 
     profile: subject.release,
     template: { scope: 'base', key: 'schema:CreativeWork' },
     document: {
-      content: [{ type: 'OutgoingRelations', props: { id: 'franchise', property: 'wdt:P144', limit: 12, paged: true } }],
+      content: [
+        { type: 'SubjectHeader', props: { id: 'subject-header' } },
+        { type: 'OutgoingRelations', props: { id: 'franchise', property: 'wdt:P144', limit: 12, paged: true } },
+      ],
     },
     reads: {},
   } as unknown as SubjectPageData;
