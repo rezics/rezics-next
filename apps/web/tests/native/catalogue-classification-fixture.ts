@@ -75,8 +75,20 @@ async function waitForSuggestion(stack: NativeWebStack, subject: NativeClassific
   throw new Error(`Native suggestions did not include ${subject.type} ${subject.id} for ${subject.label}`);
 }
 
-export async function startCatalogueClassificationFixture(): Promise<NativeClassificationFixture> {
-  const stack = await startNativeWebStack({ writeRateOverrides });
+export async function startCatalogueClassificationFixture(
+  options: { ready?: Promise<void> } = {},
+): Promise<NativeClassificationFixture> {
+  const stackPromise = startNativeWebStack({ writeRateOverrides });
+  const stack = await (async () => {
+    try {
+      if (options.ready) await options.ready;
+      return await stackPromise;
+    } catch (error) {
+      const started = await stackPromise.catch(() => undefined);
+      await started?.stop().catch(() => {});
+      throw error;
+    }
+  })();
   let auth: NativeAuthStack | undefined;
   try {
     const active = await json<{ digest: string }>(

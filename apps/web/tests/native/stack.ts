@@ -618,6 +618,10 @@ async function startStack(): Promise<
     source.pathname = `/${analysisDatabase}`;
     process.env.REYLO_CONFIG = writeReyloProject(runtimeDirectory, source.href);
     process.env.KERNEL_POOL_ACQUIRE_TIMEOUT_MS ??= '2000';
+    reportStackProgress('Native web stack startup: loading kernel modules');
+    // One graph from the semantic driver, overlapping Auth. Starting kernel.ts
+    // and search together evaluated the History fence cycle from both ends (TDZ).
+    const kernelModules = import('../../../../services/kernel/test/semantic/outcome-driver.ts');
     await import('../../../../services/kernel/test/support/fixture-event-types.ts');
     const { workerTestEnv } = await import('../../../../services/kernel/test/support/worker-env.ts');
     const { sharedAuth, closeOwnedSemanticAuth, advanceNativeAuthClock } =
@@ -705,8 +709,8 @@ async function startStack(): Promise<
       }
       return response;
     };
-    reportStackProgress('Native web stack startup: loading kernel modules');
-    const { createSemanticDriver } = await import('../../../../services/kernel/test/semantic/outcome-driver.ts');
+    reportStackProgress('Native web stack startup: awaiting kernel modules');
+    const { createSemanticDriver } = await kernelModules;
     const { createKernel } = await import('../../../../services/kernel/src/http/kernel.ts');
     const { readSearchConfig } = await import('../../../../services/kernel/src/search/work.ts');
     const { createOpenSearch } = await import('../../../../services/kernel/src/search/opensearch.ts');
@@ -1291,7 +1295,7 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
   const lifecycle = currentNativeLifecycle();
   if (!lifecycle) {
     const standalone = new NativeTestLifecycle('standalone native web stack');
-    const stack = await standalone.run('start native web stack', 360_000, () => startNativeWebStack(options), false);
+    const stack = await standalone.run('start native web stack', 540_000, () => startNativeWebStack(options), false);
     return {
       ...stack,
       async stop() {

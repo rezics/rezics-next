@@ -54,6 +54,7 @@ async function waitForPublishedSearch(container: string, timeoutMs = 30_000): Pr
 
 beforeAll(async () => {
   priorSearchUrl = process.env.OPENSEARCH_URL;
+  let searchReady: Promise<void> | undefined;
   if (!priorSearchUrl) {
     ownedSearch = `concept-works-search-${crypto.randomUUID().slice(0, 12)}`;
     docker([
@@ -80,10 +81,10 @@ beforeAll(async () => {
     ]);
     const url = await waitForPublishedSearch(ownedSearch);
     process.env.OPENSEARCH_URL = url;
-    await waitForSearch(url, ownedSearch, 180_000);
+    searchReady = waitForSearch(url, ownedSearch, 180_000);
   }
-  fixture = await startCatalogueClassificationFixture();
-}, 600_000);
+  fixture = await startCatalogueClassificationFixture({ ready: searchReady });
+}, 900_000);
 
 afterAll(async () => {
   try {
