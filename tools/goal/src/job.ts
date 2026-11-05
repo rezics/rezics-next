@@ -380,7 +380,7 @@ export class WorkerJob implements GateOutcomeSink {
   }
   /** Continue the integrated author task only when its original session and provider pool can be resumed. */
   async resumePageDataRepair(repair: PageDataRepair): Promise<boolean> {
-    if (!repair.owner || !this.startsAllowed()) return false;
+    if (!repair.owner) return false;
     const task = this.tasks.store.task(repair.owner.id);
     if (
       !['integrated', 'merged'].includes(task.state) ||

@@ -233,14 +233,23 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
   // for restartIntervalMs, so a burst of releases cannot restart it in a loop. cp-sync restarts the host regardless.
   const loadedCode = runtime.loadedCodeVersion;
   const hostStartedAt = Date.now();
+  let checkingCode = false;
   const retireForPublishedCode = async () => {
-    if (stopRequested || loadedCode === undefined || Date.now() - hostStartedAt < policy.host.restartIntervalMs) return;
-    const published = await currentCodeVersion(runtime.mainCheckout);
-    // An unreadable main is not a new revision: only a readable, different tools/goal retires this host.
-    if (published === undefined || published === loadedCode || stopRequested) return;
-    if (runtime.codeRetirement) runtime.codeRetirement.retiring = true;
-    console.log(`tools/goal is published as ${published}; this host stops after its active requests so systemd restarts it.`);
-    stop();
+    if (checkingCode || stopRequested || loadedCode === undefined) return;
+    if (Date.now() - hostStartedAt < policy.host.restartIntervalMs) return;
+    checkingCode = true;
+    try {
+      const published = await currentCodeVersion(runtime.mainCheckout);
+      // An unreadable main is not a new revision: only a readable, different tools/goal retires this host.
+      if (published === undefined || published === loadedCode || stopRequested) return;
+      if (runtime.codeRetirement) runtime.codeRetirement.retiring = true;
+      console.log(
+        `tools/goal is published as ${published}; this host stops after its active requests so systemd restarts it.`,
+      );
+      stop();
+    } finally {
+      checkingCode = false;
+    }
   };
   try {
     await stopRecordedAppServers(registryPath, policy.appServer);
