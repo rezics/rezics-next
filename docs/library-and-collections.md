@@ -447,6 +447,9 @@ presence do not establish a counted public vote. Personal-score shelf ordering r
 `503 dependency_unavailable` until Content binds a whole-owner currentness fence over Entries, counted votes and
 identity/lifecycle effects, including rows outside the returned page.
 
+Collection controls use only the current exact-occurrence action projection; `allowed: []` is a current no-action
+result. The existing Subject hosts remain the only writers, and return to the same admitted Collection address.
+
 Decision: Forward `Accept-Language` to the shared Semantic fact and summary batch for FULL Library and static
 Collection rows; preserve Semantic's current default when the header is absent.
 
