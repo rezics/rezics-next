@@ -166,7 +166,13 @@ export class ReadingDraftRecovery {
       knownCurrent: false,
       confirmedReceipt: null,
     });
-    const result = await sendReading(this.io, input, recovering, () => this.owner.version(), () => !this.readWaiting());
+    const result = await sendReading(
+      this.io,
+      input,
+      recovering,
+      () => this.owner.version(),
+      () => !this.readWaiting(),
+    );
     if (!this.owner.canWrite()) return;
     if (result.kind === 'confirmed-read-failed') {
       const retireAdvice = result.reason === 'forbidden' || result.reason === 'closed';
@@ -199,9 +205,7 @@ export class ReadingDraftRecovery {
         reason: result.reason,
         failure: result.failure,
         failureOrigin: result.kind === 'uncertain' ? result.operation : deniedWrite ? 'write' : undefined,
-        ...(readOperation
-          ? { readRetryAt: Math.max(this.state.readRetryAt, retryAt) }
-          : { commandRetryAt: retryAt }),
+        ...(readOperation ? { readRetryAt: Math.max(this.state.readRetryAt, retryAt) } : { commandRetryAt: retryAt }),
       });
       return;
     }
