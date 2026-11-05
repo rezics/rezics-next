@@ -122,7 +122,7 @@ test('a worker missing or rejecting commerce configuration names the variable an
     import { readWorkerConfig, startWorker } from './src/worker.ts';
     import { createDiscoveryProducerEntry } from './src/composition/discovery.ts';
     import { createKernelRuntimeDefaults } from './src/composition/runtime-defaults.ts';
-    import { createKernelWorkModules } from './src/work/modules.ts';
+    import { createKernelWorkModules } from './src/composition/work-modules.ts';
     const KERNEL_WORK_MODULES = createKernelWorkModules(createDiscoveryProducerEntry, createKernelRuntimeDefaults);
 
     const env = { ...process.env };

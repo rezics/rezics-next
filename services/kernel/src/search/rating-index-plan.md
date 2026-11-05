@@ -216,7 +216,7 @@ Paths: `src/search/work.ts`, `src/search/runner.ts`, `src/server.ts`, `scripts/s
 Depends on slices 3, 5 and 6 and Content's actual factory export. Inject that factory into the default Search starter
 and HTTP service; the API does not start a relay. CLI `rebuildSubjects` currently takes only Semantic source/counts
 and a no-op refresh (the worker discovers generations); wire epoch readiness through that real path too. The outcome
-worker's direct rebuild control must use identical dependencies. `src/work/modules.ts` already includes Rating and
+worker's direct rebuild control must use identical dependencies. `src/composition/work-modules.ts` already includes Rating and
 Search: do not add a duplicate module, change their order, or assume registration order synchronizes effects.
 Failing titles: “configured server default worker and CLI use the same fixed Global publication”; “rebuild control
 cannot bypass rating readiness”; “shutdown drains the active replacement Search runner”.

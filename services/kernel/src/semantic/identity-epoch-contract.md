@@ -925,7 +925,7 @@ filtered-list canonical identity, Library README, private-follow-counts and libr
 Native evidence inspected: `merges.ts`, `merge-moves.ts` and its member/redirect/page SQL, redirect migration and
 outbound-relation phase migration, `account-agents.ts`, `links.ts`, `command/command.ts` (currentCommand/native time,
 authorization-before-receipt/replay), `access/agent-verification.ts` and `agent-verification-work.ts`, Library follows
-and work registration, `work/registry.ts`, `work/modules.ts`, `worker.ts`, `rating/merge-job.ts` durable work, Search work/runner/indexer/source and generation helpers, native
+and work registration, `work/registry.ts`, `composition/work-modules.ts`, `worker.ts`, `rating/merge-job.ts` durable work, Search work/runner/indexer/source and generation helpers, native
 creation SQL, and ordinary merge HTTP/problem schemas. For cutover adoption, also read the already cloned PostgreSQL `src/backend/commands/trigger.c`
 (from its local git object) and `indexcmds.c` (trigger installation locking, old-writer draining and older-snapshot
 waits), and DBOS `src/dbos-executor.ts` (`runInternalStep`, body-before-result journalling and replay). These are

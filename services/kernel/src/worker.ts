@@ -5,7 +5,7 @@ import { createWorkClient } from './work/client.ts';
 import { bindExecutionContract } from './command/execution-contract.ts';
 import { historyExecutionPort } from './history/operational-work.ts';
 import { workExecutionPort } from './work/selected-runtime.ts';
-import { createKernelWorkModules } from './work/modules.ts';
+import { createKernelWorkModules } from './composition/work-modules.ts';
 import { createDiscoveryProducerEntry } from './composition/discovery.ts';
 import { createKernelRuntimeDefaults } from './composition/runtime-defaults.ts';
 import { composeWork, type WorkModule } from './work/registry.ts';

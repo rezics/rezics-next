@@ -31,7 +31,7 @@ Read surfaces audited: `subject.ts`, `read.ts`, `slots.ts`, `page.ts`, `graph.ts
 Write surfaces audited: `candidates.ts`, `bulk.ts`, `context.ts`, `moderation.ts`, `statement-disclosure.ts`,
 `account-agents.ts`, `agents.ts`, definition publication, and the semantic schema mutation guards.
 Shared custody evidence: `command/fence.sql`, Access's account deletion policy and committed deletion runner,
-`work/modules.ts`, `work/registry.ts`, `work/retention.ts`, and Content's authored-field contract.
+`composition/work-modules.ts`, `work/registry.ts`, `work/retention.ts`, and Content's authored-field contract.
 
 - Subject hide/takedown/restore changes visibility/security revision, retains data and decisions, and hides
   ordinary reads. Candidate hide/takedown/restore uses `hidden_candidate` and slot recomputation. Native tests

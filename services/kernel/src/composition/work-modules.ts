@@ -6,13 +6,13 @@ import { readMembershipWorkConfig } from '../access/membership-work-config.ts';
 import { createRealmMembership, readMembershipInitiator } from '../community/membership.ts';
 import { communityWorkModule } from '../community/work.ts';
 import { registerContent } from '../content/register.ts';
-import type { WorkModule } from './registry.ts';
+import type { WorkModule } from '../work/registry.ts';
 import { commerceWorkModule } from '../commerce/work-module.ts';
 import { libraryWorkModule } from '../library/work-module.ts';
 import { semanticWorkModule } from '../semantic/work-module.ts';
 import { createSearchWorkModule } from '../search/work.ts';
 import { ratingWorkModule } from '../rating/work-module.ts';
-import { workflowRetentionWorkModule } from './retention.ts';
+import { workflowRetentionWorkModule } from '../work/retention.ts';
 import { importsWorkModule } from '../imports/erasure.ts';
 
 /** Accounts registration installs the Realm adapter before any Realm workflow runs.

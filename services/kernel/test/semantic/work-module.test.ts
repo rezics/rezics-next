@@ -50,7 +50,7 @@ const program = `
   const { readWorkerConfig, startWorker } = await import('./src/worker.ts');
   import { createDiscoveryProducerEntry } from './src/composition/discovery.ts';
   import { createKernelRuntimeDefaults } from './src/composition/runtime-defaults.ts';
-    import { createKernelWorkModules } from './src/work/modules.ts';
+    import { createKernelWorkModules } from './src/composition/work-modules.ts';
     const KERNEL_WORK_MODULES = createKernelWorkModules(createDiscoveryProducerEntry, createKernelRuntimeDefaults);
   let pool;
   let starts = 0;
