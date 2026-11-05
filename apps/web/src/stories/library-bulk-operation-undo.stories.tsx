@@ -123,6 +123,9 @@ function fixture({
         locale={getLocale()}
         onRead={fn()}
         onMore={fn()}
+        onPrevious={fn()}
+        onFirst={fn()}
+        onRetryRead={fn()}
         onRestore={fn()}
       />
     ),
