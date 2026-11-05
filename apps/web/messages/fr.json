@@ -2430,6 +2430,7 @@
   "library_label_draft_navigation_stay": "Rester",
   "library_label_draft_navigation_discard": "Abandonner",
   "library_label_more": "Page suivante",
+  "library_labels_previous": "Page précédente",
   "library_label_deleted": "{name} supprimée",
   "library_label_stale": "Cette étiquette a changé. La version actuelle est affichée.",
   "library_label_invalid": "Ce nom d’étiquette ne peut pas être utilisé.",

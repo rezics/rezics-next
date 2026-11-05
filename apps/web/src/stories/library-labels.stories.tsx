@@ -87,7 +87,7 @@ export const NextPage: Story = {
   play: async (context) => {
     await labelsReady(context);
     const view = within(context.canvasElement);
-    await view.findByRole('link', { name: m.library_label_more() });
+    await view.findByRole('button', { name: m.library_label_more() });
     async function target(element: HTMLElement) {
       element.scrollIntoView({ block: 'nearest' });
       const bounds = element.getBoundingClientRect();
@@ -164,16 +164,21 @@ export const NextPage: Story = {
     await view.findByRole('link', { name: longName });
     const article = context.canvasElement.querySelector('article')!;
     await expect(article.scrollWidth).toBeLessThanOrEqual(article.clientWidth);
-    const more = view.getByRole('link', { name: m.library_label_more() });
+    let more = view.getByRole('button', { name: m.library_label_more() });
     await target(more);
-    await expect(more).toHaveAttribute('href', expect.stringContaining('cursor=next-label-page'));
     await userEvent.click(more);
     await view.findByText(m.library_labels_page_empty());
-    await expect(view.getByRole('link', { name: m.library_collections_first_page() })).toHaveAttribute(
-      'href',
-      `/${getLocale()}/library/labels`,
-    );
-    await expect(view.queryByRole('link', { name: m.library_label_more() })).toBeNull();
+    const previous = view.getByRole('button', { name: m.library_labels_previous() });
+    await target(previous);
+    await userEvent.click(previous);
+    await view.findByRole('link', { name: 'Winter reads' });
+    more = view.getByRole('button', { name: m.library_label_more() });
+    await userEvent.click(more);
+    await view.findByText(m.library_labels_page_empty());
+    const first = view.getByRole('button', { name: m.library_collections_first_page() });
+    await target(first);
+    await userEvent.click(first);
+    await view.findByRole('link', { name: 'Winter reads' });
   },
 };
 export const RenameConflict: Story = {

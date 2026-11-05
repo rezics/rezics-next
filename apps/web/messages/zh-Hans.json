@@ -2430,6 +2430,7 @@
   "library_label_draft_navigation_stay": "留下",
   "library_label_draft_navigation_discard": "丢弃",
   "library_label_more": "下一页",
+  "library_labels_previous": "上一页",
   "library_label_deleted": "已删除 {name}",
   "library_label_stale": "此标签已更改，现显示当前版本。",
   "library_label_invalid": "无法使用此标签名称。",
