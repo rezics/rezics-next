@@ -278,9 +278,16 @@ type MemberRuntime = {
   stop(signal: 'SIGKILL' | 'SIGTERM'): Promise<void>;
 };
 const children: MemberRuntime[] = [];
-function runtime(mode: string): MemberRuntime {
+function runtime(mode: string, memberId?: string): MemberRuntime {
   const process = Bun.spawn(
-    [Bun.which('bun')!, `${import.meta.dir}/support/member-retention-runtime.ts`, mode, executorId, clockPath],
+    [
+      Bun.which('bun')!,
+      `${import.meta.dir}/support/member-retention-runtime.ts`,
+      mode,
+      executorId,
+      clockPath,
+      ...(memberId ? [memberId] : []),
+    ],
     { env: globalThis.process.env, stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' },
   );
   let output = '';
@@ -345,7 +352,7 @@ test('native member purge is exact episode bounded and never decrements public l
   const firstDeadline = await nativeDeadline(m);
   await workerClient();
   writeFileSync(clockPath, String(Date.parse(firstDeadline)));
-  const parked = runtime('park');
+  const parked = runtime('park', m.first.id);
   await parked.until('worker-ready');
   const sweep = await trigger();
   await parked.until('source-parked');
@@ -374,7 +381,9 @@ test('native member purge is exact episode bounded and never decrements public l
   expect((await m.parent()).memberCount).toBe(1);
   await parked.stop('SIGTERM');
   const executions = parked.executions();
-  const purgeAttempt = executions.find((execution) => execution.operation === 'purge-attempt')!;
+  const purgeAttempt = executions.find(
+    (execution) => execution.operation === 'purge-attempt' && execution.identity?.deletionId === d1.deletionId,
+  )!;
   expect(purgeAttempt.identity?.deletionId).toBe(d1.deletionId);
   const pages = executions.filter((execution) => execution.operation === 'page-complete');
   const segments = executions.filter((execution) => execution.operation === 'segment-complete');
@@ -452,7 +461,7 @@ test('native commit before durable checkpoint recovers on the same default worke
   const deadline = await nativeDeadline(m);
   await workerClient();
   writeFileSync(clockPath, String(Date.parse(deadline)));
-  const crashed = runtime('crash');
+  const crashed = runtime('crash', m.first.id);
   await crashed.until('worker-ready');
   const sweep = await trigger();
   await crashed.until('native-committed');
