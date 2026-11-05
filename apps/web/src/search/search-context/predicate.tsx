@@ -18,10 +18,7 @@ export function rangeDescription(
   const end = (value: unknown) => (typeof value === 'object' ? JSON.stringify(value) : String(value));
   const unit = unitText?.(range.unit) ?? range.unit;
   if (unit === undefined) {
-    return [
-      range.gte === undefined ? '' : `≥ ${end(range.gte)}`,
-      range.lte === undefined ? '' : `≤ ${end(range.lte)}`,
-    ]
+    return [range.gte === undefined ? '' : `≥ ${end(range.gte)}`, range.lte === undefined ? '' : `≤ ${end(range.lte)}`]
       .filter(Boolean)
       .join(' ');
   }
@@ -200,14 +197,12 @@ export function PredicateDescription({
         {inverseDescription ? <p>{inverseDescription}</p> : null}
         {'inverse' in statement && statement.inverse && !('in' in statement) ? ' ←' : null}
         {'in' in statement && statement.concept
-          ? (
-              conceptDescription(
-                presentation.conceptScheme(statement.concept.scheme),
-                statement.concept.includeChildren
-                  ? m.condition_concept_descendants({}, options)
-                  : m.condition_concept_exact({}, options),
-                locale,
-              )
+          ? conceptDescription(
+              presentation.conceptScheme(statement.concept.scheme),
+              statement.concept.includeChildren
+                ? m.condition_concept_descendants({}, options)
+                : m.condition_concept_exact({}, options),
+              locale,
             )
           : null}
         {(previewNodes ? statement.qualifiers?.slice(0, 2) : statement.qualifiers)?.map((qualifier, i) => (
@@ -223,15 +218,13 @@ export function PredicateDescription({
   if ('type' in value)
     return (
       <>
-        {m.search_context_catalogue_type({}, options)}{' '}
-        {terms(value.type.in, presentation.catalogueType)}
+        {m.search_context_catalogue_type({}, options)} {terms(value.type.in, presentation.catalogueType)}
       </>
     );
   if ('kind' in value)
     return (
       <>
-        {m.search_context_exact_type({}, options)}{' '}
-        {terms(value.kind.in, presentation.discoveryType)}
+        {m.search_context_exact_type({}, options)} {terms(value.kind.in, presentation.discoveryType)}
       </>
     );
   if ('realm' in value) return <>{m.search_context_realm({ id: value.realm.id }, options)}</>;

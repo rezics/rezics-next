@@ -27,10 +27,7 @@ export function SearchCoverage({
   onFocus,
 }: {
   state: SearchLoaderDeps;
-  data: Pick<
-    SearchPageData,
-    'conditionMetadata' | 'hitTypes' | 'typeLabels' | 'typeChoices' | 'selectedFacetLabels'
-  >;
+  data: Pick<SearchPageData, 'conditionMetadata' | 'hitTypes' | 'typeLabels' | 'typeChoices' | 'selectedFacetLabels'>;
   observation: { as_of: string; freshness?: unknown };
   locale: string;
   refreshHref: string;
@@ -60,9 +57,7 @@ export function SearchCoverage({
       : unit;
   };
   const catalogueType = (id: string) => {
-    const labels =
-      data.conditionMetadata?.types[id]?.labels ??
-      (state.type === id ? data.typeLabels : undefined);
+    const labels = data.conditionMetadata?.types[id]?.labels ?? (state.type === id ? data.typeLabels : undefined);
     return localized(labels, id);
   };
   const discoveryType = (id: string) => {
@@ -173,7 +168,10 @@ export function SearchCoverage({
             <p>
               {m.search_context_exact_type({}, options)}{' '}
               {state.kinds.map((id, index) => (
-                <span key={id}>{index ? ', ' : ''}{discoveryType(id)}</span>
+                <span key={id}>
+                  {index ? ', ' : ''}
+                  {discoveryType(id)}
+                </span>
               ))}
             </p>
           )}
@@ -182,7 +180,10 @@ export function SearchCoverage({
               <li key={propertyId}>
                 {propertyName(propertyId)}:{' '}
                 {values.map((item, index) => (
-                  <span key={index}>{index ? ', ' : ''}{value(propertyId, item)}</span>
+                  <span key={index}>
+                    {index ? ', ' : ''}
+                    {value(propertyId, item)}
+                  </span>
                 ))}
               </li>
             ))}
@@ -192,8 +193,24 @@ export function SearchCoverage({
               </li>
             ))}
           </ul>
-          {state.condition && <PredicateDescription value={state.condition} locale={locale} presentation={presentation} unitText={unitText} saved={saved} />}
-          {resourcePredicate && <PredicateDescription value={resourcePredicate} locale={locale} presentation={presentation} unitText={unitText} saved={saved} />}
+          {state.condition && (
+            <PredicateDescription
+              value={state.condition}
+              locale={locale}
+              presentation={presentation}
+              unitText={unitText}
+              saved={saved}
+            />
+          )}
+          {resourcePredicate && (
+            <PredicateDescription
+              value={resourcePredicate}
+              locale={locale}
+              presentation={presentation}
+              unitText={unitText}
+              saved={saved}
+            />
+          )}
           {invalidPredicate && <p>{m.search_context_predicate_unavailable({}, options)}</p>}
           {(state.condition || state.filter) && <p>{m.search_context_predicates({}, options)}</p>}
           <p>{m.search_context_limits({}, options)}</p>
@@ -203,20 +220,51 @@ export function SearchCoverage({
               {m.search_context_technical_details({}, options)}
             </summary>
             <div className="mt-2 min-w-0 space-y-2 [overflow-wrap:anywhere]">
-              <p><code className="break-all">{state.query}</code></p>
-              {state.type && <p>{m.search_context_catalogue_type({}, options)} <code className="break-all">{state.type}</code></p>}
-              {!!state.kinds?.length && <p>{m.search_context_exact_type({}, options)} {state.kinds.map((id) => <code key={id} className="mr-1 break-all">{id}</code>)}</p>}
-              <p>{m.search_context_languages({}, options)}: <code className="break-all">{technicalLanguages}</code></p>
+              <p>
+                <code className="break-all">{state.query}</code>
+              </p>
+              {state.type && (
+                <p>
+                  {m.search_context_catalogue_type({}, options)} <code className="break-all">{state.type}</code>
+                </p>
+              )}
+              {!!state.kinds?.length && (
+                <p>
+                  {m.search_context_exact_type({}, options)}{' '}
+                  {state.kinds.map((id) => (
+                    <code key={id} className="mr-1 break-all">
+                      {id}
+                    </code>
+                  ))}
+                </p>
+              )}
+              <p>
+                {m.search_context_languages({}, options)}: <code className="break-all">{technicalLanguages}</code>
+              </p>
               <ul className="min-w-0 space-y-1">
                 {Object.entries(state.facets).map(([propertyId, values]) => (
-                  <li key={propertyId}><code className="break-all">{propertyId}</code>: {values.map((id) => <code key={id} className="mr-1 break-all">{id}</code>)}</li>
+                  <li key={propertyId}>
+                    <code className="break-all">{propertyId}</code>:{' '}
+                    {values.map((id) => (
+                      <code key={id} className="mr-1 break-all">
+                        {id}
+                      </code>
+                    ))}
+                  </li>
                 ))}
                 {Object.entries(state.ranges ?? {}).map(([propertyId, range]) => (
-                  <li key={propertyId}><code className="break-all">{propertyId}</code>: <code className="break-all">{JSON.stringify(range)}</code></li>
+                  <li key={propertyId}>
+                    <code className="break-all">{propertyId}</code>:{' '}
+                    <code className="break-all">{JSON.stringify(range)}</code>
+                  </li>
                 ))}
               </ul>
-              {state.condition && <PredicateDescription value={state.condition} locale={locale} presentation={technicalPresentation} />}
-              {resourcePredicate && <PredicateDescription value={resourcePredicate} locale={locale} presentation={technicalPresentation} />}
+              {state.condition && (
+                <PredicateDescription value={state.condition} locale={locale} presentation={technicalPresentation} />
+              )}
+              {resourcePredicate && (
+                <PredicateDescription value={resourcePredicate} locale={locale} presentation={technicalPresentation} />
+              )}
               {invalidPredicate && <p>{m.search_context_predicate_unavailable({}, options)}</p>}
             </div>
           </details>

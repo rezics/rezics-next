@@ -202,7 +202,9 @@ test('mounted result context stays on the executed request through draft edits a
     expect(coverage.textContent).toContain('Executed query');
     expect(coverage.textContent).not.toContain('Draft query');
     expect(coverage.textContent).toContain('Collection scope: 019a1b2c-3d4e-7f00-8a00-5ab1ec700001');
-    expect(coverage.textContent).toContain('Title and description language preferences, in this order: Japanese, English');
+    expect(coverage.textContent).toContain(
+      'Title and description language preferences, in this order: Japanese, English',
+    );
     expect(coverage.textContent).toContain('Catalogue Type (including released subtypes)');
     expect(coverage.textContent).toContain('Catalogue Book');
     expect(coverage.textContent).toContain('Exact discovery Type');
@@ -236,14 +238,7 @@ test('mounted result context stays on the executed request through draft edits a
     expect(retired.hitTypes).toEqual({});
     expect(retired.selectedFacetLabels).toEqual({});
     await act(async () =>
-      root.render(
-        <SearchResultsRegion
-          {...props}
-          data={retired}
-          retryState={executed}
-          onRetry={() => undefined}
-        />,
-      ),
+      root.render(<SearchResultsRegion {...props} data={retired} retryState={executed} onRetry={() => undefined} />),
     );
     expect(host.querySelector('[data-search-coverage]')).toBeNull();
     expect(host.textContent).not.toContain('Retired private Type label');
