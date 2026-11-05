@@ -149,16 +149,17 @@ function fixture(unknown = false) {
       return {
         kind: 'labels-applied',
         result: {
-          complete: false,
+          complete: unknown,
           outcomes: [
             {
               ordinal: 0,
               reviewId,
-              complete: false,
+              complete: unknown,
               items: [
                 {
                   key: command.body.confirmations[0]!.reviewId,
-                  status: 'pending',
+                  status: unknown ? 'applied' : 'pending',
+                  ...(unknown ? { assignment: { id: 'native-assignment', revision: 1 } } : {}),
                   label: { id: labelId, revision: 1 },
                 },
               ],
