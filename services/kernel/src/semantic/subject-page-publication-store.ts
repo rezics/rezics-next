@@ -4,8 +4,6 @@ import deliveryTime from './subject-page-publication-delivery-time.sql';
 import saveContinuationStatement from './subject-page-publication-continuation.sql';
 import readContinuationStatement from './subject-page-publication-read-continuation.sql';
 import type { Source } from '@rezics/definitions/bulk';
-import { sourceTuple, fenceKey } from './fences.ts';
-import insertSourceStatement from './subject-page-publication-source.sql';
 import readSourceStatement from './subject-page-publication-read-source.sql';
 import type { Pool, PoolClient } from 'pg';
 import { withConnection } from '../database/pool.ts';
@@ -38,8 +36,15 @@ import {
   SUBJECT_PAGE_REPAIR_QUEUED,
 } from '../events/contracts/semantic.ts';
 import readPointStatement from './subject-page-publication-read.sql';
-import lockPointStatement from './subject-page-publication-lock.sql';
-import publishPointStatement from './subject-page-publication-publish.sql';
+import {
+  assertPublicationHome,
+  bounded,
+  initializeSubjectPagePublicationAt,
+  listed,
+  lockPoint,
+  publishPoint,
+  retainSubjectPageSourceAt,
+} from './subject-page-publication-writes.ts';
 import insertChangeStatement from './subject-page-publication-change.sql';
 import installComponentStatement from './subject-page-publication-component.sql';
 import readDependenciesStatement from './subject-page-publication-dependencies.sql';
@@ -60,9 +65,6 @@ import claimBootstrapStatement from './subject-page-publication-claim-bootstrap.
 import replayWindowStatement from './subject-page-publication-replay.sql';
 import fanoutWindowStatement from './subject-page-publication-fanout.sql';
 
-function listed<T>(rows: T[] | T | null): T[] {
-  return rows === null ? [] : Array.isArray(rows) ? rows : [rows];
-}
 const saveContinuation = {
   run: async (...args: Parameters<typeof saveContinuationStatement.run>) =>
     listed(await saveContinuationStatement.run(...args)),
@@ -71,22 +73,11 @@ const readContinuation = {
   run: async (...args: Parameters<typeof readContinuationStatement.run>) =>
     listed(await readContinuationStatement.run(...args)),
 };
-const insertSource = {
-  run: async (...args: Parameters<typeof insertSourceStatement.run>) =>
-    listed(await insertSourceStatement.run(...args)),
-};
 const readSource = {
   run: async (...args: Parameters<typeof readSourceStatement.run>) => listed(await readSourceStatement.run(...args)),
 };
 const readPoint = {
   run: async (...args: Parameters<typeof readPointStatement.run>) => listed(await readPointStatement.run(...args)),
-};
-const lockPoint = {
-  run: async (...args: Parameters<typeof lockPointStatement.run>) => listed(await lockPointStatement.run(...args)),
-};
-const publishPoint = {
-  run: async (...args: Parameters<typeof publishPointStatement.run>) =>
-    listed(await publishPointStatement.run(...args)),
 };
 const insertChange = {
   run: async (...args: Parameters<typeof insertChangeStatement.run>) =>
@@ -198,7 +189,7 @@ export type PublicationStore = {
   readCurrent(subject: SubjectKey): Promise<PublicationEntry | null>;
 };
 type Configuration = { pool: Pool; access: Access; clock: KernelClock; routeKey: Uint8Array };
-type Point = {
+export type Point = {
   generation: string;
   readiness: string;
   public_effective_at: string | null;
@@ -215,11 +206,7 @@ const evidenceTime = (row: { effective_at: string | null; evidence: string }): E
   evidence: row.evidence as EvidenceTime['evidence'],
 });
 function home(tx: CommandTransaction, route: number) {
-  if (currentCommand(tx).partition !== partitionOf(route))
-    throw new TypeError('Publication write must belong to its authoritative transaction home');
-}
-function bounded(length: number, maximum: number) {
-  if (length > maximum) throw new RangeError(`Publication budget exceeds ${maximum}`);
+  assertPublicationHome(currentCommand(tx).partition, route);
 }
 function stringKeys(keys: (string | null)[]): string[] {
   return keys.map((key) => {
@@ -246,18 +233,7 @@ export function publicState(value: unknown): PublicState {
 
 /** Native creation proves an empty baseline without inventing a public time. */
 export async function initializeSubjectPagePublication(tx: CommandTransaction, subject: SubjectKey): Promise<void> {
-  home(tx, subject.route);
-  const point = (await lockPoint.run(tx, { route: subject.route, subject_id: subject.id }))[0]! as Point;
-  await publishPoint.run(tx, {
-    route: subject.route,
-    subject_id: subject.id,
-    generation: point.generation,
-    readiness: 'ready',
-    completed_position: point.completed_position,
-    position: point.change_position,
-    effective_at: null,
-    witnesses: point.witnesses,
-  });
+  await initializeSubjectPagePublicationAt(tx, currentCommand(tx).partition, subject);
 }
 
 /** Persist only actual affected identities; this never discovers a subject's degree. */
@@ -1055,17 +1031,7 @@ export async function retainSubjectPageSource(
   tx: CommandTransaction,
   input: { subject: SubjectKey; candidates: string[]; source: Source; routeKey: Uint8Array },
 ): Promise<void> {
-  home(tx, input.subject.route);
-  bounded(input.candidates.length, 512);
-  const tuple = sourceTuple(input.routeKey, input.source);
-  for (const candidate of input.candidates)
-    await insertSource.run(tx, {
-      route: input.subject.route,
-      subject_id: input.subject.id,
-      candidate_id: candidate,
-      owner_route: tuple.route,
-      owner_key: fenceKey(tuple),
-    });
+  await retainSubjectPageSourceAt(tx, currentCommand(tx).partition, input);
 }
 export async function readSubjectPageSourceOwner(
   tx: CommandTransaction,

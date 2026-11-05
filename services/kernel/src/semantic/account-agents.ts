@@ -1,9 +1,9 @@
 import { admitIdentityTerminalCapture, runIdentityTerminalCommand } from './identity-terminal-closure-command.ts';
 import { recordSemanticProducerRole } from './erasure-producer.ts';
-import { initializeSubjectPagePublication } from './subject-page-publication-store.ts';
+import { initializeSubjectPagePublicationAt } from './subject-page-publication-writes.ts';
 import { subjectPageFacts, recordSubjectPageDiff } from './subject-page-publication-native.ts';
 import type { Pool, PoolClient } from 'pg';
-import { runCommand, type CommandTransaction } from '../command/command.ts';
+import { currentCommand, runCommand, type CommandTransaction } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { withReadTransaction } from './read.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -207,7 +207,7 @@ async function createUnlabeledAgent(
   await createRevision.run(tx, { route, subject_id: id, release, transaction_id: transactionId, source: null });
   await identityEpochStore.initializeSubject(tx, id);
   await changePartitionSubjectCount.run(tx, { partition_no: partitionOf(route), delta: 1 });
-  await initializeSubjectPagePublication(tx, { route, id });
+  await initializeSubjectPagePublicationAt(tx, currentCommand(tx).partition, { route, id });
   return {
     value: resolveItem(id, [], type, {}, { revision: 1, release, context: GLOBAL_CONTEXT }),
     events: [{ type: 'com.rezics.subject.created.v1', subject: id, data: { id } }],

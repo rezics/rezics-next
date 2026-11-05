@@ -12,7 +12,7 @@ import { factDataTypes, SubjectInputError, type FactRow } from './item.ts';
 import { holderFacts, holderKeys, labelOrderKey } from './link-keys.ts';
 import { contextLinkChanges, linkChanges } from './link-changes.ts';
 import listRelationContexts from './relation-context-list.sql';
-import { readLabels } from './subject.ts';
+import { readLabels } from './subject-item-reads.ts';
 import readRetraction from './statement-disclosure-retraction.sql';
 import insertRetraction from './bulk-insert-retraction.sql';
 import insertRetractRevision from './bulk-insert-retract-revision.sql';

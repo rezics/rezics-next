@@ -4,7 +4,7 @@ import {
   sealSemanticRecordSourceSet,
 } from './record-source-set.ts';
 import { collectSemanticCandidateSource } from './record-source-set.ts';
-import { retainSubjectPageSource } from './subject-page-publication-store.ts';
+import { retainSubjectPageSourceAt } from './subject-page-publication-writes.ts';
 import { subjectPageSlot, recordSubjectPageDiff } from './subject-page-publication-native.ts';
 import { disclosureAccount, keepStatementPrivate, statementAudience } from './statement-disclosure.ts';
 import { withReadTransaction } from './read.ts';
@@ -19,7 +19,7 @@ import { declareCommandHistory, registerCommandHistoryKind } from '../history/re
 registerCommandHistoryKind('subject.propose', 3022);
 registerCommandHistoryKind('subject.decide', 3023);
 registerCommandHistoryKind('subject.adopt', 3024);
-import { fencedIds } from './fences.ts';
+import { fencedIds, type AgentSelfSource } from './fences.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { AccountActor } from '../request/access.ts';
 import { derivedId, partitionOf, routeOf } from '../route/route.ts';
@@ -61,13 +61,7 @@ import {
   type Adoption,
   type Candidate,
 } from './slots.ts';
-import {
-  accountSource,
-  assertAgentStatementAccess,
-  readItemDetails,
-  readLabels,
-  type AgentSelfSource,
-} from './subject.ts';
+import { accountSourceFor, assertAgentStatementAccessFor, readItemDetails, readLabels } from './subject-item-reads.ts';
 import { contextSnapshot } from './context.ts';
 import registerRelationContext from './relation-context-register.sql';
 import listRelationContexts from './relation-context-list.sql';
@@ -245,8 +239,8 @@ export async function writeProposal(
   );
   const details = await readItemDetails(tx, [options.subject, ...input.items.map((item) => item.id)]);
   const privateAccount = await disclosureAccount(tx, options.release.release, input.property, input.fact.body);
-  assertAgentStatementAccess(
-    tx,
+  assertAgentStatementAccessFor(
+    currentCommand(tx).basis,
     [
       options.subject,
       ...input.items
@@ -308,7 +302,9 @@ export async function writeProposal(
       revision,
       release: baseOf(options.release.digest),
       transaction_id: transactionId,
-      source: options.source ?? accountSource(tx, [options.subject, ...input.items.map((item) => item.id)]),
+      source:
+        options.source ??
+        accountSourceFor(currentCommand(tx).basis, [options.subject, ...input.items.map((item) => item.id)]),
     });
     if (options.source === undefined && creationDeclares(tx, revisionResource(options.subject, revision)))
       await initializeRevisionAuthorship(tx, { subject: options.subject, revision });
@@ -347,7 +343,7 @@ export async function writeProposal(
     revision,
   );
   if (options.source && 'source' in options.source && options.routeKey)
-    await retainSubjectPageSource(tx, {
+    await retainSubjectPageSourceAt(tx, currentCommand(tx).partition, {
       subject: { route, id: options.subject },
       candidates: [candidate],
       source: options.source,

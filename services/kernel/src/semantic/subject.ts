@@ -64,22 +64,26 @@ import { matchesTarget } from './targets.ts';
 import createRevision from './create-revision.sql';
 import insertSubject from './create-subject.sql';
 import changePartitionSubjectCount from './change-partition-subject-count.sql';
-import readLabelsStatement from './read-labels.sql';
 import readLabelChoicesStatement from './read-label-choices.sql';
 import readRelatedStatement from './read-related.sql';
 import readSubjectStatement from './read-subject.sql';
 import readSubjectIdentity from './read-subject-identity.sql';
-import readTypesStatement from './read-item-types.sql';
 import readHiddenStatement from './subject-read-hidden.sql';
 import { readRelease as getRelease } from './definitions.ts';
 import { layeredRelease } from './extensions.ts';
 import { writeFacts } from './write-facts.ts';
+import { AccountAgentLabelEditError, accountAgentsForSubjects } from './agents.ts';
 import {
-  AccountAgentLabelEditError,
-  AccountAgentWriteDeniedError,
-  accountAgentId,
-  accountAgentsForSubjects,
-} from './agents.ts';
+  accountSourceFor,
+  assertAgentStatementAccessFor,
+  assertBatch,
+  groupsOf,
+  listed,
+  readItemDetails,
+  readLabels,
+  type ItemTypeDetails,
+  type Queryable,
+} from './subject-item-reads.ts';
 import listOutboundLinks from './list-outbound-links-by-property.sql';
 import { waitForSubjectLinks } from './link-freshness.ts';
 import { identityEpochStore } from './identity-adapters/index.ts';
@@ -92,8 +96,7 @@ import { declareCommandHistory, registerCommandHistoryKind } from '../history/re
 const NIL_UUID = '00000000-0000-0000-0000-000000000000';
 
 export { writeFacts } from './write-facts.ts';
-
-const BATCH_LIMIT = 256;
+export { readItemDetails, readLabels };
 
 export const CREATE_SUBJECT = 'subject.create';
 // Permanent Semantic owner-assigned receipt codec ID.
@@ -261,7 +264,7 @@ export async function writeSubject(
     subject_id: subjectId,
     release: options.release.digest,
     transaction_id: transactionId,
-    source: options.source ?? accountSource(tx, statementSubjects),
+    source: options.source ?? accountSourceFor(currentCommand(tx).basis, statementSubjects),
   });
   // Historic trusted callbacks carry no creation capability and acquire no author rights.
   if (authored && creationDeclares(tx, revisionResource(subjectId, 1)))
@@ -399,11 +402,6 @@ type SubjectReadRow = {
   statement_id: string | null;
   body: unknown;
 };
-
-function listed<T>(result: T[] | T | null): T[] {
-  if (result == null) return [];
-  return Array.isArray(result) ? result : [result];
-}
 
 function asFacts(rows: readonly SubjectReadRow[]): FactRow[] {
   return rows.flatMap((row) =>
@@ -851,107 +849,18 @@ export async function readSubject(
   };
 }
 
-type Queryable = Pick<PoolClient, 'query'>;
-
-export type ItemTypeDetails = {
-  type: string;
-  agentAccountId: string | null;
-  agentVerified: boolean;
-};
-
-export function accountSource(tx: CommandTransaction, statementSubjects: readonly string[]): AgentSelfSource | null {
-  const basis = currentCommand(tx).basis;
-  if (!basis || basis.actorAccountId === null) return null;
-  const subject = accountAgentId(basis.actorAccountId);
-  return statementSubjects.includes(subject) ? { kind: 'agent', subject } : null;
-}
-
 export function assertAgentStatementAccess(
   tx: CommandTransaction,
   ids: readonly string[],
   details: ReadonlyMap<string, ItemTypeDetails>,
 ): void {
-  const basis = currentCommand(tx).basis;
-  if (!basis) return;
-  for (const id of new Set(ids)) {
-    const agent = details.get(id);
-    if (agent?.agentAccountId && !agent.agentVerified && agent.agentAccountId !== basis.actorAccountId)
-      throw new AccountAgentWriteDeniedError(id);
-  }
-}
-
-function assertBatch(ids: readonly string[], message: string): void {
-  if (ids.length > BATCH_LIMIT) throw new TypeError(message);
-}
-
-function groupsOf(ids: readonly string[]): Map<number, string[]> {
-  const groups = new Map<number, string[]>();
-  const seen = new Set<string>();
-  for (const id of ids) {
-    if (seen.has(id)) continue;
-    seen.add(id);
-    const route = routeOf(id);
-    if (route === null) continue;
-    const partition = partitionOf(route);
-    const group = groups.get(partition) ?? [];
-    group.push(id);
-    groups.set(partition, group);
-  }
-  return groups;
-}
-
-/** Item targets of one write, one primary-key probe per id and one statement per partition. */
-export async function readItemDetails(
-  client: Queryable,
-  ids: readonly string[],
-): Promise<Map<string, ItemTypeDetails>> {
-  if (ids.length > BATCH_LIMIT + 1) throw new TypeError('An item type and account agent check accepts at most 257 ids');
-  const details = new Map<string, ItemTypeDetails>();
-  for (const [partition, subjectIds] of groupsOf(ids)) {
-    const result = (await readTypesStatement.run(client, {
-      partition_no: partition,
-      routes: subjectIds.map((id) => routeOf(id)!),
-      subject_ids: subjectIds,
-    })) as
-      | { id: string; type: string; agent_account_id: string | null; agent_verified: boolean }[]
-      | { id: string; type: string; agent_account_id: string | null; agent_verified: boolean }
-      | null;
-    const rows = result == null ? [] : Array.isArray(result) ? result : [result];
-    for (const row of rows)
-      details.set(row.id, {
-        type: row.type,
-        agentAccountId: row.agent_account_id,
-        agentVerified: row.agent_verified,
-      });
-  }
-  return details;
+  assertAgentStatementAccessFor(currentCommand(tx).basis, ids, details);
 }
 
 export async function readItemTypes(client: Queryable, ids: readonly string[]): Promise<Map<string, string>> {
   assertBatch(ids, 'An item type check accepts at most 256 ids');
   const details = await readItemDetails(client, ids);
   return new Map([...details].map(([id, detail]) => [id, detail.type]));
-}
-
-export async function readLabels(
-  pool: Pool | CommandTransaction,
-  ids: readonly string[],
-): Promise<Map<string, Item['labels']>> {
-  assertBatch(ids, 'A label fill accepts at most 256 ids');
-  const labels = new Map<string, Item['labels']>();
-  await Promise.all(
-    [...groupsOf(ids)].map(async ([partition, subjectIds]) => {
-      const rows = listed(
-        (await readLabelsStatement.run(pool, {
-          partition_no: partition,
-          routes: subjectIds.map((id) => routeOf(id)!),
-          subject_ids: subjectIds,
-        })) as { id: string; labels: Record<string, string> }[] | { id: string; labels: Record<string, string> } | null,
-      );
-      for (const row of rows) labels.set(row.id, row.labels ?? {});
-    }),
-  );
-  return labels;
 }
 
 /** Chosen-label inputs use one statement per partition, including the original-language slot. */
