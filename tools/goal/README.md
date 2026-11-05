@@ -84,6 +84,7 @@ these commands for the files the branch already changes, including the sibling t
 call with a yield of at least 300 seconds. A supplied acceptance command defines the worker's check. For an ordinary
 dev product brief without one, the worker chooses focused validation and reports its exact command and actual result;
 the missing command never counts as a pass.
+Decision: ordinary worker-check filesystem/record interpretation (result/run precedence, nested envelopes, exit aliases, local-runner liveness, owned terminal-log evidence) lives in `worker-check-observation.ts`. `WorkerJob` consumes its pending-or-terminal observation and resume text, and retains proof observation, final-report recovery, waiting/resume transitions and process launch. Tests pin identity/security and wake/resume journeys at the public check-wake and resume-check-protocol entries; the observation entry has one disposable-file witness.
 
 A task whose paths touch `apps/web` or `packages/ui`, or an interface task without either, works against Storybook
 served from its own worktree (`storybook.ts`). Each catalogue gets a loopback port derived from the worktree path, so
@@ -103,6 +104,9 @@ import or page-story checks before dev advances. Promotion runs the full gate on
 
 Decision: The main/dev queue drain, lane leases, outcome replay and post-release recheck have one owner in
 `src/train-queue.ts`; `MergeTrain` supplies typed candidate, check, resolver and publication callbacks.
+
+Decision: `src/train-checks.ts` owns check execution, sibling settlement and failing-file decoding; `MergeTrain` keeps
+plans and policy and re-exports runner helpers for compatibility.
 
 Decision: A missing local `.sql` declaration followed by at least two TS18046/TS7006 cascades that outnumber
 cascades in changed files is an infrastructure result; landing proceeds and the independent verifier checks the root
@@ -1042,6 +1046,13 @@ reported as unknown rather than inferred.
 
 ### Host-capacity admission
 
+Decision: host-capacity tickets, waiters, memory/cap policy and `releaseWhenStarted` live in `launch-capacity.ts`.
+`launch.ts` re-exports that public admission entry. `WorkerTasks` and `WorkerJob` consume the capacity module; process
+identity, width snapshots and launch evidence stay with their current owners.
+Decision: existing capacity-wait, admission-reservation, urgent-dispatch and worker-prompt assertions stay;
+`launch-capacity.test.ts` pins public re-export identity, concurrent cap, queued progress after release, admitted-pending
+handoff and cancellation ticket cleanup at the original `launch.ts` entry.
+
 Decision: Host admission and width observations share the indexed, trigger-maintained `worker_current_attempts`
 projection; admission counts only each task's current attempt, while width retains its process-identity classification.
 
@@ -1256,9 +1267,15 @@ replacement. Delivering that lifecycle seam remains separate work.
 
 Declared paths support literals, `*`, `?` and whole-segment `**`. Absolute paths, traversal and unsupported glob syntax
 are refused. Matching walks an explicit stack and refuses after one million visited states; each pattern shares the
-12,288-byte brief size bound. Risk ownership is checked by intersecting the path patterns, including broad claims such as `src/**`.
-Every intersected risk area must be declared. Extend the ownership data when adding product modules. A `control-plane`
-brief may declare only `tools/goal/` paths; dispatch refuses outside paths and asks that they be split into a dev task.
+12,288-byte brief size bound. Risk ownership accepts legacy path lists and typed per-area `{ include, exclude }` rules.
+The shared classifier applies an exclusion only to its named area; another matching area remains protected. Broad claims
+such as `services/**` continue to intersect production authorization paths.
+
+Decision: the authorization risk area excludes `services/auth/scripts/**`; production auth, authorization and permissions
+paths remain protected. New landing requests persist per-area rules, while previously queued flat path lists retain their
+original matching behavior. Every intersected production risk area must be declared. Extend the ownership data when adding
+product modules. A `control-plane` brief may declare only `tools/goal/` paths; dispatch refuses outside paths and asks
+that they be split into a dev task.
 
 Routing records the table version on each attempt. Open experiments weight work toward cheaper models: implementation, interface and bulk text rotate Grok 4.7, Grok 4.7, Luna `max`; claims rotate Luna `max`, Grok 4.7, Sol `high`
 by durable task sequence, starting with `high`; retries retain the original profile and version. Research is read-only.
@@ -1359,6 +1376,20 @@ The tracked repository gate is `bun tools/goal/scripts/gate.ts`. It runs `bun in
 independent verifier runs them after integration; a failure is reported with the command and first failure and does
 not hold the landing train. Main promotion retains its task acceptance gates. Integration rebases onto the integration
 branch, checks declared paths, formats changes and fast-forwards that branch without moving `main`.
+Decision: Each final dev candidate runs Bun's unbundled transpile over its changed executable TypeScript files before publication; compiler diagnostics return through the same worker session without a failed attempt outcome.
+The train compares the exact target base with the recomposed candidate after replay and formatting, and applies this check to
+direct, combined, resolver-replayed and untargeted control-plane dev landings. It passes existing `.ts`, `.tsx`, `.mts` and
+`.cts` files as argv-safe entry points to Bun `build --no-bundle`; deleted files, declarations and other extensions are
+skipped. A compiler error keeps its absolute log and first file/line diagnostic, then resumes the original worker session
+through the existing retry continuation. The repaired source follows normal landing preparation and must pass a fresh
+candidate transpile. Successful checks and nonterminal repairs appear in the existing flow report.
+
+This check establishes only that Bun can transpile each changed source entry. It does not validate imports or dependencies,
+import cycles, TypeScript types, application boot, native checks or acceptance. The root typecheck, optional boot check,
+independent verifier and main promotion retain their existing policies. The target cost is below one second for a typical
+landing; the observed disposable-fixture command cost is recorded with the `dev-landing-transpile` guard below.
+The measured fixture was 7ms for 7 changed paths, 4 executable TypeScript entries and 180 source bytes; this is one
+sample against the target, not a claim that all landings meet it.
 Promotion gates on correctness only: the root gate and the promoted tasks' own acceptance. Capability completion
 (`docs/goals/<goal>.capabilities.md`) is reported by the completion checker on `main` and never blocks a promotion,
 so `main` receives finished work while other In rows are still open.
@@ -1396,6 +1427,14 @@ released; source validation alone does not repair or restart retained consumers 
 Disposable train worktrees capture their directory identity when created. Before Git removes one, the train restores
 owner access on its own directories, including immutable fixture stores left by checks. Cleanup rejects replaced roots
 or parents, never follows dependency links, and never changes package file modes or outside store directories.
+Decision: Train-owned temporary detached worktrees (ordinary and batch candidates, resolver-dev scratch, boot and
+affected baselines, control-plane merge candidates, batch proof trees and dev compatibility trees) live in
+`train-workspace.ts`. MergeTrain remains the selector, checker, publisher and settlement owner; the helper receives the
+selected checkout, tree, revision, Git and the caller's abort/cleanup profile, and returns add/release operations.
+`captureTrainWorktreeRemoval` stays exported from `merge-train.ts`. Markdown/import scratch, task-workspace
+preparation, finished worker-tree cleanup, main-checkout sync, ref transactions and cp-sync recovery stay with their
+owners. Public-boundary witnesses use disposable Git fixtures in `train-workspace.test.ts`; replaced-directory,
+symlink and shared-store assertions stay on the original `captureTrainWorktreeRemoval` entry.
 
 Store builds use `--backend=copyfile`; the `.bun` tree is made read-only before publication. Run
 `bun tools/goal/src/cli.ts deps private` before changing a manifest or lockfile. A five-directory host-c comparison
@@ -1449,7 +1488,9 @@ same session; [cp-sync](#control-plane-on-dev-cp-sync) is its release gate to `m
 `bun run --cwd tools/goal typecheck` and the complete `bun test --timeout 30000 tools/goal/src` suite.
 
 Decision: `launch-smoke.ts` remains the sole executable entry; lazy lifecycle scenarios live in `launch-smoke-scenarios.ts`, bounded evidence/report helpers live in `launch-smoke-evidence.ts`, and the inner child still dispatches through the candidate entry.
-Decision: Promotion command planning, exact-candidate check execution, result persistence/cache identity and infrastructure reruns live in `promotion-checks.ts`; `promotion.ts` remains the coordinator for promotion decisions and ref publication and re-exports the existing command API.
+Decision: Promotion command planning, exact-candidate check execution, result persistence/cache identity and infrastructure reruns live in `promotion-checks.ts`; `promotion.ts` remains the phase coordinator and re-exports the existing command API.
+Decision: Main-baseline and task-prefix failure attribution, including culprit narrowing, dependency closure, flake confirmation and probe-retry evidence, lives in `promotion-attribution.ts`; `promotion.ts` remains the phase coordinator and preserves its public command exports.
+Decision: Promotion Git/ref publication — prefix and main compare-and-swap, control-plane-only candidate merge, expected-old-head stabilize/dev updates, derived-conflict merge-back and post-main propagation — lives in `promotion-publication.ts`; `promotion.ts` remains the phase coordinator and keeps the public promote/options/regeneration API.
 Changes to the worker launch path also run `tools/goal/scripts/launch-smoke.ts` on the candidate after the control-plane checks.
 The smoke builds a disposable worktree with the candidate merged on top of current `dev`, dispatches one tiny task through
 the real worker launch and settle path, starts a real `scripts/worker-check.ts` command, and waits for its result before
@@ -1669,8 +1710,9 @@ conflict or tool blocker), or two consecutive attempts that end without a new co
 attempt records an `attempt-progress` event: whether its branch head moved from the head recorded at its first prompt,
 or work was left uncommitted. Unknown progress never stops a task. A changed file outside its declared paths and a diff
 beyond twice its estimate do not stop it either: the attempt record lists such files in `outsidePaths` and the size in
-`estimateOverrun`. A scope-stage refusal for an undeclared risk area, a frozen acceptance change on lanes that retain
-the refusal, a specification conflict and a stall still reach the owning manager. Control-plane releases, stabilize-target and verification work keep
+`estimateOverrun`. Scope-stage refusals report matches against configured protected paths for owner review; a frozen
+acceptance change on lanes that retain the refusal, a specification conflict and a stall also reach the owning manager.
+Control-plane releases, stabilize-target and verification work keep
 every limit above.
 
 A product worker on dev whose outcome does not fit one attempt lands a coherent part and writes the rest of its own

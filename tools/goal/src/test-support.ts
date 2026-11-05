@@ -490,7 +490,13 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
     const task = h.tasks.dispatch(briefFile);
     mkdirSync(dirname(join(task.worktree, file)), { recursive: true });
     mkdirSync(join(task.worktree, '.temp'), { recursive: true });
-    writeFileSync(join(task.worktree, '.temp/worker-plan.json'), JSON.stringify({ file, content: file }));
+    writeFileSync(
+      join(task.worktree, '.temp/worker-plan.json'),
+      JSON.stringify({
+        file,
+        content: /\.(?:ts|tsx|mts|cts)$/i.test(file) ? 'export const fixture = true;\n' : file,
+      }),
+    );
     return task;
   }
   async function seed(file: string, after: string[] = [], acceptance = ['true']) {
@@ -521,6 +527,9 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
         onGateOutcome(outcome) {
           outcomes.push(outcome);
           if (deliver) job.onGateOutcome(outcome);
+        },
+        onDevLandingTranspileHandoff(handoff) {
+          job.onDevLandingTranspileHandoff(handoff);
         },
       },
       ...(runGate ? { runGate } : {}),

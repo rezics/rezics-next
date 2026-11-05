@@ -1761,6 +1761,7 @@ export class WorkerStore implements AttemptFence {
           if (previous.estimateOverrun) record.estimateOverrun = previous.estimateOverrun;
           record.hostMs = previous.hostMs;
           record.earlyStop = previous.earlyStop;
+          if (previous.guardIds) record.guardIds = [...previous.guardIds];
         }
         this.saveAttempt(old);
         // A new capture cannot recalculate the old proof's report/evidence using its new contract or logs.

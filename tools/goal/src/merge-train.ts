@@ -1,6 +1,5 @@
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
-import { closeSync, constants, fchmodSync, fstatSync, lstatSync, openSync, readdirSync, realpathSync } from 'node:fs';
-import { basename } from 'node:path';
+import { closeSync, openSync } from 'node:fs';
 import { isDeepStrictEqual } from 'node:util';
 import { TrainResolver, TrainResolverInfrastructureError, type TrainConflict } from './train-resolver.ts';
 import { policyOwnerConflictGit } from './owner-conflict.ts';
@@ -12,7 +11,14 @@ import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSyn
 import { dirname, join, relative, resolve } from 'node:path';
 import { Database } from 'bun:sqlite';
 import defaults from '../defaults.json';
-import { controlPlaneReleaseBrief, matchesPath, parseBrief, readRiskOwnership } from './briefs.ts';
+import {
+  controlPlaneReleaseBrief,
+  isProtectedRiskPath,
+  matchesPath,
+  parseBrief,
+  protectedRiskAreasForBrief,
+  readRiskOwnership,
+} from './briefs.ts';
 import { selectAffectedChecks } from './check-plan.ts';
 import { StaleAttemptError } from './contracts.ts';
 import type {
@@ -28,6 +34,7 @@ import type {
   ControlPlaneBatchDevHandoff,
   ControlPlaneBatchDevHandoffRequest,
   AttemptRef,
+  DevLandingTranspileHandoff,
   GateOutcome,
   GateOutcomeSink,
   GateStage,
@@ -35,6 +42,12 @@ import type {
   RebaseConflictContext,
 } from './contracts.ts';
 import { ensureGateOutcomeRefusal } from './guards.ts';
+import { recordFlow } from './flow.ts';
+import {
+  LandingTranspileInterruptedError,
+  transpileLandingCandidate,
+  type LandingTranspileResult,
+} from './landing-transpile.ts';
 import { openDb } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { SqliteLandingQueue, type LandingEntry } from './land.ts';
@@ -74,9 +87,15 @@ import { canonicalConflictPaths, makeRebaseConflictContext } from './conflict-pr
 import { renameSync } from 'node:fs';
 
 import type { AffectedTestCheck, AffectedTestResult } from './types.ts';
-import { CHECK_HOST_TRANSPORT } from './records.ts';
 import { siblingTestCommand, siblingTestFiles } from './affected-tests.ts';
 import { installShared } from './shared-dependencies.ts';
+import {
+  checkTransportFailed,
+  failingTestFiles,
+  runAffectedTest,
+  runIntegrationChecks,
+  settleOwnedCommands,
+} from './train-checks.ts';
 import {
   classifyCandidateDelta,
   derivedForPath,
@@ -91,8 +110,12 @@ import {
   parseControlPlaneBatchManifest,
   parseControlPlaneBatchRefContinuation,
 } from './control-plane-batch.ts';
+import { openTrainWorkspace, type TrainWorkspace, type TrainWorkspaceProfile } from './train-workspace.ts';
+
+export { captureTrainWorktreeRemoval } from './train-workspace.ts';
 
 export type { DerivedFile } from './candidate.ts';
+export { failingTestFiles, runAffectedTest, runIntegrationChecks };
 export type IntegrationCheck = { paths: string[]; command: string[] };
 const defaultDerivedFiles = defaults.derivedFiles as DerivedFile[];
 const defaultJsonMessageConflicts = defaults.jsonMessageConflicts as string[];
@@ -192,99 +215,6 @@ export function landingAffectedChecks(
 }
 /** A landing may change only files the formatter does not handle, such as SQL; that is not a formatter failure. */
 export const FORMAT_FLAGS = ['--no-error-on-unmatched-pattern'];
-
-/** Capture only a newly added disposable train tree, before any check can leave immutable fixture directories. */
-export function captureTrainWorktreeRemoval(tree: string): () => void {
-  const path = resolve(tree);
-  const parentPath = dirname(path);
-  const parent = realpathSync(parentPath);
-  const rootIdentity = lstatSync(path);
-  const parentIdentity = lstatSync(parent);
-  const sameInode = (left: ReturnType<typeof fstatSync>, right: ReturnType<typeof fstatSync>) =>
-    left.dev === right.dev && left.ino === right.ino;
-  const refuse = () => new Error(`Refusing cleanup of replaced train worktree: ${path}`);
-  if (!rootIdentity.isDirectory() || !parentIdentity.isDirectory()) throw refuse();
-  const flags = constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW;
-  const descriptorPath = (fd: number) => `/proc/self/fd/${fd}`;
-  const prepare = (fd: number) => {
-    const stat = fstatSync(fd);
-    if (stat.dev !== rootIdentity.dev) throw new Error(`Refusing cleanup across train filesystem boundary: ${path}`);
-    if ((stat.mode & 0o700) !== 0o700) fchmodSync(fd, (stat.mode & 0o7777) | 0o700);
-    for (const name of readdirSync(descriptorPath(fd))) {
-      const child = join(descriptorPath(fd), name);
-      const before = lstatSync(child);
-      // Directory permissions govern deletion. Never chmod package files (which can be hardlinks), or follow links
-      // to shared dependency stores, another worktree, or any other outside directory.
-      if (!before.isDirectory()) continue;
-      const childFd = openSync(child, flags);
-      try {
-        if (!sameInode(before, fstatSync(childFd))) throw refuse();
-        prepare(childFd);
-        if (!sameInode(before, lstatSync(child))) throw refuse();
-      } finally {
-        closeSync(childFd);
-      }
-    }
-  };
-  return () => {
-    if (realpathSync(parentPath) !== parent) throw refuse();
-    const parentFd = openSync(parent, flags);
-    try {
-      if (!sameInode(parentIdentity, fstatSync(parentFd))) throw refuse();
-      const rootFd = openSync(join(descriptorPath(parentFd), basename(path)), flags);
-      try {
-        if (!sameInode(rootIdentity, fstatSync(rootFd))) throw refuse();
-        prepare(rootFd);
-        if (!sameInode(rootIdentity, lstatSync(path))) throw refuse();
-      } finally {
-        closeSync(rootFd);
-      }
-    } finally {
-      closeSync(parentFd);
-    }
-  };
-}
-
-/** Kernel summaries, FAIL lines and heading-scoped (fail) name files; passing headings, Bun's repeated summary and stack frames do not. */
-export function failingTestFiles(output: string): string[] {
-  const clean = output.replace(/\x1b\[[0-9;]*m/g, '');
-  const files = new Set<string>();
-  const add = (file: string) => files.add(file.replace(/^\.\//, ''));
-  let summarized = false;
-  for (const summary of clean.matchAll(/tests failed for (\d+) file\(s\):\r?\n([^]*?)(?=\n\s*at |$)/gi)) {
-    summarized = true;
-    files.clear(); // The final summary excludes files that passed the check's own rerun.
-    for (const line of summary[2]!.split(/\r?\n/).slice(0, Number(summary[1]))) {
-      const file = line.trim();
-      if (file) add(file);
-    }
-  }
-  if (summarized) return [...files].sort();
-  for (const match of clean.matchAll(
-    /^\s*(?:FAIL\s+([^\s]+\.(?:test|spec)\.[cm]?[jt]sx?)|([^\s:]+\.(?:test|spec)\.[cm]?[jt]sx?):[^\n]*(?:fail|error))/gim,
-  ))
-    add((match[1] ?? match[2])!);
-  let currentFile: string | undefined;
-  for (const line of clean.split(/\r?\n/)) {
-    const heading = line.match(/^([^\s]+\.(?:test|spec)\.[cm]?[jt]sx?):\s*$/);
-    if (heading) currentFile = heading[1];
-    else if (/^\d+ tests? failed:/.test(line.trim())) currentFile = undefined;
-    else if (currentFile && /^\s*\(fail\)/.test(line)) add(currentFile);
-  }
-  return [...files].sort();
-}
-
-function checkTransportFailed(output: string): boolean {
-  return (
-    CHECK_HOST_TRANSPORT.test(output) ||
-    /remote-check: (?:connection to .+ failed during .+ before a result|no check host answered)/.test(output)
-  );
-}
-
-function checkEnvironmentFailed(output: string): boolean {
-  const clean = output.replace(/\x1b\[[0-9;]*m/g, '');
-  return /^kernel check: environment failure: database storage full \(SQLSTATE 53100\)(?: on .*)?$/m.test(clean);
-}
 
 export type CandidateGitResult = {
   status: number | null;
@@ -448,126 +378,6 @@ export function assertCandidateIntegrity(
   throw new Error(
     `Candidate Git infrastructure failure phase=${phase}: git diff --quiet HEAD -- ${candidateGitDetails(quiet, policy)}; expected HEAD=${expected}; evidence recorded before candidate cleanup`,
   );
-}
-
-/** A rejected owned command cannot release its siblings' worktree or leases early. */
-async function settleOwnedCommands<T>(commands: Promise<T>[]): Promise<T[]> {
-  const results = await Promise.allSettled(commands);
-  const rejected = results.find((result) => result.status === 'rejected');
-  if (rejected?.status === 'rejected') throw rejected.reason;
-  return results.map((result) => (result as PromiseFulfilledResult<T>).value);
-}
-
-/** No wall timeout: a check waiting for a shared host slot is still queued. */
-export async function runAffectedTest(
-  command: readonly string[],
-  cwd: string,
-  logPath: string,
-  env: NodeJS.ProcessEnv,
-  options?: { signal: AbortSignal },
-  policy = defaultPolicy,
-): Promise<AffectedTestResult> {
-  const started = Date.now();
-  let output = '';
-  let passed = false;
-  let transportUnverified = false;
-  let environmentUnverified = false;
-  for (let retry = 0; retry < policy.integration.affectedTransportAttempts; retry++) {
-    appendFileSync(logPath, `$ ${command.join(' ')} (cwd: ${cwd})\n`);
-    const result = await processGroupRunner(
-      undefined,
-      undefined,
-      env,
-      false,
-      policy.merge,
-    )(command, cwd, logPath, options);
-    output = result.output;
-    passed = result.passed;
-    environmentUnverified = checkEnvironmentFailed(output);
-    transportUnverified = !passed && checkTransportFailed(output);
-    if (!transportUnverified) break;
-    if (retry + 1 < policy.integration.affectedTransportAttempts)
-      appendFileSync(
-        logPath,
-        policy.integration.affectedTransportAttempts === 2
-          ? 'Check-host transport failed; retrying once\n'
-          : 'Check-host transport failed; retrying on the same source\n',
-      );
-  }
-  const selectionUnverified = /^Affected mode: unverified, 0 of \d+ test files selected \(.+\)$/m.test(output);
-  const unverified = transportUnverified || environmentUnverified || (passed && selectionUnverified);
-  const status = unverified ? 'unverified' : passed ? 'passed' : 'failed';
-  const durationMs = Date.now() - started;
-  appendFileSync(logPath, `Affected test: ${status} in ${durationMs} ms\n`);
-  return {
-    command: [...command],
-    status,
-    failingFiles: passed || unverified ? [] : failingTestFiles(output),
-    durationMs,
-    output,
-  };
-}
-
-export async function runIntegrationChecks(
-  commands: readonly (readonly string[])[],
-  cwd: string,
-  logPath: string,
-  execute: GateRunner = gateRunner(defaultPolicy.integration.checkTimeoutMs),
-): Promise<GateResult & { failedCommand?: readonly string[] }> {
-  // Web's recorded-response check regenerates the web client first, which takes about two minutes on a loaded host.
-  let output = '';
-  let passed = true,
-    timedOut = false;
-  let failedCommand: readonly string[] | undefined;
-  const record = (command: readonly string[], result: GateResult, started: number) => {
-    output += result.output;
-    if (!result.passed && !failedCommand) failedCommand = [...command];
-    passed &&= result.passed;
-    timedOut ||= result.timedOut;
-    appendFileSync(
-      logPath,
-      `(${command.join(' ')}: ${result.passed ? 'passed' : 'failed'} in ${Math.round((Date.now() - started) / 1000)} s)\n`,
-    );
-  };
-  // Every check runs: a later check may be the only one that exercises its own errors. Installing
-  // dependencies changes the tree the others read, so it runs first and alone; the remaining checks only read the tree
-  // and run at once, each into its own log section, which keeps the landing as long as its slowest check.
-  // A check that installs or generates writes the tree, so those run one at a time, before and after the read-only
-  // group.
-  const writes = (command: readonly string[]) => / install\b|\bgenerate\b/.test(` ${command.join(' ')}`);
-  const install = commands.filter((command) => command[0] === 'bun' && command[1] === 'install');
-  const rest = commands.filter((command) => !install.includes(command) && !writes(command));
-  const after = commands.filter((command) => !install.includes(command) && writes(command));
-  for (const command of install) {
-    appendFileSync(logPath, `$ ${command.join(' ')} (cwd: ${cwd})\n`);
-    const started = Date.now();
-    record(command, await execute(command, cwd, logPath), started);
-  }
-  const parallel = await Promise.allSettled(
-    rest.map(async (command, index) => {
-      const own = `${logPath}.check-${index}`;
-      writeFileSync(own, `$ ${command.join(' ')} (cwd: ${cwd})\n`);
-      const started = Date.now();
-      const result = await execute(command, cwd, own);
-      return { command, result, started, own };
-    }),
-  );
-  for (const settled of parallel) {
-    // Rejected commands keep their exact section log. Every sibling has settled before custody can be released.
-    if (settled.status === 'rejected') continue;
-    const { command, result, started, own } = settled.value;
-    appendFileSync(logPath, readFileSync(own, 'utf8'));
-    rmSync(own, { force: true });
-    record(command, result, started);
-  }
-  const rejected = parallel.find((result) => result.status === 'rejected');
-  if (rejected?.status === 'rejected') throw rejected.reason;
-  for (const command of after) {
-    appendFileSync(logPath, `$ ${command.join(' ')} (cwd: ${cwd})\n`);
-    const started = Date.now();
-    record(command, await execute(command, cwd, logPath), started);
-  }
-  return { passed, output, timedOut, ...(failedCommand ? { failedCommand } : {}) };
 }
 
 // While dev already fails a check, a branch is still refused for error lines that dev does not have. Source
@@ -1529,6 +1339,12 @@ type PreparedLanding = {
   started: number;
 };
 
+type DevLandingSourceOwner = {
+  entry: Pick<LandingEntry, 'id' | 'request'>;
+  sourceCommit: string;
+  changedFiles: readonly string[];
+};
+
 function emptyTokens(): Tokens {
   return { input: 0, cached: 0, output: 0 };
 }
@@ -1541,11 +1357,75 @@ function addTokens(left: Tokens, right: Tokens): Tokens {
   };
 }
 
-function isDevResolutionHandoff(value: GateOutcome | DevResolutionHandoff | undefined): value is DevResolutionHandoff {
+function isDevResolutionHandoff(
+  value: GateOutcome | DevResolutionHandoff | DevLandingTranspileHandoff | undefined,
+): value is DevResolutionHandoff {
   return !!value && 'kind' in value && value.kind === 'dev-resolution';
 }
 
+function isDevLandingTranspileHandoff(
+  value: GateOutcome | DevResolutionHandoff | DevLandingTranspileHandoff | undefined,
+): value is DevLandingTranspileHandoff {
+  return !!value && 'kind' in value && value.kind === 'dev-landing-transpile';
+}
+
+function devTranspileEvidence(result: LandingTranspileResult): NonNullable<GateOutcome['devTranspile']> {
+  return {
+    base: result.base,
+    candidate: result.candidate,
+    changedFileCount: result.changedFileCount,
+    typescriptFileCount: result.typescriptFileCount,
+    elapsedMs: result.elapsedMs,
+    outcome: 'passed',
+  };
+}
+
+function transpileHandoff(
+  entry: Pick<LandingEntry, 'id' | 'request'>,
+  sourceCommit: string,
+  changedFiles: readonly string[],
+  result: LandingTranspileResult,
+): DevLandingTranspileHandoff {
+  if (result.outcome !== 'diagnostic' || !result.diagnostic || result.elapsedMs === null)
+    throw new Error('dev landing compiler handoff requires a measured TypeScript diagnostic');
+  const diagnostic = { ...result.diagnostic };
+  if (diagnostic.file) {
+    const sourcePath = changedFiles.find((path) => diagnostic.file!.endsWith(`/${path}`));
+    if (sourcePath) diagnostic.file = resolve(entry.request.worktree, sourcePath);
+  }
+  return {
+    kind: 'dev-landing-transpile',
+    taskId: entry.request.taskId,
+    attempt: entry.request.attempt,
+    entryId: entry.id,
+    request: entry.request,
+    sourceCommit,
+    base: result.base,
+    candidate: result.candidate,
+    changedFiles: [...changedFiles],
+    typescriptFiles: [...result.typescriptFiles],
+    elapsedMs: result.elapsedMs,
+    logPath: result.logPath,
+    diagnostic,
+  };
+}
+
 class ControlPlaneProofInterrupted extends Error {}
+class ControlPlaneTranspileHandoffSignal extends Error {
+  constructor(
+    readonly batchId: string,
+    readonly handoff: DevLandingTranspileHandoff,
+  ) {
+    super('control-plane dev candidate requires an in-place compiler repair');
+    this.name = 'ControlPlaneTranspileHandoffSignal';
+  }
+}
+class LandingTranspileUnavailableError extends Error {
+  constructor(readonly result: LandingTranspileResult) {
+    super(result.infrastructureError ?? 'dev landing transpile command unavailable');
+    this.name = 'LandingTranspileUnavailableError';
+  }
+}
 
 type OrdinaryProofAttempt = {
   source: string;
@@ -1631,12 +1511,43 @@ export class MergeTrain {
     return policyGit(cwd, args, this.options.policy?.merge);
   }
 
+  private trainWorkspace(tree: string, revision: string, profile: TrainWorkspaceProfile): TrainWorkspace {
+    return openTrainWorkspace({
+      checkout: this.options.mainCheckout,
+      worktreeRoot: this.options.worktreeRoot,
+      tree,
+      revision,
+      git: (cwd, ...args) => this.git(cwd, ...args),
+      profile,
+    });
+  }
+
   private workspaceFailures = new Map<number, GateOutcome[]>();
   constructor(private readonly options: TrainOptions) {}
 
   private initializeLandingLog(logPath: string): void {
     const revision = this.options.configurationRevision ?? trainConfigurationRevision(this.options);
     writeFileSync(logPath, `Configuration revision: ${revision}\n`);
+  }
+
+  private recordUnavailableDevTranspile(request: LandingRequest, result: LandingTranspileResult): void {
+    if (!(this.options.fence instanceof WorkerStore)) return;
+    recordFlow(this.options.fence.db, {
+      ...request,
+      stage: 'landing',
+      action: 'dev-transpile',
+      at: new Date().toISOString(),
+      detail: JSON.stringify({
+        outcome: 'unavailable',
+        base: result.base,
+        candidate: result.candidate,
+        changedFileCount: result.changedFileCount,
+        typescriptFileCount: result.typescriptFileCount,
+        elapsedMs: null,
+        logPath: result.logPath,
+        infrastructureError: result.infrastructureError ?? null,
+      }),
+    });
   }
 
   private configuredLandingBoot(): IntegrationCheck | undefined {
@@ -1768,9 +1679,14 @@ export class MergeTrain {
         return cached;
       }
       let baseline: GateResult = { passed: false, output: 'Boot check baseline did not run', timedOut: false };
-      const baselineTree = resolve(this.options.worktreeRoot, `boot-baseline-${randomUUID()}`);
-      mkdirSync(resolve(this.options.worktreeRoot), { recursive: true });
-      this.git(this.options.mainCheckout, 'worktree', 'add', '--detach', baselineTree, base);
+      const baselineWorkspace = this.trainWorkspace(
+        resolve(this.options.worktreeRoot, `boot-baseline-${randomUUID()}`),
+        base,
+        {
+          cleanup: { onError: 'throw' },
+        },
+      );
+      const baselineTree = baselineWorkspace.tree;
       try {
         if (
           !existsSync(join(baselineTree, 'node_modules')) &&
@@ -1805,7 +1721,7 @@ export class MergeTrain {
           appendFileSync(logPath, 'Boot check baseline infrastructure failure; retrying once on the same base\n');
         }
       } finally {
-        this.git(this.options.mainCheckout, 'worktree', 'remove', '--force', baselineTree);
+        baselineWorkspace.release();
       }
       if (!compilerInfrastructureFailure(baseline.output, baseline.timedOut))
         this.options.queue.saveBaseline(base, key, baseline);
@@ -1999,11 +1915,11 @@ export class MergeTrain {
       const localOutcomes = new Map<number, GateOutcome>();
       let base = '';
       let previous = '';
-      let added = false;
-      let prepareRemoval: (() => void) | undefined;
+      let workspace: TrainWorkspace | undefined;
       let retry = false;
       let committed = false;
       let stale: LandingEntry | undefined;
+      let transpileEvidence: GateOutcome['devTranspile'];
       try {
         for (const entry of pending) {
           const logPath = join(o.stateDirectory, `landing-${entry.id}.log`);
@@ -2015,10 +1931,17 @@ export class MergeTrain {
           throw new Error('The main checkout must already have main checked out');
         base = target();
         previous = base;
-        mkdirSync(resolve(o.worktreeRoot), { recursive: true });
-        this.git(o.mainCheckout, 'worktree', 'add', '--detach', trainTree, base);
-        added = true;
-        prepareRemoval = captureTrainWorktreeRemoval(trainTree);
+        workspace = this.trainWorkspace(trainTree, base, {
+          abort: ['rebase', 'merge'],
+          capture: 'create',
+          cleanup: {
+            onError: 'report',
+            report: (error) => {
+              for (const logPath of logPaths.values())
+                appendFileSync(logPath, `Train tree cleanup deferred: ${trainTree}: ${error}\n`);
+            },
+          },
+        });
 
         for (const entry of pending) {
           const request = { ...entry.request };
@@ -2378,14 +2301,75 @@ export class MergeTrain {
         // prelanding typecheck, then the policy boot check when changed paths match; other verification
         // runs after integration in the independent verifier.
         const finalCandidate = prepared[prepared.length - 1]!.candidate;
+        const batchLog = logPaths.get(prepared[0]!.entry.id)!;
         this.git(trainTree, 'reset', '--hard', prepared[prepared.length - 1]!.candidate);
+        if (lane === 'dev') {
+          const finalChangedFiles = changedPathsBetween(trainTree, base, finalCandidate, this.options.policy?.merge);
+          const transpiled = await transpileLandingCandidate({
+            cwd: trainTree,
+            base,
+            candidate: finalCandidate,
+            changedFiles: finalChangedFiles,
+            logPath: batchLog,
+          });
+          let staleDuringTranspile: LandingEntry | undefined;
+          for (const member of prepared) {
+            try {
+              o.fence.assertCurrent(member.entry.request);
+            } catch (error) {
+              if (!(error instanceof StaleAttemptError)) throw error;
+              staleDuringTranspile = member.entry;
+              break;
+            }
+          }
+          if (staleDuringTranspile) {
+            skipped.add(staleDuringTranspile.id);
+            pending = pending.filter((entry) => entry.id !== staleDuringTranspile!.id);
+            retry = true;
+            continue;
+          }
+          if (target() !== base) {
+            retry = true;
+            continue;
+          }
+          if (transpiled.outcome === 'diagnostic') {
+            const location = transpiled.diagnostic?.file;
+            const owner =
+              (location
+                ? prepared.find((member) =>
+                    member.result.changedFiles.some((path) => resolve(trainTree, path) === resolve(location)),
+                  )
+                : undefined) ?? prepared[0]!;
+            for (const member of prepared) if (member.entry.id !== owner.entry.id) deferred.add(member.entry.id);
+            for (const [id, outcome] of localOutcomes) outcomes.set(id, outcome);
+            appendFileSync(
+              owner.result.logPath,
+              `Candidate ${finalCandidate} was not published; returning its Bun diagnostic to task ${owner.entry.request.taskId} attempt ${owner.entry.request.attempt}.\n`,
+            );
+            return {
+              outcomes: orderedOutcomes(),
+              deferredIds: [...deferred],
+              skippedIds: [...skipped],
+              transpileHandoff: transpileHandoff(
+                owner.entry,
+                owner.entry.request.workerCommit ?? finalCandidate,
+                finalChangedFiles,
+                transpiled,
+              ),
+            };
+          }
+          if (transpiled.outcome === 'unavailable') {
+            this.recordUnavailableDevTranspile(prepared[0]!.entry.request, transpiled);
+            throw new LandingTranspileUnavailableError(transpiled);
+          }
+          if (transpiled.outcome === 'passed') transpileEvidence = devTranspileEvidence(transpiled);
+        }
         if (
           !existsSync(join(trainTree, 'node_modules')) &&
           existsSync(join(trainTree, 'bun.lock')) &&
           existsSync(join(trainTree, 'package.json'))
         )
           installShared(trainTree, undefined, undefined, this.options.policy);
-        const batchLog = logPaths.get(prepared[0]!.entry.id)!;
         const {
           command,
           result: checked,
@@ -2532,6 +2516,7 @@ export class MergeTrain {
         }
         committed = true;
         for (const member of prepared) {
+          if (member === prepared[0] && transpileEvidence) member.result.devTranspile = transpileEvidence;
           const request = member.entry.request;
           if (request.devResolution && o.trainResolver)
             o.trainResolver.devConflictLanded(
@@ -2583,6 +2568,8 @@ export class MergeTrain {
         };
       } catch (error) {
         if (committed) throw error;
+        if (error instanceof LandingTranspileUnavailableError || error instanceof LandingTranspileInterruptedError)
+          throw error;
         if (error instanceof StaleAttemptError) {
           const staleEntry = pending.find(
             (entry) => entry.request.taskId === error.ref.taskId && entry.request.attempt === error.ref.attempt,
@@ -2608,21 +2595,7 @@ export class MergeTrain {
           return { outcomes: orderedOutcomes(), deferredIds: [...deferred], skippedIds: [...skipped] };
         }
       } finally {
-        if (added) {
-          try {
-            this.git(trainTree, 'rebase', '--abort');
-          } catch {}
-          try {
-            this.git(trainTree, 'merge', '--abort');
-          } catch {}
-          try {
-            prepareRemoval?.();
-            this.git(o.mainCheckout, 'worktree', 'remove', '--force', trainTree);
-          } catch (error) {
-            for (const logPath of logPaths.values())
-              appendFileSync(logPath, `Train tree cleanup deferred: ${trainTree}: ${error}\n`);
-          }
-        }
+        workspace?.release();
       }
       if (retry) continue;
     }
@@ -2635,7 +2608,7 @@ export class MergeTrain {
     lane: 'main' | 'dev',
     handOff: () => Promise<void>,
     drainDev: () => Promise<void>,
-  ): Promise<GateOutcome | DevResolutionHandoff | undefined> {
+  ): Promise<GateOutcome | DevResolutionHandoff | DevLandingTranspileHandoff | undefined> {
     const o = this.options;
     if (
       lane !== 'main' ||
@@ -2703,7 +2676,7 @@ export class MergeTrain {
     entry: LandingEntry,
     devPending: () => boolean,
     onYield: () => void,
-  ): Promise<GateOutcome | undefined> {
+  ): Promise<GateOutcome | DevLandingTranspileHandoff | undefined> {
     const o = this.options;
     const path = join(o.stateDirectory, `control-plane-proof-${entry.id}.json`);
     const history = existsSync(path)
@@ -2816,6 +2789,7 @@ export class MergeTrain {
       const integrated = await this.integrate(entry, custody);
       if (isDevResolutionHandoff(integrated))
         throw new Error('Control-plane proof cannot be handed off to the dev resolver');
+      if (isDevLandingTranspileHandoff(integrated)) return integrated;
       const outcome = integrated;
       attempt.status = 'finished';
       attempt.outcome = outcome;
@@ -2959,10 +2933,16 @@ export class MergeTrain {
           return emptyTokens();
         }
       };
-      let added = false;
+      let workspace: TrainWorkspace | undefined;
       try {
-        this.git(o.mainCheckout, 'worktree', 'add', '--detach', tree, lastTarget);
-        added = true;
+        workspace = this.trainWorkspace(tree, lastTarget, {
+          abort: ['merge'],
+          capture: 'release',
+          cleanup: {
+            onError: 'report',
+            report: (error) => appendFileSync(outcome.logPath, `Resolver tree cleanup deferred: ${tree}: ${error}\n`),
+          },
+        });
         const frozen = frozenFilesForTask(o.stateDirectory, request.taskId).map((file) => file.path);
         let conflict: TrainConflict | undefined;
         try {
@@ -3066,18 +3046,7 @@ export class MergeTrain {
         failure = String(error);
         break;
       } finally {
-        if (added) {
-          try {
-            this.git(tree, 'merge', '--abort');
-          } catch {}
-          try {
-            const removal = captureTrainWorktreeRemoval(tree);
-            removal();
-            this.git(o.mainCheckout, 'worktree', 'remove', '--force', tree);
-          } catch (error) {
-            appendFileSync(outcome.logPath, `Resolver tree cleanup deferred: ${tree}: ${error}\n`);
-          }
-        }
+        workspace?.release();
       }
     }
 
@@ -3136,7 +3105,7 @@ export class MergeTrain {
   private async integrate(
     entry: LandingEntry,
     custody?: OrdinaryProofCustody,
-  ): Promise<GateOutcome | DevResolutionHandoff> {
+  ): Promise<GateOutcome | DevResolutionHandoff | DevLandingTranspileHandoff> {
     const o = this.options;
     const assertCandidate = (cwd: string, expected: string, phase: string, logPath: string) =>
       assertCandidateIntegrity(cwd, expected, phase, logPath, o.runCandidateGit, o.policy?.integration);
@@ -3157,6 +3126,7 @@ export class MergeTrain {
       : undefined;
     let sharedTasks: Task[] = [];
     let sharedSource = '';
+    let transpileEvidence: GateOutcome['devTranspile'];
 
     let integrationTarget: IntegrationTarget =
       recorded.target === 'stabilize' && recorded.goal !== 'control-plane'
@@ -3218,14 +3188,24 @@ export class MergeTrain {
       );
     };
     const finish = () => {
+      if (transpileEvidence) result.devTranspile = transpileEvidence;
+      else delete result.devTranspile;
       ensureGateOutcomeRefusal(result);
       if (!result.passed && !this.workspaceFailures.has(entry.id)) attributeFailure(result);
       return result;
     };
     let stage: GateStage = 'setup';
     const trainTree = resolve(o.worktreeRoot, `train-${randomUUID()}`);
-    let added = false;
-    let prepareRemoval: (() => void) | undefined;
+    let candidateWorkspace: TrainWorkspace | undefined;
+    const trainCandidateCleanup: TrainWorkspaceProfile = {
+      abort: ['rebase', 'merge'],
+      capture: 'create',
+      cleanup: {
+        onError: 'report',
+        // Retain the tree and exact cleanup failure without replacing a failed proof or a committed outcome.
+        report: (error) => appendFileSync(logPath, `Train tree cleanup deferred: ${trainTree}: ${error}\n`),
+      },
+    };
     let workerCommit: string | undefined;
     let activeTargetHead: string | undefined;
     const runOwnedAffected = (command: readonly string[], cwd: string, log: string, env: NodeJS.ProcessEnv) =>
@@ -3308,10 +3288,7 @@ export class MergeTrain {
       if (controlPlane)
         await this.propagateControlPlaneCommit(entry.candidate, request.taskId, recorded.manager, logPath);
       else if (stabilize) {
-        mkdirSync(resolve(o.worktreeRoot), { recursive: true });
-        this.git(o.mainCheckout, 'worktree', 'add', '--detach', trainTree, entry.candidate);
-        added = true;
-        prepareRemoval = captureTrainWorktreeRemoval(trainTree);
+        candidateWorkspace = this.trainWorkspace(trainTree, entry.candidate, trainCandidateCleanup);
         await this.mergeStabilizedCommitIntoDev(entry.candidate, trainTree, request.taskId, recorded.manager, logPath);
       }
       return true;
@@ -3443,12 +3420,11 @@ export class MergeTrain {
       // Recover an advance that committed before its outcome was saved.
       if (await recoverAlreadyIntegrated()) return finish();
       const originalBase = controlPlaneFork ?? this.git(o.mainCheckout, 'merge-base', sourceTip, target());
-      mkdirSync(resolve(o.worktreeRoot), { recursive: true });
-      this.git(o.mainCheckout, 'worktree', 'add', '--detach', trainTree, sourceTip);
-      added = true;
-      prepareRemoval = captureTrainWorktreeRemoval(trainTree);
+      candidateWorkspace = this.trainWorkspace(trainTree, sourceTip, trainCandidateCleanup);
       for (;;) {
         o.fence.assertCurrent(request);
+        transpileEvidence = undefined;
+        delete result.devTranspile;
         delete result.firstFailure;
         delete result.failsOnMain;
         delete result.timedOut;
@@ -3712,9 +3688,7 @@ export class MergeTrain {
             o.policy?.brief,
           );
           for (const task of sharedTasks) {
-            const protectedPaths = Object.entries(ownership.areas)
-              .filter(([area]) => !task.brief.riskAreas.includes(area))
-              .flatMap(([, paths]) => paths);
+            const protectedRiskAreas = protectedRiskAreasForBrief(ownership, task.brief.riskAreas);
             try {
               this.checkScope(
                 taskChangedPaths(task, tip, this.options.policy?.merge).filter(
@@ -3723,7 +3697,7 @@ export class MergeTrain {
                 {
                   ...request,
                   declaredPaths: task.brief.paths,
-                  protectedPaths,
+                  protectedRiskAreas: [...(request.protectedRiskAreas ?? []), ...protectedRiskAreas],
                 },
                 logPath,
               );
@@ -3806,6 +3780,32 @@ export class MergeTrain {
         // Direct dev landings honor the configurable root compiler guard and the policy boot check when paths match.
         const skipDevChecks = directDevLanding;
         if (directDevLanding) {
+          const transpiled = await transpileLandingCandidate({
+            cwd: trainTree,
+            base,
+            candidate,
+            changedFiles: result.changedFiles,
+            logPath,
+          });
+          o.fence.assertCurrent(request);
+          if (target() !== base) continue;
+          if (transpiled.outcome === 'diagnostic') {
+            appendFileSync(
+              logPath,
+              `Candidate ${candidate} was not published; returning its Bun diagnostic to task ${request.taskId} attempt ${request.attempt}.\n`,
+            );
+            return transpileHandoff(
+              entry,
+              workerCommit ?? request.workerCommit ?? candidate,
+              result.changedFiles,
+              transpiled,
+            );
+          }
+          if (transpiled.outcome === 'unavailable') {
+            this.recordUnavailableDevTranspile(request, transpiled);
+            throw new LandingTranspileUnavailableError(transpiled);
+          }
+          if (transpiled.outcome === 'passed') transpileEvidence = devTranspileEvidence(transpiled);
           stage = 'gate';
           if (
             !existsSync(join(trainTree, 'node_modules')) &&
@@ -3945,8 +3945,12 @@ export class MergeTrain {
           const key = `affected-test:${JSON.stringify(baselineCommand)}`;
           let baseline = o.queue.baseline(base, key);
           if (!baseline) {
-            const baselineTree = resolve(o.worktreeRoot, `affected-base-${randomUUID()}`);
-            this.git(o.mainCheckout, 'worktree', 'add', '--detach', baselineTree, base);
+            const baselineWorkspace = this.trainWorkspace(
+              resolve(o.worktreeRoot, `affected-base-${randomUUID()}`),
+              base,
+              { cleanup: { onError: 'throw' } },
+            );
+            const baselineTree = baselineWorkspace.tree;
             try {
               appendFileSync(logPath, `Affected test baseline on ${base}: ${baselineCommand.join(' ')}\n`);
               const environment = {
@@ -3973,7 +3977,7 @@ export class MergeTrain {
               baseline = { passed: measured.status === 'passed', output: measured.output, timedOut: false };
               o.queue.saveBaseline(base, key, baseline);
             } finally {
-              this.git(o.mainCheckout, 'worktree', 'remove', '--force', baselineTree);
+              baselineWorkspace.release();
             }
           }
           o.fence.assertCurrent(request);
@@ -4228,14 +4232,29 @@ export class MergeTrain {
             retryMovedControlPlaneRefs();
             continue;
           }
-          const release = this.prepareControlPlaneRelease(
+          const release = await this.prepareControlPlaneRelease(
             request,
+            [
+              {
+                entry,
+                sourceCommit: request.workerCommit ?? candidate,
+                changedFiles: result.changedFiles,
+              },
+            ],
             releaseSnapshot,
             candidate,
             lifecycleEvidence,
             compatibilityCommand,
             logPath,
           );
+          if (release.transpileHandoff) {
+            o.fence.assertCurrent(request);
+            if (target() !== base || !this.controlPlaneSnapshotMatches(releaseSnapshot)) {
+              retryMovedControlPlaneRefs();
+              continue;
+            }
+            return release.transpileHandoff;
+          }
           if (release.conflicts?.length) {
             const files = [...release.conflicts].sort();
             const sourceBranch = release.sourceBranch ?? mainBranch;
@@ -4277,6 +4296,7 @@ export class MergeTrain {
             retryMovedControlPlaneRefs();
             continue;
           }
+          transpileEvidence = release.devTranspile;
           preparedControlPlaneRelease = release.prepared;
           preparedControlPlaneRelease.record.source = { branch: request.branch, commit: tip };
         }
@@ -4366,11 +4386,17 @@ export class MergeTrain {
         return finish();
       }
     } catch (error) {
-      if (custody?.signal.aborted || error instanceof StaleAttemptError) throw error;
+      if (
+        custody?.signal.aborted ||
+        error instanceof StaleAttemptError ||
+        error instanceof LandingTranspileUnavailableError ||
+        error instanceof LandingTranspileInterruptedError
+      )
+        throw error;
       const message = String(error);
       appendFileSync(logPath, `${message}\n`);
       result.stage = stage;
-      if (stage === 'rebase' && added) {
+      if (stage === 'rebase' && candidateWorkspace) {
         const conflicts = canonicalConflictPaths(unmergedFiles(trainTree, this.options.policy?.merge));
         if (conflicts.length) {
           result.conflictedFiles = conflicts;
@@ -4396,21 +4422,7 @@ export class MergeTrain {
       return finish();
     } finally {
       result.hostMs = Date.now() - started;
-      if (added) {
-        try {
-          this.git(trainTree, 'rebase', '--abort');
-        } catch {}
-        try {
-          this.git(trainTree, 'merge', '--abort');
-        } catch {}
-        try {
-          prepareRemoval?.();
-          this.git(o.mainCheckout, 'worktree', 'remove', '--force', trainTree);
-        } catch (error) {
-          // Retain the tree and exact cleanup failure without replacing a failed proof or a committed outcome.
-          appendFileSync(logPath, `Train tree cleanup deferred: ${trainTree}: ${error}\n`);
-        }
-      }
+      candidateWorkspace?.release();
     }
   }
 
@@ -4535,9 +4547,9 @@ export class MergeTrain {
       if (isAncestor(checkout, sourceCommit, targetHead, this.options.policy?.merge)) return { commit: targetHead };
 
       const tree = resolve(this.options.worktreeRoot, `control-plane-merge-${randomUUID()}`);
-      mkdirSync(resolve(this.options.worktreeRoot), { recursive: true });
+      let mergeWorkspace: TrainWorkspace | undefined;
       try {
-        this.git(checkout, 'worktree', 'add', '--detach', tree, targetHead);
+        mergeWorkspace = this.trainWorkspace(tree, targetHead, { cleanup: { onError: 'ignore' } });
         const merged = runSync(
           'git',
           ['merge', '--no-ff', '--no-edit', '-m', `Merge ${sourceBranch} into ${targetBranch}`, sourceCommit],
@@ -4613,9 +4625,7 @@ export class MergeTrain {
       } catch (error) {
         return { error: String(error) };
       } finally {
-        try {
-          this.git(checkout, 'worktree', 'remove', '--force', tree);
-        } catch {}
+        mergeWorkspace?.release();
       }
     }
     return { error: `${targetBranch} moved during all five merge attempts` };
@@ -4914,8 +4924,9 @@ export class MergeTrain {
   private checkScope(files: readonly string[], request: LandingRequest, logPath: string): void {
     const outside = outsideScope(files, request.declaredPaths);
     if (!outside.length) return;
-    const protectedPaths = request.protectedPaths ?? [];
-    const refused = protectedPaths.length ? outside.filter((path) => !outsideScope([path], protectedPaths).length) : [];
+    const refused = outside.filter((path) =>
+      isProtectedRiskPath(path, request.protectedPaths, request.protectedRiskAreas, this.options.policy?.brief),
+    );
     if (refused.length) throw new Error(`Changes in undeclared risk areas: ${refused.join(', ')}`);
     appendFileSync(logPath, `Changed outside declared paths (allowed): ${outside.join(', ')}\n`);
   }
@@ -5665,11 +5676,15 @@ export class MergeTrain {
   }
 
   /** Main -> dev is the only nested train order. Dev never takes main while holding its lane. */
-  private async withControlPlaneBatchLanes<T>(run: () => Promise<T>): Promise<T> {
+  private async withControlPlaneBatchLanes(
+    run: () => Promise<ControlPlaneBatchResult>,
+  ): Promise<ControlPlaneBatchResult> {
     const main = acquireDirectoryLease(
       join(this.options.stateDirectory, 'train-main.lease'),
       this.options.policy?.leases,
     );
+    let handoff: ControlPlaneTranspileHandoffSignal | undefined;
+    let result: ControlPlaneBatchResult | undefined;
     try {
       const dev = await acquireControlPlaneDevLane(
         this.options.stateDirectory,
@@ -5677,13 +5692,27 @@ export class MergeTrain {
         this.options.policy,
       );
       try {
-        return await run();
+        try {
+          result = await run();
+        } catch (error) {
+          if (!(error instanceof ControlPlaneTranspileHandoffSignal)) throw error;
+          handoff = error;
+        }
       } finally {
         dev.release();
       }
     } finally {
       main.release();
     }
+    if (handoff) {
+      if (!this.options.sink.onDevLandingTranspileHandoff)
+        throw new Error('dev landing transpile handoff requires the worker continuation sink');
+      this.options.sink.onDevLandingTranspileHandoff(handoff.handoff);
+      this.options.queue.acknowledge(handoff.handoff.entryId);
+      return { batchId: handoff.batchId, members: [], transpileHandoffs: [handoff.handoff] };
+    }
+    if (!result) throw new Error('control-plane batch ended without a result');
+    return result;
   }
 
   /** Authenticated, append-only receiving operation for the same exact ref-starved source generation. */
@@ -6401,8 +6430,12 @@ export class MergeTrain {
           if (this.git(o.mainCheckout, 'symbolic-ref', 'HEAD') !== `refs/heads/${snapshot.mainBranch}`)
             throw new Error('The main checkout must already have main checked out');
           const tree = resolve(o.worktreeRoot, `control-plane-batch-${randomUUID()}`);
-          mkdirSync(o.worktreeRoot, { recursive: true });
-          this.git(o.mainCheckout, 'worktree', 'add', '--detach', tree, snapshot.mainHead);
+          const batchWorkspace = this.trainWorkspace(tree, snapshot.mainHead, {
+            cleanup: {
+              onError: 'report',
+              report: (error) => appendFileSync(node.logPath, `Train tree cleanup deferred: ${tree}: ${error}\n`),
+            },
+          });
           try {
             const preparedMembers: NonNullable<ControlPlaneReleaseRecord['members']> = [];
             const contributionBases = new Map<string, string>();
@@ -6435,11 +6468,9 @@ export class MergeTrain {
                   ...entry.request.declaredPaths,
                   ...(journal.scopeApprovals![task.id]?.additionalPaths.map((addition) => addition.path) ?? []),
                 ],
-                protectedPaths: [
-                  ...(entry.request.protectedPaths ?? []),
-                  ...Object.entries(risk.areas)
-                    .filter(([area]) => !task.brief.riskAreas.includes(area))
-                    .flatMap(([, paths]) => paths),
+                protectedRiskAreas: [
+                  ...(entry.request.protectedRiskAreas ?? []),
+                  ...protectedRiskAreasForBrief(risk, task.brief.riskAreas),
                 ],
               };
               let files: string[] = [];
@@ -6692,14 +6723,24 @@ export class MergeTrain {
             assertIdentities();
             if (!proof.lifecycleEvidence || !proof.compatibilityCommand)
               throw new Error('Control-plane batch has no exact native release evidence');
-            const release = this.prepareControlPlaneRelease(
+            const release = await this.prepareControlPlaneRelease(
               preparedMembers[0]!.request,
+              preparedMembers.map((member) => ({
+                entry: { id: member.entryId, request: member.request },
+                sourceCommit: member.disposition.acceptedCommit,
+                changedFiles: member.outcome.changedFiles,
+              })),
               snapshot,
               candidate,
               proof.lifecycleEvidence,
               proof.compatibilityCommand,
               node.logPath,
             );
+            if (release.transpileHandoff) {
+              if (!this.controlPlaneSnapshotMatches(snapshot)) continue;
+              assertIdentities();
+              throw new ControlPlaneTranspileHandoffSignal(batchId, release.transpileHandoff);
+            }
             if (!release.prepared) {
               if (!this.controlPlaneSnapshotMatches(snapshot)) continue;
               split(
@@ -6749,11 +6790,7 @@ export class MergeTrain {
             complete(record, node);
             return;
           } finally {
-            try {
-              this.git(o.mainCheckout, 'worktree', 'remove', '--force', tree);
-            } catch (error) {
-              appendFileSync(node.logPath, `Train tree cleanup deferred: ${tree}: ${error}\n`);
-            }
+            batchWorkspace.release();
           }
         }
         const children = journal.nodes[key]?.children;
@@ -6873,7 +6910,7 @@ export class MergeTrain {
     integrity(tree, candidate, 'control-plane verification');
     const devTree = resolve(o.worktreeRoot, `control-plane-dev-${randomUUID()}`);
     const compatibilityCommand = ['bun', 'tools/goal/scripts/check-compatibility.ts', '--scripts-root', devTree];
-    this.git(o.mainCheckout, 'worktree', 'add', '--detach', devTree, snapshot.devHead);
+    const compatibilityWorkspace = this.trainWorkspace(devTree, snapshot.devHead, { cleanup: { onError: 'throw' } });
     try {
       appendFileSync(logPath, `\nMain control-plane compatibility against dev script tree ${snapshot.devHead}\n`);
       const devInstall = await runIntegrationChecks([['bun', 'install', '--frozen-lockfile']], devTree, logPath, run);
@@ -6885,7 +6922,7 @@ export class MergeTrain {
       integrity(devTree, snapshot.devHead, 'main-dev compatibility contract');
       if (!compatibility.passed || moved()) return finish(compatibility);
     } finally {
-      this.git(o.mainCheckout, 'worktree', 'remove', '--force', devTree);
+      compatibilityWorkspace.release();
     }
     appendFileSync(logPath, '\nComplete real-boundary lifecycle suite on control-plane candidate\n');
     const smokeCommand = ['bun', 'tools/goal/scripts/launch-smoke.ts', '--expected-dev-script-tree', snapshot.devHead];
@@ -7022,13 +7059,45 @@ export class MergeTrain {
     targetBranch: string,
     targetHead: string,
     logPath: string,
-  ): { commit?: string; conflicts?: string[]; cause?: string } {
+    devLanding?: { owners: readonly DevLandingSourceOwner[]; snapshot: ControlPlaneReleaseSnapshot },
+  ): Promise<{
+    commit?: string;
+    conflicts?: string[];
+    cause?: string;
+    moved?: boolean;
+    transpileHandoff?: DevLandingTranspileHandoff;
+    devTranspile?: GateOutcome['devTranspile'];
+  }> {
     if (isAncestor(this.options.mainCheckout, sourceCommit, targetHead, this.options.policy?.merge))
-      return { commit: targetHead };
+      return Promise.resolve({ commit: targetHead });
+    return this.mergeControlPlaneCandidateTree(
+      sourceCommit,
+      sourceBranch,
+      targetBranch,
+      targetHead,
+      logPath,
+      devLanding,
+    );
+  }
+
+  private async mergeControlPlaneCandidateTree(
+    sourceCommit: string,
+    sourceBranch: string,
+    targetBranch: string,
+    targetHead: string,
+    logPath: string,
+    devLanding?: { owners: readonly DevLandingSourceOwner[]; snapshot: ControlPlaneReleaseSnapshot },
+  ): Promise<{
+    commit?: string;
+    conflicts?: string[];
+    cause?: string;
+    moved?: boolean;
+    transpileHandoff?: DevLandingTranspileHandoff;
+    devTranspile?: GateOutcome['devTranspile'];
+  }> {
     const tree = resolve(this.options.worktreeRoot, `control-plane-merge-${randomUUID()}`);
-    mkdirSync(resolve(this.options.worktreeRoot), { recursive: true });
+    const preparedMerge = this.trainWorkspace(tree, targetHead, { cleanup: { onError: 'rm' } });
     try {
-      this.git(this.options.mainCheckout, 'worktree', 'add', '--detach', tree, targetHead);
       const merged = candidateGit(
         tree,
         ['merge', '--no-ff', '--no-edit', '-m', `Merge ${sourceBranch} into ${targetBranch}`, sourceCommit],
@@ -7049,36 +7118,68 @@ export class MergeTrain {
         appendFileSync(logPath, `${message}\n`);
         return conflicts.length ? { conflicts, cause: cause || message } : { cause: message };
       }
-      return { commit: this.git(tree, 'rev-parse', 'HEAD') };
-    } finally {
-      try {
-        this.git(this.options.mainCheckout, 'worktree', 'remove', '--force', tree);
-      } catch {
-        rmSync(tree, { recursive: true, force: true });
+      const commit = this.git(tree, 'rev-parse', 'HEAD');
+      if (devLanding && targetBranch === devLanding.snapshot.devBranch) {
+        const changed = changedPathsBetween(tree, targetHead, commit, this.options.policy?.merge);
+        const transpiled = await transpileLandingCandidate({
+          cwd: tree,
+          base: targetHead,
+          candidate: commit,
+          changedFiles: changed,
+          logPath,
+        });
+        for (const owner of devLanding.owners) this.options.fence.assertCurrent(owner.entry.request);
+        if (!this.controlPlaneSnapshotMatches(devLanding.snapshot)) return { moved: true };
+        if (transpiled.outcome === 'diagnostic') {
+          const location = transpiled.diagnostic?.file;
+          const owner =
+            (location
+              ? devLanding.owners.find((item) =>
+                  item.changedFiles.some((path) => resolve(tree, path) === resolve(location)),
+                )
+              : undefined) ?? devLanding.owners[0]!;
+          return {
+            transpileHandoff: transpileHandoff(owner.entry, owner.sourceCommit, changed, transpiled),
+          };
+        }
+        if (transpiled.outcome === 'unavailable') {
+          this.recordUnavailableDevTranspile(devLanding.owners[0]!.entry.request, transpiled);
+          throw new LandingTranspileUnavailableError(transpiled);
+        }
+        return {
+          commit,
+          ...(transpiled.outcome === 'passed' ? { devTranspile: devTranspileEvidence(transpiled) } : {}),
+        };
       }
+      return { commit };
+    } finally {
+      preparedMerge.release();
     }
   }
 
-  private prepareControlPlaneRelease(
+  private async prepareControlPlaneRelease(
     request: LandingRequest,
+    owners: readonly DevLandingSourceOwner[],
     snapshot: ControlPlaneReleaseSnapshot,
     candidate: string,
     lifecycleEvidence: string,
     compatibilityCommand: string[],
     logPath: string,
-  ): {
+  ): Promise<{
     prepared?: PreparedControlPlaneRelease;
     conflicts?: string[];
     sourceBranch?: string;
     targetBranch?: string;
     cause?: string;
-  } {
+    transpileHandoff?: DevLandingTranspileHandoff;
+    devTranspile?: GateOutcome['devTranspile'];
+  }> {
     if (!this.controlPlaneSnapshotMatches(snapshot)) return {};
     let stabilizeCommit: string | undefined;
     let devSource = candidate;
     let sourceBranch = snapshot.mainBranch;
     if (snapshot.stabilizeHead) {
-      const stable = this.mergeControlPlaneCandidate(
+      const stable = await this.mergeControlPlaneCandidate(
         candidate,
         snapshot.mainBranch,
         snapshot.stabilizeBranch,
@@ -7102,7 +7203,16 @@ export class MergeTrain {
       );
     }
 
-    const dev = this.mergeControlPlaneCandidate(devSource, sourceBranch, snapshot.devBranch, snapshot.devHead, logPath);
+    const dev = await this.mergeControlPlaneCandidate(
+      devSource,
+      sourceBranch,
+      snapshot.devBranch,
+      snapshot.devHead,
+      logPath,
+      { owners, snapshot },
+    );
+    if (dev.moved) return {};
+    if (dev.transpileHandoff) return { transpileHandoff: dev.transpileHandoff };
     if (!dev.commit)
       return {
         ...(dev.conflicts ? { conflicts: dev.conflicts } : {}),
@@ -7133,7 +7243,10 @@ export class MergeTrain {
       `Prepared control-plane release candidate=${candidate} dev-script-tree=${snapshot.devHead}` +
         `${stabilizeCommit ? ` stabilize=${stabilizeCommit}` : ''} dev=${dev.commit}\n`,
     );
-    return { prepared: { snapshot, record } };
+    return {
+      prepared: { snapshot, record },
+      ...(dev.devTranspile ? { devTranspile: dev.devTranspile } : {}),
+    };
   }
 
   private publishControlPlaneRelease(prepared: PreparedControlPlaneRelease): boolean {

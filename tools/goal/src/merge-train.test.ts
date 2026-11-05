@@ -1,14 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { openDb } from './db.ts';
 import type { AttemptFence, GateOutcome } from './contracts.ts';
 import { StaleAttemptError } from './contracts.ts';
 import { SqliteLandingQueue } from './land.ts';
 import { failingTestFiles, MergeTrain, devPushScript } from './merge-train.ts';
 import { firstFailure, gateRunner, git } from './merge.ts';
-import { parseBrief, readRiskOwnership } from './briefs.ts';
+import { parseBrief, protectedRiskAreasForBrief, readRiskOwnership } from './briefs.ts';
 import { WorkerStore } from './store.ts';
 import { repository } from './test-support.ts';
 
@@ -125,6 +125,7 @@ describe('sequential integration', () => {
       ]);
       expect(git(second.worktree, 'rev-parse', 'HEAD')).toBe(original);
       expect(git(s.main, 'symbolic-ref', 'HEAD')).toBe('refs/heads/main');
+      expect(git(s.main, 'worktree', 'list', '--porcelain')).not.toMatch(/\/train-[0-9a-f-]{36}/);
       expect(readFileSync(join(s.main, 'a'), 'utf8')).toBe('a');
       expect(readFileSync(join(s.main, 'b'), 'utf8')).toBe('b');
     } finally {
@@ -161,8 +162,16 @@ describe('sequential integration', () => {
     try {
       const request = s.branch('alpha', 'allowed');
       git(request.worktree, 'mv', 'base', 'renamed');
+      const script = 'services/auth/scripts/probe.ts';
+      mkdirSync(dirname(join(request.worktree, script)), { recursive: true });
+      writeFileSync(join(request.worktree, script), 'probe\n');
+      git(request.worktree, 'add', '--', script);
       git(request.worktree, 'commit', '-m', 'Rename');
-      s.queue.enqueue({ ...request, declaredPaths: ['allowed', 'renamed'], protectedPaths: ['base'] });
+      s.queue.enqueue({
+        ...request,
+        declaredPaths: ['allowed', 'renamed'],
+        protectedPaths: ['base', '**/auth/**'],
+      });
       let called = false;
       await new MergeTrain({
         ...s.options,
@@ -174,10 +183,37 @@ describe('sequential integration', () => {
       expect(s.outcomes[0]?.stage).toBe('scope');
       expect(called).toBe(false);
       expect(s.outcomes[0]?.changedFiles).toContain('base');
+      expect(s.outcomes[0]?.changedFiles).toContain(script);
     } finally {
       s.close();
     }
   });
+  test('an undeclared auth tooling edit integrates through the supported landing path', async () => {
+    const s = setup();
+    try {
+      const request = s.branch('alpha', 'allowed.txt');
+      const script = 'services/auth/scripts/dev-stack.ts';
+      mkdirSync(dirname(join(request.worktree, script)), { recursive: true });
+      writeFileSync(join(request.worktree, script), 'local development stack\n');
+      git(request.worktree, 'add', '--', script);
+      git(request.worktree, 'commit', '-m', 'Update local auth development stack');
+      const ownership = readRiskOwnership(join(import.meta.dir, '../risk-areas.json'));
+      s.queue.enqueue({
+        ...request,
+        declaredPaths: ['allowed.txt'],
+        protectedRiskAreas: protectedRiskAreasForBrief(ownership, []),
+      });
+      await new MergeTrain({
+        ...s.options,
+        riskAreasFile: join(import.meta.dir, '../risk-areas.json'),
+        runGate: async () => ({ passed: true, output: '', timedOut: false }),
+      }).run();
+      expect(s.outcomes[0]?.passed).toBe(true);
+      expect(existsSync(join(s.main, script))).toBe(true);
+    } finally {
+      s.close();
+    }
+  }, 60_000);
   test('refuses stale enqueue, queued attempts and attempts invalidated during the gate', async () => {
     for (const when of ['enqueue', 'queued', 'gate']) {
       const s = setup();
@@ -220,7 +256,7 @@ describe('sequential integration', () => {
     } finally {
       s.close();
     }
-  });
+  }, 60_000);
   test('reports Git refusal as a merge failure and never switches main checkout HEAD', async () => {
     const s = setup();
     try {

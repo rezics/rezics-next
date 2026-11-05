@@ -1,4 +1,5 @@
 import type { AffectedTestResult, Tokens } from './types.ts';
+import type { RiskAreaRules } from './briefs.ts';
 import type { ProcessIdentity } from './process.ts';
 
 // The two halves of the control plane meet only here. The worker side owns tasks, attempts, routing, launch,
@@ -28,6 +29,8 @@ export type ControlPlaneBatchDisposition = AttemptRef & {
 export type ControlPlaneBatchResult = {
   batchId: string;
   members: ControlPlaneBatchDisposition[];
+  /** A final dev candidate compiler diagnostic returned to the original worker session. */
+  transpileHandoffs?: DevLandingTranspileHandoff[];
 };
 
 export type ControlPlaneBatchSource = AttemptRef & { acceptedCommit: string };
@@ -148,8 +151,10 @@ export type LandingRequest = AttemptRef & {
   sourceDirtyAtSettlement?: true;
   /** Path patterns the brief declared: where the work is expected. A worker may change files outside them. */
   declaredPaths: readonly string[];
-  /** Risk-area patterns the brief did not declare; a change outside declaredPaths that matches one is refused. */
+  /** Legacy flat rules remain authoritative when reading queued requests written before per-area snapshots existed. */
   protectedPaths?: readonly string[];
+  /** Undeclared risk-area rules captured for this request, retaining each area's exclusions independently. */
+  protectedRiskAreas?: readonly RiskAreaRules[];
   gate: readonly string[];
   affectedTests?: readonly AffectedTestResult[];
   /** Original worker acceptance is retained when the owning manager advances an already accepted attempt. */
@@ -243,13 +248,43 @@ export type GateOutcome = AttemptRef & {
   controlPlaneConflictRepeated?: boolean;
   /** How a dev landing conflict was resolved, including resolver tokens on worker fallback. */
   conflictResolution?: LandingConflictResolution;
+  /** The unbundled changed-TypeScript check attached only to the candidate that was published. */
+  devTranspile?: {
+    base: string;
+    candidate: string;
+    changedFileCount: number;
+    typescriptFileCount: number;
+    elapsedMs: number | null;
+    outcome: 'passed' | 'unavailable';
+  };
   diffLines: number;
   mergedCommit?: string;
+};
+
+/** Compiler diagnostics return to the source owner as a nonterminal same-session repair. */
+export type DevLandingTranspileHandoff = AttemptRef & {
+  kind: 'dev-landing-transpile';
+  entryId: number;
+  request: LandingRequest;
+  sourceCommit: string;
+  base: string;
+  candidate: string;
+  changedFiles: readonly string[];
+  typescriptFiles: readonly string[];
+  elapsedMs: number;
+  logPath: string;
+  diagnostic: {
+    file: string | null;
+    line: number | null;
+    column: number | null;
+    message: string;
+  };
 };
 
 /** Implemented by the worker side: classifies the outcome and decides the next step. */
 export interface GateOutcomeSink {
   onGateOutcome(outcome: GateOutcome): void;
+  onDevLandingTranspileHandoff?(handoff: DevLandingTranspileHandoff): void;
 }
 
 /** Only these wake a manager. Passing gates, merges, environment reruns and automatic consultations are recorded only. */

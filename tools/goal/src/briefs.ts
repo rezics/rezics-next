@@ -5,7 +5,9 @@ import type { AcceptancePlacement, AcceptanceRequirement, Brief, BriefContinuati
 import { parseBunTestCommand, parseEnvironmentPrefix } from './command-shape.ts';
 import { parseProofMetadata } from './verification.ts';
 
-export type RiskOwnership = { version: number; areas: Record<string, string[]> };
+export type RiskAreaDefinition = readonly string[] | { include: readonly string[]; exclude?: readonly string[] };
+export type RiskAreaRules = { area: string; include: readonly string[]; exclude: readonly string[] };
+export type RiskOwnership = { version: number; areas: Record<string, RiskAreaDefinition> };
 /** Prompt size diagnostic threshold. Large prompts still reach the provider and may meet the OS argument limit. */
 export const MAX_BRIEF_BYTES = defaultPolicy.brief.bytes;
 export const BRIEF_AUTHORITY_HINT = 'link an owner document section or quote the decision in the brief';
@@ -137,13 +139,96 @@ export function matchesPath(
   if (/[*?]/.test(path)) return false;
   return patterns.some((pattern) => pathsOverlap(path, pattern, policy));
 }
+
+function validateRiskPatterns(value: unknown, label: string, policy: BriefPolicy): string[] {
+  if (!Array.isArray(value) || value.some((pattern) => typeof pattern !== 'string'))
+    throw new Error(`${label} must be a string list`);
+  (value as unknown[]).forEach((pattern) => validatePath(pattern as string, policy));
+  return value as string[];
+}
+
+function isRiskAreaRule(
+  definition: RiskAreaDefinition,
+): definition is { include: readonly string[]; exclude?: readonly string[] } {
+  return !Array.isArray(definition);
+}
+
+function riskAreaRules(area: string, definition: RiskAreaDefinition): RiskAreaRules {
+  if (!isRiskAreaRule(definition)) return { area, include: definition, exclude: [] };
+  return { area, include: definition.include, exclude: definition.exclude ?? [] };
+}
+
+export function riskAreaRulesFor(ownership: RiskOwnership): RiskAreaRules[] {
+  return Object.entries(ownership.areas).map(([area, definition]) => riskAreaRules(area, definition));
+}
+
+/** A protected-area snapshot retains each area's exclusions and keeps overlapping areas independent. */
+export function protectedRiskAreasForBrief(
+  ownership: RiskOwnership,
+  declaredAreas: readonly string[],
+): RiskAreaRules[] {
+  const declared = new Set(declaredAreas);
+  return riskAreaRulesFor(ownership).filter(({ area }) => !declared.has(area));
+}
+
+function patternCoveredByExclusion(pathPattern: string, exclusions: readonly string[]): boolean {
+  return exclusions.some((exclusion) => {
+    if (pathPattern === exclusion) return true;
+    // Directory exclusions cover narrower claims rooted below that literal directory. A broader glob that may
+    // include protected siblings remains classified as risk-bearing.
+    if (!exclusion.endsWith('/**')) return false;
+    const directory = exclusion.slice(0, -3);
+    return pathPattern === directory || pathPattern.startsWith(`${directory}/`);
+  });
+}
+
+/** Classify concrete files at landing, or declared glob patterns at brief admission. */
+export function classifyRiskAreas(
+  path: string,
+  areas: readonly RiskAreaRules[],
+  kind: 'file' | 'pattern',
+  policy: BriefPolicy = defaultPolicy.brief,
+): string[] {
+  return areas
+    .filter((area) => {
+      const intersects = area.include.some((pattern) =>
+        kind === 'file' ? matchesPath(path, [pattern], policy) : pathsOverlap(path, pattern, policy),
+      );
+      if (!intersects) return false;
+      return kind === 'file'
+        ? !matchesPath(path, area.exclude, policy)
+        : !patternCoveredByExclusion(path, area.exclude);
+    })
+    .map(({ area }) => area);
+}
+
+/** Legacy flat protected paths remain effective alongside the per-area snapshot on new landing requests. */
+export function isProtectedRiskPath(
+  path: string,
+  protectedPaths: readonly string[] = [],
+  protectedAreas: readonly RiskAreaRules[] = [],
+  policy: BriefPolicy = defaultPolicy.brief,
+): boolean {
+  return (
+    matchesPath(path, protectedPaths, policy) || classifyRiskAreas(path, protectedAreas, 'file', policy).length > 0
+  );
+}
+
 export function readRiskOwnership(file: string, policy: BriefPolicy = defaultPolicy.brief): RiskOwnership {
   const value = JSON.parse(readFileSync(file, 'utf8')) as RiskOwnership;
-  if (value.version !== 1 || !value.areas || typeof value.areas !== 'object')
+  if (value.version !== 1 || !value.areas || typeof value.areas !== 'object' || Array.isArray(value.areas))
     throw new Error('invalid risk ownership table');
-  for (const patterns of Object.values(value.areas)) {
-    if (!Array.isArray(patterns)) throw new Error('risk ownership patterns must be arrays');
-    patterns.forEach((pattern) => validatePath(pattern, policy));
+  for (const [area, definition] of Object.entries(value.areas)) {
+    if (Array.isArray(definition)) {
+      validateRiskPatterns(definition, `risk ownership ${area} patterns`, policy);
+      continue;
+    }
+    if (!definition || typeof definition !== 'object') throw new Error(`risk ownership ${area} must be an object`);
+    const value = definition as { include?: unknown; exclude?: unknown };
+    if (Object.keys(definition).some((key) => !['include', 'exclude'].includes(key)) || value.include === undefined)
+      throw new Error(`risk ownership ${area} must declare include and optional exclude patterns`);
+    validateRiskPatterns(value.include, `risk ownership ${area} include`, policy);
+    if (value.exclude !== undefined) validateRiskPatterns(value.exclude, `risk ownership ${area} exclude`, policy);
   }
   return value;
 }
@@ -524,12 +609,10 @@ export function parseBrief(
     throw new Error('researchReport must also be declared in paths');
   for (const area of brief.riskAreas)
     if (!Object.hasOwn(ownership.areas, area)) throw new Error(`unknown risk area: ${area}`);
-  for (const [area, patterns] of Object.entries(ownership.areas)) {
-    if (
-      brief.paths.some((path) => patterns.some((pattern) => pathsOverlap(path, pattern, policy))) &&
-      !brief.riskAreas.includes(area)
-    )
-      throw new Error(`declared paths touch undeclared risk area: ${area}`);
+  const riskRules = riskAreaRulesFor(ownership);
+  const touchedAreas = new Set(brief.paths.flatMap((path) => classifyRiskAreas(path, riskRules, 'pattern', policy)));
+  for (const area of touchedAreas) {
+    if (!brief.riskAreas.includes(area)) throw new Error(`declared paths touch undeclared risk area: ${area}`);
   }
   return brief;
 }

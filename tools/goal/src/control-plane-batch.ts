@@ -15,7 +15,7 @@ import type {
   ControlPlaneScopeApprovalReceipt,
   LandingRequest,
 } from './contracts.ts';
-import { matchesPath, readRiskOwnership } from './briefs.ts';
+import { isProtectedRiskPath, matchesPath, protectedRiskAreasForBrief, readRiskOwnership } from './briefs.ts';
 import type { SqliteLandingQueue } from './land.ts';
 import { assertManagerLandingEvidence, requestManagerLanding } from './manager-landing.ts';
 import { git } from './merge.ts';
@@ -101,11 +101,9 @@ function assertScopeApprovalFiles(input: ControlPlaneScopeApprovalRequest, runti
     runtime.riskAreasFile ?? join(import.meta.dir, '../risk-areas.json'),
     runtime.store.policy.brief,
   );
-  const protectedPaths = [
-    ...(entry?.request.protectedPaths ?? []),
-    ...Object.entries(ownership.areas)
-      .filter(([area]) => !task.brief.riskAreas.includes(area))
-      .flatMap(([, paths]) => paths),
+  const protectedRiskAreas = [
+    ...(entry?.request.protectedRiskAreas ?? []),
+    ...protectedRiskAreasForBrief(ownership, task.brief.riskAreas),
   ];
   const frozen = new Set(
     runtime.store
@@ -124,7 +122,7 @@ function assertScopeApprovalFiles(input: ControlPlaneScopeApprovalRequest, runti
     if (
       matchesPath(path, task.brief.paths, runtime.store.policy.brief) ||
       frozen.has(path) ||
-      matchesPath(path, protectedPaths, runtime.store.policy.brief)
+      isProtectedRiskPath(path, entry?.request.protectedPaths, protectedRiskAreas, runtime.store.policy.brief)
     )
       throw new Error(`Scope approval cannot replace declared, frozen or protected authority: ${path}`);
     // ls-tree distinguishes a concrete regular file from a directory, symlink or submodule, including deleted files.

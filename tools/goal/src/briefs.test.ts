@@ -3,11 +3,14 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   controlPlaneReleaseBrief,
+  classifyRiskAreas,
   devProductBrief,
   matchesPath,
   MAX_BRIEF_BYTES,
   parseBrief,
   pathsOverlap,
+  readRiskOwnership,
+  riskAreaRulesFor,
   validatePath,
 } from './briefs.ts';
 import { workerCheckProtocol } from './launch.ts';
@@ -21,6 +24,39 @@ test('a brief over the diagnostic size budget is accepted with a lint warning', 
   expect(parseBrief(big, { version: 1, areas: {} }).lintWarnings?.join('\n')).toContain(
     `diagnostic budget is ${MAX_BRIEF_BYTES} bytes`,
   );
+});
+
+test('authorization risk excludes local auth scripts while preserving production and overlapping ownership', () => {
+  const ownership = readRiskOwnership(join(import.meta.dir, '../risk-areas.json'));
+  const authOnly = { version: 1 as const, areas: { authorization: ownership.areas.authorization! } };
+  expect(classifyRiskAreas('services/auth/scripts/**', riskAreaRulesFor(authOnly), 'pattern')).toEqual([]);
+
+  const tooling = markdown.replace('paths: [result.txt]', 'paths: [services/auth/scripts/dev-stack.ts]');
+  expect(parseBrief(tooling, ownership).riskAreas).toEqual([]);
+
+  const production = markdown.replace('paths: [result.txt]', 'paths: [services/auth/src/policy.ts]');
+  expect(() => parseBrief(production, ownership)).toThrow('authorization');
+  expect(parseBrief(production.replace('riskAreas: []', 'riskAreas: [authorization]'), ownership).riskAreas).toEqual([
+    'authorization',
+  ]);
+  expect(() => parseBrief(markdown.replace('paths: [result.txt]', 'paths: [services/**]'), authOnly)).toThrow(
+    'authorization',
+  );
+
+  const overlapping = {
+    ...ownership,
+    areas: { ...ownership.areas, disclosure: { include: ['services/auth/scripts/**'] } },
+  };
+  expect(classifyRiskAreas('services/auth/scripts/dev.ts', riskAreaRulesFor(overlapping), 'file')).toEqual([
+    'disclosure',
+  ]);
+  expect(() => parseBrief(tooling, overlapping)).toThrow('disclosure');
+  expect(parseBrief(tooling.replace('riskAreas: []', 'riskAreas: [disclosure]'), overlapping).riskAreas).toEqual([
+    'disclosure',
+  ]);
+
+  const legacyOwnership = { version: 1 as const, areas: { authorization: ['**/auth/**'] } };
+  expect(() => parseBrief(tooling, legacyOwnership)).toThrow('authorization');
 });
 
 test('acceptance placement is optional, typed, and restricts local checks to the audited command boundary', () => {
