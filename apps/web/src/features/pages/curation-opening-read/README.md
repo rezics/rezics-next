@@ -7,3 +7,5 @@ work. The adapter forwards the request signal with private no-store/manual-redir
 same-request credentials, expected-reader checks and native response admission. A retired signal prevents a queued
 native start. Callers retain their currentness fences for transports that ignore cancellation. Advice retirement
 also follows locale/source replacement; drafts and publication settlement do not belong to these read lifetimes.
+Fresh same-reader admission preserves the retained draft; the incoming native profile and immutable original
+publication remain separate. Recovery checks assert the edited field rather than absence of text from the original intent.
