@@ -126,6 +126,7 @@ test('a read loader can recover, fail again visibly, then recover on a deliberat
     await act(async () => page.host.querySelector('button')!.click());
     await act(async () => waitForText(page.host, 'Fresh page'));
     expect(reads).toBe(3);
+    expect(page.host.querySelector('.auth-route-failure')).toBeNull();
   } finally {
     await page.close();
   }
@@ -148,6 +149,7 @@ test('a render failure can recover without invoking a command', async () => {
     expect(page.host.querySelector('h1')?.textContent).toBe(m.auth_route_failure_title());
     await act(async () => page.host.querySelector('button')!.click());
     await act(async () => waitForText(page.host, 'Trigger render failure'));
+    expect(page.host.querySelector('.auth-route-failure')).toBeNull();
   } finally {
     await page.close();
   }

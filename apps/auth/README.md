@@ -7,8 +7,13 @@ Auth is a TanStack Start app on Cloudflare Workers. Its page frame is served at 
 /consent, /recovery, /security and /step-up. Each page contains the REZICS brand header and a localized heading.
 Paraglide supplies the eight launch locales.
 
-Route-error Retry performs bounded current-route read/render recovery, never command replay; missing pages use a localized 404 for classified
-browser documents and fixed local exits at `/login` and `/security`.
+Route-error Retry reads the current route again; it never repeats an earlier action. Missing pages keep
+browser-document 404 classification and fixed `/login` and `/security` exits. The root provider retires callbacks on
+pagehide, history changes and unmount. Cached return enables explicit Retry with generic copy, no
+automatic read or reset. Retired completions cannot reset or focus. Successful rendering removes recovery UI; render failure reports in
+the layout commit. Only the mounted boundary owns reset. Retry makes one router invalidation filtered to current match IDs: the
+whole call includes the installed route chain's loaders and their documented native read bounds below, not a local
+state change. Existing deadlines apply. Retirement cancels no native work. Return and reset add zero I/O; no polling or storage.
 
 Local development uses the Cloudflare Vite plugin's default `.cloudflare/state`. Test launches receive an independent
 temporary persistence directory per Auth Vite process. `AUTH_TEST_STATE_INSTANCE_DIR` supplies a caller-owned path for
@@ -85,13 +90,6 @@ current status and never navigates or starts authentication.
 The local guide has phone/desktop and light/dark stories for current identity, missing email, loading, signed-out,
 denied, unavailable and current-read replacement. The mounted language chooser updates all guide copy without a reload
 or a required preference write. Native/browser and integrated acceptance remain controller-owned.
-distinct; unavailable has an explicit Retry. The technical account ID is behind a disclosure. Security, rename and
-deletion links open their existing review pages; each page checks its own current native guidance, so navigation does
-not promise that an action is available. The home never loads an inventory, changes state or resumes an operation.
-
-Home offers installed zero-selector review links for Security, rename, personal deletion, organization creation
-and automated creation. Identity is display-only; each destination's current native advice owns execution.
-There are no fabricated organization targets, per-card preflights or membership link without a selected ID.
 
 ## Sign-in
 
@@ -186,6 +184,49 @@ ask the person to try again later.
 Leaving or replacing the recovery journey discards its browser results and private inputs; returning from a cached
 document starts a fresh form without retrying a mutation. Departure cannot undo a completed native password change.
 an unknown completion retains the original account, token and password only in the mounted attempt; explicit retry sends that exact submission, while restart or departure discards it without asserting cancellation. Definitive first validation refusals allow correction; a later refusal cannot resolve an earlier unknown outcome. Start acknowledgement confirms acceptance only.
+
+Recovery and step-up read `POST /recovery/page` with only `stage` (`start`, `complete` or `step-up`).
+The native producer returns installed handler methods, stage actions, native password limits, and whether to return
+through sign-in or review after authentication. This is advice, never credential eligibility, proof validity or a
+prepared operation. Anonymous reads perform zero account, email, credential or token lookups, even with a signed-in
+cookie. The step-up viewer uses the existing authorized exact-self identity read: three fixed human-proof
+observations, two full-key client admission seeks and one full-key user seek, with the existing issuance guard.
+The complete viewer observation has a three-second deadline and no inventory scan or fan-out. Responses are at
+most 4 KiB; the request is the existing bounded JSON body containing one fixed stage. Browser reads have the existing
+five-second whole-read bound, including streamed body consumption. Failure is explicitly unavailable with Retry,
+never inferred sign-out. Focus or visibility refresh removes old viewer advice; route replacement/departure rejects
+late results. Browser WebAuthn support gates the passkey ceremony alongside the installed native method flag.
+
+The existing recovery completion notice is consumed only after current native sign-in advice is ready, so initial sign-in attempt replacement cannot discard it.
+
+### Returning to recovery
+
+The mounted recovery page retains only a fixed start/complete outcome classification: dispatched with unknown
+outcome, or acknowledged. It retains no account, email, token, password, payload or reconstructible link. This
+summary is never written to storage, a URL, history state or cookies; an ordinary reload makes no historical claim.
+Page departure immediately clears the inputs (including detached DOM nodes), retires command callbacks and aborts
+advice reads. Leaving cannot cancel a native effect. A retained document first reads current `/recovery/page` advice
+before enabling new work. Loading and read failure have visible states, fixed sign-in exits and an explicit read Retry.
+Focus moves to the generic return explanation or read result when private controls retire.
+
+A start acknowledgement confirms neither account existence nor mail delivery. An unavailable start response keeps
+its outcome unknown. Requesting another link is deliberate new work: the person reviews fresh start advice and
+confirms another send. A later refusal or another send's acknowledgement cannot settle an earlier unknown request.
+A first definitive refusal still establishes that submission was not executed. Completion retry keeps the exact
+original credentials only in its active attempt. After retirement, the fragment and credentials stay cleared;
+current advice or a successful sign-in cannot establish what the earlier reset did. Historical uncertainty never
+creates the login completion notice. Only native completion acknowledgement uses the existing notice owner.
+Stay preserves active work; explicit Leave clears it and warns that a sent request may still finish.
+
+Deliberate fresh recovery opens an empty start form after current start advice, while generic earlier
+uncertainty remains visible and independent of the new request.
+
+Whole-call cost: summary capture and display make zero requests. Entry, retained return, focus/visibility refresh,
+explicit read Retry and deliberate transition from completion history to a fresh start each make at most one installed
+`POST /recovery/page` read (stage only), zero kernel reads and no command. The existing five-second/4 KiB bounds apply.
+A start or completion submit makes one existing Auth command request, with no reconciliation read, polling, inventory
+scan or speculative retry. Resend confirmation rereads one start advice response; its eventual explicit send makes
+one command. Language changes and displaying history make no requests. Read advice is never an execution receipt.
 
 ## Sign-up
 
@@ -640,6 +681,8 @@ review/reconciliation flow. Completed deletion offers no session-dependent actio
 form/card items and wrapping actions at phone widths without clipping details or focus. Rename confirmation appears
 only after a valid handle is entered; password guidance is shown before the Security password field.
 
+Automated creation asks Stay/Leave for meaningful input or unresolved review; Leave discards only unsent review, while a tab-local submitted marker preserves the original command for recovery. Caller replacement or permission loss revokes review without prompting.
+
 ## Organization membership
 
 `/organizations/members` reads a dedicated native page bound to the current viewer and organization. Each page shows
@@ -782,6 +825,10 @@ Submitted return and explicit Retry call only `GET /session`. A matching automat
 
 Keep public identity labels explicitly undisclosed under the opening profile; recovery links to `https://rezics.com/{locale}/accounts` and a confirmed operated session can continue to `https://rezics.com/{locale}/`.
 
+Opening advice uses a dedicated native management observation; the exact manage-only client keeps identity labels undisclosed instead of acquiring read scope. The read remains advice, never an opening approval.
+
+The Auth host installs `POST /account-management/operators/opening-page` from the native account bindings. Its closed current response identifies the acting human, installed actor target, installed operator kind, reservation/version and supported `opening` action. Missing authority returns refused; missing infrastructure returns unavailable. A single ten-second deadline covers one authentication, two bounded native transfer-state reads and one full-key operator-kind read. The two relation observations must agree. The endpoint performs no command, approval or credential staging; the page consumes one observation and preserves its exact tuple for explicit opening review. Public labels remain undisclosed under the manage-only profile; submission still needs the existing fresh-human approval and opening command.
+
 ## Step-up
 
 A signed-in browser whose session is not fresh enough for `prompt=login` or `max_age` arrives at
@@ -812,6 +859,12 @@ request is pending and shows its loading state while waiting.
 Each confirmation belongs to the current page and exact request URL; departure, a changed request or cached-document
 restoration retires its callbacks and clears private inputs. Password submission may replace a passkey prompt,
 cancelling the browser ceremony without undoing a dispatched server sign-in or automatically replaying it.
+
+Step-up rereads the exact retained account or organization operation after authentication and again after native session observation. A replaced, missing or malformed continuation refuses the old return, preserves replacement storage and asks the person to review the action again; authentication does not execute it.
+
+When a cached step-up page returns, its secret-bearing form and credential ceremony retire. The mounted page keeps only a generic unsent, refused, acknowledged or unresolved classification; it uses no browser storage. It reads current step-up advice before offering a deliberate continuation or a separate fresh confirmation. A current actor is an observation, not proof that an earlier request caused it. Review never authenticates, executes the account action or navigates automatically. A replaced or unavailable continuation remains unresolved and can be left without implying cancellation.
+
+See [Recovery](#recovery) for shared advice and bounds.
 
 ## Screenshots
 
@@ -940,56 +993,3 @@ without preload. Static assets, unknown paths and Auth forwarding retain their o
 The policy costs one 16-byte random nonce and one header set per response, with no reads. Run
 `bun test apps/auth/tests/security-headers.test.ts` from the repository root to build and preview the production
 bundle and check Chromium hydration, policy violations and the real Turnstile script URL with an offline widget.
-
-Automated creation asks Stay/Leave for meaningful input or unresolved review; Leave discards only unsent review, while a tab-local submitted marker preserves the original command for recovery. Caller replacement or permission loss revokes review without prompting.
-
-Opening advice uses a dedicated native management observation; the exact manage-only client keeps identity labels undisclosed instead of acquiring read scope. The read remains advice, never an opening approval.
-
-The Auth host installs `POST /account-management/operators/opening-page` from the native account bindings. Its closed current response identifies the acting human, installed actor target, installed operator kind, reservation/version and supported `opening` action. Missing authority returns refused; missing infrastructure returns unavailable. A single ten-second deadline covers one authentication, two bounded native transfer-state reads and one full-key operator-kind read. The two relation observations must agree. The endpoint performs no command, approval or credential staging; the page consumes one observation and preserves its exact tuple for explicit opening review. Public labels remain undisclosed under the manage-only profile; submission still needs the existing fresh-human approval and opening command.
-
-Step-up rereads the exact retained account or organization operation after authentication and again after native session observation. A replaced, missing or malformed continuation refuses the old return, preserves replacement storage and asks the person to review the action again; authentication does not execute it.
-
-When a cached step-up page returns, its secret-bearing form and credential ceremony retire. The mounted page keeps only a generic unsent, refused, acknowledged or unresolved classification; it uses no browser storage. It reads current step-up advice before offering a deliberate continuation or a separate fresh confirmation. A current actor is an observation, not proof that an earlier request caused it. Review never authenticates, executes the account action or navigates automatically. A replaced or unavailable continuation remains unresolved and can be left without implying cancellation.
-
-Recovery and step-up read `POST /recovery/page` with only `stage` (`start`, `complete` or `step-up`).
-The native producer returns installed handler methods, stage actions, native password limits, and whether to return
-through sign-in or review after authentication. This is advice, never credential eligibility, proof validity or a
-prepared operation. Anonymous reads perform zero account, email, credential or token lookups, even with a signed-in
-cookie. The step-up viewer uses the existing authorized exact-self identity read: three fixed human-proof
-observations, two full-key client admission seeks and one full-key user seek, with the existing issuance guard.
-The complete viewer observation has a three-second deadline and no inventory scan or fan-out. Responses are at
-most 4 KiB; the request is the existing bounded JSON body containing one fixed stage. Browser reads have the existing
-five-second whole-read bound, including streamed body consumption. Failure is explicitly unavailable with Retry,
-never inferred sign-out. Focus or visibility refresh removes old viewer advice; route replacement/departure rejects
-late results. Browser WebAuthn support gates the passkey ceremony alongside the installed native method flag.
-
-The existing recovery completion notice is consumed only after current native sign-in advice is ready, so initial sign-in attempt replacement cannot discard it.
-
-### Returning to recovery
-
-The mounted recovery page retains only a fixed start/complete outcome classification: dispatched with unknown
-outcome, or acknowledged. It retains no account, email, token, password, payload or reconstructible link. This
-summary is never written to storage, a URL, history state or cookies; an ordinary reload makes no historical claim.
-Page departure immediately clears the inputs (including detached DOM nodes), retires command callbacks and aborts
-advice reads. Leaving cannot cancel a native effect. A retained document first reads current `/recovery/page` advice
-before enabling new work. Loading and read failure have visible states, fixed sign-in exits and an explicit read Retry.
-Focus moves to the generic return explanation or read result when private controls retire.
-
-A start acknowledgement confirms neither account existence nor mail delivery. An unavailable start response keeps
-its outcome unknown. Requesting another link is deliberate new work: the person reviews fresh start advice and
-confirms another send. A later refusal or another send's acknowledgement cannot settle an earlier unknown request.
-A first definitive refusal still establishes that submission was not executed. Completion retry keeps the exact
-original credentials only in its active attempt. After retirement, the fragment and credentials stay cleared;
-current advice or a successful sign-in cannot establish what the earlier reset did. Historical uncertainty never
-creates the login completion notice. Only native completion acknowledgement uses the existing notice owner.
-Stay preserves active work; explicit Leave clears it and warns that a sent request may still finish.
-
-Deliberate fresh recovery opens an empty start form after current start advice, while generic earlier
-uncertainty remains visible and independent of the new request.
-
-Whole-call cost: summary capture and display make zero requests. Entry, retained return, focus/visibility refresh,
-explicit read Retry and deliberate transition from completion history to a fresh start each make at most one installed
-`POST /recovery/page` read (stage only), zero kernel reads and no command. The existing five-second/4 KiB bounds apply.
-A start or completion submit makes one existing Auth command request, with no reconciliation read, polling, inventory
-scan or speculative retry. Resend confirmation rereads one start advice response; its eventual explicit send makes
-one command. Language changes and displaying history make no requests. Read advice is never an execution receipt.
