@@ -1,5 +1,6 @@
 import { createServerFn } from '@tanstack/react-start';
 import * as contract from '@rezics/auth-contract';
+import { authPost } from './api';
 import { readJsonBounded } from './private-auth-json';
 import { parseAccountSession } from './account-session';
 import { trustedSecurityResponseConfiguration } from './security-response-config';
