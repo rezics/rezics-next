@@ -65,7 +65,14 @@ if (!process.env.RENAME_COST_CHILD) {
       authTime: 1,
       amr: ['pwd'],
     };
-    const state = { handle: 'before', malformed: false, acknowledged: false, expired: false };
+    const state = {
+      handle: 'before',
+      malformed: false,
+      acknowledged: false,
+      expired: false,
+      refusal: 0,
+      failReadback: false,
+    };
     Object.defineProperty(globalThis, 'window', {
       configurable: true,
       value: {
@@ -106,7 +113,16 @@ if (!process.env.RENAME_COST_CHILD) {
       if (String(path).endsWith('/approve'))
         return Response.json({ reference: nativeReference, expiresAt: new Date(Date.now() + 60000).toISOString() });
       if (state.expired) return Response.json({ accountId: viewer.accountId, expired: true });
+      if (state.refusal)
+        return Response.json(
+          {
+            error: state.refusal === 401 ? 'step_up_required' : 'account_operation_denied',
+            effect_status: 'not_applied',
+          },
+          { status: state.refusal },
+        );
       state.handle = 'after';
+      if (state.failReadback) state.malformed = true;
       return state.acknowledged ? Response.json({ accountId: viewer.accountId }) : new Response(null, { status: 503 });
     }) as typeof fetch;
     const selected = createRenameAttempt(
@@ -167,6 +183,24 @@ if (!process.env.RENAME_COST_CHILD) {
     expect((await nativeRenameSource.run(f.selected)).kind).toBe('renamed');
     expect(f.calls).toHaveLength(6);
   });
+  test('native conflict and failed readback preserve their existing whole-call costs', async () => {
+    const conflict = fixture();
+    conflict.state.refusal = 409;
+    expect((await nativeRenameSource.run(conflict.selected)).kind).toBe('conflict');
+    expect(conflict.calls).toHaveLength(6);
+    conflict.calls.length = 0;
+    conflict.state.refusal = 401;
+    expect((await nativeRenameSource.run(conflict.selected)).kind).toBe('step-up');
+    expect(conflict.calls).toHaveLength(3);
+    expect(conflict.selected.reference).toBeUndefined();
+    window.sessionStorage.clear();
+    const readback = fixture();
+    readback.state.acknowledged = true;
+    readback.state.failReadback = true;
+    expect((await nativeRenameSource.run(readback.selected)).kind).toBe('acknowledged');
+    expect(readback.calls).toHaveLength(6);
+  });
+
   const { confirmStepUp } = await import('../src/step-up');
   const { managementOperationProfile } = await import('@rezics/auth-contract');
   const {
