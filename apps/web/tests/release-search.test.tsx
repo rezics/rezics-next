@@ -1,6 +1,6 @@
 import { afterAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, createElement } from 'react';
+import { act, createElement, useRef } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ConditionEditor } from '../src/search/condition-editor';
 import { m } from '../src/paraglide/messages.js';
@@ -632,7 +632,7 @@ test('work expansions keep independent child progress and resume their own respo
 test('current release visits retire pending windows and bound cursor progress without reviving prior visits', async () => {
   const { QueryClient } = await import('@tanstack/react-query');
   const { browserObservation } = await import('../src/session');
-  const { addressLease } = await import('../src/session/reader');
+  const { addressLease, useReaderResponseOrigin } = await import('../src/session/reader');
   const { sessionQueryKey } = await import('../src/session/browser-state');
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -685,17 +685,23 @@ test('current release visits retire pending windows and bound cursor progress wi
   let locale = 'en';
   let currentParsed = parsed;
   let currentPage = page;
-  const render = () =>
-    act(async () =>
-      root.render(
-        createElement(ReleaseSearchPage, {
-          locale,
-          parsed: currentParsed,
-          reader,
-          state: { status: 'ready', page: currentPage },
-        }),
-      ),
-    );
+  const groupKey = ['release-child-checkpoint'];
+  client.setQueryData(groupKey, { checkpoint: page.as_of });
+  function ReadingPage() {
+    const responseCurrent = useReaderResponseOrigin(client, groupKey, () => true);
+    const parent = reader;
+    const ref = useRef<{ parent: typeof reader; origin: typeof reader } | null>(null);
+    if (!ref.current || ref.current.parent !== parent || !ref.current.origin.isCurrent()) {
+      ref.current = { parent, origin: { lifetime: {}, isCurrent: () => parent.isCurrent() && responseCurrent() } };
+    }
+    return createElement(ReleaseSearchPage, {
+      locale,
+      parsed: currentParsed,
+      reader: ref.current.origin,
+      state: { status: 'ready', page: currentPage },
+    });
+  }
+  const render = () => act(async () => root.render(createElement(ReadingPage)));
   const group = () => host.querySelector(`[data-release-work="${workId}"]`)!;
   const button = () => group().querySelector('button') as HTMLButtonElement | null;
   const open = async () =>
@@ -741,6 +747,8 @@ test('current release visits retire pending windows and bound cursor progress wi
     await complete(ready('second', 20));
     expect(group().querySelectorAll('ul > li')).toHaveLength(20);
     expect(group().textContent).not.toContain('Preview edition');
+    currentParsed = structuredClone(parsed);
+    currentPage = structuredClone(page);
     await render(); // Equivalent values keep the same deliberate expansion and accepted window.
     expect(group().querySelector('details')!.open).toBe(true);
     expect(group().querySelectorAll('ul > li')).toHaveLength(20);
@@ -757,6 +765,9 @@ test('current release visits retire pending windows and bound cursor progress wi
       () => {
         currentPage = { ...page, as_of: '2026-11-05T00:00:00Z' };
       },
+      () => {
+        client.setQueryData(groupKey, { checkpoint: page.as_of });
+      }, // A new native response, even with equal data.
       () => {
         client.setQueryData(sessionQueryKey, { state: 'signed-in', subject: 'reader', csrfToken: 'two' });
         expect(reader.isCurrent()).toBe(false); // Same principal, actual Web observation replacement.
