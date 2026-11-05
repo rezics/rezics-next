@@ -156,6 +156,8 @@ export async function publishSelectedNative(
     );
     const status = typeof result.status === 'number' ? result.status : (result.error?.status ?? 0);
     const body = result.data ?? result.error?.value ?? null;
+    // Eden represents a rejected fetch as an empty 503 error; no native outcome was observed.
+    if (status === 503 && isRecord(body) && Object.keys(body).length === 0) return { ok: false, reason: 'unknown' };
     return publicationResponse(status, body, validated);
   } catch (error) {
     if (isRedirect(error) || isNotFound(error)) throw error;

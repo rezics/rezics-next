@@ -193,8 +193,13 @@ async function mount() {
         snapshot.state === 'signed-in'
           ? client.getQueryData(viewerExposureQuery(snapshot.observation).queryKey)
           : undefined;
+      const publicationQueries = client.getQueryCache().findAll({ queryKey: ['collection-publication'] }).map((query) => ({
+        key: query.queryKey,
+        status: query.state.status,
+        error: query.state.error instanceof Error ? query.state.error.message : query.state.error,
+      }));
       throw new Error(
-        `Expected an admitted collection read; viewer=${JSON.stringify(snapshot)}, exposure=${JSON.stringify(groups)}, page=${host.textContent}`,
+        `Expected an admitted collection read; viewer=${JSON.stringify(snapshot)}, exposure=${JSON.stringify(groups)}, queries=${JSON.stringify(publicationQueries)}, page=${host.textContent}`,
       );
     }
   };
