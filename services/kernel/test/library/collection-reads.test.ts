@@ -373,7 +373,7 @@ test('a curator lists every active Collection and everyone else lists only publi
     let stored = 0;
     let cursor: string | null = null;
     do {
-      const page = await reads.listCollections(viewer, {
+      const page: { collections: CollectionResourceView[]; next: string | null } = await reads.listCollections(viewer, {
         curatorAccountId: curatorId,
         limit: 1,
         ...(management ? { ownerManagement: true } : {}),

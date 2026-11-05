@@ -89,15 +89,16 @@ class ViewReader {
   constructor(
     readonly deps: Dependencies,
     readonly actor: Actor,
+    readonly deadline: number,
   ) {}
 
   async subject(id: string): Promise<Summary | null> {
     const { pool, access, routeKey } = this.deps;
     const actor = this.actor;
+    const deadline = this.deadline;
     async function readAnchor(anchorId: string) {
       const route = routeOf(anchorId);
       if (route === null) return null;
-      const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
       const resource = {
         route,
         id: anchorId,
@@ -114,7 +115,7 @@ class ViewReader {
             actor,
             'subject:read',
             { route, id, eligibility: relatedReadEligibility({ route, id }, batch) },
-            { pool, deadline: deadlineFor(WORK_STEP_DEADLINE_MS) },
+            { pool, deadline },
           );
           return check(client);
         },
@@ -141,7 +142,9 @@ class ViewReader {
   async account(id: string): Promise<AccountSummary | null> {
     const route = routeOf(id);
     if (route === null) return null;
-    const value = await withConnection(this.deps.pool, (client) => readPublicAccount(client, route, id));
+    const value = await withConnection(this.deps.pool, (client) =>
+      readPublicAccount(deadlineClient(client, this.deadline), route, id),
+    );
     return value && value.state !== 'deleted' && 'handle' in value
       ? { id: value.accountId, handle: value.handle, displayName: value.displayName }
       : null;
@@ -152,7 +155,7 @@ class ViewReader {
     const { pool, access } = this.deps;
     if (type === 'collection') {
       try {
-        const value = await createCollectionReads(this.deps).readCollection(this.actor, id);
+        const value = await createCollectionReads(this.deps).readCollection(this.actor, id, this.deadline);
         return value.title === null ? null : { id, type, label: value.title };
       } catch (error) {
         if (error instanceof ProblemError && error.code === 'not_found') return null;
@@ -182,7 +185,7 @@ class ViewReader {
         ...identity,
         eligibility,
       },
-      { pool, deadline: deadlineFor(WORK_STEP_DEADLINE_MS) },
+      { pool, deadline: this.deadline },
     );
     return withConnection(pool, async (client) => {
       if (!(await check(client))) return null;
@@ -208,7 +211,7 @@ export async function fullView<T>(
   }> = {},
 ): Promise<Embedding<T>> {
   if (view !== 'FULL') return body as Embedding<T>;
-  const reader = new ViewReader(deps, actor);
+  const reader = new ViewReader(deps, actor, options.deadline ?? deadlineFor(WORK_STEP_DEADLINE_MS));
   const rows = Object.values(body as Record<string, unknown>).flatMap((value) =>
     Array.isArray(value) ? value : value && typeof value === 'object' ? [value] : [],
   ) as Record<string, unknown>[];
