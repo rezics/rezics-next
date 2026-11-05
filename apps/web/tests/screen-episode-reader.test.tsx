@@ -1,16 +1,17 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import type { KernelClient } from '@rezics/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ScreenEpisodeList } from '../src/features/catalogue/screen-episode-reader/view';
-import {
-  readScreenEpisodePage,
-  SCREEN_EPISODE_PAGE_MAX_BYTES,
-  type ScreenEpisodeEntry,
-} from '../src/features/catalogue/screen-episode-reader/read';
 import { screenEpisodeContinuationHref } from '../src/features/catalogue/screen-episode-reader/navigation';
 import { subjectVisitReturn } from '../src/features/pages/subject-visit-navigation';
 import { subjectHref } from '../src/subject/subject-href';
-import { screenProfileFixture } from '../src/kernel/fake/catalogue-screen-profile';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { readScreenEpisodePage, SCREEN_EPISODE_PAGE_MAX_BYTES } = await import(
+  '../src/features/catalogue/screen-episode-reader/read'
+);
+type ScreenEpisodeEntry = import('../src/features/catalogue/screen-episode-reader/read').ScreenEpisodeEntry;
+const { screenProfileFixture } = await import('../src/kernel/fake/catalogue-screen-profile');
 
 const seasonId = '00000000-0000-4000-8000-000000000902';
 const episodeId = '00000000-0000-4000-8000-000000000903';
