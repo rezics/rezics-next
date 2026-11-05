@@ -475,6 +475,33 @@ test('AniList and Bangumi retry captured production source admissions and advanc
     async delete() {
       return { kind: 'deleted' };
     },
+    async tags(command) {
+      return {
+        kind: 'tags',
+        page: { ordinal: command.ordinal, rowRevision: token, evidence: 'missing', tags: [], next: null, labels: null },
+        custody: command.custody ?? { viewer: 'alice', csrfToken: 'csrf', credential: 'encrypted' },
+      };
+    },
+    async searchLabels() {
+      return { kind: 'label-options', labels: [] };
+    },
+    async reviewLabels(command) {
+      return {
+        kind: 'labels-reviewed',
+        ordinal: command.ordinal,
+        labels: {
+          review: { token, rowRevision: command.rowRevision, subject: null, evidence: 'missing', items: [] },
+          confirmed: false,
+          outcomes: [],
+        },
+      };
+    },
+    async applyLabels(command) {
+      return { kind: 'labels-applied', result: { uploadId: command.uploadId, ordinal: command.ordinal, outcomes: [], remaining: [] } };
+    },
+    async readAssignments(subjectId) {
+      return { kind: 'assignments', subjectId, assignments: [] };
+    },
   };
   const bangumiVisit = visit();
   const bangumi = createBangumiJourney({ port: bangumiPort, visit: bangumiVisit });
