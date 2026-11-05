@@ -22,6 +22,7 @@ const rows: BulkUndoOutcome[] = ['one', 'two', 'expired', 'no-evidence'].map((su
       ? null
       : { deletionId: id, revision: 12, restoreUntil: ordinal === 2 ? '2000-01-01T00:00:00Z' : '2099-11-04T00:00:00Z' },
 }));
+let currentDeletion = rows[0]!.deletion!;
 const reads: { data: OperationAddress; resolve: (value: BulkUndoRead) => void }[] = [];
 const preparations: { data: UndoTarget; headers: Headers }[] = [];
 const sends: Parameters<RestoreSender>[0][] = [];
@@ -37,7 +38,7 @@ mock.module('../src/library/bulk-operation-undo-server', () => ({
       state: 'ready',
       undo: {
         subjectId: input.data.subjectId,
-        ...rows[0]!.deletion!,
+        ...currentDeletion,
         idempotencyKey: crypto.randomUUID(),
         credential: 'encrypted_original',
       },
@@ -129,13 +130,15 @@ test('reopened page reads without CSRF, offers explicit eligible targets, and re
     expect(reads.at(-1)!.data.cursor).toBe('second');
     await move(m.library_window_retry(), { ...ready, page: { outcomes: [rows[1]!], next: 'third' } });
     expect(reads.at(-1)!.data.cursor).toBe('second');
-    await move(m.library_window_previous(), { ...ready, page: { outcomes: rows, next: 'replacement-next' } });
+    currentDeletion = { ...currentDeletion, revision: 19 };
+    const revisited = [{ ...rows[0]!, deletion: currentDeletion }, ...rows.slice(1)];
+    await move(m.library_window_previous(), { ...ready, page: { outcomes: revisited, next: 'replacement-next' } });
     expect(reads.at(-1)!.data).not.toHaveProperty('cursor');
     expect(host.textContent).toContain(m.library_bulk_undo_expired());
     await act(async () => buttons(m.editor_undo())[0]!.click());
     expect(preparations).toHaveLength(1);
     expect(sends).toHaveLength(1);
-    expect(sends[0]!.data.subjectId).toBe('one');
+    expect(sends[0]!.data).toMatchObject({ subjectId: 'one', ...currentDeletion });
     expect(preparations[0]!.data).toMatchObject({ id, ordinal: '0', subjectId: 'one' });
     await move(m.bulk_operation_more(), { ...ready, page: { outcomes: [], next: null } });
     expect(reads.at(-1)!.data.cursor).toBe('replacement-next');

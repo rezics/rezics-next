@@ -34,12 +34,16 @@ test('GET captures nothing; each chosen restore retains its own sender, full hea
   let csrf = 'original';
   let admitted = true;
   let prepares = 0;
+  let reads = 0;
   const calls: { data: LibraryRestoreInput; headers: Headers }[] = [];
   let sender = async (input: { data: LibraryRestoreInput; headers: Headers }) => {
+    const before = reads;
+    await model.first();
+    expect(reads).toBe(before);
     calls.push(input);
     return { ok: false as const, reason: 'unavailable' as const };
   };
-  const model = new BulkOperationUndo(
+  const model: BulkOperationUndo = new BulkOperationUndo(
     { id, viewer: 'alice' },
     {
       current: () => true,
@@ -50,8 +54,15 @@ test('GET captures nothing; each chosen restore retains its own sender, full hea
       headers: () => new Headers({ 'X-CSRF-Token': csrf, 'X-Original': csrf }),
     },
     {
-      read: async () => ready,
+      read: async () => {
+        reads++;
+        return { ...ready, page: { ...ready.page, next: 'next' } };
+      },
       prepare: async (target) => {
+        const before = reads;
+        await model.more();
+        await model.read();
+        expect(reads).toBe(before);
         prepares++;
         return {
           state: 'ready',
@@ -272,51 +283,4 @@ test('coordinates commit only admitted success, retain eight predecessors and re
   await pending;
   expect(model.state.page).toBeUndefined();
   expect(model.state.cursor).toBeUndefined();
-});
-
-test('preparation and original sending block movement without losing the command checkpoint', async () => {
-  let reads = 0;
-  let prepared!: (value: import('../src/library/bulk-operation-undo').UndoPreparation) => void;
-  let sent!: (value: import('../src/library/entries-read').LibraryRestoreResult) => void;
-  const model = new BulkOperationUndo(
-    { id, viewer: 'alice' },
-    {
-      current: () => true,
-      capture: () => () => true,
-      captureRestore: () => () => true,
-      restore: () => true,
-      csrf: () => 'csrf',
-      headers: () => new Headers({ 'x-csrf-token': 'csrf' }),
-    },
-    {
-      read: async () => {
-        reads++;
-        return { ...ready, page: { ...ready.page, next: 'next' } };
-      },
-      prepare: () =>
-        new Promise((resolve) => {
-          prepared = resolve;
-        }),
-      sender: () => () =>
-        new Promise((resolve) => {
-          sent = resolve;
-        }),
-    },
-    () => {},
-  );
-  await model.read();
-  const restoring = model.restore('0');
-  await model.more();
-  await model.first();
-  expect(reads).toBe(1);
-  prepared({ state: 'ready', undo: { subjectId: outcome.subjectId, ...outcome.deletion!, idempotencyKey: id } });
-  await Promise.resolve();
-  await model.read();
-  expect(reads).toBe(1);
-  expect(model.attempts.get('0')?.status).toBe('sending');
-  sent({ ok: false, reason: 'unavailable' });
-  await restoring;
-  await model.more();
-  expect(reads).toBe(2);
-  expect(model.attempts.get('0')?.status).toBe('uncertain');
 });
