@@ -1084,67 +1084,53 @@ only `organization:membership`, and transfer/transfer acceptance only `account:m
 Native authentication materializes current consent; registration and navigation grant
 no permissions. The fixed organization/delete client and ordinary login are unchanged.
 
-`POST /account-management/profile` accepts only `{ accountId }` as a selection of the current initiating human.
-The default host binds `trustedAccess.readRenameAccountProfile` from Kernel's `createNativeAccountBindings`;
-the producer-owned private seam in `access/account-profile-source.ts` reuses `readEditableAccountProfile`, the same
-source and actual native permission formula as `GET /v1/accounts/{accountId}/profile`. Auth signs the live proof for
-native Access authentication; account equality and the exact management rename profile alone never authorize reading.
-The response allowlist is `{ profile: { id, kind: 'actor', handle: string | null } }`, including handleless accounts.
-The route requires same-issuer Origin, JSON, no query or bearer header and a current native human cookie session;
-it revalidates that same proof after the source read. Every response is `private, no-store`. Missing bindings, failed
-authority or malformed reads disclose no profile. The route remains the exact private profile port; its client, scope,
-authentication method, account equality and native `account:update` formula are unchanged.
+`POST /account-management/profile` accepts only `{accountId}` selecting the current human. Trusted
+`readRenameAccountProfile` binds Kernel `access/account-profile-source.ts` to `readEditableAccountProfile`, with the
+same permission formula as `GET /v1/accounts/{accountId}/profile`. Auth signs live proof; account/profile equality
+alone never authorizes disclosure. The closed response is `{profile:{id,kind:'actor',handle:string|null}}`, including
+handleless accounts. Failed bindings, authority or reads disclose no profile. Authentication, scope and native
+account:update admission remain unchanged; request/proof/cache rules below cover both routes.
 
-Decision: rename-page receiving uses public `RENAME_PAGE_MAX_RESPONSE_BYTES`, independently of scope catalogues.
-SessionProof `securityId` allows nonempty opaque IDs up to 1,024 UTF-16 units, including escaped/Unicode history.
-Oversized projections return unavailable without normalization/truncation. The allowance counts closed syntax, two
-worst-case escaped identities, nullable ASCII handle64, exact management client/scope, safe epoch/time integers,
-one pwd/pop method and up to eight rename/account:update entries with UUID36 resource IDs and signed safe routes.
-Retained actions force both account copies to UUID36; the allowance takes the larger compatible case. Bytes pass
-before fatal UTF-8 decoding and JSON parsing, within the existing five-second body-inclusive browser read.
-Overflow, malformed input, stalls and retirement authorize no command. The common `/session` reader uses its own
-`AUTH_SECURITY_SCOPE_CONFIGURATION` allowance. Native proof revalidation and the three-second page deadline remain.
+Decision: rename-page uses public `RENAME_PAGE_MAX_RESPONSE_BYTES`, independently of scope catalogues.
+SessionProof permits opaque securityId1024; excess is unavailable. The bound counts syntax, two escaped IDs, nullable
+ASCII handle64, exact client/scope, safe epoch/time,
+one pwd/pop and eight rename/account:update entries with UUID36 resource IDs and signed safe routes. Retained
+actions force both ID copies to UUID36; the bound takes the larger case. Bytes precede fatal UTF-8/JSON parsing
+within five seconds including body; common `/session` uses `AUTH_SECURITY_SCOPE_CONFIGURATION` separately.
+Native proof revalidation and its three-second deadline remain.
 
-`POST /account-management/rename-page` accepts only `{}`. A human without the exact rename management profile gets
-only `management-auth-required` and its fixed continuation. Native `readRenameAccountPage` composes the private
-profile read with `readManagedAuthActions`: matching `auth.account.rename` permits the form, empty ready advice is
-refused, and action dependency loss is unavailable. Profile denial, changed proof/floor or malformed source discloses
-no identity, handle or reason. Action failure after admitted profile may retain that account and handle.
-Both profile and page require same-issuer Origin, JSON, no query/bearer and a current human cookie proof;
-they revalidate proof/floor/consent after I/O and answer `private, no-store`. Review may use a stale rename-profile
-session; approval still requires fresh authentication. The page costs one exact profile read, one full-key current
-account seek and bounded self action advice (one rename candidate, before/final snapshots, one Access formula).
-Transport closes eight source action entries and retains up to eight matches, without inventory or availability lookup.
+Rename-page accepts only `{}`. Without the exact management profile it returns only management-auth-required plus
+fixed continuation. `readRenameAccountPage` composes private profile and `readManagedAuthActions`: matching rename
+advice enables review, empty advice refuses, dependency loss is unavailable. Failed profile/proof/floor discloses no
+identity or reason; action loss may retain an admitted profile. Both profile/page require same-issuer Origin, JSON,
+no query/bearer, human cookie proof revalidated after I/O, and private/no-store. Stale review is allowed; approval
+requires freshness. Cost: exact profile read, full-key current-account seek, bounded self action advice (one candidate,
+before/final snapshots, one Access formula), eight closed source entries/matches; no inventory or availability lookup.
 
-Decision: rename approval/execution alone use public `account-operation-response-bounds.ts` DTOs. Approval projects
-exactly `{reference,expiresAt}`. Actual Access `workflow-approvals.ts` seals base64url body + dot + 43-character
-SHA-256 MAC; native unseal and execute text cap it at 4,096 ASCII characters. Expiry is canonical
-`Date.toISOString()` (at most 27 ASCII bytes). Its UTF-8 allowance is the closed empty-string JSON skeleton plus
-`4096 + 27`; no UUID assumption applies. Invalid approval projection answers 503 unavailable, authorizing no execute.
-Rename workflow completion and replay return only `{accountId}`. The projection admits opaque IDs through 4,096
-UTF-16 units, matching native descriptor/continuation compatibility. Its allowance is the closed skeleton plus
-`6 * 4096`, covering legal JSON escaping and lone surrogates. A mismatched/extra-field/expired/error result after
-possible completion answers `{error:'unavailable'}`/503 without fabricated `not_applied`. Other kinds retain native
-shapes and in-process workflows remain unchanged.
+Decision: rename alone uses public `account-operation-response-bounds.ts`. Approval is exactly `{reference,expiresAt}`.
+Access `workflow-approvals.ts` seals base64url body + dot + SHA-256 MAC43; native unseal/execute cap it at 4096 ASCII
+characters. Expiry is canonical `Date.toISOString()` (maximum 27 ASCII bytes). The UTF-8 allowance is the closed
+empty-string JSON skeleton plus `4096 + 27`; references are opaque, never assumed UUIDs. Invalid projection returns
+503 unavailable and cannot authorize execute. Workflow/replay return only `{accountId}`; its compatible opaque ID
+ceiling is 4096 UTF-16 units and allowance is the closed skeleton plus `6 * 4096`, covering escapes/lone surrogates.
+Mismatched/extra/expired/error completion returns `{error:'unavailable'}`/503 without invented not_applied. Other
+kinds' shapes and in-process workflows remain unchanged.
 
-The fixed error allowance is max serialized bytes of
-`{error:'account_operation_denied',effect_status:'not_applied'}` and
-`{error:'step_up_required',effect_status:'not_applied'}`. Native denial supports 400/401/403/409/413/415/503;
-step-up supports only 401. Browser refusal handling requires the exact envelope and supported status/effect;
-bare 4xx cannot reset submitted work. Later refusal/current equality cannot settle an earlier unknown execution.
-Only an admitted original-account acknowledgement settles it, independently of current observation failure or
-retirement. Exact-owned cleanup cannot consume replacement storage; generic mounted history reveals no former labels.
+Error allowance is max serialized bytes of `{error:'account_operation_denied',effect_status:'not_applied'}` and
+`{error:'step_up_required',effect_status:'not_applied'}`. Denial supports 400/401/403/409/413/415/503; step-up only 401.
+Browser refusal handling requires the exact envelope/status/effect; bare 4xx cannot reset submitted work. Later
+refusal/current equality never settles prior unknown execution. Only original-account acknowledgement settles it,
+independently of failed/retired readback. Exact cleanup cannot consume replacement storage; mounted history is generic.
 
-Each POST keeps its independent five-second browser lifetime through headers/body, releases abort-ignoring waits,
-and admits actual bytes before fatal UTF-8/JSON parsing. Retirement before send is unsent; after dispatch it cannot
-undo native work. Original key/descriptor, live-only reference/expiry, fresh human proof, exact expectedHandle,
-management profile, native Access context deadline, execution preparation and workflow replay/CAS stay unchanged.
-No read, authority check, permission, effect or automatic retry is added. Current review uses one session GET and one
-rename-page POST: entry/return/read Retry cost two requests and zero commands. Fresh acknowledged submission costs
-six (two review pairs, approval, execute); unknown costs four. Live-reference exact retry costs three while unknown
-or five with acknowledgement; expired-reference renewal adds one. Supported 409 uses the second pair as advice
-instead of readback. Step-up return requires same-account review and deliberate confirmation, with no command.
-Local focused tests cover projection/receiving/recovery; broader native/browser acceptance and integration remain pending.
+Each POST independently keeps five seconds through headers/body, releases abort-ignoring waits, and admits actual
+bytes before fatal decoding/parsing. Retirement before dispatch is unsent; later abort cannot undo native work.
+Key/descriptor, live-only reference/expiry, fresh proof, expectedHandle, profile, Access deadline/preparation and
+workflow CAS/replay remain. No native call, permission or automatic retry is added.
+Current review costs session GET + rename-page POST: entry/return/read Retry cost two and send zero commands.
+Fresh acknowledged submit costs six; unknown four. Exact live-reference retry costs three while unknown or five
+with acknowledgement; expiry renewal adds one. Supported 409 uses the second pair as advice instead of readback.
+Step-up return requires same-account review and deliberate confirmation, sending no command. Local focused tests
+qualify receiving/recovery; broader native/browser acceptance and integration remain pending.
 
 `apps/auth/src/management-operations.ts` exports the closed `ManagementOperation`,
 `loadManagementSession()`, `managementOperationProfile(kind)` and
