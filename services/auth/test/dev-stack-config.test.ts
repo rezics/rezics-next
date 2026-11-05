@@ -1,12 +1,14 @@
 import { expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, utimes, writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { relative, resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import {
   developmentKeys,
   authSecurityScopeConfiguration,
   developmentAuthPageBindings,
   developmentWebsiteScopeConfiguration,
+  developmentWebsiteBindings,
+  root,
   developmentBindings,
   developmentRegistrationPassword,
   developmentContentBindings,
@@ -213,7 +215,7 @@ test('a failed native opening stops persona setup and names the group, cause and
   expect(attempted).toEqual(['search']);
 });
 
-test('generated Web bindings preserve literal JWK JSON through the actual Vite dotenv loader', async () => {
+test('generated Web bindings preserve literal JWK JSON and the selected deployment scope artifact', async () => {
   const directory = await mkdtemp(resolve(import.meta.dir, '../../../.temp/web-bindings-'));
   try {
     const key = { kty: 'EC', crv: 'P-256', kid: 'fixture', d: 'fixture' };
@@ -227,10 +229,15 @@ test('generated Web bindings preserve literal JWK JSON through the actual Vite d
     await writeFile(file, JSON.stringify({ WEBSITE_SCOPES }));
     const mounted = { scopes: ['openid', 'offline_access', 'exposure:open'], WEBSITE_SCOPES: 'mounted' };
     expect(developmentWebsiteScopeConfiguration(mounted, {})).toBe(mounted);
-    expect(developmentWebsiteScopeConfiguration(mounted, { WEBSITE_CONFIGURATION_FILE: file })).toEqual({
+    const selected = developmentWebsiteScopeConfiguration(mounted, {
+      WEBSITE_CONFIGURATION_FILE: relative(root, file),
+    });
+    expect(selected).toEqual({
       scopes: WEBSITE_SCOPES.split(' '),
       WEBSITE_SCOPES,
+      WEBSITE_CONFIGURATION_FILE: file,
     });
+    expect(developmentWebsiteBindings({ website: key }, selected).WEBSITE_CONFIGURATION_FILE).toBe(file);
     expect(await readFile(file, 'utf8')).toBe(JSON.stringify({ WEBSITE_SCOPES }));
   } finally {
     await rm(directory, { recursive: true, force: true });
