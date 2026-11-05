@@ -191,14 +191,16 @@ export function LiteraryNativeWindow({
             const candidate = native.direction === 'inverse' ? rootLabel : row.label.text;
             return (
               <li key={row.key} data-statement-id={row.statement.id} className="min-w-0 space-y-1 py-3">
-                <ExactEditionLink
+                <a
                   id={literaryFocusId(rowFocus)}
                   href={literaryDestination(row.id, row.label.text, locale, rowReturn, realm, context)}
                   lang={row.label.lang}
                   className={action}
+                  target="_blank"
+                  rel="noopener noreferrer"
                 >
                   {row.label.text || m.subject_value_unlabelled({}, o)}
-                </ExactEditionLink>
+                </a>
                 {type.text && (
                   <p lang={type.lang} className="text-sm text-muted-foreground">
                     {type.text}

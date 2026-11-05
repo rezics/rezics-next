@@ -21,6 +21,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const Series: Story = {};
+export const SeriesWithAnimeCounterpart: Story = { args: literaryGrainExample() };
 export const Member: Story = { args: literaryGrainExample('schema:Book') };
 export const Edition: Story = { args: literaryGrainExample('bf:Instance') };
 const windowState = (status: number): Story => {

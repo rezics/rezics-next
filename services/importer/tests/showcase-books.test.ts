@@ -85,10 +85,56 @@ function tables(
     credits?: Record<string, unknown>[];
     people?: Record<string, unknown>[];
     complete?: boolean;
+    secondFamily?: boolean;
   } = {},
 ): CrossMediaTables {
+  const karaSeries = {
+    id: 2815,
+    type: 1,
+    name: '空の境界',
+    name_cn: '空之境界',
+    platform: 1002,
+    series: true,
+    infobox: '{{Infobox animanga/Novel\r\n|中文名= 空之境界\r\n|作者= 奈須きのこ\r\n|插图= 武内崇\r\n|出版社= 講談社\r\n}}',
+  };
+  const karaVolumes = [
+    {
+      id: 5329,
+      type: 1,
+      name: '空の境界 (上)',
+      name_cn: '空之境界 (上)',
+      platform: 1002,
+      series: false,
+      infobox: '{{Infobox animanga/Novel\r\n|中文名= 空之境界 (上)\r\n|页数= 448\r\n|ISBN= 9784061823617\r\n}}',
+    },
+    {
+      id: 10862,
+      type: 1,
+      name: '空の境界 (下)',
+      name_cn: '空之境界 (下)',
+      platform: 1002,
+      series: false,
+      infobox: '{{Infobox animanga/Novel\r\n|中文名= 空之境界 (下)\r\n|页数= 538\r\n|ISBN= 9784061823624\r\n}}',
+    },
+  ];
+  const karaAnime = {
+    id: 233,
+    type: 2,
+    name: '劇場版 空の境界 第一章 俯瞰風景',
+    name_cn: '剧场版 空之境界 第一章 俯瞰风景',
+    platform: 3,
+    series: false,
+    infobox: '{{Infobox animanga/Movie}}',
+  };
   const rows: Record<string, Record<string, unknown>[]> = {
-    'bangumi/subject': [series, volume, second, unrelated, manga],
+    'bangumi/subject': [
+      series,
+      volume,
+      second,
+      unrelated,
+      manga,
+      ...(extra.secondFamily ? [karaSeries, ...karaVolumes, karaAnime] : []),
+    ],
     'bangumi/subject-relations': [
       { subject_id: 26, related_subject_id: 499, relation_type: 1002, order: 0 },
       { subject_id: 499, related_subject_id: 26, relation_type: 1003, order: 0 },
@@ -96,6 +142,16 @@ function tables(
       { subject_id: 499, related_subject_id: 27, relation_type: 1003, order: 2 },
       ...(extra.complete ? [] : [{ subject_id: 499, related_subject_id: 9002, relation_type: 1003, order: 9 }]),
       { subject_id: 26, related_subject_id: 3183, relation_type: 1, order: 0 },
+      ...(extra.secondFamily
+        ? [
+            { subject_id: 5329, related_subject_id: 2815, relation_type: 1002, order: 0 },
+            { subject_id: 10862, related_subject_id: 2815, relation_type: 1002, order: 0 },
+            { subject_id: 2815, related_subject_id: 5329, relation_type: 1003, order: 1 },
+            { subject_id: 2815, related_subject_id: 10862, relation_type: 1003, order: 2 },
+            { subject_id: 2815, related_subject_id: 233, relation_type: 1, order: 1 },
+            { subject_id: 233, related_subject_id: 2815, relation_type: 1, order: 0 },
+          ]
+        : []),
       ...(extra.relations ?? []),
     ],
     'bangumi/subject-persons': extra.credits ?? [
@@ -139,7 +195,7 @@ function reviewWorld(journal: ShowcaseJournal) {
     if (!subject) throw new Error('Missing fixture subject');
     const identity = /^(?:(person|character):)?([0-9]+)$/u.exec(subject.sourceExternalId);
     const property =
-      identity?.[1] === 'person'
+      identity?.[1] === 'person' && subject.type === 'schema:Person'
         ? 'wdt:P6298'
         : identity?.[1] === 'character'
           ? 'wdt:P6296'
@@ -259,10 +315,10 @@ function reviewWorld(journal: ShowcaseJournal) {
       return Response.json(read(id));
     }) as typeof fetch,
   });
-  return { port, review, publicClient, subjects, receipts };
+  return { port, rawPort: basePort, review, publicClient, subjects, receipts };
 }
 
-test('fresh Book Girl seed publishes current authors and keeps grain, membership and source names', async () => {
+test('fresh book seed publishes current authors and keeps grain, membership and source names', async () => {
   const plan = await planShowcaseBooks({ tables: tables() });
   expect(plan.family).toEqual(showcaseBookFamily);
   expect(plan.selected).toEqual({
@@ -270,6 +326,9 @@ test('fresh Book Girl seed publishes current authors and keeps grain, membership
     volumes: ['26', '27'],
     editions: [],
     authors: ['person:6023'],
+    illustrators: [],
+    publishers: [],
+    anime: [],
   });
   expect(plan.conversions.map((row) => [row.key, row.grain, row.converterRevision])).toEqual([
     ['499', 'schema:BookSeries', converter_revision],
@@ -280,7 +339,7 @@ test('fresh Book Girl seed publishes current authors and keeps grain, membership
     plan.edges.map((edge) => [edge.holder, edge.property, edge.target, edge.relation?.code, edge.relation?.order]),
   ).toEqual([
     ['26', 'wdt:P179', '499', 1002, 0],
-    ['27', 'wdt:P179', '499', 1002, 0],
+    ['27', 'wdt:P179', '499', 1002, 2],
   ]);
   expect(plan.members.some((row) => row.role === 'missing' && row.key === '9002')).toBe(true);
   expect(JSON.stringify(plan.selected)).not.toContain('9001');
@@ -415,6 +474,131 @@ test('fresh Book Girl seed publishes current authors and keeps grain, membership
   }
 }, 30_000);
 
+test('Kara no Kyoukai creator, publisher and anime identities survive exact journal reopen', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'showcase-book-series-'));
+  const journalPath = join(directory, 'showcase.sqlite');
+  let journal = new ShowcaseJournal(journalPath);
+  const sourceTables = () =>
+    tables({
+      complete: true,
+      secondFamily: true,
+      credits: [
+        { person_id: 6023, subject_id: 499, position: 2001, appear_eps: '' },
+        { person_id: 6023, subject_id: 26, position: 2001, appear_eps: '' },
+        { person_id: 1466, subject_id: 2815, position: 2001, appear_eps: '' },
+        { person_id: 1467, subject_id: 2815, position: 2003, appear_eps: '' },
+        { person_id: 128, subject_id: 2815, position: 2004, appear_eps: '' },
+      ],
+      people: [
+        author,
+        { id: 1466, name: '奈須きのこ', name_cn: null, type: 1, career: [] },
+        { id: 1467, name: '武内崇', name_cn: null, type: 1, career: [] },
+        { id: 128, name: '講談社', name_cn: null, type: 2 },
+      ],
+    });
+  try {
+    const world = reviewWorld(journal);
+    const input = {
+      tables: sourceTables(),
+      path: join(directory, 'state.sqlite'),
+      port: world.port,
+      journal,
+      review: world.review,
+      publicClient: world.publicClient,
+    };
+    const first = await importShowcaseBooks(input);
+    expect(first.selected).toMatchObject({
+      series: ['499', '2815'],
+      anime: ['233'],
+      authors: ['person:6023', 'person:1466'],
+      illustrators: ['person:1467'],
+      publishers: ['person:128'],
+    });
+    for (const [key, type] of ([
+      ['2815', 'schema:BookSeries'],
+      ['5329', 'schema:Book'],
+      ['10862', 'schema:Book'],
+      ['person:1466', 'schema:Person'],
+      ['person:1467', 'schema:Person'],
+      ['person:128', 'schema:Organization'],
+    ] as const))
+      expect(first.identities[key]?.type).toBe(type);
+    expect(first.identities['233']?.id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u,
+    );
+    const publisherId = first.identities['person:128']!.id;
+    const publication = await publishShowcase({
+      plan: showcaseBooksToCrossMediaPlan(first.planned),
+      result: first,
+      aliases: crossMediaAliases,
+      journal,
+      review: world.review,
+      publicClient: world.publicClient,
+      ...(first.creditVocabularyRequirements ? { vocabularyRequirements: first.creditVocabularyRequirements } : {}),
+    });
+    const publisherManifest = publication.manifest.records.find((record) => record.sourceKey === 'person:128');
+    expect(publisherManifest?.nativeType).toBe('schema:Organization');
+    expect(publisherManifest?.assertions.map((assertion) => assertion.property)).toContain('schema:name');
+    expect(
+      publication.published
+        .find((record) => record.sourceKey === 'person:128')
+        ?.assertions.map((assertion) => assertion.property),
+    ).toContain('schema:name');
+    const publisherRead = (await world.publicClient.readSubject(publisherId)).subject as {
+      type: string;
+      statements: Record<string, { value?: { content?: unknown } }[]>;
+    };
+    expect(publisherRead.type).toBe('schema:Organization');
+    expect(
+      publisherRead.statements['schema:name']?.some(
+        (row) => JSON.stringify(row.value?.content) === JSON.stringify({ language: 'und', text: '講談社' }),
+      ),
+    ).toBe(true);
+    const publisherRole = first.creditRoles!.find((role) => role.code === '2004')!;
+    expect(publisherRole.property).toBe('schema:publisher');
+    const publisherClaims = [...world.receipts.values()]
+      .map((row) => JSON.parse(row.body) as BatchCommand)
+      .filter(
+        (command): command is Extract<BatchCommand, { op: 'propose' }> =>
+          command.op === 'propose' && command.statement.property.id === 'schema:publisher',
+      );
+    expect(
+      publisherClaims.some(
+        (command) =>
+          command.subject === first.identities['2815']?.id &&
+          valueContent(command.statement) === first.identities['person:128']?.id &&
+          command.statement.qualifiers?.some(
+            (qualifier) =>
+              qualifier.property.id === 'wdt:P3831' && valueContent(qualifier) === publisherRole.conceptId,
+          ),
+      ),
+    ).toBe(true);
+
+    journal.close();
+    journal = new ShowcaseJournal(journalPath);
+    const reopened = await importShowcaseBooks({
+      ...input,
+      port: captureShowcaseCommands(world.rawPort, journal),
+      journal,
+      prior: publication,
+    });
+    expect(reopened.selected).toEqual(first.selected);
+    for (const key of [
+      '499', '26', '2815', '5329', '10862', '233',
+      'person:6023', 'person:1466', 'person:1467', 'person:128',
+    ])
+      expect(reopened.identities[key]?.id).toBe(first.identities[key]?.id);
+    expect(reopened.planned.edges.find((edge) => edge.property === 'rezics:crossMediaCounterpart')?.relation).toMatchObject({
+      sourceSubject: '2815',
+      sourceEndpoint: '233',
+      code: 1,
+    });
+  } finally {
+    journal.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 30_000);
+
 test('wrong, missing or retracted author evidence withholds only that claim and exact journal replay keeps identities', async () => {
   const planned = await planShowcaseBooks({
     tables: tables({
@@ -429,17 +613,18 @@ test('wrong, missing or retracted author evidence withholds only that claim and 
     }),
   });
   expect(planned.selected.authors).toEqual(['person:6023']);
+  expect(planned.selected.illustrators).toEqual(['person:7001']);
+  expect(planned.selected.publishers).toEqual([]);
   expect(planned.selected.editions).toEqual([]);
-  expect(
-    planned.credits.every(
-      (draft) => draft.roleCode === 2001 && (draft.person === 'person:6023' || draft.person === 'person:9009'),
-    ),
-  ).toBe(true);
+  expect(planned.credits.map((draft) => [draft.work, draft.person, draft.roleCode])).toEqual([
+    ['499', 'person:6023', 2001],
+    ['26', 'person:7001', 2002],
+  ]);
   expect(planned.gaps).toContainEqual(
-    expect.objectContaining({ reason: 'Author identity is not an individual person', property: 'schema:author' }),
+    expect.objectContaining({ reason: 'author identity is not an individual person', property: 'schema:author' }),
   );
   expect(planned.gaps).toContainEqual(
-    expect.objectContaining({ reason: 'Author identity is missing from the dump', property: 'schema:author' }),
+    expect.objectContaining({ reason: 'author identity is missing from the dump', property: 'schema:author' }),
   );
 
   const directory = await mkdtemp(join(tmpdir(), 'showcase-books-gaps-'));

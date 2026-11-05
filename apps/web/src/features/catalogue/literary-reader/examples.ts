@@ -29,6 +29,7 @@ export const literaryIds = {
   member: '0192f3a0-6c1e-7b2a-9d4e-000000000922',
   edition: '0192f3a0-6c1e-7b2a-9d4e-000000000923',
   author: '0192f3a0-6c1e-7b2a-9d4e-000000000924',
+  anime: '0192f3a0-6c1e-7b2a-9d4e-000000000925',
 };
 export function literaryStatement(property: string, target: string, position?: string): Stmt {
   return {
@@ -74,6 +75,10 @@ export function literaryGrainExample(type: 'schema:Book' | 'schema:BookSeries' |
   const membership = literaryStatement('wdt:P179', literaryIds.series, '上巻・02a');
   const canonical = literaryStatement('schema:exampleOfWork', literaryIds.member);
   const author = literaryStatement('schema:author', literaryIds.author);
+  const counterpart = {
+    ...literaryStatement('rezics:crossMediaCounterpart', literaryIds.anime),
+    id: 'literary-series-anime-counterpart',
+  };
   const subject = {
     id,
     type,
@@ -102,12 +107,14 @@ export function literaryGrainExample(type: 'schema:Book' | 'schema:BookSeries' |
                   },
                 },
               ],
+              'rezics:crossMediaCounterpart': [counterpart],
             },
   } as unknown as Subject;
   const related = {
     [literaryIds.series]: { id: literaryIds.series, type: 'schema:BookSeries', labels: { en: 'Harbour series' } },
     [literaryIds.member]: { id: literaryIds.member, type: 'schema:Book', labels: { en: 'Harbour work' } },
     [literaryIds.author]: { id: literaryIds.author, type: 'schema:Person', labels: { en: 'Supplied author' } },
+    [literaryIds.anime]: { id: literaryIds.anime, type: 'schema:Movie', labels: { en: 'First viewpoint' } },
   } as unknown as Related;
   const memberRow = {
     subject: literaryIds.member,
@@ -163,6 +170,7 @@ export function literaryGrainExample(type: 'schema:Book' | 'schema:BookSeries' |
       literaryDirection('schema:author', 'forward'),
       literaryDirection('schema:exampleOfWork', 'forward'),
       literaryDirection('schema:exampleOfWork', 'inverse'),
+      literaryDirection('rezics:crossMediaCounterpart', 'forward'),
     ],
   };
 }

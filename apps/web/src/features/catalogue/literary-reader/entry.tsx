@@ -42,6 +42,7 @@ const fields = [
   'wdt:P179',
   'schema:isPartOf',
   'schema:exampleOfWork',
+  'rezics:crossMediaCounterpart',
 ];
 
 /** No read is started here. Metadata, assertions and windows all belong to the ordinary native page. */
