@@ -137,6 +137,7 @@ test('the private Collections route retains admitted cursor coordinates across l
   const movementSpy = spyOn(MineCollectionsWindowsVisit.prototype, 'beginMovement');
   const observeSpy = spyOn(MineCollectionsWindowsVisit.prototype, 'observe');
   const acceptSpy = spyOn(MineCollectionsWindowsVisit.prototype, 'accept');
+  const clickEvidence: unknown[] = [];
   const inputs: { cursor: string | null; layout: 'rows' | 'previews' }[] = [];
   let allowRetry = false;
   const reader = spyOn(reads, 'readMineCollectionsViewerPage').mockImplementation(async ({ data }) => {
@@ -227,12 +228,28 @@ test('the private Collections route retains admitted cursor coordinates across l
     expect(host.textContent).not.toContain(m.library_saved_queries_unavailable());
 
     const next = movementLink(m.library_collection_more());
+    next.addEventListener(
+      'click',
+      (event) =>
+        clickEvidence.push([
+          'target',
+          event.defaultPrevented,
+          (event as MouseEvent).button,
+          (event as MouseEvent).detail,
+          event.target === next,
+        ]),
+      true,
+    );
+    document.addEventListener('click', (event) => clickEvidence.push(['document', event.defaultPrevented]), true);
+    document.addEventListener('click', (event) => clickEvidence.push(['document-bubble', event.defaultPrevented]));
+    host.addEventListener('click', (event) => clickEvidence.push(['host-bubble', event.defaultPrevented]));
     next.focus();
     await click(next);
     if ((router.state.location.search as Record<string, unknown>).cursor !== 'cursor-a')
       throw new Error(
         JSON.stringify({
           href: next.href,
+          clickEvidence,
           location: router.state.location,
           movementCalls: movementSpy.mock.calls.map(([, action, source, target]) => [action, source, target]),
           movementResults: movementSpy.mock.results.map((result) => result.value),
