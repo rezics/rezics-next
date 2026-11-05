@@ -2,6 +2,16 @@ import { afterAll, afterEach, expect, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
 import * as membership from '../src/organization-membership';
+import * as sessionReceiving from '../src/account-session';
+
+// Adapt the installed session BFF to this mounted fixture's native response source.
+const sessionRead = spyOn(sessionReceiving, 'requestAccountSession').mockImplementation(async () => {
+  const response = await fetch('/session');
+  if (response.status === 401) return { kind: 'signed-out' };
+  if (response.status !== 200) return { kind: 'failure' };
+  return sessionReceiving.parseAccountSession(await response.json(), 3);
+});
+afterAll(() => sessionRead.mockRestore());
 import { privateAuthRead } from '../src/private-auth-read';
 
 const { Window } = await import(
