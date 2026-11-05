@@ -613,6 +613,11 @@ Connected examples use synthetic native-shaped payloads through production adapt
 `PageStory`. Existing native subject/candidate APIs are bound through the current BFF; execution of the plays,
 normal Web captures and native integration acceptance remain pending. There is no new missing producer adapter.
 
+Decision: keep the current identifier editor and candidate controllers; align the fake adoption acknowledgement with
+the native selection envelope and pin expected-head, competing-candidate selection and grouped citation readback.
+Current identifier definitions admit no qualifiers, so tests do not invent one; shared statement mapping preserves
+admitted qualifiers.
+
 ## Browser flow: cited fact correction review and evidence reuse
 
 Generic Edit facts and every profile that renders SubjectFacts add a changed-set review before confirmation, and an explicit Reuse this reference action on a complete citation group. Character, Screen, Add-on and StoryArc classification corrections pass that same opt-in coordinator on their per-field holders. Game classification binds its own review coordinator. Album and Manga classification writers that duplicate their own submit keep immediate confirmation. Review opens with the included drafts and stays current while they change; jumping back from the review invalidates it until the contributor reviews again. Confirmation sends only that reviewed set through the existing sealed per-field commands. Independent results stay per field. Reopening a draft invalidates only the editable review, never a sealed request. After a partial set, the result board labels proposed, selected after an explicit native action, refused, uncertain and still-editable fields; existing candidate controls remain the acceptance and adoption path. Decision: after native selection the Character caller rereads that Character through the existing facts read, and the explicit Read current selection control remains for a failed or differing current result. After native selection the add-on caller rereads that add-on the same way. Classification current-reading, proposal, acceptance and adoption stay independent native outcomes.
