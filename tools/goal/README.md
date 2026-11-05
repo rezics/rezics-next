@@ -2288,6 +2288,9 @@ session while keeping its manager history and budget. An already-running provide
 that handoff; the host does not edit a live process environment. A resident supermanager remains an external session
 and is never launched or resumed by host recovery. Codex managers use a goal budget. Claude uses its configured
 executable and configuration directory, interactive window and turn-accounting hooks.
+The Stdio and WebSocket transports share one internal JSON-RPC implementation for request tracking, deadlines,
+notifications, response decoding, initialization and terminal rejection; framing, connection, readiness and owned
+child lifecycle remain with the transports ([control-plane simplification research](research/control-plane-simplification.md)).
 Every Codex manager `turn/start` pins `gpt-6.1-sol` and the manager's configured effort, including the opening,
 idle inbox wakes, and renewed continuation threads. The app-server `turn/steer` request accepts input and an
 `expectedTurnId`, but no model or effort override, so steering keeps the active turn's pinned settings. Recovery and
