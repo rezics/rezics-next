@@ -10,10 +10,7 @@ const SCHEME = 'skos:ConceptScheme';
 const IN_SCHEME = 'skos:inScheme';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-function statusForFailure(
-  status: number,
-  code: unknown,
-): Exclude<ConditionConceptReference['status'], 'ready'> {
+function statusForFailure(status: number, code: unknown): Exclude<ConditionConceptReference['status'], 'ready'> {
   if (status === 202 || code === 'index_not_ready') return 'preparing';
   if (status === 409 || code === 'search_restart_required') return 'restart';
   if (status === 403 || code === 'platform_closed' || code === 'forbidden') return 'refused';
@@ -38,9 +35,19 @@ function conceptLabels(data: SubjectRead, id: string, locale: string): string | 
   return text || undefined;
 }
 
-function schemeReference(data: SubjectRead, id: string, locale: string, release: Awaited<ReturnType<typeof readRelease>>) {
+function schemeReference(
+  data: SubjectRead,
+  id: string,
+  locale: string,
+  release: Awaited<ReturnType<typeof readRelease>>,
+) {
   const related = data.related[id];
-  if (!related || !('labels' in related) || typeof related.type !== 'string' || !typeExtends(release, related.type, SCHEME))
+  if (
+    !related ||
+    !('labels' in related) ||
+    typeof related.type !== 'string' ||
+    !typeExtends(release, related.type, SCHEME)
+  )
     return undefined;
   const label = pickText(related.labels ?? {}, locale).text;
   return { id, ...(label ? { label } : {}) };

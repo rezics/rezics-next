@@ -733,22 +733,14 @@ export function SearchPage({
   const editing =
     JSON.stringify([draft.condition, editedState.languages]) !==
     JSON.stringify([committedState.condition, committedState.languages]);
-  const conceptFilter = data?.conditionMetadata
-    ? conditionConceptSuggestionFilter(data.conditionMetadata)
-    : undefined;
+  const conceptFilter = data?.conditionMetadata ? conditionConceptSuggestionFilter(data.conditionMetadata) : undefined;
   const conceptRequiresReader = !!data?.queryState && searchRequiresCurrentReader(data.queryState);
   const conceptLookup = {
     enabled: !!conceptFilter && !!data?.conditionMetadata?.digest && !conceptRequiresReader,
     ...(conceptFilter ? { filter: conceptFilter } : {}),
     ...(data?.conditionMetadata?.digest ? { releaseDigest: data.conditionMetadata.digest } : {}),
     lifetimeKey: JSON.stringify([locale, session, data?.conditionMetadata?.digest, committedState]),
-    key: JSON.stringify([
-      locale,
-      session,
-      data?.conditionMetadata?.digest,
-      committedState,
-      draft.condition,
-    ]),
+    key: JSON.stringify([locale, session, data?.conditionMetadata?.digest, committedState, draft.condition]),
     ...(!conceptFilter || !data?.conditionMetadata?.digest
       ? { blocked: 'metadata' as const }
       : committedState.resourceScope

@@ -884,17 +884,16 @@ function NodeEditor({
                   }
                   onChange={(selected) => replaceStatement({ in: selected })}
                 />
-                {context.conceptLookup &&
-                  (value.statement.concept || conditionConceptProperty(definition)) && (
-                    <ConditionConceptPicker
-                      key={`${context.conceptLookup.key}:${pointer}:${property}`}
-                      value={value}
-                      lookup={context.conceptLookup}
-                      locale={context.locale}
-                      disabled={context.disabled}
-                      onChange={(next) => onChange(next)}
-                    />
-                  )}
+                {context.conceptLookup && (value.statement.concept || conditionConceptProperty(definition)) && (
+                  <ConditionConceptPicker
+                    key={`${context.conceptLookup.key}:${pointer}:${property}`}
+                    value={value}
+                    lookup={context.conceptLookup}
+                    locale={context.locale}
+                    disabled={context.disabled}
+                    onChange={(next) => onChange(next)}
+                  />
+                )}
               </>
             )
           )}

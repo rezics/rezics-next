@@ -6,10 +6,7 @@ import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-selec
 import { Field, FieldLabel, FieldSet } from '@rezics/ui/shadcn/field';
 import { m } from '../paraglide/messages.js';
 import { locales } from '../paraglide/runtime.js';
-import {
-  conditionConceptReferenceForRequest,
-  conditionConceptSelection,
-} from './condition-concept-model';
+import { conditionConceptReferenceForRequest, conditionConceptSelection } from './condition-concept-model';
 import {
   readConditionConceptReference,
   searchConditionConcepts,
@@ -29,7 +26,10 @@ type Props = {
   onChange(value: FilterDocument): void;
 };
 
-function referenceMessage(reference: ConditionConceptReference | undefined, options: { locale: (typeof locales)[number] }) {
+function referenceMessage(
+  reference: ConditionConceptReference | undefined,
+  options: { locale: (typeof locales)[number] },
+) {
   if (!reference || reference.status === 'ready') return undefined;
   if (reference.status === 'preparing') return m.condition_concept_preparing({}, options);
   if (reference.status === 'restart') return m.condition_concept_restart({}, options);
@@ -60,10 +60,7 @@ function ConceptPicker({
 }: Omit<Props, 'value'> & { value: ConceptFilterDocument }) {
   const statement = value.statement;
   const existingId = statement.concept ? statement.in[0] : undefined;
-  const options = useMemo(
-    () => ({ locale: locales.find((item) => item === locale) ?? 'en' }),
-    [locale],
-  );
+  const options = useMemo(() => ({ locale: locales.find((item) => item === locale) ?? 'en' }), [locale]);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [choices, setChoices] = useState<ConditionConceptChoice[]>([]);
@@ -175,9 +172,21 @@ function ConceptPicker({
           )}
         </p>
       )}
-      {blockedMessage && <p className="text-sm text-muted-foreground" role="status">{blockedMessage}</p>}
-      {message && <p className="text-sm text-muted-foreground" role="status">{message}</p>}
-      {searchMessage && <p className="text-sm text-muted-foreground" role="status">{searchMessage}</p>}
+      {blockedMessage && (
+        <p className="text-sm text-muted-foreground" role="status">
+          {blockedMessage}
+        </p>
+      )}
+      {message && (
+        <p className="text-sm text-muted-foreground" role="status">
+          {message}
+        </p>
+      )}
+      {searchMessage && (
+        <p className="text-sm text-muted-foreground" role="status">
+          {searchMessage}
+        </p>
+      )}
       <Button
         type="button"
         variant={currentMeaning ? 'outline' : 'ghost'}
@@ -234,7 +243,9 @@ function ConceptPicker({
               ))}
             </ul>
           ) : searchStatus === 'ready' ? (
-            <p className="text-sm text-muted-foreground" role="status">{m.condition_concept_no_results({}, options)}</p>
+            <p className="text-sm text-muted-foreground" role="status">
+              {m.condition_concept_no_results({}, options)}
+            </p>
           ) : null}
           {(choice || existingId) && (
             <>

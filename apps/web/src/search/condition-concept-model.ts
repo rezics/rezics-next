@@ -46,9 +46,7 @@ export function conditionConceptTypeIds(metadata: Pick<ConditionMetadata, 'types
   return Object.keys(metadata.types).filter((type) => conditionTypeExtends(metadata.types, type, 'skos:Concept'));
 }
 
-export function conditionConceptProperty(
-  definition: ConditionMetadata['properties'][string] | undefined,
-): boolean {
+export function conditionConceptProperty(definition: ConditionMetadata['properties'][string] | undefined): boolean {
   return (
     definition?.datatype === 'wikibase-item' &&
     definition.relation?.group === 'classification' &&
@@ -119,7 +117,10 @@ export function parseConditionConceptReference(input: unknown, requested: string
     if (typeof scheme.id !== 'string' || !scheme.id || seen.has(scheme.id)) continue;
     if (scheme.label !== undefined && typeof scheme.label !== 'string') continue;
     seen.add(scheme.id);
-    schemes.push({ id: scheme.id, ...(typeof scheme.label === 'string' && scheme.label ? { label: scheme.label } : {}) });
+    schemes.push({
+      id: scheme.id,
+      ...(typeof scheme.label === 'string' && scheme.label ? { label: scheme.label } : {}),
+    });
   }
   if (value.label !== undefined && typeof value.label !== 'string') return unavailable;
   return {

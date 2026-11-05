@@ -281,8 +281,7 @@ export async function suggestionResponse(
       )
         throw problem(400, 'invalid_request', 'Use one Concept read without a scoped filter');
       const digests = searchParams.getAll('digest');
-      if (digests.length !== 1 || !digests[0])
-        throw problem(400, 'invalid_request', 'Use one definitions release');
+      if (digests.length !== 1 || !digests[0]) throw problem(400, 'invalid_request', 'Use one definitions release');
       const { readConditionConcept } = await import('./condition-concept-read');
       return Response.json(await readConditionConcept(request, conceptIds[0]!, digests[0]), {
         headers: { 'cache-control': 'private, no-store' },
