@@ -3,6 +3,12 @@ import { createServerFn } from '@tanstack/react-start';
 import { setResponseHeader } from '@tanstack/react-start/server';
 import { ScreenProfileSession } from '../../features/catalogue/screen-profile-session';
 import { classificationHandoffSearch } from '../../features/catalogue/classification-create-return';
+import {
+  screenCurrentGlobalHref,
+  screenCurrentReturnHref,
+  screenCurrentRouteVisit,
+} from '../../features/catalogue/screen-current-visit';
+import { ScreenCurrentVisitRecovery } from '../../features/catalogue/screen-profile-session';
 import { getLocale } from '../../paraglide/runtime';
 import { m } from '../../paraglide/messages.js';
 import { canonicalRedirect, keepSearch, subjectHref } from '../../subject/subject-href';
@@ -53,10 +59,34 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/screen')({
 });
 function ScreenRoute() {
   const { classificationHandoff } = Route.useSearch();
+  const location = Route.useLocation();
+  const { id } = Route.useLoaderData();
+  const locale = getLocale();
+  const visitSearch = screenCurrentRouteVisit(location.searchStr, classificationHandoff);
+  const entry = `${location.pathname.replace(/\/$/u, '')}`;
+  const globalHref = screenCurrentGlobalHref(entry, classificationHandoff);
+  if (
+    visitSearch.kind === 'invalid' ||
+    (visitSearch.kind === 'current' &&
+      (visitSearch.visit.subject !== id || visitSearch.visit.locale !== locale || !screenCurrentReturnHref(visitSearch.visit)))
+  )
+    return <ScreenCurrentVisitRecovery locale={locale} globalHref={globalHref} />;
+  if (visitSearch.kind === 'current')
+    return (
+      <ScreenProfileSession
+        id={id}
+        locale={locale}
+        context={visitSearch.visit.context}
+        {...(visitSearch.visit.realm ? { realm: visitSearch.visit.realm } : {})}
+        visit={visitSearch.visit}
+        entryHref={entry}
+        {...(classificationHandoff ? { classificationHandoffToken: classificationHandoff } : {})}
+      />
+    );
   return (
     <ScreenProfileSession
-      id={Route.useLoaderData().id}
-      locale={getLocale()}
+      id={id}
+      locale={locale}
       {...(classificationHandoff ? { classificationHandoffToken: classificationHandoff } : {})}
     />
   );

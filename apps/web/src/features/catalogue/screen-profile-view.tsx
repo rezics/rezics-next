@@ -4,18 +4,22 @@ import {
   useEditorLifetime,
   useCurrentReadingActive,
 } from './editor-lifetime';
-import { useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type MouseEvent } from 'react';
+import { useId, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type MouseEvent } from 'react';
 import { flushSync } from 'react-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { pickText } from '@rezics/composition';
 import type { EntityPickerSearch } from '@rezics/ui/entity-picker';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
+import { contextHref } from '../pages/context-navigation';
 import { subjectHref } from '../../subject/subject-href';
+import { candidateContext } from '../../subject/candidates';
 import type { CandidateTransport } from '../../subject/candidate-review';
 import type { RelationTransport } from '../../subject/relation-candidates';
 import { ViewHeading, ViewHeadingActions } from '../pages/view-heading';
 import { CandidateValue } from '../pages/data';
+import { spoilerLevel } from '../pages/shared';
+import { SpoilerGate } from '../pages/values';
 import { CreateSubjectForm } from './create-subject-form';
 import type { CreateFailure, CreateResult, CreatedReader } from './create-subject';
 import type { CreateAuthority } from './identity-intake';
@@ -37,6 +41,7 @@ import {
   type MembershipDraft,
 } from './screen-episode-membership.ts';
 import { SubjectTermsEntry } from './subject-terms-entry';
+import { ScreenProfileEntry } from './screen-profile-entry';
 import { AuthoredFieldEntry } from './authored-field-entry';
 import { PublicationEditorEntry } from './publication-editor-entry';
 import { SubjectFacts } from './subject-facts-view';
@@ -46,6 +51,12 @@ import { AuthoringDepartureBoundary } from '../../threads/authoring-departure';
 import { ScreenClassificationReview } from './screen-classification-review';
 import { EditorFailure } from './statement-editor-view';
 import type { EditorRead } from './statement-editor';
+import {
+  screenCurrentInspectionId,
+  screenCurrentReturnHref,
+  type ScreenCurrentOccurrence,
+  type ScreenCurrentVisit,
+} from './screen-current-visit';
 import {
   ScreenInitialFields,
   screenCreationControl,
@@ -109,8 +120,7 @@ function readingGroups(read: ScreenCurrent) {
 
 function readingName(read: ScreenCurrent, property: string, locale: string) {
   const label = pickText(read.release.properties[property]?.labels ?? {}, locale);
-  const related = pickText(read.public.related[property]?.labels ?? {}, locale);
-  return label.text ? label : related.text ? related : { text: property, lang: null };
+  return label.text ? label : { text: '', lang: null };
 }
 
 function ScreenPart({
@@ -146,6 +156,7 @@ function ScreenParts({
     <dl className="min-w-0 space-y-2">
       {parts.map((part, index) => {
         const name = readingName(read, part.property.id, locale);
+        if (!name.text) return null;
         return (
           <div key={index} className="min-w-0 space-y-1">
             <dt lang={name.lang ?? undefined} className="text-muted-foreground">
@@ -164,30 +175,57 @@ function ScreenParts({
 function ScreenProfileLive({
   id,
   series,
+  context = candidateContext,
+  realm,
   locale,
   session,
   transport,
   search,
   onNavigate,
   classificationHandoffToken,
+  visit,
+  returnHref,
   handoffReader,
   handoffReaderLive,
 }: {
   id?: string | undefined;
   series?: string | undefined;
+  context?: string;
+  realm?: string;
   locale: string;
   session: 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
   transport: ScreenTransport;
   search: EntityPickerSearch;
   onNavigate: (href: string) => void;
   classificationHandoffToken?: string;
+  visit?: ScreenCurrentVisit;
+  returnHref?: string;
   handoffReader?: string;
   handoffReaderLive?: () => boolean;
 }) {
   const lifetime = useEditorLifetime();
+  const incarnation = useId();
   const o = { locale: locale as never };
   const client = useQueryClient();
-  const queryKey = ['screen-profile', id, series, locale, lifetime.generation];
+  const queryKey = [
+    'screen-profile',
+    incarnation,
+    id,
+    series,
+    context,
+    realm ?? '',
+    locale,
+    visit?.source ?? '',
+    visit?.subject ?? '',
+    visit?.context ?? '',
+    visit?.realm ?? '',
+    visit?.definition ?? '',
+    visit?.occurrence?.holder ?? '',
+    visit?.occurrence?.property ?? '',
+    visit?.occurrence?.statement ?? '',
+    classificationHandoffToken ?? '',
+    lifetime.generation,
+  ];
   const [membershipDraft, setMembershipDraft] = useState<MembershipDraft>();
   const [episodeJourney, setEpisodeJourney] = useState<Exclude<EpisodeJourney, { stage: 'edit' }>>();
   const membershipRef = useRef(membershipDraft);
@@ -200,7 +238,7 @@ function ScreenProfileLive({
     retry: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
-    staleTime: Infinity,
+    staleTime: 0,
     gcTime: 0,
   });
   const [retired, setRetired] = useState(false);
@@ -294,9 +332,51 @@ function ScreenProfileLive({
     setCreationRetry(undefined);
   }, [creationRetry, query.isFetching, lifetime]);
   const admitted =
-    !retired && !query.isFetching && !query.isError && query.data?.ok && query.data.public?.subject.id === id
+    !retired &&
+    !query.isFetching &&
+    !query.isError &&
+    query.data?.ok &&
+    query.data.public?.subject.id === id &&
+    query.data.public.subject.context === context &&
+    query.data.public.subject.release === releaseDigest(query.data.release) &&
+    (!visit ||
+      (visit.subject === id &&
+        visit.context === context &&
+        visit.type === query.data.public.subject.type))
       ? query.data
       : undefined;
+  const currentInspection: ScreenCurrentOccurrence | undefined =
+    visit?.occurrence &&
+    visit.definition === admitted?.public?.subject.release &&
+    admitted?.public &&
+    visit.occurrence.holder === admitted.public.subject.id &&
+    admitted.public.subject.statements[visit.occurrence.property]?.some(
+      (statement) => statement.id === visit.occurrence!.statement && statement.property.id === visit.occurrence!.property,
+    )
+      ? visit.occurrence
+      : undefined;
+  const retiredInspection = !!visit?.occurrence && !currentInspection;
+  const readingChanged = !!visit && !!admitted?.public && visit.definition !== admitted.public.subject.release;
+  const currentVisit: ScreenCurrentVisit | undefined =
+    visit && admitted?.public
+      ? {
+          ...visit,
+          definition: admitted.public.subject.release,
+          ...(readingChanged ? { occurrence: undefined } : {}),
+        }
+      : undefined;
+  const returnAddress =
+    returnHref ??
+    (visit ? screenCurrentReturnHref(visit) : undefined) ??
+    (admitted?.public
+      ? contextHref(
+          subjectHref(
+            { id: admitted.public.subject.id, label: pickText(admitted.public.subject.labels, locale).text },
+            locale,
+          ).href,
+          realm,
+        )
+      : undefined);
   const reload = () => {
     if (!lifetime.active()) return;
     const epoch = ++readingEpoch.current;
@@ -312,7 +392,13 @@ function ScreenProfileLive({
           readingEpoch.current === epoch &&
           result.isSuccess &&
           result.data?.ok &&
-          result.data.public?.subject.id === id
+          result.data.public?.subject.id === id &&
+          result.data.public.subject.context === context &&
+          result.data.public.subject.release === releaseDigest(result.data.release) &&
+          (!visit ||
+            (visit.subject === id &&
+              visit.context === context &&
+              visit.type === result.data.public.subject.type))
         )
           setRetired(false);
       })
@@ -327,7 +413,10 @@ function ScreenProfileLive({
   if (id)
     return (
       <ScreenCorrection
+        key={JSON.stringify([id, context, realm ?? '', locale, visit?.source ?? '', visit?.definition ?? '', visit?.occurrence?.statement ?? '', classificationHandoffToken ?? '', admitted?.public?.subject.release ?? '', lifetime.generation])}
         id={id}
+        context={context}
+        realm={realm}
         locale={locale}
         session={session}
         transport={transport}
@@ -335,17 +424,35 @@ function ScreenProfileLive({
         read={admitted}
         pending={query.isPending}
         fetching={query.isFetching}
-        failure={query.data && !query.data.ok ? query.data.reason : 'unavailable'}
-        revision={`${id}:${readingRevision}`}
+        failure={
+          query.data && !query.data.ok
+            ? query.data.reason
+            : visit && query.data?.ok && query.data.public?.subject.type !== visit.type
+              ? 'invalid'
+              : 'unavailable'
+        }
+        revision={`${id}:${context}:${admitted?.public?.subject.release ?? visit?.definition ?? ''}:${readingRevision}`}
         reload={reload}
         intro={intro}
+        returnHref={returnAddress}
+        {...(currentInspection ? { inspection: currentInspection } : {})}
+        inspectionRetired={retiredInspection}
+        readingChanged={readingChanged}
+        {...(currentVisit ? { currentVisit } : {})}
+        focusRequested={!!visit?.occurrence}
+        visitIdentity={visit ? JSON.stringify([visit.source, visit.subject, visit.context, visit.realm ?? '', visit.locale, visit.definition, lifetime.generation]) : ''}
         {...(classificationHandoffToken ? { classificationHandoffToken } : {})}
         {...(handoffReader ? { handoffReader } : {})}
         {...(handoffReaderLive ? { handoffReaderLive } : {})}
         observe={(next) => {
           if (!lifetime.active()) return;
           const observed: ScreenRead =
-            next.ok && next.public.subject.id === id
+            next.ok &&
+            next.public.subject.id === id &&
+            next.public.subject.context === context &&
+            next.public.subject.release === releaseDigest(next.release) &&
+              (!visit ||
+                (visit.type === next.public.subject.type && visit.context === next.public.subject.context))
               ? { ok: true, release: next.release, public: next.public }
               : { ok: false, reason: !next.ok && next.reason === 'denied' ? 'concealed' : 'unavailable' };
           client.setQueryData<ScreenRead>(queryKey, observed);
@@ -618,6 +725,8 @@ function ScreenProfileLive({
 /** Keep only the private holders mounted across refusal, with no retained public display authority. */
 function ScreenCorrection({
   id,
+  context,
+  realm,
   locale,
   session,
   transport,
@@ -630,11 +739,20 @@ function ScreenCorrection({
   reload,
   intro,
   observe,
+  returnHref,
+  inspection,
+  inspectionRetired,
+  readingChanged,
+  currentVisit,
+  focusRequested,
+  visitIdentity,
   classificationHandoffToken,
   handoffReader,
   handoffReaderLive,
 }: {
   id: string;
+  context: string;
+  realm?: string;
   locale: string;
   session: string;
   transport: ScreenTransport;
@@ -647,6 +765,13 @@ function ScreenCorrection({
   reload: () => void;
   intro: React.ReactNode;
   observe: (next: EditorRead) => void;
+  returnHref?: string;
+  inspection?: ScreenCurrentOccurrence;
+  inspectionRetired: boolean;
+  readingChanged: boolean;
+  currentVisit?: ScreenCurrentVisit;
+  focusRequested: boolean;
+  visitIdentity: string;
   classificationHandoffToken?: string;
   handoffReader?: string;
   handoffReaderLive?: () => boolean;
@@ -661,12 +786,47 @@ function ScreenCorrection({
   const privateCurrent = retained.current;
   const subject = current?.public.subject;
   const label = pickText(subject?.labels ?? {}, locale);
-  const href = subject ? subjectHref({ id: subject.id, label: label.text }, locale).href : '';
+  const href =
+    returnHref ??
+    (subject ? contextHref(subjectHref({ id: subject.id, label: label.text }, locale).href, realm) : '');
   const visible = !!current && session === 'signed-in';
   const readingTitle = m.candidate_current({}, o);
+  const focusCancelled = useRef(false);
+  const focusCleanup = useRef<(() => void) | undefined>(undefined);
+  useLayoutEffect(() => {
+    if (!focusRequested) return;
+    focusCancelled.current = false;
+    const cancel = () => {
+      focusCancelled.current = true;
+    };
+    document.addEventListener('pointerdown', cancel, true);
+    document.addEventListener('pointermove', cancel, true);
+    document.addEventListener('focusin', cancel, true);
+    document.addEventListener('keydown', cancel, true);
+    const cleanup = () => {
+      document.removeEventListener('pointerdown', cancel, true);
+      document.removeEventListener('pointermove', cancel, true);
+      document.removeEventListener('focusin', cancel, true);
+      document.removeEventListener('keydown', cancel, true);
+      if (focusCleanup.current === cleanup) focusCleanup.current = undefined;
+    };
+    focusCleanup.current = cleanup;
+    return cleanup;
+  }, [focusRequested, visitIdentity]);
+  useLayoutEffect(() => {
+    if (!focusRequested || !read?.public || pending || fetching || focusCancelled.current) return;
+    const document = globalThis.document;
+    if (document.activeElement !== document.body) return;
+    const target =
+      (inspection ? document.getElementById(screenCurrentInspectionId(inspection.statement)) : undefined) ??
+      document.getElementById('screen-correction-entry');
+    if (!target?.isConnected) return;
+    focusCleanup.current?.();
+    target.focus();
+  }, [focusRequested, visitIdentity, read, pending, fetching, inspection]);
   return (
     <CatalogueCurrentReading visible={visible} ready={visible} revision={revision}>
-      <article className="mx-auto w-full max-w-4xl min-w-0 space-y-6 px-4 py-8 sm:px-6 [&_h2]:font-sans [&_h3]:font-sans">
+      <article id="screen-correction-entry" tabIndex={-1} className="mx-auto w-full max-w-4xl min-w-0 space-y-6 px-4 py-8 sm:px-6 [&_h2]:font-sans [&_h3]:font-sans">
         <ViewHeadingActions label={m.screen_edit({}, o)} headingClassName="font-sans" />
         <div className="min-w-0 space-y-2" aria-busy={fetching}>
           {!current && !pending && (
@@ -677,6 +837,11 @@ function ScreenCorrection({
               ) : (
                 <EditorFailure locale={locale} reason={failure} />
               )}
+              {returnHref ? (
+                <a className={buttonVariants({ variant: 'outline' })} href={returnHref}>
+                  {m.screen_visit_return({}, o)}
+                </a>
+              ) : null}
             </>
           )}
           {(pending || fetching) && <p role="status">{m.candidate_loading({}, o)}</p>}
@@ -686,6 +851,8 @@ function ScreenCorrection({
         </div>
         {subject && current && read && (
           <>
+            {readingChanged ? <p role="status">{m.screen_visit_reading_changed({}, o)}</p> : null}
+            {inspectionRetired ? <p role="status">{m.screen_visit_occurrence_missing({}, o)}</p> : null}
             <header className="min-w-0 space-y-3">
               <a
                 href={href}
@@ -706,7 +873,7 @@ function ScreenCorrection({
                 aria-label={m.facts_other_editors({}, o)}
               >
                 <a className={buttonVariants({ variant: 'outline', size: 'sm' })} href={href}>
-                  {m.candidate_view_public({}, o)}
+                  {returnHref ? m.screen_visit_return({}, o) : m.candidate_view_public({}, o)}
                 </a>
                 <SubjectTermsEntry id={id} label={label.text} locale={locale} />
                 <PublicationEditorEntry work={id} locale={locale} />
@@ -722,49 +889,90 @@ function ScreenCorrection({
                       {screenGroupLabel(group as ScreenGroup, locale)}
                     </h3>
                     <dl className="min-w-0 space-y-4">
-                      {fields.map((property) => (
-                        <div key={property} className="min-w-0 space-y-2">
-                          <dt
-                            lang={readingName(current, property, locale).lang ?? undefined}
-                            className="min-w-0 max-w-full font-medium [overflow-wrap:anywhere]"
-                          >
-                            {readingName(current, property, locale).text}
-                          </dt>
-                          <dd className="min-w-0 max-w-full space-y-3 text-sm [overflow-wrap:anywhere]">
-                            {!subject.statements[property]?.length && (
-                              <p className="text-muted-foreground">{m.facts_no_value({}, o)}</p>
+                      {fields.map((property) => {
+                        const name = readingName(current, property, locale);
+                        const statements = subject.statements[property] ?? [];
+                        if (!name.text && !statements.length) return null;
+                        return (
+                          <div key={property} className="min-w-0 space-y-2">
+                            {!statements.length ? (
+                              <>
+                                <dt lang={name.lang ?? undefined} className="min-w-0 max-w-full font-medium [overflow-wrap:anywhere]">
+                                  {name.text}
+                                </dt>
+                                <dd className="text-sm text-muted-foreground">{m.facts_no_value({}, o)}</dd>
+                              </>
+                            ) : (
+                              statements.map((statement, index) => {
+                                const content = (
+                                  <div
+                                    id={inspection?.statement === statement.id ? screenCurrentInspectionId(statement.id) : undefined}
+                                    tabIndex={inspection?.statement === statement.id ? -1 : undefined}
+                                    className="min-w-0 space-y-2 rounded-lg border border-border p-3"
+                                  >
+                                    <p lang={name.lang ?? undefined} className="font-medium [overflow-wrap:anywhere]">
+                                      {name.text}
+                                    </p>
+                                    <p className="font-medium">{m.facts_selected_value({ number: index + 1 }, o)}</p>
+                                    <p className="text-muted-foreground">
+                                      {m.candidate_rank({}, o)}:{' '}
+                                      {statement.rank === 'preferred'
+                                        ? m.candidate_rank_preferred({}, o)
+                                        : statement.rank === 'deprecated'
+                                          ? m.changes_rank_deprecated({}, o)
+                                          : m.candidate_rank_normal({}, o)}
+                                    </p>
+                                    <ScreenPart part={statement} read={current} locale={locale} />
+                                    <ScreenParts parts={statement.qualifiers} read={current} locale={locale} />
+                                    <ol className="min-w-0 space-y-2">
+                                      {statement.references.map((reference, index) => (
+                                        <li
+                                          key={index}
+                                          className="min-w-0 max-w-full border-s-2 ps-3 [overflow-wrap:anywhere]"
+                                        >
+                                          <p className="text-muted-foreground">
+                                            {m.correction_references({}, o)} {index + 1}
+                                          </p>
+                                          <ScreenParts parts={reference.parts} read={current} locale={locale} />
+                                        </li>
+                                      ))}
+                                    </ol>
+                                    {currentVisit && currentVisit.occurrence?.statement !== statement.id ? (
+                                      <ScreenProfileEntry
+                                        id={id}
+                                        label={label.text}
+                                        locale={locale}
+                                        visit={{
+                                          ...currentVisit,
+                                          occurrence: { holder: id, property, statement: statement.id },
+                                        }}
+                                        inspect
+                                      />
+                                    ) : null}
+                                  </div>
+                                );
+                                return (
+                                  <div key={statement.id} className="min-w-0">
+                                    <dt className="sr-only" lang={name.lang ?? undefined}>{name.text}</dt>
+                                    <dd className="min-w-0 max-w-full space-y-3 text-sm [overflow-wrap:anywhere]">
+                                      {spoilerLevel(statement) > 0 ? (
+                                        <SpoilerGate
+                                          key={`${visitIdentity}:${statement.id}`}
+                                          label={m.subject_spoiler_show({}, o)}
+                                          hideLabel={m.subject_spoiler_hide({}, o)}
+                                          unmountOnHide
+                                        >
+                                          {content}
+                                        </SpoilerGate>
+                                      ) : content}
+                                    </dd>
+                                  </div>
+                                );
+                              })
                             )}
-                            {(subject.statements[property] ?? []).map((statement, index) => (
-                              <div key={statement.id} className="min-w-0 space-y-2">
-                                <p className="font-medium">{m.facts_selected_value({ number: index + 1 }, o)}</p>
-                                <p className="text-muted-foreground">
-                                  {m.candidate_rank({}, o)}:{' '}
-                                  {statement.rank === 'preferred'
-                                    ? m.candidate_rank_preferred({}, o)
-                                    : statement.rank === 'deprecated'
-                                      ? m.changes_rank_deprecated({}, o)
-                                      : m.candidate_rank_normal({}, o)}
-                                </p>
-                                <ScreenPart part={statement} read={current} locale={locale} />
-                                <ScreenParts parts={statement.qualifiers} read={current} locale={locale} />
-                                <ol className="min-w-0 space-y-2">
-                                  {statement.references.map((reference, index) => (
-                                    <li
-                                      key={index}
-                                      className="min-w-0 max-w-full border-s-2 ps-3 [overflow-wrap:anywhere]"
-                                    >
-                                      <p className="text-muted-foreground">
-                                        {m.correction_references({}, o)} {index + 1}
-                                      </p>
-                                      <ScreenParts parts={reference.parts} read={current} locale={locale} />
-                                    </li>
-                                  ))}
-                                </ol>
-                              </div>
-                            ))}
-                          </dd>
-                        </div>
-                      ))}
+                          </div>
+                        );
+                      })}
                     </dl>
                     {group === 'authored' && <AuthoredFieldEntry id={id} title={label.text} locale={locale} />}
                   </section>
