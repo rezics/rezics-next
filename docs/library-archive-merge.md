@@ -90,19 +90,11 @@ strict bounded decoder alone admits the artifact. Web's canonical archive consum
 `/library/recover-archive` interface and all file/recovery ownership; it receives these generated methods, without
 a handwritten client, proxy cast or alternate upload route.
 
-The retained generated upload body is `unknown`; preview records and review results omit `reviewRevision`, and
-`apply.post` still accepts `{ordinals: number[]}`. Existing upload/preview coverage in
-`packages/client/tests/library-archive-merge.test.ts` preserves original JSON text and envelope operands. The complete
-generated journey must additionally review selected changes and apply the exact returned revision, with type
-assertions for upload and confirmation operands. Restore that journey together with refreshed declarations so the
-consumer remains type-correct.
-Decision: keep canonical Web file admission unavailable until generated declarations and the exact returned
-review-revision handoff are installed together.
-Client generation must preserve unrelated declarations, including label consolidation. Source-checked emission
-precedes the full workspace compiler and construct checks; all checks still gate publication. The generated closure
-also includes public client type exports that are independent of mounted routes. Installed client delivery and its
-complete typed consumer proof continue in
-[the generated transport continuation](../.temp/continuation/archive-client-installation.md).
+Decision: mount the Entry/private-label/assignment Web branch using the installed generated original-text upload,
+preview/review `reviewRevision` and exact selected apply operand. The generated declarations already contain these
+fields; the former unavailable claims were stale. Content remains the shared publisher, including unrelated label
+consolidation and public type exports. Personal-field recovery keeps its independent field policy. The canonical
+Web interface and mounted lifetime are owned by [the Web visit](../apps/web/src/library/archive-entry-recovery.md).
 
 A bounded per-item journal preserves original command identities across uncertain acknowledgements and partial
 success. Cancellation stops unstarted effects and retains acknowledged ones. Uploads, previews, reviews and results

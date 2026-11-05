@@ -1,82 +1,181 @@
+import { QueryClientContext } from '@tanstack/react-query';
+import { useContext, useEffect, useState, useSyncExternalStore } from 'react';
+import { exposureQuery, sessionQuery } from '../../session/query';
 import { m } from '../../paraglide/messages.js';
-import { localizeHref } from '../../paraglide/runtime.js';
+import { getLocale, localizeHref } from '../../paraglide/runtime.js';
 import { PageHeading } from '../../shell/page-heading';
+import { ArchiveEntryRecoveryJourney, supportedRecoverySection } from './controller';
+import { type ArchiveReviewItem, type ArchiveRow } from './native';
+import { browserArchiveRecoveryPort } from './port';
+import { type RecoveryBinding } from './visit';
 
-const actionClass =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-md px-3 py-2 underline whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const control = 'min-h-11 min-w-11 rounded-md border px-3 py-2 disabled:opacity-50';
+const uuidPattern = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}';
+const json = (value: unknown) => <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded-md bg-muted p-3 text-sm [overflow-wrap:anywhere]">{JSON.stringify(value, null, 2)}</pre>;
 
-/** No private input is accepted before the complete native review contract is available. */
+/** Every callback consults the current query cache and address, including before React effects run. */
 export function ArchiveEntryRecoveryPage() {
-  return (
-    <main className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6 [overflow-wrap:anywhere]">
-      <header className="space-y-3">
-        <PageHeading>{m.library_archive_title()}</PageHeading>
-        <p className="text-muted-foreground">{m.library_archive_intro()}</p>
-      </header>
-
-      <ol aria-label={m.library_archive_steps()} className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
-        <li aria-current="step" className="font-semibold">
-          1. {m.library_archive_upload_step()}
-        </li>
-        <li>2. {m.library_archive_review_step()}</li>
-        <li>3. {m.library_archive_results_step()}</li>
-      </ol>
-
-      <section aria-labelledby="archive-availability" className="space-y-3 rounded-lg border p-4">
-        <h2 id="archive-availability" className="text-xl font-semibold">
-          {m.library_archive_unavailable_title()}
-        </h2>
-        <p role="status">{m.library_archive_unavailable()}</p>
-        <p id="archive-file-help" className="text-sm text-muted-foreground">
-          {m.library_archive_keep_file()}
-        </p>
-        <label htmlFor="archive-file" className="block font-medium">
-          {m.library_archive_choose_file()}
-        </label>
-        <input
-          id="archive-file"
-          type="file"
-          accept="application/json,.json"
-          disabled
-          aria-describedby="archive-file-help"
-          className="block min-h-11 w-full max-w-full rounded-md border p-2 disabled:opacity-60"
-        />
-      </section>
-
-      <section aria-labelledby="archive-scope" className="space-y-4">
-        <h2 id="archive-scope" className="text-xl font-semibold">
-          {m.library_archive_scope_title()}
-        </h2>
-        <p>{m.library_archive_scope_intro()}</p>
-        <dl className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2 rounded-lg border p-4">
-            <dt className="font-semibold">{m.library_archive_supported_title()}</dt>
-            <dd>{m.library_archive_supported()}</dd>
-          </div>
-          <div className="space-y-2 rounded-lg border p-4">
-            <dt className="font-semibold">{m.library_archive_outside_title()}</dt>
-            <dd>{m.library_archive_outside()}</dd>
-          </div>
-        </dl>
-        <p className="text-sm text-muted-foreground">{m.library_archive_inventory()}</p>
-      </section>
-
-      <section aria-labelledby="archive-review" className="space-y-3">
-        <h2 id="archive-review" className="text-xl font-semibold">
-          {m.library_archive_deliberate_title()}
-        </h2>
-        <p>{m.library_archive_deliberate()}</p>
-        <p>{m.library_archive_history()}</p>
-      </section>
-
-      <nav aria-label={m.library_archive_destinations()} className="flex flex-wrap gap-3">
-        <a href={localizeHref('/library')} className={actionClass}>
-          {m.library_archive_return()}
-        </a>
-        <a href={localizeHref('/library/export')} className={actionClass}>
-          {m.library_archive_export()}
-        </a>
-      </nav>
-    </main>
+  const client = useContext(QueryClientContext);
+  const [journey, setJourney] = useState<ArchiveEntryRecoveryJourney | null>(null);
+  const sessionIdentity = () => JSON.stringify([client?.getQueryData(sessionQuery.queryKey), client?.getQueryData(exposureQuery.queryKey), getLocale()]);
+  const identity = useSyncExternalStore(
+    listener => client?.getQueryCache().subscribe(listener) ?? (() => {}),
+    sessionIdentity,
+    () => '',
   );
+  useEffect(() => {
+    const session = client?.getQueryData<{ state: string; subject?: string; csrfToken: string | null }>(sessionQuery.queryKey);
+    if (session?.state !== 'signed-in' || !session.subject || !session.csrfToken) return;
+    let active = true;
+    let mounted: ArchiveEntryRecoveryJourney | undefined;
+    const address = window.location.pathname + window.location.search;
+    const binding: RecoveryBinding = { viewer: session.subject, credentialEpoch: session.csrfToken, csrfEpoch: session.csrfToken, source: 'native-archive-upload', route: address, locale: getLocale(), exposure: identity };
+    const current = () => active && identity === sessionIdentity() && address === window.location.pathname + window.location.search ? binding : null;
+    void browserArchiveRecoveryPort({ expectedReader: session.subject, expectedCredential: session.csrfToken }).then(port => {
+      if (!current()) return;
+      mounted = new ArchiveEntryRecoveryJourney(port, current, Date.now() + 7 * 86_400_000);
+      setJourney(mounted);
+    });
+    return () => { active = false; mounted?.retire(); setJourney(null); };
+  }, [client, identity]);
+  return <ArchiveEntryRecoveryView journey={journey} />;
+}
+
+export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRecoveryJourney | null }) {
+  const [, render] = useState(0);
+  const [confirmation, setConfirmation] = useState<unknown>(null);
+  useEffect(() => journey?.subscribe(() => render(value => value + 1)), [journey]);
+  const snapshot = journey?.snapshot();
+  const state = snapshot?.state;
+  const review = state?.review;
+  const confirmed = !!review && confirmation === review;
+  const phase = state?.phase ?? 'idle';
+  const locked = ['applying', 'uncertain', 'recoverable', 'cancelling'].includes(phase);
+  const terminal = ['cancelled', 'expired'].includes(phase);
+  const busy = snapshot?.busy ?? false;
+  const uploadLocked = busy || locked || snapshot?.uploadUncertain;
+  const hasUpload = !!state?.upload;
+  const live = state !== null && journey !== null;
+  const act = (action: Promise<void>) => { void action; };
+
+  return <main className="mx-auto w-full max-w-4xl space-y-6 px-4 py-6 [overflow-wrap:anywhere]">
+    <header className="space-y-3"><PageHeading>{m.library_archive_title()}</PageHeading><p>{m.library_archive_intro()}</p></header>
+    <ol aria-label={m.library_archive_steps()} className="flex flex-wrap gap-4 text-sm">
+      <li aria-current={!hasUpload ? 'step' : undefined}>1. {m.library_archive_upload_step()}</li>
+      <li aria-current={hasUpload && !state?.results ? 'step' : undefined}>2. {m.library_archive_review_step()}</li>
+      <li aria-current={state?.results ? 'step' : undefined}>3. {m.library_archive_results_step()}</li>
+    </ol>
+    <p role="status" aria-live="polite">{snapshot?.notice ? notice(snapshot.notice) : terminal ? phase : !live ? m.library_archive_entry_preparing() : busy ? m.library_archive_entry_working() : ''}</p>
+    <section aria-labelledby="archive-upload" className="space-y-3 rounded-lg border p-4">
+      <h2 id="archive-upload" className="text-xl font-semibold">{m.library_archive_upload_step()}</h2>
+      <p id="archive-file-help">{m.library_archive_entry_upload_help()}</p>
+      <label htmlFor="archive-file" className="block font-medium">{m.library_archive_choose_file()}</label>
+      <input id="archive-file" type="file" accept="application/json,.json" disabled={!live || uploadLocked} aria-describedby="archive-file-help" className={`${control} block w-full max-w-full`} onChange={event => {
+        const file = event.currentTarget.files?.[0];
+        event.currentTarget.value = '';
+        if (file) act(journey!.upload(file));
+      }} />
+      {snapshot?.uploadUncertain && <button type="button" className={control} disabled={busy} onClick={() => act(journey!.retryUpload())}>{m.library_archive_recovery_retry_original()}</button>}
+    </section>
+    <section aria-labelledby="archive-scope" className="space-y-3">
+      <h2 id="archive-scope" className="text-xl font-semibold">{m.library_archive_scope_title()}</h2>
+      <p>{m.library_archive_entry_scope()}</p><p>{m.library_archive_deliberate()}</p><p>{m.library_archive_history()}</p>
+    </section>
+    {(hasUpload || state?.results) && <>
+      {hasUpload && <section aria-labelledby="archive-inventory" className="space-y-3">
+        <h2 id="archive-inventory" className="text-xl font-semibold">{m.library_archive_entry_inventory()}</h2>
+        <p>{m.library_archive_entry_counts({ rows: state.upload!.metadata.rows, bytes: state.upload!.metadata.recordBytes })}</p>
+        <p>{m.library_archive_entry_count_help()}</p>
+        <p>{m.library_archive_entry_expiry({ date: state.upload!.metadata.expiresAt })}</p>
+        <dl className="grid gap-2 sm:grid-cols-2">{state.upload!.metadata.coverage.map(item => <div key={item.section} className="rounded border p-3">
+          <dt className="font-semibold">{item.section}</dt><dd>{item.rows} · {item.capture} · {supportedRecoverySection(item.section) ? item.treatment : m.library_archive_entry_retained()}</dd>
+        </div>)}</dl>
+        <button type="button" className={control} disabled={busy} onClick={() => act(journey!.status())}>{m.library_archive_entry_status()}</button>
+      </section>}
+      {!terminal && <section aria-labelledby="archive-rows" className="space-y-4">
+        <h2 id="archive-rows" className="text-xl font-semibold">{m.library_archive_entry_records()}</h2>
+        <p>{m.library_archive_entry_mapping_help()}</p>
+        {state.page?.rows.length === 0 && <p>{m.library_archive_entry_empty()}</p>}
+        {state.page?.rows.map(row => <article key={row.ordinal} className="space-y-3 rounded-lg border p-4">
+          <h3 className="font-semibold">#{row.ordinal} · {row.section} · {row.status}</h3>
+          <details><summary className={control}>{m.library_archive_entry_evidence()}</summary>{json(row.evidence)}</details>
+          {row.review !== null && <><p>{m.library_archive_entry_revision({ ordinal: row.ordinal, revision: row.reviewRevision })}</p>{json(row.review)}</>}
+          {supportedRecoverySection(row.section) && !['applying', 'acknowledged'].includes(row.status) ? <MappingForm key={`${row.ordinal}:${state.upload!.id}`} row={row} disabled={busy || locked || state.choices.length >= 20 && !state.choices.some(choice => choice.ordinal === row.ordinal)} onChoose={choice => journey!.choose(choice)} /> : <p>{m.library_archive_entry_retained()}</p>}
+        </article>)}
+        <div className="flex flex-wrap gap-3">
+          <button type="button" className={control} disabled={busy || locked} onClick={() => act(journey!.page())}>{m.library_archive_entry_first()}</button>
+          <button type="button" className={control} disabled={busy || locked || state.page?.context.next == null} onClick={() => act(journey!.page(state.page!.context.next!))}>{m.library_archive_entry_next()}</button>
+        </div>
+      </section>}
+      {!terminal && <section aria-labelledby="archive-selected" className="space-y-3">
+        <h2 id="archive-selected" className="text-xl font-semibold">{m.library_archive_entry_selected({ count: state.choices.length })}</h2>
+        <p>{m.library_archive_entry_assignment_help()}</p>
+        {state.choices.map(choice => <div key={choice.ordinal} className="space-y-2 rounded border p-3">
+          {json(choice.choice)}<button type="button" className={control} disabled={busy || locked} onClick={() => journey!.unselect(choice.ordinal)}>{m.library_archive_entry_unselect({ ordinal: choice.ordinal })}</button>
+        </div>)}
+        <button type="button" className={control} disabled={busy || locked || state.choices.length === 0} onClick={() => act(journey!.review())}>{m.library_archive_entry_review()}</button>
+        {review && <div className="space-y-3 rounded border p-4">
+          {snapshot!.reviewed.map(item => <p key={item.ordinal}>{m.library_archive_entry_revision({ ordinal: item.ordinal, revision: item.reviewRevision })} · {item.status}</p>)}
+          {json(review.body)}
+          <label className="flex min-h-11 items-center gap-3"><input type="checkbox" checked={confirmed} disabled={busy || locked} onChange={event => setConfirmation(event.currentTarget.checked ? review : null)} />{m.library_archive_entry_confirm()}</label>
+          <button type="button" className={control} disabled={busy || locked || !confirmed} onClick={() => { setConfirmation(null); act(journey!.apply()); }}>{m.library_archive_entry_apply()}</button>
+        </div>}
+        {locked && <><p>{m.library_archive_recovery_uncertain()}</p><button type="button" className={control} disabled={busy} onClick={() => act(journey!.apply())}>{m.library_archive_recovery_retry_original()}</button></>}
+      </section>}
+      {state.results && <section aria-labelledby="archive-results" className="space-y-3">
+        <h2 id="archive-results" className="text-xl font-semibold">{m.library_archive_results_step()}</h2>
+        <p>{m.library_archive_entry_result_help()}</p>
+        {state.results.rows.map(row => <div key={row.ordinal} className="space-y-2 rounded border p-3">
+          <p>#{row.ordinal} · {row.section} · {row.status}</p>
+          {row.subjectId && <a className={`${control} inline-flex items-center underline`} href={localizeHref(`/subjects/${row.subjectId}`)}>{m.library_archive_entry_subject()}</a>}
+          {(row.subjectId || row.labelId) && <button type="button" className={control} disabled={busy || phase === 'expired'} onClick={() => act(journey!.readCurrent(row.ordinal))}>{m.library_archive_entry_read_current()}</button>}
+        </div>)}
+        {snapshot?.readback && <div><h3>{m.library_archive_entry_current()}</h3>{json(snapshot.readback.value)}</div>}
+        {!terminal && <button type="button" className={control} disabled={busy} onClick={() => act(journey!.results(state.results!.context.next ?? -1))}>{m.library_archive_entry_results_refresh()}</button>}
+      </section>}
+      {!terminal && <button type="button" className={control} disabled={phase === 'cancelling' && busy} onClick={() => act(journey!.cancel())}>{m.library_archive_entry_cancel()}</button>}
+    </>}
+    {phase === 'expired' && <><p>{m.library_archive_entry_expired()}</p><button type="button" className={control} disabled={busy} onClick={() => act(journey!.prune())}>{m.library_archive_entry_prune()}</button></>}
+    <nav aria-label={m.library_archive_destinations()} className="flex flex-wrap gap-3">
+      <a href={localizeHref('/library')} className={`${control} inline-flex items-center underline`}>{m.library_archive_return()}</a>
+      <a href={localizeHref('/library/export')} className={`${control} inline-flex items-center underline`}>{m.library_archive_export()}</a>
+    </nav>
+  </main>;
+}
+
+function notice(value: string) {
+  if (value === 'uncertain') return m.library_archive_recovery_uncertain();
+  if (value === 'file_too_large') return m.library_archive_recovery_upload_too_large();
+  return m.library_archive_entry_native_status({ status: value });
+}
+
+function MappingForm({ row, disabled, onChoose }: { row: ArchiveRow; disabled: boolean; onChoose: (choice: ArchiveReviewItem) => void }) {
+  const [action, setAction] = useState('preserve');
+  const [mode, setMode] = useState('existing');
+  const prefix = `archive-map-${row.ordinal}`;
+  return <form className="space-y-3" onSubmit={event => {
+    event.preventDefault();
+    const values = new FormData(event.currentTarget);
+    const subjectId = String(values.get('subjectId'));
+    if (row.section === 'entries') onChoose(action === 'preserve' ? { ordinal: row.ordinal, kind: 'entry', subjectId, action: 'preserve' } : { ordinal: row.ordinal, kind: 'entry', subjectId, action: action as 'create' | 'update', stateId: String(values.get('stateId')) });
+    else if (row.section === 'labels') onChoose({ ordinal: row.ordinal, kind: 'label', target: mode === 'create' ? { mode: 'create' } : { mode: 'existing', labelId: String(values.get('labelId')) } });
+    else onChoose({ ordinal: row.ordinal, kind: 'assignment', subjectId, action: action === 'assign' ? 'assign' : 'preserve' });
+  }}>
+    <fieldset disabled={disabled} className="space-y-3">
+      {row.section !== 'labels' && <><label htmlFor={`${prefix}-subject`}>{m.library_archive_entry_subject_id()}</label><input id={`${prefix}-subject`} className={`${control} block w-full`} name="subjectId" required pattern={uuidPattern} autoComplete="off" /></>}
+      {row.section === 'labels' ? <>
+        <label htmlFor={`${prefix}-mode`}>{m.library_archive_entry_label_choice()}</label>
+        <select id={`${prefix}-mode`} className={`${control} block w-full`} value={mode} onChange={event => setMode(event.currentTarget.value)}><option value="existing">{m.library_archive_entry_existing_label()}</option><option value="create">{m.library_archive_entry_create_label()}</option></select>
+        {mode === 'existing' && <><label htmlFor={`${prefix}-label`}>{m.library_archive_entry_label_id()}</label><input id={`${prefix}-label`} className={`${control} block w-full`} name="labelId" pattern={uuidPattern} required autoComplete="off" /></>}
+      </> : <>
+        <label htmlFor={`${prefix}-action`}>{m.library_archive_entry_action()}</label>
+        <select id={`${prefix}-action`} className={`${control} block w-full`} value={action} onChange={event => setAction(event.currentTarget.value)}>
+          <option value="preserve">{m.library_archive_entry_preserve()}</option>
+          {row.section === 'entries' ? <><option value="create">{m.library_archive_entry_create()}</option><option value="update">{m.library_archive_entry_update()}</option></> : <option value="assign">{m.library_archive_entry_assign()}</option>}
+        </select>
+        {row.section === 'entries' && action !== 'preserve' && <><label htmlFor={`${prefix}-state`}>{m.library_archive_entry_state_id()}</label><input id={`${prefix}-state`} className={`${control} block w-full`} name="stateId" required maxLength={64} autoComplete="off" /></>}
+      </>}
+      <button type="submit" className={control}>{m.library_archive_entry_select({ ordinal: row.ordinal })}</button>
+    </fieldset>
+  </form>;
 }
