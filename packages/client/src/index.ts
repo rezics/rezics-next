@@ -4,7 +4,7 @@ import type { SESSION_HEADER as KernelSessionHeader } from './kernel/http/reques
 import type { ClientKernel as KernelType } from './kernel/http/kernel.ts';
 import type { subjectRoutes } from './kernel/semantic/http/subjects.ts';
 import type { ModerationDecisionPage } from './kernel/content/decision-page.ts';
-import type { PostHistoryPage as NativePostHistoryPage } from './kernel/content/history-page.ts';
+
 import type { WatchManagementKind, WatchManagementPage } from './kernel/content/schemas';
 import type { LibraryExportFinalManifest, LibraryExportManifest } from './kernel/library/library-export-format.ts';
 import type { ExportRecord } from './kernel/library/library-export-source.ts';
@@ -67,6 +67,7 @@ export type {
 } from './kernel/community/realm-claim-review';
 export type { PublicationCommand, RealmPublicationPreparation } from './kernel/community/publication-preparation.ts';
 
+type NativePostHistoryPage = Routes['posts'][':id']['revisions']['get']['response'][200]['page'];
 type Routes = KernelType['~Routes']['v1'];
 export type RealmClaimReviewOperation = Routes['realms'][':realmId']['claimRequests']['get'];
 export type RealmClaimReviewQuery = RealmClaimReviewOperation['query'];
@@ -360,7 +361,7 @@ export type KernelClient = Omit<
   'moderation-decisions': DecisionPages;
   realms: RealmsClient;
 };
-export type { PostHistoryPage } from './kernel/content/history-page.ts';
+export type PostHistoryPage = NativePostHistoryPage;
 export type {
   DecisionPageAppeal,
   DecisionPageAppealAdvice,
