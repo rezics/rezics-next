@@ -48,6 +48,12 @@ import { subjectLabelInputIssue } from './subject-label-input.ts';
 import { SubjectLabelInput } from './subject-label-input.tsx';
 import { SubjectLabelAssignmentReview } from './subject-label-assignment-review/review-panel';
 import {
+  captureSubjectLabelReview,
+  subjectLabelReviewIsCurrent as subjectLabelUnassignmentIsCurrent,
+  SubjectLabelUnassignmentReview,
+  type ReviewedSubjectLabel,
+} from './subject-label-unassignment-review/review';
+import {
   resolveSubjectLabelReviewChoice,
   selectSubjectLabelReviewChoice,
   subjectLabelAssignmentsKey,
@@ -93,6 +99,18 @@ type SlotAdmission = {
   retired: Set<string>;
   episode?: string;
 };
+type SubjectLabelOperationCustody = {
+  input: SubjectLabelMutationInput;
+  step?: SubjectLabelStep;
+  seed: string;
+  originKey: string;
+  lifetime: SlotLifetime;
+  csrfToken: string;
+  send: typeof mutateSubjectLabelAction;
+  label?: LibraryLabelSummary | SubjectLabel;
+  running: boolean;
+  response?: SubjectLabelMutationResult | undefined;
+};
 
 /** The shared owner observes the browser even when a direct Subject or Zone host retains its old props. */
 export function SubjectLibrarySlot(props: SubjectSlotProps) {
@@ -106,6 +124,7 @@ export function SubjectLibrarySlot(props: SubjectSlotProps) {
   );
   const currentHref = useLocation({ select: (location) => location.publicHref });
   const returnTo = subjectSlotReturnTo(currentHref, props.subject, props.locale);
+  const labelWriteCustody = useRef<SubjectLabelOperationCustody | null>(null);
   const entryGet = useOperation('library_entry.get');
   const assignments = useOperation('library_label.assignment_list');
   const collectionList = useOperation('collection.list');
@@ -133,6 +152,7 @@ export function SubjectLibrarySlot(props: SubjectSlotProps) {
       !!session.subject &&
       data.session === 'signed-in' &&
       provenance?.viewer === session.subject &&
+      provenance.csrfToken === session.csrfToken &&
       provenance.subjectId === props.subject.id &&
       !!provenance.readId &&
       (!data.entry || data.entry.subjectId === props.subject.id) &&
@@ -253,6 +273,7 @@ export function SubjectLibrarySlot(props: SubjectSlotProps) {
       entryObservation={observation.value.entry}
       entryLifetime={admissions.current.entry!.lifetime}
       labelLifetime={admissions.current.labels!.lifetime}
+      labelWriteCustody={labelWriteCustody}
       collectionLifetime={admissions.current.collections!.lifetime}
     />
   );
@@ -267,12 +288,14 @@ function SubjectLibrarySlotView({
   entryIdentity,
   entryObservation,
   labelLifetime,
+  labelWriteCustody,
   collectionLifetime,
 }: SubjectSlotProps & {
   entryLifetime: SlotLifetime;
   entryIdentity: string;
   entryObservation: number;
   labelLifetime: SlotLifetime;
+  labelWriteCustody: { current: SubjectLabelOperationCustody | null };
   collectionLifetime: SlotLifetime;
 }) {
   const queryClient = useQueryClient();
@@ -305,16 +328,7 @@ function SubjectLibrarySlotView({
     running: boolean;
     response?: SubjectLibraryMutationResponse | undefined;
   } | null>(null);
-  const uncertainLabel = useRef<{
-    input: SubjectLabelMutationInput;
-    step?: SubjectLabelStep;
-    seed: string;
-    csrfToken: string;
-    send: typeof mutateSubjectLabelAction;
-    label?: LibraryLabelSummary | SubjectLabel;
-    running: boolean;
-    response?: SubjectLabelMutationResult | undefined;
-  } | null>(null);
+  const uncertainLabel = labelWriteCustody;
   const initialEntry =
     data.restore?.ok || data.restore?.reason === 'occupied' ? (data.restore.entry ?? null) : data.entry;
   const [entry, setEntry] = useState(initialEntry);
@@ -385,6 +399,11 @@ function SubjectLibrarySlotView({
   const [labelPending, setLabelPending] = useState(false);
   const [labelNotice, setLabelNotice] = useState<string | undefined>(data.labelResult);
   const [labelUndo, setLabelUndo] = useState(data.labelUndo);
+  const [labelUnassignmentReview, setLabelUnassignmentReview] = useState<ReviewedSubjectLabel | null>(null);
+  const labelUnassignmentAction = useRef<HTMLButtonElement | null>(null);
+  const labelUnassignmentTrigger = useRef<HTMLButtonElement | null>(null);
+  const focusLabelUnassignmentAction = useRef(false);
+  const restoreLabelUnassignmentFocus = useRef(false);
   const labelUndoKeys = useRef(new Map<string, string>());
   const restoredLabelEpisodes = useRef(new Set<string>());
   const usedLabelKeys = useRef(new Set<string>());
@@ -406,6 +425,43 @@ function SubjectLibrarySlotView({
   if (searchOrigin.current.query !== labelQuery || searchOrigin.current.open !== labelPickerOpen)
     searchOrigin.current = { query: labelQuery, open: labelPickerOpen, sequence: searchOrigin.current.sequence + 1 };
   const searchSequence = searchOrigin.current.sequence;
+  const labelUnassignmentOrigin = JSON.stringify([
+    subject.id,
+    subject.type,
+    subject.label,
+    locale,
+    data.provenance?.viewer ?? null,
+    data.provenance?.csrfToken ?? null,
+    data.provenance?.readId ?? null,
+    labelLifetime.seed,
+  ]);
+  // A native outcome stays readable across list refreshes, but retires with its exact private reader.
+  const labelDisclosureOrigin = JSON.stringify([
+    subject.id,
+    subject.type,
+    locale,
+    data.provenance?.viewer ?? null,
+    data.provenance?.csrfToken ?? null,
+    labelLifetime.seed,
+  ]);
+  const labelCommandOrigin = JSON.stringify([
+    subject.id,
+    subject.type,
+    subject.label,
+    locale,
+    data.provenance?.viewer ?? null,
+    data.provenance?.csrfToken ?? null,
+    data.provenance?.readId ?? null,
+    labelLifetime.seed,
+  ]);
+  const [labelDisclosureSource, setLabelDisclosureSource] = useState(labelDisclosureOrigin);
+  if (labelDisclosureSource !== labelDisclosureOrigin) {
+    setLabelDisclosureSource(labelDisclosureOrigin);
+    setLabelUndo(undefined);
+    setLabelNotice(undefined);
+    labelUndoKeys.current.clear();
+    restoredLabelEpisodes.current.clear();
+  }
   const currentLabelReviewOrigin = (): SubjectLabelReviewOrigin => ({
     subjectId: subject.id,
     locale,
@@ -428,6 +484,31 @@ function SubjectLibrarySlotView({
     labelReviewRef.current = null;
     appliedLabelReview.current = null;
   }
+  const currentLabelUnassignmentReview =
+    labelUnassignmentReview &&
+    subjectLabelUnassignmentIsCurrent(labelUnassignmentReview, {
+      subject,
+      locale,
+      assignments: labels,
+      originKey: labelUnassignmentOrigin,
+      lifetime: labelLifetime,
+    })
+      ? labelUnassignmentReview
+      : null;
+  if (labelUnassignmentReview && !currentLabelUnassignmentReview) {
+    setLabelUnassignmentReview(null);
+    focusLabelUnassignmentAction.current = false;
+    restoreLabelUnassignmentFocus.current = false;
+    labelUnassignmentTrigger.current = null;
+  }
+  const labelOperation = uncertainLabel.current;
+  const labelRetryCurrent =
+    !!labelOperation &&
+    labelOperation.originKey === labelCommandOrigin &&
+    labelOperation.lifetime === labelLifetime &&
+    labelCommandAllowed(labelOperation.input, labelOperation);
+  const labelWritePendingElsewhere = !!labelOperation && !labelRetryCurrent;
+  const labelActionBlocked = labelPending || !!labelOperation;
   const [entryOrigin, setEntryOrigin] = useState(entryLifetime);
   const [labelOrigin, setLabelOrigin] = useState(labelLifetime);
   const [collectionOrigin, setCollectionOrigin] = useState(collectionLifetime);
@@ -573,6 +654,19 @@ function SubjectLibrarySlotView({
     removalReviewTrigger.current = null;
     if (trigger?.isConnected && entryLifetime.current('library_entry.get', 'library_entry.delete')) trigger.focus();
   }, [removalReview, entryLifetime]);
+  useLayoutEffect(() => {
+    if (focusLabelUnassignmentAction.current && currentLabelUnassignmentReview) {
+      focusLabelUnassignmentAction.current = false;
+      labelUnassignmentAction.current?.focus();
+      return;
+    }
+    if (!restoreLabelUnassignmentFocus.current || labelUnassignmentReview) return;
+    restoreLabelUnassignmentFocus.current = false;
+    const trigger = labelUnassignmentTrigger.current;
+    labelUnassignmentTrigger.current = null;
+    if (trigger?.isConnected && labelLifetime.current('library_label.assignment_list', 'library_label.unassign'))
+      trigger.focus();
+  }, [labelUnassignmentReview, currentLabelUnassignmentReview, labelLifetime]);
   useEffect(() => {
     if (!collectionLifetime.current()) return;
     setCollections(data.collections);
@@ -1223,13 +1317,14 @@ function SubjectLibrarySlotView({
     );
   }
 
-  function labelFailure(reason: string) {
+  function labelFailure(reason: string, intent?: SubjectLabelMutationInput['intent']) {
     if (!labelLifetime.current()) return;
     if (reason === 'restore-stale') {
       setLabelNotice('label-restore-stale');
       return;
     }
-    if (reason === 'conflict') setLabelNotice('label-conflict');
+    if (reason === 'conflict')
+      setLabelNotice(intent === 'unassign' ? 'label-unassign-conflict' : 'label-conflict');
     else if (reason === 'capacity') setLabelNotice('label-capacity');
     else if (reason === 'restore-expired') setLabelNotice('label-restore-expired');
     else if (reason === 'restore-occupied') setLabelNotice('label-restore-occupied');
@@ -1238,32 +1333,42 @@ function SubjectLibrarySlotView({
     else setLabelNotice('unavailable');
   }
 
+  function labelCommandAllowed(input: SubjectLabelMutationInput, operation: SubjectLabelOperationCustody) {
+    return input.intent === 'unassign'
+      ? labelLifetime.current('library_label.assignment_list', 'library_label.unassign')
+      : input.intent === 'create-and-assign'
+        ? labelLifetime.current(
+            'library_label.assignment_list',
+            'library_label.list',
+            'library_label.create',
+            'library_label.assign',
+          )
+        : input.intent === 'label-step' && operation.step?.kind === 'create'
+          ? operation.seed === labelLifetime.seed &&
+            labelLifetime.current('library_label.assignment_list', 'library_label.create')
+          : labelLifetime.current('library_label.assignment_list', 'library_label.assign');
+  }
+
   async function performLabel(command: SubjectLabelMutationInput, label?: LibraryLabelSummary | SubjectLabel) {
     if (uncertainLabel.current && command !== uncertainLabel.current.input) return;
+    if (
+      uncertainLabel.current &&
+      (uncertainLabel.current.originKey !== labelCommandOrigin || uncertainLabel.current.lifetime !== labelLifetime)
+    )
+      return;
     if (!uncertainLabel.current && !data.csrfToken) return;
     const operation: NonNullable<typeof uncertainLabel.current> = uncertainLabel.current ?? {
       input: command,
       seed: labelLifetime.seed,
+      originKey: labelCommandOrigin,
+      lifetime: labelLifetime,
       csrfToken: data.csrfToken!,
       send: mutateSubjectLabelAction,
       ...(label ? { label } : {}),
       running: false,
     };
     let input = operation.input;
-    const allowed = () =>
-      input.intent === 'unassign'
-        ? labelLifetime.current('library_label.assignment_list', 'library_label.unassign')
-        : input.intent === 'create-and-assign'
-          ? labelLifetime.current(
-              'library_label.assignment_list',
-              'library_label.list',
-              'library_label.create',
-              'library_label.assign',
-            )
-          : input.intent === 'label-step' && operation.step?.kind === 'create'
-            ? operation.seed === labelLifetime.seed &&
-              labelLifetime.current('library_label.assignment_list', 'library_label.create')
-            : labelLifetime.current('library_label.assignment_list', 'library_label.assign');
+    const allowed = () => labelCommandAllowed(input, operation);
     if (!hydrated || !data.csrfToken || !allowed() || labelFlight.current || operation.running) return;
     if (!uncertainLabel.current && input.intent !== 'restore' && input.intent !== 'label-step') {
       const freshKey = (preferred: string) => {
@@ -1302,7 +1407,13 @@ function SubjectLibrarySlotView({
             token: response.step.token,
           };
           operation.response = undefined;
-          if (!labelLifetime.current() || !allowed()) return;
+          if (
+            !operation.lifetime.current() ||
+            operation.originKey !== labelCommandOrigin ||
+            operation.lifetime !== labelLifetime ||
+            !allowed()
+          )
+            return;
           continue;
         }
         break;
@@ -1317,28 +1428,42 @@ function SubjectLibrarySlotView({
       if (!response.ok) {
         if (operation.response) {
           uncertainLabel.current = null;
-          const rejectedReview = appliedLabelReview.current;
-          appliedLabelReview.current = null;
-          if (rejectedReview && isCurrentLabelReview(rejectedReview)) {
-            setLabelReviewDraft(rejectedReview.choice);
-            updateLabelReview(rejectedReview);
-          } else {
-            setLabelReviewDraft(null);
+          if (input.intent !== 'unassign' && input.intent !== 'restore') {
+            const rejectedReview = appliedLabelReview.current;
+            appliedLabelReview.current = null;
+            if (rejectedReview && isCurrentLabelReview(rejectedReview)) {
+              setLabelReviewDraft(rejectedReview.choice);
+              updateLabelReview(rejectedReview);
+            } else {
+              setLabelReviewDraft(null);
+            }
           }
-        } else {
+        } else if (input.intent !== 'unassign' && input.intent !== 'restore') {
           appliedLabelReview.current = null;
         }
-        labelFailure(response.reason);
+        labelFailure(response.reason, input.intent);
+        if (response.reason === 'conflict' && input.intent === 'unassign')
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: ['subject-library', subject.id, locale] }),
+            router.invalidate(),
+          ]);
         return;
       }
       uncertainLabel.current = null;
-      appliedLabelReview.current = null;
-      updateLabelReview(null);
-      setLabelReviewDraft(null);
-      setLabelReviewNotice(undefined);
       if (input.intent === 'unassign') {
         const removedInput = input;
-        setLabels((current) => current.filter((row) => row.id !== removedInput.assignmentId));
+        setLabelUnassignmentReview(null);
+        focusLabelUnassignmentAction.current = false;
+        restoreLabelUnassignmentFocus.current = false;
+        labelUnassignmentTrigger.current = null;
+        setLabels((current) =>
+          current.filter(
+            (row) =>
+              row.id !== removedInput.assignmentId ||
+              row.labelId !== removedInput.labelId ||
+              row.revision !== removedInput.revision,
+          ),
+        );
         const revision = response.restoreRevision;
         if (revision === undefined) {
           setLabelNotice('unavailable');
@@ -1367,21 +1492,30 @@ function SubjectLibrarySlotView({
         if (input.intent === 'restore') {
           restoredLabelEpisodes.current.add(labelEpisode(input.assignmentId, input.revision));
           setLabelUndo(undefined);
+        } else {
+          appliedLabelReview.current = null;
+          updateLabelReview(null);
+          setLabelReviewDraft(null);
+          setLabelReviewNotice(undefined);
         }
         const applied = response.label?.name ? response.label : operation.label;
         if (applied?.name) {
           const labelId = 'labelId' in applied && typeof applied.labelId === 'string' ? applied.labelId : applied.id;
           setLabels((current) => [
-            ...current.filter((row) => row.labelId !== labelId),
+            ...current.filter((row) =>
+              input.intent === 'restore' ? row.id !== response.assignment.id : row.labelId !== labelId,
+            ),
             { id: response.assignment.id, labelId, name: applied.name, revision: response.assignment.revision },
           ]);
         }
-        setLabelPickerOpen(false);
-        setLabelQuery('');
-        setLabelNameSubmitted(false);
-        latestLabelQuery.current = '';
-        labelOptionRevision.current++;
-        setLabelChoices([]);
+        if (input.intent !== 'restore') {
+          setLabelPickerOpen(false);
+          setLabelQuery('');
+          setLabelNameSubmitted(false);
+          latestLabelQuery.current = '';
+          labelOptionRevision.current++;
+          setLabelChoices([]);
+        }
       }
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['subject-library', subject.id, locale] }),
@@ -1462,24 +1596,92 @@ function SubjectLibrarySlotView({
     startLabelReview(choice, trigger);
   }
 
-  async function removeLabel(label: SubjectLabel) {
+  async function removeLabel(review: ReviewedSubjectLabel) {
     await performLabel(
       {
         intent: 'unassign',
-        subjectId: subject.id,
-        labelId: label.labelId,
-        assignmentId: label.id,
-        revision: label.revision,
-        idempotencyKey: data.labelRemoveKeys?.[label.id] ?? crypto.randomUUID(),
+        subjectId: review.subjectId,
+        labelId: review.labelId,
+        assignmentId: review.assignmentId,
+        revision: review.revision,
+        idempotencyKey: data.labelRemoveKeys?.[review.assignmentId] ?? crypto.randomUUID(),
       },
-      label,
+      {
+        id: review.assignmentId,
+        labelId: review.labelId,
+        name: review.labelName,
+        revision: review.revision,
+      },
     );
   }
 
   function onRemoveForm(event: FormEvent<HTMLFormElement>, label: SubjectLabel) {
     if (!hydrated) return;
     event.preventDefault();
-    void removeLabel(label);
+    if (labelActionBlocked || !labelLifetime.current('library_label.assignment_list', 'library_label.unassign')) return;
+    const received = labels.find(
+      (assignment) =>
+        assignment.id === label.id &&
+        assignment.labelId === label.labelId &&
+        assignment.revision === label.revision,
+    );
+    if (!received) return;
+    const review = captureSubjectLabelReview(subject, locale, received, labelCommandOrigin, labelLifetime);
+    if (
+      !subjectLabelUnassignmentIsCurrent(review, {
+        subject,
+        locale,
+        assignments: labels,
+        originKey: labelCommandOrigin,
+        lifetime: labelLifetime,
+      })
+    )
+      return;
+    labelUnassignmentTrigger.current = event.currentTarget.querySelector<HTMLButtonElement>('button[type="submit"]');
+    restoreLabelUnassignmentFocus.current = false;
+    focusLabelUnassignmentAction.current = true;
+    setLabelUnassignmentReview(review);
+  }
+
+  function cancelLabelUnassignmentReview() {
+    restoreLabelUnassignmentFocus.current =
+      !!labelUnassignmentReview &&
+      subjectLabelUnassignmentIsCurrent(labelUnassignmentReview, {
+        subject,
+        locale,
+        assignments: labels,
+        originKey: labelCommandOrigin,
+        lifetime: labelLifetime,
+      });
+    focusLabelUnassignmentAction.current = false;
+    setLabelUnassignmentReview(null);
+  }
+
+  function confirmLabelUnassignment() {
+    const review = labelUnassignmentReview;
+    if (
+      !review ||
+      labelActionBlocked ||
+      !data.csrfToken ||
+      !subjectLabelUnassignmentIsCurrent(review, {
+        subject,
+        locale,
+        assignments: labels,
+        originKey: labelCommandOrigin,
+        lifetime: labelLifetime,
+      })
+    ) {
+      setLabelUnassignmentReview(null);
+      focusLabelUnassignmentAction.current = false;
+      restoreLabelUnassignmentFocus.current = false;
+      labelUnassignmentTrigger.current = null;
+      return;
+    }
+    setLabelUnassignmentReview(null);
+    focusLabelUnassignmentAction.current = false;
+    restoreLabelUnassignmentFocus.current = false;
+    labelUnassignmentTrigger.current = null;
+    void removeLabel(review);
   }
 
   const undoReceipt = uncertainRestore.current?.input ?? entryUndo;
@@ -1768,7 +1970,7 @@ function SubjectLibrarySlotView({
                         <input type="hidden" name="csrf_token" value={data.csrfToken ?? ''} />
                         <button
                           type="submit"
-                          disabled={!data.csrfToken || (hydrated && labelPending)}
+                          disabled={!data.csrfToken || (hydrated && labelActionBlocked)}
                           aria-label={m.library_subject_label_remove({ name: label.name })}
                           className={`inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full px-2 text-muted-foreground hover:text-foreground disabled:opacity-50 ${controlFocusClass}`}
                         >
@@ -1780,6 +1982,13 @@ function SubjectLibrarySlotView({
                 ))}
               </ul>
             ) : null}
+            <SubjectLabelUnassignmentReview
+              review={currentLabelUnassignmentReview}
+              canConfirm={!!currentLabelUnassignmentReview && hydrated && !!data.csrfToken && !labelActionBlocked}
+              actionRef={labelUnassignmentAction}
+              onConfirm={confirmLabelUnassignment}
+              onCancel={cancelLabelUnassignmentReview}
+            />
             <Exposure operation="library_label.list">
               <details
                 data-subject-label-picker-details
@@ -1860,7 +2069,7 @@ function SubjectLibrarySlotView({
                           <button
                             type="submit"
                             ref={labelSubmitElement}
-                            disabled={!data.csrfToken || (hydrated && labelPending)}
+                            disabled={!data.csrfToken || (hydrated && labelActionBlocked)}
                             className={labelButtonClass}
                           >
                             {m.library_subject_label_add()}
@@ -1926,7 +2135,7 @@ function SubjectLibrarySlotView({
                               <Exposure operation="library_label.assign">
                                 <button
                                   type="button"
-                                  disabled={!data.csrfToken || (hydrated && labelPending)}
+                                  disabled={!data.csrfToken || (hydrated && labelActionBlocked)}
                                   ref={(element) => {
                                     if (element) labelChoiceElements.current.set(choice.id, element);
                                     else labelChoiceElements.current.delete(choice.id);
@@ -1961,7 +2170,7 @@ function SubjectLibrarySlotView({
                                 <button
                                   type="button"
                                   ref={labelCreateElement}
-                                  disabled={!data.csrfToken || (hydrated && labelPending)}
+                                  disabled={!data.csrfToken || (hydrated && labelActionBlocked)}
                                   aria-pressed={labelReviewDraft?.kind === 'proposed'}
                                   onClick={() =>
                                     startLabelReview({ kind: 'proposed', name: labelQuery }, { kind: 'proposed' })
@@ -1995,23 +2204,28 @@ function SubjectLibrarySlotView({
                 ) : null}
               </details>
             </Exposure>
-            {uncertainLabel.current?.step?.created ? (
+            {labelRetryCurrent && labelOperation?.step?.created ? (
               <p role="status" className="text-sm text-muted-foreground">
                 {m.library_subject_label_steps_created()}
               </p>
             ) : null}
+            {labelWritePendingElsewhere ? (
+              <p role="status" data-subject-label-pending-origin className="text-sm text-muted-foreground">
+                {m.library_subject_label_pending_origin()}
+              </p>
+            ) : null}
             <SubjectLabelNotice {...(labelNotice !== undefined ? { result: labelNotice } : {})} />
-            {uncertainLabel.current ? (
+            {labelRetryCurrent && labelOperation ? (
               <button
                 type="button"
+                data-subject-label-retry
                 className={labelButtonClass}
                 disabled={labelPending}
                 onClick={() => {
-                  if (labelLifetime.current() && uncertainLabel.current)
-                    void performLabel(uncertainLabel.current.input);
+                  if (labelRetryCurrent) void performLabel(labelOperation.input);
                 }}
               >
-                {m.library_selection_retry()}
+                {m.library_subject_label_retry_original()}
               </button>
             ) : null}
             {labelUndo ? (
@@ -2048,10 +2262,12 @@ function SubjectLibrarySlotView({
                 />
                 <input type="hidden" name="revision" value={labelUndo.revision} />
                 <input type="hidden" name="csrf_token" value={data.csrfToken ?? ''} />
-                <span>{m.library_subject_label_removed_status()}</span>
+                <span role="status" aria-live="polite">
+                  {m.library_subject_label_removed_status()}
+                </span>
                 <button
                   type="submit"
-                  disabled={!data.csrfToken}
+                  disabled={!data.csrfToken || labelActionBlocked}
                   className={`${linkClass} min-h-[44px] min-w-[44px] rounded px-2 py-2 ${controlFocusClass}`}
                 >
                   {m.library_subject_label_undo()}

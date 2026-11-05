@@ -6,6 +6,7 @@ import { m } from '../paraglide/messages.js';
 
 export type SubjectLabelNoticeCode =
   | 'label-conflict'
+  | 'label-unassign-conflict'
   | 'label-capacity'
   | 'label-restore-stale'
   | 'label-restore-expired'
@@ -17,6 +18,7 @@ export type SubjectLabelNoticeCode =
 
 const noticeMessages: Record<SubjectLabelNoticeCode, () => string> = {
   'label-conflict': m.library_subject_label_steps_conflict,
+  'label-unassign-conflict': m.library_subject_label_unassign_conflict,
   'label-capacity': m.library_subject_label_capacity,
   'label-restore-stale': m.library_subject_label_restore_stale,
   'label-restore-expired': m.library_subject_label_restore_expired,

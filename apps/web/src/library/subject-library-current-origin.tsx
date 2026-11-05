@@ -12,14 +12,15 @@ export type SlotFamily = 'entry' | 'labels' | 'collections';
 export type SlotLifetime = { seed: string; active: boolean; current: (...operations: Operation[]) => boolean };
 const operations = {
   entry: ['library_entry.get', 'library_entry.put', 'library_entry.delete', 'library_entry.restore'],
-  // The admitted read family owns private label observations. Create, assign and unassign are checked per action;
-  // losing one writer must not retire a healthy picker choice for another writer.
-  labels: ['library_label.assignment_list', 'library_label.list'],
+  // The received assignment read has its own lifetime. Picker search is admitted separately so it cannot retire
+  // a still-current assignment review.
+  labels: ['library_label.assignment_list'],
   collections: ['collection.list', 'collection_member.create'],
 } as const;
 const allOperations: readonly Operation[] = [
   ...operations.entry,
   ...operations.labels,
+  'library_label.list',
   'library_label.assign',
   'library_label.create',
   'library_label.unassign',
