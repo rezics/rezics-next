@@ -306,7 +306,7 @@ export async function executeImportConsumptionDateIntent<Outcome extends { value
     requestKey: string,
     admission: ProgressSessionJournalAdmission,
   ) => Promise<Outcome>;
-  record?: (value: Outcome) => void;
+  record?: (value: NoInfer<Outcome>) => void;
   signal?: AbortSignal;
   isStaleError: (error: unknown) => boolean;
   rethrowError?: (error: unknown) => boolean;

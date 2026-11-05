@@ -110,7 +110,7 @@ import { ownSubjectRequest } from './service-request.ts';
 import { readRealmRatingOrder, type RealmRatingSource, type RealmRatingQuery } from './realm-rating-order.ts';
 import { routeOf } from '../route/route.ts';
 import { executeScopedSuggestions } from './scoped-suggestion.ts';
-import { boundMatchEvidencePage, compileMatchEvidence, projectMatchEvidence } from './match-evidence.ts';
+import { boundMatchEvidencePage, compileMatchEvidence, projectMatchEvidence, type MatchEvidence } from './match-evidence.ts';
 import {
   completeSuggestionWorkContext,
   type SuggestionWorkContext,
@@ -139,7 +139,7 @@ export type GroupedReleaseSearchRequest = SearchRequest & {
 type SearchFilterDocument = FilterDocument | DiscoveryFilterDocument;
 
 export type PublicSearchPage = {
-  subjects: PublicSearchHit[];
+  subjects: (PublicSearchHit & { matchEvidence: MatchEvidence })[];
   kinds?: { values: KindValue[]; next: string | null };
   next: string | null;
   as_of: string;
@@ -1603,7 +1603,7 @@ export function createSearchService({
         const after = useful.frontier.after;
         ratingPhase = useful.frontier.ratingPhase;
         const shown = [...useful.values];
-        const results: SearchHit[] = boundMatchEvidencePage(
+        const results: (SearchHit & { matchEvidence: MatchEvidence })[] = boundMatchEvidencePage(
           shown.map((subject) => ({
             ...projectHit(subject, hitOptions),
             matchEvidence: projectMatchEvidence(subject, evidenceById.get(subject.id), matchEvidencePlan),

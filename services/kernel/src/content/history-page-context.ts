@@ -334,7 +334,7 @@ async function readHistoryActions(
         }),
       ))
   )
-    return { state: 'unavailable' as const, retryable: true, references: [] as const };
+    return { state: 'unavailable' as const, retryable: true, references: [] };
   try {
     const result = await readViewerActions(
       { pool: dependencies.pool, ...runtime },
@@ -349,7 +349,7 @@ async function readHistoryActions(
     };
   } catch (error) {
     if (!dependencyUnavailable(error)) throw error;
-    return { state: 'unavailable' as const, retryable: true, references: [] as const };
+    return { state: 'unavailable' as const, retryable: true, references: [] };
   }
 }
 

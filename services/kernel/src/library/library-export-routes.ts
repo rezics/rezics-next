@@ -35,10 +35,10 @@ const sectionV2 = t.Union([
   t.Literal('journals'),
 ]);
 function sectionTuple<const Sections extends readonly string[]>(sections: Sections) {
-  return t.Tuple<{ -readonly [K in keyof Sections]: ReturnType<typeof t.Literal<Sections[K]>> }>(
-    sections.map((section) => t.Literal(section)) as {
+  return t.Tuple(
+    sections.map((section) => t.Literal(section)) as [...{
       -readonly [K in keyof Sections]: ReturnType<typeof t.Literal<Sections[K]>>;
-    },
+    }],
   );
 }
 const sectionsV1 = sectionTuple(exportSections);
@@ -342,8 +342,7 @@ export function libraryExportRoutes(
   deps: Omit<LibraryExportDependencies, 'access'> & { access: () => Access },
 ) {
   const service = () => createLibraryExport({ ...deps, access: deps.access() });
-  const statusView = (value: Awaited<ReturnType<ReturnType<typeof service>['get']>>) =>
-    value satisfies Static<typeof statusSchema>;
+  const statusView = (value: Awaited<ReturnType<ReturnType<typeof service>['get']>>): Static<typeof statusSchema> => value;
   return app
     .post(
       '/v1/libraryExports',
