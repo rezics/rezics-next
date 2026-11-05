@@ -127,7 +127,10 @@ test('Continue keeps native preparation, credential, cursor and readiness failur
       throw new Error('transport unavailable');
     },
   });
-  expect(await nativeContinueSource(transport, 'Bearer owner', { limit: 6 })).toEqual({ state: 'unavailable', status: 503 });
+  expect(await nativeContinueSource(transport, 'Bearer owner', { limit: 6 })).toEqual({
+    state: 'unavailable',
+    status: 503,
+  });
 });
 
 test('native and recognized wrapped platform closure share the closed result and one bounded FULL read', async () => {
