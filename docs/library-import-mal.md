@@ -90,6 +90,7 @@ throw and retain that checkpoint for exact command retry; current reads cannot s
 refresh cannot replace a started unresolved score, including when labels are refreshed. Missing score consent remains
 resumable. Independent effects cannot turn a selected unsuccessful vote into overall success.
 
+The consumer adapts the native flat question scale fields into the existing nested review scale.
 The consumer now calls the actual installed producer. On this source base the producer still throws
 `atomic_guard_unavailable` for guarded effects; this remains genuine unavailability, not positive acceptance.
 Content owns its original serial atomic-producer repair. No local vote writer, resolver or permission mechanism is
