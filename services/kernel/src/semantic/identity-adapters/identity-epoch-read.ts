@@ -121,7 +121,7 @@ function sortSubjects(rows: readonly SubjectDisclosure[]): SubjectDisclosure[] {
   return [...rows].sort((left, right) => left.subject_id.localeCompare(right.subject_id));
 }
 
-function reviewEvidenceBytes(value: IdentityRatingNativeEvidence): string {
+export function identityRatingReviewEvidence(value: IdentityRatingNativeEvidence): string {
   return serializeIdentityValue({
     mapping: comparableIdentityEvidence(sortedEvidence(value.mapping)),
     subjects: sortSubjects(value.subjects),
@@ -286,7 +286,7 @@ function identityReviewFromEvidence(
     controlLocators: Object.freeze(
       evidence.controlLocators.map((row) => Object.freeze({ partition: row.partition, group: row.group })),
     ),
-    evidence: reviewEvidenceBytes(evidence),
+    evidence: identityRatingReviewEvidence(evidence),
   });
   if (Buffer.byteLength(serializeIdentityValue(operand), 'utf8') > MAX_REVIEW_OPERAND_BYTES)
     return { state: 'unavailable', reason: 'operand-too-large' };
@@ -353,7 +353,7 @@ export async function readIdentityRatingReview(
   }
   const first = await collect();
   const last = await collect();
-  if (reviewEvidenceBytes(first) !== reviewEvidenceBytes(last))
+  if (identityRatingReviewEvidence(first) !== identityRatingReviewEvidence(last))
     return { state: 'unavailable', reason: 'changed-during-read' };
   return identityReviewFromEvidence(
     input.requestedOriginalId,
