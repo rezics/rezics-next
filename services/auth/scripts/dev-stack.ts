@@ -435,11 +435,8 @@ export async function openLocalShowcase(
 
 export async function provisionPersona(composition: Awaited<ReturnType<typeof assemble>>, directory = state) {
   const { host, access, kernelPool, keys, kernel } = composition;
-  const {
-    bootstrapGovernance,
-    bootstrapLocalShowcaseBoardCreation,
-    PLATFORM_RESOURCE,
-  } = await import('../../kernel/src/access/bootstrap-governance.ts');
+  const { bootstrapGovernance, bootstrapLocalShowcaseBoardCreation, PLATFORM_RESOURCE } =
+    await import('../../kernel/src/access/bootstrap-governance.ts');
   const { accessCommandAuthorization } = await import('../../kernel/src/request/access.ts');
   const { createExposureCommands } = await import('../../kernel/src/access/gates/catalogue.ts');
   const person = await host.workflows.register({

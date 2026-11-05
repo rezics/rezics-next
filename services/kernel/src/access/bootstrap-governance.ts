@@ -94,7 +94,9 @@ export async function bootstrapLocalShowcaseBoardCreation(
       if (rows.length !== value.actions.length) throw new BootstrapGovernanceUnavailableError();
       return {
         value: { ...value, valid },
-        events: [{ type: 'com.rezics.access.grant.create.v1', subject: PLATFORM_RESOURCE.id, data: { ...value, valid } }],
+        events: [
+          { type: 'com.rezics.access.grant.create.v1', subject: PLATFORM_RESOURCE.id, data: { ...value, valid } },
+        ],
       };
     },
   );

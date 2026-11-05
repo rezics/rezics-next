@@ -27,7 +27,15 @@ const community: DevelopmentCommunityOutcome = {
 };
 
 const sourceRead = {
-  post: { id: postId, revisionId, authorId: accountId, availability: 'available', licence: 'CC-BY-4.0', sha256, subjectIds: [subjectId] },
+  post: {
+    id: postId,
+    revisionId,
+    authorId: accountId,
+    availability: 'available',
+    licence: 'CC-BY-4.0',
+    sha256,
+    subjectIds: [subjectId],
+  },
   editionIdentity: { postId, revisionId, sha256, subjects: [{ id: subjectId, kind: 'available' }] },
 };
 const editionRead = {
@@ -58,16 +66,21 @@ test('edition create and separate publish resume the frozen source command and p
   const client: DevelopmentShowcaseClient = {
     async read(path) {
       reads.push(path);
-      const value = path.includes('/revisions/') ? sourceRead : path === `/v1/contentEditions/${editionId}` ? editionRead : { editions: [creatorEdition], next: null };
+      const value = path.includes('/revisions/')
+        ? sourceRead
+        : path === `/v1/contentEditions/${editionId}`
+          ? editionRead
+          : { editions: [creatorEdition], next: null };
       return { state: 'acknowledged', value };
     },
     async command<T>(intent, decode): Promise<DevelopmentSeedStep<T>> {
       intents.push(intent);
       if (intent.path === '/v1/contentEditions' && createAttempts++ === 0)
         return { state: 'unknown_delivery', operation: intent.path, code: 'transport-unknown' };
-      const value = intent.path === '/v1/contentEditions'
-        ? { editionId, editionRevision: '1' }
-        : { editionId, editionRevision: '2' };
+      const value =
+        intent.path === '/v1/contentEditions'
+          ? { editionId, editionRevision: '1' }
+          : { editionId, editionRevision: '2' };
       return { state: 'acknowledged', value: decode(value) };
     },
   };
@@ -76,7 +89,12 @@ test('edition create and separate publish resume the frozen source command and p
   expect(first).toMatchObject({ state: 'unknown_delivery', operation: 'content_edition.create' });
   const resumed = await seedDevelopmentContentEdition({ community, actor, client });
 
-  expect(resumed).toMatchObject({ state: 'published', editionId, editionRevision: '2', source: { postId, revisionId, targetSubjectId: subjectId, sha256, licence: 'CC-BY-4.0' } });
+  expect(resumed).toMatchObject({
+    state: 'published',
+    editionId,
+    editionRevision: '2',
+    source: { postId, revisionId, targetSubjectId: subjectId, sha256, licence: 'CC-BY-4.0' },
+  });
   expect(intents[0]).toEqual(intents[1]);
   expect(intents[0]).toMatchObject({
     actionKey: `local-content-edition-create:${postId}`,
@@ -97,14 +115,25 @@ test('edition create and separate publish resume the frozen source command and p
 test('a mismatched readback source refuses enrollment before an edition command', async () => {
   let commands = 0;
   const client: DevelopmentShowcaseClient = {
-    read: async () => ({ state: 'acknowledged', value: { ...sourceRead, post: { ...sourceRead.post, authorId: subjectId } } }),
+    read: async () => ({
+      state: 'acknowledged',
+      value: { ...sourceRead, post: { ...sourceRead.post, authorId: subjectId } },
+    }),
     command: async () => {
       commands++;
       return { state: 'unknown_delivery', operation: 'unexpected' };
     },
   };
-  const result = await seedDevelopmentContentEdition({ community, actor: { accountId, clientId: 'rezics-dev-showcase' }, client });
-  expect(result).toMatchObject({ state: 'refused', operation: 'post.revision.edition_identity', code: 'source-binding-mismatch' });
+  const result = await seedDevelopmentContentEdition({
+    community,
+    actor: { accountId, clientId: 'rezics-dev-showcase' },
+    client,
+  });
+  expect(result).toMatchObject({
+    state: 'refused',
+    operation: 'post.revision.edition_identity',
+    code: 'source-binding-mismatch',
+  });
   expect(commands).toBe(0);
 });
 
@@ -162,7 +191,13 @@ test('Commerce uses the current supported money rule and reads back the exact cr
             factsVersion: 'stripe-money-v1',
             taxBehavior: 'exclusive',
             configuredSaleCurrencies: [
-              { currency: 'usd', unit: { system: 'stripe-api', exponent: 2, factsVersion: 'stripe-money-v1' }, minAmountMinor: 50, maxAmountMinor: 99_999_999, chargeMultiple: 1 },
+              {
+                currency: 'usd',
+                unit: { system: 'stripe-api', exponent: 2, factsVersion: 'stripe-money-v1' },
+                minAmountMinor: 50,
+                maxAmountMinor: 99_999_999,
+                chargeMultiple: 1,
+              },
             ],
           },
         };
@@ -197,7 +232,13 @@ test('Commerce uses the current supported money rule and reads back the exact cr
     actionKey: `local-showcase-offer:${editionId}`,
     idempotencyKey: `local-showcase-offer:${editionId}`,
     path: '/v1/offers',
-    body: { contentEditionId: editionId, title: 'Local showcase authored edition', currency: 'usd', unitAmountMinor: 50, taxCode: 'txcd_10302000' },
+    body: {
+      contentEditionId: editionId,
+      title: 'Local showcase authored edition',
+      currency: 'usd',
+      unitAmountMinor: 50,
+      taxCode: 'txcd_10302000',
+    },
   });
   expect(intents[0]?.body).not.toHaveProperty('targetSubjectId');
 });
@@ -207,12 +248,32 @@ test('unknown offer delivery remains distinct from a creator readback', async ()
   const client: DevelopmentShowcaseClient = {
     read: async (path) => {
       paths.push(path);
-      return { state: 'acknowledged', value: { factsVersion: 'stripe-money-v1', taxBehavior: 'exclusive', configuredSaleCurrencies: [{ currency: 'usd', unit: { system: 'stripe-api', exponent: 2, factsVersion: 'stripe-money-v1' }, minAmountMinor: 50, maxAmountMinor: 99_999_999, chargeMultiple: 1 }] } };
+      return {
+        state: 'acknowledged',
+        value: {
+          factsVersion: 'stripe-money-v1',
+          taxBehavior: 'exclusive',
+          configuredSaleCurrencies: [
+            {
+              currency: 'usd',
+              unit: { system: 'stripe-api', exponent: 2, factsVersion: 'stripe-money-v1' },
+              minAmountMinor: 50,
+              maxAmountMinor: 99_999_999,
+              chargeMultiple: 1,
+            },
+          ],
+        },
+      };
     },
     command: async () => ({ state: 'unknown_delivery', operation: '/v1/offers', code: 'transport-unknown' }),
   };
   const result = await seedDevelopmentContentEditionOffer({
-    edition: { state: 'published', editionId, editionRevision: '2', source: { postId, revisionId, targetSubjectId: subjectId, sha256, licence: 'CC-BY-4.0' } },
+    edition: {
+      state: 'published',
+      editionId,
+      editionRevision: '2',
+      source: { postId, revisionId, targetSubjectId: subjectId, sha256, licence: 'CC-BY-4.0' },
+    },
     accountId,
     client,
   });

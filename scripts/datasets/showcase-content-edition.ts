@@ -11,13 +11,16 @@ function record(value: unknown): Record<string, unknown> | undefined {
     : undefined;
 }
 
-function sourceFromResponse(value: unknown, expected: {
-  accountId: string;
-  postId: string;
-  revisionId: string;
-  subjectId: string;
-  sha256: string;
-}) {
+function sourceFromResponse(
+  value: unknown,
+  expected: {
+    accountId: string;
+    postId: string;
+    revisionId: string;
+    subjectId: string;
+    sha256: string;
+  },
+) {
   const envelope = record(value);
   const post = record(envelope?.post);
   const identity = record(envelope?.editionIdentity);
@@ -45,7 +48,9 @@ function sourceFromResponse(value: unknown, expected: {
       return item?.id === expected.subjectId && item.kind === 'available';
     })
   )
-    throw new TypeError('Native source read did not confirm the exact authored post, revision, subject, digest and licence');
+    throw new TypeError(
+      'Native source read did not confirm the exact authored post, revision, subject, digest and licence',
+    );
   return {
     postId: expected.postId,
     revisionId: expected.revisionId,
@@ -68,11 +73,14 @@ function editionCommand(value: unknown): { editionId: string; editionRevision: s
   return { editionId: response.editionId, editionRevision: response.editionRevision };
 }
 
-function publishedEdition(value: unknown, expected: {
-  editionId: string;
-  accountId: string;
-  source: { revisionId: string; targetSubjectId: string; sha256: string; licence: string };
-}) {
+function publishedEdition(
+  value: unknown,
+  expected: {
+    editionId: string;
+    accountId: string;
+    source: { revisionId: string; targetSubjectId: string; sha256: string; licence: string };
+  },
+) {
   const edition = record(value);
   if (
     !edition ||

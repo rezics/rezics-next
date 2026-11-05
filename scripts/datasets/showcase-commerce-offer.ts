@@ -157,14 +157,17 @@ function createdOffer(
   };
 }
 
-function creatorOfferMatches(value: unknown, expected: EditionBinding & {
-  offerId: string;
-  currency: 'usd' | 'eur';
-  unitAmountMinor: number;
-  taxBehavior: 'exclusive';
-  taxCode: string;
-  moneyUnit: MoneyUnit;
-}): { royaltyBasisPoints: number } | undefined {
+function creatorOfferMatches(
+  value: unknown,
+  expected: EditionBinding & {
+    offerId: string;
+    currency: 'usd' | 'eur';
+    unitAmountMinor: number;
+    taxBehavior: 'exclusive';
+    taxCode: string;
+    moneyUnit: MoneyUnit;
+  },
+): { royaltyBasisPoints: number } | undefined {
   const offer = record(value);
   const unit = record(offer?.moneyUnit);
   if (
@@ -225,7 +228,8 @@ export async function seedDevelopmentContentEditionOffer(input: {
     return { state: 'unavailable', operation: 'commerce.money_schema', code: 'response-unavailable' };
   }
   const currency = rules.find((rule) => rule.currency === 'usd') ?? rules[0];
-  if (!currency) return { state: 'unavailable', operation: 'commerce.money_schema', code: 'sale-currency-unconfigured' };
+  if (!currency)
+    return { state: 'unavailable', operation: 'commerce.money_schema', code: 'sale-currency-unconfigured' };
 
   const binding: EditionBinding = {
     editionId: input.edition.editionId,

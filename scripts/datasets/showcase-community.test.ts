@@ -20,9 +20,7 @@ const imported = {
       subject: { subject: { id: subjectId } },
     },
   ],
-  workLinks: [
-    { source: { provider: 'vndb', externalId: 'v2002', subject: { subjectId, route: '202' } } },
-  ],
+  workLinks: [{ source: { provider: 'vndb', externalId: 'v2002', subject: { subjectId, route: '202' } } }],
 } as unknown as Pick<CrossMediaSeedResult, 'readings' | 'workLinks'>;
 
 class MemoryJournal {
@@ -49,7 +47,8 @@ class MemoryJournal {
 test('native Board and authored thread resume unknown delivery and repeated seed without duplicate effects', async () => {
   const journal = new MemoryJournal();
   const stored = new Map<string, unknown>();
-  const calls: { method: string; path: string; key?: string; body?: Record<string, unknown>; authorized: boolean }[] = [];
+  const calls: { method: string; path: string; key?: string; body?: Record<string, unknown>; authorized: boolean }[] =
+    [];
   const effects = { board: 0, thread: 0 };
   let boardPosts = 0;
   const fetcher: typeof fetch = async (request, init) => {
@@ -63,7 +62,14 @@ test('native Board and authored thread resume unknown delivery and repeated seed
       expect(headers.has('authorization')).toBe(false);
       return Response.json({
         boards: [
-          { id: boardId, realmId: null, title: 'Development showcase discussion', purpose: 'discussion', visibility: 'published', availability: 'available' },
+          {
+            id: boardId,
+            realmId: null,
+            title: 'Development showcase discussion',
+            purpose: 'discussion',
+            visibility: 'published',
+            availability: 'available',
+          },
         ],
         next: null,
       });
@@ -79,7 +85,14 @@ test('native Board and authored thread resume unknown delivery and repeated seed
       if (!prior) {
         effects.board++;
         stored.set(key, {
-          board: { id: boardId, realmId: null, title: 'Development showcase discussion', purpose: 'discussion', visibility: 'published', availability: 'available' },
+          board: {
+            id: boardId,
+            realmId: null,
+            title: 'Development showcase discussion',
+            purpose: 'discussion',
+            visibility: 'published',
+            availability: 'available',
+          },
         });
       }
       boardPosts++;
@@ -95,7 +108,14 @@ test('native Board and authored thread resume unknown delivery and repeated seed
             boardId,
             kind: 'discussion',
             authorId: accountId,
-            firstPost: { id: postId, revisionId, sha256, authorId: accountId, licence: 'CC-BY-4.0', subjectIds: [subjectId] },
+            firstPost: {
+              id: postId,
+              revisionId,
+              sha256,
+              authorId: accountId,
+              licence: 'CC-BY-4.0',
+              subjectIds: [subjectId],
+            },
           },
         });
       }
@@ -112,22 +132,68 @@ test('native Board and authored thread resume unknown delivery and repeated seed
     fetch: fetcher,
   });
 
-  const first = await seedDevelopmentCommunity({ result: imported, actor: { accountId, clientId: 'rezics-dev-showcase' }, client });
+  const first = await seedDevelopmentCommunity({
+    result: imported,
+    actor: { accountId, clientId: 'rezics-dev-showcase' },
+    client,
+  });
   expect(first).toMatchObject({ state: 'unknown_delivery', operation: 'board.create_global' });
-  const resumed = await seedDevelopmentCommunity({ result: imported, actor: { accountId, clientId: 'rezics-dev-showcase' }, client });
-  const repeated = await seedDevelopmentCommunity({ result: imported, actor: { accountId, clientId: 'rezics-dev-showcase' }, client });
+  const resumed = await seedDevelopmentCommunity({
+    result: imported,
+    actor: { accountId, clientId: 'rezics-dev-showcase' },
+    client,
+  });
+  const repeated = await seedDevelopmentCommunity({
+    result: imported,
+    actor: { accountId, clientId: 'rezics-dev-showcase' },
+    client,
+  });
 
-  expect(resumed).toMatchObject({ state: 'published', source: { subjectId }, board: { id: boardId }, thread: { threadId } });
+  expect(resumed).toMatchObject({
+    state: 'published',
+    source: { subjectId },
+    board: { id: boardId },
+    thread: { threadId },
+  });
   expect(repeated).toEqual(resumed);
   expect(effects).toEqual({ board: 1, thread: 1 });
   const boardCommands = calls.filter((call) => call.method === 'POST' && call.path === '/v1/boards');
   const threadCommands = calls.filter((call) => call.method === 'POST' && call.path === '/v1/threads');
   expect(boardCommands.map(({ key, body }) => ({ key, body }))).toEqual([
-    { key: 'local-showcase-board:' + subjectId, body: { conceptId: subjectId, title: 'Development showcase discussion', purpose: 'discussion', visibility: 'published' } },
-    { key: 'local-showcase-board:' + subjectId, body: { conceptId: subjectId, title: 'Development showcase discussion', purpose: 'discussion', visibility: 'published' } },
-    { key: 'local-showcase-board:' + subjectId, body: { conceptId: subjectId, title: 'Development showcase discussion', purpose: 'discussion', visibility: 'published' } },
+    {
+      key: 'local-showcase-board:' + subjectId,
+      body: {
+        conceptId: subjectId,
+        title: 'Development showcase discussion',
+        purpose: 'discussion',
+        visibility: 'published',
+      },
+    },
+    {
+      key: 'local-showcase-board:' + subjectId,
+      body: {
+        conceptId: subjectId,
+        title: 'Development showcase discussion',
+        purpose: 'discussion',
+        visibility: 'published',
+      },
+    },
+    {
+      key: 'local-showcase-board:' + subjectId,
+      body: {
+        conceptId: subjectId,
+        title: 'Development showcase discussion',
+        purpose: 'discussion',
+        visibility: 'published',
+      },
+    },
   ]);
-  expect(threadCommands[0]?.body).toMatchObject({ boardId, subjectIds: [subjectId], licence: 'CC-BY-4.0', visibility: 'published' });
+  expect(threadCommands[0]?.body).toMatchObject({
+    boardId,
+    subjectIds: [subjectId],
+    licence: 'CC-BY-4.0',
+    visibility: 'published',
+  });
   expect(threadCommands.map((call) => call.key)).toEqual([
     'local-showcase-thread:' + subjectId,
     'local-showcase-thread:' + subjectId,
@@ -151,7 +217,14 @@ test('a refused Board command stops before directory or thread work, and a missi
   const missing = await seedDevelopmentCommunity({
     result: { readings: [], workLinks: [] } as Pick<CrossMediaSeedResult, 'readings' | 'workLinks'>,
     actor,
-    client: { read: async () => { throw new Error('no request expected'); }, command: async () => { throw new Error('no request expected'); } },
+    client: {
+      read: async () => {
+        throw new Error('no request expected');
+      },
+      command: async () => {
+        throw new Error('no request expected');
+      },
+    },
   });
   expect(missing).toEqual({ state: 'missing_source', operation: 'vndb:v2002' });
 
@@ -161,7 +234,14 @@ test('a refused Board command stops before directory or thread work, and a missi
       workLinks: [{ source: { provider: 'vndb', externalId: 'v2002', subject: { subjectId: postId, route: '202' } } }],
     } as unknown as Pick<CrossMediaSeedResult, 'readings' | 'workLinks'>,
     actor,
-    client: { read: async () => { throw new Error('no request expected'); }, command: async () => { throw new Error('no request expected'); } },
+    client: {
+      read: async () => {
+        throw new Error('no request expected');
+      },
+      command: async () => {
+        throw new Error('no request expected');
+      },
+    },
   });
   expect(stale).toEqual({ state: 'missing_source', operation: 'vndb:v2002' });
 });

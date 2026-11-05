@@ -69,7 +69,8 @@ async function credentialKeyId(path: string): Promise<string> {
 
 async function attachDevelopmentShowcase(path: string, report: DevelopmentShowcaseReport): Promise<void> {
   const bytes = await readFile(path);
-  if (bytes.byteLength > LOCAL_RESULT_LIMIT) throw new TypeError('Cross-media seed result exceeds its local report limit');
+  if (bytes.byteLength > LOCAL_RESULT_LIMIT)
+    throw new TypeError('Cross-media seed result exceeds its local report limit');
   const imported: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
   const result =
     typeof imported === 'object' && imported !== null && !Array.isArray(imported)

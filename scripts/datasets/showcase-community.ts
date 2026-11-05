@@ -48,7 +48,10 @@ export type DevelopmentSeedJournal = {
 
 export type DevelopmentShowcaseClient = {
   read(path: string, options?: { anonymous?: boolean }): Promise<DevelopmentSeedStep<unknown>>;
-  command<T>(intent: DevelopmentCommandIntent, decode: (value: unknown, frozenBody: unknown) => T): Promise<DevelopmentSeedStep<T>>;
+  command<T>(
+    intent: DevelopmentCommandIntent,
+    decode: (value: unknown, frozenBody: unknown) => T,
+  ): Promise<DevelopmentSeedStep<T>>;
 };
 
 type RequestOptions = {
@@ -161,10 +164,7 @@ export function createDevelopmentShowcaseClient(options: RequestOptions): Develo
       if (result.state === 'missing') return { state: 'missing_source', operation: path, code: 'http-404' };
       return { state: result.state, operation: path, code: result.code };
     },
-    async command<T>(
-      intent: DevelopmentCommandIntent,
-      decode: (value: unknown, frozenBody: unknown) => T,
-    ) {
+    async command<T>(intent: DevelopmentCommandIntent, decode: (value: unknown, frozenBody: unknown) => T) {
       const sealed = {
         actor: options.actor,
         credential: options.credential,
@@ -228,7 +228,8 @@ function selectedWorkSubject(result: Pick<CrossMediaSeedResult, 'readings' | 'wo
   const handoff = result.workLinks.find(
     (entry) => entry.source.provider === 'vndb' && entry.source.externalId === externalId,
   );
-  if (typeof readingSubject !== 'string' || !UUID.test(readingSubject) || typeof reading?.route !== 'string') return undefined;
+  if (typeof readingSubject !== 'string' || !UUID.test(readingSubject) || typeof reading?.route !== 'string')
+    return undefined;
   if (
     handoff &&
     (handoff.source.subject?.subjectId !== readingSubject || handoff.source.subject.route !== reading.route)
@@ -266,7 +267,10 @@ function directoryPage(value: unknown): { boards: Record<string, unknown>[]; nex
   return { boards, next: page.next };
 }
 
-function threadFromResponse(value: unknown, expected: { boardId: string; subjectId: string; accountId: string }): {
+function threadFromResponse(
+  value: unknown,
+  expected: { boardId: string; subjectId: string; accountId: string },
+): {
   threadId: string;
   postId: string;
   revisionId: string;
