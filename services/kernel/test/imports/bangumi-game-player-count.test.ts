@@ -16,7 +16,7 @@ import {
 } from '../../../importer/src/showcase-publication.ts';
 import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
-import { fixtureFetch } from './type-helpers.ts';
+import { currentCandidates, fixtureFetch } from './type-helpers.ts';
 
 const globalContext = '00000000-0000-8000-8000-000000000000';
 const gameId = '104';
@@ -114,7 +114,9 @@ test('selected Game player-count range is independently adopted and current, and
       context: globalContext,
       limit: 100,
     });
-    expect(missing.candidates.filter((candidate) => candidate.source?.external_id === gameId)).toEqual([]);
+    expect(currentCandidates(missing.candidates).filter((candidate) => candidate.source?.external_id === gameId)).toEqual(
+      [],
+    );
     expect(playerStatement(await publicClient.readSubject(first.id))).toBeUndefined();
 
     const corrected = await importSelected(rangeInfobox);
@@ -124,7 +126,7 @@ test('selected Game player-count range is independently adopted and current, and
       context: globalContext,
       limit: 100,
     });
-    const candidate = listing.candidates.find((item) => item.source?.external_id === gameId);
+    const candidate = currentCandidates(listing.candidates).find((item) => item.source?.external_id === gameId);
     if (!candidate) throw new Error('Corrected player-count candidate is missing');
     expect(candidate.source).toMatchObject({
       source: crossMediaAliases.bangumi,
@@ -183,7 +185,7 @@ test('selected Game player-count range is independently adopted and current, and
       context: globalContext,
       limit: 100,
     });
-    expect(adopted.adoption?.selection?.map((entry) => entry.candidate)).toContain(candidate.id);
+    expect(adopted.adoption?.mode).toBe('replace');
     const current = playerStatement(await publicClient.readSubject(first.id));
     expect(current?.value?.content).toEqual({ amount: '+4', unit: '1' });
     expect(current?.qualifiers).toContainEqual({

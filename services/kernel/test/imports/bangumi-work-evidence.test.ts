@@ -3,6 +3,7 @@ import type { BatchCommand } from '@rezics/definitions/bulk';
 import { createSourceRegistration } from '../../../importer/src/source-registry.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { openProviderCli, type Candidate } from './provider-cli-native-fixture.ts';
+import { valueContent } from './type-helpers.ts';
 
 const externalId = '990411';
 const workUrl = 'https://catalogue.example/anime/CLANNAD?lang=ja#work';
@@ -135,8 +136,10 @@ test('ordinary Bangumi import reviews and adopts cited TVAnime work evidence wit
     await acceptAndAdopt(cli, id, 'schema:copyrightNotice', notices);
     const adopted = await cli.runtime.importTransport.readReviewedSubject(id);
     expect(adopted.subject?.type).toBe('schema:TVSeries');
-    expect(adopted.subject?.statements['wdt:P973']?.map((item) => item.value.content)).toEqual([workUrl]);
-    expect(adopted.subject?.statements['schema:copyrightNotice']?.map((item) => item.value.content)).toEqual([notice]);
+    expect(adopted.subject?.statements['wdt:P973']?.map((item) => valueContent(item.value))).toEqual([workUrl]);
+    expect(adopted.subject?.statements['schema:copyrightNotice']?.map((item) => valueContent(item.value))).toEqual([
+      notice,
+    ]);
     for (const property of evidenceProperties) {
       expect(adopted.subject?.statements[property]?.[0]?.references?.[0]?.parts).toContainEqual({
         property: { id: 'schema:url' },
