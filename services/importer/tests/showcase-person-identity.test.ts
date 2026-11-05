@@ -5,7 +5,11 @@ import type { BatchCommand } from '@rezics/definitions/bulk';
 import { bangumiVoiceDraft, deliverBangumiCreatorCredits } from '../src/bangumi-creator-credits.ts';
 import { CrossMediaGraph, type GraphEdgeDraft } from '../src/cross-media-bindings.ts';
 import { bundledDigest } from '@rezics/definitions/bundled';
-import { observePersonIdentity, personIdentityForSource, selectPersonReviewPair } from '../src/showcase-person-identity.ts';
+import {
+  observePersonIdentity,
+  personIdentityForSource,
+  selectPersonReviewPair,
+} from '../src/showcase-person-identity.ts';
 import { emptyCrossMediaPlan, seedCrossMedia, type CrossMediaPort } from '../src/cross-media-seed.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { randomUUID } from 'node:crypto';
@@ -18,37 +22,65 @@ const currentPersonId = '4a7a8b35-32b5-45a1-9b5f-c0d69fc23108';
 test('seed review keeps admitted source bytes and original bindings across canonical reads and reopen', async () => {
   // Source-shaped controls and a local protocol double; no native merge or pinned-dump pass is implied.
   const plan = emptyCrossMediaPlan();
-  plan.entities.bangumi.push({ source: 'bangumi', key: 'person:1916', revision: 'fixture-1', payload: {
-    id: 1916, type: 1, name: '麻枝准', summary: 'Source biography',
-  } });
-  plan.entities.vndb.push({ source: 'vndb', key: 's224', revision: 'fixture-2', payload: {
-    id: 's224', main: '28069', prod: null, name: '前田 純',
-    staff_alias: [{ id: 's224', aid: '28069', name: '前田 純', latin: 'Maeda Jun' }],
-  } });
+  plan.entities.bangumi.push({
+    source: 'bangumi',
+    key: 'person:1916',
+    revision: 'fixture-1',
+    payload: {
+      id: 1916,
+      type: 1,
+      name: '麻枝准',
+      summary: 'Source biography',
+    },
+  });
+  plan.entities.vndb.push({
+    source: 'vndb',
+    key: 's224',
+    revision: 'fixture-2',
+    payload: {
+      id: 's224',
+      main: '28069',
+      prod: null,
+      name: '前田 純',
+      staff_alias: [{ id: 's224', aid: '28069', name: '前田 純', latin: 'Maeda Jun' }],
+    },
+  });
   const original = new Map<string, string>();
   const commands: BatchCommand[] = [];
   const port: CrossMediaPort = {
     async batch(request) {
       commands.push(...structuredClone(request.commands));
-      return { results: request.commands.map((command) => {
-        if (command.op === 'create') {
-          const id = randomUUID();
-          original.set(command.source.external_id, id);
-          return { key: command.key, status: 201 as const, value: { id, revision: 1 } };
-        }
-        return { key: command.key, status: 201 as const, value: command.op === 'propose'
-          ? { candidate: randomUUID(), revision: 1 } : { revision: 1 } };
-      }) };
+      return {
+        results: request.commands.map((command) => {
+          if (command.op === 'create') {
+            const id = randomUUID();
+            original.set(command.source.external_id, id);
+            return { key: command.key, status: 201 as const, value: { id, revision: 1 } };
+          }
+          return {
+            key: command.key,
+            status: 201 as const,
+            value: command.op === 'propose' ? { candidate: randomUUID(), revision: 1 } : { revision: 1 },
+          };
+        }),
+      };
     },
     setSourceRecordMetadata: sourceRecordMetadataFixture().setSourceRecordMetadata,
-    async fence() { return { fenced: false, securityRevision: null }; },
+    async fence() {
+      return { fenced: false, securityRevision: null };
+    },
     async writeSourceStatistic() {},
     async clearSourceStatistic() {},
     async readReviewedSubject() {
-      return read({ id: currentPersonId, type: 'schema:Person', labels: { und: '麻枝准' }, statements: {
-        'wdt:P6298': [{ value: { type: 'value', content: '1916' } }],
-        'wdt:P3180': [{ value: { type: 'value', content: 's224' } }],
-      } });
+      return read({
+        id: currentPersonId,
+        type: 'schema:Person',
+        labels: { und: '麻枝准' },
+        statements: {
+          'wdt:P6298': [{ value: { type: 'value', content: '1916' } }],
+          'wdt:P3180': [{ value: { type: 'value', content: 's224' } }],
+        },
+      });
     },
   };
   const directory = await mkdtemp(join(tmpdir(), 'person-review-handoff-'));
@@ -58,20 +90,29 @@ test('seed review keeps admitted source bytes and original bindings across canon
     const pair = first.personReview!.pair;
     expect(pair.state).toBe('selected');
     if (pair.state !== 'selected') throw new Error('Expected selected source records');
-    expect(pair.sources.map((entry) => entry.boundSubjectId)).toEqual([original.get('person:1916')!, original.get('s224')!]);
+    expect(pair.sources.map((entry) => entry.boundSubjectId)).toEqual([
+      original.get('person:1916')!,
+      original.get('s224')!,
+    ]);
     expect(pair.sources.map((entry) => entry.record)).toEqual([plan.entities.bangumi[0]!, plan.entities.vndb[0]!]);
     expect(first.personIdentities.map((entry) => entry.currentSubjectId)).toEqual([currentPersonId, currentPersonId]);
     for (const entry of pair.sources) {
-      const identifier = commands.find((command) => command.op === 'propose' &&
-        command.source.external_id === entry.identity.externalId && command.statement.property.id === entry.identity.property);
+      const identifier = commands.find(
+        (command) =>
+          command.op === 'propose' &&
+          command.source.external_id === entry.identity.externalId &&
+          command.statement.property.id === entry.identity.property,
+      );
       expect(identifier?.source).toMatchObject({ digest: entry.digest, converter_revision: entry.converterRevision });
     }
     const sealed = JSON.stringify(commands);
     const reopened = await seedCrossMedia(plan, path, port, { origin: 'https://fixture.test' });
     expect(reopened.personReview).toEqual(first.personReview);
     expect(JSON.stringify(commands)).toBe(sealed);
-    expect(selectPersonReviewPair(first.personReviewSources!, { bangumi: 'person:1917', vndb: 's224' }))
-      .toEqual({ state: 'incomplete', missing: [{ source: 'bangumi', externalId: 'person:1917' }] });
+    expect(selectPersonReviewPair(first.personReviewSources!, { bangumi: 'person:1917', vndb: 's224' })).toEqual({
+      state: 'incomplete',
+      missing: [{ source: 'bangumi', externalId: 'person:1917' }],
+    });
     // A caller editing its plan after selection cannot rewrite the captured comparison evidence.
     plan.entities.bangumi[0]!.payload.name = 'Changed name';
     expect(pair.sources[0].record.payload.name).toBe('麻枝准');
