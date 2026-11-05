@@ -106,7 +106,7 @@ test('mounted curation retires every stale cache owner and recovers only an expl
   let profileA = profileFor('/private-a', 'A saved source');
   const profileB = profileFor('/private-b', 'B private source');
   let initial = readFor(readerA, profileA, 7);
-  const reads: { reader: string; work: Deferred<CurationRead>; signal?: AbortSignal }[] = [];
+  const reads: { reader: string; work: Deferred<CurationRead>; signal: AbortSignal | undefined }[] = [];
   const publishes: { reader: string; input: PublishInput; work: Deferred<PublishResult> }[] = [];
   const transport = {
     read: (reader: string, signal?: AbortSignal) => {
@@ -137,11 +137,12 @@ test('mounted curation retires every stale cache owner and recovers only an expl
     return null;
   }
   const rootRoute = routerTools.createRootRoute({
+    loader: () => initial,
     component: () =>
       createElement(
         Fragment,
         null,
-        createElement(page.CurationView, { initial, transport }),
+        createElement(page.CurationView, { initial: rootRoute.useLoaderData(), transport }),
         createElement(ProviderReplacementProbe),
       ),
   });
@@ -479,8 +480,11 @@ test('mounted curation retires every stale cache owner and recovers only an expl
     await show();
     await settle(() => reads.length === 10, 'fresh opening after interrupted return');
     expect(reads[9]!.signal?.aborted).toBe(false);
+    host.tabIndex = 0;
+    host.focus();
     await act(async () => interrupted.work.resolve(readFor(readerA, profileB, 99)));
     expect(host.textContent).not.toContain('/private-b');
+    expect(window.document.activeElement).toBe(host);
     await act(async () => reads[9]!.work.resolve(readFor(readerA, profileA, 7)));
     await settle(() => host.textContent?.includes(m.curation_unknown()) ?? false, 'unmounted intent recovered');
     const recoveredUnmountSelect = templateControl(m.curation_template()) as InstanceType<
