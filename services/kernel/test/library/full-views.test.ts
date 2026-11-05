@@ -2,9 +2,11 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
-import { bootstrapGovernance } from '../../src/access/bootstrap-governance.ts';
+import { bootstrapGovernance, PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { createKernel } from '../../src/http/kernel.ts';
+import { ACCOUNT_ROLE_BITS } from '../../src/history/contracts.ts';
+import { bindCommandHistoryEvidence } from '../../src/history/record.ts';
 import { syncSubjectListing } from '../../src/library/listing.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
@@ -80,15 +82,31 @@ async function json(response: Response, status = 200) {
 const viewPath = (path: string, view: string) => `${path}${path.includes('?') ? '&' : '?'}view=${view}`;
 async function subject(label = 'Embedded book', language = 'en') {
   const key = randomUUID();
+  const target = subjectTarget(routeKey, actor.accountId, key);
   return (
     await createSubject(db.pool, {
       actor,
-      target: subjectTarget(routeKey, actor.accountId, key),
+      target,
       idempotencyKey: key,
       digest: createHash('sha256').update(key).digest(),
       item: { type: 'schema:Book', labels: { [language]: label } },
       release: { digest: bundledDigest, release: bundledRelease },
-      authorize: async () => true,
+      authorization: {
+        action: 'subject:create',
+        resource: target,
+        denied: () => new Error('subject create denied'),
+        async authorize(tx) {
+          // The command history declaration needs the admitted identity that Access binds on the request path.
+          bindCommandHistoryEvidence(tx, [
+            {
+              accountRoute: routeOf(accounts.owner)!,
+              accountId: accounts.owner,
+              roles: ACCOUNT_ROLE_BITS.principal | ACCOUNT_ROLE_BITS.actor | ACCOUNT_ROLE_BITS['acting-human'],
+            },
+          ]);
+          return 'execute';
+        },
+      },
     })
   ).subject.id;
 }
@@ -156,6 +174,12 @@ beforeAll(async () => {
         },
       }),
   });
+  // The owner creates Spaces through the ordinary Space command, which needs its Global creation grants.
+  await db.admin.query(
+    `INSERT INTO access.resource_grant (route, resource_id, subject_id, action, valid, transaction_id)
+     SELECT $1, $2, $3, action, '(,)', $3 FROM unnest($4::text[]) AS action`,
+    [PLATFORM_RESOURCE.route, PLATFORM_RESOURCE.id, accounts.owner, ['space:create', 'realm:create']],
+  );
   for (const [persona, id] of Object.entries(accounts)) {
     await db.admin.query(
       `INSERT INTO access.account
