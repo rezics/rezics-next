@@ -53,7 +53,7 @@ mock.module('../src/search/recent-sync', () => ({
 }));
 
 // Both mounted surfaces consume the actual command boundary and the same native journal implementation.
-async function mountManagement() {
+test('installed readers alone manage Recent and History through native settlement and reopening', async () => {
   const require = createRequire(import.meta.url);
   const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
   const window = new Window({ url: 'https://site.test/en/search/history' });
@@ -127,54 +127,25 @@ async function mountManagement() {
     host.querySelector<HTMLElement>(`[data-surface="${index ? 'history' : 'recent'}"]`)!;
   const remove = (index: number) => surface(index).querySelector<HTMLButtonElement>('[data-history-action]')!;
   const announcement = (index: number) => surface(index).querySelector('[aria-live="polite"]')!.textContent;
-  return {
-    window,
-    host,
-    history,
-    session,
-    render,
-    async reopen() {
-      await act(async () => root.render(null));
-      await render();
-    },
-    io,
-    surface,
-    remove,
-    announcement,
-    m,
-    async close() {
-      await act(async () => root.unmount());
-      client.clear();
-      reads.mockRestore();
-      writes.mockRestore();
-      for (const [key, descriptor] of saved)
-        descriptor ? Object.defineProperty(globalThis, key, descriptor) : Reflect.deleteProperty(globalThis, key);
-      window.close();
-    },
-  };
-}
-
-test('installed readers alone manage Recent and History through native settlement and reopening', async () => {
-  const h = await mountManagement();
   try {
-    await act(async () => h.history[0]!.remember('Keep'));
-    expect(h.history[1]!.entries.map((entry) => entry.query)).toEqual(['Keep']);
+    await act(async () => history[0]!.remember('Keep'));
+    expect(history[1]!.entries.map((entry) => entry.query)).toEqual(['Keep']);
     for (const replacement of ['credentials', 'A/B/A']) {
-      const retired = [...h.history];
+      const retired = [...history];
       await act(async () => {
-        if (replacement === 'A/B/A') h.session('019f0000-0000-7000-8000-734100000002');
-        h.session(account, replacement);
-        const before = h.io();
+        if (replacement === 'A/B/A') session('019f0000-0000-7000-8000-734100000002');
+        session(account, replacement);
+        const before = io();
         for (let index = 0; index < 2; index++) {
-          h.remove(index).focus();
-          h.remove(index).click();
+          remove(index).focus();
+          remove(index).click();
           retired[index]!.remember('Stale');
           retired[index]!.clear!();
           retired[index]!.retry!();
         }
-        for (const type of ['focus', 'online']) h.window.dispatchEvent(new h.window.Event(type));
-        h.window.dispatchEvent(new h.window.StorageEvent('storage', { key: null }));
-        expect(h.io()).toEqual(before);
+        for (const type of ['focus', 'online']) window.dispatchEvent(new window.Event(type));
+        window.dispatchEvent(new window.StorageEvent('storage', { key: null }));
+        expect(io()).toEqual(before);
         if (finishRead) {
           const entry = {
             kind: 'query' as const,
@@ -204,9 +175,9 @@ test('installed readers alone manage Recent and History through native settlemen
           finishRead = undefined;
         }
       });
-      expect(h.host.textContent).not.toContain('Retired private');
-      for (let index = 0; index < 2; index++) expect(h.announcement(index)).toBe('');
-      const before = h.io();
+      expect(host.textContent).not.toContain('Retired private');
+      for (let index = 0; index < 2; index++) expect(announcement(index)).toBe('');
+      const before = io();
       await act(async () => {
         for (const old of retired) {
           old.remove('Keep');
@@ -215,39 +186,46 @@ test('installed readers alone manage Recent and History through native settlemen
           old.retry!();
         }
       });
-      expect(h.io()).toEqual(before);
-      expect(h.history[0]!.entries.map((entry) => entry.query)).toEqual(['Keep']);
+      expect(io()).toEqual(before);
+      expect(history[0]!.entries.map((entry) => entry.query)).toEqual(['Keep']);
     }
     await act(async () => {
-      h.history[0]!.remember('Alpha');
-      h.history[0]!.remember('Beta');
+      history[0]!.remember('Alpha');
+      history[0]!.remember('Beta');
     });
     await act(async () => {
-      h.remove(0).focus();
-      h.remove(0).click();
+      remove(0).focus();
+      remove(0).click();
     });
-    expect(h.window.document.activeElement).toBe(h.remove(0));
-    expect(h.announcement(0)).toBe(h.m.search_history_management_removed({ name: 'Beta' }));
+    expect(window.document.activeElement).toBe(remove(0));
+    expect(announcement(0)).toBe(m.search_history_management_removed({ name: 'Beta' }));
     await act(async () => {
-      h.remove(1).focus();
-      h.remove(1).click();
+      remove(1).focus();
+      remove(1).click();
     });
-    expect(h.announcement(1)).toBe(h.m.search_history_management_removed({ name: 'Alpha' }));
-    const clear = [...h.surface(1).querySelectorAll('button')].find(
-      (button) => button.textContent === h.m.search_history_clear(),
+    expect(announcement(1)).toBe(m.search_history_management_removed({ name: 'Alpha' }));
+    const clear = [...surface(1).querySelectorAll('button')].find(
+      (button) => button.textContent === m.search_history_clear(),
     )!;
     await act(async () => {
       clear.focus();
       clear.click();
     });
-    expect(h.announcement(1)).toBe(h.m.search_history_management_cleared());
-    expect(h.window.document.activeElement).toBe(h.surface(1).querySelector('section'));
+    expect(announcement(1)).toBe(m.search_history_management_cleared());
+    expect(window.document.activeElement).toBe(surface(1).querySelector('section'));
     expect(rows).toEqual([]);
-    expect(h.history.every((current) => current.sync === 'synced' && !current.entries.length)).toBe(true);
-    await h.reopen();
-    await act(async () => h.history[1]!.retry!());
-    expect(h.history.every((current) => !current.entries.length)).toBe(true);
+    expect(history.every((current) => current.sync === 'synced' && !current.entries.length)).toBe(true);
+    await act(async () => root.render(null));
+    await render();
+    await act(async () => history[1]!.retry!());
+    expect(history.every((current) => !current.entries.length)).toBe(true);
   } finally {
-    await h.close();
+    await act(async () => root.unmount());
+    client.clear();
+    reads.mockRestore();
+    writes.mockRestore();
+    for (const [key, descriptor] of saved)
+      descriptor ? Object.defineProperty(globalThis, key, descriptor) : Reflect.deleteProperty(globalThis, key);
+    window.close();
   }
 });
