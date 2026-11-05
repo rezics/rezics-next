@@ -39,10 +39,31 @@ revision, meaning, grain and units, the current own vote, and the selected nativ
 preserving the vote. Apply must repeat the reviewed selection exactly; set and clear require `consent: true`.
 Unsupported source values may be paired with explicitly chosen Content units, without claiming a conversion.
 Source `private`, upload confirmation and state adoption are not vote consent. Notes and provider aggregates are
-never published or imported. The score outcome remains typed `unavailable`: Content has not installed a
-`createVoteCommands.putVoteOutcome` guard for the reviewed question revision, current vote or absence, and canonical
-counting identity. This slice stores the exact reviewed operands and command key in the existing row, but performs no
-vote write until that owner guard exists.
+never published or imported.
+
+Decision: compose Content's complete `readVoteReview` observation and `putVoteOutcome` conditional writer with the
+existing Library row checkpoint. Review retains the exact version-1 native question/lifecycle, canonical identity,
+identity epochs and counted/original own-vote witness privately; it never constructs a partial guard. The additive
+`scoreNativeGuard` review field and `scorePlan.nativeGuard` choice field stay within the existing JSON caps. Older
+plans without the complete guard remain unavailable and require a deliberate new review. No persisted shape is
+reinterpreted or migrated.
+
+`score.native.admission = {status: "reviewed", reason: "native_review_observed"}` means complete native operands were
+observed, not that an effect was admitted. Confirmed set/clear calls `putVoteOutcome(actor,
+{questionId, targetId, units, guard}, originalKey)`. Current native authorization and exposure precede receipt replay;
+fresh native execution owns all conditional fences. Typed native stale and unavailable reasons pass through the score
+outcome. A selected unperformed score makes the row stale or unsupported even when independent state was applied.
+Unexpected delivery errors propagate with the frozen choice and original key unsettled; review cannot replace it.
+Every new score attempt clears an earlier acknowledgment before delivery, so retry uncertainty cannot be overwritten
+by a refreshed review. Preserve makes no vote attempt. Native zero remains a selected unit.
+
+The installed base producer still returns `atomic_guard_unavailable` for guarded effects. This consumer now calls that
+producer rather than declaring every review unavailable. Supported guarded commits and their positive whole-list
+acceptance remain Content delivery and integration work; unavailable-only execution is not a completed score journey.
+Current readback uses the existing owner Entry and native Rating readers, never the command receipt or retained source.
+The mounted request contract is unchanged; Web must receive the additive reviewed admission and native stale/unavailable
+outcomes through its normal owner handoff. Source expiry, cancellation and evidence removal retain their existing bounds;
+a removed upload does not undo native effects.
 
 ## Web HTTP contract
 
@@ -145,11 +166,17 @@ Decision: after the seven-day source deadline, keep only bounded Bangumi native 
   one bounded choice/outcome plus its receipt/event and any selected existing state command. The state command repeats
   current Account/scope, profile release and identity epoch, current provider-claim binding and the locked
   upload/review/choice/expiry fence; exact native receipt replay bypasses fresh admission. A confirmed score plan is
-  bounded by the same `P`, with no refill or account-wide vote scan. Score vote writes currently equal zero because
-  guarded admission is unavailable. Once Content provides it, each selected score command must include its repeated
-  Account/scope, question, Subject/currentness and counting identity guards, component/aggregate work, receipt and
-  encoded permitted result; that nested native cost remains unmeasured and cannot be claimed from this provider
-  review. `R` retries address the same retained choice and native key.
+  bounded by the same `P`, with no refill or account-wide vote scan. Each selected attempt additionally writes one
+  existing-row start checkpoint and calls the native conditional writer once with the frozen guard and original key;
+  `R` retries repeat that exact command and its current authorization/exposure and receipt lookup. Complete review adds
+  one bounded native question/counting-identity/current-vote prepare/read/finish observation per reviewed row, including
+  requested/canonical slots and published home epochs (at most two homes; witness at most 4096 bytes). The enclosing
+  review remains at most 71,680 bytes and the confirmed choice at most 8,192 bytes. Native writer work includes repeated
+  Account/scope, question, Subject/currentness and counting-identity admission, own-vote fencing, component/aggregate
+  work, normalized receipt digest and permitted result. Successful guarded write/replay and independent native current
+  readback costs remain unmeasured on this base because the producer's atomic path is unavailable; existing native
+  limits apply and no larger provider cap or scale claim follows from source review.
+
 - Expiry/background: one due-index keyset read selects one source-scrub or final-delete stage. At most 100 addressed row
   keys take two account-fenced page commands per stage (99 rows then one row); the scrub stage also updates one root,
   and the final stage deletes one root. Each page repeats the current-account fence, root lock and exact due-time

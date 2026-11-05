@@ -65,8 +65,13 @@ export type BangumiScoreReview = {
         | 'question_unavailable'
         | 'question_revision_unsupported'
         | 'question_scale_unsupported'
-        | 'conditional_admission_unavailable';
-    };
+        | 'conditional_admission_unavailable'
+        | 'question_observation_unavailable'
+        | 'identity_pending'
+        | 'identity_observation_unavailable'
+        | 'own_vote_observation_unavailable'
+        | 'atomic_guard_unavailable';
+    } | { status: 'reviewed'; reason: 'native_review_observed' };
   };
 };
 export type BangumiReview = {
