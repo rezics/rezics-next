@@ -58,7 +58,6 @@ export function conceptWorksRequest(
   if (!types.length || types.length > FILTER_LIMITS.in || types.some((type) => !property.types.includes(type))) return;
 
   const fixed: FilterDocument[] = [
-    { type: { in: types } },
     {
       statement: {
         property: property.id,
@@ -82,7 +81,7 @@ export function conceptWorksRequest(
     condition,
     cursor: selection.cursor,
     sort: selection.sort === 'rating' ? 'rating' : undefined,
-    kinds: ['subject'],
+    kinds: types,
     languages: [locale],
   };
   try {
@@ -124,37 +123,39 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function hasFixedConcept(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  if (isRecord(value.statement))
+    return (
+      typeof value.statement.property === 'string' &&
+      Array.isArray(value.statement.in) &&
+      value.statement.in.length === 1 &&
+      isRecord(value.statement.concept) &&
+      typeof value.statement.concept.scheme === 'string'
+    );
+  const children = Array.isArray(value.and) ? value.and : Array.isArray(value.or) ? value.or : undefined;
+  if (children) return children.some(hasFixedConcept);
+  return 'not' in value && hasFixedConcept(value.not);
+}
+
 function boundedFixedConceptRequest(request: DiscoveryRequest): boolean {
   const filter = request.filter as unknown;
-  if (!isRecord(filter) || !Array.isArray(filter.and) || filter.and.length !== 2) return false;
+  if (
+    !isRecord(filter) ||
+    !Array.isArray(filter.and) ||
+    filter.and.length !== 2 ||
+    request.kindCountLeaf !== 1
+  )
+    return false;
   const [condition, kind] = filter.and;
   if (
     !isRecord(kind) ||
     Object.keys(kind).length !== 1 ||
     !isRecord(kind.kind) ||
     !Array.isArray(kind.kind.in) ||
-    kind.kind.in.length !== 1 ||
-    kind.kind.in[0] !== 'subject' ||
-    !isRecord(condition) ||
-    !Array.isArray(condition.and) ||
-    condition.and.length < 2
-  )
-    return false;
-  const [type, fixedConcept] = condition.and;
-  if (
-    !isRecord(type) ||
-    Object.keys(type).length !== 1 ||
-    !isRecord(type.type) ||
-    !Array.isArray(type.type.in) ||
-    type.type.in.length === 0 ||
-    !isRecord(fixedConcept) ||
-    Object.keys(fixedConcept).length !== 1 ||
-    !isRecord(fixedConcept.statement) ||
-    typeof fixedConcept.statement.property !== 'string' ||
-    !Array.isArray(fixedConcept.statement.in) ||
-    fixedConcept.statement.in.length !== 1 ||
-    !isRecord(fixedConcept.statement.concept) ||
-    typeof fixedConcept.statement.concept.scheme !== 'string'
+    kind.kind.in.length === 0 ||
+    kind.kind.in.some((value) => typeof value !== 'string' || value === 'subject') ||
+    !hasFixedConcept(condition)
   )
     return false;
   try {

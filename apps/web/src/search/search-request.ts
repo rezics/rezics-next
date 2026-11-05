@@ -59,7 +59,7 @@ export function discoveryRequest(params: SearchLoaderDeps, languages: string[]):
     ...(params.cursor ? { cursor: params.cursor } : {}),
     ...(params.sort ? { sort: params.sort } : {}),
     ...(clauses.length ? { filter: { and: clauses } } : {}),
-    ...(kindCountLeaf !== undefined && !params.cursor ? { kindCountLeaf } : {}),
+    ...(kindCountLeaf !== undefined ? { kindCountLeaf } : {}),
     ...(emptyRecoveryActions.length ? { emptyRecoveryActions } : {}),
     kindPage: { limit: 8 },
   };

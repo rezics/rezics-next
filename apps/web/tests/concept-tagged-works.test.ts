@@ -49,6 +49,13 @@ test('the mounted weight control and committed request preserve the fixed tag, m
   );
   expect(request?.sort).toBe('rating');
   expect(request?.cursor).toBe('retained-page');
+  expect(request?.kindCountLeaf).toBe(1);
+  expect(request?.filter).toMatchObject({
+    and: [
+      { statement: { property: 'schema:genre', concept: { scheme: schemeId, includeChildren: true } } },
+      { kind: { in: ['schema:Book'] } },
+    ],
+  });
   expect(conceptLeaf(request!.filter as FilterDocument)?.statement).toEqual({
     property: 'schema:genre',
     in: [conceptId],
@@ -150,7 +157,7 @@ test('a disclosed work tag opens the mounted Concept host with its released role
   );
 });
 
-test('builds one admitted Concept statement with exact role, scheme, descendants, spoiler qualifier, type and Boolean conditions', () => {
+test('builds one admitted Concept statement with released work kinds and the designated count leaf', () => {
   expect(admission.state).toBe('available');
   if (admission.state !== 'available') return;
   expect(
@@ -177,7 +184,6 @@ test('builds one admitted Concept statement with exact role, scheme, descendants
     and: [
       {
         and: [
-          { type: { in: ['schema:Book'] } },
           {
             statement: {
               property: 'schema:genre',
@@ -189,9 +195,10 @@ test('builds one admitted Concept statement with exact role, scheme, descendants
           additional,
         ],
       },
-      { kind: { in: ['subject'] } },
+      { kind: { in: ['schema:Book'] } },
     ],
   });
+  expect(request?.kindCountLeaf).toBe(1);
 
   const descendants = conceptWorksRequest(
     { conceptId, property: 'schema:genre', scheme: schemeId, includeChildren: true },
@@ -201,6 +208,7 @@ test('builds one admitted Concept statement with exact role, scheme, descendants
   );
   const leaf = descendants?.filter ? conceptLeaf(descendants.filter as FilterDocument) : undefined;
   expect(leaf?.statement.concept).toEqual({ scheme: schemeId, includeChildren: true });
+  expect(descendants?.filter).toMatchObject({ and: [{ statement: { concept: { scheme: schemeId } } }, { kind: { in: admission.properties.find((property) => property.id === 'schema:genre')?.types } }] });
   expect(
     conceptWorksRequest({ conceptId, property: 'schema:genre', scheme: schemeId }, admission, [], 'en'),
   ).toBeUndefined();

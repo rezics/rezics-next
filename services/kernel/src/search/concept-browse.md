@@ -1,12 +1,12 @@
 # Concept hierarchy traversal
 
 Search's hierarchy traversal is derived work beneath the existing retained-plan worker. It does not establish
-Semantic graph coverage, release admission, disclosure or authorization. Indexed storage and worker dispatch
-are installed, including the admitted native hierarchy source. Native classified-statement windows
-and a complete first-prefix absence proof are available through SubjectSource. An explicitly budgeted
-multi-window prefix matcher composes these windows; Search dispatch and the public hierarchy journey
-remain to be connected.
-Absent a native source adapter the worker leaves the plan preparing; it cannot seal an empty closure.
+Semantic graph coverage, release admission, disclosure or authorization. Universal Search prepares a complete
+scheme-bound closure through the installed native hierarchy source and retained worker, then uses the shared
+multi-window native statement matcher for exact or descendant truth and same-statement qualifiers. Native
+classified-statement windows and the first-prefix absence proof remain bounded by the current request allowance.
+If the native source or closure is not ready, the request remains preparing; an empty or incomplete closure cannot
+be treated as a successful empty result.
 
 Decision: hierarchy continuation follows sortable full native edge keys independently of returned child IDs, so
 duplicate or irrelevant rows can advance without being mistaken for an empty closure.

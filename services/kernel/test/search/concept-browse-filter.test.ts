@@ -1,5 +1,4 @@
 import { expect, test } from 'bun:test';
-import { SearchUnavailableError } from '../../src/search/opensearch.ts';
 import { compileFilter } from '../../src/search/filter.ts';
 import {
   compileCurrentFilter,
@@ -10,19 +9,54 @@ import {
 const scheme = '018f0000-0000-7000-8000-00a000000010';
 const concept = '018f0000-0000-7000-8000-00a000000011';
 
-test('concept filters do not compile as root-only statement filters', () => {
-  expect(() =>
+test('concept candidates are broadened to the property and excluded concepts retain every candidate', () => {
+  const compiled = compileFilter(
+    {
+      statement: {
+        property: 'schema:genre',
+        in: ['018f0000-0000-7000-8000-00a000000011'],
+        concept: { scheme: '018f0000-0000-7000-8000-00a000000010', includeChildren: true },
+      },
+    },
+    { prefix: 'f', relationOverflow: true },
+  );
+  expect(compiled.leaves[0]).toMatchObject({
+    facet: 'statement',
+    property: 'schema:genre',
+    values: ['018f0000-0000-7000-8000-00a000000011'],
+    concept: { scheme: '018f0000-0000-7000-8000-00a000000010', includeChildren: true },
+  });
+  expect(compiled.query).toEqual({
+    bool: {
+      should: [
+        {
+          nested: {
+            path: 'facts',
+            query: { term: { 'facts.property': 'schema:genre' } },
+            score_mode: 'none',
+            _name: 'f0',
+          },
+        },
+        { term: { relation_facet_overflow: 'schema:genre' } },
+      ],
+      minimum_should_match: 1,
+      _name: 'f0',
+    },
+  });
+  expect(
     compileFilter(
       {
-        statement: {
-          property: 'schema:genre',
-          in: ['018f0000-0000-7000-8000-00a000000011'],
-          concept: { scheme: '018f0000-0000-7000-8000-00a000000010', includeChildren: true },
+        not: {
+          statement: {
+            property: 'schema:genre',
+            in: ['018f0000-0000-7000-8000-00a000000011'],
+            concept: { scheme: '018f0000-0000-7000-8000-00a000000010', includeChildren: true },
+          },
         },
       },
       { prefix: 'f', relationOverflow: true },
-    ),
-  ).toThrow(SearchUnavailableError);
+    ).query,
+  ).toEqual({ match_all: { _name: 'f0' } });
 });
 
 test('current leaves retain scheme and descendant selection and keep unknown under exclusion', () => {

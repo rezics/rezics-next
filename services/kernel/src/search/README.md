@@ -1658,8 +1658,9 @@ current owner hydration and final `readStatus` plus Source validation for every 
 retains the actual execution, consumed raw prefix and native repair-job locator, not an engine frontier. Native exhaustion requires the
 required retained window and consumption through `examined`; empty filtered output is never end evidence.
 Three rounds share `min(600, 6s+3)` raw candidates; sparse direct output advances actual repair and returns readiness.
-Kind metadata uses only positive bounded current witnesses on the initial page, otherwise unavailable; source
-census is never a query count. Removing a designated count leaf currently yields unavailable count evidence.
+When `kindCountLeaf` is designated, kind metadata performs a separate bounded disjunctive candidate pass and
+revalidates current disclosure before exposing distinct positive witnesses as `N+`; zero and exact counts require
+separate proof and are not inferred from the candidate prefix. Source census and page length are never query counts.
 
 `DiscoveryConsumerCaptureInput`, `DiscoveryEngineHit` and `DiscoveryConsumerQuery` live in `discovery.ts`;
 `public-filter-consumer-contract.ts` adds `captureDiscovery`/`queryDiscovery`, optional refill and required windows

@@ -76,6 +76,11 @@ function onlyCollectionKind(filter: DiscoveryFilterDocument | undefined): boolea
   return !!leaf && 'kind' in leaf && leaf.kind.in.length === 1 && leaf.kind.in[0] === 'collection';
 }
 
+/** Maximum engine rows admitted across one mixed Search page and its useful-page refills. */
+export function discoveryCandidateScanBound(limit: number): number {
+  return Math.min(600, 6 * limit + 3);
+}
+
 function invalid(pointer: string): never {
   throw new ProblemError('invalid_request', { errors: [{ pointer, code: 'invalid_format' }] });
 }
@@ -200,6 +205,7 @@ export function admitDiscoveryRequest(
     sort,
     limit,
     kindLimit,
+    kindCountLeaf: request.kindCountLeaf,
     options,
     languages: options.languages ?? [],
     ...(collectionDirectory ? { collectionDirectory } : {}),

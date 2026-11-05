@@ -76,6 +76,8 @@ Decision: the Web Concept reader retries only after an explicit action for the u
 
 Decision: tag weight uses a released quantity qualifier range (`{property,range:{gte?,lte?,unit}}`) on the same fixed concept statement. Definitions owns eligible qualifiers and units; sourceTagWeight retains its source metric and spoiler evidence rather than creating a separate weight assertion. The mounted weight form commits through the existing tagQualifiers visit field and clears only hit continuation. Universal kind counts remain the designated-kind-leaf exception; property/value facets and public totals remain count-free.
 
+Decision: mounted Concept works use configured released work kinds and Universal Search kind metadata/counts, with the kind leaf directly under the top-level AND. They do not translate catalogue work kinds through the obsolete `subject` alias.
+
 The mounted Concept visit uses the existing locale-prefixed `/subjects/:id/:slug/concepts` route. Its bounded query
 state keeps the selected property, source scheme, work type, admitted name or rating sort, descendant choice, spoiler
 threshold, additional condition and opaque continuation together with the fixed Concept. Changing a selection,
@@ -376,8 +378,11 @@ unchecked engine buckets, page length or estimates. Fixed maintained counters mu
 and change atomically with membership/privacy; checked enumeration is exact only on complete exhaustion.
 
 Metadata is a fixed bounded PAGE in configured order, never count order: data kind ID, localized label and icon.
-One More types control uses metadata continuation without excluding unshown kinds from hit search. Counts are
-attempted once on the initial query and retained across hit continuation; changed conditions start a new query.
+One More types control uses metadata continuation without excluding unshown kinds from hit search. For a
+designated kind leaf, recompute counts from the bounded disjunctive query on each hit or metadata continuation,
+and revalidate its current disclosure before presenting them. Only distinct current canonical rows are positive
+lower-bound evidence; unavailable evidence stays unavailable and zero is never inferred. Changed conditions
+retire the prior cursor and count work.
 Later metadata can have unavailable counts. K_page=8 is a research proposal pending first native measurement,
 not a frozen output/engine allowance. Existing property/value facets and public totals remain count-free. Facet traversal belongs to the current refinement query; a repeated opaque cursor preserves accepted values, stops further paging and offers the existing restart action. Failed reads remain retryable.
 Result Type browsing keeps the initial eight options and one replaceable eight-option continuation window;

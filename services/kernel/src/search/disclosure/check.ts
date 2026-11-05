@@ -1,6 +1,8 @@
 import { matchInverseRelationFacets, type CurrentRelationRelease } from '../character-person.ts';
 import type { ConceptSelection, FilterDocument, FilterQualifier, FilterRange, SpoilerThreshold } from '@rezics/filter';
 import { anyCurrentMatch, compileCurrentFilter, currentClauseKey } from '../current-filter-plan.ts';
+import type { ConceptFilterExecution } from '../concept-browse-statements.ts';
+import { CONCEPT_STATEMENT_PREFIX_LIMITS, matchNativeConceptFilter } from '../concept-browse-statements.ts';
 import { holdsCurrentStatements, holdsCurrentType } from '../current-leaf.ts';
 import { RequestSourceLifetime } from '../request-source-lifetime.ts';
 import { REQUEST_SOURCE_KEYS, validateRequestSourceSnapshot } from '../request-source-snapshot.ts';
@@ -13,6 +15,7 @@ import {
   type SubjectSource,
   type RetainedRelationFacetPage,
 } from '../source.ts';
+import { ProblemError } from '../../http/problem.ts';
 
 /** One OpenSearch hit, including the indexed partition, security revision and matched query names. */
 export type Hit = { id: string; partition: number; securityRevision: number; matched: readonly string[] };
@@ -43,6 +46,7 @@ export async function checkHits(
     relationProperties?: readonly string[];
     spoilerThreshold?: SpoilerThreshold;
     observeRelationRelease?: () => Promise<CurrentRelationRelease | null>;
+    conceptFilter?: ConceptFilterExecution;
   },
 ): Promise<{ passed: { hit: Hit; subject: IndexedSubject }[]; dropped: number; relationRejected?: true }> {
   const requestedConcurrency = options?.concurrency ?? 8;
@@ -117,7 +121,7 @@ export async function checkHits(
         for (const [id, subject] of read.value.subjects) subjects.set(id, subject);
       }
       const points = new Map<string, Point>();
-      const evaluations = new Map<string, () => { passed: boolean; relationRejected: boolean }>();
+      const evaluations = new Map<string, () => Promise<{ passed: boolean; relationRejected: boolean }>>();
       const eligible: { hit: Hit; subject: IndexedSubject; index: number }[] = [];
       for (const { hit, index } of group.candidates) {
         const subject = subjects.get(hit.id);
@@ -142,6 +146,10 @@ export async function checkHits(
           const values: (RelationFacetMatch | Point[])[] = new Array(plan.leaves.length);
           for (const leaf of order) {
             const clause = plan.leaves[leaf]!;
+            if (clause.facet === 'statement' && 'values' in clause && clause.concept) {
+              values[leaf] = 'not_proven';
+              continue;
+            }
             const overflow = clause.facet === 'statement' && subject.relationFacetOverflow?.includes(clause.property);
             const live =
               clause.facet === 'statement' &&
@@ -172,10 +180,47 @@ export async function checkHits(
               return point;
             });
           }
-          evaluations.set(subject.id, () => {
+          evaluations.set(subject.id, async () => {
             const resolved = values.map((value) =>
               Array.isArray(value) ? anyCurrentMatch(value.map((point) => point.result!)) : value,
             );
+            const conceptLeaves = plan.leaves.some(
+              (clause) => clause.facet === 'statement' && 'values' in clause && clause.concept,
+            );
+            if (conceptLeaves) {
+              if (!options?.conceptFilter) return { passed: false, relationRejected: true };
+              const current = await matchNativeConceptFilter(
+                options.conceptFilter.reader,
+                partition,
+                {
+                  subject: subject.id,
+                  filter: options.filter!,
+                  ...(options.spoilerThreshold === undefined ? {} : { spoilerThreshold: options.spoilerThreshold }),
+                },
+                options.conceptFilter.resolveCut,
+                CONCEPT_STATEMENT_PREFIX_LIMITS,
+                ({ leaf }) => {
+                  if (leaf.kind !== 'catalogue') return null;
+                  const index = plan.indices.get(currentClauseKey(leaf.clause));
+                  if (index === undefined) return null;
+                  const value = values[index];
+                  if (value === undefined) return null;
+                  const match = Array.isArray(value)
+                    ? anyCurrentMatch(value.map((point) => {
+                        if (point.result === undefined) throw new TypeError('Relation evidence was not resolved');
+                        return point.result;
+                      }))
+                    : value;
+                  return {
+                    read: async () => ({ status: 'current' as const, match, revalidate: async () => 'current' as const }),
+                  };
+                },
+              );
+              if (current.status === 'restart') throw new ProblemError('search_restart_required');
+              if (current.status !== 'current' || current.match === 'not_proven')
+                return { passed: false, relationRejected: true };
+              return { passed: current.match === true, relationRejected: false };
+            }
             // Bounded uncertainty remains unknown through negation and cannot disclose a hit.
             const passed = plan.evaluate(resolved) === true;
             return {
@@ -257,10 +302,13 @@ export async function checkHits(
             }
           }
         }
-        // Reanchor the complete inverse window, including changes between separate native batches
-        // and the gap between the original candidate read and the seam's first read.
+        const outcomes = new Map<string, { passed: boolean; relationRejected: boolean }>();
+        for (const { hit, subject, index } of eligible) {
+          outcomes.set(subject.id, await evaluations.get(subject.id)!());
+        }
+        // Reanchor identity, disclosure and facts after retained concept membership work.
         const retired = new Set<string>();
-        if (pagePoints.length) {
+        if (pagePoints.length || options?.conceptFilter) {
           for (let offset = 0; offset < ids.length; offset += REQUEST_SOURCE_KEYS) {
             const chunk = ids.slice(offset, offset + REQUEST_SOURCE_KEYS);
             const read = await lifetime.start(async () => {
@@ -279,7 +327,8 @@ export async function checkHits(
                 after?.visibility !== before?.visibility ||
                 after?.redirect !== before?.redirect ||
                 after?.type !== before?.type ||
-                after?.securityRevision !== before?.securityRevision
+                after?.securityRevision !== before?.securityRevision ||
+                (options?.conceptFilter && JSON.stringify(after?.statements) !== JSON.stringify(before?.statements))
               )
                 retired.add(id);
             }
@@ -287,7 +336,7 @@ export async function checkHits(
         }
         sourceChanged ||= retired.size > 0;
         for (const { hit, subject, index } of eligible) {
-          const result = evaluations.get(subject.id)!();
+          const result = outcomes.get(subject.id)!;
           if (retired.has(subject.id)) {
             relationRejected = true;
             continue;

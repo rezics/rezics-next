@@ -84,10 +84,6 @@ export function compileFilter(
     if ('owner' in node) throw new Error('Catalogue filters do not support owner predicates');
     if ('saved' in node) throw new Error('Compile only admitted filters');
     const { property, qualifiers } = node.statement;
-    // A concept leaf needs a complete retained descendant closure and a current native witness.
-    // Until both are installed, refusing the query is safer than compiling only its root value.
-    if ('in' in node.statement && node.statement.concept)
-      throw new SearchUnavailableError('Concept membership preparation is unavailable');
     const condition: { values: string[] } | { range: FilterRange } =
       'in' in node.statement ? { values: [...node.statement.in] } : { range: node.statement.range };
     leaves.push({
@@ -96,10 +92,26 @@ export function compileFilter(
       property,
       ...condition,
       ...('in' in node.statement && node.statement.inverse ? { inverse: true as const } : {}),
+      ...('in' in node.statement && node.statement.concept ? { concept: node.statement.concept } : {}),
       ...(qualifiers ? { qualifiers } : {}),
       negated,
     });
     if ('in' in node.statement && node.statement.inverse) return { match_all: { _name: name } };
+    if ('in' in node.statement && node.statement.concept) {
+      // The index stores only sampled statement values, not scheme membership or the retained
+      // descendant closure. Use the property as a positive candidate superset, and every row for
+      // exclusion; the current native concept matcher decides the actual Boolean result.
+      if (negated) return { match_all: { _name: name } };
+      const exact: FilterClause = {
+        nested: {
+          path: 'facts',
+          query: { term: { 'facts.property': property } },
+          score_mode: 'none',
+          _name: name,
+        },
+      };
+      return statementQuery(exact, property, name, false);
+    }
     // Quantity qualifier ranges are native same-statement evidence. The current document
     // format has no numeric qualifier fields; retain both polarities for native evaluation.
     if (qualifiers?.some((qualifier) => 'range' in qualifier)) return { match_all: { _name: name } };

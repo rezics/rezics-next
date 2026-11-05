@@ -279,7 +279,13 @@ function ConceptWorksVisit({
                 })
                 .map((type) => (
                   <NativeSelectOption key={type.id} value={type.id}>
-                    {localizedLabel(type.labels, locale).text.trim() || type.id}
+                    {(() => {
+                      const label = localizedLabel(type.labels, locale).text.trim() || type.id;
+                      const count = page?.kinds.values.find((entry) => entry.id === type.id)?.count;
+                      return count && 'value' in count
+                        ? `${label} (${new Intl.NumberFormat(locale).format(count.value)}${count.exact ? '' : '+'})`
+                        : label;
+                    })()}
                   </NativeSelectOption>
                 ))}
           </NativeSelect>

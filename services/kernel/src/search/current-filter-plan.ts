@@ -60,7 +60,14 @@ function normalizedQualifiers(qualifiers: readonly FilterQualifier[] = []): Filt
     const clause =
       'in' in qualifier
         ? { property: qualifier.property, in: sortedValues(qualifier.in) }
-        : { property: qualifier.property, range: { ...qualifier.range } };
+        : {
+            property: qualifier.property,
+            range: {
+              ...(qualifier.range.gte === undefined ? {} : { gte: qualifier.range.gte }),
+              ...(qualifier.range.lte === undefined ? {} : { lte: qualifier.range.lte }),
+              ...(qualifier.range.unit === undefined ? {} : { unit: qualifier.range.unit }),
+            },
+          };
     clauses.set(JSON.stringify(clause), clause);
   }
   return [...clauses.keys()].sort().map((key) => clauses.get(key)!);

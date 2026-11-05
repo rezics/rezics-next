@@ -36,6 +36,7 @@ import {
   type RetainedDiscoveryRead,
   type RetainedDiscoverySearch,
 } from './discovery-service.ts';
+import { prepareConceptDiscoveryFilter } from './concept-discovery.ts';
 import { ownDiscoveryRequest } from './discovery-request.ts';
 import { createDefaultPublicFilterRuntime, type DefaultPublicFilterRuntimeConfig } from './public-runtime.ts';
 import { createPublicPreparationStore } from './public-preparation-store.ts';
@@ -339,6 +340,14 @@ export function createDefaultDiscoverySearch(
         consumer,
         source,
         keys: config.keys,
+        prepareConceptFilter: (input) =>
+          prepareConceptDiscoveryFilter({
+            ...input,
+            pool: config.pool,
+            prefix: config.prefix,
+            routeKey: config.routeKey,
+            now: () => config.clock().getTime(),
+          }),
         now: () => config.clock().getTime(),
         resolve: async () => ({ ...current, registry }),
         async prepare(job) {
