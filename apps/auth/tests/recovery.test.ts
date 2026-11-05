@@ -222,7 +222,7 @@ async function open(path = '/recovery', options: BrowserContextOptions = {}, sto
     }
   }, storageFailure);
   try {
-    const response = await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
+    const response = await page.goto(`${origin}${path}`, { waitUntil: 'domcontentloaded' });
     expect(response?.status(), 'the documented dev server serves the page').toBe(200);
     await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
     return { page, origin, urls, responseHeaders: response?.headers() ?? {} };
