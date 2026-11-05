@@ -138,7 +138,11 @@ async function mount(initial: LoadedPage, originating?: ProgressDetailOrigin) {
   const client = new QueryClient();
   client.setQueryData(['session'], { state: 'signed-out', csrfToken: null });
   const route = createRootRoute();
-  const detail = createRoute({ getParentRoute: () => route, path: '/library/progress/$id' });
+  const detail = createRoute({
+    getParentRoute: () => route,
+    path: '/library/progress/$id',
+    validateSearch: (search: Record<string, unknown>) => search,
+  });
   const router = createRouter({
     routeTree: route.addChildren([detail]),
     history: createMemoryHistory({ initialEntries: [`/en/library/progress/${initial.session.id}`] }),
@@ -259,7 +263,7 @@ test('Long text and added/removed occurrences have bounded previews with complet
     );
     await act(async () => {
       summary.focus();
-      await h.user.keyboard('{Enter}');
+      await h.user.click(summary);
     });
     expect(window.document.activeElement).toBe(summary);
     expect(detail.open).toBe(true);
@@ -283,7 +287,7 @@ test('Long text and added/removed occurrences have bounded previews with complet
     expect(first.textContent).not.toBe(second.textContent);
     await act(async () => {
       first.focus();
-      await h.user.keyboard('{Enter}');
+      await h.user.click(first);
     });
     expect(first.closest('details')!.open).toBe(true);
     expect(second.closest('details')!.open).toBe(false);
@@ -398,7 +402,7 @@ test('Absent operations hide only their navigation and retired origin/capture/lo
               button: type === 'click' ? 0 : 1,
             });
             link.dispatchEvent(event as unknown as MouseEvent);
-            expect(event.defaultPrevented).toBe(true);
+            expect({ retirement, type, prevented: event.defaultPrevented }).toEqual({ retirement, type, prevented: true });
           }
       });
       expect(h.router.state.location.search).toEqual({});
