@@ -26,8 +26,16 @@ const globals = {
   document: window.document,
   navigator: window.navigator,
   HTMLElement: window.HTMLElement,
+  HTMLInputElement: window.HTMLInputElement,
+  HTMLButtonElement: window.HTMLButtonElement,
   Element: window.Element,
   Node: window.Node,
+  NodeFilter: window.NodeFilter,
+  ShadowRoot: window.ShadowRoot,
+  Event: window.Event,
+  KeyboardEvent: window.KeyboardEvent,
+  MouseEvent: window.MouseEvent,
+  PointerEvent: window.PointerEvent,
   Document: window.Document,
   DocumentFragment: window.DocumentFragment,
   MutationObserver: window.MutationObserver,
@@ -52,6 +60,7 @@ const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = a
 const { SearchPage } = await import('../src/search/search');
 const { HeaderSearchFilterProvider } = await import('../src/search/header-search/filter-region');
 const { setLocale } = await import('../src/paraglide/runtime.js');
+const settle = () => act(async () => { await new Promise((resolve) => window.setTimeout(resolve, 40)); });
 
 test('range drafts survive Filters remounts and reset to the next committed range', async () => {
   type Committed = { query: string; ranges: Record<string, { gte?: number; lte?: number; unit?: string }> };
@@ -119,6 +128,7 @@ test('range drafts survive Filters remounts and reset to the next committed rang
         for (const listener of mediaListeners) listener({} as MediaQueryListEvent);
       });
     await resize(390);
+    await settle();
     expect(numbers().map((input) => input.value)).toEqual(['4', '']);
     expect(document.querySelector('select[id$="-unit"]')?.value).toBe('lb');
     await resize(1280);
@@ -216,6 +226,7 @@ test('mounted criteria reserve IME keys, then Apply ordered labels without chang
       await act(async () => {
         for (const listener of mediaListeners) listener({} as MediaQueryListEvent);
       });
+      await settle();
       let input = document.querySelector<HTMLInputElement>('input[id$="-custom"]')!;
       expect(input, host.textContent ?? 'Mounted Search criteria').not.toBeNull();
       const form = input.form!;
