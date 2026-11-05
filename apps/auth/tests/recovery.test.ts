@@ -248,12 +248,14 @@ afterAll(async () => {
 
 async function startForm(page: Page) {
   const address = page.getByLabel(/email/i);
+  await address.waitFor({ state: 'visible' });
   expect(await address.count(), 'recovery start has a labelled email field').toBe(1);
   return { address, submit: page.getByRole('button', { name: 'Send recovery link', exact: true }) };
 }
 
 async function completeForm(page: Page) {
   const password = page.getByLabel(/new password/i);
+  await password.waitFor({ state: 'visible' });
   expect(await password.count(), 'recovery completion has a labelled new password field').toBe(1);
   return { password, submit: page.getByRole('button', { name: 'Update password', exact: true }) };
 }
