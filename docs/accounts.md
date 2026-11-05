@@ -159,7 +159,9 @@ Feeds retain eight admitted prior cursors plus current per feed, each at most 40
 mounted locale/target/reader visit. Router search navigation preserves the visit. Next/Previous/First
 use one native replacement read, at most 20 rows/feed; inventory retains one optional exposure read. No extra bodies,
 reads, prefetch, totals or storage. Previous rereads an admitted predecessor; direct addresses invent
-none. First removes only the selected cursor. Refresh/failure preserve history; Retry rereads the failed target,
+none. First removes only the selected cursor. Each admitted feed move replaces that feed's rows, including an empty
+terminal page; failed movement preserves its rows and coordinates. After an admitted terminal Next, Next remains visible
+but disabled while Previous and First remain enabled. Refresh/failure preserve history; Retry rereads the failed target,
 including cursor-free First. Reader/credential changes, sign-out, locale, target and disposal retire rows, coordinates,
 pending reads and focus permanently. Keyboard admission focuses the selected feed only while its activator owns the
 handoff. Reuse eight-locale labels; retain original phone/recovery and Settings acceptance.
