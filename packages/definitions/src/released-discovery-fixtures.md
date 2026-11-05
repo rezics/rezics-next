@@ -260,6 +260,8 @@ transport is `POST /v1/zones/{id}:readPage`, optional query cursor, existing own
 preparation/no-store; never normalize it to a Collection envelope. The separate technical unfiltered
 `GET /v1/subject-pages` crawler may return short/empty200 until next-null; it is not a filtered-list exception.
 
+The catalogue jobs with released data also have a native journey, `test/semantic/journey-public-filter-seeded-journey.test.ts`, over this same fixture. It walks public and owner personas across one-subject pages, negation with unknown evidence, and one contribution through propose, accept, adopt and readback. Served pages and the other five surfaces stay with their owners.
+
 Format new support/tests before recording SHA-256 for acceptance review. Scenario names are TO-FREEZE until their
 manager records accepted bytes; the existence of this contract does not freeze them or implement release data.
 The handoff reports exact titles, hashes, version, observed native reds and these prerequisites. No existing frozen
