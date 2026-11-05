@@ -11,6 +11,7 @@ const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
 );
 const window = new Window({ url: 'https://site.test/en/library/progress/current', width: 1280, height: 900 });
+window.document.head.innerHTML = '<link rel="canonical" href="https://site.test/en/library/progress/current">';
 const globals = {
   window,
   document: window.document,
@@ -34,6 +35,7 @@ const globals = {
   getComputedStyle: window.getComputedStyle.bind(window),
   requestAnimationFrame: window.requestAnimationFrame.bind(window),
   cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+  scrollTo: window.scrollTo.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -237,7 +239,9 @@ const detailModule = await import('../src/library/progress-detail-server');
 const actualDetail = detailModule.readProgressDetail;
 const { prepareSession } = await import('../src/session/request');
 const { CurrentProgressDetail } = await import('../src/library/progress-session');
-const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+const { QueryClient, QueryClientProvider, notifyManager } = await import('@tanstack/react-query');
+notifyManager.setScheduler(queueMicrotask);
+afterAll(() => notifyManager.setScheduler((callback) => setTimeout(callback, 0)));
 const { createRoot, hydrateRoot } = await import('react-dom/client');
 const { renderToString } = await import('react-dom/server');
 const { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterContextProvider, RouterProvider } =
@@ -395,10 +399,10 @@ async function mount(initial = detail(), hydrate = false, observed = viewer(init
     });
   const field = (label: string) => body.getByLabelText(label) as HTMLInputElement;
   const fill = async (label: string, value: string) =>
-    act(async () => {
-      await user.clear(field(label));
-      if (value) await user.type(field(label), value);
-    });
+    {
+      await act(async () => user.clear(field(label)));
+      for (const character of value) await act(async () => user.type(field(label), character));
+    };
   const record = async (value = '4.75') => {
     await click(m.library_progress_update());
     await fill(m.library_progress_amount(), value);
@@ -448,7 +452,8 @@ async function mount(initial = detail(), hydrate = false, observed = viewer(init
   };
 }
 function retainedSubmit(form: HTMLFormElement) {
-  const props = Object.entries(form).find(([key]) => key.startsWith('__reactProps$'))![1] as {
+  const key = Object.getOwnPropertyNames(form).find((key) => key.startsWith('__reactProps$'))!;
+  const props = Reflect.get(form, key) as {
     onSubmit: (event: { preventDefault(): void }) => void;
   };
   return () => props.onSubmit({ preventDefault() {} });
@@ -563,7 +568,7 @@ test('B detail, record and publication remain independently usable while A detai
     const oldPublication = writes[0]!;
     await h.record();
     const oldRecord = writes[1]!;
-    const oldSubmit = retainedSubmit(document.body.querySelector('[role="dialog"] form')!);
+    const oldSubmit = retainedSubmit(h.field(m.library_progress_amount()).closest('form')!);
     await h.show({ address: { ...address, logs: 'A:other-page' } });
     const oldDetail = h.reads.at(-1)!;
     await h.show({ session: viewer('B'), address });
@@ -605,7 +610,7 @@ test('late history failures and publication failures/finally cannot alter a newe
     await h.record();
     await settle(() => writes[1]!.work.resolve(recorded(detail())));
     const oldHistory = h.reads.at(-1)!;
-    const oldPublishSubmit = retainedSubmit(h.host.querySelector('form')!);
+    const oldPublishSubmit = retainedSubmit(h.field(m.library_logs_publish_note()).closest('form')!);
     await h.show({ session: viewer('B') });
     await h.resolveRead(detail('B'));
     await h.publish('B note');
@@ -635,7 +640,7 @@ test('a batched away/back viewer change retires retained callbacks and late fail
   try {
     await h.record('4.75');
     const old = writes[0]!;
-    const submit = retainedSubmit(document.body.querySelector('[role="dialog"] form')!);
+    const submit = retainedSubmit(h.field(m.library_progress_amount()).closest('form')!);
     await act(async () => {
       h.cache.setQueryData(['session'], viewer('B'));
       h.cache.setQueryData(['session'], viewer('A'));
@@ -658,7 +663,7 @@ test('a batched away/back viewer change retires retained callbacks and late fail
   }
 });
 
-test('healthy exact native payload and key survive token rotation, ordinary refresh and edits after an unknown outcome', async () => {
+test('healthy exact native payload, key and locked draft survive token rotation and ordinary refresh after an unknown outcome', async () => {
   const initial = detail();
   const h = await mount(initial);
   try {
@@ -668,12 +673,12 @@ test('healthy exact native payload and key survive token rotation, ordinary refr
     expect(first.request.headers.get('idempotency-key')).toBe(JSON.stringify(initial.progress.idempotencyKey));
     expect(first.request.headers.get('authorization')).toBe('Bearer A');
     await settle(() => first.work.reject(new Error('unknown commit outcome')));
-    await h.fill(m.library_progress_amount(), '8.5');
+    expect(h.field(m.library_progress_amount()).closest('fieldset')!.disabled).toBe(true);
     await h.show({ session: viewer('A', token('R')), page: detail('A', address, 12) });
-    await h.click(m.library_progress_record());
+    await h.click(m.library_progress_confirm_correction());
     expect(writes[1]!.body).toEqual(first.body);
     expect(writes[1]!.request.headers.get('idempotency-key')).toBe(first.request.headers.get('idempotency-key'));
-    expect(h.field(m.library_progress_amount()).value).toBe('8.5');
+    expect(h.field(m.library_progress_amount()).value).toBe('0');
     await settle(() => writes[1]!.work.resolve(recorded(initial, '0')));
     expect(h.reads.at(-1)!.data).toEqual(address); // Includes owner-list cursor, not an unlabelled session read.
     const authoritative = detail('A', address, 13);
@@ -719,7 +724,7 @@ test('publication retains its captured note and key through same-owner refresh a
     const first = writes[0]!;
     expect(first.body).toEqual({ sessionId: address.id, note: 'captured note' });
     await settle(() => first.work.reject(new Error('unknown publication')));
-    await h.fill(m.library_logs_publish_note(), 'subsequently edited');
+    expect((h.field(m.library_logs_publish_note()) as unknown as HTMLTextAreaElement).readOnly).toBe(true);
     await h.show({ session: viewer('A', token('S')), page: detail('A', address, 8) });
     await h.click(m.library_logs_publish());
     expect(writes[1]!.body).toEqual(first.body);
