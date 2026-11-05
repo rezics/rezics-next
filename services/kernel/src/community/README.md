@@ -301,12 +301,15 @@ episode, participation or action source returns `transaction_retry_exhausted` fo
 The installed producer signature is `createRealmHomeReader(deps: RealmHomeDependencies)`, where
 `RealmHomeDependencies` extends `RealmDependencies` with `tokens: KeyRing`; it returns the closed
 `RealmHomePageSchema` DTO, mounted at `GET /v1/realms/:realmId/home`. The full-input OpenAPI contract includes that
-operation. The checked-in KernelClient declaration still lacks the mounted `home`, `boardShelf` and
-`publicationShelf` methods, so the existing Community Web receiver uses a narrow local DTO and route seam until the
-shared declaration is delivered. This seam does not establish installed consumer typing. Join remains a command
-offer, and Realm claims still use their separate current claim reader; neither path executes from home advice. The
-receiver preserves its existing presentation, lifetime and mutation ownership without adding another frontend or
-Search dependency.
+operation.
+
+Decision: Community Web consumes Realm Home and both shelves only through the root-derived `KernelClient` methods
+and projections; the official publisher owns recent-thread and Board-visibility typing, and Web adds no second DTO
+or reader.
+
+Join remains a command offer, and Realm claims still use their separate current claim reader; neither path executes
+from home advice. The receiver preserves its existing presentation, lifetime and mutation ownership without adding
+another frontend or Search dependency.
 
 #### Recent discussions in the Board shelf
 

@@ -1,48 +1,15 @@
-import type { KernelClient } from '@rezics/client';
+import type { KernelClient, RealmHomePage } from '@rezics/client';
 import type { CoverSummary } from '@rezics/ui/cover';
 import type { ReadCredentialMode } from '../kernel/credential';
-import { boardCommunitySource, type CommunityPresentation } from '../threads/board-community-source';
+import { boardCommunitySource } from '../threads/board-community-source';
 import { realmClaimSnapshot } from './realm-claim';
 import { readCommunity, type PublishedSubject, type RealmBoard, type ShelfPage, type SpacePageData } from './space';
 
 type RealmRoute = ReturnType<KernelClient['realms']>;
-type Realm = NonNullable<Awaited<ReturnType<RealmRoute['get']>>['data']>['realm'];
-type Space = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['spaces']>['get']>>['data']>['space'];
 type Result<T> = { status: number; data?: T | null; error?: unknown };
-type Window<T> = { items: readonly T[]; next: string | null };
 
-/** Local view of the documented mounted DTO while the shared client route declaration is pending. */
-export type NativeRealmHomePage = {
-  realm: Realm;
-  space: Space;
-  presentation: Omit<CommunityPresentation, 'join'>;
-  boards: NativeRealmBoardPage;
-  publications: NativeRealmPublicationPage;
-  viewer:
-    | { state: 'anonymous' }
-    | {
-        readability: 'allowed';
-        membership:
-          | { state: 'member'; since: string; reservationId: string; transactionId: string }
-          | { state: 'none'; since: null; reservationId: null; transactionId: null };
-        participation: 'allowed' | 'denied';
-      };
-  actions:
-    | { state: 'sign-in' }
-    | {
-        state: 'current';
-        enter: NativeRealmHomeAction;
-        manage: NativeRealmHomeAction;
-        leave: NativeRealmHomeAction;
-      };
-};
-type NativeRealmHomeAction =
-  | { state: 'available'; method: 'GET' | 'DELETE'; path: string; body: null; expectedStatus: 200 | 202 }
-  | {
-      state: 'prohibited';
-      reason: 'not_authorized' | 'not_member' | 'signed_out' | 'governance_read_only';
-    }
-  | { state: 'unavailable'; reason: 'owner_invariant_observation_unavailable' };
+/** The mounted response is the only Home DTO authority. */
+export type NativeRealmHomePage = RealmHomePage;
 export type NativeRealmHomeObservation = {
   viewer:
     | { state: 'anonymous' }
@@ -55,24 +22,10 @@ export type NativeRealmHomeObservation = {
     >
   >;
 };
-export type NativeRealmBoardPage = Window<{
-  id: string;
-  realmId: string | null;
-  title: string | null;
-  purpose: RealmBoard['purpose'];
-  visibility: RealmBoard['visibility'];
-  availability: 'available' | 'erased';
-}>;
-export type NativeRealmPublicationPage = Window<{
-  publication: { realmId: string; subjectId: string; publicationId: string };
-  summary: {
-    id: string;
-    type: string;
-    types: string[];
-    label: { value: string; language: string } | null;
-    cover: CoverSummary | null;
-  };
-}>;
+type BoardShelfRead = Awaited<ReturnType<RealmRoute['boardShelf']['get']>>;
+type PublicationShelfRead = Awaited<ReturnType<RealmRoute['publicationShelf']['get']>>;
+export type NativeRealmBoardPage = NonNullable<BoardShelfRead['data']>;
+export type NativeRealmPublicationPage = NonNullable<PublicationShelfRead['data']>;
 
 export type NativeRealmHomeOperations = {
   home(input: { realmId: string; languages: string[] }): Promise<Result<NativeRealmHomePage>>;
@@ -84,19 +37,24 @@ export type NativeRealmHomeOperations = {
   }): Promise<Result<NativeRealmPublicationPage>>;
 };
 
-/** Keep receiving unavailable until the installed client exposes its root-derived Realm Home routes. */
 export function bindNativeRealmHomeOperations(
-  _client: KernelClient,
-  _auth: Record<string, never> | { headers: { authorization: string } },
+  client: KernelClient,
+  auth: Record<string, never> | { headers: { authorization: string } },
 ): NativeRealmHomeOperations {
-  const unavailable = async (): Promise<Result<never>> => ({
-    status: 503,
-    error: new Error('Installed Realm Home client contract is unavailable'),
-  });
+  const noStore = { ...auth, fetch: { cache: 'no-store' as const } };
   return {
-    home: unavailable,
-    boardShelf: unavailable,
-    publicationShelf: unavailable,
+    home: ({ realmId, languages }) =>
+      client.realms({ realmId }).home.get({ query: { languages }, ...noStore }),
+    boardShelf: ({ realmId, cursor }) =>
+      client.realms({ realmId }).boardShelf.get({
+        query: cursor === undefined ? {} : { cursor },
+        ...noStore,
+      }),
+    publicationShelf: ({ realmId, languages, cursor }) =>
+      client.realms({ realmId }).publicationShelf.get({
+        query: { languages, ...(cursor === undefined ? {} : { cursor }) },
+        ...noStore,
+      }),
   };
 }
 

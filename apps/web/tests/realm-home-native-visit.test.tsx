@@ -184,7 +184,7 @@ const operations: NativeRealmHomeOperations = {
   },
 };
 
-test('public Space reading remains available while the official Realm Home transport is absent', async () => {
+test('public Space reading remains available when the mounted Realm Home endpoint is unavailable', async () => {
   const calls: string[] = [];
   const client = {
     spaceAddresses: () => ({
@@ -210,6 +210,14 @@ test('public Space reading remains available while the official Realm Home trans
         };
       },
     }),
+    realms: ({ realmId }: { realmId: string }) => ({
+      home: {
+        get: async () => {
+          calls.push(`home:${realmId}`);
+          return { status: 503 };
+        },
+      },
+    }),
   } as unknown as KernelClient;
   const request = new Request('https://site.test/en/spaces/realm');
   const loaded = await loadSpacePageWithOrigin(
@@ -219,18 +227,19 @@ test('public Space reading remains available while the official Realm Home trans
     { address: 'realm', languages: ['en', 'ja'] },
     'anonymous',
   );
-  expect(calls).toEqual(['address', 'space']);
+  expect(calls).toEqual(['address', 'space', `home:${id(1)}`]);
   expect(loaded.value.space?.title).toBe('Carrying Space');
   expect(loaded.value.realmCarrier).toBe('unavailable');
 });
 
-test('Realm Home and shelves stay unavailable until the official root-derived client contract is installed', async () => {
+test('Realm Home and shelves use the installed root-derived client transport with the prepared viewer', async () => {
   const requests: {
     method: string;
     path: string;
     languages: string[];
     cursor: string | null;
     authorization: string | null;
+    cache: RequestCache;
   }[] = [];
   const client = createKernelClient('https://kernel.test', {
     fetch: async (input, init) => {
@@ -242,17 +251,47 @@ test('Realm Home and shelves stay unavailable until the official root-derived cl
         languages: url.searchParams.getAll('languages'),
         cursor: url.searchParams.get('cursor'),
         authorization: request.headers.get('authorization'),
+        cache: request.cache,
       });
-      return Response.json(url.pathname.endsWith('/home') ? fixture(1, 'anonymous') : { items: [], next: null });
+      return Response.json(
+        url.pathname.endsWith('/home')
+          ? fixture(1, 'anonymous')
+          : { items: [], next: null },
+      );
     },
   });
   const bound = bindNativeRealmHomeOperations(client, { headers: { authorization: 'Bearer prepared' } });
   const home = await bound.home({ realmId: id(1), languages: ['zh-Hant', 'en'] });
   const boards = await bound.boardShelf({ realmId: id(1), cursor: 'boards-raw' });
   const publications = await bound.publicationShelf({ realmId: id(1), languages: ['ja'], cursor: 'publications-raw' });
-  expect(requests).toEqual([]);
-  expect([home.status, boards.status, publications.status]).toEqual([503, 503, 503]);
-  expect((home.error as Error).message).toContain('Realm Home client contract is unavailable');
+  expect([home.status, boards.status, publications.status]).toEqual([200, 200, 200]);
+  expect(home.data?.realm.realmId).toBe(id(1));
+  expect(requests).toEqual([
+    {
+      method: 'GET',
+      path: `/v1/realms/${id(1)}/home`,
+      languages: ['zh-Hant', 'en'],
+      cursor: null,
+      authorization: 'Bearer prepared',
+      cache: 'no-store',
+    },
+    {
+      method: 'GET',
+      path: `/v1/realms/${id(1)}/boardShelf`,
+      languages: [],
+      cursor: 'boards-raw',
+      authorization: 'Bearer prepared',
+      cache: 'no-store',
+    },
+    {
+      method: 'GET',
+      path: `/v1/realms/${id(1)}/publicationShelf`,
+      languages: ['ja'],
+      cursor: 'publications-raw',
+      authorization: 'Bearer prepared',
+      cache: 'no-store',
+    },
+  ]);
 });
 
 test('Realm join advice needs both the exact action and mounted operation', async () => {
