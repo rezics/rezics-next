@@ -294,7 +294,6 @@ test('three windows return through exact Previous and failed Restart retry witho
     return value;
   });
   const rootRoute = createRootRoute({ component: Outlet });
-  let salesRouteId = '';
   const salesRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: '/en/creator/sales',
@@ -323,7 +322,7 @@ test('three windows return through exact Previous and failed Restart retry witho
           navigate={(href, started) => {
             const admission = deferred<Awaited<ReturnType<typeof navigateCreatorSales>>>();
             admissions.push(admission);
-            return navigateCreatorSales(routeRouter, salesRouteId, href, started).then((result) => {
+            return navigateCreatorSales(routeRouter, href, started).then((result) => {
               admission.resolve(result);
               return result;
             });
@@ -332,7 +331,6 @@ test('three windows return through exact Previous and failed Restart retry witho
       );
     },
   });
-  salesRouteId = salesRoute.id;
   const router = createRouter({
     routeTree: rootRoute.addChildren([salesRoute]),
     history: createMemoryHistory({ initialEntries: ['/en/creator/sales'] }),
@@ -531,7 +529,7 @@ test('a delayed move superseded at the same cursor retires its path before a fre
           navigate={(href, started) => {
             const admission = deferred<Awaited<ReturnType<typeof navigateCreatorSales>>>();
             admissions.push(admission);
-            return navigateCreatorSales(router, salesRouteId, href, started).then(async (result) => {
+            return navigateCreatorSales(router, href, started).then(async (result) => {
               admission.resolve(result);
               if (delayNextNavigation && result) {
                 delayNextNavigation = false;

@@ -43,7 +43,6 @@ type Windows = {
 
 export async function navigateCreatorSales(
   router: AnyRouter,
-  routeId: string,
   href: string,
   started: (locationKey: string) => void,
 ): Promise<CreatorSalesRouteAdmission | undefined> {
@@ -57,9 +56,7 @@ export async function navigateCreatorSales(
   });
   const stopResolve = router.subscribe('onResolved', ({ toLocation }) => {
     if (loaded || toLocation.key !== locationKey) return;
-    const data = router.state.matches.find((match) => match.routeId === routeId)?.loaderData as
-      | CreatorSalesRouteLoad
-      | undefined;
+    const data = router.state.matches.at(-1)?.loaderData as CreatorSalesRouteLoad | undefined;
     if (data) loaded = { locationKey, loadId: data.loadId };
   });
   try {
