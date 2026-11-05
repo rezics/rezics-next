@@ -146,7 +146,8 @@ function ownerStore(client: QueryClient) {
       // even during a synchronous A-to-B-to-A before React has committed anything.
       const stopLifetime = exposure.subscribe(changed);
       const stopCache = client.getQueryCache().subscribe(changed);
-      changed();
+      // useSyncExternalStore re-reads after subscribing; publishing here would update React mid-render.
+      read();
       return () => {
         listeners.delete(notify);
         stopCache();
