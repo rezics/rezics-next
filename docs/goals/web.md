@@ -91,6 +91,10 @@ in the interface.
 
 ### Mixed Home delivery
 
+Decision: Signed-in Home acceptance follows a real seeded card to its Subject's Entry and vote controls, reads back
+each write, and returns through credential renewal, member A → B → A replacement and sign-out. Focused Home
+composition, Space and Auth configuration checks supplement that journey; they do not establish its completion.
+
 Home is one bounded mixed stream of public discovery, Following and Continue, with one renderer. Kind, Space and
 rating-question Context select candidates conjunctively on the same primary item; they do not create separate
 sections. [Home and Following feeds](../feeds.md) owns the wire, producer semantics, disclosure, lifecycle and
