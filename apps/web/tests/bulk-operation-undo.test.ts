@@ -101,6 +101,10 @@ test('first preparation reauthorizes the exact target and seals credentials befo
   let bearer = 'original';
   const env = {
     SITE_ORIGINS: 'https://site.test',
+    AUTH_ISSUER: 'https://auth.test',
+    API_RESOURCE: 'https://kernel.test',
+    WEBSITE_SCOPES: 'openid',
+    WEBSITE_CLIENT_ID: 'web',
     WEBSITE_CLIENT_KEY: '{}',
     SESSIONS: {
       idFromName: (value: string) => value,

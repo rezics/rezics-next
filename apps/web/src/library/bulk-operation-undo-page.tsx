@@ -71,7 +71,8 @@ function UndoReader({
     model.current = reader;
     const watch = origin.watch(() => reader.retireEvidence());
     const cache = viewerExposureLifetime(client).subscribeCache((event) => {
-      const observation = origin.read().observation;
+      const snapshot = viewerExposureLifetime(client).getSnapshot();
+      const observation = snapshot.state === 'signed-in' ? snapshot.observation : undefined;
       const key = event.query.queryKey;
       if (
         event.type === 'updated' &&
@@ -81,7 +82,7 @@ function UndoReader({
         key[3] === observation?.id
       ) {
         admission++;
-        reader.retireEvidence();
+        queueMicrotask(() => reader.retireEvidence());
       }
     });
     return () => {

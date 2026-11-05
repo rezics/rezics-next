@@ -9,6 +9,7 @@ export const operation: BulkOperation = {
   state: null,
   collectionId: null,
   selectionKind: 'explicit',
+  selectionSource: null,
   phase: 'completed',
   selectionComplete: true,
   occurrencesComplete: true,
