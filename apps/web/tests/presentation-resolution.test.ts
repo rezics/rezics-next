@@ -88,6 +88,7 @@ function kernel(
     pinned?: PresentationProfile;
     published?: PresentationProfile;
     pageBody?: unknown;
+    onRead?: (request: Request) => Promise<void>;
   } = {},
 ) {
   const seen: Read[] = [];
@@ -105,6 +106,7 @@ function kernel(
       credentials: request.credentials,
       redirect: request.redirect,
     });
+    await options.onRead?.(request);
     if (path === '/v1/pages:read') return answer(options.status ?? 200, options.pageBody ?? result);
     if (path === '/v1/presentation/active')
       return answer(200, { digest: options.headDigest ?? publishedDigest, head: 17 });
@@ -172,6 +174,40 @@ test('anonymous mode strips ambient credentials and a client session token on ev
     expect(request.headers.get('cookie')).toBeNull();
     expect(request.headers.get(SESSION_HEADER)).toBeNull();
   }
+});
+
+test.each(['aggregate', 'controls'] as const)('cancels anonymous %s reads and reopens fresh', async (phase) => {
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const requests: Request[] = [];
+  const { client, seen } = kernel(page(), {
+    onRead: async (request) => {
+      requests.push(request);
+      if (requests.length === (phase === 'aggregate' ? 1 : 3)) entered.resolve();
+      if (phase === 'aggregate' || !request.url.endsWith('/pages:read')) {
+        await release.promise;
+        // The aggregate deliberately ignores abort; no later controls may start in that case.
+        if (phase === 'controls') request.signal.throwIfAborted();
+      }
+    },
+  });
+  const lifetime = new AbortController();
+  const pending = loadPresentationPreview(client, input, lifetime.signal);
+  await entered.promise;
+  lifetime.abort();
+  expect(requests.every((request) => request.signal.aborted)).toBe(true);
+  release.resolve();
+  expect(await pending).toEqual({ ok: false, reason: 'unavailable' });
+  expect(seen).toHaveLength(phase === 'aggregate' ? 1 : 3);
+  for (const request of requests) {
+    expect(request.headers.has('authorization')).toBe(false);
+    expect(request.headers.has('cookie')).toBe(false);
+    expect(request.headers.has(SESSION_HEADER)).toBe(false);
+    expect([request.credentials, request.redirect, request.cache]).toEqual(['omit', 'manual', 'no-store']);
+  }
+  const fresh = new AbortController();
+  expect(await loadPresentationPreview(client, input, fresh.signal)).toMatchObject({ ok: true, head: 17 });
+  expect(requests.at(-1)!.signal.aborted).toBe(false);
 });
 
 test('pinned provenance uses the shared helper and native selection without guessing a type hierarchy', () => {

@@ -22,6 +22,11 @@ export type PresentationPreviewInput = {
   target: { subject: string; realm?: string } | { route: string };
   locale: string;
 };
+/** Cancellation belongs to the inspection transport, never its serializable target. */
+export type PresentationPreviewRead = (
+  input: PresentationPreviewInput,
+  signal: AbortSignal,
+) => Promise<PresentationPreview>;
 export type PresentationPreview =
   | {
       ok: true;
@@ -123,13 +128,18 @@ export function matchesPinnedTemplate(profile: PresentationProfile, page: Subjec
 }
 
 /** One native current aggregate, plus two fixed presentation control reads. Never read a draft or a source row. */
-export async function loadPresentationPreview(client: KernelClient, value: unknown): Promise<PresentationPreview> {
+export async function loadPresentationPreview(
+  client: KernelClient,
+  value: unknown,
+  signal?: AbortSignal,
+): Promise<PresentationPreview> {
   const input = previewInput(value);
   if (!input) return { ok: false, reason: 'invalid' };
   try {
+    signal?.throwIfAborted();
     const response = await client.pages.$read.post(
       { target: input.target, languages: requestLanguages(input.locale) },
-      { fetch: { redirect: 'manual', credentials: 'omit', cache: 'no-store' } },
+      { fetch: { signal, redirect: 'manual', credentials: 'omit', cache: 'no-store' } },
     );
     if (response.status === 308) {
       const body: unknown = response.data ?? response.error?.value;
@@ -186,9 +196,11 @@ export async function loadPresentationPreview(client: KernelClient, value: unkno
           return { ok: false, reason: 'unavailable' };
       }
     }
+    // An aggregate transport may ignore abort. Retirement still forbids starting later control reads.
+    signal?.throwIfAborted();
     const [pinned, active] = await Promise.all([
-      client.presentation.profiles({ digest: page.profile }).get({ fetch: { cache: 'no-store' } }),
-      client.presentation.active.get({ fetch: { cache: 'no-store' } }),
+      client.presentation.profiles({ digest: page.profile }).get({ fetch: { signal, cache: 'no-store' } }),
+      client.presentation.active.get({ fetch: { signal, cache: 'no-store' } }),
     ]);
     if (pinned.status !== 200 || !pinned.data) return failure(pinned.status);
     if (active.status !== 200 || !active.data) return failure(active.status);

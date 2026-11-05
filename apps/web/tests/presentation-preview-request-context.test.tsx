@@ -42,12 +42,13 @@ const published = {
 type Call = {
   adapter: string;
   input: PresentationPreviewInput;
+  signal: AbortSignal;
   resolve: (value: PresentationPreview) => void;
   reject: (error: Error) => void;
 };
 const calls: Call[] = [];
-const reader = (adapter: string) => (input: PresentationPreviewInput) =>
-  new Promise<PresentationPreview>((resolve, reject) => calls.push({ adapter, input, resolve, reject }));
+const reader = (adapter: string) => (input: PresentationPreviewInput, signal: AbortSignal) =>
+  new Promise<PresentationPreview>((resolve, reject) => calls.push({ adapter, input, signal, resolve, reject }));
 const readA = reader('A'),
   readB = reader('B');
 const host = window.document.createElement('main');
@@ -71,6 +72,7 @@ test('retires preview results and pending reads when locale or adapter changes',
     await setAddress('first-subject');
     await submit();
     await render('fr', readA);
+    expect(calls[0]!.signal.aborted).toBe(true);
     expect(form().getAttribute('aria-busy')).toBe('false');
     expect((host.querySelector('input') as HTMLInputElement).value).toBe('first-subject');
     await act(async () => {
@@ -89,6 +91,7 @@ test('retires preview results and pending reads when locale or adapter changes',
     await setAddress('second-subject');
     await submit();
     await render('fr', readB);
+    expect(calls[2]!.signal.aborted).toBe(true);
     expect((host.querySelector('input') as HTMLInputElement).value).toBe('second-subject');
     await submit();
     expect(calls[3]!.adapter).toBe('B');
@@ -104,8 +107,10 @@ test('retires preview results and pending reads when locale or adapter changes',
       await Promise.resolve();
     });
     expect(host.querySelector('[role="alert"]')).not.toBeNull();
+    await submit();
   } finally {
     await act(async () => root.unmount());
+    expect(calls.at(-1)!.signal.aborted).toBe(true);
     mock.restore();
     await window.happyDOM.close();
   }

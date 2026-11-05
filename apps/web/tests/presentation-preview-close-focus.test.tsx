@@ -39,10 +39,10 @@ const published = {
     reads: {},
   },
 } as PresentationPreview;
-type Call = { input: PresentationPreviewInput; resolve: (value: PresentationPreview) => void };
+type Call = { input: PresentationPreviewInput; signal: AbortSignal; resolve: (value: PresentationPreview) => void };
 const calls: Call[] = [];
-const reader = () => (input: PresentationPreviewInput) =>
-  new Promise<PresentationPreview>((resolve) => calls.push({ input, resolve }));
+const reader = () => (input: PresentationPreviewInput, signal: AbortSignal) =>
+  new Promise<PresentationPreview>((resolve) => calls.push({ input, signal, resolve }));
 const host = window.document.createElement('main');
 window.document.body.append(host);
 const root = createRoot(host as unknown as HTMLElement);
@@ -79,6 +79,7 @@ test('explicit keyboard Close returns to Inspect without stealing focus on edits
     await submit();
     expect(host.querySelector('form')!.getAttribute('aria-busy')).toBe('true');
     await act(async () => activateClose());
+    expect(calls.at(-1)!.signal.aborted).toBe(true);
     expect(window.document.activeElement).toBe(inspect());
     expect(inspect().disabled).toBe(false);
     await act(async () => {
@@ -89,12 +90,15 @@ test('explicit keyboard Close returns to Inspect without stealing focus on edits
     expect(window.document.activeElement).toBe(inspect());
 
     await submit();
+    expect(calls[1]!.signal.aborted).toBe(false);
+    expect(calls[1]!.signal).not.toBe(calls[0]!.signal);
     await act(async () => {
       calls[1]!.resolve(published);
       await Promise.resolve();
     });
     expect(host.querySelector('[data-slot="published-presentation-preview"]')).not.toBeNull();
     await act(async () => activateClose());
+    expect(calls.at(-1)!.signal.aborted).toBe(true);
     expect(window.document.activeElement).toBe(inspect());
     expect(host.querySelector('[data-slot="published-presentation-preview"]')).toBeNull();
 
@@ -104,14 +108,17 @@ test('explicit keyboard Close returns to Inspect without stealing focus on edits
       await Promise.resolve();
     });
     expect(host.querySelector('[data-slot="published-presentation-preview"]')).not.toBeNull();
+    await submit();
     await act(async () => address().focus());
     await setAddress('typed-subject');
+    expect(calls[3]!.signal.aborted).toBe(true);
+    await act(async () => calls[3]!.resolve(published));
     expect(window.document.activeElement).toBe(address());
     expect(host.querySelector('[data-slot="published-presentation-preview"]')).toBeNull();
     await submit();
     expect(window.document.activeElement).toBe(address());
     await act(async () => {
-      calls[3]!.resolve(published);
+      calls[4]!.resolve(published);
       await Promise.resolve();
     });
     expect(window.document.activeElement).toBe(address());

@@ -1,11 +1,11 @@
 import { useEffect, useLayoutEffect as useBrowserLayoutEffect, useRef } from 'react';
-import type { PresentationPreview, PresentationPreviewInput } from './presentation-preview';
+import type { PresentationPreviewRead } from './presentation-preview';
 
 const useFocusLayoutEffect = typeof document === 'undefined' ? useEffect : useBrowserLayoutEffect;
 
 export type PreviewCloseFocusOwner = {
   locale: string;
-  read: (input: PresentationPreviewInput) => Promise<PresentationPreview>;
+  read: PresentationPreviewRead;
 };
 
 type PendingCloseFocus = {
