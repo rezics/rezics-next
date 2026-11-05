@@ -10,7 +10,8 @@ export type ConditionConceptReference =
       label?: string | undefined;
       schemes: readonly ConditionConceptScheme[];
     }>
-  | Readonly<{ status: 'preparing' | 'restart' | 'unsupported' | 'unavailable' | 'refused'; id: string }>;
+  | Readonly<{ status: 'preparing' | 'unavailable'; id: string; retryAfter?: string | undefined }>
+  | Readonly<{ status: 'restart' | 'unsupported' | 'refused'; id: string }>;
 
 export type ConditionConceptLookup = Readonly<{
   enabled: boolean;
@@ -26,6 +27,14 @@ export type ConditionConceptReferenceState = Readonly<{
   owner: string;
   value: ConditionConceptReference;
 }>;
+
+/** Keep a bounded Retry-After hint for the visitor; retries remain explicit. */
+export function conditionConceptRetryAdvice(value: string | null | undefined): string | undefined {
+  if (typeof value !== 'string') return;
+  const advice = value.trim();
+  if (!advice || advice.length > 128 || /[\u0000-\u001f\u007f]/u.test(advice)) return;
+  return advice;
+}
 
 export function conditionTypeExtends(
   types: Readonly<Record<string, { bases?: readonly string[] | undefined }>>,
@@ -100,13 +109,11 @@ export function parseConditionConceptReference(input: unknown, requested: string
   if (!input || typeof input !== 'object' || Array.isArray(input)) return unavailable;
   const value = input as Record<string, unknown>;
   if (value.id !== requested) return unavailable;
-  if (
-    value.status === 'preparing' ||
-    value.status === 'restart' ||
-    value.status === 'unsupported' ||
-    value.status === 'unavailable' ||
-    value.status === 'refused'
-  )
+  if (value.status === 'preparing' || value.status === 'unavailable') {
+    const retryAfter = conditionConceptRetryAdvice(typeof value.retryAfter === 'string' ? value.retryAfter : undefined);
+    return { status: value.status, id: requested, ...(retryAfter ? { retryAfter } : {}) };
+  }
+  if (value.status === 'restart' || value.status === 'unsupported' || value.status === 'refused')
     return { status: value.status, id: requested };
   if (value.status !== 'ready' || !Array.isArray(value.schemes)) return unavailable;
   const schemes: ConditionConceptScheme[] = [];
@@ -123,6 +130,7 @@ export function parseConditionConceptReference(input: unknown, requested: string
     });
   }
   if (value.label !== undefined && typeof value.label !== 'string') return unavailable;
+  if (!schemes.length) return { status: 'unsupported', id: requested };
   return {
     status: 'ready',
     id: requested,

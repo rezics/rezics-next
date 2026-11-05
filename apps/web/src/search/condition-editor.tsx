@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react';
 import {
   FILTER_LIMITS,
   facetProperties,
@@ -96,6 +105,7 @@ type EditorContext = {
   selectSavedFilter(path: ConditionTreePath, id: string, mode: SavedFilterEditMode): boolean;
   extension?: ConditionExtension | undefined;
   conceptLookup?: ConditionConceptLookup | undefined;
+  preventImplicitSubmit?: ((event: KeyboardEvent<HTMLElement>) => void) | undefined;
 };
 /** A consumer can compose additional shared grammar leaves without a second tree editor or evaluator. */
 export type ConditionExtension = {
@@ -146,6 +156,7 @@ export function ConditionEditor({
   onLanguages,
   extension,
   conceptLookup,
+  preventImplicitSubmit,
   requestResources,
   embedded = false,
   requestIdentity,
@@ -162,6 +173,7 @@ export function ConditionEditor({
   onLanguages?(languages: string[]): void;
   extension?: ConditionExtension;
   conceptLookup?: ConditionConceptLookup;
+  preventImplicitSubmit?: ((event: KeyboardEvent<HTMLElement>) => void) | undefined;
   /** Optional native labels for request-only resource IDs; labels are display data and never resolve IDs. */
   requestResources?: RequestResourceInput | false;
   embedded?: boolean;
@@ -330,6 +342,7 @@ export function ConditionEditor({
         selectSavedFilter,
         extension: activeExtension,
         conceptLookup,
+        ...(preventImplicitSubmit ? { preventImplicitSubmit } : {}),
       }
     : undefined;
   return (
@@ -1079,11 +1092,12 @@ function NodeEditor({
                 />
                 {context.conceptLookup && (value.statement.concept || conditionConceptProperty(definition)) && (
                   <ConditionConceptPicker
-                    key={`${context.conceptLookup.key}:${pointer}:${property}`}
+                    key={`${context.conceptLookup.lifetimeKey ?? context.conceptLookup.key}:${pointer}:${property}`}
                     value={value}
                     lookup={context.conceptLookup}
                     locale={context.locale}
                     disabled={context.disabled}
+                    preventImplicitSubmit={context.preventImplicitSubmit}
                     onChange={(next) => onChange(next)}
                   />
                 )}
