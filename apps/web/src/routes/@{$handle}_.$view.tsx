@@ -3,7 +3,7 @@ import { PublicRealmsRoute } from '../accounts/public-profile/realm-windows/rout
 import { PublicAccountState } from '../accounts/public-profile/view';
 import { useEffect } from 'react';
 import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
-import { createFileRoute, notFound, redirect, useRouter } from '@tanstack/react-router';
+import { createFileRoute, notFound, redirect, useLocation, useRouter } from '@tanstack/react-router';
 import { createIsomorphicFn } from '@tanstack/react-start';
 import { env } from 'cloudflare:workers';
 import { agentPageHead, agentPagePaths, agentPathView, agentViewAvailable } from '../features/pages/agent-page';
@@ -18,6 +18,7 @@ import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { validatePublicOrigin } from '../shell/origin';
 import { projectShareCardPage } from '../media/share-card-page';
+import { forwardContributionWindow, retireContributionWindow } from '../accounts/public-profile/contribution-windows/state';
 
 const publicOrigin = createIsomorphicFn()
   .server(() => validatePublicOrigin((env as { PUBLIC_ORIGIN?: string }).PUBLIC_ORIGIN))
@@ -71,6 +72,8 @@ export const Route = createFileRoute('/@{$handle}_/$view')({
             throw error;
           });
     if (page.kind === 'redirect') {
+      if (typeof window !== 'undefined' && (view === 'posts' || view === 'reviews' || view === 'discussion'))
+        retireContributionWindow(window);
       throw redirect({
         href: keepSearch(page.redirectTo, '', hash),
         statusCode: 302,
@@ -80,10 +83,19 @@ export const Route = createFileRoute('/@{$handle}_/$view')({
     if (page.kind === 'state') return { ...page, querySearch: location.searchStr, address: location.publicHref };
     if (view !== 'realms' && !agentViewAvailable(page.tabs, view) && !page.overview.views?.includes(view))
       throw redirect(canonicalRedirect(agentPath(locale, page.handle), search, hash, 302));
-    const canonicalHandle = page.page.account?.handle;
-    if (!canonicalHandle) throw notFound();
+    const canonicalAccount = page.page.account;
+    const canonicalHandle = canonicalAccount?.handle;
+    if (!canonicalAccount || !canonicalHandle) throw notFound();
     if (canonicalHandle !== params.handle) {
-      throw redirect(canonicalRedirect(agentPath(locale, canonicalHandle, view), search, hash, 308));
+      const target = canonicalRedirect(agentPath(locale, canonicalHandle, view), search, hash, 308);
+      if (typeof window !== 'undefined' && (view === 'posts' || view === 'reviews' || view === 'discussion'))
+        forwardContributionWindow({
+          owner: { accountId: canonicalAccount.id, view, locale, published: true },
+          cursor: deps.cursor ?? null,
+          fromHref: `${location.pathname}${location.searchStr}${location.hash}`,
+          toHref: target.href,
+        });
+      throw redirect(target);
     }
     return {
       ...page,
@@ -129,6 +141,7 @@ function NamedAccountViewRoute({
   const { cursor } = Route.useSearch();
   const locale = getLocale();
   const router = useRouter();
+  const location = useLocation();
   const loaded = Route.useLoaderData();
   const address = new URL(loaded.address, 'https://rezics.invalid');
   const searchStr = loaded.querySearch;
@@ -184,6 +197,16 @@ function NamedAccountViewRoute({
         page={data.page}
         cursor={data.cursor ?? null}
         locale={locale}
+        {...(view === 'posts' || view === 'reviews' || view === 'discussion'
+          ? {
+              contributionWindowRoute: {
+                pathname: location.pathname,
+                search: location.searchStr,
+                hash: location.hash,
+                retry: () => void router.invalidate(),
+              },
+            }
+          : {})}
         messages={subjectPageMessages()}
         reading={reading}
         relations={data.relations}
