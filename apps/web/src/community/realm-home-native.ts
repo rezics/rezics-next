@@ -43,8 +43,7 @@ export function bindNativeRealmHomeOperations(
 ): NativeRealmHomeOperations {
   const noStore = { ...auth, fetch: { cache: 'no-store' as const } };
   return {
-    home: ({ realmId, languages }) =>
-      client.realms({ realmId }).home.get({ query: { languages }, ...noStore }),
+    home: ({ realmId, languages }) => client.realms({ realmId }).home.get({ query: { languages }, ...noStore }),
     boardShelf: ({ realmId, cursor }) =>
       client.realms({ realmId }).boardShelf.get({
         query: cursor === undefined ? {} : { cursor },

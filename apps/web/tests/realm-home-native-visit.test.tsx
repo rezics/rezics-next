@@ -261,11 +261,7 @@ test('Realm Home and shelves use the installed root-derived client transport wit
         authorization: request.headers.get('authorization'),
         cache: request.cache,
       });
-      return Response.json(
-        url.pathname.endsWith('/home')
-          ? fixture(1, 'anonymous')
-          : { items: [], next: null },
-      );
+      return Response.json(url.pathname.endsWith('/home') ? fixture(1, 'anonymous') : { items: [], next: null });
     },
   });
   const bound = bindNativeRealmHomeOperations(client, { headers: { authorization: 'Bearer prepared' } });
