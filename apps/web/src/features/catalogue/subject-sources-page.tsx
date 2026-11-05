@@ -87,11 +87,13 @@ export function SubjectSourcesPage({
                 ? m.sources_denied({}, o)
                 : result.kind === 'invalid'
                   ? m.sources_invalid({}, o)
-                  : result.kind === 'conflict'
-                    ? m.sources_conflict({}, o)
-                    : m.sources_unavailable({}, o)}
+                  : result.kind === 'unsupported'
+                    ? m.subject_synopsis_sources_unsupported({}, o)
+                    : result.kind === 'conflict' || result.kind === 'changed'
+                      ? m.sources_conflict({}, o)
+                      : m.sources_unavailable({}, o)}
         </p>
-        {onRetry && result.kind !== 'loading' && result.kind !== 'missing' && (
+        {onRetry && !['loading', 'missing', 'unsupported'].includes(result.kind) && (
           <Button
             variant="outline"
             className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere]"
@@ -174,17 +176,19 @@ export function SubjectSourcesPage({
         locale={locale}
       />
       <p role="status" className="text-sm text-muted-foreground">
-        {page.realm
-          ? m.sources_scope_unavailable({}, o)
-          : page.viewer?.actions.state !== 'available'
-            ? m.sources_actions_unavailable({}, o)
-            : !page.viewer.actions.actions.some(
-                  (entry) => entry.action === 'statement:propose' && entry.operations.includes('subject.propose'),
-                )
-              ? m.sources_correction_denied({}, o)
-              : m.sources_current_reading({}, o)}
+        {page.selection
+          ? m.subject_synopsis_evidence({}, o)
+          : page.realm
+            ? m.sources_scope_unavailable({}, o)
+            : page.viewer?.actions.state !== 'available'
+              ? m.sources_actions_unavailable({}, o)
+              : !page.viewer.actions.actions.some(
+                    (entry) => entry.action === 'statement:propose' && entry.operations.includes('subject.propose'),
+                  )
+                ? m.sources_correction_denied({}, o)
+                : m.sources_current_reading({}, o)}
       </p>
-      {!page.realm && page.viewer?.state !== 'signed-in' && (
+      {!page.selection && !page.realm && page.viewer?.state !== 'signed-in' && (
         <a className={linkClassName} href={`/auth/sign-in?return_to=${encodeURIComponent(page.sourcesHref)}`}>
           {m.account_sign_in({}, o)}
         </a>
@@ -272,6 +276,9 @@ export function SubjectSourcesPage({
                             <ol className="list-decimal space-y-2 ps-5">
                               {fact.citations.map((citation, i) => (
                                 <li key={i}>
+                                  {!citation.length && (
+                                    <p className="text-muted-foreground">{m.sources_no_citations({}, o)}</p>
+                                  )}
                                   {citation.map((part, j) => (
                                     <CitationPart key={j} part={part} page={page} locale={locale} link={ContextLink} />
                                   ))}
@@ -291,23 +298,25 @@ export function SubjectSourcesPage({
           </section>
         ))}
       </section>
-      <div className="min-w-0 space-y-3 [&_a]:inline-flex [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:items-center [&_a]:rounded-sm [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring">
-        <SourcesSection value={value} sources={page.sources} />
-        <p className="text-sm text-muted-foreground">{m.sources_rights_scope({}, o)}</p>
-        {!records.length && <p className="text-sm text-muted-foreground">{m.sources_metadata_unavailable({}, o)}</p>}
-        {records
-          .filter((record) => !record.licence || !record.attribution)
-          .map((record, index) => (
-            <p key={index} className="text-sm text-muted-foreground">
-              {record.name}: {!record.licence && m.sources_licence_unknown({}, o)}
-              {!record.licence && !record.attribution ? ' · ' : ''}
-              {!record.attribution && m.sources_attribution_unknown({}, o)}
-            </p>
-          ))}
-        {!page.sources.credit?.license && (
-          <p className="text-sm text-muted-foreground">{m.sources_cover_unknown({}, o)}</p>
-        )}
-      </div>
+      {!page.selection && (
+        <div className="min-w-0 space-y-3 [&_a]:inline-flex [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:items-center [&_a]:rounded-sm [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring">
+          <SourcesSection value={value} sources={page.sources} />
+          <p className="text-sm text-muted-foreground">{m.sources_rights_scope({}, o)}</p>
+          {!records.length && <p className="text-sm text-muted-foreground">{m.sources_metadata_unavailable({}, o)}</p>}
+          {records
+            .filter((record) => !record.licence || !record.attribution)
+            .map((record, index) => (
+              <p key={index} className="text-sm text-muted-foreground">
+                {record.name}: {!record.licence && m.sources_licence_unknown({}, o)}
+                {!record.licence && !record.attribution ? ' · ' : ''}
+                {!record.attribution && m.sources_attribution_unknown({}, o)}
+              </p>
+            ))}
+          {!page.sources.credit?.license && (
+            <p className="text-sm text-muted-foreground">{m.sources_cover_unknown({}, o)}</p>
+          )}
+        </div>
+      )}
     </article>
   );
 }

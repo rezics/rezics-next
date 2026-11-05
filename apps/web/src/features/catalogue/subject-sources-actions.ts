@@ -5,24 +5,42 @@ import { subjectKernelClient } from '../pages/subject-queries';
 import { validatePageRealm } from '../pages/view-cursor';
 import { contextHref } from '../pages/context-navigation';
 import { explainSubjectSources, readSubjectSources, type SourcesResult } from './subject-sources';
+import {
+  readSelectedSynopsisSources,
+  synopsisSourcesVisit,
+  type SynopsisSourcesVisit,
+} from './selected-synopsis-source';
 
 export const loadSubjectSources = createServerFn({ method: 'GET', strict: false })
-  .validator((input: { id: string; locale: string; realm?: string | undefined; reader?: string | null }) => {
-    if (
-      !input ||
-      typeof input.id !== 'string' ||
-      input.id.length > 128 ||
-      typeof input.locale !== 'string' ||
-      input.locale.length > 35 ||
-      (input.reader !== undefined &&
-        input.reader !== null &&
-        (typeof input.reader !== 'string' || !input.reader || input.reader.length > 128))
-    )
-      throw new Error('Invalid subject sources request');
-    return { id: input.id, locale: input.locale, realm: validatePageRealm(input.realm), reader: input.reader };
-  })
+  .validator(
+    (
+      input: { id: string; locale: string; realm?: string | undefined; reader?: string | null } & SynopsisSourcesVisit,
+    ) => {
+      if (
+        !input ||
+        typeof input.id !== 'string' ||
+        input.id.length > 128 ||
+        typeof input.locale !== 'string' ||
+        input.locale.length > 35 ||
+        (input.reader !== undefined &&
+          input.reader !== null &&
+          (typeof input.reader !== 'string' || !input.reader || input.reader.length > 128))
+      )
+        throw new Error('Invalid subject sources request');
+      return {
+        id: input.id,
+        locale: input.locale,
+        realm: validatePageRealm(input.realm),
+        reader: input.reader,
+        ...synopsisSourcesVisit(input),
+      };
+    },
+  )
   .handler(async ({ data }): Promise<SourcesResult> => {
     setResponseHeader('cache-control', 'private, no-store');
+    // Semantic/Content's exact producer is not mounted on this source revision.
+    // Keep its typed seam explicit; ordinary Subject reads cannot certify a match.
+    if (data.sourceView) return readSelectedSynopsisSources(null, data);
     const [{ kernelClient }, { readRelease }] = await Promise.all([
       import('../../kernel/client'),
       import('../../subject/definitions'),
@@ -59,7 +77,7 @@ export const loadSubjectSources = createServerFn({ method: 'GET', strict: false 
 
 /** Hydrated private reading; the loader never serializes a viewer's action envelope into SSR. */
 export const readCurrentSubjectSources = createServerFn({ method: 'POST', strict: false })
-  .validator((input: { id: string; locale: string; expectedReader: string | null }) => {
+  .validator((input: { id: string; locale: string; expectedReader: string | null } & SynopsisSourcesVisit) => {
     if (
       !input ||
       !/^[0-9a-f-]{36}$/i.test(input.id) ||
@@ -68,7 +86,7 @@ export const readCurrentSubjectSources = createServerFn({ method: 'POST', strict
       (input.expectedReader !== null && (typeof input.expectedReader !== 'string' || input.expectedReader.length > 128))
     )
       throw new Error('Invalid Sources reader');
-    return input;
+    return { id: input.id, locale: input.locale, expectedReader: input.expectedReader, ...synopsisSourcesVisit(input) };
   })
   .handler(async ({ data }): Promise<SourcesResult> => {
     setResponseHeader('cache-control', 'private, no-store');
@@ -78,6 +96,7 @@ export const readCurrentSubjectSources = createServerFn({ method: 'POST', strict
     const request = getRequest();
     await prepareSession(request, env);
     if ((sessionSubject(request) ?? null) !== data.expectedReader) return { kind: 'denied' };
+    if (data.sourceView) return readSelectedSynopsisSources(null, data);
     const authorization = viewerCredential(request) ?? undefined;
     const [{ kernelClient }, { readRelease }] = await Promise.all([
       import('../../kernel/client'),

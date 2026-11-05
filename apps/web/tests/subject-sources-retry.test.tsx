@@ -50,7 +50,7 @@ test('actual Sources retry returns focus locally and retires focus across reader
   const unavailable = { kind: 'unavailable' } as const;
   const tick = () => new Promise((done) => setTimeout(done, 0));
   try {
-    for (const mode of 'empty failed denied error pointer unfocused moved moved-back tab blur canonical reader retired'.split(
+    for (const mode of 'empty failed denied error pointer pointer-departure unfocused moved moved-back tab blur canonical reader retired revisit'.split(
       ' ',
     )) {
       reader = 'alice';
@@ -110,7 +110,9 @@ test('actual Sources retry returns focus locally and retires focus across reader
         if (mode === 'moved') outside.focus();
         if (mode === 'tab') document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
         if (mode === 'blur') window.dispatchEvent(new window.Event('blur'));
-        if (['moved-back', 'tab', 'blur'].includes(mode)) opener.blur();
+        if (mode === 'pointer-departure')
+          document.body.dispatchEvent(new window.Event('pointerdown', { bubbles: true }));
+        if (['moved-back', 'tab', 'blur', 'pointer-departure'].includes(mode)) opener.blur();
         if (mode === 'retired') {
           await act(async () => root.unmount());
           mounted = false;
@@ -123,6 +125,27 @@ test('actual Sources retry returns focus locally and retires focus across reader
             client.setQueryData(sessionQuery.queryKey, session());
             await tick();
           });
+        }
+        if (mode === 'revisit') {
+          const otherId = '00000000-0000-4000-8000-000000000004';
+          const otherPage = {
+            ...page,
+            id: otherId,
+            title: { text: 'Another' },
+            href: `/en/subjects/${otherId}/another`,
+            sourcesHref: `/en/subjects/${otherId}/another/sources`,
+          };
+          read = async () => ({ kind: 'ready', page: otherPage });
+          await act(async () => {
+            await router.navigate({ to: otherPage.sourcesHref + suffix });
+            await tick();
+          });
+          read = async () => ready;
+          await act(async () => {
+            await router.navigate({ to: page.sourcesHref + suffix });
+            await tick();
+          });
+          outside.focus();
         }
         const returned =
           mode === 'canonical'
@@ -154,8 +177,9 @@ test('actual Sources retry returns focus locally and retires focus across reader
           expect(host.querySelector('button')?.disabled).toBe(false);
         } else {
           expect(document.activeElement).not.toBe(host.querySelector('[data-slot="view-heading"] h1'));
-          if (mode === 'moved' || mode === 'retired') expect(document.activeElement).toBe(outside);
-          if (mode === 'pointer' || ['moved-back', 'tab', 'blur'].includes(mode))
+          if (mode === 'moved' || mode === 'retired' || mode === 'revisit')
+            expect(document.activeElement).toBe(outside);
+          if (mode === 'pointer' || ['moved-back', 'tab', 'blur', 'pointer-departure'].includes(mode))
             expect(document.activeElement).toBe(document.body);
           if (mode === 'unfocused') expect(document.activeElement).toBe(outside);
         }

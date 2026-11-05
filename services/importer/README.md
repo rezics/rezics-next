@@ -73,6 +73,26 @@ Kernel owns runtime, authorization, command execution and native reads. Importer
 
 Vanished source fields retract only matching importer-owned candidates through ordinary APIs. Subjects, adoption and unrelated statements survive. Current source/media fences prevent refresh from restoring withdrawn facts; see [deletion](../../docs/deletion.md).
 
+## Selected synopsis source receiving
+
+Decision: exact selected-synopsis Sources is a separate visit from general Sources. Its Web consumer admits one
+original Global selection at the external request boundary, then consumes one typed native result containing
+only the current redacted statement, admitted Context/release and disclosed support. Document ID/digest,
+Content body, observations and source locators are request operands, never projected evidence. Empty citation
+groups remain attached to their statement; page source records and sibling assertions cannot fill them.
+
+The supplied revision has no selected-synopsis native operation or generated transport. The receiving seam stays
+explicitly unsupported before Subject/definition reads until Semantic compares the original tuple, Content
+independently admits it and Semantic checks the final selected slot. General Sources remains available under its
+own name. Imports does not substitute a public Subject read for that proof. The complete producer and dependent
+native/mounted publication circuit remain a continuation; consumer tests do not certify native admission.
+
+The consumer adds no read while unsupported. With a producer it invokes one operation and optional definitions
+after admission, within the [existing exact Sources budgets](../../docs/subject-pages.md#cost-and-acceptance-bounds);
+it neither enumerates candidates nor fetches document bodies. Retry focus belongs to the current visit and is
+retired on pointer departure as well as reader/address/navigation replacement. Focused receiving, empty-citation
+and mounted retry tests supplement the unchanged native and browser acceptance assertions.
+
 ## Cost
 
 Bounds below describe importer-owned logical work, not PostgreSQL physical visibility/vacuum work. Indexed point reads use exact primary/owner keys and O(log R) or O(log B) navigation; keyset pages examine their bounded output plus navigation, never OFFSET or history scans. `R` is retained source/run records, `B` binding/journal rows, `M` one record/request/response bytes, `r` page/batch rows, `q` commands per record, `C/U` compressed/decoded bytes, `S` supplied records, `D` dependencies, `H` retained generations, and `K` concurrently active records. Transactions add BEGIN/COMMIT (or rollback); connection schema/PRAGMA work is excluded. Kernel internal cost belongs to Kernel.

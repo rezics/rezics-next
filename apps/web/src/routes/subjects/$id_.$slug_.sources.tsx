@@ -16,6 +16,7 @@ import { sourceObservationSelection } from '../../features/catalogue/source-obse
 import type { SourceObservationRequest } from '../../features/catalogue/source-observation/contract';
 import { inspectSubjectSourceObservation } from '../../features/catalogue/source-observation/action';
 import { subjectVisitReturn } from '../../features/pages/subject-visit-navigation';
+import { synopsisSourcesVisit } from '../../features/catalogue/selected-synopsis-source';
 
 const inspectSourceObservation = (request: SourceObservationRequest) =>
   inspectSubjectSourceObservation({ data: request });
@@ -30,14 +31,15 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/sources')({
     return {
       realm: validatePageRealm(search.realm),
       via: subjectVisitReturn(search.via, getLocale()),
+      ...synopsisSourcesVisit(search),
       ...(selection ? { provider: selection.source, digest: selection.digest } : {}),
     };
   },
-  loaderDeps: ({ search }) => ({ realm: search.realm }),
+  loaderDeps: ({ search }) => ({ realm: search.realm, ...synopsisSourcesVisit(search) }),
   loader: async ({ params, location, deps }) => {
     const reader = await subjectRequestReader({ data: { realm: deps.realm } });
     const result = await loadSubjectSources({
-      data: { id: params.id, locale: getLocale(), realm: deps.realm, reader },
+      data: { id: params.id, locale: getLocale(), realm: deps.realm, reader, ...synopsisSourcesVisit(deps) },
     });
     if (result.kind === 'missing') throw notFound();
     if (result.kind === 'ready') {
@@ -62,7 +64,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/sources')({
 
 function SourcesRoute() {
   const { result, reader, visit } = Route.useLoaderData();
-  const { realm, via } = Route.useSearch();
+  const { realm, via, sourceView } = Route.useSearch();
   const session = useSession();
   const currentReader = useSubjectReaderRefresh(reader, subjectReaderPartition(realm, reader, session));
   const scope = JSON.stringify([visit, session.state, session.subject, session.csrfToken]);
@@ -81,6 +83,7 @@ function SourcesRoute() {
           id: result.kind === 'ready' ? result.page.id : '',
           locale: getLocale(),
           expectedReader: session.subject ?? null,
+          ...synopsisSourcesVisit({ sourceView, via }),
         },
         headers: csrfHeaders(),
       })
@@ -94,7 +97,7 @@ function SourcesRoute() {
     return () => {
       live = false;
     };
-  }, [result, scope, realm]);
+  }, [result, scope, realm, sourceView, via]);
   const selected =
     !realm && result.kind === 'ready' && (session.state === 'signed-in' || session.state === 'signed-out')
       ? current?.scope === scope && current.source === result

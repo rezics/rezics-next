@@ -16,6 +16,7 @@ import { originalLanguage } from '../../subject/language';
 import { defaultReader } from '../../subject/reader';
 import { subjectHref, subjectViewHref } from '../../subject/subject-href';
 import type { Related } from '../../subject/types';
+import type { SelectedSynopsisSource } from './selected-synopsis-source';
 
 export type SourceDefinitions = {
   types: Record<string, { labels?: Record<string, string>; properties?: readonly string[] }>;
@@ -48,8 +49,11 @@ export type SourcesPageData = {
   fields: SourceField[];
   related: Related;
   sources: Sources;
+  selection?: { kind: 'synopsis'; context: string; release: string };
 };
-export type SourcesFailure = { kind: 'denied' | 'missing' | 'invalid' | 'conflict' | 'unavailable' };
+export type SourcesFailure = {
+  kind: 'denied' | 'missing' | 'invalid' | 'conflict' | 'unavailable' | 'unsupported' | 'changed';
+};
 export type SourcesResult = SourcesFailure | { kind: 'ready'; page: SourcesPageData };
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -68,6 +72,70 @@ function presentable(snak: Snak, related: Related): boolean {
     );
   if (snak.property.data_type === 'url') return typeof content === 'string' && webUrl(content);
   return typeof content === 'string' || isRecord(content);
+}
+
+function sourceParts(snaks: Snak[], related: Related, locale: string, definitions?: SourceDefinitions): SourcePart[] {
+  return snaks.flatMap((snak) =>
+    presentable(snak, related)
+      ? [
+          {
+            label: fieldLabel(
+              pageText(
+                (Object.hasOwn(related, snak.property.id) ? related[snak.property.id]?.labels : undefined) ??
+                  definitions?.properties[snak.property.id]?.labels,
+                locale,
+              ),
+              locale,
+            ),
+            snak: { property: snak.property, value: snak.value },
+          },
+        ]
+      : [],
+  );
+}
+
+/** The native operation already selected and disclosed this one assertion, in its supplied language. */
+export function explainSelectedSynopsisSource(
+  source: SelectedSynopsisSource,
+  locale: string,
+  definitions?: SourceDefinitions,
+): SourcesPageData {
+  const title = pageText(source.labels, locale);
+  const identity = { id: source.subject, label: title.text };
+  const property = 'schema:abstract';
+  const statement = source.statement;
+  return {
+    id: source.subject,
+    title,
+    typeLabel: pageText(definitions?.types[source.type]?.labels, locale),
+    href: subjectHref(identity, locale).href,
+    sourcesHref: subjectViewHref(identity, locale, 'sources'),
+    selection: { kind: 'synopsis', context: source.context, release: source.release },
+    viewer: { state: 'public', actions: { state: 'unavailable' } },
+    fields: [
+      {
+        property,
+        label: fieldLabel(pageText(definitions?.properties[property]?.labels, locale), locale),
+        facts: [
+          {
+            statement: statement.id,
+            snak: { property: statement.property, value: { type: 'somevalue' } },
+            display: 'document',
+            qualifiers: sourceParts(
+              statement.qualifiers.filter((part) => part.property.id !== 'rezics:spoilerLevel'),
+              source.related,
+              locale,
+              definitions,
+            ),
+            citations: statement.references.map(({ parts }) => sourceParts(parts, source.related, locale, definitions)),
+          },
+        ],
+      },
+    ],
+    related: source.related,
+    // Neither page metadata nor a sibling assertion is support for this match.
+    sources: { credit: null, records: [], urls: [], identifiers: [] },
+  };
 }
 
 /** Only the current native subject read is input. Definition labels never confer disclosure or authority. */
@@ -93,12 +161,7 @@ export function explainSubjectSources(
       ),
       locale,
     );
-  const parts = (snaks: Snak[]): SourcePart[] =>
-    snaks.flatMap((snak) =>
-      presentable(snak, related)
-        ? [{ label: labelFor(snak.property.id), snak: { property: snak.property, value: snak.value } }]
-        : [],
-    );
+  const parts = (snaks: Snak[]): SourcePart[] => sourceParts(snaks, related, locale, definitions);
   const fields: SourceField[] = [];
   for (const [property, statements] of Object.entries(subject.statements)) {
     let selected = bestRank(statements as Stmt[]).filter(
@@ -132,9 +195,7 @@ export function explainSubjectSources(
             ? { display: statement.property.data_type === 'document' ? ('document' as const) : ('media' as const) }
             : {}),
           qualifiers: parts(statement.qualifiers.filter((snak) => snak.property.id !== 'rezics:spoilerLevel')),
-          citations: statement.references
-            .map(({ parts: citation }) => parts(citation))
-            .filter((citation) => citation.length > 0),
+          citations: statement.references.map(({ parts: citation }) => parts(citation)),
         },
       ];
     });

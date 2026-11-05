@@ -116,11 +116,13 @@ export function useSourcesRetry({
     };
     const leave = router.subscribe('onBeforeNavigate', retire);
     document.addEventListener('focusin', moved);
+    document.addEventListener('pointerdown', cancelFocus, true);
     document.addEventListener('keydown', tabbed, true);
     document.defaultView?.addEventListener('blur', cancelFocus);
     intent.dispose = () => {
       leave();
       document.removeEventListener('focusin', moved);
+      document.removeEventListener('pointerdown', cancelFocus, true);
       document.removeEventListener('keydown', tabbed, true);
       document.defaultView?.removeEventListener('blur', cancelFocus);
     };
