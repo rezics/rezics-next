@@ -759,12 +759,6 @@ export function createCollectionReads(
     return { epoch: decoded.epoch, after: decoded.after };
   }
 
-  function listCollections<Result>(
-    viewer: Actor,
-    options: CuratorPageOptions,
-    preview: { deadline: number } | undefined,
-    presentation: PagePresentation<CollectionDirectoryPage, Result>,
-  ): Promise<Result>;
   function listCollections(
     viewer: Actor,
     options: CuratorPageOptions,
@@ -773,25 +767,31 @@ export function createCollectionReads(
   function listCollections<Result>(
     viewer: Actor,
     options: CuratorPageOptions,
+    preview: { deadline: number } | undefined,
+    presentation: PagePresentation<CollectionDirectoryPage, Result>,
+  ): Promise<Result>;
+  function listCollections<Result>(
+    viewer: Actor,
+    options: CuratorPageOptions,
     preview?: { deadline: number },
     presentation?: PagePresentation<CollectionDirectoryPage, Result>,
-  ) {
+  ): Promise<CollectionDirectoryPage | Result> {
     if (preview && (options.limit ?? DEFAULT_PAGE_SIZE) > 20) throw new ProblemError('invalid_request');
     return listCuratorPage(viewer, options, false, preview, presentation);
   }
 
   /** The account's public face uses the public index even when the curator is the viewer. */
+  function listAccountCollections(viewer: Actor, options: CuratorPageOptions): Promise<CollectionDirectoryPage>;
   function listAccountCollections<Result>(
     viewer: Actor,
     options: CuratorPageOptions,
     presentation: PagePresentation<CollectionDirectoryPage, Result>,
   ): Promise<Result>;
-  function listAccountCollections(viewer: Actor, options: CuratorPageOptions): Promise<CollectionDirectoryPage>;
   function listAccountCollections<Result>(
     viewer: Actor,
     options: CuratorPageOptions,
     presentation?: PagePresentation<CollectionDirectoryPage, Result>,
-  ) {
+  ): Promise<CollectionDirectoryPage | Result> {
     return listCuratorPage(viewer, options, true, undefined, presentation);
   }
 
