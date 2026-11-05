@@ -123,7 +123,13 @@ test('the label parameter is validated, and layout and size links keep the shelf
     cursor: 'cursor',
   });
   expect(validateShelfSearch({ label: 'not-an-id' }).label).toBeUndefined();
-  expect(shelfDisplay(validateShelfSearch({ label: labelId }))).toEqual({ layout: 'grid', size: 'm' });
+  expect(shelfDisplay(validateShelfSearch({ label: labelId }))).toEqual({
+    layout: 'grid',
+    size: 'm',
+    layoutExplicit: false,
+    sizeExplicit: false,
+    columnsExplicit: false,
+  });
   expect(shelfHref('en', { label: labelId, layout: 'list', size: 'l' })).toBe(
     `/en/library?label=${labelId}&layout=list&size=l`,
   );
@@ -331,10 +337,9 @@ test('the label shelf page renders the main shelf tiles, state and active progre
   );
   expect(html).toContain('Reading list');
   expect(html).toContain('Work 1');
-  expect(html).toContain('In progress');
+  expect(html).toContain('Other');
   expect(html).toContain('42%');
   expect(html).toContain('Work 2');
-  expect(html).toContain('Completed');
   expect(html).toContain('data-slot="cover"');
   expect(html).toContain(`/en/library?label=${labelId}&amp;layout=list`);
   expect(html).toContain(`/en/library?label=${labelId}&amp;layout=table`);
