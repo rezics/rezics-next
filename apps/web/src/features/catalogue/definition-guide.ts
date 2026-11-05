@@ -166,7 +166,7 @@ export async function fetchGuideActiveDigest(
   signal?: AbortSignal,
 ): Promise<string> {
   signal?.throwIfAborted();
-  const active = await client.definitions.active.get({ headers, fetch: { signal } });
+  const active = await client.definitions.active.get({ headers, fetch: signal ? { signal } : {} });
   signal?.throwIfAborted();
   requireSuccess(active.status);
   const selected = active.data?.digest;
@@ -185,7 +185,9 @@ export async function fetchGuideRelease(
   if (digest !== undefined && !isGuideDigest(digest)) throw new DefinitionReadError('invalid');
   const selected = digest ?? (await fetchGuideActiveDigest(client, headers, signal));
   signal?.throwIfAborted();
-  const response = await client.definitions.releases({ digest: selected }).get({ headers, fetch: { signal } });
+  const response = await client.definitions
+    .releases({ digest: selected })
+    .get({ headers, fetch: signal ? { signal } : {} });
   signal?.throwIfAborted();
   requireSuccess(response.status);
   if (response.data?.digest !== selected || !releasedMetadata(response.data.release))

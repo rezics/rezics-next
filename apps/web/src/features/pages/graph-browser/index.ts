@@ -277,7 +277,7 @@ async function readDetail(
   signal?.throwIfAborted();
   if (!selection) return { detail: null };
   const id = selection.kind === 'node' ? selection.id : selection.from;
-  const result = await client.subjects({ id }).get({ headers, fetch: { signal } });
+  const result = await client.subjects({ id }).get({ headers, fetch: signal ? { signal } : {} });
   signal?.throwIfAborted();
   recordCall(cost, `GET /v1/subjects/${id}`, 1, result.data ?? null);
   if (result.status !== 200 || !result.data) return { detail: null };
@@ -390,12 +390,12 @@ export async function readSubjectGraphPage(
   try {
     signal?.throwIfAborted();
     const headers = headersOf(authorization, input.session);
-    const current = await client.subjects({ id }).get({ headers, fetch: { signal } });
+    const current = await client.subjects({ id }).get({ headers, fetch: signal ? { signal } : {} });
     signal?.throwIfAborted();
     recordCall(cost, `GET /v1/subjects/${id}`, 1, current.data ?? null);
     if (current.status !== 200 || !current.data) return candidateFailure(current.status);
     if (current.data.subject.id !== id) return candidateFailure(400);
-    const counts = await client.subjects({ id }).counts.get({ headers, fetch: { signal } });
+    const counts = await client.subjects({ id }).counts.get({ headers, fetch: signal ? { signal } : {} });
     signal?.throwIfAborted();
     recordCall(
       cost,
@@ -425,7 +425,7 @@ export async function readSubjectGraphPage(
           limit: GRAPH_LIMIT,
         },
         headers: headersOf(authorization, session),
-        fetch: { signal },
+        fetch: signal ? { signal } : {},
       });
       signal?.throwIfAborted();
       recordCall(
@@ -452,12 +452,12 @@ export async function readSubjectGraphPage(
           ? await client.subjects({ id: expansion.node }).relations.get({
               query: pageQuery,
               headers: headersOf(authorization, session),
-              fetch: { signal },
+              fetch: signal ? { signal } : {},
             })
           : await client.subjects({ id: expansion.node }).links.get({
               query: pageQuery,
               headers: headersOf(authorization, session),
-              fetch: { signal },
+              fetch: signal ? { signal } : {},
             });
       signal?.throwIfAborted();
       const path =
