@@ -2215,6 +2215,8 @@ bun tools/goal/src/cli.ts inbox send <manager> <kind> <summary> [--task <task>] 
 work. For held tasks, `status` keeps `waitingFor` as the blocking dependency IDs and adds `dependencies` entries with
 their state and readiness. Missing or malformed dependencies have state `unknown`; readiness follows the same target
 and integration-commit policy used to release held work.
+Decision: status builds an invocation-local projection from its selected task cohort and one incident-history read,
+reusing current attempt, retry intent and probe task state reads only within that response.
 
 `retry <task> [--brief <file>]` retries a task, optionally replacing its brief after checking that its Goal and manager stay the same. Brief comparison canonicalizes line endings to LF and ignores trailing end-of-file whitespace. If the supplied brief matches the current contract after that normalization, the command reports that the contract is unchanged and exits without starting another attempt. A changed brief records SHA-256 hashes of the previous and new contract on the new attempt; a stopped task can still be restarted with plain `retry <task>`.
 

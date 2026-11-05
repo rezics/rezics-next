@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ManagerEvent } from './contracts.ts';
@@ -6,7 +6,9 @@ import { makeRecord, readMeasurement } from './records.ts';
 import { WorkerJob } from './job.ts';
 import { git } from './tasks.ts';
 import { blockerFingerprint, toolRetryDelay } from './attempt-progress.ts';
-import { harness } from './test-support.ts';
+import { devVerificationState } from './dev-verifier.ts';
+import { listOpenToolIncidents } from './tool-incidents.ts';
+import { brief, harness } from './test-support.ts';
 import { runWorkerCommand } from './worker-commands.ts';
 
 const failingCommand = ['bun', 'test', 'tools/goal/src/failure.test.ts'];
@@ -182,6 +184,72 @@ test('tool-blocker retries back off by fingerprint across tasks: first, second, 
 
 test('three distinct tasks with one normalized blocker open one incident and hold their retries', async () => {
   await withThreeTaskIncident(async (_job, h, taskIds, inbox) => {
+    const dependency = h.tasks.dispatch(h.briefFile);
+    h.store.updateTask({ taskId: dependency.id, attempt: 0 }, (task) => {
+      task.state = 'running';
+    });
+    const held = h.store.createTask(
+      { ...brief(), after: [dependency.id] },
+      { briefPath: 'held.md', worktree: h.root, branch: 'worker/held', base: 'base' },
+      'implementation',
+      'held-status',
+    );
+    const pending = h.tasks.dispatch(h.briefFile);
+    const sourceAttempt = h.store.attempt({ taskId: taskIds[0]!, attempt: 1 });
+    const pendingAttempt = h.store.nextAttempt({ taskId: pending.id, attempt: 0 }, (attempt) => ({
+      ...sourceAttempt,
+      taskId: pending.id,
+      attempt,
+      failureKind: null,
+      blocker: null,
+      result: 'RESULT: retry queued',
+    }));
+    const pendingUntil = new Date(Date.now() + 60_000).toISOString();
+    h.store.saveRetryIntent({ taskId: pending.id, attempt: pendingAttempt.attempt }, { notBefore: pendingUntil });
+    const cohort = h.store.tasks();
+    const incident = listOpenToolIncidents(h.store)[0]!;
+    const expectedTasks = cohort.map((task) =>
+      task.id === held.id
+        ? {
+            ...task,
+            urgent: false,
+            dependencies: [{ id: dependency.id, state: 'running', ready: false }],
+            waitingFor: [dependency.id],
+          }
+        : task.id === pending.id
+          ? { ...task, urgent: false, pendingRetry: { reason: 'backoff', until: pendingUntil } }
+          : taskIds.includes(task.id)
+            ? {
+              ...task,
+              urgent: false,
+              pendingRetry: {
+                reason: 'environment-incident',
+                incidentId: incident.id,
+                nextProbeAt: incident.nextProbeAt,
+                isProbe: incident.probe.taskId === task.id,
+              },
+            }
+            : { ...task, urgent: false },
+    );
+    const expected = {
+      devVerification: devVerificationState(
+        h.settings.mainCheckout,
+        h.settings.stateDirectory,
+        h.settings.integrationBranch,
+        cohort,
+      ),
+      toolIncidents: [incident],
+      tasks: expectedTasks,
+    };
+    h.store.db
+      .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
+      .run(taskIds[0], 1, 'tool-blocker-incident-state', new Date().toISOString(), '{malformed');
+    const cohortRead = spyOn(h.store, 'tasks');
+    const taskRead = spyOn(h.store, 'task');
+    const attemptRead = spyOn(h.store, 'attempt');
+    const retryRead = spyOn(h.store, 'retryIntent');
+    const taskStateRead = spyOn(h.store, 'taskState');
+    const queryRead = spyOn(h.store.db, 'query');
     const output: string[] = [];
     await runWorkerCommand('status', [], {
       settings: h.settings,
@@ -194,6 +262,15 @@ test('three distinct tasks with one normalized blocker open one incident and hol
       toolIncidents: Array<{ line: string; taskIds: string[]; probe: { taskId: string }; nextProbeAt: string }>;
       tasks: Array<{ id: string; currentAttempt: number; pendingRetry?: { reason: string } }>;
     };
+    expect(status).toEqual(expected);
+    expect(cohortRead).toHaveBeenCalledTimes(1);
+    expect(taskRead).not.toHaveBeenCalled();
+    expect(attemptRead).toHaveBeenCalledTimes(cohort.filter((task) => task.currentAttempt > 0).length);
+    expect(retryRead).toHaveBeenCalledTimes(cohort.filter((task) => task.currentAttempt > 0).length);
+    expect(taskStateRead).not.toHaveBeenCalled();
+    expect(
+      queryRead.mock.calls.filter(([sql]) => sql === 'SELECT sequence, body FROM worker_events WHERE kind=? ORDER BY sequence'),
+    ).toHaveLength(1);
     expect(status.toolIncidents).toHaveLength(1);
     expect(status.toolIncidents[0]).toMatchObject({
       line: 'enospc: no space left on device at <worktree>/cache-# errno #',
@@ -205,9 +282,69 @@ test('three distinct tasks with one normalized blocker open one incident and hol
       'environment-incident',
       'environment-incident',
     ]);
-    expect(status.tasks.map((task) => task.currentAttempt)).toEqual([1, 1, 1]);
+    expect(status.tasks.filter((task) => taskIds.includes(task.id)).map((task) => task.currentAttempt)).toEqual([
+      1, 1, 1,
+    ]);
     expect(inbox.filter((event) => event.kind === 'blocker')).toHaveLength(1);
     expect(inbox.find((event) => event.kind === 'blocker')?.summary).toContain('Source location (git grep):');
+
+    cohortRead.mockClear();
+    taskRead.mockClear();
+    attemptRead.mockClear();
+    retryRead.mockClear();
+    taskStateRead.mockClear();
+    queryRead.mockClear();
+    const qualifiedOutput: string[] = [];
+    await runWorkerCommand('status', [taskIds[0]!], {
+      settings: h.settings,
+      store: h.store,
+      tasks: h.tasks,
+      print: (value) => qualifiedOutput.push(value),
+    });
+    expect(JSON.parse(qualifiedOutput.at(-1)!)).toEqual({
+      ...expectedTasks[0],
+      toolIncidents: [incident],
+    });
+    expect(cohortRead).not.toHaveBeenCalled();
+    expect(taskRead).toHaveBeenCalledTimes(1);
+    expect(attemptRead).toHaveBeenCalledTimes(1);
+    expect(retryRead).toHaveBeenCalledTimes(1);
+    expect(taskStateRead).toHaveBeenCalledTimes(1);
+    expect(
+      queryRead.mock.calls.filter(([sql]) => sql === 'SELECT sequence, body FROM worker_events WHERE kind=? ORDER BY sequence'),
+    ).toHaveLength(1);
+
+    h.store.updateTask({ taskId: incident.probe.taskId, attempt: incident.probe.attempt }, (task) => {
+      task.state = 'integrated';
+    });
+    cohortRead.mockClear();
+    taskRead.mockClear();
+    attemptRead.mockClear();
+    retryRead.mockClear();
+    taskStateRead.mockClear();
+    queryRead.mockClear();
+    const finishedProbeOutput: string[] = [];
+    await runWorkerCommand('status', [taskIds[0]!], {
+      settings: h.settings,
+      store: h.store,
+      tasks: h.tasks,
+      print: (value) => finishedProbeOutput.push(value),
+    });
+    expect(JSON.parse(finishedProbeOutput.at(-1)!)).toEqual({
+      ...h.store.task(taskIds[0]!),
+      urgent: false,
+      toolIncidents: [],
+    });
+    expect(taskStateRead).toHaveBeenCalledTimes(1);
+    expect(
+      queryRead.mock.calls.filter(([sql]) => sql === 'SELECT sequence, body FROM worker_events WHERE kind=? ORDER BY sequence'),
+    ).toHaveLength(1);
+    cohortRead.mockRestore();
+    taskRead.mockRestore();
+    attemptRead.mockRestore();
+    retryRead.mockRestore();
+    taskStateRead.mockRestore();
+    queryRead.mockRestore();
   });
 });
 

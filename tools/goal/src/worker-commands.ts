@@ -12,13 +12,13 @@ import { flowReport, readFlow, readFlowTasks } from './flow.ts';
 import { formatGuardLedger, guardLedger } from './guards.ts';
 import { lifecycleMetrics } from './lifecycle-metrics.ts';
 import type { LandingQueue, ManagerInbox } from './contracts.ts';
-import type { AttemptRecord, Effort, Settings, Task, TaskState, Tokens } from './types.ts';
+import type { Attempt, AttemptRecord, Effort, Settings, Task, TaskState, Tokens } from './types.ts';
 import { devVerificationState } from './dev-verifier.ts';
 import { retryWait } from './watchdog.ts';
 import { authenticatedCallingManager } from './integration-cli.ts';
 import { authenticatedManager } from './priority-authority.ts';
 import { submitOwnerDecision } from './owner-decisions.ts';
-import { listOpenToolIncidents, toolIncidentForRetry } from './tool-incidents.ts';
+import { projectToolIncidentStatus } from './tool-incidents.ts';
 import { parseWorkerCommandArguments, type ParsedWorkerCommandArguments } from './command-arguments.ts';
 
 export type WorkerCommandOptions = {
@@ -142,16 +142,19 @@ export async function runWorkerCommand(
       );
     } else if (parsedArguments.command === 'status') {
       const arg = parsedArguments.taskId;
+      const cohort = arg ? [store.task(arg)] : store.tasks();
+      const references = new Map<string, { attempt: Attempt; intent: ReturnType<WorkerStore['retryIntent']> }>();
+      for (const task of cohort) {
+        if (!task.currentAttempt) continue;
+        const ref = { taskId: task.id, attempt: task.currentAttempt };
+        references.set(task.id, { attempt: store.attempt(ref), intent: store.retryIntent(ref) });
+      }
+      const incidentProjection = projectToolIncidentStatus(store, cohort);
       const show = (task: Task) => {
-        const terminationRequest = task.currentAttempt
-          ? store.attempt({ taskId: task.id, attempt: task.currentAttempt }).terminationIntent
-          : undefined;
-        const intent = task.currentAttempt
-          ? store.retryIntent({ taskId: task.id, attempt: task.currentAttempt })
-          : undefined;
-        const incident = task.currentAttempt
-          ? toolIncidentForRetry(store, { taskId: task.id, attempt: task.currentAttempt })
-          : null;
+        const current = references.get(task.id);
+        const terminationRequest = current?.attempt.terminationIntent;
+        const intent = current?.intent;
+        const incident = current ? incidentProjection.forAttempt(task, current.attempt) : null;
         const dependencies =
           task.state === 'held' || intent?.status === 'pending' ? heldDependencies(task, tasks, store) : [];
         const wait = incident
@@ -186,21 +189,20 @@ export async function runWorkerCommand(
           ...(wait ? { pendingRetry: wait } : {}),
         };
       };
-      const tasksValue = arg ? show(store.task(arg)) : store.tasks().map(show);
-      const toolIncidents = listOpenToolIncidents(store);
+      const selectedTasks = cohort.map(show);
       print(
         JSON.stringify(
           arg
-            ? { ...tasksValue, toolIncidents }
+            ? { ...selectedTasks[0]!, toolIncidents: incidentProjection.toolIncidents }
             : {
                 devVerification: devVerificationState(
                   settings.mainCheckout,
                   settings.stateDirectory,
                   settings.integrationBranch,
-                  store.tasks(),
+                  cohort,
                 ),
-                toolIncidents,
-                tasks: tasksValue,
+                toolIncidents: incidentProjection.toolIncidents,
+                tasks: selectedTasks,
               },
           null,
           2,
