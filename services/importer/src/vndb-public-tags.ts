@@ -385,7 +385,7 @@ export async function importVndbPublicTags(input: {
   destination?: { origin: string };
 }): Promise<VndbPublicTagsResult> {
   const plan = await planVndbPublicTags(input.tables);
-  const admitted = input.admitted ?? plan.admitted;
+  const admitted = [...(input.admitted ?? plan.admitted)];
   const result = await seedCrossMedia(plan, input.path, input.port, input.destination, {
     vocabularyAdmission: vndbPublicTagVocabularyAdmission(input.bindings, admitted, input.ratings),
     providers: ['vndb'],
