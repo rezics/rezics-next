@@ -1881,6 +1881,9 @@ The event command does not sweep or resume workers. Acceptance and delivery even
 The decision shares the existing 20,000-character total prompt limit and process input byte limit with the ordinary
 prompt. References that do not fit remain pending; if the summary itself cannot fit, launch refuses the oversized
 prompt without recording delivery. Only a successful launch records delivery against the accepted event sequence.
+Projection decision: each prompt parses decisions and deliveries in one event traversal, keeps the earliest sequence
+per decision identity, selects by controller timestamp then event sequence, and reads each referenced path once.
+No projection cache is persisted, and the delivery protocol is unchanged.
 
 #### Native Storybook publication
 

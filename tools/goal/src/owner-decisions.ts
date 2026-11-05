@@ -181,10 +181,29 @@ function availableInWorktree(worktree: string, path: string): boolean {
   }
 }
 
-function deliveredState(events: readonly WorkerEvent[], decision: OwnerDecision) {
-  let summaryDelivered = false;
-  const deliveredDocumentPaths = new Set<string>();
+type DecisionDeliveryState = { summaryDelivered: boolean; deliveredDocumentPaths: Set<string> };
+type OwnerDecisionProjection = { decision?: OwnerDecision; delivery: DecisionDeliveryState };
+
+function decisionDeliveryKey(decisionId: string, decisionSequence: number): string {
+  return JSON.stringify([decisionId, decisionSequence]);
+}
+
+function projectOwnerDecision(
+  events: readonly WorkerEvent[],
+  task: Task,
+  ref: AttemptRef,
+  policy: ControlPolicy,
+): OwnerDecisionProjection {
+  const earliestById = new Map<string, OwnerDecision>();
+  const deliveryByDecision = new Map<string, DecisionDeliveryState>();
   for (const event of events) {
+    if (event.kind === DECISION_EVENT) {
+      const decision = decisionFromEvent(event, task, ref, policy);
+      if (!decision) continue;
+      const previous = earliestById.get(decision.id);
+      if (!previous || decision.sequence < previous.sequence) earliestById.set(decision.id, decision);
+      continue;
+    }
     if (event.kind !== DELIVERY_EVENT) continue;
     let body: Record<string, unknown> | undefined;
     try {
@@ -192,39 +211,46 @@ function deliveredState(events: readonly WorkerEvent[], decision: OwnerDecision)
     } catch {
       continue;
     }
+    const decisionId = body?.decisionId;
+    const decisionSequence = body?.decisionSequence;
     if (
-      body?.decisionId !== decision.id ||
-      body.decisionSequence !== decision.sequence ||
-      event.sequence <= decision.sequence
+      typeof decisionId !== 'string' ||
+      typeof decisionSequence !== 'number' ||
+      event.sequence <= decisionSequence
     )
       continue;
-    if (body.summaryDelivered === true) summaryDelivered = true;
+    const key = decisionDeliveryKey(decisionId, decisionSequence);
+    let delivery = deliveryByDecision.get(key);
+    if (!delivery) {
+      delivery = { summaryDelivered: false, deliveredDocumentPaths: new Set<string>() };
+      deliveryByDecision.set(key, delivery);
+    }
+    if (body.summaryDelivered === true) delivery.summaryDelivered = true;
     if (Array.isArray(body.documentRefs)) {
       for (const reference of body.documentRefs) {
         const item = record(reference);
-        if (item?.status === 'delivered' && typeof item.path === 'string') deliveredDocumentPaths.add(item.path);
+        if (item?.status === 'delivered' && typeof item.path === 'string')
+          delivery.deliveredDocumentPaths.add(item.path);
       }
     }
   }
-  return { summaryDelivered, deliveredDocumentPaths };
-}
 
-function latestDecision(
-  events: readonly WorkerEvent[],
-  task: Task,
-  ref: AttemptRef,
-  policy: ControlPolicy,
-): OwnerDecision | undefined {
-  const unique = new Map<string, OwnerDecision>();
-  for (const event of events) {
-    const decision = decisionFromEvent(event, task, ref, policy);
-    if (!decision) continue;
-    const previous = unique.get(decision.id);
-    if (!previous || decision.sequence < previous.sequence) unique.set(decision.id, decision);
+  let decision: OwnerDecision | undefined;
+  for (const candidate of earliestById.values()) {
+    if (
+      !decision ||
+      candidate.decidedAt > decision.decidedAt ||
+      (candidate.decidedAt === decision.decidedAt && candidate.sequence > decision.sequence)
+    )
+      decision = candidate;
   }
-  return [...unique.values()]
-    .sort((left, right) => left.decidedAt - right.decidedAt || left.sequence - right.sequence)
-    .at(-1);
+  const delivery = decision
+    ? deliveryByDecision.get(decisionDeliveryKey(decision.id, decision.sequence))
+    : undefined;
+  return {
+    decision,
+    delivery: delivery ?? { summaryDelivered: false, deliveredDocumentPaths: new Set<string>() },
+  };
 }
 
 export function prepareOwnerDecisionPrompt(
@@ -236,13 +262,17 @@ export function prepareOwnerDecisionPrompt(
 ): PreparedOwnerDecisionPrompt {
   if (task.id !== ref.taskId || task.currentAttempt !== ref.attempt) return { prompt };
   const events = store.ownerDecisionEvents(ref);
-  const decision = latestDecision(events, task, ref, policy);
+  const projection = projectOwnerDecision(events, task, ref, policy);
+  const decision = projection.decision;
   if (!decision) return { prompt };
 
-  const delivered = deliveredState(events, decision);
+  const delivered = projection.delivery;
+  const availabilityByPath = new Map<string, boolean>();
+  for (const reference of decision.documentRefs)
+    availabilityByPath.set(reference.path, availableInWorktree(task.worktree, reference.path));
   const pendingDocuments = decision.documentRefs.filter(
     (reference) =>
-      !delivered.deliveredDocumentPaths.has(reference.path) || !availableInWorktree(task.worktree, reference.path),
+      !delivered.deliveredDocumentPaths.has(reference.path) || availabilityByPath.get(reference.path) === false,
   );
   if (delivered.summaryDelivered && pendingDocuments.length === 0) return { prompt };
 
@@ -256,7 +286,7 @@ export function prepareOwnerDecisionPrompt(
     Buffer.byteLength(`${prompt}\n\n${block}`) <= policy.brief.bytes;
   let omitted = 0;
   for (const reference of pendingDocuments) {
-    const available = availableInWorktree(task.worktree, reference.path);
+    const available = availabilityByPath.get(reference.path) === true;
     const status = available ? 'delivered' : 'pending';
     const change = reference.change ? ` — ${reference.change}` : '';
     const line = available
