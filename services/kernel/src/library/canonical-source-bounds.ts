@@ -64,8 +64,8 @@ const sqlBound = (value: Omit<Bound, 'engineRequests'>): CanonicalSourceSqlBound
 };
 
 const jsonBytes = (value: unknown) => Buffer.byteLength(JSON.stringify(value));
-const textBytes = (value: string) => Buffer.byteLength(value);
-const bytesOf = (sql: string, values: unknown, resultBytes: number) => statementBytes(sql) + jsonBytes(values) + resultBytes;
+const bytesOf = (sql: string, values: unknown, resultBytes: number) =>
+  statementBytes(sql) + jsonBytes(values) + resultBytes;
 
 const maxIdentityObject = JSON.parse(`{"k":"${'a'.repeat(identityJsonCeiling - 8)}"}`);
 const maxScopeRow = jsonBytes([
@@ -223,7 +223,7 @@ const statement = (
   bound: CanonicalSourceSqlBound,
   raw = false,
 ): CanonicalSourceStatement => {
-  const requestBytes = textBytes(sql) + jsonBytes(values);
+  const requestBytes = statementBytes(sql) + jsonBytes(values);
   if (requestBytes + resultBytes !== bound.bytes) {
     const proved = sqlBound({ ...bound, bytes: requestBytes + resultBytes });
     return Object.freeze({ name, sql, requestBytes, resultBytes, rows, raw, bound: proved });
