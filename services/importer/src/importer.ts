@@ -143,7 +143,7 @@ export type ImportRunResult = {
 export type ImportRunOptions = {
   disappearanceThreshold?: number;
   maxRecordBytes?: number;
-  /** Permit pinned PersonDetail TSV rows only for the explicitly selected Bangumi family. */
+  /** Permit explicitly keyed, pinned Bangumi PersonDetail TSV rows. */
   bangumiPersonDetailRows?: boolean;
   signal?: AbortSignal;
   /** Explicit fixture/diagnostic bound; production defaults to no collected keys. */
@@ -187,7 +187,8 @@ export type ImporterOptions = {
       owner: Owner;
       conversion: ImportConversion;
       subject?: string;
-    }): ConversionContext['sourceVocabulary'];
+      signal: AbortSignal;
+    }): ConversionContext['sourceVocabulary'] | Promise<ConversionContext['sourceVocabulary']>;
   };
   onConversionOutput?(output: ImportConversion): void;
   afterBulkSuccess?(request: BatchWriteRequest, result: BatchWriteResult): void | Promise<void>;
@@ -1964,7 +1965,7 @@ export class Importer {
             resolvedReferences = resolution.resolvedReferences;
           } else resolvedReferences = resolution as Readonly<Record<string, string>>;
         }
-        const vocabulary = this.options.vocabularyAdmission?.request?.({ owner, conversion, subject });
+        const vocabulary = await this.options.vocabularyAdmission?.request?.({ owner, conversion, subject, signal });
         const context = {
           subjectId: subject,
           ...(resolvedReferences ? { resolvedReferences } : {}),

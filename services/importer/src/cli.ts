@@ -1,4 +1,6 @@
 import { Database } from 'bun:sqlite';
+import type { SourceVocabularyBindings } from '@rezics/conversion';
+import { createBangumiPersonCareerAdmission, parseBangumiPersonCareerBindings } from './bangumi-person-careers.ts';
 import { lstat, open, type FileHandle } from 'node:fs/promises';
 import type { SourceId } from '@rezics/conversion';
 import { createImporter, type Importer, type ImporterOptions } from './importer.ts';
@@ -168,6 +170,7 @@ type Config = {
   auth: string;
   sourceAlias?: string;
   bangumiGameGenreBindings?: string;
+  bangumiPersonCareerBindings?: string;
   disappearanceThreshold?: number;
   progressMode?: ImportProgressMode;
   compression: DumpCompression;
@@ -186,6 +189,7 @@ function usage(): string {
     '       --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>',
     '       [--source-alias <name>] [--disappearance-threshold <0..1>] [--progress <human|jsonl>]',
     '       [--bangumi-game-genre-bindings-file <finite-json-path>]',
+    '       [--bangumi-person-career-bindings-file <finite-json-path>]',
     '       [--compression none|gzip|zstd] [--decode-budget <bytes>] [--zstd-executable <absolute-path>]',
     '       [--checkpoint-staging] [--resume-staging --generation <id>]',
     '       [--checkpoint-acquisition] [--resume-acquisition --acquisition <id>]',
@@ -221,7 +225,7 @@ function usage(): string {
     '       rezics-import destination --state <sqlite-path> --source <configured-source-id> --api <https-origin>',
     '       --review-revision <64-hex> --declare --acknowledge-unverified [--json]',
     'Exit 6 means a source observation or classification needs explicit resolution; it is not an authorization failure.',
-    'Options: --source --dump --dump-set --state --api --account-key --account --client --auth --source-alias --bangumi-game-genre-bindings-file --disappearance-threshold --progress --compression --decode-budget --zstd-executable --checkpoint-staging --resume-staging --generation --checkpoint-acquisition --resume-acquisition --acquisition --help',
+    'Options: --source --dump --dump-set --state --api --account-key --account --client --auth --source-alias --bangumi-game-genre-bindings-file --bangumi-person-career-bindings-file --disappearance-threshold --progress --compression --decode-budget --zstd-executable --checkpoint-staging --resume-staging --generation --checkpoint-acquisition --resume-acquisition --acquisition --help',
     'gzip is admitted only for Open Library and Wikidata streamed dumps. zstd is admitted only for VNDB archives and Wikidata streamed dumps, as one regular local file (not stdin). Default --compression none. A suffix is not a source identity. --decode-budget is a whole-set decoded-byte ceiling (default 256 GiB) for one gzip dump, one zstd dump or one complete dump set, never a per-member multiple. Dump-set version 1 stays plain; version 2 requires explicit per-member none or gzip. --compression does not apply to --dump-set. zstd uses /usr/bin/zstd or PATH zstd, or --zstd-executable, with a 128 MiB decoder window.',
     'Each exact source alias records its API origin on first use. A mistyped --api fails before credentials. Legacy unbound history needs rezics-import destination. Same-origin server replacement cannot be detected without a separately released deployment identity.',
     '--checkpoint-staging and --resume-staging admit one uncompressed Bangumi regular file, one Open Library or Wikidata regular file (plain, gzip, or Wikidata zstd), or one Open Library dump-set. They re-hash every original file before any capture or resume mutation, then replay the production decoder from the start of each member. Default import still discards unsealed staging. After sealing, resume with the ordinary dump-free command; do not replace input. Local conversion is not publication, and Bangumi ratings stay omitted. VNDB archives and stdin stay non-resumable.',
@@ -255,6 +259,7 @@ function parse(argv: readonly string[]): Config | 'help' {
     '--auth',
     '--source-alias',
     '--bangumi-game-genre-bindings-file',
+    '--bangumi-person-career-bindings-file',
     '--disappearance-threshold',
     '--progress',
     '--compression',
@@ -323,6 +328,10 @@ function parse(argv: readonly string[]): Config | 'help' {
   if (bangumiGameGenreBindings !== undefined && (source !== 'bangumi' || !bangumiGameGenreBindings.trim()))
     throw new InputFailure();
 
+  const bangumiPersonCareerBindings = values.get('--bangumi-person-career-bindings-file');
+  if (bangumiPersonCareerBindings !== undefined && (source !== 'bangumi' || !bangumiPersonCareerBindings.trim()))
+    throw new InputFailure();
+
   const checkpointStaging = flags.has('--checkpoint-staging');
   const resumeStaging = flags.has('--resume-staging');
   const checkpointAcquisition = flags.has('--checkpoint-acquisition');
@@ -364,6 +373,7 @@ function parse(argv: readonly string[]): Config | 'help' {
     ...(generation ? { generation } : {}),
     ...(acquisition ? { acquisition } : {}),
     ...(bangumiGameGenreBindings === undefined ? {} : { bangumiGameGenreBindings }),
+    ...(bangumiPersonCareerBindings === undefined ? {} : { bangumiPersonCareerBindings }),
   };
   const compression = values.get('--compression');
   if (compression !== undefined) result.compression = parseDumpCompression(compression);
@@ -418,7 +428,7 @@ function parse(argv: readonly string[]): Config | 'help' {
   return result;
 }
 
-async function readBangumiGameGenreBindings(path: string): Promise<BangumiGameGenreBindings> {
+async function readBangumiBindings<T>(path: string, parse: (value: unknown) => T): Promise<T> {
   const handle = await open(path, 'r');
   try {
     const stat = await handle.stat();
@@ -435,7 +445,7 @@ async function readBangumiGameGenreBindings(path: string): Promise<BangumiGameGe
       chunks.push(chunk.subarray(0, read.bytesRead));
     }
     const text = new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks, size));
-    return parseBangumiGameGenreBindings(JSON.parse(text) as unknown);
+    return parse(JSON.parse(text) as unknown);
   } finally {
     await handle.close();
   }
@@ -651,12 +661,32 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
   let bangumiGameGenreBindings: BangumiGameGenreBindings | undefined;
   if (config.bangumiGameGenreBindings) {
     try {
-      bangumiGameGenreBindings = await readBangumiGameGenreBindings(config.bangumiGameGenreBindings);
+      bangumiGameGenreBindings = await readBangumiBindings(
+        config.bangumiGameGenreBindings,
+        parseBangumiGameGenreBindings,
+      );
     } catch {
       return {
         code: 2,
         stdout: '',
         stderr: diagnostic('Invalid Bangumi Game genre binding profile.'),
+        openHandles: 0,
+      };
+    }
+  }
+
+  let bangumiPersonCareerBindings: SourceVocabularyBindings | undefined;
+  if (config.bangumiPersonCareerBindings) {
+    try {
+      bangumiPersonCareerBindings = await readBangumiBindings(
+        config.bangumiPersonCareerBindings,
+        parseBangumiPersonCareerBindings,
+      );
+    } catch {
+      return {
+        code: 2,
+        stdout: '',
+        stderr: diagnostic('Invalid Bangumi Person career binding profile.'),
         openHandles: 0,
       };
     }
@@ -1057,6 +1087,11 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
     // production RecordBindings handle owned by this coordinator.
     importerOptions.mediaResolver = mediaAdapter;
     if (config.source === 'bangumi') {
+      if (bangumiPersonCareerBindings)
+        importerOptions.vocabularyAdmission = createBangumiPersonCareerAdmission(
+          bangumiPersonCareerBindings,
+          liveTransport(),
+        );
       const publicTagLookup = createReviewedCatalogueLookup(importer.session.bindings, liveTransport());
       importerOptions.identifierLookup = bangumiGameGenreBindings
         ? composeBangumiImportIdentifierLookups(
@@ -1288,7 +1323,7 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
             ? {}
             : { disappearanceThreshold: config.disappearanceThreshold }),
           signal,
-          ...(registration.source === 'bangumi_cross_media' ? { bangumiPersonDetailRows: true } : {}),
+          ...(config.source === 'bangumi' ? { bangumiPersonDetailRows: true } : {}),
           ...(progressHooks ? { progress: progressHooks } : {}),
           ...(checkpointRequest(config, capture) ? { checkpoint: checkpointRequest(config, capture)! } : {}),
         });

@@ -4,6 +4,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { runImportCli } from '../src/cli.ts';
 import { createSourceRegistration } from '../src/source-registry.ts';
+import { converter_revision } from '@rezics/conversion/bangumi';
 
 test('ordinary Bangumi registration converts named 3/6 records and keeps identity-only ignored seams', () => {
   const registration = createSourceRegistration('bangumi');
@@ -45,7 +46,7 @@ test('ordinary Bangumi registration converts named 3/6 records and keeps identit
   }
   expect(seen).toEqual([]);
   const returned = convert({ id: 71001, type: 1, name: 'The Cartographer’s Book: Revised' });
-  expect(registration.converter_revision).toBe('bangumi@15');
+  expect(registration.converter_revision).toBe(converter_revision);
   expect(returned.digest).not.toBe(initial.digest);
   expect(returned.proposals).toHaveLength(2);
   expect(convert(JSON.parse(JSON.stringify(returned.normalized)))).toEqual(returned);
@@ -54,7 +55,7 @@ test('ordinary Bangumi registration converts named 3/6 records and keeps identit
     expect(proposal.source).toMatchObject({
       source: 'bangumi',
       external_id: '71001',
-      converter_revision: 'bangumi@15',
+      converter_revision: converter_revision,
     });
   }
 });
@@ -105,7 +106,7 @@ test('ordinary Bangumi CLI seals the whole transition input before any Auth or p
         }) as unknown as typeof fetch,
       },
     );
-    expect(revisions).toEqual(['bangumi@15']);
+    expect(revisions).toEqual([converter_revision]);
     expect(result.code).toBe(2);
     expect(result.openHandles).toBe(0);
     expect(requests).toEqual([]);

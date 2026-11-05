@@ -114,7 +114,7 @@ export async function* readDump(
     maxChunkBytes?: number;
     counters?: DumpCounters;
     openLibraryFamily?: OpenLibraryDumpFamily;
-    /** Explicit Bangumi cross-media imports also accept pinned PersonDetail TSV rows. */
+    /** Explicitly keyed Bangumi imports also accept pinned PersonDetail TSV rows. */
     bangumiPersonDetailRows?: boolean;
   } = {},
 ): AsyncGenerator<SourceRecord> {
