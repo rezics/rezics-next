@@ -163,8 +163,14 @@ test('mounted entry, editorial menu and installed Facts route guard retain and r
     });
   const navigate = async (href: string) => {
     const url = new URL(href, window.location.origin);
-    const routeHref = `${url.pathname.replace(/^\/en(?=\/subjects)/u, '')}${url.search}`;
-    await act(async () => router.navigate({ href: routeHref }));
+    const search = Object.fromEntries(url.searchParams.entries());
+    await act(async () =>
+      router.navigate({
+        to: '/subjects/$id/$slug/edit',
+        params: { id: addonProfileId, slug: 'harbor-northern-lights' },
+        search,
+      } as never),
+    );
   };
   const originHref = factsPublicCorrectionHref(base, addonProfileId, 'en', observed);
   const unsupported = factsPublicCorrectionHref(base, addonProfileId, 'en', { ...observed, context: addonWorkId });
