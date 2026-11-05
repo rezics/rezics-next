@@ -30,6 +30,8 @@ import {
 } from './reads';
 
 import { prepareShelfWorkContext, type ShelfFacts, type ShelfWorkContext } from './shelf-work-context/context';
+import { scoreOrderReadState } from './personal-score';
+import type { LibraryScoreQuestion, LibraryViewerFacts } from './score';
 
 export type LibraryEntryStateRead = string;
 
@@ -52,6 +54,8 @@ export type PersonalLibraryEntry = {
   stateOptions?: LibraryStateChoice[];
   activeProgressSession?: ProgressLabelInput | null;
   subject: LibrarySubject | null;
+  personalScore?: number | null;
+  viewerRowKey?: string;
   changeKey: string;
   removeKey: string;
   removeCredential?: string;
@@ -70,6 +74,8 @@ export type PersonalLibraryView =
       cursorReset?: boolean;
       addressIssues?: ShelfAddressField[];
       readState?: 'closed' | 'denied' | 'preparing' | 'unavailable' | 'score-unavailable';
+      scoreQuestion?: LibraryScoreQuestion;
+      viewerFacts?: LibraryViewerFacts;
       entries: PersonalLibraryEntry[];
       next: string | null;
     };
@@ -165,6 +171,7 @@ type RawEntry = {
   lastActivityAt?: string;
   finishedAt?: string | null;
   activeProgressSession?: ProgressLabelInput | null;
+  personalScore?: number | null;
   subject?: Parameters<typeof subjectOf>[0];
 };
 
@@ -181,6 +188,7 @@ function presentEntry(entry: RawEntry): ReloadedLibraryEntry {
     activeProgressSession: entry.activeProgressSession ?? null,
     subject: subjectOf(entry.subject),
     ...(entry.subject && entry.facts ? { facts: entry.facts } : {}),
+    ...(entry.personalScore !== undefined ? { personalScore: entry.personalScore } : {}),
     workContext: null,
   };
 }
@@ -197,6 +205,14 @@ function codeOf(error: unknown): string | undefined {
   if (!value || typeof value !== 'object' || !('code' in value)) return undefined;
   const code = (value as { code: unknown }).code;
   return typeof code === 'string' ? code : undefined;
+}
+
+function detailOf(error: unknown): string | undefined {
+  if (!error || typeof error !== 'object' || !('value' in error)) return undefined;
+  const value = (error as { value: unknown }).value;
+  if (!value || typeof value !== 'object' || !('detail' in value)) return undefined;
+  const detail = (value as { detail: unknown }).detail;
+  return typeof detail === 'string' ? detail : undefined;
 }
 
 type LibraryRefusal = 'closed' | 'denied' | 'signed-out';
@@ -245,8 +261,6 @@ export async function readEntryPage(
 ) {
   const addressIssues = shelfAddressIssues({ type, state, cursor });
   if (addressIssues.length) throw new InvalidShelfAddressError(addressIssues);
-  // Personal score remains closed under its separate owner-wide currentness contract.
-  if (sort?.orderBy === 'personalScore') throw new ShelfPageUnavailableError('score-unavailable');
   const result = await client.libraryEntries.get({
     query: { ...libraryListQuery(cursor, limit), ...(state ? { state } : {}), ...sort, ...(type ? { type } : {}) },
     headers: { authorization },
@@ -257,8 +271,12 @@ export async function readEntryPage(
     const code = codeOf(result.error);
     if (status === 400 && code === 'invalid_cursor') throw new StaleCursorError();
     if (status === 403 && code !== 'platform_closed') throw new ShelfPageUnavailableError('denied');
-    if (status === 503)
-      throw new ShelfPageUnavailableError(code === 'dependency_unavailable' ? 'preparing' : 'unavailable');
+    if (status === 503) {
+      const scoreState = sort.orderBy === 'personalScore' ? scoreOrderReadState(detailOf(result.error)) : undefined;
+      throw new ShelfPageUnavailableError(
+        scoreState ?? (code === 'dependency_unavailable' ? 'preparing' : 'unavailable'),
+      );
+    }
   }
   const page = readLibraryResult(result);
   if (page.next !== null && shelfAddressIssues({ cursor: page.next }).length)
@@ -267,8 +285,9 @@ export async function readEntryPage(
 }
 
 function presentShelfEntries(rows: RawEntry[]): PersonalLibraryEntry[] {
-  return rows.map((entry) => ({
+  return rows.map((entry, index) => ({
     ...presentEntry(entry),
+    viewerRowKey: String(index),
     changeKey: crypto.randomUUID(),
     removeKey: crypto.randomUUID(),
   }));
@@ -381,6 +400,8 @@ export async function loadPersonalLibrary(
       ...entry,
       ...(credential ? { removeCredential: credential } : {}),
     })),
+    ...('scoreQuestion' in page && page.scoreQuestion ? { scoreQuestion: page.scoreQuestion } : {}),
+    ...('viewerFacts' in page && page.viewerFacts ? { viewerFacts: page.viewerFacts } : {}),
     next: page.next,
   };
 }

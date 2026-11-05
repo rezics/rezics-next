@@ -97,7 +97,7 @@ test('native shelf defaults resolve within limits, URL choices win, and replaced
   expect(explicit.search.cursor).toBe('current-order');
   expect(explicit.cursorInvalidated).toBe(false);
   expect(unsupportedShelfColumns(shelf)).toEqual(['creator', 'rating', 'started']);
-  expect(unsupportedShelfSorts(shelf)).toEqual([{ tab: 'planned', field: 'title' }]);
+  expect(unsupportedShelfSorts(shelf)).toEqual([]);
   expect(shelfColumnIds).not.toContain('creator' as never);
 
   const explicitDefaults = validateShelfSearch({
@@ -435,7 +435,7 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
       await render();
       expect(host.querySelectorAll('select')).toHaveLength(9);
       expect(host.textContent).toContain(m.settings_shelf_columns_unavailable({ columns: 'creator, rating, started' }));
-      expect(host.textContent).toContain(
+      expect(host.textContent).not.toContain(
         m.settings_shelf_order_unavailable({ tab: m.library_state_planned(), field: 'title' }),
       );
 
@@ -444,7 +444,8 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
         [4, m.library_score_highest()],
       ] as const) {
         const option = host.querySelectorAll<HTMLSelectElement>('select')[index]!.selectedOptions[0]!;
-        expect(option.disabled).toBe(true);
+        expect(option.disabled).toBe(false);
+        expect(option.value.startsWith('rating:')).toBe(true);
         expect(option.textContent).toContain(direction);
       }
 

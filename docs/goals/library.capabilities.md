@@ -816,10 +816,11 @@ query/schema/client producer, rated-first keysets in both directions, atomic Ent
 maintenance and an explicit 100-entry installation command. `test/library/shelf-score.test.ts` covers native raw
 page traversal, both filters, zero/ties/unrated, write/clear/counted-target changes, Entry identity/removal,
 bounded installation and opaque negative/expired cursors. These are focused tests, not native growth measurements.
-Content's owner-wide identity-currentness producer is an explicit unbound port; the default public order remains
-503 unavailable even after installation. The viewer-facts overlay is independent. Whole public traversal after
-binding the native producer, complete merge/lifecycle currentness and controller native growth remain outstanding
-in `.temp/continuation/personal-score-currentness.md`. Existing date-order assertions are unchanged.
+Content's owner-wide identity-currentness producer is bound: `readPersonalScoreCurrentness` versions question, identity
+work and voter standing without reading vote rows. Pending repair or ineligible standing remains 503; installation
+readiness is a separate preparation visit. The viewer-facts overlay is independent. Web requests the native order,
+shows own units, and refreshes Library/Liked/own-vote reads after Content's vote write. Existing date-order assertions
+are unchanged.
 
 ## Evidence stage
 
