@@ -306,7 +306,8 @@ operation.
 Decision: Community Web consumes Realm Home and both shelves only through the root-derived `KernelClient` methods
 and projections; the official publisher owns recent-thread and Board-visibility typing, and Web adds no second DTO
 or reader. Home response typing is derived directly from the installed root callable, just like both shelves;
-consumer work does not repair generated publisher declarations.
+consumer work does not repair generated publisher declarations. Native visit fixtures preserve the captured session
+observation through admission and assert membership offers on controls rather than unrelated catalogue prose.
 
 Join remains a command offer, and Realm claims still use their separate current claim reader; neither path executes
 from home advice. The receiver preserves its existing presentation, lifetime and mutation ownership without adding
