@@ -453,12 +453,14 @@ Each member's acceptance command runs concurrently against the final batch candi
 times out, or changes its worktree, the train retries the members individually so the failure is attributed to its task.
 `promotionParallelism` defaults to `4` and caps concurrent promotion checks.
 
+Decision: settings resolution and decoding live in `settings.ts`; `config.ts` remains the supported public settings entry and owns runtime composition.
+
 ### Control-plane policy
 
 The table is the policy reference for values supplied by `defaults.json`. Local settings use the same dotted
 paths as nested objects and override individual leaves; omitted leaves retain the package default. For example,
 `{"policy":{"capacity":{"maxWorkers":16},"backlog":{"lowWater":4}}}` changes only those two limits.
-`config.ts` validates policy values before composing the runtime. Numeric `policy` leaves are positive safe integers,
+`settings.ts` validates policy values while decoding local settings, before `config.ts` composes the runtime. Numeric `policy` leaves are positive safe integers,
 except the memory floor and extra memory reserve, which accept zero. The worker memory fraction is finite and in
 `(0, 1]`; container age is a finite non-negative number of hours. Retry schedules are non-empty arrays of safe integer
 milliseconds: tool retries permit zero, while settlement pauses must be positive. Manager continuation and unused-allowance alert percentages cannot exceed 100. A host still opts into admission with `capacity.json`; its explicit
