@@ -91,6 +91,7 @@ const { createRoot } = await import('react-dom/client');
 const { QueryClient, QueryClientProvider, notifyManager } = await import('@tanstack/react-query');
 const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
 const { SubjectLibrarySlot } = await import('../src/library/subject-slot-view');
+const { PublicCollectionsPanel } = await import('../src/library/subject-collection-journey/public');
 const { useSession } = await import('../src/session/query');
 const { m } = await import('../src/paraglide/messages.js');
 const { deLocalizeUrl, localizeUrl } = await import('../src/paraglide/runtime.js');
@@ -278,6 +279,23 @@ test('a Subject reader continues three public pages, adds a later curated Collec
   expect(host.textContent).toContain('Public 3-0');
   expect(host.textContent).toContain(m.library_subject_page_rows({ count: 10 }));
   expect(host.textContent).toContain(m.library_subject_continuation_exhausted());
+  const panel = host.querySelector<HTMLDetailsElement>('[data-public-collections]')!;
+  panel.open = true;
+  await click(m.library_subject_continuation_previous());
+  expect(publics[2]!.data).toEqual({ subjectId: subject.id, cursor: 'cursor-2' });
+  expect(host.textContent).not.toContain('Public 3-0');
+  expect([...panel.querySelectorAll('button')].every((node) => node.disabled)).toBe(true);
+  await act(async () => publics[2]!.resolve(publicPage(2, 'cursor-3', 1)));
+  expect(host.textContent).toContain('Public 2-0');
+  expect(window.document.activeElement).toBe(panel.querySelector('h3'));
+  expect(host.textContent).toContain(m.library_subject_public_collections({ count: 50 }));
+  expect([...panel.querySelectorAll('button')].some(
+    (node) => node.textContent === m.library_subject_continuation_previous(),
+  )).toBe(false);
+  await click(m.library_subject_continuation_restart());
+  expect(publics[3]!.data).toEqual({ subjectId: subject.id });
+  await act(async () => publics[3]!.resolve(publicPage(1, null)));
+  expect(publics).toHaveLength(4);
   await act(async () => {
     host.querySelector<HTMLButtonElement>('[data-add-to-collection]')!.click();
   });
@@ -335,6 +353,50 @@ test('a Subject reader continues three public pages, adds a later curated Collec
   expect(returnLink?.getAttribute('href')).toContain('node=cast');
   expect(returnLink?.getAttribute('href')).toContain('cursor=next');
   expect(sealed).toEqual(members[0]!.data);
+});
+
+test('public recovery uses the current origin, keeps sparse pages and retires late responses', async () => {
+  let current = true;
+  const staleRead = mock(async () => publicPage(9, null));
+  const readPage = (cursor?: string) => hold(publics, { data: { cursor } });
+  const render = async (source = readPage) => {
+    await act(async () => root.render(
+      <PublicCollectionsPanel locale="ja" collections={[]} next="sparse" count={{ kind: 'unknown' }}
+        current={() => current} readPage={source} />,
+    ));
+    host.querySelector<HTMLDetailsElement>('details')!.open = true;
+  };
+  await render(staleRead);
+  await render();
+  const next = button(m.library_subject_continuation_next());
+  next.focus();
+  await act(async () => { next.click(); next.click(); });
+  expect(publics).toHaveLength(1);
+  expect(staleRead).not.toHaveBeenCalled();
+  expect(publics[0]!.data).toEqual({ cursor: 'sparse' });
+  expect(host.querySelector('[role="status"]')?.textContent).toBe(m.library_subject_public_preparing());
+  await act(async () => publics[0]!.resolve(publicPage(2, 'empty-next', 1, { kind: 'unknown' })));
+  expect(host.textContent).toContain(m.library_subject_public_collections_unknown());
+  expect(window.document.activeElement).toBe(host.querySelector('h3'));
+  await click(m.library_subject_continuation_next());
+  await act(async () => publics[1]!.resolve(publicPage(3, 'still-next', 0, { kind: 'unknown' })));
+  expect(host.textContent).toContain(m.library_subject_public_empty_page());
+  await click(m.library_subject_continuation_previous());
+  expect(publics[2]!.data).toEqual({ cursor: 'empty-next' });
+  await act(async () => publics[2]!.reject(new Error('stale_cursor')));
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain(m.library_subject_continuation_expired());
+  button(m.library_subject_continuation_restart()).focus();
+  await click(m.library_subject_continuation_restart());
+  expect(publics[3]!.data).toEqual({ cursor: undefined });
+  current = false;
+  await act(async () => publics[3]!.resolve(publicPage(1, 'obsolete-next')));
+  expect(host.textContent).not.toContain('Public 1-0');
+  expect(host.textContent).not.toContain(m.library_subject_public_collections({ count: 50 }));
+  await act(async () => root.unmount());
+  root = createRoot(host);
+  await render();
+  await click(m.library_subject_continuation_next());
+  expect(publics).toHaveLength(4);
 });
 
 test('empty continuing pages, expired cursors, denied add and original retry stay explicit', async () => {

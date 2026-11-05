@@ -7,6 +7,7 @@ import {
   collectionReadFailure,
   firstCollectionVisit,
   nextCollectionVisit,
+  previousCollectionVisit,
   publicCountOf,
   replaceCollectionPage,
   type BoundCollectionPage,
@@ -45,6 +46,7 @@ export function PublicCollectionsPanel({
   const heading = useRef<HTMLHeadingElement>(null);
   const live = useRef(true);
   const version = useRef(0);
+  const flight = useRef(false);
   const callbacks = useRef({ current, readPage });
   callbacks.current = { current, readPage };
   const [page, setPage] = useState<BoundCollectionPage<PublicCollectionRow>>(() =>
@@ -70,6 +72,8 @@ export function PublicCollectionsPanel({
   const retained = (episode: number) => live.current && episode === version.current && callbacks.current.current();
 
   async function load(visit: SubjectCollectionVisit, focus: boolean) {
+    if (flight.current || !retained(version.current)) return;
+    flight.current = true;
     const episode = ++version.current;
     setBusy(true);
     setIssue(null);
@@ -88,12 +92,16 @@ export function PublicCollectionsPanel({
     } catch (error) {
       if (retained(episode)) setIssue(collectionReadFailure(error));
     } finally {
-      if (retained(episode)) setBusy(false);
+      if (retained(episode)) {
+        flight.current = false;
+        setBusy(false);
+      }
     }
   }
 
   const total = page.count ?? count ?? publicCountOf(undefined);
   const rows = issue ? [] : page.rows;
+  const previous = previousCollectionVisit(page.visit);
   return (
     <details data-public-collections className="relative">
       <summary className={`${buttonClass} cursor-pointer list-none`}>
@@ -165,6 +173,16 @@ export function PublicCollectionsPanel({
         ) : null}
         {!issue ? (
           <div className="flex min-w-0 flex-wrap gap-2">
+            {previous ? (
+              <button
+                type="button"
+                className={`${buttonClass} ${controlClass}`}
+                disabled={busy}
+                onClick={() => void load(previous, true)}
+              >
+                {m.library_subject_continuation_previous()}
+              </button>
+            ) : null}
             {page.visit.page > 1 ? (
               <button
                 type="button"
