@@ -432,7 +432,7 @@ test('the native financial participant minimizes an explicitly retained real ord
   expect(await inspectNativeRetainedOrder(pool, first.id)).toBeNull();
   expect(await inspectNativeRetainedOrder(pool, second.id)).toBeNull();
   const purgedBeforeResolve = await readErasureStatus(pool, buyer.accountId);
-  expect(purgedBeforeResolve?.participants.commerce.retained[0]?.resolvedAt).toBeNull();
+  expect(purgedBeforeResolve?.participants.commerce?.retained[0]?.resolvedAt).toBeNull();
   await startCommerceWorker();
   await finish(buyerErasureId);
   expect(await inspectNativeRetainedOrder(pool, first.id)).toBeNull();
@@ -449,11 +449,11 @@ test('the native financial participant minimizes an explicitly retained real ord
       },
     ],
   });
-  const resolvedAt = resolvedStatus?.participants.commerce.retained[0]?.resolvedAt;
+  const resolvedAt = resolvedStatus?.participants.commerce?.retained[0]?.resolvedAt;
   expect(resolvedAt).not.toBeNull();
   expect(Date.parse(resolvedAt!)).toBeGreaterThanOrEqual(expiresAt.getTime());
   await resolveRetention({ pool }, { accountId: buyer.accountId, participant: 'commerce', store: ORDER_RETENTION_STORE });
-  expect((await readErasureStatus(pool, buyer.accountId))?.participants.commerce.retained[0]?.resolvedAt).toBe(
+  expect((await readErasureStatus(pool, buyer.accountId))?.participants.commerce?.retained[0]?.resolvedAt).toBe(
     resolvedAt,
   );
   await finish(await postSignedEvent(latePaidSigned));
