@@ -6,6 +6,10 @@ must declare the property as a facet of the selected type and declare every requ
 and its datatype. Item operands are native concept or subject UUIDs. A catalogue Person remains
 distinct from an Account.
 
+Decision: Person name queries consume Universal Search's current catalogue text projection and
+shared analyzer; the locale-selected preferred label and canonical Person identity remain
+independent of the matched name.
+
 For example, a work's `wdt:P725` value selects the credited person; `wdt:P453` and `wdt:P3831`
 qualifiers constrain the portrayed character and role on that same statement. Repeated voice
 credits do not pool qualifiers across slots. The existing current statement matcher remains
