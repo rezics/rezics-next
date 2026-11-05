@@ -445,4 +445,3 @@ function settingsFromLocal(value: unknown, { env, initialMain, localFile }: Sett
     },
   };
 }
-
