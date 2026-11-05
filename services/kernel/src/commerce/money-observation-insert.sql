@@ -8,5 +8,7 @@ SELECT :route, :order_id, :buyer, o.object_id, o.context, o.namespace, o.livemod
 FROM jsonb_to_recordset(:observations::jsonb) AS o(object_id text, context text, namespace text,
  livemode boolean, api_version text, request_version text, response_version text, unit jsonb,
  economics_hash text, amounts jsonb)
+JOIN access.account a ON a.route=:route AND a.account_id=:buyer AND a.state='active'
+WHERE NOT EXISTS (SELECT 1 FROM access.erasure e WHERE e.route=a.route AND e.account_id=a.account_id)
 ON CONFLICT DO NOTHING
 RETURNING provider_object_id AS "objectId", context;

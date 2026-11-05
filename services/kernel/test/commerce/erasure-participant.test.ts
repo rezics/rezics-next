@@ -2,13 +2,17 @@ import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { RELEASE_FORMAT, type Release } from '@rezics/definitions';
 import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
-import { readErasureStatus } from '../../src/access/erasure.ts';
+import { readErasureStatus, resolveRetention } from '../../src/access/erasure.ts';
 import { GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { createCommerceCommands } from '../../src/commerce/commands.ts';
 import {
   advanceCommerceErasure,
   commerceErasureWorkflowId,
+  COMMERCE_CUSTODY_BLOCKER,
   FINANCIAL_ERASURE_BLOCKER,
+  NATIVE_TEST_ORDER_RETENTION_FIELDS,
+  NATIVE_TEST_ORDER_RETENTION_PURPOSE,
+  ORDER_RETENTION_STORE,
 } from '../../src/commerce/erasure-participant.ts';
 import { createCommerceWork } from '../../src/commerce/enqueue.ts';
 import { createStripePort } from '../../src/commerce/stripe.ts';
@@ -21,6 +25,7 @@ import { deletePersona, drainEffects } from '../support/account-deletion.ts';
 import { createPersonas, type Persona } from '../support/personas.ts';
 import { testKernel, type TestKernel } from '../support/test-kernel.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
+import { inspectNativeRetainedOrder, prepareNativeRetainedOrder } from './support/order-retention-fixture.ts';
 import { until } from './support/work-fixture.ts';
 import { startWorkStripe } from './support/work-stripe.ts';
 
@@ -90,7 +95,9 @@ async function erase(persona: Persona) {
   return barrier;
 }
 async function event(type: string, sessionId: string) {
-  const signed = await provider.fake.event(type, sessionId);
+  return postSignedEvent(await provider.fake.event(type, sessionId));
+}
+async function postSignedEvent(signed: { bytes: string; headers: Record<string, string> }) {
   const response = await kernel.handle(
     new Request('http://kernel.test/v1/webhooks/stripe', {
       method: 'POST',
@@ -115,6 +122,49 @@ async function entitlementRows(accountId: string) {
 }
 async function commerceOutcome(accountId: string) {
   return (await readErasureStatus(pool, accountId))?.participants.commerce;
+}
+
+async function startCommerceWorker() {
+  const env = {
+    ...process.env,
+    ...workerTestEnv({
+      DATABASE_URL: process.env.DATABASE_URL!,
+      STRIPE_SECRET_KEY: 'sk_test_erasure',
+      STRIPE_MANAGED_PAYMENTS: 'false',
+      STRIPE_API_HOST: `http://127.0.0.1:${provider.port}`,
+      CHECKOUT_SUCCESS_URL: urls.successUrl,
+      CHECKOUT_CANCEL_URL: urls.cancelUrl,
+    }),
+  };
+  const running = Bun.spawn([process.execPath, `${import.meta.dir}/support/erasure-participant-runtime.ts`], {
+    env,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  worker = running;
+  let output = '',
+    errors = '';
+  void (async () => {
+    for await (const bytes of running.stdout as ReadableStream<Uint8Array>) output += new TextDecoder().decode(bytes);
+  })();
+  void (async () => {
+    for await (const bytes of running.stderr as ReadableStream<Uint8Array>) errors += new TextDecoder().decode(bytes);
+  })();
+  await until(
+    async () => {
+      if (running.exitCode !== null) throw new Error(`Kernel worker ${running.pid} exited: ${errors}`);
+      return output;
+    },
+    (value) => value.includes('Commerce erasure worker ready'),
+  );
+}
+
+async function stopCommerceWorker() {
+  const running = worker;
+  if (!running) return;
+  running.kill('SIGTERM');
+  await running.exited;
+  worker = undefined;
 }
 
 beforeAll(async () => {
@@ -155,46 +205,14 @@ beforeAll(async () => {
     await accepted(personas.staff, '/v1/subjects', { type: 'schema:Book', labels: { en: 'Commerce erasure book' } })
   ).subject.id;
   commands = createCommerceCommands({ pool, access: kernel.testAccess });
-  const env = {
-    ...process.env,
-    ...workerTestEnv({
-      DATABASE_URL: process.env.DATABASE_URL!,
-      STRIPE_SECRET_KEY: 'sk_test_erasure',
-      STRIPE_MANAGED_PAYMENTS: 'false',
-      STRIPE_API_HOST: `http://127.0.0.1:${provider.port}`,
-      CHECKOUT_SUCCESS_URL: urls.successUrl,
-      CHECKOUT_CANCEL_URL: urls.cancelUrl,
-    }),
-  };
   // Auth owns the parent's DBOS singleton. The kernel's default executor runs in
   // its own process against this same database and the parent's loopback provider.
-  worker = Bun.spawn([process.execPath, `${import.meta.dir}/support/erasure-participant-runtime.ts`], {
-    env,
-    stdout: 'pipe',
-    stderr: 'pipe',
-  });
-  const running = worker;
-  let output = '',
-    errors = '';
-  void (async () => {
-    for await (const bytes of running.stdout as ReadableStream<Uint8Array>) output += new TextDecoder().decode(bytes);
-  })();
-  void (async () => {
-    for await (const bytes of running.stderr as ReadableStream<Uint8Array>) errors += new TextDecoder().decode(bytes);
-  })();
-  await until(
-    async () => {
-      if (running.exitCode !== null) throw new Error(`Kernel worker ${running.pid} exited: ${errors}`);
-      return output;
-    },
-    (value) => value.includes('Commerce erasure worker ready'),
-  );
+  await startCommerceWorker();
 }, 360_000);
 
 afterAll(async () => {
   try {
-    worker?.kill('SIGTERM');
-    await worker?.exited;
+    await stopCommerceWorker();
   } finally {
     await client?.close();
     provider?.stop();
@@ -203,7 +221,7 @@ afterAll(async () => {
   }
 });
 
-test('the default financial commerce terminal effect acknowledges only native no-data or actual policy-complete minimization while late provider work never restores private benefits', async () => {
+test('the native financial participant minimizes an explicitly retained real order, expires it durably, and preserves late financial truth without restoring private benefits', async () => {
   // Bob has no commerce, delegation or operator history. Auth approval/execute commits T.
   const unused = personas.bob;
   const barrier = await erase(unused);
@@ -266,9 +284,26 @@ test('the default financial commerce terminal effect acknowledges only native no
   const second = (await accepted(buyer, '/v1/orders', { offerId: offer.id, expectedOfferRevision: offer.revision }))
     .order as { id: string };
   const secondNative = (await commands.readOrderForAccount(buyer.accountId, second.id))!;
+  const expiresAt = new Date(Date.now() + 60_000);
+  const firstRetention = await prepareNativeRetainedOrder(pool, first.id, expiresAt);
+  const secondRetention = await prepareNativeRetainedOrder(pool, second.id, expiresAt);
+  expect(firstRetention).toMatchObject({
+    store: ORDER_RETENTION_STORE,
+    fields: [...NATIVE_TEST_ORDER_RETENTION_FIELDS],
+    purpose: NATIVE_TEST_ORDER_RETENTION_PURPOSE,
+    expiresAt: expiresAt.toISOString(),
+  });
+  expect(secondRetention).toMatchObject({
+    store: ORDER_RETENTION_STORE,
+    fields: [...NATIVE_TEST_ORDER_RETENTION_FIELDS],
+    purpose: NATIVE_TEST_ORDER_RETENTION_PURPOSE,
+    expiresAt: expiresAt.toISOString(),
+  });
   provider.fake.pay(secondNative.checkoutSessionId!);
   const held = provider.delayRead();
-  const latePaid = await event('checkout.session.completed', secondNative.checkoutSessionId!);
+  const latePaidSigned = await provider.fake.event('checkout.session.completed', secondNative.checkoutSessionId!);
+  const latePaid = await postSignedEvent(latePaidSigned);
+  const buyerErasureId = commerceErasureWorkflowId(buyer.accountId);
   await held.captured;
   const purgeBarrier = await pool.connect();
   try {
@@ -290,12 +325,59 @@ test('the default financial commerce terminal effect acknowledges only native no
     expect(await commands.listEntitlementsForAccount(buyer.accountId, { after: null, limit: 100 })).toEqual([]);
     expect((await request(buyer, '/v1/orders', { offerId: offer.id })).status).toBe(401);
     await purgeBarrier.query('ROLLBACK');
-    const buyerErasureId = commerceErasureWorkflowId(buyer.accountId);
     await until(
       () => client.getWorkflow(buyerErasureId),
       (row) => row !== null && row !== undefined,
     );
-    await finish(buyerErasureId);
+    await until(
+      async () => (await commerceOutcome(buyer.accountId)) ?? null,
+      (row) => row?.outcome === 'erased' && row.retained.length === 1 && row.retained[0]?.resolvedAt === null,
+    );
+    const retainedFirst = await inspectNativeRetainedOrder(pool, first.id);
+    const retainedSecond = await inspectNativeRetainedOrder(pool, second.id);
+    expect(retainedFirst).toMatchObject({
+      orderId: first.id,
+      buyerAccountId: buyer.accountId,
+      checkoutUrl: firstNative.checkoutUrl,
+    });
+    expect(retainedSecond).toMatchObject({
+      orderId: second.id,
+      buyerAccountId: buyer.accountId,
+      checkoutUrl: secondNative.checkoutUrl,
+    });
+    expect(Date.parse(retainedFirst!.expiresAt)).toBe(expiresAt.getTime());
+    expect(Date.parse(retainedSecond!.expiresAt)).toBe(expiresAt.getTime());
+    const minimizedOrders = (
+      await pool.query(
+        `SELECT order_id,checkout_session_id,checkout_url,checkout_expires_at,checkout_minimized_at,
+                settlement,unit_amount_minor::text AS unit_amount_minor,currency
+         FROM commerce.purchase_order WHERE route=$1 AND order_id=ANY($2::uuid[]) ORDER BY order_id`,
+        [routeOf(buyer.accountId), [first.id, second.id]],
+      )
+    ).rows;
+    expect(minimizedOrders).toHaveLength(2);
+    for (const order of minimizedOrders) {
+      const source = order.order_id === first.id ? firstNative : secondNative;
+      expect(order).toMatchObject({
+        order_id: source.id,
+        checkout_session_id: source.checkoutSessionId,
+        checkout_url: null,
+        checkout_expires_at: null,
+        unit_amount_minor: '1200',
+        currency: 'usd',
+        settlement: source.id === first.id ? 'paid' : 'pending',
+      });
+      expect(Date.parse(order.checkout_minimized_at)).toBe(Date.parse(barrier.at));
+    }
+    expect(
+      (
+        await pool.query('SELECT order_id FROM commerce.money_observation WHERE route=$1 AND buyer_account_id=$2', [
+          routeOf(buyer.accountId),
+          buyer.accountId,
+        ])
+      ).rows,
+    ).toEqual([]);
+    expect(await entitlementRows(buyer.accountId)).toHaveLength(0);
     await expect(commands.createOrder(typedBuyer, offer.id, offer.revision, crypto.randomUUID())).rejects.toThrow(
       GrantDeniedError,
     );
@@ -307,9 +389,27 @@ test('the default financial commerce terminal effect acknowledges only native no
       commands.reviseOffer(typedBuyer, initialOffer.id, { unitAmountMinor: 1300 }, crypto.randomUUID()),
     ).rejects.toThrow(GrantDeniedError);
     expect((await request(personas.staff, '/v1/orders', { offerId: offer.id })).status).toBe(409);
-    expect(await commerceOutcome(buyer.accountId)).toEqual({ outcome: 'pending', retained: [] });
+    expect(await commerceOutcome(buyer.accountId)).toMatchObject({
+      outcome: 'erased',
+      retained: [
+        {
+          store: ORDER_RETENTION_STORE,
+          fields: [...NATIVE_TEST_ORDER_RETENTION_FIELDS],
+          purpose: NATIVE_TEST_ORDER_RETENTION_PURPOSE,
+          expiresAt: expiresAt.toISOString(),
+          resolvedAt: null,
+        },
+      ],
+    });
     expect(await commerceOutcome(seller.accountId)).toEqual({ outcome: 'pending', retained: [] });
-    expect(await entitlementRows(buyer.accountId)).toHaveLength(0);
+    expect(
+      (
+        await pool.query('SELECT phase,blocker FROM commerce.erasure_progress WHERE route=$1 AND account_id=$2', [
+          routeOf(seller.accountId),
+          seller.accountId,
+        ])
+      ).rows,
+    ).toEqual([{ phase: 'pending', blocker: FINANCIAL_ERASURE_BLOCKER }]);
     expect(
       (
         await pool.query('SELECT phase,blocker FROM commerce.erasure_progress WHERE route=$1 AND account_id=$2', [
@@ -317,7 +417,7 @@ test('the default financial commerce terminal effect acknowledges only native no
           buyer.accountId,
         ])
       ).rows,
-    ).toEqual([{ phase: 'pending', blocker: FINANCIAL_ERASURE_BLOCKER }]);
+    ).toEqual([{ phase: 'retained', blocker: COMMERCE_CUSTODY_BLOCKER }]);
   } finally {
     try {
       await purgeBarrier.query('ROLLBACK');
@@ -326,6 +426,37 @@ test('the default financial commerce terminal effect acknowledges only native no
       held.release();
     }
   }
+  await stopCommerceWorker();
+  await Bun.sleep(Math.max(0, expiresAt.getTime() - Date.now() + 25));
+  expect(await advanceCommerceErasure(pool, buyer.accountId)).toBe('resolve');
+  expect(await inspectNativeRetainedOrder(pool, first.id)).toBeNull();
+  expect(await inspectNativeRetainedOrder(pool, second.id)).toBeNull();
+  const purgedBeforeResolve = await readErasureStatus(pool, buyer.accountId);
+  expect(purgedBeforeResolve?.participants.commerce.retained[0]?.resolvedAt).toBeNull();
+  await startCommerceWorker();
+  await finish(buyerErasureId);
+  expect(await inspectNativeRetainedOrder(pool, first.id)).toBeNull();
+  expect(await inspectNativeRetainedOrder(pool, second.id)).toBeNull();
+  const resolvedStatus = await readErasureStatus(pool, buyer.accountId);
+  expect(resolvedStatus?.participants.commerce).toMatchObject({
+    outcome: 'erased',
+    retained: [
+      {
+        store: ORDER_RETENTION_STORE,
+        fields: [...NATIVE_TEST_ORDER_RETENTION_FIELDS],
+        purpose: NATIVE_TEST_ORDER_RETENTION_PURPOSE,
+        expiresAt: expiresAt.toISOString(),
+      },
+    ],
+  });
+  const resolvedAt = resolvedStatus?.participants.commerce.retained[0]?.resolvedAt;
+  expect(resolvedAt).not.toBeNull();
+  expect(Date.parse(resolvedAt!)).toBeGreaterThanOrEqual(expiresAt.getTime());
+  await resolveRetention({ pool }, { accountId: buyer.accountId, participant: 'commerce', store: ORDER_RETENTION_STORE });
+  expect((await readErasureStatus(pool, buyer.accountId))?.participants.commerce.retained[0]?.resolvedAt).toBe(
+    resolvedAt,
+  );
+  await finish(await postSignedEvent(latePaidSigned));
   await finish(latePaid);
   await drainEffects(pool, partitionOf(routeOf(buyer.accountId)!));
   expect(
@@ -337,6 +468,15 @@ test('the default financial commerce terminal effect acknowledges only native no
     ).rows,
   ).toEqual([{ settlement: 'paid' }]);
   expect(await entitlementRows(buyer.accountId)).toHaveLength(0);
+  expect(await inspectNativeRetainedOrder(pool, second.id)).toBeNull();
+  expect(
+    (
+      await pool.query('SELECT order_id FROM commerce.money_observation WHERE route=$1 AND buyer_account_id=$2', [
+        routeOf(buyer.accountId),
+        buyer.accountId,
+      ])
+    ).rows,
+  ).toEqual([]);
 
   const refund = provider.fake.refund(firstNative.checkoutSessionId!, { amount: 1200 });
   await finish(await event('charge.refunded', provider.fake.chargeId(firstNative.checkoutSessionId!)));
@@ -362,7 +502,7 @@ test('the default financial commerce terminal effect acknowledges only native no
     ).rows,
   ).toEqual([]);
   expect(await advanceCommerceErasure(pool, buyer.accountId)).toBe('pending');
-  expect(await commerceOutcome(buyer.accountId)).toEqual({ outcome: 'pending', retained: [] });
+  expect((await commerceOutcome(buyer.accountId))?.retained[0]?.resolvedAt).toBe(resolvedAt);
   // Replay of the exact original event identity finds the existing workflow and immutable native outcome.
   const replay = await client.enqueue(
     {
@@ -375,7 +515,7 @@ test('the default financial commerce terminal effect acknowledges only native no
   );
   await replay.getResult();
   expect(await commerceOutcome(unused.accountId)).toEqual({ outcome: 'none', retained: [] });
-});
+}, 120_000);
 
 test('historical acting-human and operator responsibilities cannot be attested as native no-data', async () => {
   // Native deletion retires/releases the live responsibility; the historical slot remains proof of use.
