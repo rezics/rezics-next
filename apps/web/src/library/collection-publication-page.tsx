@@ -628,7 +628,7 @@ function CurrentPublicationPage({
             {m.library_query_publication_heading()}
           </Button>
           <Button variant="outline" aria-pressed={!wholeQuery} onClick={() => setWholeQuery(false)}>
-            {m.library_publication_heading()}
+            {m.library_publication_choose()}
           </Button>
         </div>
       ) : null}

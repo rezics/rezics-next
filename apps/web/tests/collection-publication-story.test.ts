@@ -27,6 +27,7 @@ test('Collection publication Pages stories enter the publish route through PageS
   const exports = [...story.matchAll(/export const (\w+): Story =/g)];
   expect(exports.map((entry) => entry[1])).toEqual([
     'SelectedEmpty',
+    'WholeQueryReview',
     'SelectedNonempty',
     'Denied',
     'Stale',
@@ -37,6 +38,7 @@ test('Collection publication Pages stories enter the publish route through PageS
     exports.map((entry, index) => [entry[1]!, story.slice(entry.index, exports[index + 1]?.index ?? story.length)]),
   );
   expect(scenarios.SelectedEmpty).toContain('publishRoute(publicationStoryIds.ready)');
+  expect(scenarios.WholeQueryReview).toContain('publishRoute(publicationStoryIds.ready)');
   expect(scenarios.SelectedNonempty).toContain('publishRoute(publicationStoryIds.ready)');
   expect(scenarios.Denied).toContain('publishRoute(publicationStoryIds.denied)');
   expect(scenarios.Stale).toContain('publishRoute(publicationStoryIds.stale)');
