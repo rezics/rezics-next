@@ -20,8 +20,7 @@ const canonicalIdentifiers = createServerFn({ method: 'GET', strict: false })
       typeof input.slug !== 'string' ||
       input.slug.length > 128 ||
       typeof input.locale !== 'string' ||
-      typeof input.search !== 'string' ||
-      input.search.length > 2048
+      typeof input.search !== 'string'
     )
       throw notFound();
     return input;
@@ -91,7 +90,17 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/identifiers')({
   staticData: { publicCache: false },
   validateSearch: (input: Record<string, unknown>) => {
     if (
-      Object.keys(input).some((key) => !['originContext', 'originRealm', 'reviewProperty', 'candidate', 'inspectProperty', 'inspectStatement'].includes(key))
+      Object.keys(input).some(
+        (key) =>
+          ![
+            'originContext',
+            'originRealm',
+            'reviewProperty',
+            'candidate',
+            'inspectProperty',
+            'inspectStatement',
+          ].includes(key),
+      )
     )
       throw notFound();
     return {

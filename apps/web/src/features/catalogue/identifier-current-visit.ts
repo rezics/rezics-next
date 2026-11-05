@@ -2,7 +2,14 @@ import { candidateContext } from '../../subject/candidates';
 import { keepSearch, subjectHref, type SubjectHrefInput } from '../../subject/subject-href';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const allowed = new Set(['originContext', 'originRealm', 'reviewProperty', 'candidate', 'inspectProperty', 'inspectStatement']);
+const allowed = new Set([
+  'originContext',
+  'originRealm',
+  'reviewProperty',
+  'candidate',
+  'inspectProperty',
+  'inspectStatement',
+]);
 
 export type IdentifierVisitOrigin = {
   context?: string;
@@ -55,7 +62,8 @@ export function parseIdentifierCurrentVisit(search: string): IdentifierCurrentVi
       (!inspectProperty.trim() || inspectProperty.length > 256 || /[\u0000-\u001f\u007f]/u.test(inspectProperty))) ||
     (inspectStatement !== undefined && !uuid.test(inspectStatement)) ||
     (inspectProperty === undefined) !== (inspectStatement === undefined)
-  ) return null;
+  )
+    return null;
 
   const hasOrigin = context !== undefined || realm !== undefined;
   const origin: IdentifierVisitOrigin | undefined = hasOrigin
@@ -67,7 +75,9 @@ export function parseIdentifierCurrentVisit(search: string): IdentifierCurrentVi
     : undefined;
   return {
     ...(origin ? { origin } : {}),
-    ...(inspectProperty && inspectStatement ? { initialInspection: { property: inspectProperty, statement: inspectStatement } } : {}),
+    ...(inspectProperty && inspectStatement
+      ? { initialInspection: { property: inspectProperty, statement: inspectStatement } }
+      : {}),
     ...(reviewProperty && candidate ? { initialReview: { property: reviewProperty, candidate } } : {}),
   };
 }
@@ -90,12 +100,7 @@ export function identifierVisitHref(subject: SubjectHrefInput, locale: string, s
 }
 
 /** Canonical route address for an installed visit, limited to the one supported Realm selector. */
-export function identifierRouteHref(
-  locale: string,
-  id: string,
-  slug: string,
-  visit: IdentifierCurrentVisit,
-) {
+export function identifierRouteHref(locale: string, id: string, slug: string, visit: IdentifierCurrentVisit) {
   const base = `/${encodeURIComponent(locale)}/subjects/${encodeURIComponent(id)}/${slug}/identifiers`;
   const params = new URLSearchParams();
   if (visit.origin?.context) params.set('originContext', visit.origin.context);

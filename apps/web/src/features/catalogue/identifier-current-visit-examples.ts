@@ -16,21 +16,49 @@ export function identifierVisitExample(realm = true) {
   const read = structuredClone(fixture.publicRead);
   read.subject.context = realm ? identifierExampleContext : candidateContext;
   const original = read.subject.statements['schema:isbn']![0]!;
-  read.subject.statements['schema:isbn']!.push({ ...structuredClone(original), id: identifierExampleDuplicate,
-    references: [{ hash: 'second-group', parts: [{ property: { id: 'schema:url', data_type: 'url' }, value: { type: 'value', content: 'https://catalogue.example/second' } }] }],
+  read.subject.statements['schema:isbn']!.push({
+    ...structuredClone(original),
+    id: identifierExampleDuplicate,
+    references: [
+      {
+        hash: 'second-group',
+        parts: [
+          {
+            property: { id: 'schema:url', data_type: 'url' },
+            value: { type: 'value', content: 'https://catalogue.example/second' },
+          },
+        ],
+      },
+    ],
   });
-  const origin = realm ? { kind: 'realm' as const, context: identifierExampleContext, realm: identifierExampleRealm } : undefined;
-  const context = { id: read.subject.context, population: realm
-    ? { kind: 'realm' as const, id: identifierExampleRealm, title: 'Example Realm' }
-    : { kind: 'global' as const } };
+  const origin = realm
+    ? { kind: 'realm' as const, context: identifierExampleContext, realm: identifierExampleRealm }
+    : undefined;
+  const context = {
+    id: read.subject.context,
+    population: realm
+      ? { kind: 'realm' as const, id: identifierExampleRealm, title: 'Example Realm' }
+      : { kind: 'global' as const },
+  };
   const document = platform.generic.views.overview as unknown as CompositionDocument;
   const page: SubjectPageData = {
-    subject: read.subject.id, profile: 'example', template: { scope: 'base', key: null },
-    document: document as SubjectPageData['document'], context,
+    subject: read.subject.id,
+    profile: 'example',
+    template: { scope: 'base', key: null },
+    document: document as SubjectPageData['document'],
+    context,
     requestedRealm: origin?.realm,
-    catalogue: { state: 'released', type: read.subject.type, definitions: fixture.release, digest: read.subject.release },
-    reads: Object.fromEntries(Object.entries(planReads(platformRegistry, document, { subject: read.subject.id, context }).reads)
-      .map(([key, planned]) => [key, { status: 200, body: planned.kind === 'subject' ? read : {} }])),
+    catalogue: {
+      state: 'released',
+      type: read.subject.type,
+      definitions: fixture.release,
+      digest: read.subject.release,
+    },
+    reads: Object.fromEntries(
+      Object.entries(planReads(platformRegistry, document, { subject: read.subject.id, context }).reads).map(
+        ([key, planned]) => [key, { status: 200, body: planned.kind === 'subject' ? read : {} }],
+      ),
+    ),
   };
   const result = identifierEvidenceFromPage(page, read.subject.id, origin);
   if (result.kind !== 'ready') throw new Error('Identifier example needs a public reading');

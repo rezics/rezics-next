@@ -28,27 +28,54 @@ function IdentifiersProfileSessionLive({
   const [globalChoice, setGlobalChoice] = useState(!origin || origin.kind === 'global');
   const [reviewRevision, setReviewRevision] = useState(0);
   const publicWork = useCatalogueLifetime('identifier-public-origin');
-  const publicTransport = useMemo(() => ({
-    read: () => readIdentifierOrigin({
-      data: {
-        id, locale, expectedReader: publicWork.reader || null,
-        search: editorHref ? new URL(editorHref, 'https://rezics.invalid').search : '',
-      },
-      headers: csrfHeaders(),
+  const publicTransport = useMemo(
+    () => ({
+      read: () =>
+        readIdentifierOrigin({
+          data: {
+            id,
+            locale,
+            expectedReader: publicWork.reader || null,
+            search: editorHref ? new URL(editorHref, 'https://rezics.invalid').search : '',
+          },
+          headers: csrfHeaders(),
+        }),
     }),
-  }), [id, locale, editorHref, publicWork]);
+    [id, locale, editorHref, publicWork],
+  );
   return (
     <>
-      {editorHref && <IdentifierCurrentVisit key={reviewRevision} id={id} locale={locale} origin={origin}
-        initialInspection={reviewRevision === 0 ? initialInspection : undefined} initialReview={initialReview}
-        editorHref={editorHref} transport={publicTransport} />}
+      {editorHref && (
+        <IdentifierCurrentVisit
+          key={reviewRevision}
+          id={id}
+          locale={locale}
+          origin={origin}
+          initialInspection={reviewRevision === 0 ? initialInspection : undefined}
+          initialReview={initialReview}
+          editorHref={editorHref}
+          transport={publicTransport}
+        />
+      )}
       {!globalChoice && origin ? (
-        <IdentifierOriginChoice locale={locale} origin={origin}
+        <IdentifierOriginChoice
+          locale={locale}
+          origin={origin}
           originHref={origin.kind === 'realm' ? originHref : undefined}
-          globalHref={globalHref} onChooseGlobal={() => setGlobalChoice(true)} />
+          globalHref={globalHref}
+          onChooseGlobal={() => setGlobalChoice(true)}
+        />
       ) : (
-        <IdentifiersProfileCorrectionSession onReviewIntent={() => setReviewRevision((value) => value + 1)} id={id} locale={locale} initialReview={initialReview}
-          origin={origin} editorHref={editorHref} originHref={originHref} globalHref={globalHref} />
+        <IdentifiersProfileCorrectionSession
+          onReviewIntent={() => setReviewRevision((value) => value + 1)}
+          id={id}
+          locale={locale}
+          initialReview={initialReview}
+          origin={origin}
+          editorHref={editorHref}
+          originHref={originHref}
+          globalHref={globalHref}
+        />
       )}
     </>
   );

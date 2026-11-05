@@ -6,10 +6,15 @@ import { identifierEvidenceFromPage, type IdentifierEvidenceRead } from './ident
 /** Hydrated public origin read. No root Context selector or correction address enters this request. */
 export const readIdentifierOrigin = createServerFn({ method: 'POST', strict: false })
   .validator((input: { id: string; locale: string; search: string; expectedReader: string | null }) => {
-    if (!input || typeof input.id !== 'string' || !/^[0-9a-f-]{36}$/iu.test(input.id) ||
-      typeof input.locale !== 'string' || input.locale.length > 35 ||
+    if (
+      !input ||
+      typeof input.id !== 'string' ||
+      !/^[0-9a-f-]{36}$/iu.test(input.id) ||
+      typeof input.locale !== 'string' ||
+      input.locale.length > 35 ||
       typeof input.search !== 'string' ||
-      (input.expectedReader !== null && (typeof input.expectedReader !== 'string' || input.expectedReader.length > 128)))
+      (input.expectedReader !== null && (typeof input.expectedReader !== 'string' || input.expectedReader.length > 128))
+    )
       throw new Error('Invalid Identifier origin request');
     const visit = parseIdentifierCurrentVisit(input.search);
     if (!visit) throw new Error('Invalid Identifier origin visit');
@@ -19,7 +24,8 @@ export const readIdentifierOrigin = createServerFn({ method: 'POST', strict: fal
     setResponseHeader('cache-control', 'private, no-store');
     if (data.visit.origin?.kind === 'unsupported') return { kind: 'unsupported' };
     const [{ loadSubjectPage, PageReadError }, { subjectKernelClient }] = await Promise.all([
-      import('../pages/subject'), import('../pages/subject-queries'),
+      import('../pages/subject'),
+      import('../pages/subject-queries'),
     ]);
     try {
       const realm = data.visit.origin?.realm;
