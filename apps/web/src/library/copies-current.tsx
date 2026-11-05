@@ -203,7 +203,6 @@ function CurrentCopiesRead({
               (value.result.copy.id !== id ||
                 (address.subjectId && value.result.copy.subject && value.result.copy.subject.id !== address.subjectId)))
           ) {
-            origin.rejectRead();
             return { ok: false, reason: 'unavailable' };
           }
           return value.result;
@@ -218,7 +217,6 @@ function CurrentCopiesRead({
             value.id !== id ||
             (value.result.state === 'ready' && value.result.subject.id !== id)
           ) {
-            origin.rejectRead();
             return { state: 'unavailable' };
           }
           return value.result;
