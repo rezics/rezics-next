@@ -88,6 +88,7 @@ test('actual runImportCli accepts pinned five-column PersonDetail rows as propos
         clock: { now: () => 1_000, sleep: async () => {} },
       },
     );
+    if (result.code !== 0) throw new Error(result.stderr);
     expect(result.code).toBe(0);
     const names = sent.filter(
       (command): command is Extract<BatchCommand, { op: 'propose' }> =>
