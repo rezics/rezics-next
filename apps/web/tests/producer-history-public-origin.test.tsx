@@ -50,6 +50,11 @@ mock.module('../src/features/catalogue/relation-editor-actions', () => ({
   }),
   proposeSubjectRelation: async ({ data }: { data: RelationProposal }) => {
     commands.push(data);
+    candidate.statement = {
+      ...candidate.statement,
+      ...data.statement,
+      references: data.statement.references.map((reference, index) => ({ ...reference, hash: `citation-${index}` })),
+    };
     proposed = true;
     return { ok: true, candidate: candidate.id };
   },
@@ -91,7 +96,7 @@ function historyFragment(context: string) {
   });
 }
 
-test('public Organization entry preserves Context and current return, refuses unsupported visits, and names fresh Global', async () => {
+test('Organization origin completes three producer windows, exact Retry and correction, then returns with private retirement', async () => {
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
