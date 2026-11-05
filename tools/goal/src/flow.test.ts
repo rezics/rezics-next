@@ -150,13 +150,7 @@ test('one ordered interval index keeps equal-time reports and does linear work a
     let visits = 0;
     const events: any[] = [];
     const tasks: ReturnType<typeof task>[] = [];
-    const add = (event: {
-      taskId: string;
-      attempt: number;
-      stage: string;
-      action: string;
-      at: string;
-    }) => {
+    const add = (event: { taskId: string; attempt: number; stage: string; action: string; at: string }) => {
       const taskId = event.taskId;
       events.push(
         Object.defineProperty({ ...event }, 'taskId', {

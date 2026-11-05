@@ -167,8 +167,7 @@ const waitEnds: Record<QueueStage, string[]> = {
   promotion: ['promoted'],
 };
 const requestActions = ['requested', 'enqueued'];
-const isQueueStage = (stage: FlowStage): stage is QueueStage =>
-  queueStages.includes(stage as QueueStage);
+const isQueueStage = (stage: FlowStage): stage is QueueStage => queueStages.includes(stage as QueueStage);
 
 function projectFlow(ordered: FlowEvent[]) {
   const n = ordered.length;
