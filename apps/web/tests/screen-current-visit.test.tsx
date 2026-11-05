@@ -71,7 +71,14 @@ mock.module('@tanstack/react-start', () => ({
     return chain;
   },
 }));
-mock.module('../src/kernel/client', () => ({ kernelClient: () => fakeClient, requestLocale: () => 'en' }));
+mock.module('../src/kernel/client', () => ({
+  kernelClient: () => fakeClient,
+  requestLocale: () => 'en',
+  configuredKernelOrigin: () => 'https://kernel.test',
+  hasKernelOrigin: () => true,
+  acceptLanguage: () => 'en',
+  preparePrivatePage: () => {},
+}));
 
 function reading(context = contextId): SubjectRead {
   return {
