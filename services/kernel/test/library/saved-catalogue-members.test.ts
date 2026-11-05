@@ -4,6 +4,7 @@ import { ProblemError } from '../../src/http/problem.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { readSavedCatalogueMembers } from '../../src/search/service-saved-collection.ts';
 import type { SearchService } from '../../src/search/service-scope.ts';
+import type { PublicSearchPage } from '../../src/search/service.ts';
 
 const actor: AccountActor = {
   kind: 'account',
@@ -48,7 +49,26 @@ test('saved catalogue delegates the exact property query, accepted meaning and n
       expect(release).toBe(input.release);
       expect(context?.savedCollection).toBe(input.collection);
       expect(context?.scope).toBe(input.scope);
-      const page = { subjects: [], next: 'next-native-continuation', as_of: '2026-11-06T00:00:00Z' };
+      const page: PublicSearchPage = {
+        subjects: [
+          {
+            id: 'catalogue-only-subject',
+            type: 'schema:Book',
+            labels: { en: 'Catalogue book' },
+            figure: {
+              questionId: 'question',
+              populationId: 'global',
+              scale: { min: 0, max: 10, displayStep: 1 },
+              count: 0,
+              state: 'insufficient_data',
+              mean: null,
+              score: null,
+            },
+          },
+        ],
+        next: 'next-native-continuation',
+        as_of: '2026-11-06T00:00:00Z',
+      };
       await context!.complete(page);
       return page;
     },
@@ -61,7 +81,7 @@ test('saved catalogue delegates the exact property query, accepted meaning and n
         finalized++;
       },
     }),
-  ).toEqual({ members: [], next: 'next-native-continuation' });
+  ).toEqual({ members: [{ kind: 'dynamic', subjectId: 'catalogue-only-subject' }], next: 'next-native-continuation' });
   expect(finalized).toBe(1);
 });
 
