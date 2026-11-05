@@ -372,6 +372,9 @@ nor purge timing, and this contract adds no lifecycle engine or synchronous wait
 Decision: second-scope saved queries use the installed rule, Source, Members and explicit Publication contracts
 with `id` order; private meaning stays private, with no new grammar, sort family or publication engine. The
 [second-scope plan](research/commerce-second-scope-plan.md) owns the delivery slices and their composition.
+Decision: Search-origin catalogue saves retain an explicit catalogue Source descriptor alongside the shared filter
+and accepted release; Library-origin saves retain Commerce's native private OWNER Source. Source selection is stored
+separately from the predicate tree and must survive direct reads, retained preparation, replay and catalogue refresh.
 Decision: Web reads ordinary saved identities through the existing Dynamic Collection reader and members GET;
 owner-only rule edit stays off the public page, and 202/empty 200/503/stale-cursor recovery follow
 [saved-query results](../apps/web/src/library/saved-query-results.md).
