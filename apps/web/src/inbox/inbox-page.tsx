@@ -41,7 +41,9 @@ import { InboxNoticeActorVisual, inboxNoticeActorPresentation } from './inbox-no
 import {
   inboxAcknowledgementRecovery,
   inboxAcknowledgementRetryAllowed,
+  inboxObservationRetryAllowed,
   type InboxAcknowledgementRecovery,
+  type InboxObservationRecovery,
 } from './inbox-acknowledgement-recovery';
 
 type InboxLoadedSeenIntent = Readonly<{
@@ -372,6 +374,8 @@ export function ViewerInboxPage({
   const [seenRecoveryView, setSeenRecoveryView] = useState<InboxAcknowledgementRecovery<
     Readonly<InboxSeenAttempt>
   > | null>(null);
+  const observationRecovery = useRef<InboxObservationRecovery | null>(null);
+  const [observationRecoveryView, setObservationRecoveryView] = useState<InboxObservationRecovery | null>(null);
   const seenRetryPolicy = useRef({ pageReady: false, allowed: false });
   const [seenConfirmed, setSeenConfirmed] = useState(false);
   const [markingPending, setMarkingPending] = useState(false);
@@ -384,7 +388,13 @@ export function ViewerInboxPage({
   if (received !== pagination) setPagination(received);
   const readable = readableInboxPage(received);
   const visibleItems = readable?.items ?? [];
-  const page = pageQuery.data?.signedIn && pageQuery.data.state === 'ready' ? pageQuery.data : null;
+  const page =
+    !observationRecoveryView?.page &&
+    !pageQuery.isError &&
+    pageQuery.data?.signedIn &&
+    pageQuery.data.state === 'ready'
+      ? pageQuery.data
+      : null;
   const admittedMarkSeen = page?.actions?.markSeen ?? null;
   const operationState = pageQuery.data?.signedIn && pageQuery.data.state !== 'ready' ? pageQuery.data : null;
   const pageRetryAt = operationState
@@ -401,6 +411,10 @@ export function ViewerInboxPage({
   const seenFailure = seenRecoveryViewCurrent?.failure;
   const noticeWaiting = usePreferenceRetry(noticeFailure, noticeRecoveryViewCurrent?.retryAt ?? 0);
   const seenWaiting = usePreferenceRetry(seenFailure, seenRecoveryViewCurrent?.retryAt ?? 0);
+  const observationWaiting = usePreferenceRetry(
+    observationRecoveryView?.page ? observationRecoveryView.failure : undefined,
+    observationRecoveryView?.retryAt ?? 0,
+  );
   const pageSignedOut = pageQuery.data !== undefined && !pageQuery.data.signedIn;
   const seenNeedsAccess = seenFailure?.code === 'platform_closed' || accessRefused(seenFailure);
   // A successful page read only establishes read access; the separate marker retry can still be refused.
@@ -417,6 +431,7 @@ export function ViewerInboxPage({
       continuation.current = null;
       seenIntent.current = null;
       seenRecovery.current = null;
+      observationRecovery.current = null;
       noticeAttempt.current = null;
       noticeRecovery.current = null;
       const episodeQueryKey = [...inboxViewerQueryKey(viewer), episode];
@@ -458,6 +473,33 @@ export function ViewerInboxPage({
     [episode, episodeOwnerCurrent, queryClient, viewer],
   );
 
+  const finishAcknowledged = useCallback(
+    (
+      confirm: (state: typeof pagination) => typeof pagination,
+      consume: () => void,
+      observation: InboxObservationRecovery | null,
+    ) => {
+      if (!active.current || !episodeOwnerCurrent()) return;
+      setPagination((current) => {
+        if (!active.current || !episodeOwnerCurrent()) return current;
+        const refreshed = queryClient.getQueryState<InboxPage>([
+          ...inboxViewerQueryKey(viewer),
+          episode,
+          current.selection,
+          current.cursor ?? null,
+        ]);
+        return confirm(
+          receiveInboxPage(current, refreshed?.data, refreshed?.status === 'error' || (observation?.page ?? false)),
+        );
+      });
+      consume();
+      const next = observation?.page ? observation : null;
+      observationRecovery.current = next;
+      setObservationRecoveryView(next);
+    },
+    [episode, episodeOwnerCurrent, queryClient, viewer],
+  );
+
   const sendSeenAttempt = useCallback(
     async (intent: InboxLoadedSeenIntent, deliberateRetry = false, dispatchIntent: InboxPageIntent = pageIntent) => {
       const attempt = intent.attempt;
@@ -484,28 +526,19 @@ export function ViewerInboxPage({
       marking.current = true;
       setMarkingPending(true);
       try {
-        await markInboxViewerSeen(queryClient, viewer, attempt, token);
+        const observation = await markInboxViewerSeen(queryClient, viewer, attempt, token);
         if (!active.current || !episodeOwnerCurrent() || seenIntent.current !== intent) return;
-        setPagination((current) => {
-          if (!active.current || !episodeOwnerCurrent()) return current;
-          // Invalidation has settled, but its response may not have rendered yet. Consume denials
-          // and authoritative replacements before touching the original eligible IDs.
-          const refreshed = queryClient.getQueryState<InboxPage>([
-            ...inboxViewerQueryKey(viewer),
-            episode,
-            current.selection,
-            current.cursor ?? null,
-          ]);
-          return confirmLoadedInboxSeen(
-            receiveInboxPage(current, refreshed?.data, refreshed?.status === 'error'),
-            new Set(intent.eligibleNoticeIds),
-          );
-        });
-        markedThrough.current = attempt.through;
-        seenIntent.current = null;
-        seenRecovery.current = null;
-        setSeenRecoveryView(null);
-        setSeenConfirmed(true);
+        finishAcknowledged(
+          (current) => confirmLoadedInboxSeen(current, new Set(intent.eligibleNoticeIds)),
+          () => {
+            markedThrough.current = attempt.through;
+            seenIntent.current = null;
+            seenRecovery.current = null;
+            setSeenRecoveryView(null);
+            setSeenConfirmed(true);
+          },
+          observation,
+        );
       } catch (error: unknown) {
         if (active.current && episodeOwnerCurrent() && seenIntent.current === intent) {
           const failure = inboxSeenFailure(error).failure;
@@ -520,7 +553,7 @@ export function ViewerInboxPage({
         }
       }
     },
-    [episodeOwnerCurrent, pageIntent, pageQueryFetching, queryClient, viewer],
+    [episodeOwnerCurrent, finishAcknowledged, pageIntent, pageQueryFetching, queryClient, viewer],
   );
 
   const sendNoticeSeenAttempt = useCallback(
@@ -546,27 +579,21 @@ export function ViewerInboxPage({
       noticeMarking.current = true;
       setNoticePendingId(attempt.noticeId);
       try {
+        let observation: InboxObservationRecovery | null = null;
         if (acknowledgeNotice) await acknowledgeNotice(attempt, token);
-        else await markInboxViewerNoticeSeen(queryClient, viewer, attempt, token);
+        else observation = await markInboxViewerNoticeSeen(queryClient, viewer, attempt, token);
         if (!active.current || !episodeOwnerCurrent() || noticeAttempt.current !== attempt) return;
-        setPagination((current) => {
-          if (!active.current || !episodeOwnerCurrent()) return current;
-          const refreshed = queryClient.getQueryState<InboxPage>([
-            ...inboxViewerQueryKey(viewer),
-            episode,
-            current.selection,
-            current.cursor ?? null,
-          ]);
-          return confirmInboxNoticeSeen(
-            receiveInboxPage(current, refreshed?.data, refreshed?.status === 'error'),
-            attempt.noticeId,
-          );
-        });
-        noticeAttempt.current = null;
-        noticeRecovery.current = null;
-        setNoticeAttemptView(null);
-        setNoticeRecoveryView(null);
-        setNoticeConfirmedId(attempt.noticeId);
+        finishAcknowledged(
+          (current) => confirmInboxNoticeSeen(current, attempt.noticeId),
+          () => {
+            noticeAttempt.current = null;
+            noticeRecovery.current = null;
+            setNoticeAttemptView(null);
+            setNoticeRecoveryView(null);
+            setNoticeConfirmedId(attempt.noticeId);
+          },
+          observation,
+        );
       } catch (error: unknown) {
         if (active.current && episodeOwnerCurrent() && noticeAttempt.current === attempt) {
           const failure = inboxSeenFailure(error).failure;
@@ -581,7 +608,7 @@ export function ViewerInboxPage({
         }
       }
     },
-    [acknowledgeNotice, episode, episodeOwnerCurrent, pageIntent, pageQueryFetching, queryClient, viewer],
+    [acknowledgeNotice, episode, episodeOwnerCurrent, finishAcknowledged, pageIntent, pageQueryFetching, queryClient, viewer],
   );
 
   const markLoadedThroughLatest = () => {
@@ -769,7 +796,8 @@ export function ViewerInboxPage({
       continuation.current ||
       pageQueryFetching(pageIntent) ||
       accessPending.current ||
-      pageWaitActive(pageIntent)
+      pageWaitActive(pageIntent) ||
+      (observationRecovery.current?.page && !inboxObservationRetryAllowed(observationRecovery.current))
     )
       return;
     if (cursor !== undefined) {
@@ -777,7 +805,21 @@ export function ViewerInboxPage({
       setContinuing(true);
       setContinuationMessage(m.inbox_page_loading());
     }
-    void pageQuery.refetch({ cancelRefetch: false });
+    void pageQuery.refetch({ cancelRefetch: false }).then((result) => {
+      if (!active.current || !episodeOwnerCurrent()) return;
+      if (
+        !observationRecovery.current?.page ||
+        result.isError ||
+        !result.data?.signedIn ||
+        result.data.state !== 'ready'
+      )
+        return;
+      const next = observationRecovery.current.count
+        ? { ...observationRecovery.current, page: false }
+        : null;
+      observationRecovery.current = next;
+      setObservationRecoveryView(next);
+    });
   };
   const failed = pageQuery.isError || operationState !== null;
   const noticeAttemptRowVisible =
@@ -862,6 +904,34 @@ export function ViewerInboxPage({
               onClick={retryNoticeSeen}
             >
               {m.inbox_notice_seen_retry()}
+            </Button>
+          ) : null}
+        </section>
+      ) : null}
+      {observationRecoveryView?.page ? (
+        <section
+          role="status"
+          data-response-status={observationRecoveryView.failure.status ?? ''}
+          data-response-code={observationRecoveryView.failure.code ?? ''}
+          data-retry-after={observationRecoveryView.failure.retryAfter}
+          className="mt-4 space-y-2"
+        >
+          <p>{m.inbox_acknowledged_observation_unavailable()}</p>
+          <p>{m.inbox_acknowledged_observation_stale()}</p>
+          {observationWaiting ? <p>{m.settings_retry_wait()}</p> : null}
+          {!failed ? (
+            <Button
+              variant="outline"
+              className="h-auto min-h-11 max-w-full whitespace-normal py-2"
+              disabled={
+                observationWaiting ||
+                pageQueryFetching(pageIntent) ||
+                checkingAccess ||
+                !episodeOwnerCurrent()
+              }
+              onClick={retryPage}
+            >
+              {m.inbox_retry()}
             </Button>
           ) : null}
         </section>
@@ -1058,7 +1128,11 @@ export function ViewerInboxPage({
               aria-describedby={failed ? `${boundaryId}-failure` : undefined}
               aria-busy={continuing}
               aria-disabled={
-                continuing || pageQueryFetching(pageIntent) || checkingAccess || (failed && pageWaitActive(pageIntent))
+                continuing ||
+                pageQueryFetching(pageIntent) ||
+                checkingAccess ||
+                (failed && pageWaitActive(pageIntent)) ||
+                observationWaiting
               }
               onClick={failed ? retryPage : loadMore}
             >
