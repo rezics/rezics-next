@@ -31,6 +31,28 @@ mock.module('../src/kernel/client', () => ({
     },
   }),
 }));
+const focusTrace: string[] = [];
+const { searchWindowFocus: makeFocus } = await import('../src/search/search-window/focus');
+mock.module('../src/search/search-window/focus', () => ({
+  searchWindowFocus: () => {
+    const focus = makeFocus();
+    return {
+      retire() {
+        focusTrace.push(`retire ${new Error().stack?.split('\n').slice(2, 4).join(' ')}`);
+        focus.retire();
+      },
+      capture(...args: Parameters<typeof focus.capture>) {
+        focusTrace.push(`capture ${args[1]} ${args[2]} active=${args[3].ownerDocument.activeElement === args[3]}`);
+        focus.capture(...args);
+      },
+      settle(...args: Parameters<typeof focus.settle>) {
+        focusTrace.push(`settle ${args[1]} nav=${!!args[2]} region=${!!args[3]}`);
+        focus.settle(...args);
+        focusTrace.push(`settled active=${args[3]?.ownerDocument.activeElement?.tagName}`);
+      },
+    };
+  },
+}));
 
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -251,13 +273,14 @@ test('released group Continue, Previous, First and native open/back each read on
   const envelope = JSON.stringify(window.history.state.rezicsSearchWindows);
   expect(envelope).not.toContain('Current edition');
   expect(envelope).not.toContain('csrf');
+  focusTrace.length = 0;
   await click('next');
   expect(reads).toHaveLength(7);
   await finish(page(null));
   expect(link('next')).toBeNull();
   expect(
     document.activeElement === host.querySelector('[data-release-group-results]'),
-    document.activeElement?.outerHTML.slice(0, 400),
+    focusTrace.join('\n'),
   ).toBe(true);
 });
 
