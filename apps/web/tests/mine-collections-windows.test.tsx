@@ -132,6 +132,7 @@ test('the private Collections route retains admitted cursor coordinates across l
   const { sessionQuery } = await import('../src/session/query');
   const { viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
   const { m } = await import('../src/paraglide/messages.js');
+  const { deLocalizeUrl, localizeUrl } = await import('../src/paraglide/runtime.js');
   const reads = await import('../src/library/mine-collections-route');
   const inputs: { cursor: string | null; layout: 'rows' | 'previews' }[] = [];
   let allowRetry = false;
@@ -169,7 +170,8 @@ test('the private Collections route retains admitted cursor coordinates across l
   const router = createRouter({
     routeTree: rootRoute.addChildren([route, collectionRoute]),
     context: { queryClient: client, credentialMode: anonymousReadMode },
-    history: createMemoryHistory({ initialEntries: ['/library/collections?layout=rows'] }),
+    history: createMemoryHistory({ initialEntries: ['/en/library/collections?layout=rows'] }),
+    rewrite: { input: ({ url }) => deLocalizeUrl(url).href, output: ({ url }) => localizeUrl(url).href },
   });
   const host = document.createElement('main');
   document.body.append(host);
@@ -258,7 +260,7 @@ test('the private Collections route retains admitted cursor coordinates across l
     await click(movementLink(m.library_collections_first_page()));
     expect(router.state.location.search).toEqual({ layout: 'previews' });
 
-    await navigate('/library/collections?cursor=stale&layout=rows');
+    await navigate('/en/library/collections?cursor=stale&layout=rows');
     expect(host.textContent).toContain(m.library_collections_cursor_reset());
     expect(
       [...host.querySelectorAll('nav')].some((nav) =>
@@ -269,7 +271,7 @@ test('the private Collections route retains admitted cursor coordinates across l
     expect(router.state.location.search).toEqual({ cursor: 'cursor-a', layout: 'rows' });
     expect(movementLink(m.library_collections_previous()).getAttribute('href')).not.toContain('cursor=stale');
 
-    await navigate('/library/collections?cursor=direct&layout=rows');
+    await navigate('/en/library/collections?cursor=direct&layout=rows');
     expect(movementLink(m.library_collections_first_page()).getAttribute('href')).toContain('layout=rows');
     expect(
       [...host.querySelectorAll('nav')].some((nav) =>
