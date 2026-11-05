@@ -98,7 +98,7 @@ function sourceProjection(root: string, commit: string, policy: ControlPolicy['s
   const manifests = readBlobs(root, manifestPaths.map(({ object }) => object));
   for (const [index, dir] of workspaceDirs.entries()) {
     try {
-      const value: unknown = JSON.parse(manifests[index]);
+      const value: unknown = JSON.parse(manifests[index]!);
       workspaceManifests.set(dir, { value });
       workspaceByName.set((value as { name?: unknown }).name, dir);
     } catch (error) {

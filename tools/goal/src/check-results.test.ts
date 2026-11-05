@@ -123,7 +123,7 @@ describe('check result reuse keys', () => {
       'packages/b/package.json',
       JSON.stringify({
         name: '@fixture/b',
-        dependencies: { '@fixture/a': 'workspace:*', [extraNames[0]]: 'workspace:*' },
+        dependencies: { '@fixture/a': 'workspace:*', [extraNames[0]!]: 'workspace:*' },
       }),
     );
     for (const [index, name] of extraNames.entries())
