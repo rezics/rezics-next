@@ -339,7 +339,7 @@ export function ContinueSection({
               : [])
           }
           busy={windowBusy}
-          onNavigate={onWindowNavigate}
+          {...(onWindowNavigate ? { onNavigate: onWindowNavigate } : {})}
         />
       ) : null}
     </section>
