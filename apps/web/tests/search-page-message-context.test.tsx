@@ -137,6 +137,16 @@ function resourceLanguagePageData(editing = false): SearchPageData {
     queryState,
     type: queryState.type,
     condition: queryState.condition,
+    discovery: {
+      status: 'ready',
+      page: {
+        hits: [],
+        kinds: { values: [], next: null },
+        applicability: { type: 'all', statement: 'all' },
+        next: null,
+        as_of: '2026-11-03T00:00:00.000Z',
+      },
+    },
     selectedFacets: queryState.facets,
     selectedFacetLabels: {},
     refinement: { key: 'resource-language-test', properties, initial },
