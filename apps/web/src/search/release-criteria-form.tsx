@@ -133,7 +133,7 @@ function ReleaseSearchSubjectPicker({
   locale: string;
   invalid: boolean;
   errorId?: string;
-  selection?: ReleaseSearchSubjectSelection;
+  selection?: ReleaseSearchSubjectSelection | undefined;
   onSelection(value?: ReleaseSearchSubjectSelection): void;
   onPendingChange(pending: boolean): void;
 }) {
@@ -389,7 +389,7 @@ export function ReleaseSearchFormView({
     return labels[field];
   };
   const issue = (field: keyof ReleaseSearchForm) =>
-    corrections.has(field)
+    corrections.has(field as SemanticField)
       ? m.release_search_correction_required({ field: fieldLabel(field) }, options)
       : issueText(field, draft, controls, locale);
   const clearServerError = (field: keyof ReleaseSearchForm) =>
