@@ -11,6 +11,18 @@ test('the mounted Kernel publishes closed review and immediate-parent context wi
   expect(personal[0].properties.rows.items.properties.actions.anyOf[0].properties.allowed.type).toBe('array');
   expect(personal[1].properties.reason.anyOf.map((value: any) => value.const)).toContain('response_limit');
   const variants = page.properties.feedItems.items.anyOf.map((schema: any) => schema.properties);
+  const collection = variants.find(
+    (variant: any) => variant.source.const === 'discovery' && variant.key.properties.kind.const === 'collection',
+  ).summary;
+  expect(collection.required).toContain('card');
+  const cards = collection.properties.card.anyOf;
+  expect(cards.map((card: any) => card.properties.membershipKind.const)).toEqual(['curated', 'dynamic']);
+  for (const card of cards) {
+    expect(card.required).toContain('curator');
+    expect(card.required).toContain('preview');
+    expect(card.properties.curator.anyOf[0].properties).toHaveProperty('destination');
+    expect(card.properties.preview.anyOf[0].properties).toHaveProperty('partial');
+  }
   const subject = variants.filter((variant: any) => variant.summary.properties.subjectReactions);
   expect(subject).toHaveLength(3);
   for (const { summary } of subject) {
