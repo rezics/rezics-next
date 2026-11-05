@@ -36,6 +36,7 @@ import assignmentLabelPage from './label-assignment-label-page.sql';
 import assignmentSubjectPage from './label-assignment-subject-page.sql';
 import entryTiles from './library-entry-tiles.sql';
 import activeSessions from './shelf-active.sql';
+import generationRead from './shelf-maintenance-gate-read.sql';
 
 /** Public page and storage ceilings remain owned by the label contracts. */
 export const LABEL_PAGE_DEFAULT = 20;
@@ -354,23 +355,22 @@ export function labelCommandAttemptComponent(
     response,
   };
   const accountInput = { route: 65_535, account_id: uuid };
-  const share = sqlBound(
-    accountShare.sql,
-    accountInput,
-    { candidateKeys: 1, nativeRows: 1, points: 1, emptySeeks: 1, output: { state: 'deleted', fenced: true }, outputRows: 1 },
-  );
-  const account = sqlBound(
-    accountCommandState.sql,
-    accountInput,
-    {
-      candidateKeys: 1,
-      nativeRows: 1,
-      points: 1,
-      emptySeeks: 1,
-      output: { kind: 'organization', state: 'deleted', fenced: true, minimumAuthnEpoch: '-9223372036854775808' },
-      outputRows: 1,
-    },
-  );
+  const share = sqlBound(accountShare.sql, accountInput, {
+    candidateKeys: 1,
+    nativeRows: 1,
+    points: 1,
+    emptySeeks: 1,
+    output: { state: 'deleted', fenced: true },
+    outputRows: 1,
+  });
+  const account = sqlBound(accountCommandState.sql, accountInput, {
+    candidateKeys: 1,
+    nativeRows: 1,
+    points: 1,
+    emptySeeks: 1,
+    output: { kind: 'organization', state: 'deleted', fenced: true, minimumAuthnEpoch: '-9223372036854775808' },
+    outputRows: 1,
+  });
   const time = sqlBound(
     timeRead.sql,
     { at: timestamp },
@@ -500,18 +500,14 @@ export function labelSnapshotComponent(kind: string, input: unknown, responseByt
       controlSql('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY'),
       controlSql('COMMIT'),
       controlSql('ROLLBACK'),
-      sqlBound(
-        accountCommandState.sql,
-        accountInput,
-        {
-          candidateKeys: 1,
-          nativeRows: 1,
-          points: 1,
-          emptySeeks: 1,
-          output: { kind: 'organization', state: 'deleted', fenced: true, minimumAuthnEpoch: '-9223372036854775808' },
-          outputRows: 1,
-        },
-      ),
+      sqlBound(accountCommandState.sql, accountInput, {
+        candidateKeys: 1,
+        nativeRows: 1,
+        points: 1,
+        emptySeeks: 1,
+        output: { kind: 'organization', state: 'deleted', fenced: true, minimumAuthnEpoch: '-9223372036854775808' },
+        outputRows: 1,
+      }),
       sqlBound(
         partitionRead.sql,
         { partition_no: 4095 },
@@ -691,7 +687,17 @@ export function labelSummaryObservationBound(count: number): Bound {
       outputRows: n,
     },
   );
-  return sumBounds(repeatBound(reference, 4 * n), owners, sources, pending, current, representatives, summaries, covers, fences);
+  return sumBounds(
+    repeatBound(reference, 4 * n),
+    owners,
+    sources,
+    pending,
+    current,
+    representatives,
+    summaries,
+    covers,
+    fences,
+  );
 }
 
 /** Keep one attempt declaration across Core retries so nested SQL does not reserve again. */
@@ -867,7 +873,12 @@ export function labelCataloguePlan(input: {
   );
   const continuation =
     input.prefix !== undefined && input.afterLabelId !== '00000000-0000-0000-0000-000000000000'
-      ? [component('label.catalogue.continuation-name', labelPoint(input.route, input.accountId, input.afterLabelId).bound)]
+      ? [
+          component(
+            'label.catalogue.continuation-name',
+            labelPoint(input.route, input.accountId, input.afterLabelId).bound,
+          ),
+        ]
       : [];
   return operation(
     'label.catalogue',
@@ -1200,9 +1211,32 @@ export function labelAssignmentPagePlan(input: {
         ),
       ),
     );
-  }
-  if (input.view === 'FULL' && byLabel)
+    extras.push(
+      component(
+        'assignment.full.generation',
+        sqlBound(
+          generationRead.sql,
+          { route: input.route, account_id: input.accountId },
+          {
+            candidateKeys: 1,
+            nativeRows: 1,
+            points: 1,
+            emptySeeks: 1,
+            output: {
+              initialized: true,
+              mode: 'rebuilding',
+              ready: false,
+              epoch: '9223372036854775807',
+              activeGeneration: uuid,
+              runId: uuid,
+            },
+            outputRows: 1,
+          },
+        ),
+      ),
+    );
     extras.push(component('assignment.full.summary-observation', labelSummaryObservationBound(input.limit)));
+  }
   return operation(
     'assignment.page',
     `${input.view.toLowerCase()}-${byLabel ? 'label' : 'subject'}`,

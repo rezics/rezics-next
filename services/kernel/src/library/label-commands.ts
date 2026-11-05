@@ -206,7 +206,15 @@ export function createPersonalLabelCommands(config: {
           receiptKeysFor(pool).keys.size + 1,
         ),
         ...(guard
-          ? [labelOwnerSqlComponent('import.anilist.label-fence', guard, { payload: { source: {}, labelReview: {} } }, 2, 2)]
+          ? [
+              labelOwnerSqlComponent(
+                'import.anilist.label-fence',
+                guard,
+                { payload: { source: {}, labelReview: {} } },
+                2,
+                2,
+              ),
+            ]
           : []),
         ...(malLabelFence
           ? [
@@ -501,69 +509,71 @@ export function createPersonalLabelCommands(config: {
       ],
       true,
     );
-    return executeLabelOperation(composed, () => snapshot(actor, 'library_entry:list', async (client, owner, route) => {
-      const partition = await readPartition(client, partitionOf(route));
-      if (!partition) throw new Error('Missing owner partition');
-      const binding = {
-        route: 'library_label.list',
-        viewer: owner.accountId,
-        query: { owner: owner.accountId, limit, ...(q ? { q, version: 1 } : {}) },
-      };
-      const now = clock();
-      let after = '00000000-0000-0000-0000-000000000000';
-      if (parsed.cursor !== undefined) {
-        if (typeof parsed.cursor !== 'string') throw new ProblemError('invalid_cursor');
-        const cursor = await decodeListCursor(tokens, binding, parsed.cursor, now);
-        if (
-          !cursor.ok ||
-          cursor.after.length !== 2 ||
-          typeof cursor.after[0] !== 'string' ||
-          routeOf(cursor.after[0]) !== route ||
-          typeof cursor.after[1] !== 'string' ||
-          !/^(0|[1-9][0-9]{0,18})$/.test(cursor.after[1])
-        )
-          throw new ProblemError('invalid_cursor');
-        if (cursor.epoch !== partition.epoch || cursor.after[1] !== partition.position.toString())
-          throw new ProblemError('stale_cursor');
-        after = cursor.after[0];
-      }
-      let afterName = q;
-      if (q && after !== '00000000-0000-0000-0000-000000000000') {
-        const last = await store.readPersonalLabel(client, route, owner.accountId, after);
-        if (!last || !last.name.startsWith(q)) throw new ProblemError('stale_cursor');
-        afterName = last.name;
-      }
-      const operation = labelCataloguePlan({
-        route,
-        accountId: owner.accountId,
-        ...(q ? { prefix: q, upper: store.personalLabelPrefixEnd(q), afterName } : {}),
-        afterLabelId: after,
-        limit,
-      });
-      const leaf = operation.leaves[0]!;
-      const db = { query: client.query.bind(client) };
-      const rows = await executeLabelOperation(operation, () =>
-        executeLabelSql(leaf, (operands) =>
-          q
-            ? prefixPage.run(db, operands as Parameters<typeof prefixPage.run>[1])
-            : page.run(db, operands as Parameters<typeof page.run>[1]),
-        ),
-      );
-      const last = rows.at(-1);
-      return {
-        labels: rows.filter((row) => row.deletedAt === null).map(visible),
-        // A full raw window may end at EOF. One final empty page is intentionally valid.
-        next:
-          rows.length === limit && last
-            ? await encodeListCursor(
-                tokens,
-                binding,
-                { epoch: partition.epoch, after: [last.id, partition.position.toString()] },
-                now,
-              )
-            : null,
-      };
-    }));
+    return executeLabelOperation(composed, () =>
+      snapshot(actor, 'library_entry:list', async (client, owner, route) => {
+        const partition = await readPartition(client, partitionOf(route));
+        if (!partition) throw new Error('Missing owner partition');
+        const binding = {
+          route: 'library_label.list',
+          viewer: owner.accountId,
+          query: { owner: owner.accountId, limit, ...(q ? { q, version: 1 } : {}) },
+        };
+        const now = clock();
+        let after = '00000000-0000-0000-0000-000000000000';
+        if (parsed.cursor !== undefined) {
+          if (typeof parsed.cursor !== 'string') throw new ProblemError('invalid_cursor');
+          const cursor = await decodeListCursor(tokens, binding, parsed.cursor, now);
+          if (
+            !cursor.ok ||
+            cursor.after.length !== 2 ||
+            typeof cursor.after[0] !== 'string' ||
+            routeOf(cursor.after[0]) !== route ||
+            typeof cursor.after[1] !== 'string' ||
+            !/^(0|[1-9][0-9]{0,18})$/.test(cursor.after[1])
+          )
+            throw new ProblemError('invalid_cursor');
+          if (cursor.epoch !== partition.epoch || cursor.after[1] !== partition.position.toString())
+            throw new ProblemError('stale_cursor');
+          after = cursor.after[0];
+        }
+        let afterName = q;
+        if (q && after !== '00000000-0000-0000-0000-000000000000') {
+          const last = await store.readPersonalLabel(client, route, owner.accountId, after);
+          if (!last || !last.name.startsWith(q)) throw new ProblemError('stale_cursor');
+          afterName = last.name;
+        }
+        const operation = labelCataloguePlan({
+          route,
+          accountId: owner.accountId,
+          ...(q ? { prefix: q, upper: store.personalLabelPrefixEnd(q), afterName } : {}),
+          afterLabelId: after,
+          limit,
+        });
+        const leaf = operation.leaves[0]!;
+        const db = { query: client.query.bind(client) };
+        const rows = await executeLabelOperation(operation, () =>
+          executeLabelSql(leaf, (operands) =>
+            q
+              ? prefixPage.run(db, operands as Parameters<typeof prefixPage.run>[1])
+              : page.run(db, operands as Parameters<typeof page.run>[1]),
+          ),
+        );
+        const last = rows.at(-1);
+        return {
+          labels: rows.filter((row) => row.deletedAt === null).map(visible),
+          // A full raw window may end at EOF. One final empty page is intentionally valid.
+          next:
+            rows.length === limit && last
+              ? await encodeListCursor(
+                  tokens,
+                  binding,
+                  { epoch: partition.epoch, after: [last.id, partition.position.toString()] },
+                  now,
+                )
+              : null,
+        };
+      }),
+    );
   }
 
   return { createLabel, renameLabel, deleteLabel, restoreLabel, readLabel, listLabels };

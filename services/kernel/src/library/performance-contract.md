@@ -704,13 +704,15 @@ same client without duplicate reservation. A direct leaf still uses its exact SQ
 to the existing eight-axis Source port checks `engineRequests === 0`; these SQL leaves make no Search request and do
 not mint permission, a native grant, replay authority or execution evidence.
 
-FULL by-label storage reads charge the bounded assignment page, current parent, entry tiles and active-session query
-for at most 100 subject IDs. Their projection bounds follow the stored vocabulary ID ceiling, profile unit ID limit,
-numeric input grammar, locator limit, UUID/revision widths and PostgreSQL timestamp text. The active-session seek is
-the existing partial index on `(route, account_id, subject_id, last_changed_at DESC, session_id)`. FULL subject
-summaries are Semantic-owned: `ViewReader.subject`/`loadSubjects` use `readSubjectSummaryObservation` with original
-and terminal authorization, identity/Source/cover fences and language/profile/type currentness. A withheld summary
-does not shrink the raw assignment frontier.
+FULL by-label storage reads charge the bounded assignment page, current parent, the same Shelf generation reader as
+summary/page, entry tiles and active-session query for at most 100 subject IDs. Their projection bounds follow the
+stored vocabulary ID ceiling, profile unit ID limit, numeric input grammar, locator limit, UUID/revision widths and
+PostgreSQL timestamp text. The active-session seek is the existing partial index on
+`(route, account_id, subject_id, last_changed_at DESC, session_id)`. FULL subject summaries are Semantic-owned:
+`ViewReader.subject`/`loadSubjects` use `readSubjectSummaryObservation` with original and terminal authorization,
+identity/Source/cover fences and language/profile/type currentness. A withheld summary does not shrink the raw
+assignment frontier. Counter-only rebuilds keep last-complete FULL tiles; field backfill withholds them until
+publication, after which the original Label and Shelf actions return the published generation.
 
 The existing native prefix journey now takes a full 100-row prefix page and its five-row continuation. The FULL HTTP
 journey takes a 100-assignment raw page with one withheld Subject summary and verifies that continuation starts after
