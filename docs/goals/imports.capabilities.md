@@ -47,7 +47,7 @@ Keep ordinary and selected-family mappings aligned with the current converter ex
 
 Creator and voice credits follow Game environment and genre mapping and precede Character identity/appearance. Game cast follows Character identity/appearance immediately. Character appearance requires actual selected work relations, exact Character identity and released role binding. A malformed optional field does not suppress an independently valid association.
 
-Focused source outcomes remain in [Bangumi importer tests](../../services/importer/tests/) and [native imports tests](../../services/kernel/test/imports/). They include TVAnime websites and work evidence, Book names, Game names and publication date, player count, environment and genres, creator/voice credits, character identity/appearance, Game cast, Person biography and source-owned citation behavior.
+Focused outcomes include [TVAnime websites](../../services/importer/tests/bangumi-official-websites.test.ts), [TVAnime work evidence](../../services/importer/tests/bangumi-work-evidence.test.ts), [Game names](../../services/importer/tests/bangumi-game-names.test.ts), [Game publication dates](../../services/importer/tests/bangumi-game-publication.test.ts), [creator credits](../../services/importer/tests/bangumi-creator-credits.test.ts), and [character appearance](../../services/importer/tests/showcase-bangumi-characters.test.ts). The [native career journey](../../services/kernel/test/imports/bangumi-person-careers.test.ts) covers separate review and current reads. Other existing feature cases and API/native obligations remain in their owner suites.
 
 ### VNDB and other source-specific outcomes
 
