@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
+import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, type ComponentProps, type ReactNode } from 'react';
 import * as start from '../.storybook/react-start';
@@ -69,6 +69,7 @@ mock.module('../src/library/follow-actions', () => ({
 const { createRoot } = await import('react-dom/client');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const { sessionQuery, exposureQuery } = await import('../src/session/query');
+const viewerExposure = await import('../src/kernel/viewer-exposure');
 const { FollowTargetControl, followStateQuery } = await import('../src/library/follow-target-control');
 const { FollowControl } = await import('../src/library/follow-control');
 const { m } = await import('../src/paraglide/messages.js');
@@ -83,6 +84,10 @@ const host = window.document.createElement('main') as unknown as HTMLElement;
 window.document.body.append(host);
 let root: ReturnType<typeof createRoot>;
 let client: InstanceType<typeof QueryClient>;
+spyOn(viewerExposure, 'readViewerExposure').mockImplementation(async ({ data }) => ({
+  subject: data,
+  admitted: client.getQueryData<string[]>(exposureQuery.queryKey) ?? [],
+}));
 const tick = () => new Promise((resolve) => setTimeout(resolve, 10));
 const paint = (node: ReactNode, session?: Viewer) =>
   act(async () => {
