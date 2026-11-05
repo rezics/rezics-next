@@ -104,7 +104,7 @@ export function reviewedPersonRequests(client: KernelClient) {
     },
     merge(
       body: ReviewedPersonMerge,
-      options: { headers?: Record<string, string>; fetch?: { signal?: AbortSignal } } = {},
+      options: { headers: Record<string, string> & { 'idempotency-key': string }; fetch?: { signal?: AbortSignal } },
     ) {
       return client.subjects.$merge.post(body as never, options);
     },

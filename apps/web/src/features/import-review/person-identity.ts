@@ -32,7 +32,12 @@ export function personReviewPairInput(value: unknown): PersonReviewPair {
   if (
     !Array.isArray(value) ||
     value.length !== 2 ||
-    !value.every((v) => isReviewedPersonSource(v) && typeof v.subject === 'string' && uuid.test(v.subject)) ||
+    !value.every(
+      (v) =>
+        isReviewedPersonSource(v) &&
+        typeof (v as PersonReviewAddress).subject === 'string' &&
+        uuid.test((v as PersonReviewAddress).subject),
+    ) ||
     value[0].source !== 'bangumi' ||
     value[1].source !== 'vndb' ||
     value[0].subject === value[1].subject
@@ -87,7 +92,7 @@ export async function readPersonComparison(
     pair.map((original) =>
       reviewedPersonRequests(client).read(original.subject, original, {
         headers: { authorization },
-        fetch: { signal },
+        ...(signal === undefined ? {} : { fetch: { signal } }),
       }),
     ),
   );
@@ -107,7 +112,7 @@ export async function mergePersonComparison(
 ): Promise<PersonReviewResult> {
   const response = await reviewedPersonRequests(client).merge(command.body, {
     headers: { authorization, 'idempotency-key': JSON.stringify(command.key) },
-    fetch: { signal },
+    ...(signal === undefined ? {} : { fetch: { signal } }),
   });
   if (response.status !== 202 || !response.data) return providerFailure(response.status, response.headers);
   const admission = response.data as ReviewedPersonAdmission;

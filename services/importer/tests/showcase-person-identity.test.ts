@@ -279,7 +279,7 @@ test('an identity observation for a followed endpoint cannot stand in for the re
     origin: 'https://kernel.import.test',
     tokenProvider: async () => 'token',
     maxAttempts: 1,
-    fetch: (async () =>
+    fetch: (async (_request: Request) =>
       Response.json({
         subject: { id: currentPersonId, type: 'schema:Person', statements: {} },
         reviewedIdentity: {
