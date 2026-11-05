@@ -60,6 +60,7 @@ import {
 import { LibraryConflictError } from './entry-errors.ts';
 export { LibraryConflictError } from './entry-errors.ts';
 import { createEntryPersonalCommands } from './entry-personal.ts';
+import { ENTRY_STATE_HISTORY_PAGE_LIMIT } from './entry-operation-bounds.ts';
 
 type Dependencies = {
   pool: Pool;
@@ -89,7 +90,7 @@ const UPDATED_EVENT = 'com.rezics.library.entry.updated.v1';
 const DELETED_EVENT = 'com.rezics.library.entry.deleted.v1';
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 100;
-const MAX_STATE_HISTORY_PAGE_SIZE = 50;
+const MAX_STATE_HISTORY_PAGE_SIZE = ENTRY_STATE_HISTORY_PAGE_LIMIT;
 
 export class LibraryEntryInvalidError extends TypeError {
   constructor(message = 'Unknown library entry state') {
