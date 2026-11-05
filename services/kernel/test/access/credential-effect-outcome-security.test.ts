@@ -221,10 +221,10 @@ test('reviewed Allow acknowledges the submitted union and reduction retires real
   expect((await native.request(human.caller, '/consent', { ...command, reviewed_scopes: [] })).status).toBe(409);
   const caller = await native.login(human.email, undefined, clientId, command.scope);
   const token = await native.bearer(caller);
-  expect((await native.kernel(token, `/v1/accounts/${human.accountId}`, { bio: 'Consented update' })).status).toBe(200);
+  expect((await native.kernel(token, `/v1/accounts/${human.accountId}`, { biography: 'Consented update' })).status).toBe(200);
   const limited = await native.login(human.email, undefined, clientId, ['account:read']);
   expect(
-    (await native.kernel(await native.bearer(limited), `/v1/accounts/${human.accountId}`, { bio: 'Outside scope' }))
+    (await native.kernel(await native.bearer(limited), `/v1/accounts/${human.accountId}`, { biography: 'Outside scope' }))
       .status,
   ).toBe(403);
   const session = await json(await native.request(caller, '/session'));
@@ -251,7 +251,7 @@ test('reviewed Allow acknowledges the submitted union and reduction retires real
   const persisted = await native.snapshot(human.accountId);
   expect(persisted.consents.find((row) => row.client_id === clientId)?.scopes).toEqual(['account:read']);
   expect(persisted.sessions).toHaveLength(0);
-  expect((await native.kernel(token, `/v1/accounts/${human.accountId}`, { bio: 'Revoked update' })).status).toBe(401);
+  expect((await native.kernel(token, `/v1/accounts/${human.accountId}`, { biography: 'Revoked update' })).status).toBe(401);
   const fresh = await native.login(human.email, undefined, clientId, ['account:read']);
   await native.expire(fresh);
   expect((await native.request(fresh, '/token', {})).status).toBe(401);
