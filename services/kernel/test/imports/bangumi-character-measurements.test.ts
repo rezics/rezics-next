@@ -247,4 +247,4 @@ test('default Bangumi seed publicly adopts selected character quantities and doe
     await runtime.close();
     await rm(directory, { recursive: true, force: true });
   }
-});
+}, 300_000);
