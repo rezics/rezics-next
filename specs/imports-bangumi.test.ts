@@ -182,6 +182,7 @@ test('source identity and record revision accompany a nonempty converter_revisio
       id: 424243,
       name: 'Another Observatory',
       name_cn: '另一座天文台',
+      infobox: fixture.infobox.replace('发条天文台', '另一座天文台'),
       summary: 'An entirely different summary, including its final sentence.',
     };
     const changed = driver.convert(
@@ -289,6 +290,7 @@ test('an absent Chinese name never fabricates a Chinese label', () =>
       const record = structuredClone(fixture) as Record<string, unknown>;
       if (name_cn === undefined) delete record.name_cn;
       else record.name_cn = name_cn;
+      record.infobox = (record.infobox as string).replace('|中文名=发条天文台\n', '');
       const output = driver.convert(input(record), context);
       expect(at(output, field(driver, output, 'title').value)).toBe(fixture.name);
       expect(driver.inspect(output).fields.filter((candidate) => candidate.role === 'chinese-label')).toEqual([]);
