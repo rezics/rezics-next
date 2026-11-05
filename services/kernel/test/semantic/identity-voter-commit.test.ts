@@ -130,7 +130,7 @@ test('four provider review/apply paths commit local votes and preserve foreign-h
         const caller = await f.identity(f.owner.actor.scopes, callerHome);
         await f.grantLibraryGate(caller.actor.accountId);
         let appliedRequest!: { path: string; body: unknown; key: string; data: unknown };
-        const request = async (path: string, body: unknown, key = randomUUID()) => {
+        const request = async (path: string, body: unknown, key: string = randomUUID()) => {
           const response = await f.send(caller.bearer, 'POST', `/v1/libraryImports/${provider}${path}`, body, key);
           const data = await response.json();
           expect({ status: response.status, data }).toMatchObject({ status: 200 });
