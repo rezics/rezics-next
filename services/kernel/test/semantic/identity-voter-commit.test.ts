@@ -2,9 +2,7 @@ import { expect, test } from 'bun:test';
 import { noEffect, runCommand } from '../../src/command/command.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { readIdentityRatingReview } from '../../src/semantic/identity-adapters/read.ts';
-import {
-  createIdentityRatingCommitParticipant,
-} from '../../src/semantic/identity-rating-commit-participant.ts';
+import { createIdentityRatingCommitParticipant } from '../../src/semantic/identity-rating-commit-participant.ts';
 import { createIdentityMappingFixture } from './support/identity-epoch-mapping.ts';
 import { release } from './support/identity-epoch.ts';
 
@@ -30,16 +28,12 @@ test('reviewed identity admission returns the native owner and published head an
     let admitted!: (held: Awaited<ReturnType<typeof participant.admit>>) => void;
     const commandBarrier = new Promise<void>((resolve) => (releaseCommand = resolve));
     const admission = new Promise<Awaited<ReturnType<typeof participant.admit>>>((resolve) => (admitted = resolve));
-    const command = runCommand(
-      f.pool,
-      { partition: selected.home, deadline: Date.now() + 10_000 },
-      async (tx) => {
-        const held = await participant.admit(tx, prepared);
-        admitted(held);
-        await commandBarrier;
-        return noEffect(held);
-      },
-    );
+    const command = runCommand(f.pool, { partition: selected.home, deadline: Date.now() + 10_000 }, async (tx) => {
+      const held = await participant.admit(tx, prepared);
+      admitted(held);
+      await commandBarrier;
+      return noEffect(held);
+    });
     const held = await admission;
     const expectedOwner = (
       await f.admin.query('SELECT node,epoch FROM core.partition WHERE partition_no=$1', [selected.home])
@@ -55,7 +49,9 @@ test('reviewed identity admission returns the native owner and published head an
       ownerEpoch: expectedOwner.epoch,
       partition: selected.home,
       subjectId: selected.subjectId,
-      publishedHeads: [{ partition: selected.home, group: selected.subjectId, epoch: String(expectedHead.published_epoch) }],
+      publishedHeads: [
+        { partition: selected.home, group: selected.subjectId, epoch: String(expectedHead.published_epoch) },
+      ],
     });
 
     const writer = await f.admin.connect();

@@ -286,17 +286,23 @@ function validateEvidenceString(
     (row) => `${row.partition_no as number}:${row.terminal as string}:${row.requested_original as string}`,
   );
   const expectedCurrentKeys = sources
-    .map(
-      (row) =>
-        `${row.control_partition as number}:${row.control_group as string}:${row.original as string}`,
-    )
+    .map((row) => `${row.control_partition as number}:${row.control_group as string}:${row.original as string}`)
     .sort();
   const sortedCurrentKeys = [...currentKeys].sort();
   const pendingKeysActual = pendingRows.map((row) => `${row.partition_no}:${row.terminal}`).sort();
   if (
-    sources.map((row) => row.subject_id as string).sort().some((id, index) => id !== sourceIds[index]) ||
-    disclosureRows.map((row) => row.subject_id as string).sort().some((id, index) => id !== sourceIds[index]) ||
-    owners.map((row) => row.partition_no as number).sort((a, b) => a - b).some((home, index) => home !== expectedOwnerHomes[index]) ||
+    sources
+      .map((row) => row.subject_id as string)
+      .sort()
+      .some((id, index) => id !== sourceIds[index]) ||
+    disclosureRows
+      .map((row) => row.subject_id as string)
+      .sort()
+      .some((id, index) => id !== sourceIds[index]) ||
+    owners
+      .map((row) => row.partition_no as number)
+      .sort((a, b) => a - b)
+      .some((home, index) => home !== expectedOwnerHomes[index]) ||
     owners.length !== expectedOwnerHomes.length ||
     controls
       .map((row) => row.partition_no as number)
@@ -381,14 +387,21 @@ function normalizeOperand(value: unknown): IdentityRatingReviewOperand {
   if (sourceHomes.length !== expectedHomes.length || sourceHomes.some((home, index) => home !== expectedHomes[index]))
     return invalid();
   const locators: IdentityRatingControlLocator[] = rawLocators.map((candidate) => {
-    if (!record(candidate) || !exactKeys(candidate, ['partition', 'group']) || !isPartition(candidate.partition) || !isUuid(candidate.group))
+    if (
+      !record(candidate) ||
+      !exactKeys(candidate, ['partition', 'group']) ||
+      !isPartition(candidate.partition) ||
+      !isUuid(candidate.group)
+    )
       return invalid();
     return { partition: candidate.partition, group: candidate.group };
   });
   const sortedLocators = sortLocators(locators);
   if (
     !unique(sortedLocators, (row) => `${row.partition}:${row.group}`) ||
-    locators.some((row, index) => row.partition !== sortedLocators[index]?.partition || row.group !== sortedLocators[index]?.group)
+    locators.some(
+      (row, index) => row.partition !== sortedLocators[index]?.partition || row.group !== sortedLocators[index]?.group,
+    )
   )
     return invalid();
   const parsed = validateEvidenceString(value.evidence, expectedIds, expectedHomes, sortedLocators);
@@ -406,8 +419,7 @@ function normalizeOperand(value: unknown): IdentityRatingReviewOperand {
         row.control_partition !==
           sortedLocators.find(
             (locator) => locator.partition === row.control_partition && locator.group === row.control_group,
-          )?.partition ||
-        row.control_group !== row.terminal,
+          )?.partition || row.control_group !== row.terminal,
     ) ||
     sourceRows.some((row) => row.subject_id !== row.original) ||
     classified.state !== 'reviewed'
@@ -438,13 +450,21 @@ export class IdentityRatingCommitUnavailableError extends VoteReviewUnavailableE
     identityState: IdentityRatingCommitUnavailableError['identityState'],
     readonly home?: number,
   ) {
-    super(identityState === 'foreign-control' ? 'atomic_guard_unavailable' : identityState === 'pending' ? 'identity_pending' : 'identity_observation_unavailable');
+    super(
+      identityState === 'foreign-control'
+        ? 'atomic_guard_unavailable'
+        : identityState === 'pending'
+          ? 'identity_pending'
+          : 'identity_observation_unavailable',
+    );
     this.identityState = identityState;
     this.name = 'IdentityRatingCommitUnavailableError';
   }
 }
 
-function throwUnavailable(result: Exclude<IdentityRatingReviewResult, { state: 'reviewed' } | { state: 'changed' }>): never {
+function throwUnavailable(
+  result: Exclude<IdentityRatingReviewResult, { state: 'reviewed' } | { state: 'changed' }>,
+): never {
   if (result.state === 'pending') throw new IdentityRatingCommitUnavailableError('pending');
   if (result.state === 'moved') throw new IdentityRatingCommitUnavailableError('moved', result.home);
   if (result.state === 'absent') throw new IdentityRatingCommitUnavailableError('absent');
@@ -477,7 +497,10 @@ export function createIdentityRatingCommitParticipant(): IdentityRatingCommitPar
       const client = deadlineClient(tx, deadline);
       const owner = await lockOwner.run(client, { partition_no: command.partition });
       if (!owner || owner.writeState !== 'active')
-        throw new IdentityRatingCommitUnavailableError(owner?.writeState === 'moved' ? 'moved' : 'unavailable', command.partition);
+        throw new IdentityRatingCommitUnavailableError(
+          owner?.writeState === 'moved' ? 'moved' : 'unavailable',
+          command.partition,
+        );
       const native = await readIdentityRatingEvidenceInTransaction(client, {
         sourceIdentities: operand.sourceIdentities,
         commandHome: command.partition,
@@ -510,7 +533,11 @@ export function createIdentityRatingCommitParticipant(): IdentityRatingCommitPar
           (candidate) => candidate.partition_no === locator.partition && candidate.terminal === locator.group,
         );
         if (!row) throw new TypeError('Reviewed identity control row disappeared under its native owner fence');
-        return Object.freeze({ partition: locator.partition, group: locator.group, epoch: String(row.published_epoch) });
+        return Object.freeze({
+          partition: locator.partition,
+          group: locator.group,
+          epoch: String(row.published_epoch),
+        });
       });
       return Object.freeze({
         ownerId: String(owner.ownerId),

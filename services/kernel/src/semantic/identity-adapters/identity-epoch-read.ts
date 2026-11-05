@@ -155,7 +155,11 @@ async function sourcePhase(
   };
 }
 
-async function controlPhase(client: Queryable, locators: readonly IdentityRatingControlLocator[], sourceRows: readonly IdentitySourceEvidence[]) {
+async function controlPhase(
+  client: Queryable,
+  locators: readonly IdentityRatingControlLocator[],
+  sourceRows: readonly IdentitySourceEvidence[],
+) {
   if (!locators.length) return { owners: [], pending: [], current: [] };
   const homes = [...new Set(locators.map((row) => row.partition))].sort((a, b) => a - b);
   const ownersRows: IdentityOwnerEvidence[] = [];
@@ -166,7 +170,9 @@ async function controlPhase(client: Queryable, locators: readonly IdentityRating
     const pairs = sourceRows
       .filter((row) => row.control_partition === home && row.control_group !== null && row.original !== null)
       .map((row) => ({ partition: home, terminal: row.control_group!, original: row.original! }))
-      .sort((left, right) => left.terminal.localeCompare(right.terminal) || left.original.localeCompare(right.original));
+      .sort(
+        (left, right) => left.terminal.localeCompare(right.terminal) || left.original.localeCompare(right.original),
+      );
     const ownerResult = await client.query(owners.sql, [[home]]);
     const pendingResult = await client.query(pending.sql, [
       controlKeys.map(() => home),
@@ -209,15 +215,14 @@ function identityReviewFromEvidence(
   if (
     new Set(evidenceSourceIds).size !== evidenceSourceIds.length ||
     new Set(evidence.subjects.map((row) => row.subject_id)).size !== evidence.subjects.length ||
-    new Set(evidence.mapping.sourceOwners.map((row) => row.partition_no)).size !== evidence.mapping.sourceOwners.length ||
-    new Set(evidence.mapping.controlOwners.map((row) => row.partition_no)).size !== evidence.mapping.controlOwners.length ||
+    new Set(evidence.mapping.sourceOwners.map((row) => row.partition_no)).size !==
+      evidence.mapping.sourceOwners.length ||
+    new Set(evidence.mapping.controlOwners.map((row) => row.partition_no)).size !==
+      evidence.mapping.controlOwners.length ||
     new Set(evidence.mapping.pendingRows.map((row) => `${row.partition_no}:${row.terminal}`)).size !==
       evidence.mapping.pendingRows.length ||
-    new Set(
-      evidence.mapping.currentRows.map(
-        (row) => `${row.partition_no}:${row.terminal}:${row.requested_original}`,
-      ),
-    ).size !== evidence.mapping.currentRows.length
+    new Set(evidence.mapping.currentRows.map((row) => `${row.partition_no}:${row.terminal}:${row.requested_original}`))
+      .size !== evidence.mapping.currentRows.length
   )
     return { state: 'unavailable', reason: 'bootstrap' };
   if (evidence.subjects.some((row) => row.visibility !== 'visible')) return { state: 'undisclosed' };
@@ -225,8 +230,16 @@ function identityReviewFromEvidence(
   if (evidence.mapping.currentRows.some((row) => row.redirected))
     return { state: 'unavailable', reason: 'redirect-chain' };
 
-  const mapped = classifyIdentityMappings(requestsFor(sourceIdentities, sourceIdentities.map((id) => routeOf(id)!)), evidence.mapping);
-  const pendingMapping = mapped.find((row): row is Extract<IdentityMapping, { state: 'pending' }> => row.state === 'pending');
+  const mapped = classifyIdentityMappings(
+    requestsFor(
+      sourceIdentities,
+      sourceIdentities.map((id) => routeOf(id)!),
+    ),
+    evidence.mapping,
+  );
+  const pendingMapping = mapped.find(
+    (row): row is Extract<IdentityMapping, { state: 'pending' }> => row.state === 'pending',
+  );
   if (pendingMapping)
     return { state: 'pending', jobId: pendingMapping.job.jobId, epoch: pendingMapping.job.epoch.toString() };
   const unavailableMapping = mapped.find(
@@ -304,7 +317,11 @@ export async function readIdentityRatingReview(
       subjects: [] as SubjectDisclosure[],
     };
     for (const home of sourceHomes) {
-      const part = await withReadTransaction(pool, (client) => sourcePhase(client, sourceIdentities, routes, home), input.deadline);
+      const part = await withReadTransaction(
+        pool,
+        (client) => sourcePhase(client, sourceIdentities, routes, home),
+        input.deadline,
+      );
       source.owners.push(...part.owners);
       source.sources.push(...part.sources);
       source.subjects.push(...part.subjects);
@@ -320,7 +337,12 @@ export async function readIdentityRatingReview(
     for (const home of [...new Set(locators.map((row) => row.partition))].sort((a, b) => a - b)) {
       const part = await withReadTransaction(
         pool,
-        (client) => controlPhase(client, locators.filter((row) => row.partition === home), source.sources),
+        (client) =>
+          controlPhase(
+            client,
+            locators.filter((row) => row.partition === home),
+            source.sources,
+          ),
         input.deadline,
       );
       controls.owners.push(...part.owners);
@@ -333,14 +355,22 @@ export async function readIdentityRatingReview(
   const last = await collect();
   if (reviewEvidenceBytes(first) !== reviewEvidenceBytes(last))
     return { state: 'unavailable', reason: 'changed-during-read' };
-  return identityReviewFromEvidence(input.requestedOriginalId, input.canonicalTerminalId, sourceIdentities, sourceHomes, last);
+  return identityReviewFromEvidence(
+    input.requestedOriginalId,
+    input.canonicalTerminalId,
+    sourceIdentities,
+    sourceHomes,
+    last,
+  );
 }
 
 /** One bounded reread on the caller's original command connection after its native home lock. */
 export async function readIdentityRatingEvidenceInTransaction(
   client: Queryable,
   input: Readonly<{ sourceIdentities: readonly string[]; commandHome: number }>,
-): Promise<Readonly<{ state: 'ready'; evidence: IdentityRatingNativeEvidence }> | Readonly<{ state: 'foreign-control' }>> {
+): Promise<
+  Readonly<{ state: 'ready'; evidence: IdentityRatingNativeEvidence }> | Readonly<{ state: 'foreign-control' }>
+> {
   const sourceIdentities = [...input.sourceIdentities];
   if (sourceIdentities.length < 1 || sourceIdentities.length > MAX_REVIEW_KEYS)
     throw new RangeError('Identity rating review must contain one or two exact source keys');
@@ -370,13 +400,7 @@ export function classifyIdentityRatingReviewEvidence(
   sourceHomes: readonly number[],
   evidence: IdentityRatingNativeEvidence,
 ): IdentityRatingReviewResult {
-  return identityReviewFromEvidence(
-    requestedOriginalId,
-    canonicalTerminalId,
-    sourceIdentities,
-    sourceHomes,
-    evidence,
-  );
+  return identityReviewFromEvidence(requestedOriginalId, canonicalTerminalId, sourceIdentities, sourceHomes, evidence);
 }
 
 /** Bounded exact mapping proof, with source and control homes released independently. */

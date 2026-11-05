@@ -29,9 +29,7 @@ test('review and held identity costs stay fixed as unrelated native identities g
       });
       if (review.state !== 'reviewed') throw new Error(`Expected a reviewed identity, received ${review.state}`);
       const prepared = participant.prepare(review.operand);
-      return runCommand(db.pool, { partition: home }, async (tx) =>
-        noEffect(await participant.admit(tx, prepared)),
-      );
+      return runCommand(db.pool, { partition: home }, async (tx) => noEffect(await participant.admit(tx, prepared)));
     };
 
     const sample = await capture(db, operation, { includeBackends: true });

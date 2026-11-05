@@ -28,7 +28,10 @@ export type {
   IdentityRatingReviewResult,
   IdentityRatingReviewUnavailableReason,
 } from './identity-adapters/read.ts';
-export { createIdentityRatingCommitParticipant, IdentityRatingCommitUnavailableError } from './identity-rating-commit-participant.ts';
+export {
+  createIdentityRatingCommitParticipant,
+  IdentityRatingCommitUnavailableError,
+} from './identity-rating-commit-participant.ts';
 export type {
   IdentityRatingCommitHeld,
   IdentityRatingCommitParticipant,

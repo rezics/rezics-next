@@ -16,12 +16,12 @@ For a same-home command, the single native held row is `core.partition(partition
 
 Content's original voter command currently retains its `VoteReviewGuard` read and own-vote checks, but the guarded effect branch in `rating/votes.ts` still returns `atomic_guard_unavailable`; this Semantic participant does not activate that Content-owned effect path. Content/provider wiring, provider caller-home evidence, four-provider native effects/readback and the serial successful-effects acceptance remain the Content continuation. The participant itself does not supply Person identifier merge expectations.
 
-| Provider caller | Requested/canonical Subject IDs | Question/voter command home | Persisted controls | Eligibility/effect coverage owner |
-| --- | --- | --- | --- | --- |
-| VNDB | Not established by a guarded Rating request | Not established | Not established | Content and VNDB producer owners |
-| Bangumi | Not established by a guarded Rating request | Not established | Not established | Content and Bangumi producer owners |
-| MAL | Not established by a guarded Rating request | Not established | Not established | Content and MAL producer owners |
-| AniList | Not established by a guarded Rating request | Not established | Not established | Content and AniList producer owners |
+| Provider caller | Requested/canonical Subject IDs             | Question/voter command home | Persisted controls | Eligibility/effect coverage owner   |
+| --------------- | ------------------------------------------- | --------------------------- | ------------------ | ----------------------------------- |
+| VNDB            | Not established by a guarded Rating request | Not established             | Not established    | Content and VNDB producer owners    |
+| Bangumi         | Not established by a guarded Rating request | Not established             | Not established    | Content and Bangumi producer owners |
+| MAL             | Not established by a guarded Rating request | Not established             | Not established    | Content and MAL producer owners     |
+| AniList         | Not established by a guarded Rating request | Not established             | Not established    | Content and AniList producer owners |
 
 These rows are deliberately unmeasured: the current importer provider paths do not call the guarded voter command, and `rating/votes.ts` refuses the guarded effect before writing. Source-epoch observations or fabricated home/control rows do not establish provider coverage. The continuation must obtain the real request and command IDs from each provider's owning path, then record the actual question/voter eligibility and native source/control homes; any foreign tuple is deferred as `atomic_guard_unavailable` until its enrollment/movement contract is delivered.
 
