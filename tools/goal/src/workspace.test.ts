@@ -640,7 +640,12 @@ test('one immutable interval attributes trailers, NUL paths and merges with boun
   expect(taskChangedPaths(task)).toEqual(['t0/0.ts', 't0/4.ts', 't0/8.ts', 't0/12.ts']);
   expect(projectWorkspaceInterval(root, origin, 'HEAD', undefined, origin).gitReads).toBe(3);
   git(root, ['commit', '--allow-empty', '-m', `Goal-Task: ${grown[0]!}`, '-m', 'Goal-Task: prose\nOrdinary body.']);
-  expect(projectWorkspaceInterval(root, origin).tasks.get('task-0')).toEqual([grown[0], grown[4], grown[8], grown[12]]);
+  expect(projectWorkspaceInterval(root, origin).tasks.get('task-0')).toEqual([
+    grown[0]!,
+    grown[4]!,
+    grown[8]!,
+    grown[12]!,
+  ]);
   git(root, ['checkout', '--orphan', 'other']);
   git(root, ['rm', '-rf', '--cached', '.']);
   const orphanRoot = commit('orphan.txt', 'orphan');
