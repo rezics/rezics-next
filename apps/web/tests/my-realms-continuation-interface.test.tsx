@@ -13,7 +13,7 @@ import {
 import { MyRealmsPageView } from '../src/community/my-realms-page';
 import type { MyRealmsPage } from '../src/community/space';
 import { m } from '../src/paraglide/messages.js';
-import { deLocalizeUrl, localizeUrl, setLocale } from '../src/paraglide/runtime.js';
+import { deLocalizeUrl, localizeUrl, overwriteGetLocale, setLocale } from '../src/paraglide/runtime.js';
 import { ClosedErrorPage } from '../src/shell/closed';
 import recording from '../src/kernel/recorded/my-realms.json';
 import en from '../messages/en.json';
@@ -41,6 +41,7 @@ const populated: MyRealmsPage = {
 
 async function render(pages: readonly MyRealmsPage[], locale: Locale, dir: 'ltr' | 'rtl' = 'ltr', unavailable = false) {
   await setLocale(locale, { reload: false });
+  overwriteGetLocale(() => locale);
   const root = createRootRoute({ component: Outlet });
   const route = createRoute({
     getParentRoute: () => root,
@@ -61,7 +62,7 @@ async function render(pages: readonly MyRealmsPage[], locale: Locale, dir: 'ltr'
     history: createMemoryHistory({ initialEntries: [`/${locale}/realms`] }),
     rewrite: {
       input: ({ url }) => deLocalizeUrl(url).href,
-      output: ({ url }) => localizeUrl(url).href,
+      output: ({ url }) => localizeUrl(url, { locale }).href,
     },
   });
   await router.load();

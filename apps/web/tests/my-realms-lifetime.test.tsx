@@ -325,7 +325,7 @@ test('signed-out, replaced-account and unavailable readiness transitions close t
 });
 
 test('a fresh explicit visit after a same-account credential replacement uses a new caller and is usable', async () => {
-  resetReader(async () => page(`Current visit ${readCalls.length + 1}`));
+  resetReader(async () => page(`Current visit ${readCalls.length}`));
   const surface = await createSurface();
   try {
     await surface.load();
@@ -498,7 +498,7 @@ test('a failed continuation keeps same-request retry and restarts through a fres
 });
 
 test('unmount retires saved loader callbacks; a later explicit visit can load a fresh list', async () => {
-  resetReader(async () => page(`Mounted visit ${readCalls.length + 1}`));
+  resetReader(async () => page(`Mounted visit ${readCalls.length}`));
   const surface = await createSurface();
   try {
     await surface.load();
