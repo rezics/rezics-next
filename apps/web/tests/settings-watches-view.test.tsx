@@ -57,6 +57,7 @@ const { m } = await import('../src/paraglide/messages.js');
 test('the mounted private view separates inaccessible targets, uncertain removal, sparse/empty pages and refresh failure', async () => {
   const client = new QueryClient();
   client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'alice', csrfToken: 'csrf' });
+  const owner = new SettingsSessionOwner(client, 'csrf', 'alice');
   const host = window.document.createElement('div');
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
