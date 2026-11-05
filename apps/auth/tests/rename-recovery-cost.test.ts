@@ -161,4 +161,49 @@ if (!process.env.RENAME_COST_CHILD) {
     expect((await nativeRenameSource.run(f.selected)).kind).toBe('renamed');
     expect(f.calls).toHaveLength(6);
   });
+  const { confirmStepUp } = await import('../src/step-up');
+  const { managementOperationProfile } = await import('@rezics/auth-contract');
+  const {
+    managementOperationStepUpUrl,
+    storePendingRenameReviewStepUp,
+    pendingRenameReviewStepUpState,
+    consumeRenameReviewReturn,
+  } = await import('../src/management-operation-step-up');
+  test('password step-up verifies the exact rename session and returns without executing a rename', async () => {
+    fixture();
+    const accountId = '00000000-0000-4000-8000-000000000001';
+    const url = managementOperationStepUpUrl('rename');
+    expect(storePendingRenameReviewStepUp(accountId)).toBe(true);
+    const requests: { path: string; body: unknown }[] = [];
+    globalThis.fetch = (async (path, init) => {
+      const name = new URL(String(path), 'https://auth.test').pathname;
+      const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+      requests.push({ path: name, body });
+      if (name === '/signin') return Response.json({});
+      if (name === '/session')
+        return Response.json({
+          account_id: accountId,
+          client_id: RENAME_PROFILE.client_id,
+          scope: ['account:update'],
+          authn_epoch: 1,
+          auth_time: Math.floor(Date.now() / 1000),
+          amr: ['pwd'],
+        });
+      return new Response(null, { status: 404 });
+    }) as typeof fetch;
+    expect(
+      await confirmStepUp('person@example.test', 'password', url.slice(url.indexOf('?')), 'https://auth.test'),
+    ).toEqual({
+      ok: true,
+      target: 'https://auth.test/account/rename',
+    });
+    expect(requests.map(({ path }) => path)).toEqual(['/signin', '/session']);
+    expect(requests[0]?.body).toEqual({
+      email: 'person@example.test',
+      password: 'password',
+      ...managementOperationProfile('rename'),
+    });
+    expect(pendingRenameReviewStepUpState()).toMatchObject({ kind: 'pending', value: { phase: 'returned' } });
+    expect(consumeRenameReviewReturn(accountId)).toBe(true);
+  });
 }

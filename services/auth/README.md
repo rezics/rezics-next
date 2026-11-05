@@ -1102,8 +1102,7 @@ Native proof revalidation and its three-second deadline remain.
 Rename-page accepts only `{}`. Without the exact management profile it returns only management-auth-required plus
 fixed continuation. `readRenameAccountPage` composes private profile and `readManagedAuthActions`: matching rename
 advice enables review, empty advice refuses, dependency loss is unavailable. Failed profile/proof/floor discloses no
-identity or reason; action loss may retain an admitted profile. Both profile/page require same-issuer Origin, JSON,
-no query/bearer, human cookie proof revalidated after I/O, and private/no-store. Stale review is allowed; approval
+identity or reason; action loss may retain an admitted profile. Both require same-issuer Origin, JSON, no query/bearer, revalidated human cookie proof and private/no-store. Stale review is allowed; approval
 requires freshness. Cost: exact profile read, full-key current-account seek, bounded self action advice (one candidate,
 before/final snapshots, one Access formula), eight closed source entries/matches; no inventory or availability lookup.
 
@@ -1129,7 +1128,7 @@ Current review costs session GET + rename-page POST: entry/return/read Retry cos
 Fresh acknowledged submit costs six; unknown four. Exact live-reference retry costs three while unknown or five
 with acknowledgement; expiry renewal adds one. Supported 409 uses the second pair as advice instead of readback.
 Step-up return needs same-account review and confirmation, with zero commands. Local tests qualify receiving;
-broader native/browser acceptance and integration remain pending.
+Native/browser acceptance and integration remain pending.
 
 `apps/auth/src/management-operations.ts` exports the closed `ManagementOperation`,
 `loadManagementSession()`, `managementOperationProfile(kind)` and
