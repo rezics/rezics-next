@@ -123,14 +123,22 @@ export async function libraryEntryFormResponse(
         idempotencyKey,
         ...(credential ? { credential } : {}),
       };
-      const result = await removePersonalLibraryEntry(client, request, sessionEnv, input);
+      const original = await originalEntryRestoreCredential(request, sessionEnv, credential);
+      if (!original) return problemResponse(problem(403, 'forbidden', 'Forbidden'));
+      const captured = credential ?? (await captureEntryRestoreCredential(request, sessionEnv));
+      // The document boundary has consumed and authenticated the form already.
+      const result = await removePersonalLibraryEntry(
+        client,
+        new Request(request.url, { method: 'POST', headers: { authorization: original } }),
+        {},
+        { subjectId, revision, ...(incarnationId ? { incarnationId } : {}), idempotencyKey },
+      );
       if (!result.ok && result.reason === 'unavailable') {
-        const captured = credential ?? (await captureEntryRestoreCredential(request, sessionEnv));
         retryRemove = { ...input, ...(captured ? { credential: captured } : {}) };
       }
       removed = result.ok || result.reason === 'missing';
       if (result.ok && result.undo && admitted.includes('library_entry.restore' as never)) {
-        const credential = result.undo.credential;
+        const credential = captured;
         undo = {
           subjectId,
           ...result.undo,
