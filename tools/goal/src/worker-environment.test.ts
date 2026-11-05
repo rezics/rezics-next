@@ -4,11 +4,24 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { attemptEnvironment } from './launch.ts';
 import { gateEnvironment } from './merge.ts';
+import type { Task } from './types.ts';
 
 test('a worker environment leaves affected-test selection to the check runner and neutralizes the debuginfod path', () => {
   expect(attemptEnvironment({ id: 'task', base: 'abc123' }, { attempt: 2 })).toEqual({
     GOAL_TASK_ID: 'task',
     GOAL_ATTEMPT: '2',
+    DEBUGINFOD_IMA_CERT_PATH: 'none',
+    MOZ_GMP_PATH: 'none',
+    EDITOR: 'nano',
+  });
+});
+
+test('a worker environment names the acceptance requirements its brief lists, which admit a walk stack', () => {
+  const brief = { acceptance: { requires: ['native', 'root'] } } as unknown as Task['brief'];
+  expect(attemptEnvironment({ id: 'task', base: 'abc123', brief }, { attempt: 2 })).toEqual({
+    GOAL_TASK_ID: 'task',
+    GOAL_ATTEMPT: '2',
+    GOAL_ACCEPTANCE_REQUIRES: 'native,root',
     DEBUGINFOD_IMA_CERT_PATH: 'none',
     MOZ_GMP_PATH: 'none',
     EDITOR: 'nano',
