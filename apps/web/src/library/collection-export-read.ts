@@ -48,13 +48,15 @@ export async function loadCollectionExport(
   capture: CollectionExportCapture,
   context: CollectionPublicContext,
 ) {
-  const address = exportAddress(capture);
   return finishCollectionExport(capture, context, () =>
     loadEditableCollectionPage(
       client,
       request,
       sessionEnv,
-      { ...address, ...(capture.filter ? { filter: capture.filter } : {}) },
+      {
+        ...exportAddress(capture),
+        ...(capture.filter ? { filter: capture.filter } : {}),
+      },
       capture.provenance.mode,
     ),
   );

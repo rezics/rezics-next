@@ -634,6 +634,8 @@ occurrences, then compare it with current native FULL reads at admission and ter
 existing 100-member page bound: two reads examine at most 200 returned members, two Collection headers and at most
 four existing viewer-action/follow point reads. There is no cursor accumulation. The resulting ItemList retains
 occurrence identifiers, permitted notes and order; cancellation retires delivery and retry keeps the same capture.
+Decision: Malformed or noncanonical captured Collection export addresses return unavailable before native reads; valid
+captures retain the exact addressed page and existing public eligibility.
 Larger, later-page and filtered curated populations remain explicitly unavailable until native durable preparation
 is integrated. Decision: unavailable preparation never falls back to exporting the displayed partial population;
 expired preparation will require a new admitted request. The default Members factory and worker are unavailable
