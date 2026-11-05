@@ -6303,6 +6303,7 @@
   "home_space_retry": "Space の検索を再試行",
   "home_space_invalid": "Space のアドレス、またはこのサイトの Space リンクを入力してください。",
   "home_space_unavailable": "この Space を読み込めませんでした。再試行するか、選択を解除してください。",
+  "home_space_not_found": "この Space は見つかりませんでした。アドレスを確認するか、選択を解除してください。",
   "home_space_changed": "この Space が変更されたため、ホームの結果を更新しています。",
   "home_feed_sparse": "このページに項目はありません。次のページに進んでください。",
   "home_feed_public_discovery_unavailable": "公開コレクション、レビュー、Space の発見はネイティブフィードではまだ利用できません。",

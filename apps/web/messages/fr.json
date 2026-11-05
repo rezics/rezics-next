@@ -6300,6 +6300,7 @@
   "home_space_retry": "Réessayer la recherche",
   "home_space_invalid": "Saisissez l’adresse du Space ou un lien vers celui-ci depuis ce site.",
   "home_space_unavailable": "Impossible de charger ce Space. Réessayez ou retirez-le.",
+  "home_space_not_found": "Ce Space est introuvable. Vérifiez l'adresse ou retirez-le.",
   "home_space_changed": "Ce Space a changé. Home met à jour vos résultats.",
   "home_feed_sparse": "Aucun élément sur cette page. Passez à la suivante.",
   "home_feed_public_discovery_unavailable": "La découverte publique des collections, des avis et des Spaces n’est pas encore disponible dans le flux natif.",
