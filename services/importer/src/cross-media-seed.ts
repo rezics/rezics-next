@@ -1,5 +1,4 @@
 import { createHash } from 'node:crypto';
-import { ImportTransportError } from './import-client.ts';
 import { createReadStream } from 'node:fs';
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
