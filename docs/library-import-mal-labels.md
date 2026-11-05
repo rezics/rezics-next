@@ -148,7 +148,8 @@ identity and revision are deliberate inputs; native review owns normalization, c
 Confirmation displays the exact version and normalized selections. Results distinguish per-value receipts from a
 separate exact-Subject `libraryLabelAssignments` current read. Cancellation never removes accepted assignments.
 The original encrypted credential is captured before apply and reused with the original reviewed operands.
-Only one page and bounded command custody are retained; replacing the page drops its title metadata.
+A private upload handle reopens retained evidence without another upload; exact XML is read lazily through the
+existing source method. Only one page and bounded command custody are retained; replacing the page drops its title metadata.
 
 Sources read before implementation: this owner, the existing Web receiving guide, native MAL tag/review owners,
 generated `list-import-mal` declarations and mounted route snapshot, generated label-assignment routes, and the

@@ -11,16 +11,16 @@ rows, late delivery and retry authority.
 ## Native methods
 
 Mounted under `/v1/libraryImports/mal` after Commerce dependency `029513f7`. Web binds
-`KernelClient.libraryImports.mal` when present (`$preview`, page GET, `source`, `review`, `apply`, `cancel`,
-DELETE). The generated client snapshot may lag the kernel source; missing methods render unavailable rather than a
-local parser or successful fixture.
+`KernelClient.libraryImports.mal` (`$preview`, page GET, `source`, `review`, `apply`, `cancel`, DELETE).
+The native owner declarations supply tag projection types; the mounted route snapshot still needs Content’s
+serial publication of the label extension for generated-client acceptance.
 
 | Step    | Native                                                                 | Page                                                                                       |
 | ------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | Upload  | `POST :preview` `{ xml }` with Idempotency-Key                         | File stays local until submit; bytes are dropped after the call                            |
 | Preview | `GET :id?after=` pages of 20                                           | Current page only; titles assist display/search, never automatic identity                  |
-| Review  | `POST :id/review` `{ row, target, skip, replace }`                     | Unmatched rows may set an explicit subject; skip and replace are deliberate                |
-| Confirm | `POST :id/apply` `{ confirm: true, rows: [{ row, version, fields }] }` | Only native-admitted `status` is selectable; other fields remain retained evidence         |
+| Review  | `POST :id/review` `{ row, target, skip, replace, labels? }`            | Unmatched rows may set an explicit subject; skip and replace are deliberate                |
+| Confirm | `POST :id/apply` `{ confirm: true, rows: [{ row, version, fields }] }` | Native-admitted `status` and explicitly reviewed `tags` are independent selections         |
 | Source  | `POST /v1/libraryEntries/{subjectId}/sourceObservations` after apply   | Separate typed command; record id is `${kind}/${identifier.value}`; created time is absent |
 | Stop    | `POST :id/cancel`                                                      | Stops future dispatch; acknowledged effects remain                                         |
 | Discard | `DELETE :id`                                                           | Clears this upload's evidence now                                                          |
@@ -45,6 +45,10 @@ until both are checked. MAL privacy tokens `1`/`true`/`private` are private; `0`
 Bounds follow the native page `limits` and [personal MAL import](../../../docs/library-import-mal.md): 2 MiB XML,
 4 MiB JSON wire, 500 rows, depth 16, 20-row pages and apply batches, 64 fields, three retained uploads, seven-day
 lifetime. Native provider catalogue ingestion remains Imports-owned.
+
+The upload screen can reopen a retained native upload by its private handle without uploading another file.
+The current page exposes that handle and lazily reads exact XML through the mounted `source.get`; it never parses
+that XML. The handle stays outside the URL and browser storage. Native reads reauthorize before disclosure.
 
 ## Retained tag adoption
 
