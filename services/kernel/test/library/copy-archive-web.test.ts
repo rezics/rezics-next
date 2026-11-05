@@ -51,7 +51,7 @@ beforeAll(async () => {
   await response('POST', '/v1/copies', { subjectId, kind: 'physical', status: 'owned' });
   // Independent equal-valued repeats, zero, absent, exact decimals, active and terminal source states.
   for (let i = 0; i < 13; i++) {
-    const started = await response('POST', '/v1/progressSessions', { subjectId, mode: 'scalar_amount', unit: 'chapter', total: '9.125000', additionalMeasures: [{ unit: 'page', total: '12.500001' }] });
+    const started = await response('POST', '/v1/progressSessions', { subjectId, mode: 'scalar_amount', unit: 'chapter', total: '9.125000', additionalMeasures: [{ unit: 'page', total: '12.500001' }, { unit: 'old.page' }] });
     sessions.push(started.progressSession.id);
     if (i !== 2) await response('POST', `/v1/progressSessions/${sessions[i]}:record`, { revision: 1, amount: i === 3 ? '0' : '1.125000' });
     if (i === 0 || i === 1) {
@@ -122,7 +122,7 @@ test('mounted generated journey pages a completed export and creates distinct eq
   const ids: string[] = [];
   for (const source of [sessions[0]!, sessions[1]!, sessions[2]!, sessions[3]!, sessions[4]!]) {
     await j.review(body(source)); const reviewed = j.snapshot().review!;
-    expect(reviewed.applicable).toBe(true); await j.confirm(reviewed.reviewId);
+    expect(reviewed.applicable).toBe(true); expect(reviewed.unsupported.length).toBeGreaterThan(0); await j.confirm(reviewed.reviewId);
     const current = j.snapshot().result!.progressSession!; ids.push(current.id);
     expect(current.id).not.toBe(source);
     expect(current.total).toBe('9.125000');
