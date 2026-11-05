@@ -240,6 +240,9 @@ test('My Logs accepts three exact windows, bounded branches, retry, stale restar
   expect(visit.beginMovement('viewer-a', 'next', 'middle', 'branch')).toBe(true);
   visit.observe('viewer-a', 'branch');
   visit.failMovement('viewer-a', 'branch');
+  const failedRevision = visit.getSnapshot().revision;
+  visit.failMovement('viewer-a', 'branch');
+  expect(visit.getSnapshot().revision).toBe(failedRevision);
   expect(visit.getSnapshot()).toMatchObject({
     coordinates: [null, 'middle'],
     current: 'middle',

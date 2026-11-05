@@ -159,7 +159,8 @@ export class MyLogsWindowNavigation {
 
   failMovement(authorityKey: string, cursor: MyLogsCoordinate) {
     const movement = this.snapshot.movement;
-    if (this.disposed || this.authorityKey !== authorityKey || !movement || movement.target !== cursor) return;
+    if (this.disposed || this.authorityKey !== authorityKey || !movement || movement.target !== cursor || movement.failed)
+      return;
     this.cancelFocus();
     this.replace({ ...this.snapshot, movement: { ...movement, failed: true }, focusReady: false });
   }
