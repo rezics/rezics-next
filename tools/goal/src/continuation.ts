@@ -426,16 +426,32 @@ export function completeContinuation(
   ownership: RiskOwnership | undefined,
   policy: ControlPolicy['brief'] = defaultPolicy.brief,
 ): string {
-  const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(markdown);
-  if (!match) return markdown;
+  const frontMatter = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/;
+  const match = frontMatter.exec(markdown);
   let raw: unknown;
-  try {
-    raw = Bun.YAML.parse(match[1]!);
-  } catch {
-    return markdown;
+  if (match) {
+    try {
+      raw = Bun.YAML.parse(match[1]!);
+    } catch {
+      return markdown;
+    }
+  } else {
+    // Workers often write the remainder as plain Markdown: on 2026-11-05, 34 of 43 dropped continuations had no front
+    // matter. Its contract is the parent's, so it inherits the parent's front matter; ordering and critical-path flags
+    // belong to the parent alone.
+    const parent = frontMatter.exec(task.brief.markdown);
+    let inherited: unknown;
+    try {
+      inherited = parent ? Bun.YAML.parse(parent[1]!) : {};
+    } catch {
+      inherited = {};
+    }
+    raw = inherited && typeof inherited === 'object' && !Array.isArray(inherited) ? { ...inherited } : {};
+    for (const key of ['after', 'waiting', 'criticalPath']) delete (raw as Record<string, unknown>)[key];
   }
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return markdown;
   const front: Record<string, unknown> = { ...(raw as Record<string, unknown>) };
+  front.manager ??= task.brief.manager;
   const list = (value: unknown, fallback: string[]) =>
     value === undefined || value === null
       ? fallback
@@ -472,10 +488,11 @@ export function completeContinuation(
       else delete front.acceptance;
     }
   }
-  if (JSON.stringify(front) === JSON.stringify(raw)) return markdown;
-  const newline = match[0].includes('\r\n') ? '\r\n' : '\n';
+  if (match && JSON.stringify(front) === JSON.stringify(raw)) return markdown;
+  const newline = (match?.[0] ?? markdown).includes('\r\n') ? '\r\n' : '\n';
   const yaml = Bun.YAML.stringify(front, null, 2).trimEnd().replaceAll('\n', newline);
-  return `---${newline}${yaml}${newline}---${newline}${markdown.slice(match.index + match[0].length)}`;
+  const body = match ? markdown.slice(match.index + match[0].length) : markdown;
+  return `---${newline}${yaml}${newline}---${newline}${body}`;
 }
 
 function invalidReason(

@@ -540,7 +540,7 @@ test('minimal product policy keeps supported compiler placement and the open com
         for (const required of MINIMAL_RULES) expect(policy).toContain(required);
         if (retryEvidence) expect(prompt).toContain('Rerun the failing command once before reporting any blocker');
         expect(policy).not.toContain('task-scoped exception');
-        expect(prompt).toContain('Unfinished work is not a blocker');
+        expect(prompt).toContain('Build the whole outcome in this attempt');
         expect(policy).not.toContain('must report status blocked');
         expect(policy).not.toContain('run it in the foreground with remote placement off');
         expect(policy).not.toContain('REZICS_CHECK_LOCAL_ONLY');
@@ -721,7 +721,7 @@ test('minimal source completion and incomplete product results use the current p
       for (const required of MINIMAL_RULES) expect(prompt).toContain(required);
       expect(prompt).toContain('naming what you completed and the deferred acceptance');
       expect(prompt).not.toContain('must report status blocked');
-      expect(prompt).toContain('Unfinished work is not a blocker');
+      expect(prompt).toContain('Build the whole outcome in this attempt');
       expect(prompt).not.toContain('run your acceptance command once');
     }
   } finally {
