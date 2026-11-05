@@ -13,6 +13,7 @@ afterAll(() => mock.restore());
 const { readEntryPage } = await import('../src/library/entries-read');
 const { ShelfScoreUnavailable } = await import('../src/library/shelf-view');
 const { SortControls } = await import('../src/library/entries-current');
+const { viewerExposureLifetime, viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
 const { resolveShelfPresentation, unsupportedShelfSorts, shelfOrderFromLibrary } =
   await import('../src/library/shelf-preferences');
 
@@ -79,7 +80,17 @@ test('mounted sort form retains score addresses until date selection and replace
     await import('@tanstack/react-router');
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(['session'], { state: 'signed-in', subject: 'A', csrfToken: 'csrf-A' });
-  client.setQueryData(['exposure', 'viewer'], ['personal_library', 'reading_progress']);
+  const lifetime = viewerExposureLifetime(client);
+  const releaseExposure = lifetime.subscribe(() => {});
+  const admitViewer = (subject: string) => {
+    const snapshot = lifetime.getSnapshot();
+    if (snapshot.state !== 'signed-in') throw new Error('Viewer observation was not enrolled');
+    client.setQueryData(viewerExposureQuery(snapshot.observation).queryKey, {
+      subject,
+      admitted: ['personal_library', 'reading_progress'],
+    });
+  };
+  admitViewer('A');
   const router = createRouter({
     routeTree: createRootRoute(),
     history: createMemoryHistory({ initialEntries: ['/en/library?cursor=obsolete'] }),
@@ -154,6 +165,7 @@ test('mounted sort form retains score addresses until date selection and replace
       expect(submitted()).toEqual({ ...retained, orderBy: 'personalScore', direction: changedDirection });
       await act(async () => {
         client.setQueryData(['session'], { state: 'signed-in', subject: 'B', csrfToken: 'csrf-B' });
+        admitViewer('B');
       });
       const before = submitted();
       const calls = navigate.mock.calls.length;
@@ -163,6 +175,7 @@ test('mounted sort form retains score addresses until date selection and replace
       expect(submitted()).toEqual(before);
       await act(async () => {
         client.setQueryData(['session'], { state: 'signed-in', subject: 'A', csrfToken: 'csrf-A' });
+        admitViewer('A');
       });
       // Leave a pending edit for the next address replacement.
       await render(direction);
@@ -183,6 +196,7 @@ test('mounted sort form retains score addresses until date selection and replace
   } finally {
     await act(async () => root.unmount());
     navigate.mockRestore();
+    releaseExposure();
     client.clear();
     window.close();
     for (const [key, descriptor] of previous) {
@@ -263,16 +277,25 @@ test('mounted unavailable recovery retains display and filters, retires the curs
         );
         const [restart, date] = [...host.querySelectorAll('a')];
         const restartSearch = validateShelfSearch(Object.fromEntries(new URL(restart!.href).searchParams));
-        expect(restartSearch).toEqual({ ...view, cursor: undefined });
+        expect(restartSearch).toMatchObject({
+          type: view.type,
+          state: view.state,
+          orderBy: view.orderBy,
+          direction: view.direction,
+          size: view.size,
+          columns: view.columns,
+        });
+        expect(restartSearch.cursor).toBeUndefined();
+        expect(restartSearch.layout).toBe(layout === 'grid' ? undefined : layout);
         const dateSearch = validateShelfSearch(Object.fromEntries(new URL(date!.href).searchParams));
         expect(dateSearch).toMatchObject({
           type: view.type,
           state: view.state,
-          layout,
           size: view.size,
           columns: view.columns,
           orderBy: 'finishedAt',
         });
+        expect(dateSearch.layout).toBe(layout === 'grid' ? undefined : layout);
         expect(dateSearch.cursor).toBeUndefined();
         restart!.focus();
         await act(async () =>
