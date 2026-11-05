@@ -256,7 +256,8 @@ test('the mounted Subject, canonical route, correction session and existing read
       storyArcProfileId,
       'en',
     )!;
-    expect(nonGlobalVisit).toMatchObject({ context: selectedContext, realm: undefined });
+    expect(nonGlobalVisit).toMatchObject({ context: selectedContext, definition: fixture.arc.subject.release });
+    expect(nonGlobalVisit).not.toHaveProperty('realm');
     const nonGlobalRoute = await loadRoute(nonGlobalEntry!);
     const beforeRefusal = profileLoads.length;
     await render(sessionFor((nonGlobalRoute as { id: string }).id, nonGlobalVisit));
