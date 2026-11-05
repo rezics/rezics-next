@@ -182,13 +182,13 @@ function queryClient(tx: CommandTransaction) {
   return { query: tx.query.bind(tx) };
 }
 
-function hashBytes(value: Buffer): string {
-  return value.toString('hex');
+function hashBytes(value: Uint8Array): string {
+  return Buffer.from(value).toString('hex');
 }
 
 /** The clear writer and own-page advice share the same retained-slot binding precondition. */
 export function classificationBallotClearPrecondition(
-  retainedBinding: Buffer | null,
+  retainedBinding: Uint8Array | null,
   current: Pick<CurrentClassificationAssociation, 'bindingHash'> | null,
 ): boolean {
   return current === null || retainedBinding === null || hashBytes(retainedBinding) === current.bindingHash;

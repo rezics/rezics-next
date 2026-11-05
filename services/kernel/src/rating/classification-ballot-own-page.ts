@@ -51,13 +51,13 @@ type ActorState = { eligible: boolean; generation: string; tombstoned: boolean; 
 type Slot = {
   subjectId: string;
   associationId: string;
-  bindingHash: Buffer;
+  bindingHash: Uint8Array;
   assessment: Assessment;
   falsePositive: boolean;
   revision: string;
   eligibilityGeneration: string;
 };
-type Contribution = { bindingHash: Buffer | null; revision: string | null };
+type Contribution = { subjectId: string; associationId: string; bindingHash: Uint8Array | null; revision: string | null };
 type PageItem = {
   state: 'available' | 'withheld';
   subjectId: string;
@@ -147,7 +147,7 @@ function validateKey(key: Key): void {
 
 function validateSlot(row: Slot): void {
   validateKey(row);
-  if (!Buffer.isBuffer(row.bindingHash) || row.bindingHash.byteLength !== 32) throw new Error('Invalid ballot binding');
+  if (row.bindingHash.byteLength !== 32) throw new Error('Invalid ballot binding');
   if (row.assessment !== 'support' && row.assessment !== 'oppose') throw new Error('Invalid current ballot assessment');
   if (!/^[1-9][0-9]*$/.test(row.revision)) throw new Error('Invalid current ballot revision');
 }
@@ -272,19 +272,19 @@ async function associations(
   return result;
 }
 
-async function associationRows<T>(
+async function associationRows<Input, Result>(
   deps: Dependencies,
-  rows: readonly T[],
-  idOf: (row: T) => Key,
-  query: (client: Pick<PoolClient, 'query'>, route: number, keys: string) => Promise<unknown[]>,
+  rows: readonly Input[],
+  idOf: (row: Input) => Key,
+  query: (client: Pick<PoolClient, 'query'>, route: number, keys: string) => Promise<Result[]>,
   deadline: number,
-) {
-  const groups = new Map<number, T[]>();
+): Promise<Result[]> {
+  const groups = new Map<number, Input[]>();
   for (const row of rows) {
     const route = routeOf(idOf(row).subjectId)!;
     groups.set(route, [...(groups.get(route) ?? []), row]);
   }
-  const result: unknown[] = [];
+  const result: Result[] = [];
   for (const [route, group] of groups) {
     const home = partitionOf(route)!;
     result.push(
@@ -341,8 +341,8 @@ export function createClassificationBallotOwnPageReader(deps: Dependencies) {
           if (actorStateKey(state) !== actorStateKey(initialState)) throw new AccessUnavailableError('contention');
           if (!state)
             return {
-              raw: [] as Slot[],
-              selectedSlot: null as Slot | null,
+              raw: [],
+              selectedSlot: null,
               selectedShown: continuation.selectedShown,
               hasMore: false,
             };
@@ -416,7 +416,7 @@ export function createClassificationBallotOwnPageReader(deps: Dependencies) {
       const readable = readableSlots.filter((slot) => {
         const key = keyOf(slot);
         const association = initialAssociations.get(key)!;
-        if (slot.bindingHash.toString('hex') !== association.bindingHash) return false;
+        if (Buffer.from(slot.bindingHash).toString('hex') !== association.bindingHash) return false;
         for (const current of [setAssociations.get(key), aggregateAssociations.get(key)])
           if (current && current.bindingHash !== association.bindingHash)
             throw new AccessUnavailableError('contention');
@@ -439,9 +439,9 @@ export function createClassificationBallotOwnPageReader(deps: Dependencies) {
       const contributionInputs = readable.map((slot) => ({
         subjectId: slot.subjectId,
         associationId: slot.associationId,
-        binding_hash: slot.bindingHash.toString('hex'),
+        binding_hash: Buffer.from(slot.bindingHash).toString('hex'),
       }));
-      const contributionRows = (await associationRows(
+      const contributionRows = await associationRows(
         deps,
         contributionInputs,
         (row) => row,
@@ -453,8 +453,10 @@ export function createClassificationBallotOwnPageReader(deps: Dependencies) {
             actor_id: owner.accountId,
           }),
         deadline,
-      )) as Array<{ subjectId: string; associationId: string; bindingHash: Buffer | null; revision: string | null }>;
-      const contributionByKey = new Map(contributionRows.map((row) => [keyOf(row), row as Contribution & Key]));
+      );
+      const contributionByKey = new Map(
+        contributionRows.map((row): [string, Contribution] => [keyOf(row), row]),
+      );
 
       const aggregateInputs = readable
         .filter(
@@ -464,7 +466,7 @@ export function createClassificationBallotOwnPageReader(deps: Dependencies) {
         .map((slot) => ({
           subjectId: slot.subjectId,
           associationId: slot.associationId,
-          binding_hash: slot.bindingHash.toString('hex'),
+          binding_hash: Buffer.from(slot.bindingHash).toString('hex'),
         }));
       const aggregateObservations = new Map<
         string,
@@ -507,8 +509,8 @@ export function createClassificationBallotOwnPageReader(deps: Dependencies) {
         deadline,
         async (client, state) => {
           if (actorStateKey(state) !== actorStateKey(initialState)) throw new AccessUnavailableError('contention');
-          if (!state) return [] as Slot[];
-          return (await selectCurrent.run(client, {
+          if (!state) return [];
+          return selectCurrent.run(client, {
             route: actorRoute,
             actor_id: owner.accountId,
             generation: state.generation,
@@ -518,7 +520,7 @@ export function createClassificationBallotOwnPageReader(deps: Dependencies) {
                 association_id: associationId,
               })),
             ),
-          })) as Slot[];
+          });
         },
         initialHomeEpoch,
       );
@@ -530,7 +532,7 @@ export function createClassificationBallotOwnPageReader(deps: Dependencies) {
         if (!slot) continue;
         const observedAssociation = initialAssociations.get(key) ?? null;
         const current =
-          observedAssociation && slot.bindingHash.toString('hex') === observedAssociation.bindingHash
+          observedAssociation && Buffer.from(slot.bindingHash).toString('hex') === observedAssociation.bindingHash
             ? observedAssociation
             : null;
         const clearPreparation = finalSetAssociations.get(key) ?? null;
@@ -559,7 +561,8 @@ export function createClassificationBallotOwnPageReader(deps: Dependencies) {
         const contribution = contributionByKey.get(key);
         const pending = current
           ? contribution?.revision === slot.revision &&
-            contribution.bindingHash?.toString('hex') === slot.bindingHash.toString('hex')
+            contribution.bindingHash !== null &&
+            Buffer.from(contribution.bindingHash).toString('hex') === Buffer.from(slot.bindingHash).toString('hex')
             ? ('current' as const)
             : ('pending' as const)
           : ('unknown' as const);
