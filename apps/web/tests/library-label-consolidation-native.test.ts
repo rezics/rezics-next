@@ -91,12 +91,16 @@ test('native paged review, original confirmation/apply replay and both movement 
   expect(j.visit.acknowledgementUnknown).toBe(true);
   expect(await j.visit.recover()).toBe('accepted');
   expect(j.requests.at(-1)!.headers.get('idempotency-key')).toBe(apply.headers.get('idempotency-key'));
-  // New commands must use the current owner, so restore the admitted owner envelope.
-  // The original retained transport alone survives the simulated credential substitution.
+  j.owner();
+  for (let item = 1; item < 5; item++) expect(await j.visit.apply()).toBe('accepted');
+  expect(j.visit.result!.status).toBe('completed');
+  expect(j.visit.result!.items[1]).toMatchObject({ status: 'moved', targetUnchanged: true,
+    targetAssignment: { id: j.existing.assignmentId, revision: j.existing.revision } });
+  expect((await j.read(j.source.id)).map(row => row.subjectId)).toEqual([j.items[5]!.subjectId]);
+  expect((await j.read(j.target.id)).map(row => row.subjectId).sort())
+    .toEqual(j.items.slice(0, 5).map(row => row.subjectId).sort());
   j.retire();
   expect(await j.visit.apply()).toBe('unavailable');
-  expect((await j.read(j.source.id)).map(row => row.subjectId)).not.toContain(j.items[0]!.subjectId);
-  expect((await j.read(j.target.id)).map(row => row.subjectId)).toContain(j.items[0]!.subjectId);
 }, 120_000);
 
 test('native mixed moves, uncertain target cancellation and original finite source Undo retain partial effects and controls', async () => {
