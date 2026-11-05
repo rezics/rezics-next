@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useOperation } from '../../kernel/exposure';
+import { getLocale } from '../../paraglide/runtime.js';
+import { AniListLabelAdoption } from './labels';
 import { m } from '../../paraglide/messages.js';
 import { PageHeading } from '../../shell/page-heading';
 import { createAniListJourney, type AniListJourney, type AniListJourneySnapshot } from './controller';
@@ -29,7 +31,7 @@ export function PersonalAniListImportPage({ visit }: { visit?: AniListVisit | nu
   const current = visit === undefined ? observed : visit;
   useOperation('library_entry.put');
   if (!current) return <AniListSignedOut />;
-  return <AniListImportSession key={`${current.subject}:${current.csrfToken}`} visit={current} />;
+  return <AniListImportSession key={`${current.subject}:${current.csrfToken}:${getLocale()}`} visit={current} />;
 }
 
 function AniListImportSession({ visit }: { visit: AniListVisit }) {
@@ -105,6 +107,27 @@ function AniListImportSession({ visit }: { visit: AniListVisit }) {
           onConfirm={() => act((current) => current.openConfirm())}
         />
       ) : null}
+      {snap.stage === 'review' || snap.stage === 'results' || snap.stage === 'cancelled'
+        ? snap.page
+            .filter((row) => row.labelEvidence)
+            .map((row) => (
+              <AniListLabelAdoption
+                key={`${snap.importId}:${row.ordinal}`}
+                row={row}
+                meta={snap.meta.find((item) => item.ordinal === row.ordinal)!}
+                busy={locked}
+                cancelled={snap.cancelled}
+                current={() => journey.current!.live()}
+                onChoose={(subjectId, selections) =>
+                  void act((current) => current.chooseLabels(row.ordinal, subjectId, selections))
+                }
+                onReview={() => void act((current) => current.reviewLabels(row.ordinal))}
+                onConfirm={() => void act((current) => current.confirmLabels(row.ordinal))}
+                onRead={() => void act((current) => current.readLabels(row.ordinal))}
+                onSearch={(query, cursor) => journey.current!.labelTargets(query, cursor)}
+              />
+            ))
+        : null}
       {snap.stage === 'confirm' ? (
         <AniListConfirmPage
           rows={snap.meta}

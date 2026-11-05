@@ -4,6 +4,8 @@ import {
   chunkConfirmations,
   encodedBytes,
   newCommandKey,
+  type AniListLabelSelection,
+  type AniListLabelReview,
   type AniListCommand,
   type AniListCompleteness,
   type AniListConfirmation,
@@ -148,6 +150,27 @@ function metaFromRow(
   const status = aniListStatusOf(row.source.evidence);
   return {
     ordinal: row.ordinal,
+    ...(row.labelEvidence
+      ? {
+          labels: {
+            subjectId:
+              previous?.labels?.subjectId ??
+              row.labelReview?.subjectId ??
+              observation?.subjectId ??
+              (row.match.state === 'matched' ? (row.match.candidates[0] ?? null) : null),
+            selections:
+              previous?.labels?.selections ??
+              row.labelReview?.items.map((item) => ({
+                key: item.key,
+                target: 'label' in item.target ? { labelId: item.target.label.id } : { name: item.target.name },
+              })) ??
+              [],
+            review: previous?.labels?.invalidated ? null : (row.labelReview ?? null),
+            invalidated: previous?.labels?.invalidated ?? false,
+            outcomes: previous?.labels?.outcomes?.reviewId === row.labelReview?.id ? previous.labels.outcomes : null,
+          },
+        }
+      : {}),
     title: aniListTitle(row.source.evidence, untitled),
     mediaType: aniListMediaType(row.source.evidence),
     status,
@@ -347,6 +370,9 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
       response.kind === 'page' ||
       response.kind === 'reviewed' ||
       response.kind === 'applied' ||
+      response.kind === 'labels-reviewed' ||
+      response.kind === 'labels-applied' ||
+      response.kind === 'labels-read' ||
       response.kind === 'cancelled'
     ) {
       notice = null;
@@ -367,6 +393,7 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
     const response = await run(command, () => port.page(command), retry);
     if (!response || response.kind !== 'page' || !live()) return snapshot();
     const current = response.page;
+    importId = id;
     page = current.rows;
     after = cursor;
     next = current.next;
@@ -758,6 +785,13 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
       retain();
       return snapshot();
     }
+    if (command.kind === 'review-labels') {
+      const response = await run(command, () => port.reviewLabels(command), true);
+      if (response?.kind === 'labels-reviewed') acceptLabelReview(response.ordinal, response.review);
+      return snapshot();
+    }
+    if (command.kind === 'apply-labels') return applyLabelCommand(command, true);
+    if (command.kind === 'read-labels') return readLabels(command.ordinal);
     if (command.kind === 'admit-source') {
       await admitQueued();
       if (!heldUnknown()) stage = 'results';
@@ -823,6 +857,100 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
     return snapshot();
   }
 
+  function chooseLabels(
+    ordinal: number,
+    subjectId: string | null,
+    selections: AniListLabelSelection[],
+  ): AniListJourneySnapshot {
+    if (!live() || busy || heldUnknown()) return snapshot();
+    const row = meta.get(ordinal)!;
+    row.labels = { subjectId, selections, review: null, invalidated: true, outcomes: null };
+    const visible = page.find((item) => item.ordinal === ordinal);
+    if (visible) delete visible.currentLabels;
+    return snapshot();
+  }
+
+  function acceptLabelReview(ordinal: number, review: AniListLabelReview): void {
+    const row = meta.get(ordinal)!;
+    row.labels = {
+      subjectId: review.subjectId,
+      selections: review.items.map((item) => ({
+        key: item.key,
+        target: 'label' in item.target ? { labelId: item.target.label.id } : { name: item.target.name },
+      })),
+      review,
+      invalidated: false,
+      outcomes: null,
+    };
+    const visible = page.find((item) => item.ordinal === ordinal);
+    if (visible) {
+      visible.labelReview = review;
+      delete visible.labelWork;
+      delete visible.currentLabels;
+    }
+  }
+
+  async function reviewLabels(ordinal: number): Promise<AniListJourneySnapshot> {
+    if (!importId || !live() || busy || heldUnknown() || cancelled) return snapshot();
+    const labels = meta.get(ordinal)!.labels!;
+    const command: Extract<AniListCommand, { kind: 'review-labels' }> = {
+      kind: 'review-labels',
+      importId,
+      key: newCommandKey(),
+      body: { ordinal, subjectId: labels.subjectId!, selections: labels.selections },
+      custody: { expectedReader: visit.subject, expectedCredential: visit.csrfToken },
+    };
+    const response = await run(command, () => port.reviewLabels(command));
+    if (response?.kind === 'labels-reviewed') acceptLabelReview(response.ordinal, response.review);
+    return snapshot();
+  }
+
+  async function readLabels(ordinal: number): Promise<AniListJourneySnapshot> {
+    const review = meta.get(ordinal)?.labels?.review;
+    if (!importId || !review || !live() || busy || heldUnknown()) return snapshot();
+    const command: Extract<AniListCommand, { kind: 'read-labels' }> = {
+      kind: 'read-labels',
+      importId,
+      ordinal,
+      subjectId: review.subjectId,
+    };
+    const response = await run(command, () => port.readLabels(command));
+    const visible = page.find((item) => item.ordinal === ordinal);
+    if (response?.kind === 'labels-read' && visible) visible.currentLabels = response.labels;
+    return snapshot();
+  }
+
+  async function applyLabelCommand(
+    command: Extract<AniListCommand, { kind: 'apply-labels' }>,
+    retry = false,
+  ): Promise<AniListJourneySnapshot> {
+    const response = await run(command, () => port.applyLabels(command), retry);
+    if (response?.kind !== 'labels-applied') return snapshot();
+    for (const outcome of response.result.outcomes) {
+      const labels = meta.get(outcome.ordinal)!.labels!;
+      labels.outcomes = outcome;
+    }
+    // A current read is an observation, never acknowledgement of an unresolved command.
+    for (const confirmation of command.body.confirmations) await readLabels(confirmation.ordinal);
+    return snapshot();
+  }
+
+  async function confirmLabels(ordinal: number): Promise<AniListJourneySnapshot> {
+    const labels = meta.get(ordinal)?.labels;
+    if (!importId || !labels?.review || labels.invalidated || !live() || busy || heldUnknown()) return snapshot();
+    return applyLabelCommand({
+      kind: 'apply-labels',
+      importId,
+      body: { confirmations: [{ ordinal, reviewId: labels.review.id }] },
+      custody: { expectedReader: visit.subject, expectedCredential: visit.csrfToken },
+    });
+  }
+
+  async function labelTargets(query: string, cursor?: string) {
+    cost.recordCall('label-targets');
+    return port.labelTargets(query, cursor);
+  }
+
   function openConfirm(): AniListJourneySnapshot {
     if (!reviewedConfirmations().length || cancelled || heldUnknown()) return snapshot();
     confirmPrivacy = false;
@@ -846,6 +974,11 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
 
   return {
     snapshot,
+    chooseLabels,
+    reviewLabels,
+    confirmLabels,
+    readLabels,
+    labelTargets,
     preview,
     loadPage,
     review,
@@ -863,6 +996,13 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
     nextPage: () => (importId && next !== null ? loadPage(importId, next) : Promise.resolve(snapshot())),
     refresh: async () => {
       if (heldUnknown()) return snapshot();
+      for (const row of page) {
+        const labels = meta.get(row.ordinal)?.labels;
+        if (labels && !Object.values(row.labelWork ?? {}).some((work) => work.createStarted || work.assignStarted)) {
+          labels.invalidated = true;
+          labels.review = null;
+        }
+      }
       const readStage = stage === 'results' ? 'results' : 'review';
       await readQuestion();
       return importId ? loadPage(importId, after, false, readStage) : snapshot();

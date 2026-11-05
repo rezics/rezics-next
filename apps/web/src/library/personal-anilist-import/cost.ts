@@ -8,7 +8,18 @@ import {
 } from './contract';
 
 /** Machine-independent work at the AniList loader/controller boundary. */
-export type AniListCallKind = 'preview' | 'page' | 'review' | 'apply' | 'cancel' | 'question' | 'score-readback';
+export type AniListCallKind =
+  | 'preview'
+  | 'page'
+  | 'review'
+  | 'apply'
+  | 'cancel'
+  | 'question'
+  | 'score-readback'
+  | 'review-labels'
+  | 'apply-labels'
+  | 'read-labels'
+  | 'label-targets';
 
 export type AniListCostSnapshot = {
   calls: Record<AniListCallKind, number>;
@@ -30,7 +41,19 @@ export type AniListCostSnapshot = {
 
 export function emptyAniListCost(): AniListCostSnapshot {
   return {
-    calls: { preview: 0, page: 0, review: 0, apply: 0, cancel: 0, question: 0, 'score-readback': 0 },
+    calls: {
+      preview: 0,
+      page: 0,
+      review: 0,
+      apply: 0,
+      cancel: 0,
+      question: 0,
+      'score-readback': 0,
+      'review-labels': 0,
+      'apply-labels': 0,
+      'read-labels': 0,
+      'label-targets': 0,
+    },
     retries: 0,
     pagesVisited: 0,
     reviewed: 0,
@@ -51,7 +74,17 @@ export function emptyAniListCost(): AniListCostSnapshot {
 export function aniListCallTotal(cost: AniListCostSnapshot): number {
   const calls = cost.calls;
   return (
-    calls.preview + calls.page + calls.review + calls.apply + calls.cancel + calls.question + calls['score-readback']
+    calls.preview +
+    calls.page +
+    calls.review +
+    calls.apply +
+    calls.cancel +
+    calls.question +
+    calls['score-readback'] +
+    calls['review-labels'] +
+    calls['apply-labels'] +
+    calls['read-labels'] +
+    calls['label-targets']
   );
 }
 

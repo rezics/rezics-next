@@ -224,3 +224,66 @@ export function AniListResultPage({
     </section>
   );
 }
+
+/** Receipts and current assignments are separate facts, including a created label awaiting assignment. */
+export function AniListLabelResult({
+  row,
+  labels,
+}: {
+  row: import('./contract').AniListRow;
+  labels: NonNullable<AniListRowMeta['labels']>;
+}) {
+  const outcomes =
+    labels.outcomes?.items ??
+    Object.values(row.labelWork ?? {}).flatMap((work) => (work.outcome ? [work.outcome] : []));
+  return (
+    <section className="space-y-3" data-anilist-label-results>
+      <ul className="space-y-2">
+        {outcomes.map((item) => (
+          <li key={item.key} data-anilist-label-outcome={item.status}>
+            <p>
+              {item.key} · {m.library_anilist_labels_outcome({ status: item.status })}
+            </p>
+            {item.label ? (
+              <p>
+                {m.library_anilist_labels_native_label()} · {item.label.id} · {item.label.revision}
+              </p>
+            ) : null}
+            {item.assignment ? (
+              <p>
+                {m.library_anilist_labels_assignment()} · {item.assignment.id} · {item.assignment.revision}
+              </p>
+            ) : null}
+            {item.reason ? <p>{item.reason}</p> : null}
+          </li>
+        ))}
+      </ul>
+      {Object.entries(row.labelWork ?? {})
+        .filter(([, work]) => work.label && !work.outcome)
+        .map(([index, work]) => (
+          <div key={index}>
+            <p>
+              {labels.review?.items[Number(index)]?.key} · {m.library_anilist_labels_native_label()} · {work.label!.id}{' '}
+              · {work.label!.revision}
+            </p>
+            <p role="status">{m.library_anilist_labels_incomplete()}</p>
+          </div>
+        ))}
+      <h4 className="font-medium">{m.library_anilist_labels_current()}</h4>
+      {row.currentLabels ? (
+        <ul>
+          {row.currentLabels.map((item) => (
+            <li key={item.id}>
+              {item.name} · {item.labelId} · {item.id} · {item.revision}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p>{m.library_anilist_labels_read_pending()}</p>
+      )}
+      {labels.outcomes?.complete === false || outcomes.some((item) => item.status === 'pending') ? (
+        <p role="status">{m.library_anilist_labels_incomplete()}</p>
+      ) : null}
+    </section>
+  );
+}
