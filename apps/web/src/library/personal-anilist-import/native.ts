@@ -46,7 +46,7 @@ import {
   type AniListUnknown,
 } from './contract';
 
-type NativeResult = { data?: unknown; error?: { value?: unknown } | null; status: number };
+type NativeResult<T = unknown> = { data?: T; error?: { value?: unknown } | null; status: number };
 type AniListSurface = NonNullable<KernelClient['libraryImports']['anilist']>;
 type IdResource = ReturnType<AniListSurface>;
 
@@ -310,10 +310,10 @@ export function kernelAniListPort(
     authorization,
     'idempotency-key': quotedIdempotencyKey(key),
   });
-  async function call<T>(
+  async function call<T, Data>(
     command: AniListCommand,
-    send: (anilist: AniListSurface, authorization: string) => Promise<NativeResult>,
-    read: (data: unknown) => T | undefined,
+    send: (anilist: AniListSurface, authorization: string) => Promise<NativeResult<Data>>,
+    read: (data: NonNullable<Data>) => T | undefined,
   ): Promise<T | AniListFailure | AniListUnknown> {
     const session = await withSession(request, sessionEnv, originConfigured);
     if ('kind' in session) return session;
@@ -322,7 +322,7 @@ export function kernelAniListPort(
     try {
       const result = await send(anilist, originalAuthorization ?? session.authorization);
       if (result.error) return outcomeOf(result.status, result.error.value, command);
-      const value = read(result.data);
+      const value = read(result.data!);
       if (!value) return { kind: 'unavailable' };
       return value;
     } catch (error) {
@@ -337,32 +337,14 @@ export function kernelAniListPort(
         command,
         (_anilist, authorization) =>
           aniListLabelRequests(client, authorization).review(command.importId, command.body, command.key),
-        (data) => {
-          // This is a generated native response at the HTTP boundary.
-          if (
-            !record(data) ||
-            typeof data.ordinal !== 'number' ||
-            !record(data.review) ||
-            typeof data.review.id !== 'string' ||
-            !Array.isArray(data.review.items)
-          )
-            return undefined;
-          return {
-            kind: 'labels-reviewed' as const,
-            ordinal: data.ordinal,
-            review: data.review as import('./contract').AniListLabelReview,
-          };
-        },
+        (data) => ({ kind: 'labels-reviewed' as const, ordinal: data.ordinal, review: data.review }),
       );
     },
     async applyLabels(command) {
       return call(
         command,
         (_anilist, authorization) => aniListLabelRequests(client, authorization).apply(command.importId, command.body),
-        (data) => {
-          if (!record(data) || !Array.isArray(data.outcomes) || typeof data.complete !== 'boolean') return undefined;
-          return { kind: 'labels-applied' as const, result: data as import('./contract').AniListLabelApplyResult };
-        },
+        (data) => ({ kind: 'labels-applied' as const, result: data }),
       );
     },
     async readLabels(command) {
