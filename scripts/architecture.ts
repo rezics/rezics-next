@@ -1138,13 +1138,7 @@ export function auditArchitecture(
         if (sourceModule.id === targetModule.id) continue;
         const publicTarget = isPublicTarget(edge.specifier, target, targetModule, exportTargets);
         if (!publicTarget)
-          add(
-            sourceModule.id,
-            'rule 2',
-            source,
-            stableEdge(edge, target),
-            `${sourceModule.id} -> ${targetModule.id}`,
-          );
+          add(sourceModule.id, 'rule 2', source, stableEdge(edge, target), `${sourceModule.id} -> ${targetModule.id}`);
         if (
           !(
             sourceModule.allowedDependencies.includes('*') || sourceModule.allowedDependencies.includes(targetModule.id)
