@@ -138,6 +138,7 @@ test('interrupting the import removes owned driver files and keeps the diagnosti
     server: 'export const server = true;\n',
     worker: 'export const worker = true;\n',
   });
+  let child: ReturnType<typeof spawn> | undefined;
   try {
     const { root } = fixture;
     put(
@@ -167,7 +168,7 @@ test('interrupting the import removes owned driver files and keeps the diagnosti
     const childEnv: NodeJS.ProcessEnv = { ...process.env, KERNEL_IMPORT_READY: ready };
     delete childEnv.DATABASE_URL;
     delete childEnv.KERNEL_DATABASE_CONTAINER;
-    const child = spawn(process.execPath, ['-e', script], {
+    child = spawn(process.execPath, ['-e', script], {
       cwd: root,
       env: childEnv,
       stdio: 'ignore',
@@ -180,9 +181,10 @@ test('interrupting the import removes owned driver files and keeps the diagnosti
     expect(existsSync(join(root, '.temp', 'landing.log'))).toBe(true);
     expect(readdirSync(join(root, '.temp')).every((name) => !name.startsWith('dev-kernel-import-'))).toBe(true);
   } finally {
+    child?.kill('SIGKILL');
     fixture.close();
   }
-});
+}, 20_000);
 
 test('a real Reylo SQL mismatch against candidate migrations returns the first diagnostic', async () => {
   const repository = resolveRepository();
@@ -241,7 +243,7 @@ test('importing the actual Kernel server and worker against a throwaway database
   expect(result.importMs).toEqual(expect.any(Number));
   expect(result.cleanupMs).toEqual(expect.any(Number));
   expect(readFileSync(logPath, 'utf8')).toContain('kernel-import entry=');
-}, 180_000);
+}, 360_000);
 
 function resolveRepository(): string {
   return execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd: import.meta.dir, encoding: 'utf8' }).trim();

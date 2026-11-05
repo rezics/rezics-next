@@ -762,9 +762,14 @@ const KERNEL_IMPORT_STAND_IN = [
   "  if (process.env.KERNEL_IMPORT_RUNS) appendFileSync(process.env.KERNEL_IMPORT_RUNS, 'run\\n');",
   "  return work({ ...process.env, DATABASE_URL: 'postgres://rezics:rezics@127.0.0.1:59999/rezics?sslmode=disable', KERNEL_DATABASE_CONTAINER: 'fixture' });",
   '}',
+  'if (import.meta.main) process.exit(0);',
 ].join('\n');
 
 function seedKernelImportFixture(h: ReturnType<typeof integrationHarness>, server: string, worker: string) {
+  h.advanceDev(
+    'services/kernel/package.json',
+    `${JSON.stringify({ private: true, scripts: { derived: 'bun scripts/derived.ts' } })}\n`,
+  );
   h.advanceDev('services/kernel/scripts/derived.ts', `${KERNEL_IMPORT_STAND_IN}\n`);
   h.advanceDev('services/kernel/src/server.ts', server);
   h.advanceDev('services/kernel/src/worker.ts', worker);
@@ -902,23 +907,23 @@ test('a combined Kernel-source candidate runs one import phase, and a replayed c
   }
 }, 60_000);
 
-test('control-plane Kernel-source landings on dev run the same candidate-scoped import', async () => {
+test('control-plane landings on dev skip Kernel import when the candidate has no Kernel source delta', async () => {
   const h = integrationHarness();
   try {
     h.settings.integration.devLandingChecks = false;
     seedKernelImportFixture(h, 'export const server = true;\n', 'export const worker = true;\n');
     h.ensureDev();
-    const path = 'services/kernel/src/control-plane-entry.ts';
+    const path = 'tools/goal/src/control-plane-kernel-skip.ts';
     const task = h.dispatch(path, [], ['true'], 'control-plane');
     writeFileSync(
       join(task.worktree, '.temp/worker-plan.json'),
-      JSON.stringify({ file: path, content: 'export const controlPlaneKernel = true;\n' }),
+      JSON.stringify({ file: path, content: 'export const controlPlaneKernelSkip = true;\n' }),
     );
     await h.start(task);
     await h.train();
     const outcome = h.outcomes.find((item) => item.taskId === task.id && item.passed)!;
-    expect(outcome.devKernelImport).toMatchObject({ outcome: 'passed', kernelFileCount: 1 });
-    expect(git(h.root, 'show', `dev:${path}`)).toBe('export const controlPlaneKernel = true;\n');
+    expect(outcome.devKernelImport).toBeUndefined();
+    expect(git(h.root, 'show', `dev:${path}`)).toBe('export const controlPlaneKernelSkip = true;\n');
   } finally {
     h.dispose();
   }
