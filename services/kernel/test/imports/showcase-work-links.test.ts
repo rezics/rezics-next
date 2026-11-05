@@ -4,6 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BatchCommand } from '@rezics/definitions/bulk';
+import { developmentShowcaseSelection } from '../../../../scripts/datasets/cross-media-seed.ts';
 import {
   crossMediaAliases,
   planCrossMediaSeed,
@@ -16,17 +17,32 @@ import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
 
 const globalContext = GLOBAL_CONTEXT;
-const linkedUrl = 'https://bgm.tv/subject/100';
+const sourceWork = 'v2002';
+const animeWork = '10380';
+const linkedUrl = `https://bgm.tv/subject/${animeWork}`;
 
 function tables(value = linkedUrl): CrossMediaTables {
   return {
     async *rows(provider, table) {
-      if (provider === 'bangumi' && table === 'subject') yield { id: 100, type: 2, name: 'STEINS;GATE' };
+      if (provider === 'bangumi' && table === 'subject') {
+        yield { id: 10380, type: 2, name: 'STEINS;GATE' };
+        yield { id: 84148, type: 1, name: 'STEINS;GATE' };
+        yield { id: 51, type: 2, name: 'CLANNAD' };
+      }
       if (provider !== 'vndb') return;
-      if (table === 'vn') yield { id: 'v410', olang: 'ja', alias: null };
-      if (table === 'vn_titles') yield { id: 'v410', lang: 'ja', official: 't', title: 'STEINS;GATE', latin: null };
-      if (table === 'entry_meta') yield { id: 'v410', revision: '7', lastmod: '2026-10-25' };
-      if (table === 'vn_extlinks') yield { id: 'v410', link: 1 };
+      if (table === 'vn') {
+        yield { id: sourceWork, olang: 'ja', alias: null };
+        yield { id: 'v4', olang: 'ja', alias: null };
+      }
+      if (table === 'vn_titles') {
+        yield { id: sourceWork, lang: 'ja', official: 't', title: 'STEINS;GATE', latin: null };
+        yield { id: 'v4', lang: 'ja', official: 't', title: 'CLANNAD', latin: null };
+      }
+      if (table === 'entry_meta') {
+        yield { id: sourceWork, revision: '7', lastmod: '2026-10-25' };
+        yield { id: 'v4', revision: '8', lastmod: '2026-10-25' };
+      }
+      if (table === 'vn_extlinks') yield { id: sourceWork, link: 1 };
       if (table === 'extlinks') yield { id: 1, site: 'website', value };
     },
   };
@@ -141,34 +157,53 @@ test('default seed publishes the cited VN work link on its own identity and refr
         return runtime.importTransport.batch(request);
       },
     };
-    const firstPlan = await planCrossMediaSeed(tables());
+    const firstPlan = await planCrossMediaSeed(tables(), { selection: developmentShowcaseSelection });
     const first = await seedCrossMedia(firstPlan, path, port, destination, { mediaDeadlineMs: 0 });
-    const vnId = subjectId(first.readings.find((row) => row.source === 'vndb' && row.externalId === 'v410')!);
-    const animeId = subjectId(first.readings.find((row) => row.source === 'bangumi' && row.externalId === '100')!);
+    const vnId = subjectId(first.readings.find((row) => row.source === 'vndb' && row.externalId === sourceWork)!);
+    const animeId = subjectId(first.readings.find((row) => row.source === 'bangumi' && row.externalId === animeWork)!);
     expect(vnId).not.toBe(animeId);
     expect(first.workLinks).toContainEqual(
       expect.objectContaining({
         source: expect.objectContaining({
           provider: 'vndb',
-          externalId: 'v410',
+          externalId: sourceWork,
           subject: expect.objectContaining({ subjectId: vnId }),
         }),
         sourceLink: { id: 1, site: 'website', value: linkedUrl },
         reference: expect.objectContaining({
           status: 'current',
           provider: 'bangumi',
-          externalId: '100',
+          externalId: animeWork,
           subject: expect.objectContaining({ subjectId: animeId }),
         }),
       }),
     );
+    const handoff = first.workLinks.find((link) => link.source.externalId === sourceWork)!;
+    expect(handoff.source.subject?.route.startsWith(`/subjects/${vnId}/`)).toBe(true);
+    expect(handoff.reference.status).toBe('current');
+    if (handoff.reference.status === 'current')
+      expect(handoff.reference.subject.route.startsWith(`/subjects/${animeId}/`)).toBe(true);
+    const firstCommandBodies = commands.map((command) => JSON.stringify(command));
+    const reopened = await seedCrossMedia(
+      await planCrossMediaSeed(tables(), { selection: developmentShowcaseSelection }),
+      path,
+      port,
+      destination,
+      { mediaDeadlineMs: 0 },
+    );
+    expect(commands.map((command) => JSON.stringify(command))).toEqual(firstCommandBodies);
+    expect(reopened.workLinks).toEqual(first.workLinks);
+    expect(
+      subjectId(reopened.readings.find((row) => row.source === 'vndb' && row.externalId === sourceWork)!),
+    ).toBe(vnId);
+
     const bridgeCandidates = await candidates(vnId, 'wdt:P5732');
-    const bridge = bridgeCandidates.candidates.find((candidate) => candidate.source?.external_id === 'v410')!;
+    const bridge = bridgeCandidates.candidates.find((candidate) => candidate.source?.external_id === sourceWork)!;
     expect(bridge).toMatchObject({
-      statement: { value: { content: '100' } },
+      statement: { value: { content: animeWork } },
       source: {
         source: crossMediaAliases.vndb,
-        external_id: 'v410',
+        external_id: sourceWork,
         record_revision: '7',
         converter_revision: 'vndb-work-links@1',
       },
@@ -197,31 +232,33 @@ test('default seed publishes the cited VN work link on its own identity and refr
     const currentAnime = await read(animeId);
     expect(currentVn.subject.id).not.toBe(currentAnime.subject.id);
     expect(currentVn.subject.type).not.toBe(currentAnime.subject.type);
-    expect(currentVn.subject.statements['wdt:P5732']?.map((item) => item.value.content)).toContain('100');
-    expect(currentVn.subject.statements['wdt:P3180']?.map((item) => item.value.content)).toContain('v410');
+    expect(currentVn.subject.statements['wdt:P5732']?.map((item) => item.value.content)).toContain(animeWork);
+    expect(currentVn.subject.statements['wdt:P3180']?.map((item) => item.value.content)).toContain(sourceWork);
     expect(currentVn.subject.statements['schema:url']?.map((item) => item.value.content)).toContain(linkedUrl);
-    expect(currentAnime.subject.statements['wdt:P5732']?.map((item) => item.value.content)).toContain('100');
+    expect(currentAnime.subject.statements['wdt:P5732']?.map((item) => item.value.content)).toContain(animeWork);
 
     const taken = await editor.http('/v1/sourceFences:takedown', {
       source: crossMediaAliases.vndb,
-      externalId: 'v410',
+      externalId: sourceWork,
       fieldGroup: 'facts',
       reason: 'Selected source work link fence',
     });
     expect(taken.status).toBe(200);
     const commandOffset = commands.length;
-    const refreshedPlan = await planCrossMediaSeed(tables('https://bgm.tv/subject/101'));
-    expect(refreshedPlan.records.vndb.find((record) => record.key === 'v410')?.revision).toBe('7');
+    const refreshedPlan = await planCrossMediaSeed(tables('https://bgm.tv/subject/101'), {
+      selection: developmentShowcaseSelection,
+    });
+    expect(refreshedPlan.records.vndb.find((record) => record.key === sourceWork)?.revision).toBe('7');
     const refreshed = await seedCrossMedia(refreshedPlan, path, port, destination, {
       mediaDeadlineMs: 0,
     });
     expect(commands.slice(commandOffset).filter((command) => command.op === 'create')).toEqual([]);
     const refreshedVnId = subjectId(
-      refreshed.readings.find((row) => row.source === 'vndb' && row.externalId === 'v410')!,
+      refreshed.readings.find((row) => row.source === 'vndb' && row.externalId === sourceWork)!,
     );
     expect(refreshedVnId).toBe(vnId);
     expect(refreshed.unresolved).toContainEqual(
-      expect.objectContaining({ holder: 'v410', property: 'wdt:P5732', reason: 'fenced_source_facts' }),
+      expect.objectContaining({ holder: sourceWork, property: 'wdt:P5732', reason: 'fenced_source_facts' }),
     );
     expect(refreshed.workLinks[0]?.candidateDigest).not.toBe(first.workLinks[0]?.candidateDigest);
     const afterFence = await read(vnId);
