@@ -273,6 +273,8 @@ export async function loadSubjectPage(
     realm?: string | undefined;
     continuation?: PageContinuation | undefined;
     authorization?: string | undefined;
+    /** Transport lifetime stays outside the serialized page-read input. */
+    signal?: AbortSignal | undefined;
   } = {},
 ): Promise<SubjectPageLoad> {
   if (!subjectIdPattern.test(id)) return { kind: 'missing' };
@@ -283,7 +285,7 @@ export async function loadSubjectPage(
       languages: requestLanguages(locale),
     },
     {
-      fetch: { redirect: 'manual' },
+      fetch: { redirect: 'manual', ...(options.signal ? { signal: options.signal } : {}) },
       ...(options.authorization ? { headers: { authorization: options.authorization } } : {}),
     },
   );

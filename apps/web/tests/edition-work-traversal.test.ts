@@ -36,6 +36,7 @@ const { loadViewPages } = await import('../src/features/pages/subject-frame');
 const { holderItems, statementItems } = await import('../src/features/pages/overview');
 
 const profile = profileJson as PresentationProfile;
+let requestSignal: AbortSignal | null | undefined;
 const definitions = (page: SubjectPageData) =>
   relationDefinitions(traversalRelease, pageRelationProperties(page), 'en');
 function render(
@@ -67,6 +68,7 @@ function group(page: SubjectPageData, node: string) {
 function clientFor(scenario: TraversalScenario, seen: { body: Record<string, any>; headers: Headers }[], status = 200) {
   return createKernelClient('http://fixture.test', {
     fetch: (async (input, init) => {
+      requestSignal = init?.signal;
       const request = new Request(input, init);
       expect(new URL(request.url).pathname).toBe('/v1/pages:read');
       const body = (await request.json()) as Record<string, any>;
@@ -150,7 +152,8 @@ test('creator-to-Works continues each current configured role independently with
       node,
       cursor: result.next,
     };
-    const section = await readRelationGroup(client, input, 'Bearer current-viewer');
+    const controller = new AbortController();
+    const section = await readRelationGroup(client, input, 'Bearer current-viewer', controller.signal);
     expect(section.ok).toBe(true);
     if (!section.ok) throw new Error('Expected current role');
     expect(section.body.next).toBeNull();
@@ -160,6 +163,7 @@ test('creator-to-Works continues each current configured role independently with
       continuation: { node, cursor: result.next },
     });
     expect(seen.at(-1)?.headers.get('authorization')).toBe('Bearer current-viewer');
+    expect(requestSignal).toBe(controller.signal);
     expect(relationGroupKey(input)).not.toEqual(relationGroupKey({ ...input, node: 'another-role' }));
     expect(relationGroupKey(input)).not.toEqual(relationGroupKey({ ...input, realm: undefined }));
     expect(relationGroupKey(input)).not.toEqual(relationGroupKey({ ...input, view: 'editions' }));
