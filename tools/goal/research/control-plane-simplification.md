@@ -8,8 +8,11 @@ Keep current-attempt fencing, immutable source identity, owned-process cancellat
 and the full promotion gate. They prevent concrete failures; removing their extra implementations is the saving.
 Do not add a new orchestration service to simplify this controller.
 
-This is a proposal, not an adopted change to delivery policy. No controller or harness code changes accompany it.
-The report stays at the contract's named path rather than creating a second research authority under `docs/research/`.
+The broader recommendations remain proposals. The hourly reporting boundary is adopted: rendering and event
+projections stay in `efficiency-report.ts`; delivery claims, persistence and notifier I/O live in
+`efficiency-report-delivery.ts`; canonical UTC-hour conversion lives in `efficiency-report-time.ts`. This is a
+code-boundary choice only and does not change delivery policy. Keep this report at its current path rather than
+creating a second research authority under `docs/research/`.
 
 The retained source is commit `7eca27f3e695e35a16f5a5d8f518bf4ef261511c`. At this revision there are **96**
 non-`*.test.ts` TypeScript files under `tools/goal/src`: 92 at its root and four provider adapters, totaling
@@ -341,19 +344,19 @@ mechanism. The live-call column names the behavior entry point, including paths 
 
 These are not dead merely because the source import graph does not call their `main` function.
 
-| Entry point under `tools/goal/scripts/` | Purpose and live caller                                                                      | Incident / decision                                                                                                                                                     |
-| --------------------------------------- | -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `cp-sync.ts`                            | Operator `sync/rollback` publishes a validated controller source using recorded ref history. | I17; **merge** with the release coordinator, keep rollback. Split its 1,251 lines into thin CLI, plan, validation and publication modules.                              |
-| `cp-config-smoke.ts`                    | Cp-sync's `configSmoke` loads real settings/routing before publication.                      | I17; **keep** one shared prepublication configuration check.                                                                                                            |
-| `check-compatibility.ts`                | Train/cp-sync compatibility subprocess validates the launcher/harness contract.              | I8, I17; **merge** into the shared protocol-validation entry point, retain the CLI shim during migration.                                                               |
-| `release-control-plane-batch.ts`        | Explicit operator batch release calls the train batch API.                                   | I17, I20; **merge** into release CLI after request-schema migration.                                                                                                    |
-| `launch-smoke.ts`                       | Train and cp-sync execute real/fake launch scenarios against an isolated candidate.          | I10, I20; **keep** real launch coverage; split 1,787 lines into provider scenarios, fixture control and CLI/report adapter, and delete fake-only lifecycle duplication. |
-| `gate-parity.ts`                        | Lifecycle scenarios/CLI compare coverage across script and candidate boundaries.             | I15, I20; **keep** cross-version parity as migration tests; **delete** obsolete version branches after the compatibility window closes.                                 |
-| `gate.ts`                               | Goal gate entry runs the isolated controller typecheck/tests.                                | I10, I20; **keep** one thin test entry, not another production scheduler.                                                                                               |
-| `candidate-cleanliness-probe.ts`        | Explicit probe/its tests compare candidate state across check execution.                     | I15; **merge** shared integrity assertion with train/runner while keeping the probe's real-Git boundary scenarios.                                                      |
-| `efficiency-report.ts`                  | Host hourly scheduler/CLI requests a completed-hour report.                                  | I8; **keep** a thin reporting adapter over the shared event projections.                                                                                                |
-| `check-host-route.ts`                   | Explicit route-management CLI applies/reverts only routes it owns.                           | No traced control-plane outage; **keep** as an operator transport prerequisite, separate from job retry policy.                                                         |
-| `smoke-codex-manager.ts`                | Explicit operator smoke exercises manager app-server connectivity.                           | I10; **merge** scenario/transport helpers with launch smoke, retain a focused operator command.                                                                         |
+| Entry point under `tools/goal/scripts/` | Purpose and live caller                                                                      | Incident / decision                                                                                                                                                                                             |
+| --------------------------------------- | -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cp-sync.ts`                            | Operator `sync/rollback` publishes a validated controller source using recorded ref history. | I17; **merge** with the release coordinator, keep rollback. Split its 1,251 lines into thin CLI, plan, validation and publication modules.                                                                      |
+| `cp-config-smoke.ts`                    | Cp-sync's `configSmoke` loads real settings/routing before publication.                      | I17; **keep** one shared prepublication configuration check.                                                                                                                                                    |
+| `check-compatibility.ts`                | Train/cp-sync compatibility subprocess validates the launcher/harness contract.              | I8, I17; **merge** into the shared protocol-validation entry point, retain the CLI shim during migration.                                                                                                       |
+| `release-control-plane-batch.ts`        | Explicit operator batch release calls the train batch API.                                   | I17, I20; **merge** into release CLI after request-schema migration.                                                                                                                                            |
+| `launch-smoke.ts`                       | Train and cp-sync execute real/fake launch scenarios against an isolated candidate.          | I10, I20; **keep** real launch coverage; split 1,787 lines into provider scenarios, fixture control and CLI/report adapter, and delete fake-only lifecycle duplication.                                         |
+| `gate-parity.ts`                        | Lifecycle scenarios/CLI compare coverage across script and candidate boundaries.             | I15, I20; **keep** cross-version parity as migration tests; **delete** obsolete version branches after the compatibility window closes.                                                                         |
+| `gate.ts`                               | Goal gate entry runs the isolated controller typecheck/tests.                                | I10, I20; **keep** one thin test entry, not another production scheduler.                                                                                                                                       |
+| `candidate-cleanliness-probe.ts`        | Explicit probe/its tests compare candidate state across check execution.                     | I15; **merge** shared integrity assertion with train/runner while keeping the probe's real-Git boundary scenarios.                                                                                              |
+| `efficiency-report.ts`                  | Host hourly scheduler/CLI requests a completed-hour report.                                  | I8; **keep** rendering over shared event projections here; isolate delivery state and notifier I/O in `efficiency-report-delivery.ts`, with shared UTC-hour conversion in the leaf `efficiency-report-time.ts`. |
+| `check-host-route.ts`                   | Explicit route-management CLI applies/reverts only routes it owns.                           | No traced control-plane outage; **keep** as an operator transport prerequisite, separate from job retry policy.                                                                                                 |
+| `smoke-codex-manager.ts`                | Explicit operator smoke exercises manager app-server connectivity.                           | I10; **merge** scenario/transport helpers with launch smoke, retain a focused operator command.                                                                                                                 |
 
 ## Target design and invariants
 
@@ -447,6 +450,8 @@ Use one worker-width decision that excludes check waiters, with physical check s
 Ship with durable-follow-up, worker-autonomy, retry-recovery/held/leftovers, stop-custody, settlement-contention,
 orphan/adoption/landing, stale-exit, check-wake and capacity tests. Add crash-boundary cases before and after
 claim/launch/exit/next-attempt commits, and simultaneous continuation harvest/recovery; assert exactly one next action.
+Boundary decision: grouped-research rewriting, group/member persistence, dispatch recovery, archival and completion delivery belong to backlog-research.ts; backlog.ts retains sweep admission and capacity accounting.
+
 Target net deletion: 2,000–3,500 lines across job/tasks/store/backlog/manager continuation. Existing rows remain
 readable through an adapter; rollback stops new admission briefly and uses the recorded old/new schema version.
 No live process is killed or cleared just to switch implementations.

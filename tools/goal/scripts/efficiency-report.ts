@@ -1,12 +1,9 @@
 #!/usr/bin/env bun
 import { join } from 'node:path';
 import { openDb } from '../src/db.ts';
-import {
-  completedUtcHour,
-  parseUtcHour,
-  renderHourlyEfficiencyReport,
-  sendHourlyEfficiencyReport,
-} from '../src/efficiency-report.ts';
+import { completedUtcHour, parseUtcHour } from '../src/efficiency-report-time.ts';
+import { sendHourlyEfficiencyReport } from '../src/efficiency-report-delivery.ts';
+import { renderHourlyEfficiencyReport } from '../src/efficiency-report.ts';
 import { loadSettings } from '../src/config.ts';
 
 type Arguments = { send: boolean; scheduled: boolean; bucket?: string };

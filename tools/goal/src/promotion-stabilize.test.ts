@@ -1,9 +1,11 @@
-import { expect, test } from 'bun:test';
+import { expect, setDefaultTimeout, test } from 'bun:test';
 import { appendFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { git } from './merge.ts';
 import { promote } from './promotion.ts';
 import { integrationHarness } from './test-support.ts';
+
+setDefaultTimeout(30_000);
 
 const failure = { passed: false, output: 'AssertionError: incompatible fixture', timedOut: false };
 const success = { passed: true, output: '', timedOut: false };
@@ -169,6 +171,26 @@ test('a stabilize publish merges main into dev, keeping dev for derived files, a
   }
 });
 
+test('promotion without a stabilize branch cuts one from a passing quick-gated dev snapshot', async () => {
+  const h = integrationHarness();
+  try {
+    const task = await h.seed('first');
+    expect(git(h.root, 'branch', '--list', 'stabilize')).toBe('');
+    const gated: string[] = [];
+    await h.promote(async (command, cwd) => {
+      if (command[0] === 'true') gated.push(git(cwd, 'rev-parse', 'HEAD'));
+      return success;
+    });
+    const published = h.head('main');
+    expect(gated.length).toBeGreaterThan(0);
+    expect(new Set(gated)).toEqual(new Set([published]));
+    expect(h.head('stabilize')).toBe(published);
+    expect(h.store.task(task.id).state).toBe('merged');
+  } finally {
+    h.dispose();
+  }
+});
+
 test('promotion without a stabilize branch does not cut from a dev commit that fails its quick gate', async () => {
   const h = integrationHarness();
   try {
@@ -210,6 +232,34 @@ function commitOnMain(h: ReturnType<typeof integrationHarness>, path: string): s
   git(h.root, 'commit', '-m', `Change ${path} on main`);
   return h.head('main');
 }
+
+test('a moving dev ref during publish is merged back and then advances stabilize', async () => {
+  const h = integrationHarness();
+  try {
+    const task = await h.seed('stable');
+    const candidate = h.head();
+    createStabilize(h, candidate);
+    let extra = '';
+    await promote({
+      settings: h.settings,
+      job: h.job,
+      runGate: async () => success,
+      beforeAdvance: () => {
+        extra ||= commitOn(h, 'dev', h.head('dev'), { extra: 'extra\n' });
+      },
+    });
+    await h.job.drain();
+    expect(extra).not.toBe('');
+    expect(h.head('main')).toBe(candidate);
+    expect(git(h.root, 'merge-base', '--is-ancestor', candidate, 'dev')).toBe('');
+    expect(git(h.root, 'merge-base', '--is-ancestor', extra, 'dev')).toBe('');
+    expect(git(h.root, 'show', 'dev:extra')).toBe('extra');
+    expect(h.head('stabilize')).toBe(h.head('dev'));
+    expect(h.store.task(task.id).state).toBe('merged');
+  } finally {
+    h.dispose();
+  }
+});
 
 test('a snapshot gated while main took control-plane commits is published merged with them', async () => {
   const h = integrationHarness();

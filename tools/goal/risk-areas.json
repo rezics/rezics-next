@@ -1,7 +1,10 @@
 {
   "version": 1,
   "areas": {
-    "authorization": ["**/auth/**", "**/authorization/**", "**/permissions/**"],
+    "authorization": {
+      "include": ["**/auth/**", "**/authorization/**", "**/permissions/**"],
+      "exclude": ["services/auth/scripts/**"]
+    },
     "disclosure": ["**/disclosure/**", "**/visibility/**"],
     "rights": ["**/rights/**", "**/licensing/**"],
     "deletion": ["**/deletion/**", "**/delete/**"],

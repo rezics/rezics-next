@@ -271,6 +271,7 @@ export async function runWorkerCommand(
               `Bottleneck: ${result.bottleneck ?? 'unknown'}`,
               `Over-budget launches by layer: ${JSON.stringify(result.overBudgetLaunchesByLayer)}`,
               `Attempts per integrated task: ${result.attemptsPerIntegrated ?? 'unknown'}`,
+              `Dev landing transpile: ${result.devTranspile.successfulChecks} passed, ${result.devTranspile.repairHandbacks} repair handbacks, ${result.devTranspile.unavailable} unavailable; ${result.devTranspile.measuredChecks} measured checks, ${result.devTranspile.totalMs === null ? 'cost unavailable' : `${result.devTranspile.totalMs}ms total`}.`,
               `Urgent: ${result.urgent.tasks.length} tasks; ${result.urgent.integrated} integrated (${result.urgent.tasks.join(', ') || 'none'}); excluded from throughput.`,
               ...formatPageDataFlowRuns(result.pageDataRuns),
               ...result.stages.map((s) => `${s.stage}: total ${s.totalMs}ms, p50 ${s.p50Ms}ms, p90 ${s.p90Ms}ms`),

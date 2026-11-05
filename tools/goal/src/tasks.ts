@@ -21,6 +21,7 @@ import {
   devProductBrief,
   assertBriefDispatchable,
   parseBrief,
+  protectedRiskAreasForBrief,
   readRiskOwnership,
   withStabilizeTarget,
 } from './briefs.ts';
@@ -30,14 +31,8 @@ import { classifyTask, readRouting, retryFallbacks, routeTask } from './routing.
 import { choosePoolWithFallback, PoolPolicyReloader } from './pools.ts';
 import { pace, readCodexSchedule } from './pacing.ts';
 import { readPool, withObservedExhaustion, type PoolReader } from './usage.ts';
-import {
-  applyRenderedPrompt,
-  awaitHostCapacity,
-  launch,
-  renderWorkerPrompt,
-  startsFirst,
-  type RunningWorker,
-} from './launch.ts';
+import { applyRenderedPrompt, launch, renderWorkerPrompt, type RunningWorker } from './launch.ts';
+import { awaitHostCapacity, startsFirst } from './launch-capacity.ts';
 import { rebaseOnto } from './merge-train.ts';
 import { completeRebaseConflictContext } from './conflict-progress.ts';
 import {
@@ -211,6 +206,8 @@ export type RetryOptions = {
   freshSession?: boolean;
   /** The page-data controller may resume one integrated task when its retained provider session is available. */
   pageDataRepairKey?: string;
+  /** Exact compiler feedback returned from a dev landing, delivered through the retained worker session. */
+  landingDiagnostic?: string;
 };
 /** Metadata-only first/future proof registration, including stopped/exited runs with historical reservations. */
 export type ProofStartOptions = {
@@ -518,12 +515,14 @@ export class WorkerTasks {
       lease.release();
     }
   }
-  /** Patterns of the risk areas a brief did not declare, which a worker may not change outside its declared paths. */
-  protectedPaths(brief: { riskAreas: readonly string[] }): string[] {
+  /** Per-area undeclared rules preserve exclusions and overlapping ownership in the persisted landing request. */
+  protectedRiskAreas(brief: { riskAreas: readonly string[] }) {
     const ownership = readRiskOwnership(this.settings.riskAreasFile, this.settings.policy?.brief);
-    return Object.entries(ownership.areas)
-      .filter(([area]) => !brief.riskAreas.includes(area))
-      .flatMap(([, patterns]) => patterns);
+    return protectedRiskAreasForBrief(ownership, brief.riskAreas);
+  }
+  /** Flattened legacy view for callers that still construct pre-snapshot queued requests. */
+  protectedPaths(brief: { riskAreas: readonly string[] }): string[] {
+    return this.protectedRiskAreas(brief).flatMap(({ include }) => include);
   }
   async retry(taskId: string, options: RetryOptions = {}): Promise<RunningWorker> {
     const worker = await this.retryTask(taskId, options);
@@ -1719,6 +1718,7 @@ export class WorkerTasks {
               renderWorkerPrompt({
                 task,
                 evidence: options.evidence,
+                landingDiagnostic: options.landingDiagnostic,
                 resolutionFiles: [],
                 mainCheckout: this.settings.mainCheckout,
                 launchContext: context,
@@ -1772,6 +1772,7 @@ export class WorkerTasks {
                 task,
                 evidence: options.evidence,
                 consultation: options.consultation,
+                landingDiagnostic: options.landingDiagnostic,
                 resolutionFiles: [],
                 mainCheckout: this.settings.mainCheckout,
                 launchContext: context,
@@ -1874,6 +1875,7 @@ export class WorkerTasks {
             task,
             evidence: options.evidence,
             consultation: options.consultation,
+            landingDiagnostic: options.landingDiagnostic,
             resolutionFiles: files,
             mainCheckout: this.settings.mainCheckout,
             launchContext: context,

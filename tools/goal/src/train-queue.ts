@@ -2,7 +2,13 @@ import { Database } from 'bun:sqlite';
 import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { controlPlaneReleaseBrief } from './briefs.ts';
-import { StaleAttemptError, type AttemptFence, type GateOutcome, type GateOutcomeSink } from './contracts.ts';
+import {
+  StaleAttemptError,
+  type AttemptFence,
+  type DevLandingTranspileHandoff,
+  type GateOutcome,
+  type GateOutcomeSink,
+} from './contracts.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import type { LandingEntry, SqliteLandingQueue } from './land.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
@@ -24,6 +30,7 @@ export type BatchLandingResult = {
   deferredIds: number[];
   skippedIds: number[];
   resolution?: DevResolutionHandoff;
+  transpileHandoff?: DevLandingTranspileHandoff;
 };
 
 export type TrainQueueConfigurationReloader<T> = () => T | Promise<T>;
@@ -57,7 +64,7 @@ export type TrainQueueOptions<TConfiguration> = {
     lane: 'main' | 'dev',
     handOff: () => Promise<void>,
     drainDev: () => Promise<void>,
-  ) => Promise<GateOutcome | DevResolutionHandoff | undefined>;
+  ) => Promise<GateOutcome | DevResolutionHandoff | DevLandingTranspileHandoff | undefined>;
   resolveDevLanding: (pending: DevResolutionHandoff) => Promise<void>;
 };
 
@@ -180,6 +187,7 @@ export class TrainQueue<TConfiguration> {
       const roundHead = this.integrationHead();
       const deferred = new Set<number>();
       const pendingDevResolutions: DevResolutionHandoff[] = [];
+      const pendingDevTranspiles: DevLandingTranspileHandoff[] = [];
       let processedEntry = false;
       let retire = false;
       let stop = false;
@@ -230,6 +238,10 @@ export class TrainQueue<TConfiguration> {
                   o.queue.beginResolution(integrated.resolution.entry.id);
                   pendingDevResolutions.push(integrated.resolution);
                 }
+                if (integrated.transpileHandoff) {
+                  o.queue.beginResolution(integrated.transpileHandoff.entryId);
+                  pendingDevTranspiles.push(integrated.transpileHandoff);
+                }
                 for (const id of integrated.skippedIds) {
                   o.queue.acknowledge(id);
                   retryDeferred.delete(id);
@@ -263,6 +275,11 @@ export class TrainQueue<TConfiguration> {
                 if (isDevResolutionHandoff(integration)) {
                   o.queue.beginResolution(entry.id);
                   pendingDevResolutions.push(integration);
+                  continue;
+                }
+                if (isDevLandingTranspileHandoff(integration)) {
+                  o.queue.beginResolution(entry.id);
+                  pendingDevTranspiles.push(integration);
                   continue;
                 }
                 const outcome = integration;
@@ -325,8 +342,25 @@ export class TrainQueue<TConfiguration> {
         lease.release();
       }
 
+      if (pendingDevTranspiles.length) {
+        for (const handoff of pendingDevTranspiles) {
+          if (!o.sink.onDevLandingTranspileHandoff)
+            throw new Error('dev landing transpile handoff requires the worker continuation sink');
+          o.sink.onDevLandingTranspileHandoff(handoff);
+          o.queue.acknowledge(handoff.entryId);
+        }
+      }
+
       if (pendingDevResolutions.length) {
         for (const pending of pendingDevResolutions) await o.resolveDevLanding(pending);
+        if (retire || stale()) {
+          await handOff();
+          return;
+        }
+        continue;
+      }
+
+      if (pendingDevTranspiles.length) {
         if (retire || stale()) {
           await handOff();
           return;
@@ -358,6 +392,14 @@ export class TrainQueue<TConfiguration> {
   }
 }
 
-function isDevResolutionHandoff(value: GateOutcome | DevResolutionHandoff | undefined): value is DevResolutionHandoff {
+function isDevResolutionHandoff(
+  value: GateOutcome | DevResolutionHandoff | DevLandingTranspileHandoff | undefined,
+): value is DevResolutionHandoff {
   return !!value && 'kind' in value && value.kind === 'dev-resolution';
+}
+
+function isDevLandingTranspileHandoff(
+  value: GateOutcome | DevResolutionHandoff | DevLandingTranspileHandoff | undefined,
+): value is DevLandingTranspileHandoff {
+  return !!value && 'kind' in value && value.kind === 'dev-landing-transpile';
 }

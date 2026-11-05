@@ -665,7 +665,7 @@ function acceptedBatch(h: ReturnType<typeof integrationHarness>, tasks: readonly
         branch: current.branch,
         worktree: current.worktree,
         declaredPaths: current.brief.paths,
-        protectedPaths: h.tasks.protectedPaths(current.brief),
+        protectedRiskAreas: h.tasks.protectedRiskAreas(current.brief),
         gate: current.brief.acceptance.command,
       };
     });
@@ -1441,7 +1441,7 @@ function batchRuntime(h: ReturnType<typeof integrationHarness>, train = semantic
         branch: task.branch,
         worktree: task.worktree,
         declaredPaths: task.brief.paths,
-        protectedPaths: h.tasks.protectedPaths(task.brief),
+        protectedRiskAreas: h.tasks.protectedRiskAreas(task.brief),
         gate: task.brief.acceptance.command,
       };
     },

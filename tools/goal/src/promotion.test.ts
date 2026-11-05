@@ -1,8 +1,61 @@
-import { expect, test } from 'bun:test';
+import { expect, setDefaultTimeout, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
-import { git } from './merge.ts';
+import { firstFailure, git } from './merge.ts';
+import { promote } from './promotion.ts';
+import type { PromotionRun } from './types.ts';
 import { integrationHarness } from './test-support.ts';
+
+setDefaultTimeout(30_000);
+
+const success = { passed: true, output: '', timedOut: false };
+
+test('a matching failure on main is classified as an environment failure through the promotion entry', async () => {
+  const h = integrationHarness();
+  try {
+    const task = await h.seed('candidate');
+    const mainBase = h.head('main');
+    const devHead = h.head();
+    git(h.root, 'branch', 'stabilize', devHead);
+    const failure = firstFailure('AssertionError: shared baseline failure');
+    const run: PromotionRun = {
+      id: 'promotion-baseline-fixture',
+      phase: 'classify-main',
+      mainBase,
+      devHead,
+      taskIds: [task.id],
+      rootGate: ['fixture-gate'],
+      promotionParallelism: h.settings.promotionParallelism,
+      boundaries: [{ taskId: task.id, commit: task.integratedCommit! }],
+      headResults: [
+        {
+          commit: devHead,
+          command: ['fixture-gate'],
+          passed: false,
+          timedOut: false,
+          firstFailure: failure,
+        },
+      ],
+      prefixResults: [],
+      failedCommand: ['fixture-gate'],
+      firstFailure: failure,
+    };
+    h.store.savePromotion(run);
+    const checked: { commit: string; command: string[] }[] = [];
+
+    await h.promote(async (command, cwd) => {
+      checked.push({ commit: git(cwd, 'rev-parse', 'HEAD'), command: [...command] });
+      return { passed: false, output: 'AssertionError: shared baseline failure', timedOut: false };
+    });
+
+    expect(checked).toEqual([{ commit: mainBase, command: ['fixture-gate'] }]);
+    expect(h.head('main')).toBe(mainBase);
+    expect(h.head()).toBe(devHead);
+    expect(h.store.promotion()).toMatchObject({ phase: 'report-environment', mainResult: { passed: false } });
+  } finally {
+    h.dispose();
+  }
+});
 
 test('a stale verifier ref thousands of commits behind cannot pin promotion or bypass the frozen candidate gate', async () => {
   const h = integrationHarness();
@@ -60,6 +113,89 @@ test('a stale verifier ref thousands of commits behind cannot pin promotion or b
       ]),
     );
     expect(h.store.promotion()?.phase).toBe('stabilize-blocked');
+  } finally {
+    h.dispose();
+  }
+});
+
+test('promotion publishes the exact gated candidate onto main', async () => {
+  const h = integrationHarness();
+  try {
+    const task = await h.seed('candidate');
+    const candidate = h.head();
+    git(h.root, 'branch', 'stabilize', candidate);
+    const gated: string[] = [];
+    await h.promote(async (command, cwd) => {
+      if (command[0] === 'true') gated.push(git(cwd, 'rev-parse', 'HEAD'));
+      return success;
+    });
+    const published = h.head('main');
+    expect(gated.length).toBeGreaterThan(0);
+    expect(new Set(gated)).toEqual(new Set([published]));
+    expect(h.store.task(task.id).state).toBe('merged');
+    expect(h.store.task(task.id).mergedCommit).toBe(published);
+    expect(h.store.promotion()).toBeUndefined();
+  } finally {
+    h.dispose();
+  }
+});
+
+test('beforeAdvance concurrent main fast-forward still publishes the gated candidate', async () => {
+  const h = integrationHarness();
+  try {
+    const task = await h.seed('candidate');
+    const originalMain = h.head('main');
+    const candidate = h.head();
+    git(h.root, 'branch', 'stabilize', candidate);
+    let seen = '';
+    await promote({
+      settings: h.settings,
+      job: h.job,
+      runGate: async () => success,
+      beforeAdvance: () => {
+        seen = h.head('main');
+        git(h.root, 'merge', '--ff-only', '--no-edit', candidate);
+      },
+    });
+    await h.job.drain();
+    expect(seen).toBe(originalMain);
+    expect(h.head('main')).toBe(candidate);
+    expect(h.store.task(task.id).state).toBe('merged');
+    expect(h.store.promotion()).toBeUndefined();
+  } finally {
+    h.dispose();
+  }
+});
+
+test('an already-published main head replays without moving refs', async () => {
+  const h = integrationHarness();
+  try {
+    const task = await h.seed('candidate');
+    const candidate = h.head();
+    git(h.root, 'branch', 'stabilize', candidate);
+    await h.promote(async () => success);
+    const published = h.head('main');
+    expect(h.store.task(task.id).state).toBe('merged');
+    h.store.savePromotion({
+      id: 'replay-publish',
+      phase: 'publish-main',
+      mainBase: published,
+      devHead: published,
+      taskIds: [task.id],
+      rootGate: ['true'],
+      promotionParallelism: h.settings.promotionParallelism,
+      boundaries: [{ taskId: task.id, commit: published }],
+      headResults: [],
+      prefixResults: [],
+      promoteHead: published,
+      promoteTaskIds: [task.id],
+    });
+    await h.promote(async () => {
+      throw new Error('already-published replay cannot run a gate');
+    });
+    expect(h.head('main')).toBe(published);
+    expect(h.store.task(task.id).state).toBe('merged');
+    expect(h.store.promotion()).toBeUndefined();
   } finally {
     h.dispose();
   }

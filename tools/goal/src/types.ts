@@ -327,6 +327,8 @@ export type RetryIntent = AttemptRef & {
     /** A check-host transport failure retries only while no check host is in a probed outage. */
     awaitCheckHosts?: boolean;
     profile?: Profile;
+    /** Exact dev-landing compiler feedback for the same-session continuation. */
+    landingDiagnostic?: string;
   };
   status: 'pending' | 'started' | 'abandoned';
   abandonedBy?: 'stop' | 'cancel';

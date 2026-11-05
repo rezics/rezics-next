@@ -7,7 +7,8 @@ import { CHECK_HOST_TRANSPORT, readLogTail } from './records.ts';
 import type { WorkerStore } from './store.ts';
 import type { Attempt, RetryIntent, Task } from './types.ts';
 import type { ManagerEventKind } from './contracts.ts';
-import { capacityWaiters, checkWaitMs } from './launch.ts';
+import { checkWaitMs } from './launch.ts';
+import { capacityWaiters } from './launch-capacity.ts';
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
 
 // Each check is a state the control plane should never stay in. A violation that persists means work has silently

@@ -76,10 +76,19 @@ export const GUARDS = {
     repair: 'Resolve the conflicting requirement and issue a current brief.',
   },
   'undeclared-risk-area': {
-    defect: 'A change enters a protected risk area the brief did not declare.',
+    defect:
+      'An undeclared production change can alter authorization, disclosure, rights, deletion or account controls.',
     owner: 'control-plane',
     since: '2026-11-05',
-    repair: 'Keep the protected file unchanged or declare its owning risk area.',
+    repair: 'Keep protected production files unchanged or declare every applicable risk area.',
+  },
+  'dev-landing-transpile': {
+    defect:
+      'A changed dev TypeScript file contains a compile error, including the observed boot-breaking const reassignment.',
+    owner: 'control-plane',
+    since: '2026-11-05',
+    repair:
+      'Return the first Bun diagnostic and retained log to the original worker session; repair in place and transpile the recomposed candidate before landing. Cost target: <1000ms per typical landing. Measured disposable fixture: 7ms for 7 changed files, 4 executable TypeScript entries and 180 source bytes.',
   },
   'round-limit': {
     defect: 'The attempt reached its configured repair round limit.',
@@ -148,10 +157,10 @@ export const GUARDS = {
     repair: 'Resolve the conflict in the worker branch or with the dev resolver.',
   },
   'scope-failed': {
-    defect: 'A landing scope check rejected an unsafe source change.',
+    defect: 'A candidate file matched a protected production risk area not declared by its brief.',
     owner: 'control-plane',
     since: '2026-11-05',
-    repair: 'Repair the protected-path change or declare its risk area.',
+    repair: 'Declare the applicable production risk area or correct a tooling-path ownership rule.',
   },
   'frozen-acceptance-change': {
     defect: 'A worker changed acceptance files frozen by the controller.',
