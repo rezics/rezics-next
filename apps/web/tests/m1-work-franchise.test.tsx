@@ -97,7 +97,7 @@ function read(
 function pageFor(source: SubjectRead): SubjectPageData {
   const content = [
     workDocument.content[0]!,
-    { type: 'OutgoingRelations', props: { id: 'franchise', title: { en: 'Related works' }, property, limit: 8 } },
+    { type: 'OutgoingRelations', props: { id: 'franchise', title: { en: 'Related works' }, property, limit: 8, paged: true } },
     ...Object.keys(source.subject.statements)
       .filter((key) => key !== property)
       .map((key) =>
