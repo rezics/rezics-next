@@ -14,7 +14,10 @@ CREATE TABLE commerce.purchase_order_retention_policy (
   route integer NOT NULL,
   order_id uuid NOT NULL,
   buyer_account_id uuid NOT NULL,
-  fields text[] NOT NULL CHECK (fields = ARRAY['buyer_account_id','checkout_url','expires_at']::text[]),
+  fields text[] NOT NULL CHECK (
+    fields = ARRAY['buyer_account_id','checkout_url','expires_at']::text[]
+    AND array_position(fields, NULL) IS NULL
+  ),
   purpose text NOT NULL CHECK (char_length(purpose) BETWEEN 1 AND 200),
   expires_at timestamptz NOT NULL CHECK (isfinite(expires_at)),
   PRIMARY KEY (route, order_id),
@@ -50,7 +53,10 @@ ALTER TABLE commerce.erasure_progress
   ),
   ADD CONSTRAINT erasure_progress_retention_check CHECK (
     (retention_store IS NULL AND retention_fields IS NULL AND retention_purpose IS NULL AND retention_expires_at IS NULL)
-    OR (retention_store = 'commerce.purchase_order_retained' AND retention_fields IS NOT NULL
+    OR (retention_store = 'commerce.purchase_order_retained'
+        AND retention_fields IS NOT NULL
+        AND retention_fields = ARRAY['buyer_account_id','checkout_url','expires_at']::text[]
+        AND array_position(retention_fields, NULL) IS NULL
         AND retention_purpose IS NOT NULL AND retention_expires_at IS NOT NULL)
   );
 

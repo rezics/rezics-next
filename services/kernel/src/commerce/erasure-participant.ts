@@ -142,7 +142,7 @@ export async function prepareCommerceOrderRetention(pool: Pool, input: { orderId
         throw new Error('Native Commerce retention expiry must be after configuration');
       const owner = (await readRetentionOwner.run(tx, ownerKey))[0];
       if (!owner) throw new Error('Order retention configuration requires a genuine active native order');
-      const prior = (await listRetentionPolicy.run(tx, { route, account_id: owner.buyerAccountId }))[0];
+      const prior = await listRetentionPolicy.run(tx, { route, account_id: owner.buyerAccountId });
       if (
         prior &&
         (prior.purpose !== NATIVE_TEST_ORDER_RETENTION_PURPOSE ||
@@ -157,11 +157,11 @@ export async function prepareCommerceOrderRetention(pool: Pool, input: { orderId
         purpose: NATIVE_TEST_ORDER_RETENTION_PURPOSE,
         expires_at: expiresAt,
       });
-      const retained = (await readRetentionPolicy.run(tx, {
+      const retained = await readRetentionPolicy.run(tx, {
         route,
         order_id: input.orderId,
         account_id: owner.buyerAccountId,
-      }))[0];
+      });
       if (
         !retained ||
         retained.purpose !== NATIVE_TEST_ORDER_RETENTION_PURPOSE ||
@@ -369,7 +369,7 @@ export async function advanceCommerceErasure(pool: Pool, accountId: string): Pro
           }
           retainedPolicy = {
             retentionStore: ORDER_RETENTION_STORE,
-            retentionFields: order.fields,
+            retentionFields: [...NATIVE_TEST_ORDER_RETENTION_FIELDS],
             retentionPurpose: order.purpose,
             retentionExpiresAt: order.expiresAt,
           };
@@ -424,7 +424,7 @@ export async function advanceCommerceErasure(pool: Pool, accountId: string): Pro
         throw new Error('Commerce retained-order metadata is incomplete');
       exceptions.push({
         store: retained.store,
-        fields: retained.fields,
+        fields: [...NATIVE_TEST_ORDER_RETENTION_FIELDS],
         purpose: retained.purpose,
         expiresAt: new Date(retained.expiresAt),
       });
