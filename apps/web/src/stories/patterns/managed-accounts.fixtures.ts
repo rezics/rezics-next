@@ -4,7 +4,10 @@ export const managedViewer = '019a0000-0000-7000-8000-000000000001';
 export function managedAccountsExample(): ManagedAccountsPage {
   return {
     account: { id: managedViewer, kind: 'actor', handle: 'avery', displayName: 'Avery Reader' },
-    viewer: { state: 'current', account: { id: managedViewer, kind: 'actor', handle: 'avery', displayName: 'Avery Reader' } },
+    viewer: {
+      state: 'current',
+      account: { id: managedViewer, kind: 'actor', handle: 'avery', displayName: 'Avery Reader' },
+    },
     organizations: {
       state: 'ready',
       items: [

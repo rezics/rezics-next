@@ -139,11 +139,25 @@ const inventory = () => ({
   viewer: { state: 'current' as const, account: identity() },
   organizations: {
     state: 'ready' as const,
-    items: [{ account: { ...identity(targetId), kind: 'organization' as const }, role: 'owner' as const, navigation: { state: 'admitted' as const } }],
+    items: [
+      {
+        account: { ...identity(targetId), kind: 'organization' as const },
+        role: 'owner' as const,
+        navigation: { state: 'admitted' as const },
+      },
+    ],
     next: 'org/+==',
   },
   responsibilities: {
-    items: [{ reservationId: otherId, accountId: targetId, account: null, state: 'reconciling' as const, navigation: { state: 'concealed' as const } }],
+    items: [
+      {
+        reservationId: otherId,
+        accountId: targetId,
+        account: null,
+        state: 'reconciling' as const,
+        navigation: { state: 'concealed' as const },
+      },
+    ],
     next: 'ops/+==',
   },
 });
