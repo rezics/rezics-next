@@ -102,9 +102,10 @@ function AuthoredRoute() {
   const editorWork = useCatalogueLifetime(identity);
   const currentFieldHref = `${location.pathname}?${new URLSearchParams({ property: SUMMARY_PROPERTY })}`;
   const { state } = useSession();
-  const returnLink = via ? (
+  const returnHref = via ?? (invalid ? location.pathname.replace(/\/authored$/u, '') : undefined);
+  const returnLink = returnHref ? (
     <p className="px-6 text-sm">
-      <a className="underline underline-offset-4" href={via}>
+      <a className="underline underline-offset-4" href={returnHref}>
         {m.subject_synopsis_return()}
       </a>
     </p>
