@@ -19,11 +19,17 @@ exercise only the permissions they hold. Operators can open product capabilities
 Completion requires the scoped outcomes on main with recorded checks covering the promoted commit. Specified,
 implemented, exposed, tested and promoted are separate states; a passing local check alone does not complete a Goal.
 
-## Scope and ownership
+## Scope
 
-Accounts owns native Auth and Access, `apps/auth/**`, `packages/auth-contract/**` and pure `packages/access/**`,
-including native profile, verification, preferences and identity-publication semantics. Native Access lives under
-`services/kernel/{src,db,test}/access/**`; that placement does not transfer Kernel's command, storage, request or
+The Goal covers native Auth and Access, including native profile, verification, preferences and identity-publication
+semantics. Follow [public scope](../scope.md); future adapters are not required merely because operation discovery
+supports them.
+
+## Ownership
+
+Accounts owns native Auth and Access, `apps/auth/**`, `packages/auth-contract/**` and pure `packages/access/**`.
+Native Access lives under `services/kernel/{src,db,test}/access/**`; that placement does not transfer Kernel's
+command, storage, request or
 execution machinery to Accounts. Web and Performance own their Settings and account-page consumers. Content,
 Commerce, Semantic, Search and generated publication retain their module ownership.
 
@@ -34,8 +40,7 @@ Commerce, Semantic, Search and generated publication retain their module ownersh
 [native Access](../../services/kernel/src/access/README.md) owns preparations, disclosure and bounded native work.
 The [adopted Access architecture](../architecture.md) places pure policy behind the public
 `packages/access/src/index.ts` entry. [Platform gates](../../services/kernel/src/access/gates/README.md) retain their
-native exposure contract. Follow [public scope](../scope.md); future adapters are not required merely because
-operation discovery supports them.
+native exposure contract.
 
 ## Dependencies
 
