@@ -47,7 +47,8 @@ complete native references, and fetch callables with their connection API. The c
 the supplied port type so review commands remain available to the existing native journeys. Archive result readback
 retains each confirmed choice across later edits; private-entry callers retain native authorization and idempotency
 headers through the generated command signatures. Ordinary Search evidence remains required; only grouped release
-evidence is optional.
+evidence is optional. Native basis composition retains the original SQL query identities used by its bound and
+projection maps.
 
 Decision: Account client exports project mounted route types and add no parallel producer for account profile, avatar,
 managed-account navigation or unread data.
