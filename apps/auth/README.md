@@ -899,7 +899,9 @@ No created-account lookup or persistent completion record is added. Generic hist
 read Retry/cached return; new acknowledgement reappears as new evidence. Dismissal cannot undo, confirm or authorize
 work, remove a marker or release unknown-send exclusion. There is no create-another action here.
 
-Both creation pages retire browser callbacks on departure, cached-page restoration and session replacement. Retry restores the exact saved operation and initiating account; organization review uses its saved handle and original key. Automated review keeps the exact selected operator. Leaving never clears an unresolved attempt or reverses native creation; uncertain results require explicit confirmation of the same command and never automatically repeat execution.
+Both creation pages retire callbacks on departure/restoration/session replacement and retain original retry operands.
+Automated review keeps its exact selected operator. Leaving neither clears unknown work nor reverses creation;
+uncertain recovery always requires deliberate confirmation.
 
 ## Automated account creation
 
