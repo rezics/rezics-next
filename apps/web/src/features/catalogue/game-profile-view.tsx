@@ -664,6 +664,7 @@ function GameCorrection({
                                   type="button"
                                   variant="outline"
                                   aria-label={m.game_visit_inspect_assertion({ property: label.text || property }, o)}
+                                  data-game-inspect-assertion={statement.id}
                                   onClick={() =>
                                     lifetime.active() &&
                                     setInspection({
@@ -693,6 +694,7 @@ function GameCorrection({
           key={`${projection.current.revision}:${read.public.subject.id}:${read.public.subject.context}:${read.digest}:${selected.property}:${selected.statement}`}
           className="space-y-4 rounded-xl border border-border p-4"
           aria-labelledby="game-current-assertion-heading"
+          data-game-inspected-assertion={selected.statement}
         >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <h2 id="game-current-assertion-heading" className="font-sans text-xl font-semibold">

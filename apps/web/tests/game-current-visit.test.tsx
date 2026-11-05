@@ -185,10 +185,14 @@ test('Game source admission preserves Realm, refuses contradictory intent, and n
     const admittedInspectors = within(host).getAllByRole('button', {
       name: m.game_visit_inspect_assertion({ property: 'genre' }),
     });
+    expect(admittedInspectors).toHaveLength(2);
     await act(async () => {
-      admittedInspectors[0]!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+      host
+        .querySelector<HTMLElement>(`[data-game-inspect-assertion="${firstAssertion}"]`)!
+        .dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
     });
     const chosenFirst = within(host).getByRole('heading', { name: m.game_visit_inspection_title() });
+    expect(chosenFirst.parentElement!.parentElement!.getAttribute('data-game-inspected-assertion')).toBe(firstAssertion);
     expect(chosenFirst.parentElement!.parentElement!.querySelector(`a[href="${firstEvidence}"]`)).not.toBeNull();
     expect(chosenFirst.parentElement!.parentElement!.querySelector(`a[href="${secondEvidence}"]`)).toBeNull();
     await act(async () => {
