@@ -43,10 +43,11 @@ export function progressRecoveryNative(client: KernelClient, authorization: stri
     upload(base64: string, key: string) {
       const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
       const options = write(key);
+      const headers = { ...options.headers, 'content-type': 'application/json' };
       return receive(() =>
         client.libraryCopyArchives.post(new Blob([bytes], { type: 'application/json' }), {
           ...options,
-          headers: { ...options.headers, 'content-type': 'application/json' },
+          headers,
         }),
       );
     },
