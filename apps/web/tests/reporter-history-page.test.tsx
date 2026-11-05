@@ -209,7 +209,7 @@ test('mounted history replaces one page, retries the exact cursor, opens selecte
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(reads[2]).toEqual({ cursor: 'next/frontier', reportId: secondReportId });
+    expect(reads[2]).toEqual({ reportId: secondReportId });
     const statusLink = container.querySelector<HTMLAnchorElement>('a[href*="historyReportId"]');
     if (!statusLink) throw new Error('Selecting a report should reopen its existing status journey');
     const statusUrl = new URL(statusLink.href);

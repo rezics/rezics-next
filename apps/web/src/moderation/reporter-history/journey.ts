@@ -8,6 +8,7 @@ import {
 } from '../private-reader-lifetime';
 import { reporterHistoryQuery, type ReporterHistoryQuery } from './model';
 import type { ReporterHistoryResult } from './read';
+import { createHistoryCoordinates, routeHistoryCoordinates, type HistoryCoordinates, type Movement } from './coordinates';
 
 export type ReporterHistoryRead = PrivateReaderRead & { result: ReporterHistoryResult };
 export type ReporterHistoryReader = (query: ReporterHistoryQuery) => Promise<ReporterHistoryRead>;
@@ -16,9 +17,11 @@ export type ReporterHistoryVisit = ReporterHistoryRead & {
   locale: string;
   generation: string;
   browserReader?: BrowserReader;
+  movement?: symbol;
 };
 export type ReporterHistoryNavigation = PrivateReaderNavigation & {
   /** Served routes commit operands and prepare a new visit. They never invoke this visit's local reader. */
+  coordinates?: HistoryCoordinates;
   request?: (query: ReporterHistoryQuery) => Promise<void>;
   openStatus?: (reportId: string, cursor?: string) => Promise<void>;
 };
@@ -36,6 +39,9 @@ export async function prepareReporterHistoryVisit(
   read: ReporterHistoryReader,
   signal?: AbortSignal,
 ): Promise<ReporterHistoryVisit> {
+  const coordinates = routeHistoryCoordinates(cache);
+  coordinates.eligible(locale);
+  const movement = coordinates.capture(operands);
   const browser = browserObservation(cache).getSnapshot();
   const query = Object.freeze(reporterHistoryQuery(operands));
   const response = await preparePrivateReaderRead(
@@ -56,6 +62,7 @@ export async function prepareReporterHistoryVisit(
     query,
     locale,
     generation: crypto.randomUUID(),
+    ...(movement ? { movement } : {}),
     ...(typeof window !== 'undefined' && browser.state === 'signed-in' ? { browserReader: browser.observation } : {}),
   };
 }
@@ -75,6 +82,9 @@ export function createReporterHistoryJourney(
     key(originalQuery, locale),
     navigation,
   );
+  const coordinates = navigation?.coordinates ?? createHistoryCoordinates();
+  let movementTicket = initial.movement;
+  let intentional = false;
   let result: ReporterHistoryState = initial.result;
   let query = originalQuery;
   let pending = query;
@@ -106,14 +116,21 @@ export function createReporterHistoryJourney(
       result = retired;
       serverResult = retired;
       source = null;
+      if (!intentional) coordinates.clear();
       return retired;
     }
-    if (result.state === 'loaded' && !owner.available()) return unavailable;
+    if (result.state === 'loaded') {
+      if (!owner.available()) return unavailable;
+      if (navigation?.coordinates) routeHistoryCoordinates(cache).eligible(locale, result.nativeSourceFingerprint);
+      if (result.page.state === 'ready') coordinates.admit(query, movementTicket);
+    }
     return result;
   };
   const current = () => healthy() && owner.isCurrent();
-  async function request(operands: ReporterHistoryQuery) {
+  async function request(operands: ReporterHistoryQuery, movement?: Movement) {
     if (!current() || busy) return;
+    if (movement) coordinates.stage(operands, movement);
+    movementTicket = coordinates.capture(operands);
     busy = true;
     pending = Object.freeze(reporterHistoryQuery(operands));
     const attempt = ++generation;
@@ -122,6 +139,7 @@ export function createReporterHistoryJourney(
     publish({ state: 'loading' });
     if (navigation?.request) {
       // The route loader is the sole publisher. Retire before handing off, even for same-address reloads.
+      intentional = true;
       owner.retire();
       await navigation.request(pending);
       return;
@@ -146,6 +164,11 @@ export function createReporterHistoryJourney(
   }
   return {
     snapshot,
+    openStatus: async (reportId: string, cursor?: string) => {
+      if (!current() || !owner.available()) return;
+      intentional = true;
+      await navigation?.openStatus?.(reportId, cursor);
+    },
     // Admission remains mandatory on the browser, even after a server rendering.
     serverSnapshot: () => serverResult,
     operands: () => pending,
@@ -153,6 +176,7 @@ export function createReporterHistoryJourney(
       owner.retire();
       publish(retired);
       source = null;
+      if (!intentional) coordinates.clear();
     },
     isConnected: current,
     isCurrent: () => current() && owner.available() && snapshot().state === 'loaded',
@@ -166,6 +190,7 @@ export function createReporterHistoryJourney(
       const stop = owner.subscribe(() => {
         if (!owner.healthy()) {
           source = null;
+          if (!intentional) coordinates.clear();
           publish(retired);
         } else listener();
       });
@@ -181,11 +206,19 @@ export function createReporterHistoryJourney(
     next: () => {
       const value = snapshot();
       return value.state === 'loaded' && value.page.nextCursor !== null
-        ? request({ ...query, cursor: value.page.nextCursor })
+        ? request({ ...query, cursor: value.page.nextCursor }, 'next')
         : Promise.resolve();
     },
-    select: (reportId: string) => (snapshot().state === 'loaded' ? request({ ...query, reportId }) : Promise.resolve()),
+    previous: () => {
+      const target = coordinates.previous();
+      return snapshot().state === 'loaded' && target ? request(target, 'previous') : Promise.resolve();
+    },
+    hasPrevious: () => coordinates.previous() !== undefined,
+    first: () => snapshot().state === 'loaded'
+      ? request(query.reportId === undefined ? {} : { reportId: query.reportId }, 'first') : Promise.resolve(),
+    select: (reportId: string) => (snapshot().state === 'loaded'
+      ? reportId === query.reportId ? Promise.resolve() : request({ reportId }, 'selection') : Promise.resolve()),
     // Restart is explicit and also drops the selected ID bound into the expired cursor.
-    restart: () => (snapshot().state === 'expired' ? request({}) : Promise.resolve()),
+    restart: () => (snapshot().state === 'expired' ? request({}, 'restart') : Promise.resolve()),
   };
 }

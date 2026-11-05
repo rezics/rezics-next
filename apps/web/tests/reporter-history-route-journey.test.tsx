@@ -57,6 +57,7 @@ test('served operands, exact own status and recovery form one fresh private rout
   cache.setQueryData(viewerExposureQuery(admission.observation).queryKey, { subject: origin.subject, admitted: [] });
   const reads: ReporterHistoryQuery[] = [];
   const cursor = 'opaque/+%2F ?frontier=two';
+  const third = 'native window three';
   let failNext = true;
   let mode: 'ready' | 'preparing' | 'expired' = 'ready';
   let resolveLate: (() => void) | undefined;
@@ -70,7 +71,7 @@ test('served operands, exact own status and recovery form one fresh private rout
       return { readerOrigin: origin, result: { state: 'unavailable' } };
     }
     if (capturedMode === 'expired') return { readerOrigin: origin, result: { state: 'expired' } };
-    const id = query.cursor ? otherId : reportId;
+    const id = query.reportId ?? (query.cursor ? otherId : reportId);
     return {
       readerOrigin: origin,
       result: {
@@ -80,7 +81,7 @@ test('served operands, exact own status and recovery form one fresh private rout
           state: capturedMode,
           selectedReportId: capturedMode === 'ready' && query.reportId === id ? id : null,
           retry: { cursor: query.cursor ?? null },
-          nextCursor: capturedMode === 'preparing' || query.cursor ? null : cursor,
+          nextCursor: capturedMode === 'preparing' || query.cursor === third ? null : query.cursor === cursor ? third : cursor,
           viewer: { kind: 'reporter' },
           entries:
             capturedMode === 'preparing'
@@ -204,9 +205,18 @@ test('served operands, exact own status and recovery form one fresh private rout
     await click('Try again');
     expect(history.location.href).toBe(failedAddress);
     expect(reads.slice(1, 3)).toEqual([{ cursor }, { cursor }]);
+    await click('Load more');
+    expect(router.state.location.search).toEqual({ cursor: third });
+    await click('Previous');
+    expect(reads.at(-1)).toEqual({ cursor });
+    await click('First page');
+    expect(reads.at(-1)).toEqual({});
+    expect(button('Previous')).toBeUndefined();
+    await click('Load more');
     await click('Select report');
-    expect(router.state.location.search).toEqual({ cursor, reportId: otherId });
+    expect(router.state.location.search).toEqual({ reportId: otherId });
     expect(window.document.activeElement === host.querySelector('[aria-pressed="true"]')).toBe(true);
+    await click('Load more');
     const selectedAddress = history.location.href;
     await follow(host.querySelector<HTMLAnchorElement>('a[href*="historyReportId"]')!);
     expect(statuses).toEqual([otherId]);
@@ -220,6 +230,7 @@ test('served operands, exact own status and recovery form one fresh private rout
     expect(history.location.href).toBe(selectedAddress);
     expect(reads.at(-1)).toEqual({ cursor, reportId: otherId });
     expect(window.document.activeElement === host.querySelector('[aria-pressed="true"]')).toBe(true);
+    expect(button('Previous')).toBeDefined();
     const beforeBack = statuses.length;
     await act(async () => {
       history.back();
