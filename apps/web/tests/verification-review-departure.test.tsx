@@ -132,6 +132,10 @@ test('verification departures preserve all reviewed drafts and original commands
       await router.invalidate();
       root.render(<RouterProvider router={router} />);
     });
+  const settleRoute = async () =>
+    act(async () => {
+      await router.invalidate();
+    });
   const click = async (node: HTMLElement) =>
     act(async () => {
       await user.click(node);
@@ -197,6 +201,7 @@ test('verification departures preserve all reviewed drafts and original commands
     expect(document.activeElement).toBe(next);
     await click(next);
     await choose(true, true);
+    await settleRoute();
     expect(page).toBe(1);
     expect(history).toEqual([0]);
     expect(movements).toBe(1);
@@ -225,6 +230,7 @@ test('verification departures preserve all reviewed drafts and original commands
     expect(host.textContent).toContain(m.av_confirm({ action: m.av_reject() }));
     await click(previous);
     await choose(true, true);
+    await settleRoute();
     expect(page).toBe(0);
     expect(history).toEqual([]);
     expect(movements).toBe(beforePreviousLeave + 1);
