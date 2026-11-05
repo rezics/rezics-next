@@ -58,7 +58,7 @@ Scenarios and evidence on this base:
   these point reads is not established on this base.
 - `late-board-revocation-pages`: the new suite declares literal cases for hot, active and newest board first and
   continuation pages, and thread post first and continuation pages. Each has a late board takedown, late protected
-  read-grant revocation, and unchanged public and protected positive controls. Stage **specified red**; no user-cases driver is registered.
+  read-grant revocation, and unchanged public and protected positive controls. Stage **specified red**; no user-cases driver is registered. Decision: `board-hot-revocation-http` covers the takedown and Realm-ban continuation cases for hot, active, newest and thread-post pages over HTTP without the timing barrier; the frozen suite stays specified red until its driver binds `holdPage`.
 
 Native acceptance commands, from the repository root:
 
