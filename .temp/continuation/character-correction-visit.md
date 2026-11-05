@@ -3,13 +3,14 @@
 goal: semantic
 manager: semantic
 
-## Completed in the preceding attempt
+## Completed in this attempt
 
 - Character public entry carries the selected Context and optional Realm through the correction route and canonical Realm redirect.
 - The installed Subject GET receives the selected Context. The result is admitted only when its Subject id, Context, Character Type and released Definition match; Work remains an independent Global read.
 - Selected Context visits keep correction and classification controls hidden and offer a separate Global visit that retains Work and the existing classification handoff. Facts reread uses the same address.
 - Owner decision and read cost notes are in [catalogue editing](../../docs/catalogue-editing.md#correct-an-existing-character-from-the-selected-reading), with a pointer from [subject pages](../../docs/subject-pages.md#character-appearances-and-relationships).
 - The new focused test covers route field parsing, validator retention, the native Context option, Realm/currentness identity and the deliberate Global URL. The existing Character profile story has a selected Context state.
+- The focused address/read test passes. Web typecheck found no remaining errors in the changed Character files, but the check host ended with status 75 after reporting unrelated base errors in other Web and Kernel files.
 
 ## Remaining outcome
 
