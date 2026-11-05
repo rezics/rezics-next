@@ -366,14 +366,18 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
     expect(submits[1]!.key).toBe(submits[0]!.key);
     expect(host.textContent).toContain(m.slow_mode_saved());
     const inline = host.querySelector('[data-testid="inline-reply"]')!;
-    const inlineSend = [...inline.querySelectorAll('button')].find((button) => button.textContent === m.thread_write_send());
+    const inlineSend = [...inline.querySelectorAll('button')].find(
+      (button) => button.textContent === m.thread_write_send(),
+    );
     await act(async () => {
       await user.click(inlineSend!);
     });
     expect(replySubmits).toHaveLength(1);
     expect(replySubmits[0]).toMatchObject({ parentId });
     expect(inline.textContent).toContain('An inline reply keeps its exact selected parent.');
-    const inlineRetry = [...inline.querySelectorAll('button')].find((button) => button.textContent === m.thread_write_retry());
+    const inlineRetry = [...inline.querySelectorAll('button')].find(
+      (button) => button.textContent === m.thread_write_retry(),
+    );
     await act(async () => {
       await user.click(inlineRetry!);
     });

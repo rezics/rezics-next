@@ -112,11 +112,7 @@ export function useSlowModeVisit(
         if (selectionCurrent) selectionWasCurrent = true;
         else if (selectionWasCurrent) state.retire();
         return (
-          !state.retired &&
-          !signal.aborted &&
-          signal === state.controller.signal &&
-          sourceCurrent &&
-          selectionCurrent
+          !state.retired && !signal.aborted && signal === state.controller.signal && sourceCurrent && selectionCurrent
         );
       },
     };
