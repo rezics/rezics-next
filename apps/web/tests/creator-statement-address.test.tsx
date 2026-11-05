@@ -1,14 +1,12 @@
-import { expect, test } from 'bun:test';
+import { afterAll, expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import * as start from '../.storybook/react-start';
 import { CreatorStatementAddressRecovery } from '../src/checkout/creator-statement-address';
-import {
-  hasStatementAddressIssue,
-  statementDetailSearch,
-  statementSearch,
-  type CreatorStatementData,
-  type CreatorStatementsAddress,
-  type CreatorStatementsData,
+import type {
+  CreatorStatementData,
+  CreatorStatementsAddress,
+  CreatorStatementsData,
 } from '../src/checkout/creator-statements';
 import {
   CreatorStatementWindows,
@@ -19,6 +17,13 @@ import {
   creatorStatementFixture,
   paidCreatorStatementFixture,
 } from '../src/kernel/fake/creator-statements';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+mock.module('@tanstack/react-start', () => start);
+mock.module('@tanstack/react-start/server', () => start);
+const { hasStatementAddressIssue, statementDetailSearch, statementSearch } =
+  await import('../src/checkout/creator-statements');
+afterAll(() => mock.restore());
 
 const statementId = '5b399d68-1747-4e88-bc9a-b642945d2850';
 

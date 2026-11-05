@@ -28,6 +28,7 @@ test('Creator Statement shared summaries retain historical money month currency 
     MouseEvent: window.MouseEvent,
     FocusEvent: window.FocusEvent,
     getComputedStyle: window.getComputedStyle.bind(window),
+    scrollTo: window.scrollTo.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
   };
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
