@@ -14,7 +14,6 @@ import {
 } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { lockZoneHead } from '../zones/resource-store.ts';
 import { commandHistoryKind } from './record.ts';
 import { agentIdentityCopyRetentionGap } from './agent-identity-source.ts';
 import { decodeLocator, encodeLocator, validateLocator, validateScope } from './locator.ts';
@@ -198,6 +197,9 @@ export async function observeZoneHistoryConsumerClosure(
   const route = binding?.zoneRoute ?? routeOf(zoneId);
   if (route === null || foundZoneId !== zoneId) return pending('zone-history-source-binding-changed');
 
+  // Loaded on use: a static import of the Zone store from this History hub closes an import cycle that left
+  // module-level declarations uninitialized and stopped the Kernel from booting (d97edeb000).
+  const { lockZoneHead } = await import('../zones/resource-store.ts');
   const zone = await lockZoneHead(tx, route, zoneId);
   if (!zone) return pending('zone-history-source-missing');
   if (binding) {
