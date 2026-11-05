@@ -234,6 +234,9 @@ states; definition/Subject labels retain their native fallback language.
 Decision: retain the supported same-work Subject address and a single-hop opener, with stream/node and separate
 browse/evidence focus; a replaced or no-longer-admitted reading offers an explicit restart.
 
+Decision: keep finite-view work-region grammar closed until Semantic exposes its actual grouped public component
+and native selected-region handoff; consume a return arriving on a retired reading before equal replacement.
+
 The overview keeps the current grouped relation renderer at its existing placement. Web composes its target,
 Connections and value-inspection addresses through `subjectVisitReturn`; the receiving route validates the same
 address it consumes. Realm survives on overview returns; Connections retains its own exact native cursor/history. Finite-view
@@ -247,6 +250,8 @@ whether that control exists. Missing rows, changed release/revision or spoiler p
 and expose restart. Focus is consumed once for an actual address visit, so source replacement and A/B/A cannot
 replay an old locator. Equal successful replacement remounts row disclosure. Browser credential/cache observation
 uses the existing shared `browserObservation` and address lease; a retired source cannot rebind itself to recovery.
+A return observed while that lease is retired is consumed on that reading, even if its control could not mount;
+fresh equal rows cannot later inherit that focus intent.
 
 Connections keeps its existing bounded history and exact reading checks. Target and inspection links retain that
 window plus the validated work-region opener. A replacement of the mounted source consumes the prior URL intent

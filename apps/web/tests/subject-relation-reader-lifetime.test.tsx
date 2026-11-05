@@ -1184,6 +1184,11 @@ test('work region return focuses its actual inspection control once and retires 
     await draw();
     expect(host.querySelector('[data-work-action]')).toBeNull();
     expect(browser.document.activeElement).toBe(outside);
+    href = workFranchiseReturnHref(base, base, 'en', selection);
+    await draw(); // A return arriving on the retired reader is consumed there.
+    await draw(structuredClone(subject), structuredClone(windows));
+    expect(host.querySelector('[data-work-action="evidence"]')).not.toBeNull();
+    expect(browser.document.activeElement).toBe(outside);
     const origin = workFranchiseReturnHref(base, base, 'en', selection);
     const returnWindow = connectionReturnHref(subject.id, 'Book', 'en', undefined, {
       stream: selection.stream,

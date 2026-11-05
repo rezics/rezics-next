@@ -95,9 +95,16 @@ export function useWorkRegionReturn({
   )
     binding.lease.retire();
   const current = () => binding.lease.current();
+  const available = current();
   const [missing, setMissing] = useState(false);
-  const visit = useRef({ href: currentHref, consumed: false });
-  if (visit.current.href !== currentHref) visit.current = { href: currentHref, consumed: false };
+  const visit = useRef({ href: currentHref, binding, consumed: !available });
+  if (visit.current.href !== currentHref) {
+    visit.current = { href: currentHref, binding, consumed: !available };
+  } else if (visit.current.binding !== binding || !available) {
+    // An address belongs to the reading on which it arrived, including an already retired reading.
+    // Equal replacement can render current rows, but cannot inherit an unconsumed focus request.
+    visit.current.consumed = true;
+  }
   const accepted = subjectVisitReturn(currentHref, locale);
   const acceptedUrl = accepted ? new URL(accepted, 'https://rezics.invalid') : undefined;
   const selection =
@@ -109,7 +116,6 @@ export function useWorkRegionReturn({
     selection.spoiler === spoiler &&
     (selection.release === undefined || selection.release === release) &&
     (selection.revision === undefined || selection.revision === revision);
-  const available = current();
   const pending = available && !visit.current.consumed && selection !== undefined;
   const restored = useRef(false);
   restored.current = false;
