@@ -170,7 +170,8 @@ export function SearchResultsRegion({
       {data?.queryState && (
         <SearchWindowControls
           window={windowNavigation}
-          state={data.queryState}
+          cursor={data.queryState.cursor}
+          query={data.queryState.query}
           locale={locale}
           next={next}
           enabled={continuationAllowed && !invalid && data.recovery?.status !== 'loading'}

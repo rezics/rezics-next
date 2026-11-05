@@ -15,7 +15,8 @@ import {
 } from './character-person-selection';
 import type { DiscoveryState } from './discovery';
 import { characterPersonQueryOptions } from './character-person-window-query';
-import { characterPersonWindowFacts, CharacterPersonWindowLinks } from './character-person-window';
+import { characterPersonWindowFacts } from './character-person-window';
+import { SearchWindowControls, useSearchWindow } from './search-window';
 export { characterPersonQueryOptions } from './character-person-window-query';
 import { DiscoveryResults } from './discovery-results';
 import {
@@ -242,6 +243,19 @@ export function CharacterPersonSearchPage({
         ? { status: 'unavailable' }
         : (query.data?.discovery ?? { status: 'loading' });
   const facts = characterPersonWindowFacts(locale, parsed, state, current);
+  const windowNavigation = useSearchWindow({
+    cursor: facts.cursor,
+    href: facts.href,
+    isCurrent: facts.current,
+    locale,
+    session: principal,
+    ready: facts.ready,
+    settled: facts.settled,
+    preparing: facts.preparing,
+    recoverable: facts.recoverable,
+    checkpoint: facts.checkpoint,
+    enabled: facts.enabled && !dirty,
+  });
   const next = state.status === 'ready' ? state.page.next : null;
   const sparse = state.status === 'ready' && state.page.hits.length === 0 && next !== null;
   return (
@@ -271,6 +285,7 @@ export function CharacterPersonSearchPage({
         </p>
       )}
       <section
+        ref={windowNavigation.regionRef}
         aria-label={m.character_person_results({}, options)}
         data-character-person-results
         data-search-recovery={state.status === 'ready' ? undefined : state.status}
@@ -305,7 +320,17 @@ export function CharacterPersonSearchPage({
           </button>
         )}
       </section>
-      {!dirty && facts.enabled && <CharacterPersonWindowLinks locale={locale} facts={facts} next={next} />}
+      {!dirty && facts.enabled && (
+        <SearchWindowControls
+          window={windowNavigation}
+          cursor={facts.cursor}
+          query={parsed.search.name}
+          locale={locale}
+          next={next}
+          nextLabel={m.character_person_continue({}, options)}
+          enabled={state.status !== 'loading'}
+        />
+      )}
     </main>
   );
 }

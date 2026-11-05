@@ -17,7 +17,13 @@ function CharacterPersonRoute() {
   const parsed = parseCharacterPersonSearch(raw, getLocale());
   const session = useSession();
   const principal = session.state === 'signed-in' ? `signed-in:${session.subject ?? ''}` : session.state;
+  const locale = getLocale();
   return (
-    <CharacterPersonSearchPage key={JSON.stringify(raw)} locale={getLocale()} parsed={parsed} principal={principal} />
+    <CharacterPersonSearchPage
+      key={JSON.stringify([locale, parsed.form, parsed.error])}
+      locale={locale}
+      parsed={parsed}
+      principal={principal}
+    />
   );
 }

@@ -66,6 +66,7 @@ document.body.append(host);
 let root: ReturnType<typeof createRoot>;
 let client: InstanceType<typeof QueryClient>;
 let router: ReturnType<typeof createRouter>;
+let pageLocale = 'en';
 const originalFetch = globalThis.fetch;
 const work = '018f0000-0000-7000-8000-00a000000001';
 const role = '018f0000-0000-7000-8000-00a000000003';
@@ -90,8 +91,17 @@ async function navigate(href: string) {
     await router.navigate({ href });
   });
 }
+async function activateWindow(action: string, duplicate = false) {
+  const link = host.querySelector<HTMLAnchorElement>(`[data-window-action="${action}"]`)!;
+  await act(async () => {
+    link.focus();
+    link.click();
+    if (duplicate) link.click();
+  });
+}
 async function show(href = characterPersonHref('en', operand().search)) {
   reads.length = 0;
+  pageLocale = 'en';
   setLocale('en', { reload: false });
   window.history.replaceState({}, '', href);
   globalThis.fetch = (async (input) => {
@@ -113,11 +123,12 @@ async function show(href = characterPersonHref('en', operand().search)) {
     validateSearch: (raw) => raw,
     component: () => {
       const raw = route.useSearch();
+      const parsed = parseCharacterPersonSearch(raw, pageLocale);
       return (
         <CharacterPersonSearchPage
-          key={JSON.stringify(raw)}
-          locale="en"
-          parsed={parseCharacterPersonSearch(raw, 'en')}
+          key={JSON.stringify([pageLocale, parsed.form, parsed.error])}
+          locale={pageLocale}
+          parsed={parsed}
           principal={work}
         />
       );
@@ -160,7 +171,7 @@ afterAll(() => {
 });
 
 test.each(['people', 'characters'])(
-  'one fresh native read preserves %s operands through Continue, First and browser return',
+  'one fresh native read preserves %s operands through Continue, Previous, First and browser return',
   async (mode) => {
     const parsed = operand(mode);
     await show(characterPersonHref('en', parsed.search));
@@ -169,14 +180,25 @@ test.each(['people', 'characters'])(
     const next = host.querySelector<HTMLAnchorElement>('[data-window-action="next"]')!;
     const target = parseCharacterPersonSearch(defaultParseSearch(new URL(next.href).search), 'en');
     expect(target.search).toEqual({ ...parsed.search, cursor: 'next' });
-    await navigate(next.getAttribute('href')!);
+    await activateWindow('next');
     expect(reads).toHaveLength(2);
     await finish({ ...ready, page: { ...ready.page, next: null } });
     expect(host.textContent).toContain(m.search_window_address({}, { locale: 'en' }));
+    const previous = host.querySelector<HTMLAnchorElement>('[data-window-action="previous"]')!;
+    expect(previous.href).toBe(`https://search.test${characterPersonHref('en', parsed.search)}`);
+    await activateWindow('previous');
+    expect(reads).toHaveLength(3);
+    expect(reads.at(-1)!.search).toEqual(parsed.search);
+    await finish();
+    const continueAgain = host.querySelector<HTMLAnchorElement>('[data-window-action="next"]')!;
+    expect(continueAgain.getAttribute('href')).toBe(characterPersonHref('en', parsed.search, 'next'));
+    await activateWindow('next');
+    expect(reads).toHaveLength(4);
+    await finish({ ...ready, page: { ...ready.page, next: null } });
     const first = host.querySelector<HTMLAnchorElement>('[data-window-action="first"]')!;
     expect(first.getAttribute('href')).toBe(characterPersonHref('en', parsed.search));
-    await navigate(first.getAttribute('href')!);
-    expect(reads).toHaveLength(3);
+    await activateWindow('first');
+    expect(reads).toHaveLength(5);
     expect(reads.at(-1)!.search).toEqual(parsed.search);
     const native = await readDiscovery(characterPersonRequest(parsed.search), async () => ({
       status: 200,
@@ -188,12 +210,76 @@ test.each(['people', 'characters'])(
       router.history.back();
       await window.happyDOM.whenAsyncComplete();
     });
-    expect(reads).toHaveLength(4);
+    expect(reads).toHaveLength(6);
     expect(host.querySelector('[data-slot="discovery-results"]')).toBeNull();
     expect(reads.at(-1)!.search).toEqual(parsed.search);
     await finish();
   },
 );
+
+test('failed forward reads hide old rows and keep the admitted Previous address available', async () => {
+  await show();
+  await finish({ ...ready, page: { ...ready.page, hits: [discoveryExample.hits[0]!], next: 'next' } });
+  await activateWindow('next');
+  expect(reads).toHaveLength(2);
+  await finish({ status: 'unavailable' });
+  expect(host.querySelector('[data-character-person-results] [data-slot="discovery-results"]')).toBeNull();
+  const previous = host.querySelector<HTMLAnchorElement>('[data-window-action="previous"]')!;
+  expect(previous.href).toBe(`https://search.test${characterPersonHref('en', operand().search)}`);
+  await activateWindow('previous');
+  expect(reads).toHaveLength(3);
+  expect(reads.at(-1)!.search).toEqual(operand().search);
+  await finish();
+});
+
+test('request A/B/A and locale replacement start fresh reads for the current address', async () => {
+  const searchA = operand().search;
+  const searchB = operand('characters').search;
+  await show(characterPersonHref('en', searchA));
+  await finish();
+  await navigate(characterPersonHref('en', searchB));
+  expect(reads).toHaveLength(2);
+  expect(reads.at(-1)!.search).toEqual(searchB);
+  await finish();
+  await act(async () => {
+    router.history.back();
+    await window.happyDOM.whenAsyncComplete();
+  });
+  expect(reads).toHaveLength(3);
+  expect(reads.at(-1)!.search).toEqual(searchA);
+  await finish();
+
+  pageLocale = 'de';
+  await act(async () => {
+    setLocale('de', { reload: false });
+    await router.navigate({ href: characterPersonHref('de', searchA) });
+  });
+  expect(reads).toHaveLength(4);
+  expect(reads.at(-1)!.search).toEqual(searchA);
+  await finish();
+});
+
+test('checkpoint changes retire prior Previous history and focus recovery', async () => {
+  await show();
+  await finish({ ...ready, page: { ...ready.page, as_of: 'cut-one' } });
+  await activateWindow('next', true);
+  expect(reads).toHaveLength(2);
+  await finish({ status: 'ready', page: { ...ready.page, as_of: 'cut-two', next: null } });
+  expect(host.querySelector('[data-window-action="previous"]')).toBeNull();
+  expect(host.querySelector('[data-window-action="first"]')).not.toBeNull();
+  expect(document.activeElement).not.toBe(host.querySelector('[data-character-person-results]'));
+});
+
+test('focus remains with the reader after focus moves during an activated navigation', async () => {
+  await show();
+  await finish();
+  const elsewhere = host.querySelector<HTMLInputElement>('input[name="name"]')!;
+  await activateWindow('next');
+  expect(reads).toHaveLength(2);
+  elsewhere.focus();
+  await finish();
+  expect(document.activeElement).toBe(elsewhere);
+});
 
 test('opaque sparse, terminal, preparing, failed and restart windows stay distinct and retry deduplicates', async () => {
   await show(characterPersonHref('en', operand().search, 'opaque'));
