@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { prepareArtifactRun, readArtifactCatalog, restoreArtifactReturns } from '../../../scripts/check-artifacts.ts';
 import {
   assertSchemaConsistency,
@@ -10,10 +11,12 @@ import {
   formatConnectionRunSummary,
   formatFileConnectionResult,
   formatPostgresErrors,
+  invokeTypecheck,
   reportCheckFailure,
   reportPostgresErrors,
   startPostgresContainer,
 } from './check.ts';
+import { prepareReyloAnalysisCache } from './reylo-cache.ts';
 
 function schemaFixture(): { root: string; kernel: string; dispose: () => void } {
   const temporary = resolve(import.meta.dir, '../../../.temp');
@@ -308,4 +311,124 @@ test("the check reports each file's peak database connections and the run's peak
     throw new Error('sampling query failed');
   });
   await expect(unavailable.sample()).resolves.toBeUndefined();
+});
+
+/** Reylo names an entry by its statement and by its server: the URL's protocol, user, host, port and database. */
+function reyloEntryName(statement: string, url: string): string {
+  const database = new URL(url);
+  const server = createHash('sha256')
+    .update(`${database.protocol}//${database.username}@${database.host}${database.pathname}`)
+    .digest('hex')
+    .slice(0, 16);
+  return `${createHash('sha256').update(statement).digest('hex').slice(0, 32)}-${server}.json`;
+}
+
+test('a focused check compiles on the host analysis: a statement is analysed once per change even in a new throwaway database, and the diagnostics equal a cold run', async () => {
+  const repository = mkdtempSync(join(tmpdir(), 'kernel-check-analysis-'));
+  const workspace = join(repository, 'services/kernel');
+  mkdirSync(join(workspace, 'src'), { recursive: true });
+  writeFileSync(join(workspace, 'src/first.sql'), 'select 1;\nselect 11;\n');
+  writeFileSync(join(workspace, 'src/second.sql'), 'select 2 error;\n');
+  const cacheRoot = join(repository, 'cache');
+  let dumps: Record<string, string> = { 'db/schema.sql': 'create table first (id integer);' };
+  const check = async (port: number, cache = cacheRoot) => {
+    const url = `postgres://rezics:rezics@127.0.0.1:${port}/rezics?sslmode=disable`;
+    const prepared = await prepareReyloAnalysisCache(
+      { DATABASE_URL: url, KERNEL_DATABASE_CONTAINER: 'fixture-container' },
+      {
+        repository,
+        workspace,
+        cacheRoot: cache,
+        identity: () => 'fixed-toolchain',
+        schemaDumps: () => ({ ...dumps }),
+        generate: async (files, configFile, _env, root) => {
+          // Reylo's generation reduced to its reuse rule: a statement whose entry exists under this server is kept.
+          const queries = join(dirname(configFile), '.reylo', 'queries');
+          mkdirSync(queries, { recursive: true });
+          const served = JSON.parse(readFileSync(configFile, 'utf8').trim().slice('direct_url: '.length)) as string;
+          for (const file of files)
+            for (const statement of readFileSync(join(root, file), 'utf8')
+              .split(';')
+              .map((text) => text.trim())
+              .filter(Boolean)) {
+              const name = reyloEntryName(statement, served);
+              if (!existsSync(join(queries, name))) writeFileSync(join(queries, name), JSON.stringify({ statement }));
+            }
+          return { status: 0, stdout: '', stderr: '' };
+        },
+      },
+    );
+    try {
+      // The compiler reads the host analysis offline: its project names no database, so every statement is an entry.
+      const diagnostics = invokeTypecheck(
+        'tsc',
+        null,
+        prepared.environment,
+        prepared.environment.REYLO_CONFIG!,
+        (_program, _args, environment) => {
+          const config = environment.REYLO_CONFIG!;
+          expect(readFileSync(config, 'utf8')).toBe('direct_url: ""\n');
+          const queries = join(dirname(config), '.reylo', 'queries');
+          return readdirSync(queries)
+            .map((name) => (JSON.parse(readFileSync(join(queries, name), 'utf8')) as { statement: string }).statement)
+            .filter((statement) => statement.includes('error'))
+            .sort();
+        },
+      );
+      return {
+        analyzed: prepared.analyzedFiles,
+        total: prepared.totalFiles,
+        written: prepared.writtenEntries,
+        diagnostics,
+      };
+    } finally {
+      prepared.dispose();
+    }
+  };
+
+  try {
+    expect(await check(5432)).toEqual({ analyzed: 2, total: 2, written: 3, diagnostics: ['select 2 error'] });
+    expect(await check(5433)).toEqual({ analyzed: 0, total: 2, written: 0, diagnostics: ['select 2 error'] });
+
+    writeFileSync(join(workspace, 'src/first.sql'), 'select 1;\nselect 12;\n');
+    // The new database keeps the entry of the unchanged `select 1` and writes only the changed statement.
+    expect(await check(5434)).toEqual({ analyzed: 1, total: 2, written: 1, diagnostics: ['select 2 error'] });
+
+    dumps = { 'db/schema.sql': 'create table first (id bigint);' };
+    const migrated = await check(5435);
+    expect(migrated).toEqual({ analyzed: 2, total: 2, written: 3, diagnostics: ['select 2 error'] });
+    expect(await check(5436)).toEqual({ analyzed: 0, total: 2, written: 0, diagnostics: ['select 2 error'] });
+    expect(await check(5437, join(repository, 'cold-cache'))).toEqual(migrated);
+  } finally {
+    rmSync(repository, { recursive: true, force: true });
+  }
+});
+
+test('a failed analysis publishes nothing and reports itself unavailable, so the check keeps its own analysis for the SQL diagnostics', async () => {
+  const repository = mkdtempSync(join(tmpdir(), 'kernel-check-analysis-failed-'));
+  const workspace = join(repository, 'services/kernel');
+  mkdirSync(join(workspace, 'src'), { recursive: true });
+  writeFileSync(join(workspace, 'src/bad.sql'), 'select missing;\n');
+  try {
+    const prepared = await prepareReyloAnalysisCache(
+      {
+        DATABASE_URL: 'postgres://rezics:rezics@127.0.0.1:5432/rezics?sslmode=disable',
+        KERNEL_DATABASE_CONTAINER: 'fixture-container',
+      },
+      {
+        repository,
+        workspace,
+        cacheRoot: join(repository, 'cache'),
+        identity: () => 'fixed-toolchain',
+        schemaDumps: () => ({ 'db/schema.sql': 'create table first (id integer);' }),
+        generate: async () => ({ status: 1, stdout: '', stderr: 'select missing: column does not exist' }),
+      },
+    );
+    expect(prepared.available).toBe(false);
+    expect(prepared.environment.REYLO_CONFIG).toBeUndefined();
+    expect(existsSync(join(repository, 'cache', 'reylo-kernel'))).toBe(false);
+    prepared.dispose();
+  } finally {
+    rmSync(repository, { recursive: true, force: true });
+  }
 });

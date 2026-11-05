@@ -4,7 +4,8 @@ import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { expect, test } from 'bun:test';
 import { withCommandPhase } from './command-phases.ts';
-import { prepareReyloAnalysisCache, runKernelTypecheck } from './typecheck.ts';
+import { prepareReyloAnalysisCache } from './reylo-cache.ts';
+import { runKernelTypecheck } from './typecheck.ts';
 
 test('Kernel typecheck reuses SQL analysis, keeps diagnostics, and scopes invalidation to changed inputs', async () => {
   const repository = mkdtempSync(join(tmpdir(), 'kernel-typecheck-cache-'));
