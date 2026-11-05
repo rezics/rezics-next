@@ -22,7 +22,7 @@ import type { LibraryExpectedEffectAfter } from '../library/identity-scope-effec
 import type { WorkDimensions } from '../library/collection-source.ts';
 import { instrumentNativeCollectionWork, requireNativeCollectionFootprint } from '../library/collection-source-work.ts';
 import { readIdentityPrearmCustodyPage, verifyIdentityPrearmCustodyCut } from './identity-epoch-prearm-custody.ts';
-import { identityScopeAddress, scopeConsumerFootprint } from './identity-scoped-observations.ts';
+import { identityScopeAddress, type scopeConsumerFootprint } from './identity-scoped-observations.ts';
 import { readIdentityReceivingSelection, reconcileIdentityReceivingEffect } from './identity-receiving-effects.ts';
 import type { IdentityReceivingSelection, IdentityReceivingRecord } from './identity-receiving-effects-types.ts';
 import { readAccountIdentitySource, type AccountIdentitySource } from '../access/agent-verification-identity.ts';
