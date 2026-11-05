@@ -85,7 +85,11 @@ export function RealmMembership({
     if (admittedAction !== undefined && admittedAction !== 'sign-in') return null;
     if (realm.visibility === 'protected')
       return (
-        <section className="rounded-2xl bg-card p-3 text-card-foreground" aria-label={m.realm_membership_label()}>
+        <section
+          className="rounded-2xl bg-card p-3 text-card-foreground"
+          aria-label={m.realm_membership_label()}
+          data-slot="realm-membership"
+        >
           <p className="text-sm">{m.realm_protected_admission()}</p>
         </section>
       );
@@ -93,6 +97,7 @@ export function RealmMembership({
       <section
         className="rounded-2xl bg-card p-3 text-card-foreground"
         aria-label={m.realm_membership_label()}
+        data-slot="realm-membership"
         data-member-state="none"
       >
         <div className="flex flex-wrap items-center gap-3">
@@ -358,6 +363,7 @@ function NativeMembership({
       tabIndex={-1}
       aria-label={m.realm_membership_label()}
       className="flex min-w-0 flex-wrap items-center gap-3"
+      data-slot="realm-membership"
       data-member-state={source.viewer.state === 'member' ? source.viewer.membership : source.viewer.state}
       data-native-advice={
         attempt

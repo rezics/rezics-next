@@ -3,6 +3,7 @@ import type { CoverSummary } from '@rezics/ui/cover';
 import type { ReadCredentialMode } from '../kernel/credential';
 import { boardCommunitySource } from '../threads/board-community-source';
 import { realmClaimSnapshot } from './realm-claim';
+import { presentRealmBoardRecent } from './realm-community/recent';
 import { readCommunity, type PublishedSubject, type RealmBoard, type ShelfPage, type SpacePageData } from './space';
 
 type RealmRoute = ReturnType<KernelClient['realms']>;
@@ -63,7 +64,15 @@ function boards(page: NativeRealmBoardPage, realmId: string): RealmBoard[] {
     throw new Error('Realm home board source changed');
   return page.items.flatMap((item) =>
     item.availability === 'available' && item.visibility !== 'taken_down'
-      ? [{ id: item.id, title: item.title, purpose: item.purpose, visibility: item.visibility }]
+      ? [
+          {
+            id: item.id,
+            title: item.title,
+            purpose: item.purpose,
+            visibility: item.visibility,
+            recent: presentRealmBoardRecent((item as { recent?: unknown }).recent, item.id),
+          },
+        ]
       : [],
   );
 }
