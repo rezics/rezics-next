@@ -10,6 +10,11 @@ through the generated VNDB preview method, seals the exact body and idempotency 
 and returns the actual native upload UUID and row count. The existing review/apply API composes each native owner;
 no second importer or Library vote writer is introduced.
 
+Decision: the mounted Web caller carries state, explicit minute occurrences and deliberate native vote units
+through the same retained review/apply commands. Native units zero and clear stay distinct. The official client uses
+a typed compatibility binding for these already mounted additions until whole-Kernel declaration emission succeeds;
+it yields to the generated Progress contract. Web trusts native responses and keeps current-session custody checks.
+
 ## Private evidence
 
 | Source field                                                                         | Review and native treatment                                                                                                                                                                                                      |
@@ -86,7 +91,9 @@ A Progress-only review selects `field: "minutes"` and one existing occurrence by
 written. Existing measures are preserved unless replacement is explicit, unrelated measures remain unchanged, zero
 is an amount, absence preserves current facts, and `action: "clear"` separately clears one selected measure. Missing,
 unknown, invalid and unsupported values have distinct outcomes. No occurrence or historical activity is inferred.
-The result includes per-measure outcomes and the native reader's current occurrence and measures.
+The result includes per-measure outcomes and the native reader's current occurrence and measures. Web offers one
+bounded page of current occurrences for the explicitly chosen target, an explicit new minute occurrence, replacement
+consent and a separate clear choice. Native review reports profile or source ineligibility before confirmation.
 
 ## Native score review
 
