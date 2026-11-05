@@ -289,7 +289,7 @@ test('Whole Shelf type chooser binds actual same-read viewer and cursor provenan
     await click(button(m.library_types_retry()));
     expect(reads).toHaveLength(3);
     expect(new URL(reads[2]!.request.url).searchParams.get('cursor')).toBe('signed/types+next');
-    await complete(2, ['schema:Movie']);
+    await complete(2, ['schema:Movie'], 'third');
     expect(window.document.body.textContent).toContain('Film');
     const film = [...window.document.querySelectorAll('nav a')].find((node) => node.textContent === 'Film')!;
     const filmUrl = new URL(film.getAttribute('href')!, 'https://site.test');
@@ -302,14 +302,38 @@ test('Whole Shelf type chooser binds actual same-read viewer and cursor provenan
       size: 'l',
       columns: 'title,type',
     });
+    await click(button(m.library_types_next()));
+    await complete(3, ['schema:VideoGame']);
+    expect(button(m.library_types_next())).toBeUndefined();
+    const previous = retained(button(m.library_collections_previous()));
+    await act(async () => {
+      previous();
+      previous();
+    });
+    expect(reads).toHaveLength(5);
+    expect(new URL(reads[4]!.request.url).searchParams.get('cursor')).toBe('signed/types+next');
+    await complete(4, [], null, 503);
+    await click(button(m.library_types_retry()));
+    expect(new URL(reads[5]!.request.url).searchParams.get('cursor')).toBe('signed/types+next');
+    await complete(5, ['schema:Movie'], 'third');
+    expect(window.document.activeElement?.textContent).toBe(m.library_types_heading());
+    await click(button(m.library_collections_previous()));
+    expect(new URL(reads[6]!.request.url).searchParams.has('cursor')).toBe(false);
+    await complete(6, ['schema:Book'], 'signed/types+next');
+    expect(button(m.library_collections_previous())).toBeUndefined();
+    await click(button(m.library_types_next()));
+    await complete(7, ['schema:Movie']);
     await click(button(m.library_types_first()));
-    expect(new URL(reads[3]!.request.url).searchParams.has('cursor')).toBe(false);
-    await complete(3, ['schema:Book'], 'fresh-next');
+    expect(new URL(reads[8]!.request.url).searchParams.has('cursor')).toBe(false);
+    await complete(8, [], null, 503);
+    await click(button(m.library_types_retry()));
+    expect(new URL(reads[9]!.request.url).searchParams.has('cursor')).toBe(false);
+    await complete(9, ['schema:Book'], 'fresh-next');
 
     // Admission ABA happens synchronously before React commits; retained next AND retry must refuse IO.
     await click(button(m.action_cancel()));
     await click(trigger());
-    expect(reads).toHaveLength(4);
+    expect(reads).toHaveLength(10);
     const oldNext = retained(button(m.library_types_next()));
     await act(async () => {
       client.setQueryData(exposureQuery.queryKey, []);
@@ -318,23 +342,23 @@ test('Whole Shelf type chooser binds actual same-read viewer and cursor provenan
       client.setQueryData(exposureQuery.queryKey, ['personal_library']);
       oldNext({ preventDefault() {} });
     });
-    expect(reads).toHaveLength(4);
+    expect(reads).toHaveLength(10);
     expect(window.document.body.textContent).not.toContain('Book');
     await begin();
-    await complete(4, ['schema:Book'], 'A-next');
+    await complete(10, ['schema:Book'], 'A-next');
     const viewerNext = retained(button(m.library_types_next()));
     await act(async () => {
       client.setQueryData(sessionQuery.queryKey, viewer(B));
       client.setQueryData(sessionQuery.queryKey, viewer(A));
       viewerNext({ preventDefault() {} });
     });
-    expect(reads).toHaveLength(5);
+    expect(reads).toHaveLength(11);
     expect(window.document.body.textContent).not.toContain('Book');
 
     // An actual prepared A cannot certify observed B, even when the native response is an empty success.
     await act(async () => client.setQueryData(sessionQuery.queryKey, viewer(B)));
     await begin();
-    await complete(5, []);
+    await complete(11, []);
     expect(window.document.body.textContent).not.toContain(m.library_types_empty());
     expect(window.document.body.textContent).toContain(m.library_types_unavailable());
     const mismatchRetry = retained(button(m.library_types_retry()));
@@ -343,25 +367,25 @@ test('Whole Shelf type chooser binds actual same-read viewer and cursor provenan
       mismatchRetry({ preventDefault() {} });
       client.setQueryData(sessionQuery.queryKey, viewer(A));
     });
-    expect(reads).toHaveLength(6);
+    expect(reads).toHaveLength(12);
     await begin(); // A remains unresolved while B starts and finishes its own read.
-    const pendingA = 6;
+    const pendingA = 12;
     const aTrigger = retained(trigger());
     await act(async () => client.setQueryData(sessionQuery.queryKey, viewer(B)));
     preparedSubject = B;
     await begin();
-    expect(reads).toHaveLength(8);
-    await complete(7, ['schema:Movie'], 'B-next');
+    expect(reads).toHaveLength(14);
+    await complete(13, ['schema:Movie'], 'B-next');
     expect(window.document.body.textContent).toContain('Film');
     await click(button(m.library_types_next()));
-    expect(reads).toHaveLength(9);
+    expect(reads).toHaveLength(15);
     await complete(pendingA, ['schema:Book'], 'obsolete-A');
     expect(window.document.body.textContent).toContain(m.library_types_loading());
     expect(window.document.body.textContent).not.toContain('Book');
-    await complete(8, ['schema:Movie'], 'B-next-again');
+    await complete(14, ['schema:Movie'], 'B-next-again');
     const bNext = retained(button(m.library_types_next()));
     await act(async () => aTrigger({ preventDefault() {} }));
-    expect(reads).toHaveLength(9);
+    expect(reads).toHaveLength(15);
 
     // Actual address ABA is observed by the router before the replacement page commit.
     await act(async () => {
@@ -370,14 +394,14 @@ test('Whole Shelf type chooser binds actual same-read viewer and cursor provenan
       await router.navigate({ href: '/library' });
       bNext({ preventDefault() {} });
     });
-    expect(reads).toHaveLength(9);
+    expect(reads).toHaveLength(15);
     expect(window.document.body.textContent).not.toContain('Film');
     view = { ...view, state: 'paused' };
     locale = 'zh-Hant';
     address = '/zh-Hant/library';
     await act(async () => repaint!());
     await begin();
-    await complete(9, []);
+    await complete(15, []);
     expect(window.document.body.textContent).toContain(m.library_types_empty());
     // Sign-out/unknown retire choices; unmount also fences a retained callback and late finally.
     await act(async () => {
@@ -390,8 +414,8 @@ test('Whole Shelf type chooser binds actual same-read viewer and cursor provenan
     await act(async () => root.unmount());
     unmounted = true;
     await act(async () => beforeUnmount({ preventDefault() {} }));
-    expect(reads).toHaveLength(11);
-    await complete(10, ['schema:Book'], 'unmounted');
+    expect(reads).toHaveLength(17);
+    await complete(16, ['schema:Book'], 'unmounted');
     expect(window.document.body.textContent).not.toContain('Book');
     expect(
       reads.every(

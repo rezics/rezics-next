@@ -9,12 +9,49 @@ import {
   type ShelfTypesCurrentRead,
   type ShelfTypesView,
 } from '../../library/shelf-types-read';
+import { ShelfTypeWindowNavigation } from '../../library/shelf-type-window-navigation';
 import type { ShelfAdvice, ShelfPreferences } from '../preferences';
 
 const nativeRead = (cursor?: string) => readShelfTypesCurrent({ data: cursor ? { cursor } : {} });
 
+/** The existing current() authority owns retirement; source/locale replacement gets a fresh local path. */
+export function ShelfTypeDefaults(props: Parameters<typeof OwnerShelfTypeDefaults>[0]) {
+  const locale = getLocale();
+  const origin = useRef({
+    subject: props.subject,
+    read: props.readTypes,
+    current: props.isCurrent,
+    locale,
+    active: true,
+    key: 0,
+  });
+  const old = origin.current;
+  if (
+    old.subject !== props.subject ||
+    old.read !== props.readTypes ||
+    old.current !== props.isCurrent ||
+    old.locale !== locale
+  ) {
+    old.active = false;
+    origin.current = {
+      subject: props.subject,
+      read: props.readTypes,
+      current: props.isCurrent,
+      locale,
+      active: true,
+      key: old.key + 1,
+    };
+  }
+  const owner = origin.current;
+  if (!props.isCurrent()) {
+    owner.active = false;
+    return null;
+  }
+  return <OwnerShelfTypeDefaults key={owner.key} {...props} isCurrent={() => owner.active && props.isCurrent()} />;
+}
+
 /** One replacement owner-index page; saved scopes remain removable when discovery cannot name them. */
-export function ShelfTypeDefaults({
+function OwnerShelfTypeDefaults({
   layouts,
   supportedLayouts,
   layoutLabel,
@@ -45,7 +82,10 @@ export function ShelfTypeDefaults({
   const [selected, setSelected] = useState('');
   const [page, setPage] = useState<ShelfTypesView>();
   const [busy, setBusy] = useState(false);
-  const [cursor, setCursor] = useState<string>();
+  const navigation = useRef(new ShelfTypeWindowNavigation());
+  const heading = useRef<HTMLHeadingElement>(null);
+  const focus = useRef(false);
+  const inFlight = useRef(false);
   const lifetime = useRef({ active: true, revision: 0 });
   useLayoutEffect(() => {
     const owner = lifetime.current;
@@ -55,29 +95,45 @@ export function ShelfTypeDefaults({
     };
   }, []);
   const current = () => lifetime.current.active && isCurrent();
-  async function read(next?: string) {
-    if (!current() || !subject || busy) return;
+  useLayoutEffect(() => {
+    if (focus.current && page?.state === 'loaded' && current()) heading.current?.focus();
+    focus.current = false;
+  });
+  async function read(movement: 'read' | 'next' | 'previous' | 'first' | 'retry' = 'read', cursor?: string) {
+    if (!current() || !subject || inFlight.current) return;
+    const target = navigation.current.stage(movement, cursor);
+    if (!target) return;
+    const next = target.cursor;
+    inFlight.current = true;
+    focus.current = false;
     const revision = ++lifetime.current.revision;
     const currentRequest = () => current() && lifetime.current.revision === revision;
     setBusy(true);
     setPage(undefined);
-    setCursor(next);
+
     try {
       const result = await readTypes(next);
       if (!currentRequest()) return;
-      setPage(
+      const matches =
         result.sessionSubject === subject &&
-          result.authorizationAgrees &&
-          result.requested.locale === locale &&
-          result.requested.limit === SHELF_TYPES_LIMIT &&
-          result.requested.cursor === (next ?? null)
-          ? result.page
-          : { state: 'unavailable' },
-      );
+        result.authorizationAgrees &&
+        result.requested.locale === locale &&
+        result.requested.limit === SHELF_TYPES_LIMIT &&
+        result.requested.cursor === (next ?? null);
+      const admitted = matches && result.page.state === 'loaded';
+      navigation.current.settle(admitted);
+      focus.current = admitted && movement !== 'read';
+      setPage(matches ? result.page : { state: 'unavailable' });
     } catch {
-      if (currentRequest()) setPage({ state: 'unavailable' });
+      if (currentRequest()) {
+        navigation.current.settle(false);
+        setPage({ state: 'unavailable' });
+      }
     } finally {
-      if (currentRequest()) setBusy(false);
+      if (currentRequest()) {
+        inFlight.current = false;
+        setBusy(false);
+      }
     }
   }
   const choices = page?.state === 'loaded' ? page.types : [];
@@ -94,7 +150,7 @@ export function ShelfTypeDefaults({
   const pending = override !== saved;
   return (
     <section aria-labelledby="settings-type-layouts" className="space-y-3 border-t pt-5">
-      <h3 id="settings-type-layouts" className="font-medium">
+      <h3 ref={heading} tabIndex={-1} id="settings-type-layouts" className="font-medium">
         {m.settings_shelf_types_heading()}
       </h3>
       <p className="text-sm text-muted-foreground">{m.settings_shelf_types_help()}</p>
@@ -103,7 +159,7 @@ export function ShelfTypeDefaults({
         variant="outline"
         className="min-h-11 max-w-full whitespace-normal"
         disabled={!subject || busy || !current()}
-        onClick={() => void read(cursor)}
+        onClick={() => void read(page && page.state !== 'loaded' ? 'retry' : 'read')}
       >
         {page && page.state !== 'loaded' ? m.library_types_retry() : m.settings_shelf_types_load()}
       </Button>
@@ -213,18 +269,29 @@ export function ShelfTypeDefaults({
           variant="outline"
           className="min-h-11 max-w-full whitespace-normal"
           disabled={busy || !current()}
-          onClick={() => void read(page.next!)}
+          onClick={() => void read('next', page.next!)}
         >
           {m.library_types_next()}
         </Button>
       ) : null}
-      {cursor ? (
+      {navigation.current.hasPrevious ? (
         <Button
           type="button"
           variant="outline"
           className="min-h-11 max-w-full whitespace-normal"
           disabled={busy || !current()}
-          onClick={() => void read()}
+          onClick={() => void read('previous')}
+        >
+          {m.library_collections_previous()}
+        </Button>
+      ) : null}
+      {navigation.current.hasFirst ? (
+        <Button
+          type="button"
+          variant="outline"
+          className="min-h-11 max-w-full whitespace-normal"
+          disabled={busy || !current()}
+          onClick={() => void read('first')}
         >
           {m.library_types_first()}
         </Button>

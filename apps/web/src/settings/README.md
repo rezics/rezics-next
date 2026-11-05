@@ -157,6 +157,13 @@ The existing shelf editor adds exact type-URI layouts to its versioned dirty-fie
 
 **Decision:** Keep unsaved Shelf choices is a local review resolution beside Discard. It rebases clean fields onto the current snapshot and retains only later local intent. It never writes, mints a command key, or treats matching current values as a committed original. Save stays a separate command against that version. An unresolved original is unchanged. A confirmed receipt consumes its operands so they cannot roll back a newer current snapshot; a later edit remains. Reset review keeps later edits and drops pre-reset choices.
 
+**Decision:** Type discovery uses the [Library retained-coordinate contract](../library/README.md#saved-shelf-presentation)
+independently for each current defaults editor. Browsing Previous, Next, First or exact Retry never edits a layout,
+selected override, global scope, unsent draft or original command. Only the current admitted 20-row page supplies
+new choices; absent saved overrides remain visible and removable within the existing 32-layout/256-scope bounds.
+The editor keeps eight predecessor coordinates and one staged target, never historical rows, labels or counts.
+Existing Save, uncertain original custody and the single Stay/Leave owner remain unchanged.
+
 ## Account safety
 
 Managed detail captures Retry-After at response receipt in its immutable viewer/target reader. The longest observed

@@ -73,6 +73,16 @@ Decision: saved rating is a score address intent, while native availability inde
 
 Decision: type selection only inspects a local draft; Settings uses replacement pages from the private Library type index, keeps absent saved types removable, and clears a single override with a nullable map entry. Type navigation carries explicit URL layouts while implicit layouts resolve again for the destination type.
 
+Decision: each current Shelf chooser and Settings Type editor retains at most eight admitted predecessor
+coordinates, its current coordinate and one staged target, with only the current native 20-row DTO. Next pushes
+only after exact cursor, limit, locale, session subject and operation admission; Previous rereads the retained
+coordinate and First deliberately reads cursor-free and clears predecessors on success. Failed movement Retry
+repeats its staged target. Each activation costs one existing private Type read and its existing optional label
+batch; no counts, historical bodies, hydration, sorting or shared QueryClient page cache are added. Pending reads
+clear displayed choices. Fresh owners have no predecessors; source, viewer, credential, locale or operation
+replacement and disposal retire choices, coordinates and focus. Closing/reopening follows the existing chooser
+lifetime. Only a fresh admitted movement may focus the still-current open owner's heading.
+
 ## Cost bounds
 
 Preference resolution uses one bounded native snapshot (at most 32 layout scopes, six per-state sorts and eleven

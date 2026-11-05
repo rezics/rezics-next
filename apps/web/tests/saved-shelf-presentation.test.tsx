@@ -346,10 +346,12 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
     const absent = 'https://types.example/retired';
     let typesMode: 'unavailable' | 'loaded' | 'empty' | 'late' = 'unavailable';
     let resolveTypes: ((value: import('../src/library/shelf-types-read').ShelfTypesCurrentRead) => void) | undefined;
-    const typeResult = () => ({
+    let browsing = false;
+    const typeCursors: (string | undefined)[] = [];
+    const typeResult = (cursor?: string) => ({
       sessionSubject: accountId,
       authorizationAgrees: true,
-      requested: { cursor: null, limit: 20 as const, locale: 'en' },
+      requested: { cursor: cursor ?? null, limit: 20 as const, locale: 'en' },
       page:
         typesMode === 'unavailable'
           ? { state: 'unavailable' as const }
@@ -362,15 +364,17 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
                       { type: book, label: 'Books' },
                       { type: movie, label: 'Films' },
                     ],
-              next: null,
+              next: browsing ? (cursor === 'second' ? 'third' : cursor === 'third' ? null : 'second') : null,
             },
     });
-    const readTypes = async () =>
-      typesMode === 'late'
+    const readTypes = async (cursor?: string) => {
+      typeCursors.push(cursor);
+      return typesMode === 'late'
         ? new Promise<import('../src/library/shelf-types-read').ShelfTypesCurrentRead>((resolve) => {
             resolveTypes = resolve;
           })
-        : typeResult();
+        : typeResult(cursor);
+    };
 
     function MountedCard() {
       const [version, setVersion] = useState(initialPreferences.version);
@@ -516,7 +520,22 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
       expect(host.textContent).toContain(book);
       expect(patches).toHaveLength(5);
       typesMode = 'loaded';
+      browsing = true;
       await click(m.library_types_retry());
+      await select(0, 'table');
+      await select(8, book);
+      const patchCount = patches.length;
+      await click(m.library_types_next());
+      await click(m.library_types_next());
+      await click(m.library_collections_previous());
+      expect(typeCursors.slice(-3)).toEqual(['second', 'third', 'second']);
+      expect((host.querySelectorAll('select')[0] as HTMLSelectElement).value).toBe('table');
+      expect((host.querySelectorAll('select')[8] as HTMLSelectElement).value).toBe(book);
+      expect(patches).toHaveLength(patchCount);
+      await click(m.library_types_first());
+      expect(typeCursors.at(-1)).toBeUndefined();
+      browsing = false;
+      await select(0, 'list');
       await select(8, movie);
       expect(host.textContent).toContain(m.settings_shelf_type_inherits({ layout: m.library_layout_list() }));
       await select(9, 'table');
