@@ -124,6 +124,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/edit')({
       ...(hasExact && !validExact ? { reviewInvalid: true } : {}),
     };
   },
+  loaderDeps: ({ search }) => ({ origin: search.origin, publicReturn: search.publicReturn }),
   loader: async ({ params, location }) => {
     const locale = getLocale();
     const search = keepSearch('', location.searchStr, location.hash);

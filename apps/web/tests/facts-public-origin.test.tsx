@@ -220,6 +220,11 @@ test('mounted entry, editorial menu and installed Facts route guard retain and r
     expect(changesReview).toMatchObject({ returnTo: 'changes' });
     expect(changesReview.reviewInvalid).toBeFalsy();
     expect(visitValidator({ property: 'schema:abstract', returnTo: 'sources' })).toMatchObject({ returnTo: 'sources' });
+    const visitLoaderDeps = Route.options.loaderDeps as (input: { search: Record<string, unknown> }) => unknown;
+    expect(visitLoaderDeps({ search: { origin: 'observed', publicReturn: '/en/subjects/example#connections' } })).toEqual({
+      origin: 'observed',
+      publicReturn: '/en/subjects/example#connections',
+    });
 
     await load('harbor-northern-lights', originHref);
     const canonicalRedirect = await load('stale-slug', originHref).then(
