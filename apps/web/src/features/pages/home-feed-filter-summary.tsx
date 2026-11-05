@@ -10,6 +10,7 @@ export type HomeFeedFilterSummary = {
   value: string;
   lang?: string | undefined;
   description?: string | undefined;
+  descriptionLang?: string | undefined;
   state?: string | undefined;
   onRemove: () => void;
 };
@@ -64,7 +65,9 @@ export function HomeFeedFilterSummary({
                       <bdi lang={selection.lang}>{selection.value}</bdi>
                     </span>
                     {selection.description ? (
-                      <span className="block text-xs font-normal text-muted-foreground">{selection.description}</span>
+                      <span lang={selection.descriptionLang} className="block text-xs font-normal text-muted-foreground">
+                        {selection.description}
+                      </span>
                     ) : null}
                     {selection.state ? (
                       <span className="block text-xs font-normal text-muted-foreground">{selection.state}</span>
