@@ -508,7 +508,10 @@ function ReleaseFidelityLive({
       const current = [...document.querySelectorAll<HTMLElement>('[data-release-occurrence]')].find(
         (element) => element.dataset.releaseOccurrence === visit.occurrence?.key,
       );
-      const selected = current?.querySelector<HTMLElement>('button, summary, a');
+      const selected =
+        current?.querySelector<HTMLElement>('button') ??
+        current?.querySelector<HTMLElement>('summary') ??
+        current?.querySelector<HTMLElement>('a');
       const evidence = current?.querySelector('details');
       if (evidence && visit.focus === 'inspection') evidence.open = true;
       if (selected) {
