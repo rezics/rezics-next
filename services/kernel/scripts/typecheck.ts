@@ -415,7 +415,8 @@ async function typecheck(
         // Client-dependent tests must see declarations from the source being checked.
         // The generator checks all source modules; the full workspace checks still run before publication.
         if (emitClient) {
-          const emitted = await compilerCommand('client-emit', ['bun', 'scripts/client.ts'], typecheckEnv);
+          // The emitter discards the caller's Reylo project and needs the compiler database directly.
+          const emitted = await compilerCommand('client-emit', ['bun', 'scripts/client.ts'], compilerEnv);
           if (emitted !== 0) return emitted;
         }
         const tsc = await withCommandPhase(
