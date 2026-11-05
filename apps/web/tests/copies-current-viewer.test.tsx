@@ -589,6 +589,10 @@ test('The actual Copies route retires retained private rows and editor state on 
     // Retain an originating write callback, then let B use the page while A's write is unresolved.
     await show(viewer('A'));
     await acceptList('A');
+    expect(host.querySelectorAll('article[data-copy-comparison-id]')).toHaveLength(0);
+    await act(async () => comparisonProps.onClick());
+    expect(document.activeElement).not.toBe(comparisonTrigger);
+    expect(button(m.library_copy_compare_select()).getAttribute('aria-pressed')).toBe('false');
     await inspect('A');
     const oldSubmit = retainedSubmit();
     await submit(true);
@@ -830,11 +834,6 @@ test('The actual Copies route retires retained private rows and editor state on 
     await acceptList('A');
     await act(async () => pendingCreate.reject(new Error('Retired create failure')));
     absent('B');
-
-    expect(host.querySelectorAll('article[data-copy-comparison-id]')).toHaveLength(0);
-    await act(async () => comparisonProps.onClick());
-    expect(document.activeElement).not.toBe(comparisonTrigger);
-    expect(button(m.library_copy_compare_select()).getAttribute('aria-pressed')).toBe('false');
 
     // Real deletion/Undo callbacks retain immutable episode, CAS, key and originating lifetime.
     await inspect('A');
