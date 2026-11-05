@@ -545,6 +545,7 @@ function RuleForm({
     try {
       parsed = parseFilter(filter);
     } catch {
+      console.log('rule submit parse failed');
       setFeedback(m.condition_invalid());
       operation.finish();
       return;
@@ -560,6 +561,7 @@ function RuleForm({
     };
     const send = request.current?.send ?? (captureSave ? captureSave() : save);
     if (!send) {
+      console.log('rule submit sender unavailable');
       operation.finish();
       return;
     }
