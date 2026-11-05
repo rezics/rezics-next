@@ -87,7 +87,12 @@ export function characterPublicExample(
   });
   const read: ConnectionRead = async (address) => {
     const result = visit(Boolean(address.only && address.selection?.[address.only]?.cursor));
-    if (address.only) result.sections = { [address.only]: result.sections[address.only] };
+    if (address.only) {
+      const section = result.sections[address.only]!;
+      const cursor = address.selection?.[address.only]?.cursor;
+      if (section.section.ok && cursor) section.section.read = { ...section.section.read, cursor };
+      result.sections = { [address.only]: section };
+    }
     return result;
   };
   const value = {

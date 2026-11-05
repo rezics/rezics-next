@@ -1,4 +1,11 @@
-import type { ConnectionAddress, ConnectionGroup, ConnectionSelection, ConnectionVisit } from './subject-connections';
+import type { ConnectionReturnWindow } from './subject-visit-navigation';
+import type {
+  ConnectionAddress,
+  ConnectionGroup,
+  ConnectionSelection,
+  ConnectionSection,
+  ConnectionVisit,
+} from './subject-connections';
 
 export const CONNECTION_HISTORY_LIMIT = 8;
 
@@ -64,6 +71,38 @@ function validHistory(value: ConnectionWindowResume, selection?: ConnectionSelec
     !selection ||
     (selection.stream === value.stream && selection.cursor === current.cursor && selection.reading === current.reading)
   );
+}
+
+export function connectionReturn(
+  current: ConnectionSection,
+  page: ConnectionPageState | undefined,
+  focus?: string,
+  holder?: string,
+  control?: 'browse' | 'evidence',
+): ConnectionReturnWindow | undefined {
+  if (!current.reading) return;
+  const cursor = current.section.ok && 'cursor' in current.section.read ? current.section.read.cursor : undefined;
+  const history =
+    page?.stream === current.stream.key &&
+    page.index >= 0 &&
+    page.index < page.history.length &&
+    page.history.length > 0 &&
+    page.history.every((entry) => entry.page !== undefined && Number.isSafeInteger(entry.page)) &&
+    page.history[page.index]?.reading === current.reading &&
+    page.history[page.index]?.cursor === cursor
+      ? page.history.map((entry) => ({
+          ...(entry.cursor ? { cursor: entry.cursor } : {}),
+          reading: entry.reading,
+          page: entry.page!,
+        }))
+      : undefined;
+  return {
+    stream: current.stream.key,
+    reading: current.reading,
+    ...(cursor ? { cursor } : {}),
+    ...(focus && holder ? { focus, holder, ...(control ? { control } : {}) } : {}),
+    ...(history && page ? { history, index: page.index } : {}),
+  };
 }
 
 /** One mounted visit, three independent bounded address histories, and one optional native neighbourhood. */

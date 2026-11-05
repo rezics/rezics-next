@@ -3,7 +3,7 @@ import { QueryClientContext } from '@tanstack/react-query';
 import { browserObservation } from '../../../session';
 import { m } from '../../../paraglide/messages.js';
 import { OverviewContext, type OverviewValue } from '../../pages/overview';
-import { createConnectionWindow, type ConnectionRead } from '../../pages/subject-connections-window';
+import { createConnectionWindow, connectionReturn, type ConnectionRead } from '../../pages/subject-connections-window';
 import { useSubjectCommunityReading } from '../../pages/subject-community-lifetime';
 import { CharacterWorkRows } from '../character-work-visit/view';
 import { characterWorkStream } from '../character-work-visit/intent';
@@ -168,7 +168,12 @@ function AssociationWindows({
                 <p role="status">{m.subject_relation_loading({}, o)}</p>
               ) : current && kind && section?.ok ? (
                 <>
-                  <CharacterWorkRows current={current} value={value} kind={kind} />
+                  <CharacterWorkRows
+                    current={current}
+                    value={value}
+                    kind={kind}
+                    returnWindow={connectionReturn(current, page)}
+                  />
                   {Array.isArray(section.body.links) && !section.body.links.length && (
                     <p role="status">{m.subject_relation_empty_page({}, o)}</p>
                   )}
