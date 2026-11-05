@@ -88,6 +88,7 @@ test('selected second synopsis traverses authored inspection and fresh return; u
   const { PageData, dataComponents } = await import('../src/features/pages/data');
   const { SubjectSourcesPage } = await import('../src/features/catalogue/subject-sources-page');
   const { explainSubjectSources } = await import('../src/features/catalogue/subject-sources');
+  const { sourceDefinitions } = await import('../src/kernel/fake/catalogue-sources');
   const { CompositionRender } = await import('../src/features/pages/render');
   const { pageDefinitions } = await import('../src/features/pages/layout');
   const { Route: AuthoredRoute } = await import('../src/routes/subjects/$id_.$slug_.authored');
@@ -159,7 +160,7 @@ test('selected second synopsis traverses authored inspection and fresh return; u
     validateSearch: (search: Record<string, unknown>) => ({ via: subjectVisitReturn(search.via, 'en') }),
     component: () => (
       <SubjectSourcesPage
-        result={{ kind: 'ready', page: explainSubjectSources(fixture.publicRead, 'en', definitions) }}
+        result={{ kind: 'ready', page: explainSubjectSources(fixture.publicRead, 'en', sourceDefinitions) }}
         locale="en"
         returnTo={sources.useSearch().via}
       />
