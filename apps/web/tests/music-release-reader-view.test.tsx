@@ -161,7 +161,7 @@ test('select one repeated occurrence, inspect its evidence and return, retry Nex
     expect(targetReturn.searchParams.get('musicReturnHolder')).toBe(releaseId);
     expect(targetReturn.searchParams.get('musicReturnStatement')).toBe(original.id);
     expect(correction.href).toContain(`/en/subjects/${releaseId}/`);
-    expect(correction.href).toEndWith('/relation-edit');
+    expect(new URL(correction.href).pathname).toEndWith('/relation-edit');
     for (const anchor of [target, correction]) {
       expect([anchor.target, anchor.rel]).toEqual(['_blank', 'noopener']);
       anchor.focus();
@@ -251,9 +251,7 @@ test('inverse stream starts without another frontier, and withheld targets expos
     });
     await mounted.select(1);
     await mounted.click(m.work_parts_more());
-    const inverseButton = Array.from(mounted.host.querySelectorAll('button')).find(
-      (node) => node.getAttribute('aria-pressed') === 'false',
-    )!;
+    const inverseButton = mounted.host.querySelector<HTMLButtonElement>('button[data-stream-key="inverse:wdt:P361"]')!;
     inverseButton.focus();
     await act(async () => {
       inverseButton.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 }));

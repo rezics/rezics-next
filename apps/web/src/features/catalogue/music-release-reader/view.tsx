@@ -490,6 +490,7 @@ export function MusicReleaseWindow({
               <button
                 key={stream.key}
                 type="button"
+                data-stream-key={stream.key}
                 aria-pressed={stream.key === page.stream?.key}
                 disabled={busy}
                 className={`${buttonVariants({ variant: 'outline' })} ${action}`}
@@ -581,6 +582,8 @@ export function MusicReleaseWindow({
                                 id={`${inspectionId}-heading`}
                                 ref={inspectionHeading}
                                 tabIndex={-1}
+                                data-holder={selected.holder}
+                                data-statement-id={selected.statementId}
                                 className="font-semibold"
                               >
                                 {m.music_release_occurrence({}, o)}
