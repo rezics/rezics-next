@@ -1528,54 +1528,54 @@ export const DocumentMediaInputSchema = t.Object(
   },
   closed,
 );
-export const DocumentMediaPageSchema = t.Unsafe<DocumentMediaPage>(
+export const DocumentImagePresentationSchema = t.Unsafe<DocumentMediaPage['images'][number]>(
   t.Object(
     {
-      images: t.Array(
+      id: ContentIdSchema,
+      containerId: ContentIdSchema,
+      digest: mediaDigest,
+      width: imageDimension,
+      height: imageDimension,
+      variants: t.Array(
         t.Object(
           {
-            id: ContentIdSchema,
-            containerId: ContentIdSchema,
-            digest: mediaDigest,
-            width: imageDimension,
+            format: t.Union([t.Literal('avif'), t.Literal('webp')]),
+            width: t.Integer({ minimum: 1, maximum: 2560 }),
             height: imageDimension,
-            variants: t.Array(
-              t.Object(
-                {
-                  format: t.Union([t.Literal('avif'), t.Literal('webp')]),
-                  width: t.Integer({ minimum: 1, maximum: 2560 }),
-                  height: imageDimension,
-                },
-                closed,
-              ),
-              { minItems: 1, maxItems: 12 },
-            ),
-            placeholder: t.Union([
-              t.Object(
-                {
-                  thumbhash: t.String({ minLength: 1, maxLength: 44 }),
-                  color: t.String({ pattern: '^#[0-9a-f]{6}$' }),
-                },
-                closed,
-              ),
-              t.Null(),
-            ]),
-            focalPoint: t.Union([
-              t.Object(
-                {
-                  x: t.Number({ minimum: 0, maximum: 1 }),
-                  y: t.Number({ minimum: 0, maximum: 1 }),
-                },
-                closed,
-              ),
-              t.Null(),
-            ]),
-            credit: t.Union([CoverCreditSchema, t.Null()]),
           },
           closed,
         ),
-        { maxItems: 32 },
+        { minItems: 1, maxItems: 12 },
       ),
+      placeholder: t.Union([
+        t.Object(
+          {
+            thumbhash: t.String({ minLength: 1, maxLength: 44 }),
+            color: t.String({ pattern: '^#[0-9a-f]{6}$' }),
+          },
+          closed,
+        ),
+        t.Null(),
+      ]),
+      focalPoint: t.Union([
+        t.Object(
+          {
+            x: t.Number({ minimum: 0, maximum: 1 }),
+            y: t.Number({ minimum: 0, maximum: 1 }),
+          },
+          closed,
+        ),
+        t.Null(),
+      ]),
+      credit: t.Union([CoverCreditSchema, t.Null()]),
+    },
+    closed,
+  ),
+);
+export const DocumentMediaPageSchema = t.Unsafe<DocumentMediaPage>(
+  t.Object(
+    {
+      images: t.Array(DocumentImagePresentationSchema, { maxItems: 32 }),
     },
     closed,
   ),

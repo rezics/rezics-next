@@ -1076,7 +1076,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         detail: {
           operationId: 'thread.reading_page',
           description:
-            'Read a current thread opening and one bounded reply page with confirmed conversation activity, viewer state and mounted actions.',
+            'Read a current thread opening and one bounded reply page with current document image presentations, confirmed conversation activity, viewer state and mounted actions.',
           'x-resource-types': ['content.thread'],
           'x-exposure': 'public',
           'x-action': 'thread:read',
@@ -1091,6 +1091,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         return contentOperation(() =>
           admission.run('normal', job, async () => {
             const result = await readContentReadingPage(dependencies, id, actor, job.deadline, query.cursor);
+            set.headers['cache-control'] = 'private, no-store';
             for (const anchor of result.anchors) session.record(sessionComponent(anchor));
             return result.value;
           }),
