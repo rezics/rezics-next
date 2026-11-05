@@ -277,48 +277,61 @@ test('mounted own upload, admitted identifier match, explicit resolution, confli
   const omittedConsent = await apply([scoreConfirmation], path2);
   expect(omittedConsent).toMatchObject({ complete: false, outcomes: [{ score: { status: 'skipped' } }] });
   expect(await votes.readOwnVote(importer.actor, STANDARD_QUESTION_ID, subjectId)).toMatchObject({ units: 11 });
+  await votes.putVoteOutcome(
+    importer.actor,
+    { questionId: STANDARD_QUESTION_ID, targetId: subjectId, units: 13 },
+    crypto.randomUUID(),
+  );
   const consented = await f.send(importer.bearer, 'POST', path2 + ':apply', {
     confirmations: [{ ...scoreConfirmation, confirmNativeVoteEffects: true }],
   });
   expect(consented.status).toBe(200);
   expect(await consented.json()).toMatchObject({
-    complete: false,
-    outcomes: [{ score: { status: 'unavailable', reason: 'atomic_guard_unavailable' } }],
+    complete: true,
+    outcomes: [{ status: 'stale', score: { status: 'stale', reason: 'own_vote_changed' } }],
   });
-  expect(await votes.readOwnVote(importer.actor, STANDARD_QUESTION_ID, subjectId)).toMatchObject({ units: 11 });
+  expect(await votes.readOwnVote(importer.actor, STANDARD_QUESTION_ID, subjectId)).toMatchObject({ units: 13 });
   const scorePage = await f.send(importer.bearer, 'GET', path2);
   expect(scorePage.status).toBe(200);
   const scoreRow = (await scorePage.json()).rows[1];
-  expect(scoreRow.currentScore.vote).toMatchObject({ units: 11 });
+  expect(scoreRow.currentScore.vote).toMatchObject({ units: 13 });
   expect(scoreRow.review.score.native.guard).toEqual(scoreChoice.score.native.guard);
   const exactRetry = await f.send(importer.bearer, 'POST', path2 + ':apply', {
     confirmations: [{ ...scoreConfirmation, confirmNativeVoteEffects: true }],
   });
   expect(exactRetry.status).toBe(200);
   expect(await exactRetry.json()).toMatchObject({
-    complete: false,
-    outcomes: [
-      {
-        score: {
-          status: 'unavailable',
-          reason: 'atomic_guard_unavailable',
-        },
-      },
-    ],
+    complete: true,
+    outcomes: [{ status: 'stale', score: { status: 'stale', reason: 'own_vote_changed' } }],
   });
-  await votes.putVoteOutcome(
-    importer.actor,
-    { questionId: STANDARD_QUESTION_ID, targetId: subjectId, units: 13 },
-    crypto.randomUUID(),
-  );
-  const staleVote = await f.send(importer.bearer, 'POST', path2 + ':apply', {
-    confirmations: [{ ...scoreConfirmation, confirmNativeVoteEffects: true }],
+  const changedUpload = await f.send(importer.bearer, 'POST', base + ':preview', {
+    upload: JSON.stringify([{ score: 8 }]),
+    scoreFormat: 'POINT_10',
   });
-  expect(staleVote.status).toBe(200);
-  expect(await staleVote.json()).toMatchObject({
-    outcomes: [{ score: { status: 'stale', reason: 'own_vote_changed' } }],
+  expect(changedUpload.status).toBe(200);
+  const changedPath = base + '/' + (await changedUpload.json()).id;
+  const changedReview = await f.send(importer.bearer, 'POST', changedPath + ':review', {
+    ordinal: 0,
+    subjectId,
+    fields: [],
+    replace: true,
+    score: { action: 'vote', questionId: STANDARD_QUESTION_ID, questionRevision: 1, units: 16 },
   });
-  expect(await votes.readOwnVote(importer.actor, STANDARD_QUESTION_ID, subjectId)).toMatchObject({ units: 13 });
+  expect(changedReview.status).toBe(200);
+  const changedChoice = (await changedReview.json()).review;
+  const changedConfirmation = { ordinal: 0, reviewId: changedChoice.id, confirmNativeVoteEffects: true };
+  expect(await apply([changedConfirmation], changedPath)).toMatchObject({
+    complete: true,
+    outcomes: [{ status: 'applied', score: { status: 'applied' }, retained: [] }],
+  });
+  expect(await votes.readOwnVote(importer.actor, STANDARD_QUESTION_ID, subjectId)).toMatchObject({ units: 16 });
+  const changedPage = await f.send(importer.bearer, 'GET', changedPath);
+  expect(changedPage.status).toBe(200);
+  const changedRow = (await changedPage.json()).rows[0];
+  expect(changedRow.source.evidence.score).toBe(8);
+  expect(changedRow.currentScore.vote).toMatchObject({ units: 16 });
+  expect(changedRow.review.score.native.commandKey).toBe(changedChoice.score.native.commandKey);
+  expect(await apply([changedConfirmation], changedPath)).toMatchObject({ complete: true });
   const refreshedScore = await f.send(importer.bearer, 'POST', path2 + ':review', {
     ordinal: 1,
     subjectId,
@@ -406,6 +419,13 @@ test('mounted own upload, admitted identifier match, explicit resolution, confli
     action: 'clear',
     units: null,
   });
+  const clearChoice = (await clearChoiceResponse.json()).review;
+  expect(await apply([{ ordinal: 2, reviewId: clearChoice.id, confirmNativeVoteEffects: true }], path3)).toMatchObject({
+    complete: true,
+    outcomes: [{ status: 'applied', score: { status: 'applied' }, retained: [] }],
+  });
+  expect(await votes.readOwnVote(importer.actor, STANDARD_QUESTION_ID, subjectId)).toBeNull();
+  expect((await (await f.send(importer.bearer, 'GET', path3)).json()).rows[2].currentScore.vote).toBeNull();
   const guarded = await review(1, { subjectId, fields: ['status'], replace: true }, path3);
   const before = (await (await f.send(importer.bearer, 'GET', `/v1/libraryEntries/${subjectId}`)).json()).libraryEntry;
   const changed = await f.send(importer.bearer, 'PUT', `/v1/libraryEntries/${subjectId}`, {

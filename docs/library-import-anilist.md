@@ -43,9 +43,10 @@ scale, Content's current standard question/revision/meaning and owner-selected 0
 an explicit native clear separately. Apply needs a separate `confirmNativeVoteEffects:true`; source privacy,
 upload confirmation, state import and the score value do not provide that consent.
 
-Decision: compose Rating's complete native review observation and exact guarded command in the existing AniList
-row. The base producer still refuses guarded effects with `atomic_guard_unavailable`; completing atomic question
-and identity fencing remains Content work. Never bypass that refusal with an unguarded write.
+Decision: compose Rating's complete native review observation and exact guarded command for the selected
+same-logical-home target in the existing AniList row; foreign-home support remains deferred. Effect confirmation
+is separate from review, and retries preserve the original guard, operands and command key. Owner reads take
+`currentScore` from Rating after guarded effects.
 
 `createVoteCommands.readVoteReview` supplies the current question, canonical identity and required identity epochs,
 raw original/canonical slots and counted own-vote witness. The importer stores its complete version 1 guard with
@@ -56,7 +57,8 @@ score action. Missing effect consent is resumable. Consent checkpoints retain th
 uncertain delivery; retries call that exact command without replacing its observations. Native stale and unavailable
 results remain typed. Unexpected delivery errors propagate with the started checkpoint retained. Owner page reads
 include `currentScore` from Rating alongside the current Entry proposal; receipts and retained evidence are not
-current readback. Native effect success remains unproved while Content returns `atomic_guard_unavailable`.
+current readback. A supported guarded effect is complete only after Rating accepts it and the importer records its
+outcome; a later owner read reports Rating's current vote.
 
 Progress keeps episodes (ANIME), chapters (MANGA), unknown measures and
 volumes separate. Repeat, priority, notes, privacy, precise/partial dates, updatedAt and all unrecognized fields are
@@ -98,8 +100,8 @@ POST /v1/libraryImports/anilist/{importId}:review
 POST /v1/libraryImports/anilist/{importId}:apply
 { confirmations: [{ordinal: 0, reviewId: 'review-uuid'}] }
 // 200 {outcomes:[{ordinal:0,status:'applied',retained:['mediaId','notes']}],complete:true}
-// A native score action additionally requires confirmNativeVoteEffects: true; until the guarded Content producer
-// exists its score result is unavailable and complete is false. Missing consent reports skipped and remains resumable.
+// A native score action additionally requires confirmNativeVoteEffects: true. Missing consent reports skipped and
+// remains resumable; guarded success reports applied and is read back from Rating.
 POST /v1/libraryImports/anilist/{importId}:cancel
 { remove: true } // 200 {cancelled:true}; false/omitted stops new work while retaining evidence
 ```
@@ -124,8 +126,8 @@ the explicit UUID submitted to `review.subjectId` is identity. Apply defaults to
 (`replace:false`). Only admitted `status` is selectable in state review. The independent `reviewLabels`/`applyLabels` methods
 adopt explicitly selected retained custom membership without changing state/progress choices. Missing `scoreFormat` stays unknown scale and is never
 converted into native units. Native score review offers only the standard question, records its current Content
-revision/meaning and requires a second effect confirmation; the native atomic admission refusal currently keeps
-score effects unavailable. Native review owns `commandKey`, `clientId` and `requestedBy`. The generated client snapshot may
+revision/meaning and requires a second effect confirmation. The supported same-logical-home guarded write is
+performed by Rating; foreign-home targets remain deferred. Native review owns `commandKey`, `clientId` and `requestedBy`. The generated client snapshot may
 omit this surface; missing methods render unavailable rather than a local parser.
 
 Own-upload attestation does not verify an AniList account. Preview does not mutate Library facts. Apply revalidates
@@ -159,9 +161,10 @@ not admitted facts. `complete:false` is resumable, not success for every row.
   no additional evidence store. Upload deletion and account cleanup remain the existing explicit delete and 100-key
   owned-graph phase. The bounded guard carries at most two epochs and a native witness capped at 4,096 bytes.
   Native attempts include repeated question/target/account admission, identity epochs, receipt lookup, raw and
-  counted vote locks and witness reads. Successful effects additionally require Content's component/aggregate and
-  receipt work; current atomic refusal precedes those effects. No independent measurement writer is introduced.
+  counted vote locks and witness reads. Successful effects use Content's component/aggregate and receipt work
+  through the same reviewed guarded command. No independent measurement writer is introduced.
 - Growth check: Web focused test `apps/web/tests/personal-anilist-import.test.tsx` drives 20, 100 and 200
   native-shaped rows through the same controller and asserts call counts, 20-row reads, 20-row writes and the
-  retained-byte bound. Native statement/index bounds stay with the Commerce engine; the native review uses exact slot keys and the counted-target index. Positive conditional write cost remains
-  unmeasured while the producer refuses atomic admission.
+  retained-byte bound. Native statement/index bounds stay with the Commerce engine; the native review uses exact
+  slot keys and the counted-target index. Guarded effects remain bounded by the reviewed exact slots and
+  counted-target index.
