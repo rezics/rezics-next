@@ -12,6 +12,7 @@ import type { PinMutation } from '../src/library/pins-actions';
 let preparation: 'active' | 'absent' | 'unavailable' = 'active';
 let actualSubject: string | undefined = 'A';
 let preparations = 0;
+let useServerIsomorphicFunctions = true;
 const headers = new Headers();
 const env = {
   KERNEL_ORIGIN: 'https://kernel.test',
@@ -49,8 +50,8 @@ const startWithServerFunctions = {
         server = handler;
         return chain;
       },
-      client(_handler: (...args: never[]) => unknown) {
-        return (...args: never[]) => server(...args);
+      client(handler: (...args: never[]) => unknown) {
+        return (...args: never[]) => (useServerIsomorphicFunctions ? server : handler)(...args);
       },
     };
     return chain;
@@ -305,6 +306,7 @@ test('The default My Collections route immediately retires private collections a
         expect(html).toContain('Private A');
         expect(html).toContain('Pinned A');
         host.innerHTML = html;
+        useServerIsomorphicFunctions = false;
         root = hydrateRoot(host, tree(), { onRecoverableError: (error) => hydrationErrors.push(error) });
       } else root.render(tree());
       await new Promise((resolve) => setTimeout(resolve, 0));
