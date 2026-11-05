@@ -567,6 +567,45 @@ next-page two-stream sentinel, retention's 100/100 controls and exact locator me
 reservation behavior. The existing HTTP/native/growth causal suites retain their public detail/list, receipt replay,
 Undo deadline, stale deletion and scale assertions. None of these declarations or tests claims native receiving.
 
+## Private Collection pin operations
+
+Decision: pin bounds retain the full 100-ID owner projection, charge the real insert arbitration/CAS schedule and its
+native source-fence trigger, and visit only selected current headers with the existing Collection reader.
+
+The preference contract remains in [docs/library-pins.md](../../../../docs/library-pins.md). `pin-operation-bounds.ts`
+uses immutable nine-axis declarations and the installed Library work translation; every native pin declaration carries
+`engineRequests: 0`, checked before it reaches the eight-axis bridge. The exact SQL and original scalar/UUID-array binds
+come from `pin-store.ts`, and the shared Collection point declaration is executed by `collection-reads.ts` through
+`collectionDirectoryRowPlan`.
+
+`readPins` is one `(route, account_id)` point with the maximum stored 100-ID array projection even when the returned
+page is short. Its absent-row negative seek is retained. `writePins` always attempts the original INSERT ... SELECT
+... WHERE-before-is-zero first; an absent-row insert can return immediately, while existing-row mutation still reaches
+the conditional revision UPDATE. The statement declarations retain original UUID arrays and revision binds, the
+negative insert probe, CAS arbitration and the `RETURNING` projection. The `collection_pins` trigger performs one
+`native_source_fence` upsert after INSERT and old/new upserts after UPDATE; these are included in the corresponding
+statement costs. It does not advance `fact_source_head` or create a Collection header, grant or materialization.
+
+The owner read declaration includes its repeatable-read controls, current Account and authoritative-time points,
+cursor input, and connection rollback path; the exact stored-list projection is a separate store leaf. The shared
+collection gate is charged once for a nonempty page. Each returned ID reaches the existing current curated/dynamic or
+built-in resolver under the same T and absolute deadline. Its per-ID bound composes the existing Collection row
+derivation with current Access, identity and presentation terms, then the mounted response bound uses the selected
+header union. No off-page target contributes work. The target connections remain downstream of the committed and
+released owner snapshot.
+
+Core/History retains current command authorization before receipt lookup, command identity, receipt replay/write,
+partition/floor/epoch custody, event and outbox serialization, transaction/retry policy, rollback and terminal cleanup.
+The pin runner keeps `ownAccountPrepared`; its deferred admission error and business body stay at their existing roots.
+This section declares only pin-owned observations, statements and response projections and does not replace command
+custody.
+
+`pins-growth.test.ts` runs the released fixture's native HTTP producer and instrumented Kernel pool at 64, 512 and
+4096 same-home and unrelated-owner Collections. The stored and returned neighbourhood stays fixed while SQL plans,
+request/response bytes and real curated plus Everything/Liked headers are observed. It also captures first INSERT,
+existing-row CAS, concealed-target reorder/remove and exact lost-ack receipt replay. The independent frozen built-in
+acceptance remains unchanged.
+
 ## Private label operations
 
 Decision: private label operations use closed service-owned nine-axis plans built from immutable request operands and

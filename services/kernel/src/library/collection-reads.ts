@@ -100,7 +100,7 @@ export type CollectionView = CollectionPresentation &
     visibility: 'private' | 'unlisted' | 'public';
     revision: number;
     /** Present for the curator and derived from the same native update authority as the writer. */
-    allowedVisibilityActions?: readonly ('private' | 'unlisted' | 'public')[];
+    allowedVisibilityActions?: ('private' | 'unlisted' | 'public')[];
     memberCount: number;
     createdAt: string;
     updatedAt: string;
@@ -121,7 +121,7 @@ export type CollectionResourceView =
   | CollectionView
   | SavedDynamicCollectionView
   | (BuiltinCollectionView & {
-      allowedVisibilityActions?: readonly ('private' | 'unlisted' | 'public')[];
+      allowedVisibilityActions?: ('private' | 'unlisted' | 'public')[];
     });
 
 /** Check the required wire fields without expanding the older curated caller guarantee. */
@@ -189,6 +189,11 @@ function invalidCursor(): ProblemError {
 
 function queryOf(client: QueryClient): QueryClient {
   return { query: client.query.bind(client) };
+}
+
+/** Reuse the directory owner's exact immutable point declaration in the shared reader. */
+function readCollectionRow(client: QueryClient, input: Parameters<typeof collectionRead.run>[1]) {
+  return collectionDirectoryRowPlan(input).run(queryOf(client));
 }
 
 function iso(value: string): string {
@@ -354,7 +359,7 @@ function readEligibility(route: number, id: string, sink: Sink) {
     // False leaves the owner's grant path intact. A throw would hide a private Collection from its curator.
     async verify({ client }) {
       try {
-        const row = await collectionRead.run(queryOf(client), { route, id });
+        const row = await readCollectionRow(client, { route, id });
         sink.seen = true;
         sink.row = row;
         return row !== null && row.state === 'active' && row.visibility !== 'private';
@@ -421,7 +426,7 @@ export function createCollectionReads(
             account.minimumAuthnEpoch > BigInt(accountViewer.authnEpoch)
           )
             throw notFound();
-          const row = await collectionRead.run(queryOf(client), { route: route!, id });
+          const row = await readCollectionRow(client, { route: route!, id });
           // A broad management grant never grants another curator's personal predicates.
           if (
             !row ||
@@ -505,7 +510,7 @@ export function createCollectionReads(
           : null;
       const allowed = await check(client, observation?.time);
       if (sink.failure) throw sink.failure.error;
-      if (!sink.seen) sink.row = await collectionRead.run(queryOf(client), { route, id });
+      if (!sink.seen) sink.row = await readCollectionRow(client, { route, id });
       // Terminal owners cannot disclose private/unlisted payload or authorship, even before bounded work.
       if (sink.row?.curatorAccountId) {
         const curatorId = sink.row.curatorAccountId;
@@ -568,7 +573,7 @@ export function createCollectionReads(
       const time = await mintReadTime(client, dependencies.clock);
       try {
         const account = await readAccount(client, accountRoute, viewer.accountId);
-        const row = await collectionRead.run(queryOf(client), { route, id });
+        const row = await readCollectionRow(client, { route, id });
         if (
           !account ||
           !grantCapable(account, viewer) ||
