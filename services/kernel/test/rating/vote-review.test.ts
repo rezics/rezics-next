@@ -122,7 +122,10 @@ test('supported native guarded effects retain exact retries, current readback an
       reason: 'atomic_guard_unavailable',
     });
     const prepared = votes.preparePutVote(voter, input(target, 0, before.guard), crypto.randomUUID());
-    const committed = await votes.putVoteOutcome(voter, prepared.input, prepared.receipt.requestKey);
+    const storedGuard = (await local.database.admin.query('SELECT $1::jsonb AS guard', [JSON.stringify(before.guard)]))
+      .rows[0].guard;
+    expect(votes.preparePutVote(voter, input(target, 0, storedGuard), prepared.receipt.requestKey)).toEqual(prepared);
+    const committed = await votes.putVoteOutcome(voter, input(target, 0, storedGuard), prepared.receipt.requestKey);
     expect(committed.vote).toMatchObject({ units: 0, revision: 1 });
     expect(committed.component).not.toBeNull();
     const current = await votes.readVoteReview(voter, STANDARD_QUESTION_ID, target);

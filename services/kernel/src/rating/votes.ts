@@ -300,16 +300,16 @@ function normalizePutVoteInput(input: PutVoteInput): PutVoteInput {
   let guard: VoteReviewGuard | undefined;
   if (input.guard !== undefined) {
     try {
-      const identity = input.guard.subject.identity;
+      guard = normalizeVoteReviewGuard(input.guard, input.targetId);
+      const identity = guard.subject.identity;
       if (identity !== undefined) {
         createIdentityRatingCommitParticipant().prepare(identity);
         if (
           identity.requestedOriginalId !== input.targetId ||
-          identity.canonicalTerminalId !== input.guard.subject.canonicalId
+          identity.canonicalTerminalId !== guard.subject.canonicalId
         )
           throw new TypeError('Identity review does not describe the requested vote');
       }
-      guard = normalizeVoteReviewGuard(input.guard, input.targetId);
     } catch {
       throw new VoteInvalidError('guard');
     }
