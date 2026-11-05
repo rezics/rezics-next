@@ -60,6 +60,8 @@ deliberate read recovery only, then review current native values and later local
 
 **Decision:** Notification patches are admitted as a whole against the current optional catalogue; retained unavailable kinds stay local and distinct until discarded or later advice admits the full set. Current switches follow the fresh envelope; a retained local value is never shown as current compulsory state.
 
+**Decision:** Recovered drafts project only retained deliberate choices onto adopted native optional values; acknowledging a first send consumes its intent so only later edits can enter a reviewed patch.
+
 ## Reading
 
 `/settings#reading` inspects the confirmed spoiler and suitability pair, changes an allowed setting, and recovers a

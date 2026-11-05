@@ -627,7 +627,7 @@ test('conflict returns the current page, prunes forbidden kinds and keeps a stil
     phase: 'review',
     pending: null,
     known: { version: 8, notifications: { ...optional, mention: false } },
-    draft: { ...optional, reply: false, mention: true },
+    draft: { ...optional, reply: false, mention: false },
   });
   expect(editor.snapshot().draft.legacy_digest).toBeUndefined();
   expect(editor.snapshot().intent).toEqual({ reply: false });

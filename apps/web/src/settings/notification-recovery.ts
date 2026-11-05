@@ -98,18 +98,16 @@ export function unavailableNotificationIntent(
   );
 }
 
-function overlayOptionalDraft(
+function projectOptionalIntent(
   known: NotificationPreferences,
-  draft: NotificationPreferences,
   intent: NotificationPatch | undefined,
 ): NotificationPreferences {
-  return Object.fromEntries(
-    Object.entries(known).map(([kind, enabled]) => {
-      if (kind in draft) return [kind, draft[kind]!];
-      if (intent && intent !== null && typeof intent[kind] === 'boolean') return [kind, intent[kind]];
-      return [kind, enabled];
-    }),
-  );
+  const draft = { ...known };
+  if (intent === undefined || intent === null) return draft;
+  for (const [kind, enabled] of Object.entries(intent)) {
+    if (Object.prototype.hasOwnProperty.call(known, kind)) draft[kind] = enabled;
+  }
+  return draft;
 }
 
 export function notificationOriginalAllowed(
@@ -223,10 +221,8 @@ export class NotificationEditor {
   }
   private adoptPage(page: PreferencePage, preserveDraft: boolean, phase: NotificationEditorState['phase']) {
     const known = snapshotFrom(page);
-    const draft = preserveDraft
-      ? overlayOptionalDraft(known.notifications, this.state.draft, this.state.intent)
-      : { ...known.notifications };
     const intent = preserveDraft ? this.state.intent : undefined;
+    const draft = projectOptionalIntent(known.notifications, intent);
     const edited = intent !== undefined || !sameNotifications(draft, known.notifications);
     this.confirm(known);
     this.update({
@@ -246,8 +242,8 @@ export class NotificationEditor {
   }
   private reviewPending(page: PreferencePage) {
     const known = snapshotFrom(page);
-    const draft = overlayOptionalDraft(known.notifications, this.state.draft, this.state.intent);
     const intent = this.state.intent;
+    const draft = projectOptionalIntent(known.notifications, intent);
     this.confirm(known);
     this.update({
       currentAdvice: page,
@@ -264,7 +260,7 @@ export class NotificationEditor {
     const known = snapshotFrom(page);
     const laterIntent = intentSince(confirmation.attempt.intent, this.state.intent);
     const intent = laterIntent;
-    const draft = overlayOptionalDraft(known.notifications, {}, laterIntent);
+    const draft = projectOptionalIntent(known.notifications, laterIntent);
     const newer = known.version > confirmation.receipt.version;
     this.confirm(known);
     this.update({
@@ -311,7 +307,7 @@ export class NotificationEditor {
     const next = { ...intent };
     delete next[kind];
     const intentNext: NotificationPatch | undefined = Object.keys(next).length ? next : undefined;
-    const draft = overlayOptionalDraft(this.state.known.notifications, this.state.draft, intentNext);
+    const draft = projectOptionalIntent(this.state.known.notifications, intentNext);
     const edited = intentNext !== undefined || !sameNotifications(draft, this.state.known.notifications);
     this.update({
       intent: intentNext,
@@ -460,16 +456,11 @@ export class NotificationEditor {
       const laterIntent = intentSince(attempt.intent, this.state.intent);
       // This command is confirmed, but a later shared version makes its values historical.
       this.confirm(receipt);
-      const draft = Object.fromEntries(
-        Object.entries(receipt.notifications).map(([kind, enabled]) => [
-          kind,
-          edited && kind in this.state.draft ? this.state.draft[kind]! : enabled,
-        ]),
-      );
+      const draft = projectOptionalIntent(receipt.notifications, laterIntent);
       this.update({
         pending: null,
         draft,
-        intent: stale || edited ? (edited ? laterIntent : this.state.intent) : undefined,
+        intent: laterIntent,
         phase: stale ? 'conflict' : edited ? 'review' : 'saved',
         readOrigin: null,
         readReason: undefined,
