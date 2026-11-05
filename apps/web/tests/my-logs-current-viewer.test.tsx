@@ -276,7 +276,8 @@ test("My Logs immediately retires an old owner's history on observed viewer repl
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
   const { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } =
     await import('@tanstack/react-router');
-  const { sessionQuery, exposureQuery, useSession } = await import('../src/session/query');
+  const { sessionQuery, useSession } = await import('../src/session/query');
+  const { viewerExposureLifetime, viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
   const { Route } = await import('../src/routes/library/logs');
   const { requireSignedIn } = await import('../src/session/guard');
   const { m } = await import('../src/paraglide/messages.js');
@@ -293,7 +294,14 @@ test("My Logs immediately retires an old owner's history on observed viewer repl
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const viewer = (subject: string, csrfToken = 'csrf-one') => ({ state: 'signed-in', subject, csrfToken });
   client.setQueryData(sessionQuery.queryKey, viewer('A'));
-  client.setQueryData(exposureQuery.queryKey, ['reading_progress']);
+  const exposureLifetime = viewerExposureLifetime(client);
+  const stopExposure = exposureLifetime.subscribe(() => {});
+  const initialExposure = exposureLifetime.getSnapshot();
+  if (initialExposure.state !== 'signed-in') throw new Error('Expected the enrolled My Logs viewer');
+  client.setQueryData(viewerExposureQuery(initialExposure.observation).queryKey, {
+    subject: initialExposure.observation.subject,
+    admitted: ['reading_progress'],
+  });
   client.setQueryData(['exposure', 'anonymous'], ['reading_progress']);
   const host = window.document.createElement('main');
   window.document.body.append(host);
@@ -336,7 +344,12 @@ test("My Logs immediately retires an old owner's history on observed viewer repl
   const show = async (session: { state: string; subject?: string; csrfToken: string | null }, admitted = true) => {
     await act(async () => {
       client.setQueryData(sessionQuery.queryKey, session);
-      client.setQueryData(exposureQuery.queryKey, admitted ? ['reading_progress'] : []);
+      const exposure = exposureLifetime.getSnapshot();
+      if (exposure.state === 'signed-in')
+        client.setQueryData(viewerExposureQuery(exposure.observation).queryKey, {
+          subject: exposure.observation.subject,
+          admitted: admitted ? ['reading_progress'] : [],
+        });
       await tick();
     });
   };
@@ -583,6 +596,7 @@ test("My Logs immediately retires an old owner's history on observed viewer repl
     expect(activeKey.slice(1, 6)).toEqual(['B', 'published_log.list', true, null, 'en']);
   } finally {
     if (root) await act(async () => root!.unmount());
+    stopExposure();
     client.clear();
     transport.mockRestore();
     retainedLoader.mockRestore();
