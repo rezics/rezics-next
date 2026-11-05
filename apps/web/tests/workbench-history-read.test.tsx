@@ -144,3 +144,16 @@ test('moderator history separates retained empty reasons, retired reasons and un
   expect(markup).not.toContain('href="/posts/');
   expect(markup).not.toContain('queue:original');
 });
+
+test('a native continuation outside the browser address bound cannot silently become First', async () => {
+  const result = await readWorkbenchHistory(
+    {
+      page: async () => ({ status: 200, source: 'source', data: { ...page, nextCursor: 'x'.repeat(4097) } }),
+      exact: async () => {
+        throw new Error('unexpected exact');
+      },
+    },
+    search,
+  );
+  expect(result).toMatchObject({ state: 'unavailable', entries: [], next: null });
+});

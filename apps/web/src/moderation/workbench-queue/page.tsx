@@ -20,6 +20,7 @@ import { createWorkbenchSelection, WorkbenchSelectionBoundary } from '../workben
 import { workbenchReadKey, workbenchSearch, workbenchWithoutContinuation, type WorkbenchSearch } from './scope';
 import { loadWorkbench, type WorkbenchCase, type WorkbenchRead, type WorkbenchReader } from './read';
 import { WorkbenchView } from './view';
+import { workbenchHistoryWindows } from '../workbench-history/window-history';
 import {
   isWorkbenchHistoryTransition,
   workbenchQueueWindowHistory,
@@ -59,6 +60,12 @@ export function WorkbenchPage({
 }) {
   const client = useContext(QueryClientContext);
   const windowHistory = useMemo(() => (client ? workbenchQueueWindowHistory(client) : undefined), [client]);
+  const historyWindows = useMemo(() => (client ? workbenchHistoryWindows(client) : undefined), [client]);
+  const historyRevision = useSyncExternalStore(
+    historyWindows?.subscribe ?? (() => () => {}),
+    historyWindows?.snapshot ?? (() => 0),
+    () => 0,
+  );
   const windowRevision = useSyncExternalStore(
     windowHistory?.subscribe ?? (() => () => {}),
     windowHistory?.snapshot ?? (() => 0),
@@ -146,6 +153,10 @@ export function WorkbenchPage({
     () => (view.state === 'denied' ? undefined : windowHistory?.view(windowVisitId, search, view.state)),
     [windowHistory, windowRevision, windowVisitId, search, view.state],
   );
+  const historyWindow = useMemo(
+    () => (search.history ? historyWindows?.view(windowVisitId, search, view) : undefined),
+    [historyWindows, historyRevision, windowVisitId, search, view.history, view.state],
+  );
   // The child reports pending synchronously, before React renders another refresh control.
   function unresolvedChanged(value: boolean) {
     unresolved.current = value;
@@ -164,11 +175,28 @@ export function WorkbenchPage({
   }
   function navigateSearch(next: WorkbenchSearch) {
     if (!isCurrent()) return;
+    historyWindows?.prepare(navigation?.visitId, search, next, data, locale.current);
     if (windowHistory) {
       if (isWorkbenchHistoryTransition(search, next)) windowHistory.beginHistory(navigation?.visitId, search, next);
       else windowHistory.clearForVisit(navigation?.visitId);
     }
     onSearch(next);
+  }
+  function historyMove(move: WorkbenchWindowMove | 'retry', source?: HTMLButtonElement, keyboard = false) {
+    if (!isCurrent()) return;
+    const next = historyWindows?.begin(navigation?.visitId, search, data, locale.current, move, source, keyboard);
+    if (!next) return;
+    if (move === 'retry') onRetry?.();
+    else if (move === 'refresh') void refresh();
+    else navigateSearch(next);
+  }
+  function closeHistory(source: HTMLButtonElement, keyboard: boolean) {
+    if (!isCurrent() || !search.historyDecision) return;
+    const next = workbenchSearch({ ...search, historyDecision: undefined });
+    // A keyboard Close uses the same focus eligibility as a window movement.
+    historyWindows?.begin(navigation?.visitId, search, data, locale.current, 'refresh', source, keyboard);
+    historyWindows?.closing(search.historyDecision);
+    navigateSearch(next);
   }
   function windowMove(move: WorkbenchWindowMove, source?: HTMLButtonElement, keyboard = false) {
     if (!isCurrent() || !windowHistory || !navigation?.visitId || !windowFence) return;
@@ -330,11 +358,19 @@ export function WorkbenchPage({
   useLayoutEffect(() => {
     if (owner && (!owner.available() || getLocale() !== locale.current || navigation?.isCurrent() === false)) {
       if (navigation?.isCurrent() !== false && !owner.healthy()) {
+        historyWindows?.clear();
         windowHistory?.clearForVisit(navigation?.visitId);
         windowHistory?.clearAppealForVisit(navigation?.visitId);
       }
       return;
     }
+    const historyFocus = historyWindows?.admit(
+      navigation?.visitId,
+      search,
+      data,
+      locale.current,
+      !owner || owner.available(),
+    );
     const appealFocus =
       search.queue === 'appeals'
         ? windowHistory?.admitAppeal({
@@ -367,6 +403,13 @@ export function WorkbenchPage({
           : null;
       const queueHeading = boundary.current?.querySelector<HTMLElement>('[data-workbench-current-queue]');
       (returnTarget ?? queueHeading ?? boundary.current?.querySelector<HTMLElement>('article'))?.focus();
+    } else if (historyFocus) {
+      const row = historyFocus.row
+        ? [...(boundary.current?.querySelectorAll<HTMLElement>('[data-history-receipt]') ?? [])].find(
+            (element) => element.dataset.historyReceipt === historyFocus.row,
+          )
+        : null;
+      (row ?? boundary.current?.querySelector<HTMLElement>('#workbench-history-heading'))?.focus();
     } else appealTarget?.focus();
     // A direct visit or pointer navigation has no focus ticket to restore.
   }, [owner, data, search, navigation?.visitId, version]);
@@ -425,6 +468,7 @@ export function WorkbenchPage({
           onAction={submit}
           isCurrent={isCurrent}
           {...(queueWindow ? { queueWindow } : {})}
+          {...(historyWindow ? { historyWindow, onHistoryMove: historyMove, onHistoryClose: closeHistory } : {})}
           {...(windowHistory && windowVisitId ? { onWindowMove: windowMove } : {})}
           {...(queueWindow?.retry ? { retryWindow: queueWindow.retry, onRetryWindow: retryWindow } : {})}
           onUnresolvedAppealChange={unresolvedChanged}

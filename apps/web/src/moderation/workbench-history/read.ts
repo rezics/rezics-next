@@ -84,7 +84,10 @@ function pageValue(value: unknown): value is NativePage {
     value['viewer']['kind'] !== 'board-moderator' ||
     !Array.isArray(value['entries']) ||
     value['entries'].length > 20 ||
-    !(value['nextCursor'] === null || typeof value['nextCursor'] === 'string')
+    !(
+      value['nextCursor'] === null ||
+      (typeof value['nextCursor'] === 'string' && value['nextCursor'].length > 0 && value['nextCursor'].length <= 4096)
+    )
   )
     return false;
   return value['entries'].every((entry: unknown) => {

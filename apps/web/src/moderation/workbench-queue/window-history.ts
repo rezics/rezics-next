@@ -345,10 +345,6 @@ export class WorkbenchQueueWindowHistory {
       return false;
     if (input.move === 'refresh' && (state.index < 0 || cursorOf(input.search) !== state.addresses[state.index]))
       return false;
-    if (input.move === 'first') {
-      state.addresses = [];
-      state.index = -1;
-    }
     state.pending = { kind: 'move', move: input.move };
     state.transitionApproved = false;
     state.focus?.cancel();
