@@ -539,6 +539,7 @@ function RuleForm({
       if (collectionTextIssue('title', title) || collectionTextIssue('description', description)) return;
     }
     const operation = start(isOwnerCurrent ?? isCurrent);
+    console.log('rule submit operation', !!operation);
     if (!operation) return;
     let parsed: FilterDocument;
     try {
@@ -569,6 +570,7 @@ function RuleForm({
     setIntent(input);
     setFeedback('');
     try {
+      console.log('rule submit before send', { current: isCurrent(), operation: operation.current() });
       if (!isCurrent() || !operation.current()) return;
       const result = await original.send(input, original.csrf);
       if (!operation.current()) return;
