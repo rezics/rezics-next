@@ -1,7 +1,7 @@
 import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { dirname } from 'node:path';
-import { act } from 'react';
+import { act, createElement, useState, type ReactElement, type ReactNode } from 'react';
 import * as start from '../.storybook/react-start';
 import type { MineFollowingRead } from '../src/library/mine-following-actions';
 import type { FollowingKind } from '../src/library/following-kind-navigation/address';
@@ -45,6 +45,39 @@ mock.module('@tanstack/react-start/server', () => ({
   setResponseHeader: (name: string, value: string) => responseHeaders.set(name, value),
 }));
 mock.module('cloudflare:workers', () => ({ env }));
+mock.module('@rezics/ui/menu', () => ({
+  Menu: ({ trigger, entries = [] }: {
+    trigger: ReactElement<{ 'aria-label'?: string; children?: ReactNode; disabled?: boolean }>;
+    entries?: { type: string; label?: string; onSelect?: () => void; disabled?: boolean }[];
+  }) => {
+    const [open, setOpen] = useState(false);
+    return createElement(
+      'div',
+      null,
+      createElement(
+        'button',
+        {
+          type: 'button',
+          'aria-label': trigger.props['aria-label'],
+          disabled: trigger.props.disabled,
+          onClick: () => setOpen(true),
+        },
+        trigger.props.children,
+      ),
+      open
+        ? entries.map((entry, index) =>
+            entry.type === 'item' || entry.type === 'destructive'
+              ? createElement(
+                  'button',
+                  { key: index, type: 'button', disabled: entry.disabled, onClick: entry.onSelect },
+                  entry.label,
+                )
+              : null,
+          )
+        : null,
+    );
+  },
+}));
 afterAll(() => mock.restore());
 
 const actions = await import('../src/library/mine-following-actions');
@@ -205,44 +238,12 @@ const loaded = (
   },
 });
 
-function activateMenuTrigger(trigger: HTMLButtonElement) {
-  const propsKey = Object.getOwnPropertyNames(trigger).find((key) => key.startsWith('__reactProps$'))!;
-  const onClick = (trigger as unknown as Record<string, { onClick: (event: unknown) => void }>)[propsKey]!.onClick;
-  const nativeEvent = new trigger.ownerDocument.defaultView!.MouseEvent('click', { bubbles: true, cancelable: true });
-  const event = {
-    currentTarget: trigger,
-    target: trigger,
-    nativeEvent,
-    defaultPrevented: false,
-    preventDefault() {
-      nativeEvent.preventDefault();
-      this.defaultPrevented = true;
-    },
-    stopPropagation() {
-      nativeEvent.stopPropagation();
-    },
-  };
-  onClick(event);
-}
-
 test('the mounted default Following composition retires viewer, cursor and row lifetimes while current native removal remains usable', async () => {
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
   const window = new Window({ url: `${origin}/en/library/following`, width: 1280, height: 900 });
   window.document.documentElement.lang = 'en';
-  window.matchMedia = (query) => ({
-    media: query,
-    matches: query === '(pointer: coarse)',
-    onchange: null,
-    addListener() {},
-    removeListener() {},
-    addEventListener() {},
-    removeEventListener() {},
-    dispatchEvent() {
-      return false;
-    },
-  }) as MediaQueryList;
   const globals = {
     window,
     document: window.document,
@@ -347,7 +348,7 @@ test('the mounted default Following composition retires viewer, cursor and row l
     const trigger = host.querySelector<HTMLButtonElement>('[data-slot="follow-control"] button')!;
     expect(trigger.disabled).toBe(false);
     await act(async () => {
-      activateMenuTrigger(trigger);
+      trigger.click();
       await tick();
     });
     const action = [...window.document.querySelectorAll<HTMLElement>('[role="menuitem"], button')].find(
@@ -567,18 +568,6 @@ test('Following recovery stays page-local through terminal pages, last-row remov
   );
   const window = new Window({ url: `${origin}/en/library/following`, width: 1280, height: 900 });
   window.document.documentElement.lang = 'en';
-  window.matchMedia = (query) => ({
-    media: query,
-    matches: query === '(pointer: coarse)',
-    onchange: null,
-    addListener() {},
-    removeListener() {},
-    addEventListener() {},
-    removeEventListener() {},
-    dispatchEvent() {
-      return false;
-    },
-  }) as MediaQueryList;
   const globals = {
     window,
     document: window.document,
@@ -702,7 +691,7 @@ test('Following recovery stays page-local through terminal pages, last-row remov
     const trigger = host.querySelector<HTMLButtonElement>('[data-slot="follow-control"] button')!;
     expect(trigger.disabled).toBe(false);
     await act(async () => {
-      activateMenuTrigger(trigger);
+      trigger.click();
       await tick();
     });
     const action = [...window.document.querySelectorAll<HTMLElement>('[role="menuitem"], button')].find(
