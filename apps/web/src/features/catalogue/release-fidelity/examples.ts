@@ -75,7 +75,7 @@ export function releaseVisitExample(context = selectedContext, type = 'wd:Q20631
       const labels = { en: 'Companion release 文庫' };
       const related = {
         [target]: { type, labels: concealed ? {} : labels },
-        [work]: { type: 'schema:Book', labels: { en: 'Original work 原作' } },
+        [work]: { type: type === 'bf:Instance' ? 'schema:Book' : 'wd:Q689445', labels: { en: 'Original work 原作' } },
       };
       if (url.pathname.endsWith('/relations') || url.pathname.endsWith('/links')) {
         const property = url.searchParams.get('property')!;

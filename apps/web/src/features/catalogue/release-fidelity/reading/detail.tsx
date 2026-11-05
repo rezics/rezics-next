@@ -3,7 +3,7 @@ import { pickText } from '@rezics/composition';
 import { Button } from '@rezics/ui/shadcn/button';
 import { ContentItemFrame } from '@rezics/ui/content-item';
 import type { MouseEvent, Ref } from 'react';
-import { PartValue } from '../../statement-editor-view';
+import { ReleasePartValue as PartValue } from './value';
 import { m } from '../../../../paraglide/messages.js';
 import { timePresentation } from '../../../../subject/time-presentation';
 import { isReleaseType, relatedReadable, releaseGroups, selectedStatements } from '../model';

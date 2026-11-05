@@ -25,7 +25,7 @@ const canonicalRelease = createServerFn({ method: 'GET', strict: false })
         typeof input.id !== 'string' ||
         input.id.length > 128 ||
         typeof input.slug !== 'string' ||
-        input.slug.length > 128 ||
+        input.slug.length > 768 ||
         typeof input.locale !== 'string' ||
         typeof input.search !== 'string' ||
         input.search.length > 32768

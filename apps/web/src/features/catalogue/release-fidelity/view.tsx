@@ -25,7 +25,7 @@ import {
   type RelationSlot,
 } from '../../../subject/relation-candidates';
 import { m } from '../../../paraglide/messages.js';
-import { EditorFailure, PartValue } from '../statement-editor-view';
+import { EditorFailure } from '../statement-editor-view';
 import { RelationEditor } from '../relation-editor';
 import { SubjectFacts } from '../subject-facts-view';
 import type { FactsTransport } from '../subject-facts';
@@ -42,6 +42,7 @@ import {
   type ReleaseStream,
 } from './model';
 import { type ReleaseFidelityRead, type ReleaseRow } from './read';
+import { ReleaseDestination, ReleasePartValue as PartValue, ReleaseValueLink } from './reading/value';
 import { ReleaseStatementEvidence } from './reading/detail';
 import { ReleaseSelectedDetail } from './reading/detail';
 import {
@@ -219,7 +220,7 @@ function ReleaseFidelityLive({
     slice.retire();
     const current = readerRef.current;
     const prior = keepPage ?? ('admitted' in current ? current.admitted : undefined);
-    const retained = prior ? { ...prior, address: { ...prior.address, revision } } : undefined;
+    const retained = prior && !visit ? { ...prior, address: { ...prior.address, revision } } : undefined;
     const request: ReleaseReadIntent =
       intent.kind === 'selection'
         ? {
@@ -557,603 +558,617 @@ function ReleaseFidelityLive({
   const selectedSlot =
     detailRow && read?.stream ? relationSlot(detailRow, read.stream, read.public.subject.context) : undefined;
   return (
-    <section
-      className="flex flex-col gap-4"
-      data-slot="release-fidelity"
-      aria-busy={busy}
-      onClickCapture={(event) => {
-        const anchor = (event.target as Element).closest?.('a');
-        const target = anchor?.getAttribute('href');
-        if (target && anchor?.hasAttribute('href')) rememberDeparture(target);
-      }}
-    >
-      <p className="px-6 pt-4 break-words" data-slot="release-context">
-        {m.context_title({}, o)}: {context === candidateContext ? m.subject_context_global({}, o) : context}
-      </p>
-      {returnTo && (
-        <a className={linkClass} href={subjectVisitReturn(returnTo, locale)}>
-          {m.release_fidelity_origin({}, o)}
-        </a>
-      )}
-      {returnNotice && (
-        <p role="status" className="px-6">
-          {m.release_fidelity_visit_changed({}, o)}
+    <ReleaseDestination.Provider value={(base) => destination(base, 'subject', 'related')}>
+      <section
+        className="flex flex-col gap-4"
+        data-slot="release-fidelity"
+        aria-busy={busy}
+        onClickCapture={(event) => {
+          const anchor = (event.target as Element).closest?.('a');
+          const target = anchor?.getAttribute('href');
+          if (target && anchor?.hasAttribute('href')) rememberDeparture(target);
+        }}
+      >
+        <p className="px-6 pt-4 break-words" data-slot="release-context">
+          {m.context_title({}, o)}: {context === candidateContext ? m.subject_context_global({}, o) : context}
         </p>
-      )}
-      {!readable && (
-        <div className="flex flex-col gap-4 p-6">
-          <ViewHeading label={m.release_fidelity_title({}, o)} headingClassName="font-sans" headingRef={heading} />
-          {reader.kind === 'failed' ? (
-            reader.failure.reason === 'unavailable' ? (
-              <div ref={readFailure} tabIndex={-1} role="status">
-                <EditorFailure reason="unavailable" locale={locale} />
-              </div>
-            ) : (
-              <p ref={readFailure} tabIndex={-1} role="status">
-                {reader.failure.reason === 'denied'
-                  ? m.release_fidelity_concealed({}, o)
-                  : reader.failure.reason === 'invalid'
-                    ? m.release_fidelity_not_release({}, o)
-                    : reader.intent.kind === 'selection'
-                      ? m.release_fidelity_selection_stale({}, o)
-                      : m.release_fidelity_related_unavailable({}, o)}
-              </p>
-            )
-          ) : streamFailure ? (
-            <p ref={readFailure} tabIndex={-1} role="status">
-              {read?.streamState === 'denied'
-                ? m.release_fidelity_related_denied({}, o)
-                : read?.streamState === 'withheld'
-                  ? m.release_fidelity_related_withheld({}, o)
-                  : read?.streamState === 'unsupported'
-                    ? m.release_fidelity_related_unsupported({}, o)
-                    : m.release_fidelity_related_unavailable({}, o)}
-            </p>
-          ) : (
-            <p ref={readFailure} tabIndex={-1} role="status">
-              {m.candidate_loading({}, o)}
-            </p>
-          )}
-          {(priorPage || (streamFailure && admitted)) && (
-            <Field className="min-w-0">
-              <FieldLabel htmlFor={`${headingId}-recovery-stream`}>{m.release_fidelity_related({}, o)}</FieldLabel>
-              <NativeSelect
-                id={`${headingId}-recovery-stream`}
-                value={
-                  reader.kind === 'loading-page'
-                    ? (reader.intent.stream ?? '')
-                    : (read?.stream?.key ?? priorPage?.read.stream?.key ?? '')
-                }
-                disabled={!!draft}
-                onChange={(event) => {
-                  const source = priorPage ?? admitted;
-                  void startRead(
-                    {
-                      kind: 'page',
-                      stream: event.currentTarget.value,
-                      ...(source?.address.session ? { session: source.address.session } : {}),
-                    },
-                    undefined,
-                    source,
-                  );
-                }}
-              >
-                {(priorPage?.read.streams ?? read?.streams ?? []).map((item) => (
-                  <NativeSelectOption key={item.key} value={item.key}>
-                    {item.label.text || item.property}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-            </Field>
-          )}
-          <a href={destination(href, 'subject', 'related')} className={linkClass}>
+        {returnTo && (
+          <a className={linkClass} href={subjectVisitReturn(returnTo, locale)}>
             {m.release_fidelity_origin({}, o)}
           </a>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              className={actionClass}
-              disabled={busy || !!draft}
-              onClick={(event) => retryCurrent(event)}
-            >
-              {m.release_fidelity_reload({}, o)}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className={actionClass}
-              disabled={busy || !!draft}
-              onClick={(event) => restart(event)}
-            >
-              {m.release_fidelity_restart({}, o)}
-            </Button>
-          </div>
-        </div>
-      )}
-      {read && (
-        <CatalogueCurrentReading visible={readable} ready={readable} revision={`${lifetime.generation}:${read.digest}`}>
-          <div hidden={!readable} className="mx-auto flex w-full min-w-0 max-w-4xl flex-col gap-6 p-4 sm:p-6">
-            <ViewHeading
-              label={m.release_fidelity_title({}, o)}
-              headingClassName="font-sans"
-              headingRef={heading}
-              headingTabIndex={-1}
-            />
-            <p className="text-muted-foreground">{m.release_fidelity_intro({}, o)}</p>
-            <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-              <span lang={title.lang ?? undefined}>
-                <a href={destination(href, 'subject', 'related')} className={linkClass}>
-                  {title.text || m.subject_value_unlabelled({}, o)}
-                </a>
-              </span>
-              <span
-                lang={pickText(read.release.types[read.public.subject.type]?.labels ?? {}, locale).lang ?? undefined}
-              >
-                {pickText(read.release.types[read.public.subject.type]?.labels ?? {}, locale).text}
-              </span>
-            </p>
-            <ReleaseStatementGate
-              statement={selectedStatements(read.public.subject.statements['schema:exampleOfWork'])[0]}
-              locale={locale}
-            >
-              <section className="space-y-2" data-slot="release-work">
-                <h2 ref={workHeading} tabIndex={-1} className="text-lg font-semibold">
-                  {m.release_fidelity_work({}, o)}
-                </h2>
-                {read.work.readability === 'absent' && <p>{m.release_fidelity_work_absent({}, o)}</p>}
-                {read.work.readability === 'unreadable' && <p>{m.release_fidelity_work_unreadable({}, o)}</p>}
-                {read.work.readability === 'concealed' && <p>{m.release_fidelity_work_concealed({}, o)}</p>}
-                {workHref && (
-                  <a href={workHref} className={linkClass} lang={read.work.label?.lang ?? undefined}>
-                    {read.work.label?.text || m.subject_value_unlabelled({}, o)}
-                  </a>
-                )}
-                {read.work.historical && (
-                  <p className="text-sm text-muted-foreground">{m.release_fidelity_historical({}, o)}</p>
-                )}
-                {read.work.completeness && (
-                  <p data-slot="release-completeness" lang={read.work.completeness.label?.lang ?? undefined}>
-                    {read.work.completeness.label?.text || m.release_fidelity_related_unreadable({}, o)}
-                  </p>
-                )}
-                {read.work.readability === 'readable' && !workHref && (
-                  <p role="status">{m.release_fidelity_visit_unsupported({}, o)}</p>
-                )}
-                {read.work.readability === 'readable' &&
-                  selectedStatements(read.public.subject.statements['schema:exampleOfWork']).map((statement) => (
-                    <ReleaseStatementEvidence
-                      key={statement.id}
-                      statement={statement}
-                      read={{ release: read.release, public: { related: read.public.related } }}
-                      locale={locale}
-                    />
-                  ))}
-              </section>
-            </ReleaseStatementGate>
-            <section className="space-y-2" data-slot="release-date">
-              <ContentItemHeading level={2} className="text-lg font-semibold">
-                {m.release_fidelity_date({}, o)}
-              </ContentItemHeading>
-              <p>
-                {read.date.kind === 'tba' ? (
-                  m.release_fidelity_date_tba({}, o)
-                ) : read.date.kind === 'absent' ? (
-                  m.release_fidelity_date_absent({}, o)
-                ) : datePresentation?.state === 'supported' ? (
-                  datePresentation.structuredDate ? (
-                    <time dateTime={datePresentation.structuredDate}>{datePresentation.text}</time>
-                  ) : (
-                    datePresentation.text
-                  )
-                ) : datePresentation ? (
-                  datePresentation.text
-                ) : read.date.kind === 'none' ? (
-                  m.release_fidelity_date_none({}, o)
-                ) : read.date.kind === 'invalid' ? (
-                  m.release_fidelity_date_invalid({}, o)
-                ) : read.date.kind === 'unsupported' ? (
-                  m.release_fidelity_date_unsupported({}, o)
-                ) : (
-                  (read.date.text ?? m.release_fidelity_date_absent({}, o))
-                )}
-              </p>
-              {read.date.historical && (
-                <p className="text-sm text-muted-foreground">{m.release_fidelity_historical({}, o)}</p>
-              )}
-              {dateStatement && (
-                <details className="space-y-2">
-                  <summary className={summaryClass}>{m.release_fidelity_date_evidence({}, o)}</summary>
-                  <PartValue part={dateStatement} read={read} locale={locale} />
-                  {dateStatement.qualifiers.map((part, index) => (
-                    <div key={index}>
-                      <PartValue part={part} read={read} locale={locale} />
-                    </div>
-                  ))}
-                  {dateStatement.references.map((reference, index) => (
-                    <div key={index} className="space-y-1 text-sm">
-                      {reference.parts.map((part, at) => (
-                        <PartValue key={at} part={part} read={read} locale={locale} />
-                      ))}
-                    </div>
-                  ))}
-                </details>
-              )}
-              {!read.statusProperty && <p>{m.release_fidelity_status_unavailable({}, o)}</p>}
-              {!read.regionProperty && <p>{m.release_fidelity_region_unavailable({}, o)}</p>}
-            </section>
-            {(['classification', 'credits', 'identifiers', 'facts'] as const).map((group) =>
-              read.facts[group]?.length ? (
-                <section key={group} className="space-y-3" data-slot={`release-${group}`}>
-                  <ContentItemHeading level={2} className="text-lg font-semibold">
-                    {group === 'classification'
-                      ? m.release_fidelity_classification({}, o)
-                      : group === 'credits'
-                        ? m.release_fidelity_credits({}, o)
-                        : group === 'identifiers'
-                          ? m.release_fidelity_identifiers({}, o)
-                          : m.release_fidelity_facts({}, o)}
-                  </ContentItemHeading>
-                  {read.facts[group]!.map((fact) => (
-                    <ContentItemFrame key={fact.property} as="div" className="min-w-0 space-y-2 p-4">
-                      <p lang={fact.label.lang ?? undefined} className="text-sm text-muted-foreground">
-                        {fact.label.text}
-                      </p>
-                      {fact.statements.map((statement) => (
-                        <div key={statement.id} className="space-y-2">
-                          <PartValue part={statement} read={read} locale={locale} />
-                          {statement.qualifiers.map((part, index) => (
-                            <div key={index} className="text-sm">
-                              <PartValue part={part} read={read} locale={locale} />
-                            </div>
-                          ))}
-                          {historicalNote(statement.rezics.release !== read.digest, o)}
-                        </div>
-                      ))}
-                    </ContentItemFrame>
-                  ))}
-                </section>
-              ) : null,
-            )}
-            <section className="space-y-2" data-slot="release-sources">
-              <ContentItemHeading level={2} className="text-lg font-semibold">
-                {m.release_fidelity_sources({}, o)}
-              </ContentItemHeading>
-              {!read.sources.length && <p>{m.sources_no_citations({}, o)}</p>}
-              <ul className="space-y-2">
-                {read.sources.map((source) => (
-                  <li key={source.url} className="min-w-0">
-                    <a href={source.url} className={linkClass} rel="nofollow">
-                      {source.name}
-                    </a>
-                    {source.licence?.id && (
-                      <p className="text-sm text-muted-foreground">
-                        {source.licence.id}
-                        {source.attribution ? ` · ${source.attribution}` : ''}
-                      </p>
-                    )}
-                  </li>
-                ))}
-              </ul>
-              <h3 ref={sourcesHeading} tabIndex={-1} className="sr-only">
-                {m.subject_sources({}, o)}
-              </h3>
-              {destination(`${href}/sources`, 'sources', 'sources') ? (
-                <a href={destination(`${href}/sources`, 'sources', 'sources')} className={linkClass}>
-                  {m.subject_sources({}, o)}
-                </a>
+        )}
+        {returnNotice && (
+          <p role="status" className="px-6">
+            {m.release_fidelity_visit_changed({}, o)}
+          </p>
+        )}
+        {!readable && (
+          <div className="flex flex-col gap-4 p-6">
+            <ViewHeading label={m.release_fidelity_title({}, o)} headingClassName="font-sans" headingRef={heading} />
+            {reader.kind === 'failed' ? (
+              reader.failure.reason === 'unavailable' ? (
+                <div ref={readFailure} tabIndex={-1} role="status">
+                  <EditorFailure reason="unavailable" locale={locale} />
+                </div>
               ) : (
-                <p>
-                  {m.subject_sources({}, o)}: {m.release_fidelity_visit_unsupported({}, o)}
+                <p ref={readFailure} tabIndex={-1} role="status">
+                  {reader.failure.reason === 'denied'
+                    ? m.release_fidelity_concealed({}, o)
+                    : reader.failure.reason === 'invalid'
+                      ? m.release_fidelity_not_release({}, o)
+                      : reader.intent.kind === 'selection'
+                        ? m.release_fidelity_selection_stale({}, o)
+                        : m.release_fidelity_related_unavailable({}, o)}
                 </p>
-              )}
-            </section>
-            <section className="min-w-0 space-y-3" data-slot="release-related">
-              <h2
-                ref={listHeading}
-                tabIndex={-1}
-                className="text-lg font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-              >
-                {m.release_fidelity_related({}, o)}
-              </h2>
-              {read.streamState === 'unsupported' && <p>{m.release_fidelity_related_unsupported({}, o)}</p>}
-              {read.streamState === 'unavailable' && <p>{m.release_fidelity_related_unavailable({}, o)}</p>}
-              {read.streamState === 'withheld' && <p>{m.release_fidelity_related_withheld({}, o)}</p>}
-              {read.streamState === 'denied' && <p>{m.release_fidelity_related_denied({}, o)}</p>}
-              <p className="text-sm text-muted-foreground">{m.release_fidelity_selection_local({}, o)}</p>
-              {read.streams.length > 0 && (
-                <Field className="min-w-0">
-                  <FieldLabel htmlFor={`${headingId}-stream`}>{m.release_fidelity_related({}, o)}</FieldLabel>
-                  <NativeSelect
-                    id={`${headingId}-stream`}
-                    value={
-                      reader.kind === 'loading-page'
-                        ? (reader.intent.stream ?? read.stream?.key ?? '')
-                        : (read.stream?.key ?? '')
-                    }
-                    disabled={!!draft}
-                    onChange={(event) => {
-                      void startRead(
-                        {
-                          kind: 'page',
-                          stream: event.currentTarget.value,
-                          ...(admitted?.address.session ? { session: admitted.address.session } : {}),
-                        },
-                        undefined,
-                        admitted,
-                      );
-                    }}
-                  >
-                    {read.streams.map((item) => (
-                      <NativeSelectOption key={item.key} value={item.key}>
-                        {item.label.text || item.property}
-                      </NativeSelectOption>
-                    ))}
-                  </NativeSelect>
-                </Field>
-              )}
-              <p ref={sliceStatus} tabIndex={-1} className="sr-only">
-                {m.release_fidelity_related({}, o)}
+              )
+            ) : streamFailure ? (
+              <p ref={readFailure} tabIndex={-1} role="status">
+                {read?.streamState === 'denied'
+                  ? m.release_fidelity_related_denied({}, o)
+                  : read?.streamState === 'withheld'
+                    ? m.release_fidelity_related_withheld({}, o)
+                    : read?.streamState === 'unsupported'
+                      ? m.release_fidelity_related_unsupported({}, o)
+                      : m.release_fidelity_related_unavailable({}, o)}
               </p>
-              {reader.kind === 'loading-page' && <p role="status">{m.candidate_loading({}, o)}</p>}
-              {read.streamState === 'empty' && <p>{m.release_fidelity_related_empty({}, o)}</p>}
-              <ul className="space-y-3">
-                {read.rows.map((row) => {
-                  const target = read.stream ? rowTarget(row, read.stream) : undefined;
-                  const occurrence = read.stream ? occurrenceFor(row, read.stream) : undefined;
-                  const isSelected = !!occurrence && occurrence.key === selection?.key;
-                  const summaryLabel = row.summary?.label?.value || m.subject_value_unlabelled({}, o);
-                  const companion =
-                    row.readability === 'readable' &&
-                    row.summary?.label?.value &&
-                    read.stream?.kind === 'file' &&
-                    target
-                      ? destination(
-                          `${subjectHref({ id: target, label: summaryLabel }, locale).href}/file`,
-                          'file',
-                          'inspection',
-                          occurrence,
-                        )
-                      : row.readability === 'readable' &&
-                          row.summary?.label?.value &&
-                          read.stream?.kind === 'release' &&
-                          target
-                        ? destination(
-                            `${subjectHref({ id: target, label: summaryLabel }, locale).href}/release`,
-                            'release',
-                            'inspection',
-                            occurrence,
-                          )
-                        : undefined;
-                  return (
-                    <li
-                      key={`${row.holder}:${row.statementId}`}
-                      aria-current={
-                        isSelected &&
-                        !row.statement?.qualifiers.some((part) => part.property.id === 'rezics:spoilerLevel')
-                          ? 'location'
-                          : undefined
-                      }
-                      data-selected-occurrence={
-                        isSelected && (!row.statement || spoilerLevel(row.statement) === 0)
-                          ? occurrence?.key
-                          : undefined
-                      }
-                    >
-                      <ReleaseAssociationGate
-                        key={`${row.holder}:${row.statementId}:${sliceRevision.current}`}
-                        row={row}
-                        locale={locale}
-                      >
-                        <ContentItemFrame as="div" className="min-w-0 space-y-3 p-4">
-                          <p className="break-words text-sm">
-                            {read.stream?.label.text || read.stream?.property} ·{' '}
-                            {read.stream?.direction === 'inverse' ? '←' : '→'}
-                          </p>
-                          {row.summary && companion && (
-                            <ListRowLink href={companion} lang={row.summary.label?.language}>
-                              {summaryLabel}
-                            </ListRowLink>
-                          )}
-                          <p>
-                            {row.readability === 'concealed'
-                              ? m.release_fidelity_related_concealed({}, o)
-                              : row.readability === 'unreadable'
-                                ? m.release_fidelity_related_unreadable({}, o)
-                                : summaryLabel}
-                          </p>
-                          {row.statement && row.readability === 'readable' ? (
-                            <CandidateValue snak={row.statement} related={row.related} locale={locale} />
-                          ) : null}
-                          {row.readability === 'readable' && !companion && (
-                            <p>{m.release_fidelity_visit_unsupported({}, o)}</p>
-                          )}
-                          {row.readability === 'readable' &&
-                            row.provenance.map((code, index) => (
-                              <p key={`${index}:${code}`} className="break-words text-sm text-muted-foreground">
-                                {m.release_fidelity_related_unknown({ code }, o)}
-                              </p>
-                            ))}
-                          {row.readability === 'readable' && row.historical && (
-                            <p className="text-sm text-muted-foreground">{m.release_fidelity_historical({}, o)}</p>
-                          )}
-                          {occurrence && row.readability === 'readable' && (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className={actionClass}
-                              disabled={!!draft}
-                              aria-current={isSelected ? 'true' : undefined}
-                              onClick={(event) => inspect(row, event)}
-                            >
-                              {isSelected
-                                ? m.release_fidelity_selected({}, o)
-                                : m.release_fidelity_select_detail({}, o)}
-                            </Button>
-                          )}
-                        </ContentItemFrame>
-                      </ReleaseAssociationGate>
-                    </li>
-                  );
-                })}
-              </ul>
-              {history.length > 0 && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={actionClass}
-                  disabled={!!draft || busy}
-                  onClick={(event) => {
-                    const previous = history.at(-1)!;
-                    movingBack.current = true;
-                    setHistory((items) => items.slice(0, -1));
+            ) : (
+              <p ref={readFailure} tabIndex={-1} role="status">
+                {m.candidate_loading({}, o)}
+              </p>
+            )}
+            {(priorPage || (streamFailure && admitted)) && (
+              <Field className="min-w-0">
+                <FieldLabel htmlFor={`${headingId}-recovery-stream`}>{m.release_fidelity_related({}, o)}</FieldLabel>
+                <NativeSelect
+                  id={`${headingId}-recovery-stream`}
+                  value={
+                    reader.kind === 'loading-page'
+                      ? (reader.intent.stream ?? '')
+                      : (read?.stream?.key ?? priorPage?.read.stream?.key ?? '')
+                  }
+                  disabled={!!draft}
+                  onChange={(event) => {
+                    const source = priorPage ?? admitted;
                     void startRead(
                       {
                         kind: 'page',
-                        stream: previous.stream,
-                        cursor: previous.cursor,
-                        session: admitted?.address.session,
+                        stream: event.currentTarget.value,
+                        ...(source?.address.session ? { session: source.address.session } : {}),
                       },
-                      event,
-                      admitted,
+                      undefined,
+                      source,
                     );
                   }}
                 >
-                  {m.prq_previous({}, o)}
-                </Button>
-              )}
-              {read.next && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={actionClass}
-                  disabled={!!draft || reader.kind === 'loading-page'}
-                  onClick={(event) =>
-                    void startRead(
-                      {
-                        kind: 'page',
-                        ...(read.stream?.key ? { stream: read.stream.key } : {}),
-                        ...(read.next ? { cursor: read.next } : {}),
-                        ...(admitted?.address.session ? { session: admitted.address.session } : {}),
-                      },
-                      event,
-                      admitted,
-                    )
-                  }
-                >
-                  {m.release_fidelity_next({}, o)}
-                </Button>
-              )}
-              {selection && selectionState && admitted && (
-                <ReleaseStatementGate statement={detailRow?.statement} locale={locale}>
-                  <ReleaseSelectedDetail
-                    page={admitted}
-                    occurrence={selection}
-                    row={detailRow}
-                    locale={locale}
-                    state={selectionState}
-                    detail={selectedDetail}
-                    onRetry={(event) => retryCurrent(event)}
-                    onClose={clearSelection}
-                    onCorrect={() => correctSelected(selection)}
-                    canCorrect={detailRow?.readability === 'readable' && !!detailRow.statement && !!selectedSlot}
-                    disabled={!!draft}
-                    headingRef={detailHeading}
-                  />
-                </ReleaseStatementGate>
-              )}
-            </section>
-            {!fileProfileReleased(read.release) && (
-              <p data-slot="release-files-unavailable">{m.release_fidelity_files_unavailable({}, o)}</p>
+                  {(priorPage?.read.streams ?? read?.streams ?? []).map((item) => (
+                    <NativeSelectOption key={item.key} value={item.key}>
+                      {item.label.text || item.property}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              </Field>
             )}
-            {draft && (
-              <RelationEditor
-                id={draft.holder}
-                locale={locale}
-                search={search}
-                transport={transport.relation(draft.holder, draft.slot.context ?? read.public.subject.context)}
-                composition={{
-                  statement: draft.statement,
-                  slot: draft.slot,
-                  positionEditable: false,
-                  ...(draft.session ? { session: draft.session } : {}),
-                }}
-                onClose={closeCorrection}
-              />
-            )}
-            {blocker.status === 'blocked' && (
-              <div role="dialog" className="space-y-2 rounded-xl border p-4">
-                <p>{m.release_fidelity_leave({}, o)}</p>
-                <Button type="button" className={actionClass} onClick={() => blocker.reset?.()}>
-                  {m.library_collection_draft_navigation_stay({}, o)}
-                </Button>
-                <Button type="button" variant="outline" className={actionClass} onClick={() => blocker.proceed?.()}>
-                  {m.library_collection_draft_navigation_leave({}, o)}
-                </Button>
-              </div>
-            )}
-            {read.public.subject.context === candidateContext ? (
-              <details className="space-y-3">
-                <summary className={summaryClass}>{m.release_fidelity_current_edit({}, o)}</summary>
-                <p>{m.release_fidelity_correction_review({}, o)}</p>
-                <SubjectFacts
-                  initial={{ ok: true, public: read.public, release: read.release, source: null }}
-                  locale={locale}
-                  transport={transport.facts}
-                  review={transport.review}
-                  initialReview={initialReview}
-                  embedded
-                  profile={{
-                    properties: (current) => scalarFields(current.release, current.public.subject.type),
-                    title: m.release_fidelity_current_edit({}, o),
-                    intro: m.release_fidelity_correction_review({}, o),
-                    empty: m.release_fidelity_empty({}, o),
-                    path: 'release',
-                  }}
-                />
-              </details>
-            ) : (
-              <p role="status">{m.relation_context({}, o)}</p>
-            )}
-            <nav className="flex flex-wrap gap-2" data-slot="release-return">
-              {workHref && (
-                <a href={workHref} className={`${buttonVariants({ variant: 'outline', size: 'sm' })} ${actionClass}`}>
-                  {m.release_fidelity_return({}, o)}
-                </a>
-              )}
-              <a
-                href={destination(`${href}/changes`, 'changes', 'related')}
-                className={`${buttonVariants({ variant: 'outline', size: 'sm' })} ${actionClass}`}
-              >
-                {catalogueEntries.changes({ id, title: title.text, locale }).label}
-                {context !== candidateContext ? `: ${m.release_fidelity_visit_unsupported({}, o)}` : ''}
-              </a>
-
+            <a href={destination(href, 'subject', 'related')} className={linkClass}>
+              {m.release_fidelity_origin({}, o)}
+            </a>
+            <div className="flex flex-wrap gap-2">
               <Button
                 type="button"
                 variant="outline"
                 className={actionClass}
-                disabled={!!draft}
+                disabled={busy || !!draft}
                 onClick={(event) => retryCurrent(event)}
               >
                 {m.release_fidelity_reload({}, o)}
               </Button>
-              {admitted?.address.cursor && (
+              <Button
+                type="button"
+                variant="outline"
+                className={actionClass}
+                disabled={busy || !!draft}
+                onClick={(event) => restart(event)}
+              >
+                {m.release_fidelity_restart({}, o)}
+              </Button>
+            </div>
+          </div>
+        )}
+        {read && (
+          <CatalogueCurrentReading
+            visible={readable}
+            ready={readable}
+            revision={`${lifetime.generation}:${read.digest}`}
+          >
+            <div hidden={!readable} className="mx-auto flex w-full min-w-0 max-w-4xl flex-col gap-6 p-4 sm:p-6">
+              <ViewHeading
+                label={m.release_fidelity_title({}, o)}
+                headingClassName="font-sans"
+                headingRef={heading}
+                headingTabIndex={-1}
+              />
+              <p className="text-muted-foreground">{m.release_fidelity_intro({}, o)}</p>
+              <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                <span lang={title.lang ?? undefined}>
+                  <a href={destination(href, 'subject', 'related')} className={linkClass}>
+                    {title.text || m.subject_value_unlabelled({}, o)}
+                  </a>
+                </span>
+                <span
+                  lang={pickText(read.release.types[read.public.subject.type]?.labels ?? {}, locale).lang ?? undefined}
+                >
+                  {pickText(read.release.types[read.public.subject.type]?.labels ?? {}, locale).text}
+                </span>
+              </p>
+              <ReleaseStatementGate
+                statement={selectedStatements(read.public.subject.statements['schema:exampleOfWork'])[0]}
+                locale={locale}
+              >
+                <section className="space-y-2" data-slot="release-work">
+                  <h2 ref={workHeading} tabIndex={-1} className="text-lg font-semibold">
+                    {m.release_fidelity_work({}, o)}
+                  </h2>
+                  {read.work.readability === 'absent' && <p>{m.release_fidelity_work_absent({}, o)}</p>}
+                  {read.work.readability === 'unreadable' && <p>{m.release_fidelity_work_unreadable({}, o)}</p>}
+                  {read.work.readability === 'concealed' && <p>{m.release_fidelity_work_concealed({}, o)}</p>}
+                  {workHref && (
+                    <a href={workHref} className={linkClass} lang={read.work.label?.lang ?? undefined}>
+                      {read.work.label?.text || m.subject_value_unlabelled({}, o)}
+                    </a>
+                  )}
+                  {read.work.readability === 'readable' && !workHref && (
+                    <p lang={read.work.label?.lang ?? undefined}>{read.work.label?.text}</p>
+                  )}
+                  {read.work.historical && (
+                    <p className="text-sm text-muted-foreground">{m.release_fidelity_historical({}, o)}</p>
+                  )}
+                  {read.work.completeness && (
+                    <p data-slot="release-completeness" lang={read.work.completeness.label?.lang ?? undefined}>
+                      {read.work.completeness.label?.text || m.release_fidelity_related_unreadable({}, o)}
+                    </p>
+                  )}
+                  {read.work.readability === 'readable' && !workHref && (
+                    <p role="status">{m.release_fidelity_visit_unsupported({}, o)}</p>
+                  )}
+                  {read.work.readability === 'readable' &&
+                    selectedStatements(read.public.subject.statements['schema:exampleOfWork']).map((statement) => (
+                      <ReleaseStatementEvidence
+                        key={statement.id}
+                        statement={statement}
+                        read={{ release: read.release, public: { related: read.public.related } }}
+                        locale={locale}
+                      />
+                    ))}
+                </section>
+              </ReleaseStatementGate>
+              <section className="space-y-2" data-slot="release-date">
+                <ContentItemHeading level={2} className="text-lg font-semibold">
+                  {m.release_fidelity_date({}, o)}
+                </ContentItemHeading>
+                <p>
+                  {read.date.kind === 'tba' ? (
+                    m.release_fidelity_date_tba({}, o)
+                  ) : read.date.kind === 'absent' ? (
+                    m.release_fidelity_date_absent({}, o)
+                  ) : datePresentation?.state === 'supported' ? (
+                    datePresentation.structuredDate ? (
+                      <time dateTime={datePresentation.structuredDate}>{datePresentation.text}</time>
+                    ) : (
+                      datePresentation.text
+                    )
+                  ) : datePresentation ? (
+                    datePresentation.text
+                  ) : read.date.kind === 'none' ? (
+                    m.release_fidelity_date_none({}, o)
+                  ) : read.date.kind === 'invalid' ? (
+                    m.release_fidelity_date_invalid({}, o)
+                  ) : read.date.kind === 'unsupported' ? (
+                    m.release_fidelity_date_unsupported({}, o)
+                  ) : (
+                    (read.date.text ?? m.release_fidelity_date_absent({}, o))
+                  )}
+                </p>
+                {read.date.historical && (
+                  <p className="text-sm text-muted-foreground">{m.release_fidelity_historical({}, o)}</p>
+                )}
+                {dateStatement && (
+                  <details className="space-y-2">
+                    <summary className={summaryClass}>{m.release_fidelity_date_evidence({}, o)}</summary>
+                    <PartValue part={dateStatement} read={read} locale={locale} />
+                    {dateStatement.qualifiers.map((part, index) => (
+                      <div key={index}>
+                        <PartValue part={part} read={read} locale={locale} />
+                      </div>
+                    ))}
+                    {dateStatement.references.map((reference, index) => (
+                      <div key={index} className="space-y-1 text-sm">
+                        {reference.parts.map((part, at) => (
+                          <PartValue key={at} part={part} read={read} locale={locale} />
+                        ))}
+                      </div>
+                    ))}
+                  </details>
+                )}
+                {!read.statusProperty && <p>{m.release_fidelity_status_unavailable({}, o)}</p>}
+                {!read.regionProperty && <p>{m.release_fidelity_region_unavailable({}, o)}</p>}
+              </section>
+              {(['classification', 'credits', 'identifiers', 'facts'] as const).map((group) =>
+                read.facts[group]?.length ? (
+                  <section key={group} className="space-y-3" data-slot={`release-${group}`}>
+                    <ContentItemHeading level={2} className="text-lg font-semibold">
+                      {group === 'classification'
+                        ? m.release_fidelity_classification({}, o)
+                        : group === 'credits'
+                          ? m.release_fidelity_credits({}, o)
+                          : group === 'identifiers'
+                            ? m.release_fidelity_identifiers({}, o)
+                            : m.release_fidelity_facts({}, o)}
+                    </ContentItemHeading>
+                    {read.facts[group]!.map((fact) => (
+                      <ContentItemFrame key={fact.property} as="div" className="min-w-0 space-y-2 p-4">
+                        <p lang={fact.label.lang ?? undefined} className="text-sm text-muted-foreground">
+                          {fact.label.text}
+                        </p>
+                        {fact.statements.map((statement) => (
+                          <div key={statement.id} className="space-y-2">
+                            <PartValue part={statement} read={read} locale={locale} />
+                            {statement.qualifiers.map((part, index) => (
+                              <div key={index} className="text-sm">
+                                <PartValue part={part} read={read} locale={locale} />
+                              </div>
+                            ))}
+                            {historicalNote(statement.rezics.release !== read.digest, o)}
+                          </div>
+                        ))}
+                      </ContentItemFrame>
+                    ))}
+                  </section>
+                ) : null,
+              )}
+              <section className="space-y-2" data-slot="release-sources">
+                <ContentItemHeading level={2} className="text-lg font-semibold">
+                  {m.release_fidelity_sources({}, o)}
+                </ContentItemHeading>
+                {!read.sources.length && <p>{m.sources_no_citations({}, o)}</p>}
+                <ul className="space-y-2">
+                  {read.sources.map((source) => (
+                    <li key={source.url} className="min-w-0">
+                      <a href={source.url} className={linkClass} rel="nofollow">
+                        {source.name}
+                      </a>
+                      {source.licence?.id && (
+                        <p className="text-sm text-muted-foreground">
+                          {source.licence.id}
+                          {source.attribution ? ` · ${source.attribution}` : ''}
+                        </p>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                <h3 ref={sourcesHeading} tabIndex={-1} className="sr-only">
+                  {m.subject_sources({}, o)}
+                </h3>
+                {destination(`${href}/sources`, 'sources', 'sources') ? (
+                  <a href={destination(`${href}/sources`, 'sources', 'sources')} className={linkClass}>
+                    {m.subject_sources({}, o)}
+                  </a>
+                ) : (
+                  <p>
+                    {m.subject_sources({}, o)}: {m.release_fidelity_visit_unsupported({}, o)}
+                  </p>
+                )}
+              </section>
+              <section className="min-w-0 space-y-3" data-slot="release-related">
+                <h2
+                  ref={listHeading}
+                  tabIndex={-1}
+                  className="text-lg font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                >
+                  {m.release_fidelity_related({}, o)}
+                </h2>
+                {read.streamState === 'unsupported' && <p>{m.release_fidelity_related_unsupported({}, o)}</p>}
+                {read.streamState === 'unavailable' && <p>{m.release_fidelity_related_unavailable({}, o)}</p>}
+                {read.streamState === 'withheld' && <p>{m.release_fidelity_related_withheld({}, o)}</p>}
+                {read.streamState === 'denied' && <p>{m.release_fidelity_related_denied({}, o)}</p>}
+                <p className="text-sm text-muted-foreground">{m.release_fidelity_selection_local({}, o)}</p>
+                {read.streams.length > 0 && (
+                  <Field className="min-w-0">
+                    <FieldLabel htmlFor={`${headingId}-stream`}>{m.release_fidelity_related({}, o)}</FieldLabel>
+                    <NativeSelect
+                      id={`${headingId}-stream`}
+                      value={
+                        reader.kind === 'loading-page'
+                          ? (reader.intent.stream ?? read.stream?.key ?? '')
+                          : (read.stream?.key ?? '')
+                      }
+                      disabled={!!draft}
+                      onChange={(event) => {
+                        void startRead(
+                          {
+                            kind: 'page',
+                            stream: event.currentTarget.value,
+                            ...(admitted?.address.session ? { session: admitted.address.session } : {}),
+                          },
+                          undefined,
+                          admitted,
+                        );
+                      }}
+                    >
+                      {read.streams.map((item) => (
+                        <NativeSelectOption key={item.key} value={item.key}>
+                          {item.label.text || item.property}
+                        </NativeSelectOption>
+                      ))}
+                    </NativeSelect>
+                  </Field>
+                )}
+                <p ref={sliceStatus} tabIndex={-1} className="sr-only">
+                  {m.release_fidelity_related({}, o)}
+                </p>
+                {reader.kind === 'loading-page' && <p role="status">{m.candidate_loading({}, o)}</p>}
+                {read.streamState === 'empty' && <p>{m.release_fidelity_related_empty({}, o)}</p>}
+                <ul className="space-y-3">
+                  {read.rows.map((row) => {
+                    const target = read.stream ? rowTarget(row, read.stream) : undefined;
+                    const occurrence = read.stream ? occurrenceFor(row, read.stream) : undefined;
+                    const isSelected = !!occurrence && occurrence.key === selection?.key;
+                    const summaryLabel = row.summary?.label?.value || m.subject_value_unlabelled({}, o);
+                    const companion =
+                      row.readability === 'readable' &&
+                      row.summary?.label?.value &&
+                      read.stream?.kind === 'file' &&
+                      target
+                        ? destination(
+                            `${subjectHref({ id: target, label: summaryLabel }, locale).href}/file`,
+                            'file',
+                            'inspection',
+                            occurrence,
+                          )
+                        : row.readability === 'readable' &&
+                            row.summary?.label?.value &&
+                            read.stream?.kind === 'release' &&
+                            target
+                          ? destination(
+                              `${subjectHref({ id: target, label: summaryLabel }, locale).href}/release`,
+                              'release',
+                              'inspection',
+                              occurrence,
+                            )
+                          : undefined;
+                    return (
+                      <li
+                        key={`${row.holder}:${row.statementId}`}
+                        aria-current={
+                          isSelected &&
+                          !row.statement?.qualifiers.some((part) => part.property.id === 'rezics:spoilerLevel')
+                            ? 'location'
+                            : undefined
+                        }
+                        data-selected-occurrence={
+                          isSelected && (!row.statement || spoilerLevel(row.statement) === 0)
+                            ? occurrence?.key
+                            : undefined
+                        }
+                      >
+                        <ReleaseAssociationGate
+                          key={`${row.holder}:${row.statementId}:${sliceRevision.current}`}
+                          row={row}
+                          locale={locale}
+                        >
+                          <ContentItemFrame as="div" className="min-w-0 space-y-3 p-4">
+                            <p className="break-words text-sm">
+                              {read.stream?.label.text || read.stream?.property} ·{' '}
+                              {read.stream?.direction === 'inverse' ? '←' : '→'}
+                            </p>
+                            {row.summary && companion && (
+                              <ListRowLink href={companion} lang={row.summary.label?.language}>
+                                {summaryLabel}
+                              </ListRowLink>
+                            )}
+                            <p>
+                              {row.readability === 'concealed'
+                                ? m.release_fidelity_related_concealed({}, o)
+                                : row.readability === 'unreadable'
+                                  ? m.release_fidelity_related_unreadable({}, o)
+                                  : summaryLabel}
+                            </p>
+                            {row.statement && row.readability === 'readable' ? (
+                              <CandidateValue
+                                snak={row.statement}
+                                related={row.related}
+                                locale={locale}
+                                link={ReleaseValueLink}
+                              />
+                            ) : null}
+                            {row.readability === 'readable' && !companion && (
+                              <p>{m.release_fidelity_visit_unsupported({}, o)}</p>
+                            )}
+                            {row.readability === 'readable' &&
+                              row.provenance.map((code, index) => (
+                                <p key={`${index}:${code}`} className="break-words text-sm text-muted-foreground">
+                                  {m.release_fidelity_related_unknown({ code }, o)}
+                                </p>
+                              ))}
+                            {row.readability === 'readable' && row.historical && (
+                              <p className="text-sm text-muted-foreground">{m.release_fidelity_historical({}, o)}</p>
+                            )}
+                            {occurrence && row.readability === 'readable' && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className={actionClass}
+                                disabled={!!draft}
+                                aria-current={isSelected ? 'true' : undefined}
+                                onClick={(event) => inspect(row, event)}
+                              >
+                                {isSelected
+                                  ? m.release_fidelity_selected({}, o)
+                                  : m.release_fidelity_select_detail({}, o)}
+                              </Button>
+                            )}
+                          </ContentItemFrame>
+                        </ReleaseAssociationGate>
+                      </li>
+                    );
+                  })}
+                </ul>
+                {history.length > 0 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className={actionClass}
+                    disabled={!!draft || busy}
+                    onClick={(event) => {
+                      const previous = history.at(-1)!;
+                      movingBack.current = true;
+                      setHistory((items) => items.slice(0, -1));
+                      void startRead(
+                        {
+                          kind: 'page',
+                          stream: previous.stream,
+                          cursor: previous.cursor,
+                          session: admitted?.address.session,
+                        },
+                        event,
+                        admitted,
+                      );
+                    }}
+                  >
+                    {m.prq_previous({}, o)}
+                  </Button>
+                )}
+                {read.next && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className={actionClass}
+                    disabled={!!draft || reader.kind === 'loading-page'}
+                    onClick={(event) =>
+                      void startRead(
+                        {
+                          kind: 'page',
+                          ...(read.stream?.key ? { stream: read.stream.key } : {}),
+                          ...(read.next ? { cursor: read.next } : {}),
+                          ...(admitted?.address.session ? { session: admitted.address.session } : {}),
+                        },
+                        event,
+                        admitted,
+                      )
+                    }
+                  >
+                    {m.release_fidelity_next({}, o)}
+                  </Button>
+                )}
+                {selection && selectionState && admitted && (
+                  <ReleaseStatementGate statement={detailRow?.statement} locale={locale}>
+                    <ReleaseSelectedDetail
+                      page={admitted}
+                      occurrence={selection}
+                      row={detailRow}
+                      locale={locale}
+                      state={selectionState}
+                      detail={selectedDetail}
+                      onRetry={(event) => retryCurrent(event)}
+                      onClose={clearSelection}
+                      onCorrect={() => correctSelected(selection)}
+                      canCorrect={detailRow?.readability === 'readable' && !!detailRow.statement && !!selectedSlot}
+                      disabled={!!draft}
+                      headingRef={detailHeading}
+                    />
+                  </ReleaseStatementGate>
+                )}
+              </section>
+              {!fileProfileReleased(read.release) && (
+                <p data-slot="release-files-unavailable">{m.release_fidelity_files_unavailable({}, o)}</p>
+              )}
+              {draft && (
+                <RelationEditor
+                  id={draft.holder}
+                  locale={locale}
+                  search={search}
+                  transport={transport.relation(draft.holder, draft.slot.context ?? read.public.subject.context)}
+                  composition={{
+                    statement: draft.statement,
+                    slot: draft.slot,
+                    positionEditable: false,
+                    ...(draft.session ? { session: draft.session } : {}),
+                  }}
+                  onClose={closeCorrection}
+                />
+              )}
+              {blocker.status === 'blocked' && (
+                <div role="dialog" className="space-y-2 rounded-xl border p-4">
+                  <p>{m.release_fidelity_leave({}, o)}</p>
+                  <Button type="button" className={actionClass} onClick={() => blocker.reset?.()}>
+                    {m.library_collection_draft_navigation_stay({}, o)}
+                  </Button>
+                  <Button type="button" variant="outline" className={actionClass} onClick={() => blocker.proceed?.()}>
+                    {m.library_collection_draft_navigation_leave({}, o)}
+                  </Button>
+                </div>
+              )}
+              {read.public.subject.context === candidateContext ? (
+                <details className="space-y-3">
+                  <summary className={summaryClass}>{m.release_fidelity_current_edit({}, o)}</summary>
+                  <p>{m.release_fidelity_correction_review({}, o)}</p>
+                  <SubjectFacts
+                    initial={{ ok: true, public: read.public, release: read.release, source: null }}
+                    locale={locale}
+                    transport={transport.facts}
+                    review={transport.review}
+                    initialReview={initialReview}
+                    embedded
+                    profile={{
+                      properties: (current) => scalarFields(current.release, current.public.subject.type),
+                      title: m.release_fidelity_current_edit({}, o),
+                      intro: m.release_fidelity_correction_review({}, o),
+                      empty: m.release_fidelity_empty({}, o),
+                      path: 'release',
+                    }}
+                  />
+                </details>
+              ) : (
+                <p role="status">{m.relation_context({}, o)}</p>
+              )}
+              <nav className="flex flex-wrap gap-2" data-slot="release-return">
+                {workHref && (
+                  <a href={workHref} className={`${buttonVariants({ variant: 'outline', size: 'sm' })} ${actionClass}`}>
+                    {m.release_fidelity_return({}, o)}
+                  </a>
+                )}
+                <a
+                  href={destination(`${href}/changes`, 'changes', 'related')}
+                  className={`${buttonVariants({ variant: 'outline', size: 'sm' })} ${actionClass}`}
+                >
+                  {catalogueEntries.changes({ id, title: title.text, locale }).label}
+                  {context !== candidateContext ? `: ${m.release_fidelity_visit_unsupported({}, o)}` : ''}
+                </a>
+
                 <Button
                   type="button"
                   variant="outline"
                   className={actionClass}
                   disabled={!!draft}
-                  onClick={(event) => restart(event)}
+                  onClick={(event) => retryCurrent(event)}
                 >
-                  {m.release_fidelity_restart({}, o)}
+                  {m.release_fidelity_reload({}, o)}
                 </Button>
-              )}
-            </nav>
-          </div>
-        </CatalogueCurrentReading>
-      )}
-    </section>
+                {admitted?.address.cursor && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className={actionClass}
+                    disabled={!!draft}
+                    onClick={(event) => restart(event)}
+                  >
+                    {m.release_fidelity_restart({}, o)}
+                  </Button>
+                )}
+              </nav>
+            </div>
+          </CatalogueCurrentReading>
+        )}
+      </section>
+    </ReleaseDestination.Provider>
   );
 }
 
