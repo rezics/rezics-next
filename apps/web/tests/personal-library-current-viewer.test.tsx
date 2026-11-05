@@ -1,13 +1,14 @@
 import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, StrictMode } from 'react';
+import { createKernelClient } from '@rezics/client';
 import * as start from '../.storybook/react-start';
 import type { PersonalLibraryCurrentRead, PersonalContinueRead } from '../src/library/personal-library-server';
 import type { LibraryMutationResult, PersonalLibraryEntry } from '../src/library/entries-read';
 import type { ShelfSearch } from '../src/library/shelf-params';
 
-// UNRUN: controller integration owns execution. These use the installed DOM, actual combined
-// server export and exported mounted composition with real shelf children; no native/visual proof.
+// Controller acceptance owns native/visual proof. This fixture covers the server export and mounted
+// composition with real shelf children against the generated kernel client.
 type Preparation = { subject?: string; accessToken?: string; status: 'active' | 'absent' | 'unavailable' };
 let preparations: Preparation[] = [];
 let preparationCalls = 0;
@@ -37,6 +38,11 @@ mock.module('@tanstack/react-start/server', () => ({
   setResponseHeader: (name: string, value: string) => headers.set(name, value),
 }));
 mock.module('cloudflare:workers', () => ({ env }));
+const nativeClient = createKernelClient('https://kernel.test', {
+  headers: { 'accept-language': 'en' },
+  fetch: (input, init) => globalThis.fetch(input, init),
+});
+mock.module('../src/kernel/client', () => ({ kernelClient: () => nativeClient, requestLocale: () => 'en' }));
 afterAll(() => mock.restore());
 function deferred<T>() {
   let resolve!: (value: T) => void;
