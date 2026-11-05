@@ -67,6 +67,8 @@ Decision: Keep exact Character provider keys, appearance rows and units; omit un
 
 ## Native execution boundary
 
+Decision: run the fresh pinned seed and journal reopen on an approved check host with `bun scripts/worker-check.ts --returns .temp/imports-native-evidence -- bun scripts/datasets/native-seed-journey.ts`. The journey uses the real local-stack composition, independent anonymous Subject reads, mounted Web pages and decoded served cover variants. Credentials and private exports stay in local-stack private files; returned evidence redacts the persona password. Supply the actual private list export through the existing environment seam to complete its upload obligation.
+
 Kernel owns runtime, authorization, command execution and native reads. Importer does not add privileged writes, acceptance shortcuts or SQL adoption. Decision: review exact original `bangumi_cross_media`/`vndb_cross_media` claims through the released asynchronous merge contract; retain sealed intent and original bindings while observing native operation completion and separate public canonical reads. Client binds these exact methods while whole-Kernel declaration publication is pending. HTTP 202 is admission; HTTP 200 merge or an application reread is not completion. Current Person identifiers exclude deprecated rows and require every remaining value to agree. Native redirects resolve reads on the same API; manifest assertions and dependent credits keep original source ownership. Credits wait for current canonical delivery, not another binding or publisher.
 
 ## Deletion
