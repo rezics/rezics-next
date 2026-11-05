@@ -6,10 +6,7 @@ if (!databaseUrl) throw new Error('DATABASE_URL is required for the terminal era
 
 const barrier = new Pool({ connectionString: databaseUrl, max: 2 });
 const registerStep = DBOS.registerStep.bind(DBOS);
-DBOS.registerStep = ((
-  action: (...args: any[]) => any,
-  configuration?: { name?: string; [key: string]: unknown },
-) => {
+DBOS.registerStep = ((action: (...args: any[]) => any, configuration?: { name?: string; [key: string]: unknown }) => {
   const gated = async (...args: any[]) => {
     for (;;) {
       const entered = await barrier.query(
@@ -22,9 +19,7 @@ DBOS.registerStep = ((
     try {
       return await action(...args);
     } finally {
-      await barrier.query(
-        `UPDATE access.terminal_erasure_test_barrier SET active=active-1 WHERE singleton=true`,
-      );
+      await barrier.query(`UPDATE access.terminal_erasure_test_barrier SET active=active-1 WHERE singleton=true`);
     }
   };
   return registerStep(gated, configuration as never);
