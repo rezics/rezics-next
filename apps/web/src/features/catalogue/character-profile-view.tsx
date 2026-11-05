@@ -183,8 +183,8 @@ function CharacterProfileLive({
         id,
         label: correctionLabel,
         locale,
-        work,
-        classificationHandoff: classificationHandoffToken,
+        ...(work ? { work } : {}),
+        ...(classificationHandoffToken ? { classificationHandoff: classificationHandoffToken } : {}),
       })
     : undefined;
   const publicHref =
@@ -194,7 +194,7 @@ function CharacterProfileLive({
           label: correctionLabel,
           locale,
           context: current.context,
-          realm,
+          ...(current.realm ? { realm: current.realm } : {}),
         })
       : undefined;
   const globalMutation = currentRead && current?.context === candidateContext && !realm;
@@ -233,7 +233,7 @@ function CharacterProfileLive({
           )}
         </div>
       )}
-      {query.data && !query.data.ok && query.data.reason === 'unsupported' && (
+      {query.data && !query.data.ok && query.data.selection === 'unsupported' && (
         <div role="status" className="space-y-2 rounded-lg border border-border p-4">
           <p>{m.character_visit_unsupported({}, o)}</p>
           {globalHref && (
@@ -245,7 +245,7 @@ function CharacterProfileLive({
       )}
       {((query.isFetching && !currentRead) || reloadPending) && <p role="status">{m.candidate_loading({}, o)}</p>}
       {(query.isError ||
-        (query.data && !query.data.ok && query.data.reason !== 'unsupported') ||
+        (query.data && !query.data.ok && query.data.selection !== 'unsupported') ||
         (query.isSuccess && !query.isFetching && query.data?.ok && !currentRead)) && (
         <div ref={reloadFailure} tabIndex={-1}>
           <EditorFailure locale={locale} reason={query.data && !query.data.ok ? query.data.reason : 'unavailable'} />
