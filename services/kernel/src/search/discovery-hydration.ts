@@ -86,16 +86,9 @@ function validOwnerSummary(
   if (kind === 'collection') {
     return (
       Object.keys(value).length === 8 &&
-      [
-        'id',
-        'title',
-        'summary',
-        'revision',
-        'sourcePosition',
-        'queryObservation',
-        'card',
-        'operands',
-      ].every((key) => Object.hasOwn(value, key)) &&
+      ['id', 'title', 'summary', 'revision', 'sourcePosition', 'queryObservation', 'card', 'operands'].every((key) =>
+        Object.hasOwn(value, key),
+      ) &&
       validText(value.title) &&
       validNullableText(value.summary) &&
       decimal(value.revision) &&

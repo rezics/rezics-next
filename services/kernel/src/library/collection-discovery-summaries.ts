@@ -139,9 +139,8 @@ function operand(
   queryCurator: CollectionCurator | null | undefined,
   querySubject: { id: string } | null | undefined,
 ): PublicCollectionDiscoveryOperand {
-  const presentationKind: CollectionPresentationKind = observed.row.presentationKind === null
-    ? { kind: 'mixed' }
-    : { kind: 'owner', id: observed.row.presentationKind };
+  const presentationKind: CollectionPresentationKind =
+    observed.row.presentationKind === null ? { kind: 'mixed' } : { kind: 'owner', id: observed.row.presentationKind };
   const subjectMembership =
     query.subjectId === undefined
       ? null
@@ -382,7 +381,9 @@ export async function readPublicCollectionDiscoverySummaries(
       state: 'ready',
       summaries: [],
       operands: [],
-      queryObservation: createHash('sha256').update(JSON.stringify([admitted.context.partition, query])).digest('hex'),
+      queryObservation: createHash('sha256')
+        .update(JSON.stringify([admitted.context.partition, query]))
+        .digest('hex'),
     };
   const unavailable = (reason: Extract<PublicCollectionDiscoveryResult, { state: 'unavailable' }>['reason']) =>
     ({ state: 'unavailable', reason }) as const;

@@ -113,9 +113,8 @@ function compare(a: CollectionDiscoveryKey, b: CollectionDiscoveryKey) {
 
 async function item(client: AccessClient, key: CollectionDiscoveryKey, row?: Row): Promise<CollectionDiscoveryItem> {
   if (!row || row.state !== 'active' || row.visibility !== 'public') return { key, status: 'withdrawn' };
-  const presentationKind: CollectionPresentationKind = row.presentationKind === null
-    ? { kind: 'mixed' }
-    : { kind: 'owner', id: row.presentationKind };
+  const presentationKind: CollectionPresentationKind =
+    row.presentationKind === null ? { kind: 'mixed' } : { kind: 'owner', id: row.presentationKind };
   const recency: CollectionDiscoveryRecency = [
     row.membershipKind === 'curated' ? row.updatedAtEpochMicros : null,
     key.route,
@@ -190,7 +189,10 @@ export function publicCollectionDiscoverySource({ pool }: { pool: Pool }): Colle
             : await readDiscoverySubjectMembership(client, sources, query.subjectId);
         const followCountHealth = query?.popularity ? await readFollowCountHealthObservation(client) : undefined;
         const counts = query?.popularity
-          ? await readCollectionDiscoveryFollowCounts(client, values.map(({ key }) => key))
+          ? await readCollectionDiscoveryFollowCounts(
+              client,
+              values.map(({ key }) => key),
+            )
           : new Map<string, string | null>();
         if (query?.popularity && values.some((value) => !counts.get(value.key.id)))
           throw new FollowCountUnavailableError('A public Collection follow total is unavailable');
@@ -207,10 +209,7 @@ export function publicCollectionDiscoverySource({ pool }: { pool: Pool }): Colle
                   query?.subjectId === undefined
                     ? null
                     : { subjectId: query.subjectId, matches: memberships.get(value.key.id) ?? false },
-                popularity:
-                  query?.popularity && followCountHealth
-                    ? { followers: counts.get(value.key.id)! }
-                    : null,
+                popularity: query?.popularity && followCountHealth ? { followers: counts.get(value.key.id)! } : null,
               },
             },
           };

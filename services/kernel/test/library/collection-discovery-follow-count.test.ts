@@ -25,10 +25,7 @@ test('native public popularity follows current aggregate changes and identity ti
     }
     async function reconcileAndRead(target: typeof first.target, expected: number) {
       await driver.reconcile(first.follower, target);
-      const response = await driver.request(
-        first.manager.credential,
-        `/v1/followCounts/collection/${target.targetId}`,
-      );
+      const response = await driver.request(first.manager.credential, `/v1/followCounts/collection/${target.targetId}`);
       expect(response.status).toBe(200);
       expect(await response.json()).toMatchObject({ followerCount: expected });
       return popular(target.targetId);
@@ -74,9 +71,9 @@ test('native public popularity follows current aggregate changes and identity ti
     const secondCurrent = await popular(second.targetId);
     expect(firstCurrent.operands.popularity).toEqual({ followers: '0' });
     expect(secondCurrent.operands.popularity).toEqual({ followers: '1' });
-    expect(compareCollectionDiscoveryOperands(toRanked(firstCurrent), toRanked(secondCurrent), 'popularity')).toBeGreaterThan(
-      0,
-    );
+    expect(
+      compareCollectionDiscoveryOperands(toRanked(firstCurrent), toRanked(secondCurrent), 'popularity'),
+    ).toBeGreaterThan(0);
   } finally {
     await driver.close();
   }

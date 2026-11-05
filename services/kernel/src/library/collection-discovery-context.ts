@@ -35,7 +35,10 @@ type AccountSummary = NonNullable<
   Awaited<ReturnType<typeof readAccountDiscoverySummaries>> extends Map<string, infer Value> ? Value : never
 >;
 
-function disclosedCurator(account: AccountSummary | null, unavailableReason: 'deidentified' | 'withheld'): CollectionCurator {
+function disclosedCurator(
+  account: AccountSummary | null,
+  unavailableReason: 'deidentified' | 'withheld',
+): CollectionCurator {
   return account
     ? {
         state: 'available',
@@ -141,13 +144,15 @@ export async function prepareCollectionDiscoveryContext(
   members: ReadonlyMap<string, readonly DiscoveryMemberKey[]>,
   languages: readonly string[] = [],
   filters: CollectionDiscoveryContextFilters = {},
-): Promise<Readonly<{
-  values: ReadonlyMap<string, CollectionDiscoveryContext>;
-  queryCurator?: CollectionCurator | null;
-  querySubject?: SubjectSummary | null;
-  observation: string;
-  current: () => Promise<boolean>;
-}>> {
+): Promise<
+  Readonly<{
+    values: ReadonlyMap<string, CollectionDiscoveryContext>;
+    queryCurator?: CollectionCurator | null;
+    querySubject?: SubjectSummary | null;
+    observation: string;
+    current: () => Promise<boolean>;
+  }>
+> {
   const unavailable = new Map(
     sources.map((source) => [
       source.id,

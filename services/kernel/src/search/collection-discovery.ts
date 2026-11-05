@@ -242,10 +242,7 @@ function summaries(value: PublicCollectionDiscoveryResult, ids: readonly string[
       throw new TypeError('Invalid current Collection disclosure status');
     return { state: 'unavailable', reason: value.reason };
   }
-  if (
-    value.state !== 'ready' ||
-    !Array.isArray(value.summaries)
-  )
+  if (value.state !== 'ready' || !Array.isArray(value.summaries))
     throw new TypeError('Invalid current Collection summaries');
   const byId = new Map<string, PublicCollectionDiscoverySummary>();
   for (const card of value.summaries) {
@@ -454,7 +451,8 @@ export function createNativeCollectionDiscoveryAdapter(
                     (row.operands.subjectMembership?.subjectId !== nativeOperand.subjectMembership.subjectId ||
                       row.operands.subjectMembership.matches !== nativeOperand.subjectMembership.matches)) ||
                   (query.popularity === true &&
-                    (!row.operands.popularity || !nativeOperand.popularity ||
+                    (!row.operands.popularity ||
+                      !nativeOperand.popularity ||
                       row.operands.popularity.followers !== nativeOperand.popularity.followers))
                 )
                   throw new CollectionDiscoveryReadinessError('unavailable', 'current_source_changed');

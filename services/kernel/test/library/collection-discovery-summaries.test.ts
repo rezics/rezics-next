@@ -280,9 +280,7 @@ test('selected A supplies exact dynamic Subject membership and null recency whil
   });
   expect(result).toMatchObject({
     state: 'ready',
-    summaries: [
-      { id: collection.id, membershipKind: 'dynamic', outputGeneration: published.publication.generation },
-    ],
+    summaries: [{ id: collection.id, membershipKind: 'dynamic', outputGeneration: published.publication.generation }],
     operands: [
       {
         id: collection.id,

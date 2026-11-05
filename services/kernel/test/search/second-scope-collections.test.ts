@@ -427,7 +427,11 @@ test('Search collection tie ordering uses exact counts, exact microseconds, null
       curator: { state: 'unavailable' as const, reason: 'deidentified' as const },
       subjectMembership: null,
       popularity: { followers: '9007199254740993' },
-      recency: ['1791431975123457', key('00000000-0000-7000-8000-000000000021').route, '00000000-0000-7000-8000-000000000021'] as const,
+      recency: [
+        '1791431975123457',
+        key('00000000-0000-7000-8000-000000000021').route,
+        '00000000-0000-7000-8000-000000000021',
+      ] as const,
       eligible: { presentationKind: null, curator: null, subject: null },
     },
   };
@@ -437,7 +441,11 @@ test('Search collection tie ordering uses exact counts, exact microseconds, null
       ...left.operand,
       id: '00000000-0000-7000-8000-000000000022',
       popularity: { followers: '9007199254740993' },
-      recency: ['1791431975123456', key('00000000-0000-7000-8000-000000000022').route, '00000000-0000-7000-8000-000000000022'] as const,
+      recency: [
+        '1791431975123456',
+        key('00000000-0000-7000-8000-000000000022').route,
+        '00000000-0000-7000-8000-000000000022',
+      ] as const,
     },
   };
   expect(compareCollectionDiscoveryOperands(left, right, 'popularity')).toBeLessThan(0);
