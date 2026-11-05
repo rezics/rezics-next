@@ -1,4 +1,10 @@
 {
+  "game_visit_invalid": "この修正アドレスは無効です。現在のゲームの閲覧画面から修正を開き直してください。",
+  "game_visit_unsupported": "この閲覧に使われているコンテキストはゲーム修正エディターでは未対応です。元の閲覧画面に戻るか、グローバルで別の修正を開始してください。",
+  "game_visit_context": "コンテキスト: {context}",
+  "game_visit_realm": "Realm: {realm}",
+  "game_visit_return": "現在のゲームの閲覧画面に戻る",
+  "game_visit_global": "グローバルで別の修正を開始",
   "credit_return_unavailable": "このクレジットまたは現在の表示範囲が変更されたか、取得できません。現在のクレジットを選択してください。",
   "credit_technical": "技術的な詳細",
   "credit_label_unavailable": "項目名を取得できません",

@@ -1,4 +1,10 @@
 {
+  "game_visit_invalid": "This correction address is invalid. Open correction again from the current Game reading.",
+  "game_visit_unsupported": "This reading uses a Context that the Game correction editor does not support. Return to the source reading, or start a separate Global correction.",
+  "game_visit_context": "Context: {context}",
+  "game_visit_realm": "Realm: {realm}",
+  "game_visit_return": "Return to the current Game reading",
+  "game_visit_global": "Start a separate Global correction",
   "credit_return_unavailable": "This credit or its current window changed or is unavailable. Select a current credit to inspect it.",
   "credit_technical": "Technical details",
   "credit_label_unavailable": "Field label unavailable",

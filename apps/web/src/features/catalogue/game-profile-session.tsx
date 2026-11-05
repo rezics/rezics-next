@@ -1,3 +1,4 @@
+import { gameVisitSearch, type GameCurrentVisit } from './game-current-visit';
 import { editorRequest } from './editor-request';
 import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
 import { candidateSession } from '../../subject/candidate-lifetime';
@@ -17,7 +18,13 @@ import { submitFactCorrection } from './subject-facts-actions';
 import { readSubjectRelationEditor, proposeSubjectRelation, confirmSubjectRelation } from './relation-editor-actions';
 import { relationTargetSearch } from './relation-editor-search';
 
-function GameProfileSessionLive({ id, locale }: { id?: string; locale: string }) {
+function GameProfileSessionLive({ id, locale, visit, address }: {
+  id?: string;
+  locale: string;
+  visit?: GameCurrentVisit | undefined;
+  /** Included in the existing session and editor lifetime, including source release replacement. */
+  address?: string | undefined;
+}) {
   const editorWork = useCatalogueLifetime('transport');
   const { state } = useSession();
   const search = useCallback(
@@ -29,13 +36,17 @@ function GameProfileSessionLive({ id, locale }: { id?: string; locale: string })
     <GameProfile
       {...(id ? { id } : {})}
       locale={locale}
+      visit={visit}
+      address={address}
       session={state}
       search={search}
       onNavigate={(href) => {
         window.location.assign(href);
       }}
       transport={{
-        load: () => loadGameProfile({ data: id }),
+        load: () => loadGameProfile({ data: id && visit
+          ? { id, locale, search: gameVisitSearch(visit) }
+          : id }),
         create: (data) => createCatalogueGame({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
         eligibility,
         read: (data) => readCreatedCatalogueSubject({ data }),

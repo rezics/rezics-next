@@ -706,6 +706,9 @@ export function SubjectPage({
             type={read.subject.type}
             label={subjectPageTitle(page, locale)}
             locale={locale}
+            context={page.context?.id ?? read.subject.context}
+            realm={realm}
+            release={page.catalogue?.digest}
           />
           <CreateSubjectEntry locale={locale} />
           {read.subject.type === 'wd:Q209163' ? (
@@ -771,7 +774,20 @@ export function SubjectPage({
         </EditorialEntry>
       </>
     ) : (
-      existingActions
+      <>
+        {existingActions}
+        {read && !page.account && realm && (
+          <GameProfileEntry
+            id={read.subject.id}
+            type={read.subject.type}
+            label={subjectPageTitle(page, locale)}
+            locale={locale}
+            context={page.context?.id ?? read.subject.context}
+            realm={realm}
+            release={page.catalogue?.digest}
+          />
+        )}
+      </>
     );
   const jsonLd = overview ? subjectPageJsonLd(page, locale) : undefined;
   const bar =

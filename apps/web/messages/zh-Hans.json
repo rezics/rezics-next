@@ -1,4 +1,10 @@
 {
+  "game_visit_invalid": "此修正地址无效。请从当前游戏阅读页面重新打开修正。",
+  "game_visit_unsupported": "游戏修正编辑器尚不支持此阅读使用的 Context。请返回来源阅读，或另行开始 Global 修正。",
+  "game_visit_context": "Context：{context}",
+  "game_visit_realm": "Realm：{realm}",
+  "game_visit_return": "返回当前游戏阅读",
+  "game_visit_global": "另行开始 Global 修正",
   "credit_return_unavailable": "此演职员资料或当前窗口已变更，或无法读取。请选择当前资料以查看。",
   "credit_technical": "技术详情",
   "credit_label_unavailable": "字段名称不可用",
