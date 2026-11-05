@@ -13,7 +13,7 @@ Registration, not aliases, dump fields or caller descriptors, sets source rights
 
 ## Registration, identity and ordinary writes
 
-The active registration uses Bangumi bangumi@15, VNDB vndb@8, Open Library open-library@5, Wikidata wikidata-6 and cross-media-entities cross-media-entities@15. Selected Bangumi entities compose cross-media-entities@15+bangumi@15. Vocabulary revisions belong to [conversion](../../packages/conversion/README.md#package-api).
+The active registration uses Bangumi bangumi@16, VNDB vndb@8, Open Library open-library@5, Wikidata wikidata-6 and cross-media-entities cross-media-entities@15. Selected Bangumi entities compose cross-media-entities@15+bangumi@16. Vocabulary revisions belong to [conversion](../../packages/conversion/README.md#package-api).
 
 Configured alias and exact external ID form the durable source tuple. The alias binds to one normalized API origin before run or network effects; destination placement is not authorization. Source records cannot choose provider or converter revisions. Record the genuine source revision, or unversioned with a source digest when no revision exists; never fabricate one.
 
@@ -46,53 +46,31 @@ Metadata has an immutable request/result journal: the first write expects no rev
 
 Descriptors are at most 8 KiB. A run adds at most one intent per bound record, or two when an unresolved intent precedes a change. Each coordinator attempt is capped at eight and each HTTP call at five, independently of semantic, statistic and media bounds.
 
-## Registered source vocabulary mapping
+## Mapping boundary
 
-The graph owner selects and traverses source rows, resolves native identities, and supplies normalized rows plus exact public bindings. The pure mapper follows no IDs, searches no labels and infers no equivalence. It verifies the current release, source path/code, target type, property and qualifiers. Missing, withdrawn, concealed, wrong-type or unavailable bindings yield addressable gaps, not similar-label fallbacks; valid rows survive malformed neighbors. Output uses the registered source alias, revision, digest, attribution and ordinary batch-write path. Mapping-specific command-key revisions prevent a sealed command from being replayed with changed statement bytes. Source rows cap at 128 per call and use only room remaining in the 100-command batch.
-
-### Bangumi people, TVAnime, games and characters
-
-For an actual type-1 Person, name is und and name_cn or the exact PersonDetail infobox key 简体中文名 is zh. Biography, names, careers and credits remain independent. A career proposal requires the actual Person/source key, source-owned careers Scheme, current bound Concept, released P106 and exact citation. Pure conversion emits no P106; source Concepts do not claim canonical occupation or cross-provider equivalence. A malformed, missing or empty career cannot erase valid sibling facts. PersonDetail career and Chinese-name acquisition shares one selected response and receipt.
-
-TVAnime official websites remain separate schema:url statements; descriptive links remain cited P973; copyright notices remain verbatim and grant no licence. Source links are not fetched. Game Chinese names, aliases, publication dates, environments, genres, websites and work evidence remain independent, exact and cited. Type-4 source genres stay literal and unsplit; platforms and engines require current exact Concept bindings. Creator and voice credits follow Game environment/genres, then Character identity/appearance; Game cast follows Character. Each association cites its exact selected work/person or work/Character source relation and released role. Character identity, appearance, names and explicit-unit measurements stay on Character; units and blood-type Concepts are never guessed.
-
-Only admitted source-site rows with a parsed public Bangumi /subject/N URL yield that exact numeric P5732 identifier. Person/Character URLs, other websites, titles and adaptations do not resolve identity. Game website and descriptive work-link fields retain exact URL bytes and separate properties. Open Library Work first_publish_date stays on Work; Edition dates, page counts and ISBNs remain on Edition.
-
-### VNDB facts, tags and releases
-
-COPY conversion retains exact table origins and native keys. Null, empty and missing optional Latin cells remain distinct in the digest: exactly empty omits only the Romanized alias; whitespace, missing and wrong-type values remain errors. Selected release names do not rank from translation flags. Dates retain year/month/day precision; TBA, unknown and absent remain distinct. Producer parent/subsidiary directions and release supersession use only their admitted outgoing source rows; no reciprocal or chronology-based edge is invented. Completeness remains a qualifier gap where no released status property exists.
-
-The local showcase keeps `vn_relations.side` and `par` as addressable gaps until the typed work-relations result supplies the mapped direction, current endpoint identities and citation. It does not emit a generic property from those inventory strings.
-
-Decision: `sourceParents` retains child/parent keys, category, path, main. Missing, cyclic or cross-category ancestry withholds edges; source closure grants no native hierarchy admission or equivalence.
-
-Public tags need COPY rows and current reviewed Scheme/Concept bindings. Kana weights need an exact current /vn response for the selected work/tag, retaining decimal rating, response digest and endpoint. Exclude user IDs, notes and votes; COPY votes are never weights, confidence or ratings. Changed or missing bindings withhold only their association.
-
-Selected-family release seeds read only selected works/releases and current reviewed development-status/platform/medium groups. Reseeds reuse the current seed result, latest verified groups, released states and exact keys. Changed bindings reseed the same plan; missing/retracted classification gaps withhold only that association. Dates, names and editorial choices survive; TBA/unknown never means unreleased.
-
-### Wikidata exact values
-
-A complete cited candidate must pass public Definitions validation against the actual released property. Preserve each present timezone, before and after value, including zero; absent values stay absent. Quantity amount, bounds, unit and qualifiers remain exact. If any required qualifier is unsupported, unresolved or narrowed, withhold the entire measurement. Do not invent vocabulary or an exactness flag. Unresolved keys remain cited external identifiers until a real resolution is available.
-
-### Resolved references and reviewed catalogue seed
-
-Conversion resolvedReferences keys and platform-seed identities are different formats. Conversion uses v1 plus compact UTF-8 JSON for the exact ordered tuple. The platform seed uses v1 plus unpadded base64url of the tuple's UTF-8 JSON. Keep exact Scheme and literal identity, current 255-byte external-ID and full public-key caps, current native receipts, and separate provider namespaces; do not normalize, hash, truncate or rewrite provider IDs.
-
-The explicit seed publisher is the only trusted producer for the four authored reviewed-vocabulary records, including the reviewed Bangumi Episode Scheme and its seven Concepts. Seed owners are not provider records or derived UUIDs; native create/resolve receipts supply IDs. The ordinary Bangumi CLI may use the reviewed lookup, which checks exact identities, current bindings, source fences and public disclosure. It performs no label lookup or population scan. Ordinary provider imports do not invoke the seed publisher. Seed review/adoption uses current authority and fresh native heads; the importer grants nothing.
+[Conversion](../../packages/conversion/README.md) owns provider field mappings, value fidelity, citations, qualifiers and released conversion profiles. Imports owns selected external acquisition, source and request journals, candidate preparation, replay, and the separately authorized acceptance, adoption and readback lifecycle. Importer callers pass exact selected records and current bindings to Conversion; they do not reinterpret provider fields or infer identity from names, titles or URLs.
 
 ## Shared showcase and media
 
-Ordinary import remains proposal-only. The common selected-family publisher records exact create and proposal bodies before sending and stores native IDs only after acknowledged responses. It operates on finite selected roots and direct selected graphs, not a catalogue scan. Candidate acceptance and adoption are separate authorized operations; adoption uses exact candidate IDs and preserves unrelated editorial choices. Independent current reads verify identity, endpoints, statements, qualifiers, source citations and reader routes. A missing, changed, hidden or unreadable binding withholds only the dependent result.
+### Selected release context
 
-The development seed selects Bangumi Steins;Gate anime and book and CLANNAD anime, plus VNDB Steins;Gate and CLANNAD. It adds direct cast and episodes, not recursive work expansion or release discovery. Work links and showcase publication are separate results: source-keyed workLinks returns current source/cited-work identities and routes; showcase.published returns independently read public identities, admitted assertions and routes. No title lookup correlates them. The selected plan retains the existing graph cap of 8,192 edges and 8 MiB total, at most 1 MiB per edge, and reports overflow as a bounded gap.
+Only finite selected records and their direct, admitted graph relations enter a showcase plan. Release facts stay on their exact Release or Work identities, and current platform or medium bindings are reread for the selected plan. Source-keyed work links and showcase publication are separate results; neither title matching nor a work-link result establishes publication.
 
-Each selected VNDB link carries its raw candidate digest, normalized semantic digest, upstream entry revision and vndb-work-links@1 graph revision. At most three selected franchise families contain 256 works each, for 768 total; each owner has at most 32 links. Only selected vn_extlinks rows and matching extlinks dictionary rows are read. A website row may propose P5732 only for an exact public Bangumi subject URL after a facts fence. VN and anime identities remain separate. Missing/duplicate joins and dictionary rows are bounded gaps; malformed required headers fail with the table name.
+### Cover source acquisition
 
-Common publication and media refresh share one journal and exact source/tuple-home fences. Before a receipt or replay, current authorization and fences are checked. Pending or unknown outcomes retain the exact response evidence and unresolved command/key. A changed terminal response gets a distinct receipt. A nonempty plan remains recoverable; retries reuse the sealed request, independent reads verify the result, and unrelated editorial choices are preserved. Current source fences apply on unchanged and cached results. Unavailable, rejected or fenced outcomes are not success; 503/429, acquisition and reopen limits remain finite.
+Bangumi PersonDetail fallback reads only selected actual Persons missing the relevant archive field. The exact response id and archive type must match; images admit only images.large. Missing, blank, placeholder or alternate-size values are omitted. A response can supply the selected Person's careers and Chinese name as well as the image field; each admitted field retains its own exact evidence and digest. An absent source revision stays unversioned.
 
-Content owns media rights, image processing, identity and serving; see [Content covers](../kernel/src/content/README.md#covers). The shared [operation bounds](#operation-bounds) cover media preparation, observation, resolution and route writes. A source cover needs rights-holder and via-source credit. Metadata rights do not license images. The Content URL-import/shared worker re-encodes admitted images into available media variants; originals are not public. Exact candidate adoption and current public identity/readback are separate from media completion, and current served variants follow Content policy. No hotlink, metadata licence, BFF or reservation proves an available public cover. Takedown fences the source cover field so refresh cannot restore it.
+Content owns media rights, image processing, identity and serving; see [Content covers](../kernel/src/content/README.md#covers). Metadata rights do not license images. A source cover requires rights-holder and via-source credit. Content re-encodes admitted URLs into available media variants; originals are not public. Candidate adoption and current public identity/readback are separate from media completion. Takedown fences the source cover field so refresh cannot restore it.
 
-Bangumi PersonDetail fallback reads only selected actual Persons missing the relevant archive field. Exact GET /v0/persons/{id} response identity and archive type must match; only images.large is admitted for images. Missing, blank, placeholder or alternate-size images are omitted. Response bytes, digest and optional ETag are sealed; an absent source revision stays unversioned. Changed digests append immutable receipts. Pending, unknown and fenced outcomes reuse prior evidence. A retryable 503 or 429 is retained as unavailable without inventing a reservation or Media ID; independent text facts may finish and the image gap remains addressable. The source summary and image rights stay separate.
+### Common journal, replay and graph publication
+
+The common publisher records exact create and proposal request bodies before sending and stores native IDs only after acknowledged responses. Pending or unknown sends retain the sealed response evidence and unresolved command/key. Reopen replays that exact request before source reacquisition; a changed terminal response receives a distinct immutable receipt. Current source and tuple-home fences are checked before replay and publication. Unavailable, refused and fenced outcomes are not success; retryable 503/429 responses remain bounded.
+
+Canonical Person identifier checks belong to common showcase publication. A Person or Organization binding must reconcile the selected source key, current Subject and database binding before dependent creator or voice credits can publish. A missing, ambiguous, pending or unknown identity withholds dependent credits while independent facts remain eligible. Visible names, overlapping credits or prereads do not establish identity.
+
+Candidate acceptance and adoption are separately authorized native actions. Adoption uses exact candidate IDs and preserves unrelated editorial choices. Independent current reads verify subject identities, endpoints, statements, qualifiers, source citations and reader routes. Literary conversion proposals do not establish native acceptance or readback; those remain independent stages. A changed or hidden dependency withholds only its dependent result.
+
+Graph publication is limited to selected direct edges and current selected endpoints. It retains the existing 8,192-edge, 8 MiB total and 1 MiB per-edge caps; overflow is a bounded gap. The publisher reads exact current identities and complete relation statements after separate review and adoption. Exact tag keys, spoiler qualifiers, source request identity and receipt identity remain sealed through refresh and recovery.
 
 ## Deletion
 
@@ -843,7 +821,7 @@ remains a gap. The ordinary broad CLI retains the same two reviewed book
 families.
 `task seed:dev` elects its directly selected Bangumi Official Book root as part
 of the five-work showcase. Decision: type 1 Book/BookSeries dispatch uses the
-current `bangumi@14` converter, preserving Book names, TVAnime original-run
+current `bangumi@16` converter, preserving Book names, TVAnime original-run
 and Game player-count while adding TVAnime work evidence. Decision: one Bangumi subject stays one
 identity, so ISBN on a volume does not create a `bf:Instance`. Decision:
 selected Book Girl and Kara no Kyoukai records join the common showcase manifest; book review
@@ -881,9 +859,9 @@ nonempty plan does not relabel it as an empty statistics refresh.
 
 ### Bangumi TVAnime bounded profile conversion
 
-`bangumi@14` includes TVAnime names, original-run, work evidence and official
+`bangumi@16` includes TVAnime names, original-run, work evidence and official
 websites. Ordinary and selected-family registration share bounded conversion;
-selected envelopes use `cross-media-entities@15+bangumi@15`. The existing journal
+selected envelopes use `cross-media-entities@15+bangumi@16`. The existing journal
 preserves exact alias/key, source admission, citations, independent
 review/adoption and current reads. Unversioned rows retain the bounded infobox
 digest; no publisher or identity lookup is added.
@@ -912,7 +890,7 @@ aliases use `und`. A malformed field is withheld as a whole while independent
 source names and summary proposals remain available.
 
 The ordinary importer remains proposal-only. The default selected-family path
-uses its existing `cross-media-entities@15+bangumi@15` registration, record bindings,
+uses its existing `cross-media-entities@15+bangumi@16` registration, record bindings,
 finite showcase manifest and publication journal. Local review accepts and
 adopts current candidates through separate native commands; corrected source
 names create new proposals on the acknowledged Book UUID, and ordinary refresh
@@ -932,7 +910,7 @@ source digest and field-pointer command identity remain attached.
 ### Bangumi television original run
 
 Ordinary Bangumi JSON-lines registration converts pinned TVAnime infobox
-`放送开始`, `播放结束` and `话数` on type 2 through current `bangumi@14`,
+`放送开始`, `播放结束` and `话数` on type 2 through current `bangumi@16`,
 retaining the original-run mapping alongside newer TVAnime evidence. Selected-family seed uses that same converter; this
 journey adds no publisher. Native read is the acknowledged TVSeries. Weekday
 schedule text, custom keys and OVA/Movie templates remain diagnostics. An end
@@ -952,9 +930,9 @@ date is not completion or access authority.
 ### Bangumi Game player count
 
 Ordinary Bangumi JSON-lines registration converts pinned Game infobox
-`游玩人数` on type 4 through current `bangumi@14`, retaining original-run and
+`游玩人数` on type 4 through current `bangumi@16`, retaining original-run and
 work-evidence mappings. Selected-family seed uses that same converter under its
-existing combined `cross-media-entities@15+bangumi@15` registration; this journey adds no
+existing combined `cross-media-entities@15+bangumi@16` registration; this journey adds no
 publisher. Native read is the acknowledged VideoGame. A mode, platform, edition
 or condition qualification withholds the whole occurrence. Names, dates,
 platforms, developer/voice credits and websites retain their owners.
@@ -977,7 +955,7 @@ positive integer or inclusive range; a lone count invents no minimum.
 ### Bangumi Game platforms and software engine
 
 Ordinary Bangumi JSON-lines registration converts pinned Game infobox `平台`
-and `游戏引擎` on type 4 through `bangumi@14`, preserving Game names, player-count,
+and `游戏引擎` on type 4 through `bangumi@16`, preserving Game names, player-count,
 Book grain and TVAnime work-evidence mapping. Selected-family type
 4 rows use that same converter.
 Current reviewed Concept reads supply the only native targets; a configuration
@@ -986,7 +964,7 @@ withhold that occurrence and keep the VideoGame identity and sealed retry
 candidates. Top-level `platform` remains the profile selector. Engine version,
 platform or edition text is withheld because `wdt:P408` admits no qualifiers.
 No second vocabulary publisher or taxonomy release is introduced.
-Decision: Game environment admission stays on the combined `bangumi@14` revision; book
+Decision: Game environment admission stays on the combined `bangumi@16` revision; book
 grain stays on that combined revision. No infobox-field scheme URI is minted
 from `平台` or `游戏引擎`.
 
@@ -1008,7 +986,7 @@ Decision: one complete scalar `游戏类型` occurrence remains one exact litera
 compound values are not split, and nested or continued fields are withheld.
 
 Ordinary Bangumi registration and the selected-family default seed share the
-`bangumi@14` adapter. Only the exact type-4 Game template field can propose
+`bangumi@16` adapter. Only the exact type-4 Game template field can propose
 `schema:genre` on its `schema:VideoGame`, using a finite literal-to-Concept
 profile and the pinned source scheme
 `https://rezics.com/schemes/bangumi/genres`. Profile UUIDs are lookup hints:
@@ -1227,7 +1205,7 @@ is sealed beside the archive digest. Decision: that GET is the shared Person
 career, image and date acquisition, not a second HTTP client. Failed acquisition withholds only the date.
 Ordinary dumps are JSON-lines; a `career` array keys `person:<id>` under
 `cross-media-entities@15`. Selected envelopes keep
-`cross-media-entities@15+bangumi@15`. `last_modified` is comment time, not a
+`cross-media-entities@15+bangumi@16`. `last_modified` is comment time, not a
 wiki revision. VNDB prose is not borrowed.
 
 - Touches: one Person, at most one birthDate and one abstract, at most 64 PersonDetail reads.
@@ -1237,233 +1215,12 @@ wiki revision. VNDB prose is not borrowed.
 Reviewed metadata and candidate provenance compare bounded canonical JSON values. Public transport snapshots
 with null object prototypes retain the same provenance; prototype identity is never a source or permission fact.
 
-## Explicit local showcase publication
+## Selected showcase publication
 
-Decision: `task seed:dev` publishes sealed current source/candidate digests; ordinary imports only propose.
+Ordinary imports prepare proposals only. Selected showcase plans reuse the source records, current bindings and common journal; they do not add a second converter, publisher or identity resolver. Source records retain exact keys, source and converter digests, selected candidate identities and caller routes. Current facts fences apply to unchanged and cached results as well as refreshes.
 
-[Seed denial diagnostics](seed-diagnostics.md).
+Creator and voice candidates retain their exact selected source relationships, credited Person identity and released role qualifiers. Candidate preparation withholds a dependent credit when current source-to-Person reconciliation fails; it does not suppress unrelated facts. Source aggregate weights, votes or ranks are not native votes, confidence, acceptance, adoption or publication.
 
-### Refresh selected VNDB Character vocabulary
+Publication accepts each selected candidate through the existing review API, adopts only those exact IDs, preserves previous selections, and independently reads back the current public identity and complete statement. Literary native acceptance and readback remain separate from conversion and candidate preparation. Unsupported records, malformed fields and unavailable third-party responses produce bounded omissions without substituting guessed values.
 
-Decision: reviewed selection admits only source-supported i23/i30 traits and
-selected appearance roles; unavailable Concepts withhold their associations.
-
-The seed rereads reviewed traits and roles before initial import and each
-vocabulary reseed. Characters may occupy either planned record group.
-The common journal publishes selected role schemes and Concepts, then current
-reads supply the returned trait/role profile and association bindings. Optional
-`--vndb-character-vocabulary` / `REZICS_DEV_VNDB_CHARACTER_VOCABULARY` UUIDs are
-lookup hints, never adoption authority. Unreviewed traits stay withheld.
-
-- Touches: selected Character rows, one reviewed trait Scheme and only needed
-  i23/i30 Concepts, plus selected current role bindings.
-- Bound: existing closure and publication caps; each refresh reads at most one
-  trait Scheme and two Concepts.
-- Growth check: `tests/showcase-vndb-traits.test.ts` covers source selection and
-  isolated withdrawal; `test/imports/showcase-character-vocabulary.test.ts`
-  retains independent current Character/work reads and reopen acceptance.
-
-### Selected VNDB Release context across vocabulary phases
-
-Later Character, credit and Bangumi vocabulary reseeds reuse the actual selected Release/Work seed result and latest current platform/media groups. A changed current binding reseeds the same selected plan; a missing or retracted group withholds only its association. Release-state groups and source keys stay composed, while independent dates, names and editorial choices remain available. Ordinary imports remain proposal-only; explicit review uses the existing ShowcaseJournal and common publisher.
-
-Decision: later release reseeds carry the latest current classifications with the actual selected seed result; they retain released-state groups and source identities while replacing stale platform/media bindings.
-
-Decision: the local seed stores reviewed-catalogue UUIDs in the importer journal and rereads tag Concept/Scheme and other native bindings on each run; unavailable tag reads withhold only that association and exact pending keyword candidates retain their original intent.
-
-Decision: work cover responses refresh after terminal media; pending, unknown and fenced intents retain sealed evidence; changed responses get new receipts.
-
-Decision: selected Bangumi Person and Organization images use only pinned `GET /v0/persons/{person_id}` `PersonDetail.images.large` after exact response `id` and archive-selected `type` match; missing, null, blank and placeholder images are absent, and no alternate size or image redirect is used.
-
-The finite selected-people rows are derived after the existing per-provider cap. Their response evidence uses the official OpenAPI schema version `2026-07-24`, bounded bytes, SHA-256 and an optional bounded ETag; a missing source revision is recorded as `unversioned`. Changed response digests create immutable receipts in the same showcase journal. Pending, unknown and fenced outcomes reuse prior evidence; ordinary media submission, cover fencing and separate local review/adoption remain shared with work covers.
-
-If the native cover POST returns an explicitly retryable `dependency_unavailable` (503) or `rate_limited` (429),
-the showcase retains its exact prepared intent as unavailable without inventing a reservation or Media ID. The same
-producer invocation does not submit that refused intent again. Independently authorized text facts can finish and
-publication records the image gap. An indexed check of the current unsubmitted intent and source digest keeps that
-asset eligible on an unchanged source refresh. An actually accepted pending job still holds its source generation
-until normal completion. Permission failures and other refusals remain failures; native admission, retry limits and
-all media checks stay active.
-
-#### Current cover source refresh
-
-- Touches: one media intent (65,536-byte cap), source receipt and latest result; reserved, uploaded, available, rejected and unknown states stay journalled.
-- Bound: two indexed binding reads, one receipt lookup, one latest intent read scanning at most 320 outcomes, and one detail GET per selected work per run within existing response and deadline limits.
-- Growth check: `tests/bindings-growth.test.ts` measures indexed intent cost at three scales. `tests/showcase-media.test.ts` covers pending receipt retention, terminal source refresh, refusal, retry and native media states. `task seed:dev` keeps five roots, direct cast, episodes and 64 creators per provider; Organization `wdt:P6298` remains omitted because its profile has no Bangumi-ID property.
-
-Decision: selected graph preparation retains at most 8,192 edges and 8 MiB total (1 MiB per edge), recording a bounded gap when either limit is exceeded.
-
-`task seed:dev` elects Bangumi Steins;Gate anime/book (10380, 84148) and CLANNAD anime (51), plus VNDB Steins;Gate (v2002) and CLANNAD (v4). It adds direct cast and episodes, omits recursive work expansion and releases, and skips the separate Book Girl importer. It reuses the Accounts `dev:persona` setup and its private `.temp/local-stack/seed.env`. The local invocation gives the cross-media CLI a separate durable showcase journal. The ordinary CLI stays proposal-only unless that local publication state is explicitly supplied. The journal records exact create and proposal command bodies before send, then stores native UUIDs only after an acknowledged response. Publication derives its intent from those selected source records, current reads, and exact candidate identities. Ordinary selected graph relations and release membership use their existing graph commands and exact source envelopes; only an acknowledged command whose exact selected endpoints and current candidate still match enters the manifest. The publisher checks both native endpoints before review actions, then independently reads both public identities and the complete relation statement, including its qualifiers and source citation. A missing endpoint or unreadable relation withholds that edge and keeps unrelated public facts available. Publication reads only selected subject/property candidate pages, accepts each selected candidate through the review API, and adopts only those IDs while preserving any prior adoption selections. Refused steps keep their known acknowledgements; an unknown send reuses its sealed body and idempotency key on restart.
-
-Decision: reviewed cross-provider Person confirmation consumes only Semantic's coherent original-Person `reviewedIdentity` observation and guarded `expectedIdentity.endpoints`, preserving original endpoint order and decimal security revisions. Names, overlapping credits and application prereads do not authorize a merge. `readReviewedPersonIdentity(id, {source, externalId}, signal?)` and `mergeReviewedPersons(body, key, signal?)` use ordinary import credentials, sessions, deadlines and cancellation; a 202 is admission, not publication. Preserve durable provider bindings and sealed credit requests across canonical following and reopen. Independently read exact current identifiers and public credits after separate editorial acceptance/adoption. Missing producer evidence leaves the mounted comparison readable and confirmation unavailable.
-
-The result carries provider and native type bindings, source keys, source and converter digests, selected candidate IDs, and ordinary reader routes. Each selected subject and vocabulary dependency is checked through current reads, and final facts use the tokenless Global-context reader. Source ConceptScheme and Concept records require acknowledged create receipts and exact current URI and scheme membership; no canonical or label equivalence is inferred. Decision: retain the registered VNDB cited `schema:genre` mapping. The common journal carries each admitted work, exact `tags_vn` path and tag code with its current released Concept/Scheme IDs and URI pair, then rereads that binding before review. A missing, unsupported, withdrawn or changed binding withholds only that association and records a bounded addressable diagnostic while independent source and adopted facts remain available. Adoption action identity includes the sealed manifest intent and exact selection body. The default cross-media seed still consumes only the exact Bangumi editor `meta_tags` literal `后宫` through its trusted alias; source-tag removal retracts only importer-owned candidates. The pinned `GET /v0/subjects/{id}` response is validated against the selected work and required image fields before `images.large` is admitted. Its SHA-256 and optional ETag are sealed beside the archive revision/digest in the showcase journal. A missing or invalid cover stays an addressable gap while independent metadata remains useful. Reserved/uploaded/rejected and unknown states stay journalled; retries reuse exact bytes and keys, and only available media is proposed. Covers retain `(c) rights holder`, `via Bangumi`, unknown image licence, cover-only use, private original retention and public re-encoded variants. Prose stays private without admitted rights. Public visibility makes no Search-index claim.
-
-### Cost: selected showcase media acquisition and publication
-
-- Touches: preparation of at most 8,192 selected graph edges and 8 MiB of retained edge data (at most 1 MiB per edge), plus at most 768 selected source records, 8,192 candidate assertions, 512 vocabulary records, 128 assertions per record, 100 candidates per current page, 256 selected Bangumi works, 64 selected creators and 320 combined media outcomes or omissions.
-- Bound: work is limited to the exact five roots, their direct cast and episodes, at most 64 people or organizations per provider, reviewed VNDB trait/tag codes i23/i30 and g105/g249, exact local candidate IDs, and required current subject/property reads. Current native and public reads are deduplicated by subject ID and cover at most 768 selected source plus 512 vocabulary subjects; graph targets must belong to that selected set. Candidate pages are limited by the 8,192 assertion cap and 100-row page bound. Selected work and creator detail acquisition is sequential and capped at 320 requests, 1 MiB per response and 1 MiB combined sealed source evidence, using the existing deadline and pacing. Media send/status uses the ordinary authenticated transport, exact importer bindings and current `(source, external_id, cover)` fence; public readback uses the existing bounded publication pass. There is no catalogue-wide scan, unsupported-tag inference or generic accept-all mode.
-- Growth check: `services/importer/tests/showcase-media.test.ts` covers work recovery, creator/Organization conversion, absent/unavailable/invalid detail states, changed image evidence and unknown-send receipt reuse; `services/importer/tests/showcase-publication.test.ts` proves exact candidate and relation publication across refusal, current-read withholding and journal restart; `services/importer/tests/showcase-bangumi-genres.test.ts` covers trusted alias resolution. `services/kernel/test/imports/showcase-media.test.ts` authors the common Person/Organization media, review, public-read, served-variant and takedown path with synthetic detail derivatives; integration verifies it against the actual finite default selection. Native showcase media, genre and graph walkthroughs remain controller-owned; no native pass or database growth series is claimed here.
-
-### Bangumi Person careers
-
-The selected-family converter retains authentic career strings on actual
-type-1 Persons. When the selected archive row omits `career`, explicit local
-showcase seeding fills only that selected Person through bounded public
-`GET /v0/persons/{id}`. The same validated response can supply the exact parsed
-`简体中文名` entry when the selected archive row has no admitted Chinese name;
-career and name projection share its sealed response and do not refetch. A
-present career field, including an empty or malformed value, still takes
-precedence for occupations. The API response must identify the requested
-Person and contain at most seven bounded
-strings; its exact endpoint, SHA-256, optional ETag and values are sealed in the
-existing `ShowcaseJournal`. Missing or malformed responses withhold dependent
-occupations and Chinese names while retaining the independent original name,
-identity, biography and credits. No archive revision is invented.
-
-The default local review derives only present finite categories, uses the
-existing common ShowcaseJournal publisher and current vocabulary reader, and
-feeds the reread bindings into the ordinary importer. The optional
-`--bangumi-character-bindings` input remains a validated current-binding
-override. Ordinary imports emit cited `wdt:P106` proposals only; only explicit
-local showcase review accepts and adopts candidates. Source Concepts under
-`https://rezics.com/schemes/bangumi/careers/` are source-owned and do not assert
-canonical equivalence.
-
-Chinese names remain ordinary proposals until a separate local review selects
-their candidates and an independent current public read verifies them on the
-same Person. Source refresh creates a new name candidate on that identity;
-missing or malformed Chinese input does not erase an existing editorial choice.
-
-- Touches: at most 64 selected Person/Organization rows, 64 selected-Person
-  fallback requests, one 64 KiB response per request, one Scheme and at most
-  seven Concept requirements, and their separate current reads.
-- Bound: selected actual Persons missing archive career or birth-date fields
-  share one GET `/v0/persons/{id}`; requests are sequential with a 250 ms gap,
-  share the existing import deadline and bounded public transport, and no
-  population or label scan occurs.
-- Growth check: `services/importer/tests/showcase-bangumi-person-careers.test.ts`
-  covers archive precedence, exact API receipt, malformed-response withholding
-  and sealed replay. `services/kernel/test/imports/bangumi-person-careers.test.ts`
-  covers default review/adoption, current reads and ordinary source proposals;
-  broader acceptance remains integration-owned.
-
-### Bangumi TVAnime official websites
-
-The official-website projection runs through ordinary `bangumi@14` and the
-selected-family `cross-media-entities@15+bangumi@15` registration. It recognizes
-only a literal `官方网站` value from the exact pinned type-2 TVAnime template.
-The URL fact is distinct from its `schema:url` reference to the exact Bangumi
-subject record. Source spelling, path, query and fragment are preserved. A
-changed value offers a new candidate on the same acknowledged work identity;
-ordinary import stays proposal-only and current adopted selections are not
-rewritten by source text. Absent or unsupported values do not retract facts.
-
-The common publisher keeps independent exact-candidate acceptance and adoption,
-current authority checks, journal recovery, source and tuple-home fences, and a
-current public read of the acknowledged TVSeries. The website is never fetched
-or used for identity resolution. The one-literal/no-host-normalization/no-list-
-splitting decision is recorded in `packages/conversion/README.md`.
-
-- Touches: one selected TVAnime source record, up to 32 URL proposals and 16
-  bounded omission diagnostics, each candidate citing the source record.
-- Bound: 65,536 projected characters, 64 visited infobox fields, 1,500
-  characters per URL and at most 95 converter commands under the released
-  100-command batch ceiling; destination pages are not requested.
-- Growth check: `services/importer/tests/bangumi-official-websites.test.ts`
-  covers ordinary/default proposals, same-identity refresh and unsupported
-  source shape. `services/kernel/test/imports/bangumi-official-websites.test.ts`
-  covers separate acceptance/adoption, public read, restart and fencing; native
-  execution is controller-owned and the M1 walkthrough remains separate.
-
-### Bangumi TVAnime work evidence
-
-Decision: trim only horizontal template/list-boundary whitespace; `链接` remains a cited `wdt:P973` descriptive page and `官方网站` remains the separate `schema:url` mapping.
-
-Only exact `{{Infobox animanga/TVAnime` type-2 fields `链接` and `Copyright` are admitted. Descriptive destinations preserve their source spelling and cite the Bangumi subject record; notices remain verbatim `schema:copyrightNotice` values and grant no licence or media permission. Malformed neighbors are bounded, source-free omissions; summary and cover rights remain separate.
-
-- Touches: ordinary `bangumi@14` and selected-family `cross-media-entities@15+bangumi@15` publication of cited TVAnime work evidence through the existing journal and review/adoption/current-read path.
-- Bound: 64 visited fields, 16 descriptive links, 16 diagnostics, and the compiled TVSeries 1,500-character limits. No linked-page fetch or hostname identity lookup.
-- Growth check: `tests/bangumi-work-evidence.test.ts` covers selected-family proposals, unchanged/changed source, citations, malformed neighbor and repair. `../kernel/test/imports/bangumi-work-evidence.test.ts` authors ordinary independent adoption, reopen/current reads and the facts fence; no real-data walkthrough is claimed.
-
-### Bangumi Game-template subject names
-
-Ordinary Bangumi registration and selected-family Game records use the exact
-`{{Infobox Game` grammar through the current `bangumi@14` converter. Type 4
-remains `schema:VideoGame`; scalar `中文名` supplies `zh`, and scalar or
-single-level bullet `别名` stays `und`. Top-level labels keep their existing
-meaning. Unsupported field occurrences are withheld atomically while separate
-valid names remain eligible. The normalized source retains the bounded
-infobox, so changed names produce changed source digests and fresh proposals on
-the acknowledged identity. This adds no identity lookup or publisher; local
-review and adoption use the existing manifest, journal, source admission and
-facts fence. Name links and diagnostics grant no rights.
-
-- Touches: at most 24 distinct names and 16 omission diagnostics from one
-  selected Game record, with exact Bangumi record citations.
-- Bound: the 65,536-character record/infobox cap, 64 visited fields and current
-  batch/journal limits; source prose stays out of logs.
-- Growth check: `tests/bangumi-game-names.test.ts` covers ordinary and selected
-  conversion, exact provenance, malformed field omission, neighbor exclusion
-  and changed-name refresh. `../kernel/test/imports/bangumi-game-names.test.ts`
-  covers independent native adoption, same identity on reopen and the facts
-  fence; native execution remains controller-owned.
-
-### Bangumi Game characters and voice performers
-
-The selected-family seed keeps the existing type-2 anime appearance branch and
-adds a separate type-4 Game branch. Only an actual `subject-characters` row on a
-selected, acknowledged Game can create an appearance. A `person-characters` row
-must match that Game and its admitted Character; the Person remains a separate
-Bangumi identity. Existing vocabulary preparation reads only the selected role
-and Character-kind Concepts, then the ordinary source registration emits cited
-`schema:character` and Character-qualified `wdt:P725` candidates. The common
-showcase journal, exact accept/adopt operations and public reads remain in use.
-
-Decision: malformed optional appearance order retains the independently valid
-role-qualified association, records a source diagnostic, and emits
-`schema:position` only when the current `schema:VideoGame` definition admits it.
-
-The bundled native release admits Game `schema:character` with `wdt:P3831` and
-Game `wdt:P725` with required `wdt:P453` and supported `wdt:P1932`. The Bangumi
-source inventory still declares `subject-characters` and `person-characters`
-on `schema:TVSeries` only; its producer contract needs Game applicability while
-retaining the anime path. Web and Semantic own public page and inverse
-projections, so this delivery claims no page/index acceptance.
-
-- Touches: at most 64 selected appearances and the existing stricter 64 voice
-  associations per Game, within the 16 KiB row, shared 4 MiB appearance
-  evidence, common batch and journal bounds, and the actual 64 KiB command
-  envelope.
-- Growth check: `tests/showcase-bangumi-game-characters.test.ts` pins selected
-  source rows, role binding, malformed order, exact performer qualification,
-  citations and unrelated-work exclusion. The native lifecycle and current-read
-  scenario is `test/imports/showcase-bangumi-game-characters.test.ts`; broader
-  native and public-page acceptance is controller-owned.
-
-### Bangumi Game first publication date
-
-[Touches, Bound and Growth check](../../packages/conversion/bangumi-game-publication.md).
-
-### Bangumi Game web destinations
-
-Ordinary Game imports preserve exact unqualified values from the pinned
-`{{Infobox Game` fields `website` and `链接` as separate `schema:url` and
-`wdt:P973` proposals. Occurrence citations retain the source field pointer; the
-Bangumi subject URL remains provenance only. Unsafe, malformed or qualified
-destinations are withheld without suppressing independent valid facts. The
-conversion and selected-family callers share the honest `bangumi@15` revision
-and existing native review, adoption, refresh, journal and current-read APIs.
-
-Decision: preserve admitted URL bytes; withhold labelled destinations until a
-released source contract can preserve their platform, region or edition meaning.
-No destination is fetched or followed, and none grants mutation authority.
-
-- Touches: at most 16 candidates across the two destination fields for one
-  source-selected Game, with independent native adoption.
-- Bound: existing projection, infobox, journal and 64 KiB command-envelope
-  limits; overflow is an explicit bounded omission.
-- Growth check: `tests/bangumi-game-web-destinations.test.ts` covers ordinary
-  registration and malformed, dangerous, qualified and overflow cases. The
-  selected-family native lifecycle is `test/imports/bangumi-game-web-destinations.test.ts`;
-  execution and public-page acceptance remain controller-owned.
+Book, Manga, Person, Character and game-specific values follow the mappings in [Conversion](../../packages/conversion/README.md). The importer keeps PersonDetail acquisition bounds in [Cost](#cost); acquisition and publication prose does not redefine those mappings.

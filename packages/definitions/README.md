@@ -1570,8 +1570,7 @@ targets keep their source code on the existing `schema:sameAs` qualifier.
 `rezics:releaseSupersedes` points from the current software release to the exact
 release it replaces. It is a separate directed relation from P155/P156 sequence
 chronology and from P1365/P1366, whose released target remains Organization.
-The mapping is grounded in VNDB's `releases_supersedes(id, rid)` source schema;
-unresolved provider codes are not turned into native assertions.
+VNDB `releases_supersedes.id` targets `rid` through `rezics:releaseSupersedes`. P155/P156 retain work chronology; P749 retains child-to-parent organization relations; P1365/P1366 retain Organization replacement. Unresolved provider codes are not turned into native assertions.
 
 ## Versioned catalogue distribution
 
