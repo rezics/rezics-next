@@ -151,6 +151,7 @@ export function admitDiscoveryRequest(
     sort,
     limit,
     kindLimit,
+    kindCountLeaf: request.kindCountLeaf,
     options,
     languages: options.languages ?? [],
     bindingRequest,

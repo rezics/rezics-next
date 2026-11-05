@@ -339,7 +339,8 @@ function executeDiscoverySearch(
     const nativeContext = { deadline: context.deadline };
     const coverage = openPublicFilterCoveragePage(config.consumer, nativeContext);
     try {
-      let queried: PublicFilterQueriedObservation;
+      let queried!: PublicFilterQueriedObservation;
+      let observationOpened = false;
       let refill: PublicFilterConsumerRefill | undefined;
       let repair: PublicFilterConsumerJob | undefined;
       let kindAfter = '';
@@ -368,6 +369,7 @@ function executeDiscoverySearch(
           throw new ProblemError('search_restart_required');
         if (!token.state.retained) throw new ProblemError('search_restart_required');
         queried = token.state.queried;
+        observationOpened = true;
         repair = token.state.repair;
         refill = { ...token.state.retained, size: Math.min(200, 2 * admitted.limit + 1) };
       }
@@ -411,6 +413,7 @@ function executeDiscoverySearch(
         }
         if (captured.status !== 'captured') throw ready();
         queried = captured.queried;
+        observationOpened = true;
         repair = captured.repair;
       }
       if (kindPhysical !== undefined && kindPhysical !== canonicalize(queried.consumer))
@@ -700,7 +703,7 @@ function executeDiscoverySearch(
         throw error;
       } finally {
         await coverage.dispose();
-        if (!retained) {
+        if (!retained && observationOpened) {
           try {
             await config.consumer.closeObservation(queried, nativeContext);
           } catch (error) {

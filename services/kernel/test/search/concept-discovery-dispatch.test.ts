@@ -44,7 +44,7 @@ const cut: ConceptStatementCut = {
     advance: async () => null,
     seal: async () => null,
     retire: async () => {},
-    contains: async (concept: string) => concept === root || concept === child,
+    contains: async (_state, concept) => concept === root || concept === child,
   },
 };
 const statement = {

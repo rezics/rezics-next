@@ -42,12 +42,12 @@ function conceptSelections(filter: DiscoveryFilterDocument): ConceptSelection[] 
 }
 
 function boundedReservation<T extends Record<string, number>>(maximum: T, name: string) {
-  const used = Object.fromEntries(Object.keys(maximum).map((key) => [key, 0])) as T;
+  const used = Object.fromEntries(Object.keys(maximum).map((key) => [key, 0])) as Record<keyof T, number>;
   return (cost: T) => {
     for (const key of Object.keys(maximum) as (keyof T)[])
-      if (cost[key] > maximum[key] - used[key])
+      if ((cost[key] as number) > (maximum[key] as number) - used[key])
         throw new SearchUnavailableError(`${name} exceeded its admitted request reservation`);
-    for (const key of Object.keys(maximum) as (keyof T)[]) used[key] += cost[key];
+    for (const key of Object.keys(maximum) as (keyof T)[]) used[key] += cost[key] as number;
   };
 }
 
@@ -128,10 +128,12 @@ export async function prepareConceptDiscoveryFilter(input: Readonly<{
     const selection: ConceptDescendantSelection = { ...selected, includeChildren: true };
     const browse = source.conceptBrowse(selection, { principal: input.principal, request: requestBinding }, reserveNative);
     const observed = await browse.observe();
-    if (observed.status === 'preparing') throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
-    if (observed.status === 'unavailable') throw new ProblemError('dependency_unavailable');
-    if (observed.status === 'rejected')
+    if (observed.status !== 'current') {
+      if (observed.status === 'preparing')
+        throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
+      if (observed.status === 'unavailable') throw new ProblemError('dependency_unavailable');
       throw new ProblemError('invalid_request', { errors: [{ pointer: '/filter', code: 'invalid_format' }] });
+    }
 
     const id = scopeId(selection, observed.binding);
     const store = createConceptBrowseStore(input.pool, input.prefix, id, {
