@@ -1,3 +1,4 @@
+import { enrollmentOptionsFixture } from './passkey-enrollment-fixture';
 import { afterAll, afterEach, expect, test } from 'bun:test';
 import { creationFixture, dom, flush, open, fill } from './creation-page-fixture';
 import type { SecurityActionResult } from '../src/security-reconciliation';
@@ -206,7 +207,7 @@ test('Leave retires an unresolved operation without replaying it after return', 
   await flush(() => ui.host.querySelector<HTMLButtonElement>('[role="dialog"] button:last-child')!.click());
   expect(calls).toBe(1);
   const { navigation: leaving } = await startNavigation(ui.router, '/next');
-  expect(ui.host.querySelector('[role="alertdialog"]')).not.toBeNull();
+  expect(ui.host.querySelectorAll('[role="alertdialog"]')).toHaveLength(1);
   await flush(() => ui.host.querySelector<HTMLButtonElement>('[data-leave]')!.click());
   await flush(() => leaving);
   expect(ui.router.state.location.pathname).toBe('/next');
@@ -264,19 +265,10 @@ test('Stay preserves a passkey prompt phase and focus; Leave retires it without 
   const name = ui.host.querySelector<HTMLInputElement>('#security-passkey-name')!;
   await flush(() => fill(name, 'Private passkey label'));
   await flush(() => ui.host.querySelectorAll('form')[1]!.requestSubmit());
-  await flush(() =>
-    ui.calls[0]!.resolve(
-      Response.json({
-        challenge: 'Y2hhbGxlbmdl',
-        rp: { id: 'auth.test', name: 'REZICS' },
-        user: { id: 'YWNjb3VudA', name: 'reader', displayName: 'Reader' },
-        pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
-      }),
-    ),
-  );
+  await flush(() => ui.calls[0]!.resolve(Response.json(enrollmentOptionsFixture())));
   await tick();
   const { navigation: staying } = await startNavigation(ui.router, '/next');
-  expect(ui.host.querySelector('[role="alertdialog"]')).not.toBeNull();
+  expect(ui.host.querySelectorAll('[role="alertdialog"]')).toHaveLength(1);
   await flush(() =>
     document.activeElement!.dispatchEvent(new dom.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
   );

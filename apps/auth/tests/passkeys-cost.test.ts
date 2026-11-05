@@ -70,7 +70,11 @@ const fake = Bun.serve({
         challenge,
         rp: { id: 'localhost', name: 'REZICS' },
         user: { id: Buffer.from(accountId).toString('base64url'), name: 'cost', displayName: 'cost' },
-        pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
+        pubKeyCredParams: [-8, -7, -257].map((alg) => ({ type: 'public-key', alg })),
+        extensions: { credProps: true },
+        hints: [],
+        timeout: 60_000,
+        excludeCredentials: [],
         attestation: 'none',
         authenticatorSelection: { residentKey: 'required', requireResidentKey: true, userVerification: 'required' },
       });
@@ -80,7 +84,7 @@ const fake = Bun.serve({
       if (!accepts(response)) return json({ error: 'registration_denied' }, 400);
       const saved = { id: response.id, name: 'Added', created_at: new Date().toISOString(), last_used_at: null };
       passkeys.push(saved);
-      return json(saved, 201);
+      return json({ id: saved.id, name: saved.name, created_at: saved.created_at }, 201);
     }
     if (url.pathname === '/passkeys/remove') {
       passkeys = passkeys.filter((passkey) => passkey.id !== JSON.parse(body).id);

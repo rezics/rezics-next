@@ -567,6 +567,24 @@ asks for confirmation and sends the existing `POST /passkeys/remove` with `{ id 
 credential, so nothing changed and a localized message says so. Registration and removal are credential changes: a 401
 `step_up_required` sends the person to `/step-up?return_to=%2Fsecurity`. A dismissed browser prompt is silent. Where the browser has no WebAuthn, saved passkeys and their native removal advice remain visible; only creation is unavailable. A failed inventory shows an alert in its section, never an empty-list claim.
 
+Enrollment preparation and acknowledgement use the shared closed formulas in
+`packages/auth-contract/src/passkey-enrollment-response-bounds.ts`; the native producer qualification and supported
+options are owned by the Auth service's passkey section. Each options POST keeps `{}`, same-origin cookies, no-store,
+redirect rejection and its own five-second lifetime through actual streamed success/error bytes and fatal UTF-8/JSON
+decoding, with effective caller cancellation even when transport ignores abort. Preparation issues a challenge;
+it is never cached, retried or shared with cached sign-in options. Invalid or excess preparation never opens a prompt.
+The existing one registration POST has one five-second lifetime through its bounded 201/error body. The exact native
+ID/name/date acknowledgement is validated before confirmation; native null names become the same empty display
+label as Security inventory, without substituting the requested/default name. The saved ID remains exact.
+Only native `not_applied` refusal or the native pre-dispatch rate-limiter response establishes no effect; HTTP status,
+malformed data, overflow, cancellation after dispatch and lost responses alone remain unknown. Observer exceptions
+cannot alter dispatch bookkeeping. Before dispatch, cancellation retires preparation or the browser prompt.
+The seven supported transport spellings include native absent/empty defaults; other historical/unconfigured producer
+values remain unavailable rather than being silently stripped. Formula maxima include escaped labels and all 32
+excluded credentials. These byte bounds add parsing only: no inventory refresh, native currentness check or replay.
+Mocked receiving and mounted return tests qualify phase/custody behavior, not real browser WebAuthn or native growth;
+existing native authenticator tests and integrated real-browser acceptance retain that authority.
+
 Registration uses the existing five-second issuer deadline through response-body completion; an uncertain acknowledgement holds the page operation boundary until an account-bound native passkey refresh and explicit review, never infers success from names or WebAuthn IDs, and never replays the ceremony or registration POST.
 
 Passkey history follows the mounted lifetime. Check current and Finish review remain separate actions; neither

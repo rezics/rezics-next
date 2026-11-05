@@ -1,3 +1,4 @@
+import { enrollmentOptionsFixture } from './passkey-enrollment-fixture';
 import { afterAll, expect, test } from 'bun:test';
 import { act, type ReactNode } from 'react';
 import type { PasskeyRegistrationReview } from '../src/security';
@@ -73,13 +74,7 @@ async function mount() {
   });
   globalThis.fetch = (async (path, init = {}) => {
     requests.push({ path: String(path), init });
-    if (path === '/passkeys/register/options')
-      return Response.json({
-        challenge: 'Y2hhbGxlbmdl',
-        rp: { id: 'auth.test', name: 'REZICS' },
-        user: { id: 'YWNjb3VudA', name: 'reader', displayName: 'Reader' },
-        pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
-      });
+    if (path === '/passkeys/register/options') return Response.json(enrollmentOptionsFixture());
     return response.promise;
   }) as typeof fetch;
 }
