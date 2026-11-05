@@ -54,7 +54,10 @@ export function createReleasedRelationDirectionResolver(
     pinned = false;
   }
   const sources = new Map<string, string[]>();
+  const typeAnchors = new Set(Object.keys(release.types));
   for (const [type, definition] of Object.entries(release.types))
+    for (const base of definition.bases) typeAnchors.add(base);
+  for (const [type, definition] of Object.entries(release.types)) {
     for (const property of definition.properties) {
       const owners = sources.get(property) ?? [];
       owners.push(type);
@@ -112,7 +115,7 @@ export function createReleasedRelationDirectionResolver(
 
       const sourceTypes = [...(sources.get(propertyId) ?? [])].sort();
       const targetTypes = [...(property.targets ?? [])].sort();
-      if (!sourceTypes.length || !targetTypes.length || targetTypes.some((type) => !release.types[type]))
+      if (!sourceTypes.length || !targetTypes.length || targetTypes.some((type) => !typeAnchors.has(type)))
         return failure(requestedProperty, direction, 'stale-descriptor', 'unavailable');
       if (direction === 'forward' && !sourceTypes.some((type) => subtype(release, subjectType, type)))
         return failure(requestedProperty, direction, 'inapplicable-type');
@@ -126,7 +129,7 @@ export function createReleasedRelationDirectionResolver(
             !qualifier ||
             qualifier.datatype !== 'wikibase-item' ||
             !qualifier.targets?.length ||
-            !qualifier.targets.some((type) => release.types[type] && subtype(release, subjectType, type))
+            !qualifier.targets.some((type) => typeAnchors.has(type) && subtype(release, subjectType, type))
           )
             return failure(requestedProperty, direction, 'inapplicable-type');
           viaQualifier = options.viaQualifier;

@@ -95,11 +95,28 @@ export const RELATION_GROUPS = new Set([
   'credit',
   'appearance',
 ]);
+const OCCUPATION_PROPERTY = 'wdt:P106';
 const isObject = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
 
 export function isRelationProperty(release: Release, property: string): boolean {
-  return RELATION_GROUPS.has(release.properties[property]?.relation?.group ?? '');
+  const definition = release.properties[property];
+  if (RELATION_GROUPS.has(definition?.relation?.group ?? '')) return true;
+  return (
+    property === OCCUPATION_PROPERTY &&
+    release.types['schema:Person']?.properties.includes(property) === true &&
+    definition?.datatype === 'wikibase-item' &&
+    definition.relation?.group === 'classification' &&
+    definition.targets?.length === 1 &&
+    definition.targets[0] === 'skos:Concept'
+  );
+}
+
+function hasRelationSlots(property: string, relation: RelationDefinition | undefined): boolean {
+  return (
+    RELATION_GROUPS.has(relation?.group ?? '') ||
+    (property === OCCUPATION_PROPERTY && relation?.group === 'classification')
+  );
 }
 
 export function statementSlotId(subject: string, property: string): string {
@@ -128,7 +145,7 @@ export function relationSlotForStatement(
   relation?: RelationDefinition,
 ): string {
   const fallback = statementSlotId(subject, property);
-  if (!relation || !RELATION_GROUPS.has(relation.group) || !isObject(body) || !isObject(body.value)) return fallback;
+  if (!hasRelationSlots(property, relation) || !isObject(body) || !isObject(body.value)) return fallback;
   const value = body.value as { type?: unknown; content?: unknown };
   if (value.type === 'value' && typeof value.content === 'string' && routeOf(value.content) !== null) {
     const key = relation.slotKey
@@ -173,7 +190,7 @@ export function relationSlotForApi(
   relation: RelationDefinition | undefined,
   input: { target?: string; sameAs?: string; key?: string },
 ): string {
-  if (!relation || !RELATION_GROUPS.has(relation.group)) return statementSlotId(subject, property);
+  if (!hasRelationSlots(property, relation)) return statementSlotId(subject, property);
   if (input.target !== undefined) {
     return relationSlotId(subject, property, input.target, {
       declared: relation.slotKey !== undefined,

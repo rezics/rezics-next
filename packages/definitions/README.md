@@ -1129,6 +1129,10 @@ a target or its type's `bases` contains a target. The compiler emits the declare
 range, so adding a subtype matches through `bases` and does not change `targets`.
 Expanded lists of concrete type keys remain valid.
 
+The released relation-direction index treats type keys and declared `bases` as
+its known range anchors. It keeps an abstract target in the resolved descriptor
+and refuses targets absent from both sets.
+
 Structural limits apply to every release: decimal strings have at most 127
 characters and a time's year has at most 16 digits. An oversized value reports
 `out_of_range` at its decimal member or `/time`, without further value checks.

@@ -29,6 +29,11 @@ test('public resolver preserves missing, stale, ambiguous and inapplicable outco
     state: 'unsupported',
     reason: 'inapplicable-type',
   });
+  expect(directions.resolve('bf:Instance', 'schema:exampleOfWork', 'inverse')).toMatchObject({
+    state: 'admitted',
+    property: 'schema:exampleOfWork',
+    targetTypes: ['schema:CreativeWork'],
+  });
 
   const changedTarget = structuredClone(bundledRelease);
   changedTarget.properties['wdt:P725']!.targets = ['missing:type'];

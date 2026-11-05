@@ -9,6 +9,7 @@ import {
   resolveTemplate,
   UI_LOCALES,
   validateComposition,
+  validateDocumentFilters,
 } from '@rezics/composition';
 import { platformProfile } from '../../src/presentation/setup.ts';
 
@@ -27,6 +28,7 @@ test('the site home is a route page with search and a popular list per vertical'
   const page = home();
   expect(page).toMatchObject({ scope: 'route', key: '/' });
   expect(validateComposition(platformRegistry, page.document)).toEqual([]);
+  expect(validateDocumentFilters(platformRegistry, page.document, bundledRelease)).toEqual([]);
   const nodes = [...walk(page.document.content as Node[])];
   expect(nodes.slice(0, 2).map((node) => node.type)).toEqual(['Heading', 'SearchBox']);
   expect(nodes.some(({ type }) => type === 'LinkGrid')).toBe(false);
@@ -39,6 +41,16 @@ test('the site home is a route page with search and a popular list per vertical'
     if (read.kind === 'search') expect(() => admitFilter(parseFilter(read.body.filter), bundledRelease)).not.toThrow();
   }
   expect(reads.reduce((sum, read) => sum + readCost(read), 0)).toBeLessThanOrEqual(MAX_PAGE_COST);
+});
+
+test('a TypeList whose selector is absent from the release stays invalid', () => {
+  const page = home();
+  const list = [...walk(page.document.content as Node[])].find((node) => node.type === 'TypeList')!;
+  list.props.types = ['schema:NotReleased'];
+  expect(validateDocumentFilters(platformRegistry, page.document, bundledRelease)).toContainEqual({
+    pointer: '/content/2/props/filter/type/in/0',
+    code: 'invalid',
+  });
 });
 
 test('every home text is written in all eight locales', () => {

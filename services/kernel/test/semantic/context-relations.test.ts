@@ -39,7 +39,7 @@ const kernel = createKernel({
   tokens: ring,
 });
 const projection = linkProjection(pool);
-const itemProperty = (id: string, group: 'appearance' | 'credit') => ({
+const itemProperty = (id: string, group: 'appearance' | 'credit' | 'classification') => ({
   iri: `https://example.test/${id.slice(3)}`,
   labels: { en: id },
   mappings: [],
@@ -50,28 +50,54 @@ const itemProperty = (id: string, group: 'appearance' | 'credit') => ({
   targets: ['ex:Person'],
   relation: { inverse: 'none' as const, group, order: 'position' as const },
 });
+const typeDefinition = (iri: string, label: string, properties: string[]) => ({
+  iri,
+  labels: { en: label },
+  mappings: [],
+  bases: [],
+  facets: [],
+  properties,
+});
 const release: Release = {
   format: 'https://rezics.com/definitions/release/1',
   catalogue: { id: 'https://example.test/context-relations', version: '1' },
   generator: { name: 'semantic-test', version: '1' },
-  prefixes: { ex: 'https://example.test/', schema: 'http://schema.org/' },
-  types: Object.fromEntries(
-    ['Work', 'Person'].map((name) => [
-      `ex:${name}`,
-      {
-        iri: `https://example.test/${name}`,
-        labels: { en: name },
-        mappings: [],
-        bases: [],
-        facets: [],
-        properties: ['ex:appearance', 'ex:credit', 'ex:elsewhere', 'schema:position'],
-      },
+  prefixes: {
+    ex: 'https://example.test/',
+    schema: 'http://schema.org/',
+    skos: 'http://www.w3.org/2004/02/skos/core#',
+    wdt: 'http://www.wikidata.org/prop/direct/',
+  },
+  types: {
+    'ex:Work': typeDefinition('https://example.test/Work', 'Work', [
+      'ex:appearance',
+      'ex:credit',
+      'ex:elsewhere',
+      'ex:classification',
+      'schema:position',
     ]),
-  ),
+    'ex:Person': typeDefinition('https://example.test/Person', 'Person', [
+      'ex:appearance',
+      'ex:credit',
+      'ex:elsewhere',
+      'ex:classification',
+      'schema:position',
+    ]),
+    'schema:Person': typeDefinition('http://schema.org/Person', 'Person', ['wdt:P106']),
+    'skos:Concept': typeDefinition('http://www.w3.org/2004/02/skos/core#Concept', 'Concept', []),
+  },
   properties: {
     'ex:appearance': itemProperty('ex:appearance', 'appearance'),
     'ex:credit': itemProperty('ex:credit', 'credit'),
     'ex:elsewhere': itemProperty('ex:elsewhere', 'appearance'),
+    'ex:classification': itemProperty('ex:classification', 'classification'),
+    'wdt:P106': {
+      ...itemProperty('wdt:P106', 'classification'),
+      iri: 'http://www.wikidata.org/prop/direct/P106',
+      targets: ['skos:Concept'],
+      qualifiers: [],
+      relation: { inverse: 'none' as const, group: 'classification' as const, order: 'name' as const },
+    },
     'schema:url': {
       iri: 'http://schema.org/url',
       labels: { en: 'URL' },
@@ -243,6 +269,34 @@ test("a community Context's relation pages show its accepted, replaced and suppr
   expect(preview.statements['ex:appearance'].map((row: any) => row.id)).toEqual([newAppearance]);
   expect(preview.statements['ex:credit'].map((row: any) => row.id)).toEqual([newCredit]);
   expect(preview.resolution).toEqual({ 'ex:appearance': 'suppressed' });
+});
+
+test('Person occupation is a native Concept relation while other classifications stay outside relation pages', async () => {
+  const concept = (await call('POST', '/v1/subjects', { type: 'skos:Concept', labels: { en: 'Writer' } })).subject;
+  const person = (
+    await call('POST', '/v1/subjects', {
+      type: 'schema:Person',
+      labels: { en: 'Person with an occupation' },
+      statements: {
+        'wdt:P106': [{ property: { id: 'wdt:P106' }, value: { type: 'value', content: concept.id } }],
+      },
+    })
+  ).subject;
+  for (const subject of [concept, person]) {
+    partitions.add(partitionOf(routeOf(subject.id)!));
+    await access.grant({ route: routeOf(subject.id)!, id: subject.id }, 'editor', 'subject:read');
+  }
+  await drain();
+  expect(
+    (await call('GET', `/v1/subjects/${person.id}/relations?property=wdt:P106&language=en&limit=12&context=${GLOBAL_CONTEXT}`))
+      .relations.map((row: any) => row.target),
+  ).toEqual([concept.id]);
+  const refused = await kernel.handle(
+    new Request(`http://kernel.test/v1/subjects/${person.id}/relations?property=ex:classification&context=${GLOBAL_CONTEXT}`, {
+      headers: { authorization: `Bearer ${access.bearer('editor')}` },
+    }),
+  );
+  expect(refused.status).toBe(400);
 });
 
 test("a Context's unproved relation counts are omitted", async () => {

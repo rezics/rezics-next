@@ -1254,6 +1254,14 @@ the report carries only the actual upload UUID and row count, never inferred per
 
 [Seed denial diagnostics](seed-diagnostics.md).
 
+Selected Bangumi synopsis proposals use the exact source record and document
+snapshot, keep the converter's `und` language and CC-BY-SA-3.0 attribution and
+ShareAlike obligations, and remain private until the matching candidate is
+accepted and selected for Global. The common publisher rereads the exact
+subject, candidate, rights and source citation before acceptance, then checks
+the public statement and authored document separately; an unadopted proposal
+never becomes public synopsis text.
+
 ### Refresh selected VNDB Character vocabulary
 
 Decision: reviewed selection admits only source-supported i23/i30 traits and

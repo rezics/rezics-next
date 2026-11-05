@@ -68,6 +68,7 @@ test('selected dump candidates publish only by exact intent and resume a refused
   const accepted = new Set<string>();
   const adopted = new Map<string, { head: number; selection: { candidate: string; rank: 'normal' | 'preferred' }[] }>();
   const publicReadIds = new Set<string>();
+  const publicReads = new Map<string, any>();
   const acceptanceCalls: { candidateId: string; body: unknown; idempotencyKey: string }[] = [];
   let refuseAcceptance = true;
   let tagSpoiler = 0;
@@ -77,8 +78,8 @@ test('selected dump candidates publish only by exact intent and resume a refused
   const tables: CrossMediaTables = {
     async *rows(provider, table) {
       if (provider === 'bangumi' && table === 'subject') {
-        yield { id: 101, name: 'STEINS;GATE', type: 2 };
-        yield { id: 102, name: 'CLANNAD', type: 2 };
+        yield { id: 101, name: 'STEINS;GATE', type: 2, summary: 'Source synopsis for the first selected work.' };
+        yield { id: 102, name: 'CLANNAD', type: 2, summary: 'Source synopsis for the second selected work.' };
         yield { id: 103, name: 'Fate/stay night', type: 2 };
       }
       if (provider === 'vndb' && table === 'vn_titles') {
@@ -310,7 +311,9 @@ test('selected dump candidates publish only by exact intent and resume a refused
       fetch: (async (input) => {
         const id = new URL(String(input)).pathname.split('/').at(-1)!;
         publicReadIds.add(id);
-        return Response.json(read(id));
+        const value = read(id);
+        publicReads.set(id, value);
+        return Response.json(value);
       }) as typeof fetch,
     });
     let tagOptions = {
@@ -332,6 +335,19 @@ test('selected dump candidates publish only by exact intent and resume a refused
     const acknowledged = journal.acknowledgedCommands().filter((entry) => entry.candidateId);
     expect(acknowledged.length).toBeGreaterThan(0);
     expect(accepted.size).toBe(0);
+    const synopses = [...candidates.values()].filter((candidate) => candidate.statement.property.id === 'schema:abstract');
+    expect(synopses.map((candidate) => candidate.source?.external_id).sort()).toEqual(['101', '102']);
+    for (const candidate of synopses) {
+      const proposal = acknowledged.find((entry) => entry.candidateId === candidate.id);
+      expect(proposal?.command).toMatchObject({
+        op: 'propose',
+        source: { external_id: candidate.source?.external_id, field_group: 'summary' },
+        rights: { license: 'CC-BY-SA-3.0', obligations: ['cc:Attribution', 'cc:ShareAlike'] },
+      });
+      const subject = [...subjects.values()].find((item) => item.sourceExternalId === candidate.source?.external_id)!;
+      expect(subject.statements['schema:abstract']).toBeUndefined();
+      expect(adopted.has(`${subject.id}\0schema:abstract`)).toBe(false);
+    }
     const membership = acknowledged.find(
       (entry) =>
         entry.command.op === 'propose' &&
@@ -423,6 +439,16 @@ test('selected dump candidates publish only by exact intent and resume a refused
     expect(replayed.status).toBe('published');
     expect(replayed.manifest.digest).toBe(first.manifest.digest);
     expect(accepted).toEqual(new Set(acknowledged.map((entry) => entry.candidateId!)));
+    for (const candidate of synopses) {
+      const subject = [...subjects.values()].find((item) => item.sourceExternalId === candidate.source?.external_id)!;
+      expect(accepted.has(candidate.id)).toBe(true);
+      expect(adopted.get(`${subject.id}\0schema:abstract`)?.selection).toEqual([
+        { candidate: candidate.id, rank: 'normal' },
+      ]);
+      expect(subject.statements['schema:abstract']).toEqual([candidate.statement]);
+      expect(publicReadIds.has(subject.id)).toBe(true);
+      expect(publicReads.get(subject.id)?.subject?.statements?.['schema:abstract']).toEqual([candidate.statement]);
+    }
     const tagAcceptanceCalls = acceptanceCalls.filter((call) => call.candidateId === membershipCandidateId);
     expect(tagAcceptanceCalls).toHaveLength(1);
 

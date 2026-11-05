@@ -29,6 +29,13 @@ Build checks in `test/presentation/platform-profile.test.ts`:
 - every list in a shipped document is admitted by the bundled release
 - setup activates the platform profile once
 
+Each shipped `TypeList` lowers its concrete selectors into the same closed
+public filter grammar used by Search. Profile admission checks those selectors
+against the effective release; an unknown Type remains an invalid profile and
+is never converted into an empty catalogue read. The Home's four selectors are
+`schema:Book`, `schema:TVSeries` plus `schema:Movie`, `wd:Q689445`, and
+`schema:Recipe`.
+
 ## Release evidence and scope
 
 The shared [composition format](../../../../packages/composition/README.md) is a closed, inert document with a
