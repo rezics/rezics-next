@@ -17,7 +17,7 @@ negative/discarded work, and preserve native 100-key/262,144-row ceilings. Never
 
 ## Follow operation composition
 
-Decision: bind immutable original SQL operands at native dispatch. Entry consumes the same nested mutation
+Decision: bind original SQL operands at native dispatch. Entry consumes the same nested mutation
 on its original transaction/client/time, without another runner or admission.
 
 `follow-operation-bounds.ts` retains all nine axes and native adapter bind order. Mutation includes the installed
