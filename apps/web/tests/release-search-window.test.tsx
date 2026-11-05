@@ -56,6 +56,7 @@ const { releaseSearchQueryOptions } = await import('../src/search/release-search
 const { parseReleaseSearch, releaseSearchHref } = await import('../src/search/release-search');
 const { useReleaseWindowQuery } = await import('../src/search/release-window-query');
 const { ReleaseSearchPage } = await import('../src/search/release-search-page');
+const { browserObservation } = await import('../src/session');
 const { sessionQuery } = await import('../src/session/query');
 const { setLocale } = await import('../src/paraglide/runtime.js');
 notifyManager.setScheduler((callback) => callback());
@@ -127,6 +128,7 @@ let root: ReturnType<typeof createRoot> | undefined;
 let client: InstanceType<typeof QueryClient>;
 let router: ReturnType<typeof createRouter>;
 let navigation: Promise<void> | undefined;
+let stopObservation: (() => void) | undefined;
 const link = (action: string) => host.querySelector<HTMLAnchorElement>(`[data-window-action="${action}"]`);
 async function finish(data = page(), status = 200) {
   await act(async () => {
@@ -147,6 +149,7 @@ async function show(cursor?: string, initial = page()) {
   window.history.replaceState({}, '', releaseSearchHref('en', parsed.form, cursor));
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'reader', csrfToken: 'one' });
+  stopObservation = browserObservation(client).subscribe(() => {});
   const parent = createRootRouteWithContext<{ queryClient: QueryClient }>()({ component: Outlet });
   const route = createRoute({
     getParentRoute: () => parent,
@@ -195,6 +198,7 @@ async function show(cursor?: string, initial = page()) {
 afterEach(async () => {
   if (root) await act(async () => root!.unmount());
   root = undefined;
+  stopObservation?.();
   client?.clear();
   host.replaceChildren();
 });
@@ -218,7 +222,7 @@ test('released group Continue, Previous, First and native open/back each read on
   expect(host.textContent).not.toContain('Current edition');
   await finish(page('third'));
   expect(host.textContent).toContain('Group window 2');
-  expect(document.activeElement).toBe(link('next'));
+  expect(document.activeElement === host.querySelector('[data-release-group-results]')).toBe(true);
   await click('previous');
   await finish();
   expect(reads).toHaveLength(3);
@@ -285,7 +289,7 @@ test('same-principal replacement, A/B/A, checkpoint replacement and moved focus 
     client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'reader', csrfToken: 'two' }),
   );
   await finish();
-  expect(document.activeElement).not.toBe(host.querySelector('[data-release-group-results]'));
+  expect(document.activeElement === host.querySelector('[data-release-group-results]')).toBe(false);
   const outside = document.createElement('button');
   document.body.append(outside);
   outside.focus();
