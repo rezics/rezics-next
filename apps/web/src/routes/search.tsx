@@ -1,5 +1,4 @@
-import { createFileRoute, useLocation } from '@tanstack/react-router';
-import { useEffect, useRef } from 'react';
+import { createFileRoute, useLocation, useRouter } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createIsomorphicFn } from '@tanstack/react-start';
 import { getRequest } from '@tanstack/react-start/server';
@@ -89,6 +88,7 @@ function SearchFailed() {
 function SearchRoute() {
   const search = Route.useSearch();
   const location = useLocation();
+  const router = useRouter();
   const navigate = Route.useNavigate();
   const locale = getLocale();
   const intake = searchUrlIntake(search, location.searchStr, location.publicHref);
@@ -96,71 +96,39 @@ function SearchRoute() {
   const queryClient = useQueryClient();
   const cachedSession = queryClient.getQueryData(sessionQuery.queryKey);
   const readerIntent = cachedSession ? searchSessionOwner(cachedSession) : undefined;
-  const visitIdentity = `${locale}\u0000${location.publicHref}\u0000${fingerprint}\u0000${readerIntent ?? 'unknown'}`;
-  const visit = useRef({ identity: visitIdentity, generation: 0 });
-  if (visit.current.identity !== visitIdentity)
-    visit.current = { identity: visitIdentity, generation: visit.current.generation + 1 };
-  const visitGeneration = visit.current.generation;
-  const pendingFocus = useRef<
-    | {
-        fingerprint: string;
-        locale: string;
-        originVisit: number;
-        targetVisit?: number;
-        readerIntent?: string | null;
-        source: Element | null;
-      }
-    | undefined
-  >(undefined);
-
-  const pending = pendingFocus.current;
-  if (pending) {
-    if (pending.locale !== locale || pending.readerIntent !== readerIntent) pendingFocus.current = undefined;
-    else if (pending.targetVisit === undefined && visitGeneration !== pending.originVisit) {
-      if (visitGeneration === pending.originVisit + 1 && pending.fingerprint === fingerprint)
-        pending.targetVisit = visitGeneration;
-      else pendingFocus.current = undefined;
-    } else if (pending.targetVisit !== undefined && pending.targetVisit !== visitGeneration)
-      pendingFocus.current = undefined;
-  }
-
-  useEffect(() => {
-    const pending = pendingFocus.current;
-    if (!pending) return;
-    if (
-      pending.locale !== locale ||
-      pending.fingerprint !== fingerprint ||
-      pending.targetVisit !== visitGeneration
-    ) {
-      pendingFocus.current = undefined;
-      return;
-    }
-    const active = document.activeElement;
-    if (active !== pending.source && !(active === document.body && pending.source && !pending.source.isConnected)) {
-      pendingFocus.current = undefined;
-      return;
-    }
-    const firstIssue = document.querySelector<HTMLElement>(
-      '[data-search-input-first] textarea, [data-search-input-first] input, [data-search-input-first] button',
-    );
-    const results = document.querySelector<HTMLElement>('[data-search-results]');
-    if (results && pending.readerIntent !== undefined && results.dataset.searchReader !== (pending.readerIntent ?? '')) {
-      pendingFocus.current = undefined;
-      return;
-    }
-    (firstIssue ?? results)?.focus({ preventScroll: true });
-    pendingFocus.current = undefined;
-  }, [fingerprint, intake.kind, locale, visitGeneration]);
-
-  const focusAfterNavigation = (nextSearch: Record<string, unknown>) => {
-    pendingFocus.current = {
-      fingerprint: searchInputFingerprint(nextSearch),
-      locale,
-      originVisit: visitGeneration,
-      readerIntent,
-      ...(searchInputFingerprint(nextSearch) === fingerprint ? { targetVisit: visitGeneration } : {}),
-      source: typeof document === 'undefined' ? null : document.activeElement,
-    };
+  const visitLocation = router.state.location;
+  const focusAfterNavigation = (
+    nextSearch: Record<string, unknown>,
+    startNavigation: () => Promise<unknown>,
+  ) => {
+    if (router.state.location !== visitLocation || typeof document === 'undefined') return;
+    const expectedFingerprint = searchInputFingerprint(nextSearch);
+    const source = document.activeElement;
+    void startNavigation().then(() => {
+      const targetLocation = router.state.location;
+      if (searchInputFingerprint(targetLocation.search as Record<string, unknown>) !== expectedFingerprint) return;
+      const focus = () => {
+        if (router.state.location !== targetLocation || getLocale() !== locale) return;
+        const currentSession = queryClient.getQueryData(sessionQuery.queryKey);
+        const currentReader = currentSession ? searchSessionOwner(currentSession) : undefined;
+        if (currentReader !== readerIntent) return;
+        const active = document.activeElement;
+        const shellFocus = document.getElementById('main-content');
+        if (
+          active !== source &&
+          !(active === document.body && source && !source.isConnected) &&
+          active !== shellFocus
+        )
+          return;
+        const firstIssue = document.querySelector<HTMLElement>(
+          '[data-search-input-first] textarea, [data-search-input-first] input, [data-search-input-first] button',
+        );
+        const results = document.querySelector<HTMLElement>('[data-search-results]');
+        if (results && currentReader !== undefined && results.dataset.searchReader !== (currentReader ?? '')) return;
+        (firstIssue ?? results)?.focus({ preventScroll: true });
+      };
+      document.defaultView!.requestAnimationFrame(focus);
+    });
   };
 
   if (intake.kind === 'over-budget') {
@@ -170,9 +138,7 @@ function SearchRoute() {
         overBudget
         locale={locale}
         onRestart={() => {
-          if (visit.current.generation !== visitGeneration) return;
-          focusAfterNavigation({});
-          void navigate({ search: () => ({}) });
+          focusAfterNavigation({}, () => navigate({ search: () => ({}) }));
         }}
       />
     );
@@ -186,26 +152,26 @@ function SearchRoute() {
         issues={intake.issues}
         locale={locale}
         onApply={(issue, value) => {
-          if (visit.current.generation !== visitGeneration) return;
           const next = correctSearchInput(search, issue.key, value, issue.occurrence);
-          focusAfterNavigation(next);
-          void navigate({
-            search: (previous) =>
-              searchInputFingerprint(previous) === baseFingerprint
-                ? correctSearchInput(previous, issue.key, value, issue.occurrence)
-                : previous,
-          });
+          focusAfterNavigation(next, () =>
+            navigate({
+              search: (previous) =>
+                searchInputFingerprint(previous) === baseFingerprint
+                  ? correctSearchInput(previous, issue.key, value, issue.occurrence)
+                  : previous,
+            }),
+          );
         }}
         onRemove={(issue) => {
-          if (visit.current.generation !== visitGeneration) return;
           const next = removeSearchInput(search, issue.key, issue.occurrence);
-          focusAfterNavigation(next);
-          void navigate({
-            search: (previous) =>
-              searchInputFingerprint(previous) === baseFingerprint
-                ? removeSearchInput(previous, issue.key, issue.occurrence)
-                : previous,
-          });
+          focusAfterNavigation(next, () =>
+            navigate({
+              search: (previous) =>
+                searchInputFingerprint(previous) === baseFingerprint
+                  ? removeSearchInput(previous, issue.key, issue.occurrence)
+                  : previous,
+            }),
+          );
         }}
       />
     );
