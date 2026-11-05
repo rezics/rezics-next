@@ -524,6 +524,211 @@ test('reviewed Person merge refuses absent claims, wrong types, malformed select
   expect(await Promise.all([...people, book].map((subject) => revisions(subject.id)))).toEqual(before);
 });
 
+test('reviewed Person evidence admits all four exact source keys and keeps same identifiers under other keys distinct', async () => {
+  const routeKey = new Uint8Array(32).fill(4);
+  const base = `${Date.now()}${Math.floor(Math.random() * 1_000_000)}`;
+  const coresident = (pair: readonly [string, string], externalId: (index: number) => string) => {
+    for (let index = 1; index <= 100_000; index++) {
+      const id = externalId(index);
+      if (partitionOf(tupleRoute(routeKey, pair[0], id)) === partitionOf(tupleRoute(routeKey, pair[1], id))) return id;
+    }
+    throw new Error('no co-resident external identifier');
+  };
+  const bangumiId = coresident(['bangumi', 'bangumi_cross_media'], (index) => `person:${base}${index}`);
+  const vndbId = coresident(['vndb', 'vndb_cross_media'], (index) => `s${base}${index}`);
+  const claims = [
+    { source: 'bangumi', externalId: bangumiId, property: 'wdt:P6298', value: bangumiId.slice(7) },
+    { source: 'bangumi_cross_media', externalId: bangumiId, property: 'wdt:P6298', value: bangumiId.slice(7) },
+    { source: 'vndb', externalId: vndbId, property: 'wdt:P3180', value: vndbId },
+    { source: 'vndb_cross_media', externalId: vndbId, property: 'wdt:P3180', value: vndbId },
+  ] as const;
+  const batch = await call('POST', '/v1/subjects:batchWrite', {
+    as: 'editor',
+    body: {
+      commands: claims.map((claim) => ({
+        op: 'create',
+        key: randomUUID(),
+        source: {
+          source: claim.source,
+          external_id: claim.externalId,
+          record_revision: '1',
+          digest: 'c'.repeat(64),
+          converter_revision: 'review@1',
+          field_group: 'facts',
+        },
+        subject: {
+          type: 'schema:Person',
+          labels: { en: `Reviewed ${claim.source}` },
+          statements: { [claim.property]: [statement(claim.property, claim.value)] },
+        },
+      })),
+    },
+  });
+  expect(batch.response.status).toBe(200);
+  expect(batch.body.results.map((result: any) => result.status)).toEqual([201, 201, 201, 201]);
+  const ids = batch.body.results.map((result: any) => result.value.id as string);
+  const read = (id: string, claim: (typeof claims)[number]) =>
+    call(
+      'GET',
+      `/v1/subjects/${id}?${new URLSearchParams({
+        reviewIdentitySource: claim.source,
+        reviewIdentityExternalId: claim.externalId,
+        includeViewerActions: 'true',
+      })}`,
+    );
+  const reads = await Promise.all(ids.map((id, index) => read(id, claims[index]!)));
+  for (const [index, answer] of reads.entries()) {
+    expect(answer.response.status).toBe(200);
+    expect(answer.body.reviewedIdentity).toEqual({
+      subject: ids[index],
+      revision: 1,
+      securityRevision: expect.stringMatching(/^[1-9][0-9]*$/),
+      ...claims[index]!,
+      claimTransactionId: expect.any(String),
+    });
+  }
+  const crossed = await Promise.all([
+    read(ids[0]!, claims[1]!),
+    read(ids[1]!, claims[0]!),
+    read(ids[2]!, claims[3]!),
+    read(ids[3]!, claims[2]!),
+  ]);
+  for (const answer of crossed) {
+    expect(answer.response.status).toBe(200);
+    expect(answer.body.reviewedIdentity).toBeNull();
+  }
+  for (const query of [
+    `reviewIdentitySource=vndb_cross_media&reviewIdentityExternalId=person:${base}`,
+    `reviewIdentitySource=bangumi_cross_media&reviewIdentityExternalId=s${base}`,
+  ])
+    expect((await call('GET', `/v1/subjects/${ids[0]}?${query}`)).response.status).toBe(400);
+  const pairBody = (first: number, second: number) => ({
+    subjects: [ids[first]!, ids[second]!],
+    expectedIdentity: { endpoints: [reads[first]!.body.reviewedIdentity, reads[second]!.body.reviewedIdentity] },
+  });
+  const before = await Promise.all(ids.map(revisions));
+  const wrongSource = structuredClone(pairBody(0, 1));
+  wrongSource.expectedIdentity.endpoints[0].source = 'bangumi_cross_media';
+  expect((await merge(wrongSource)).response.status).toBe(409);
+  expect(await Promise.all(ids.map(revisions))).toEqual(before);
+  const token = key();
+  const admitted = await merge(pairBody(0, 1), { key: token });
+  expect(admitted.response.status).toBe(202);
+  expect(admitted.body).toEqual({ operation: { id: expect.any(String) } });
+  expect(admitted.response.headers.get('location')).toBe(`/v1/subjectIdentityOperations/${admitted.body.operation.id}`);
+  expect((await merge(pairBody(0, 1), { key: token })).body).toEqual(admitted.body);
+  expect((await merge(pairBody(2, 3))).response.status).toBe(202);
+  const poll = await call('GET', `/v1/subjectIdentityOperations/${admitted.body.operation.id}`, { as: 'acceptor' });
+  expect(poll.response.status).toBe(200);
+  expect(poll.body.operation).toEqual({ id: admitted.body.operation.id, done: false });
+  const [, redirectedId] = [ids[0]!, ids[1]!].sort();
+  const publicRead = await call('GET', `/v1/subjects/${redirectedId}`);
+  expect(publicRead.response.status).toBe(308);
+  const survivor = publicRead.body.redirect.to as string;
+  const canonical = await call('GET', `/v1/subjects/${survivor}`);
+  expect(canonical.response.status).toBe(200);
+  expect(canonical.body.subject.id).toBe(survivor);
+});
+
+test('foreign-home reviewed Person evidence is atomic_guard_unavailable and writes nothing', async () => {
+  const routeKey = new Uint8Array(32).fill(4);
+  const number = String(Date.now());
+  const bangumi = { source: 'bangumi' as const, externalId: `person:${number}` };
+  const bangumiPartition = partitionOf(tupleRoute(routeKey, bangumi.source, bangumi.externalId));
+  let vndbId = '';
+  for (let index = 1; index <= 100_000; index++) {
+    const externalId = `s${number}${index}`;
+    if (partitionOf(tupleRoute(routeKey, 'vndb', externalId)) !== bangumiPartition) {
+      vndbId = externalId;
+      break;
+    }
+  }
+  expect(vndbId).not.toBe('');
+  const claims = [
+    { source: 'bangumi' as const, externalId: bangumi.externalId, property: 'wdt:P6298' as const, value: number },
+    { source: 'vndb' as const, externalId: vndbId, property: 'wdt:P3180' as const, value: vndbId },
+  ];
+  const batch = await call('POST', '/v1/subjects:batchWrite', {
+    as: 'editor',
+    body: {
+      commands: claims.map((claim) => ({
+        op: 'create',
+        key: randomUUID(),
+        source: {
+          source: claim.source,
+          external_id: claim.externalId,
+          record_revision: '1',
+          digest: 'c'.repeat(64),
+          converter_revision: 'review@1',
+          field_group: 'facts',
+        },
+        subject: {
+          type: 'schema:Person',
+          labels: { en: `Foreign ${claim.source}` },
+          statements: { [claim.property]: [statement(claim.property, claim.value)] },
+        },
+      })),
+    },
+  });
+  expect(batch.response.status).toBe(200);
+  expect(batch.body.results.map((result: any) => result.status)).toEqual([201, 201]);
+  const subjects = batch.body.results.map((result: any) => result.value.id) as [string, string];
+  expect(partitionOf(routeOf(subjects[0])!)).not.toBe(partitionOf(routeOf(subjects[1])!));
+  const reads = await Promise.all(
+    subjects.map((id, index) =>
+      call(
+        'GET',
+        `/v1/subjects/${id}?${new URLSearchParams({
+          reviewIdentitySource: claims[index]!.source,
+          reviewIdentityExternalId: claims[index]!.externalId,
+          includeViewerActions: 'true',
+        })}`,
+      ),
+    ),
+  );
+  expect(reads.map((read) => read.response.status)).toEqual([200, 200]);
+  const before = await Promise.all(subjects.map(revisions));
+  const refused = await merge({
+    subjects,
+    expectedIdentity: { endpoints: reads.map((read) => read.body.reviewedIdentity) },
+  });
+  expect([refused.response.status, refused.body.code]).toEqual([503, 'atomic_guard_unavailable']);
+  expect(await Promise.all(subjects.map(revisions))).toEqual(before);
+});
+
+test('Account Context epochs are observed independently of the catalogue identity epoch in one transaction', async () => {
+  const editorHome = partitionOf(routeOf(accounts.editor)!);
+  const acceptorHome = partitionOf(routeOf(accounts.acceptor)!);
+  const held = await admin.connect();
+  try {
+    await held.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+    const owners = (
+      await held.query<{ partition_no: number; epoch: string }>(
+        'SELECT partition_no, epoch FROM core.partition WHERE partition_no = ANY($1::int[]) ORDER BY partition_no',
+        [[editorHome, acceptorHome]],
+      )
+    ).rows;
+    const identity = (
+      await held.query<{ partition_no: number; published_epoch: string }>(
+        'SELECT partition_no, published_epoch FROM semantic.identity_epoch_control WHERE partition_no = ANY($1::int[])',
+        [[editorHome, acceptorHome]],
+      )
+    ).rows;
+    await held.query('COMMIT');
+    expect(owners.map((row) => row.partition_no)).toEqual([...new Set([editorHome, acceptorHome])].sort((a, b) => a - b));
+    for (const row of owners) expect(/^[1-9][0-9]*$/.test(String(row.epoch))).toBe(true);
+    const ownerEpoch = new Map(owners.map((row) => [row.partition_no, String(row.epoch)]));
+    for (const row of identity)
+      expect(row.published_epoch === ownerEpoch.get(row.partition_no) ? 'same-number-ok' : 'independent').toMatch(
+        /independent|same-number-ok/,
+      );
+    expect(ownerEpoch.get(editorHome)).toBeDefined();
+    expect(ownerEpoch.get(acceptorHome)).toBeDefined();
+  } finally {
+    held.release();
+  }
+});
+
 test('a held subject lock times out competing merge and leaves no effect until release', async () => {
   const people = [await person('Lock A'), await person('Lock B')].sort(byId) as [
     Record<string, any>,

@@ -750,11 +750,13 @@ Current-authority replay finds that same operation. The existing GET poll pendin
 unknown/denied behavior remain; a redirect/revision alone cannot complete it. Suspension follows the [native bearer contract](identity-epoch-contract.md#ordinary-http-asynchronous-identity-operation).
 
 Decision: the identity admission store asks the caller for an authorization per native partition it runs a command on
-(`authorizationFor`), because an admission's home and the redirected Subject's partition can differ. The poll discovers
-the immutable original and terminal tuple without disclosing it, prepares both `subject:read` checks outside any
-transaction, and then consumes merge authority, both reads, visibility and the current operation observation in one read
-transaction. Subject writes on a fresh database still raise `identity_epoch_unavailable` until the successor identity
-receiving closes the bootstrap holds; merge tests that write subjects wait for that remainder.
+(`authorizationFor`), because an admission's home and the redirected Subject's partition can differ. Colocated callers
+keep a single `authorization`. The poll discovers the immutable original and terminal tuple without disclosing it,
+prepares both `subject:read` checks outside any transaction, and then consumes merge authority, both reads, visibility
+and the current operation observation in one read transaction. Independent public readback is the one-hop 308 plus the
+survivor GET; `done: true` still requires mapping and both participant receipts. Foreign-home reviewed Person evidence
+answers HTTP 503 `atomic_guard_unavailable`. Subject writes on a fresh database still raise `identity_epoch_unavailable`
+until the successor identity receiving closes the bootstrap holds; merge tests that write subjects wait for that remainder.
 
 Verification/reversal retain their successful subject/component DTO and same receipt. The SAME Accounts workflow
 uses bounded admission/delivery steps, bounded indexed native publication probes and durable sleep OUTSIDE a step,

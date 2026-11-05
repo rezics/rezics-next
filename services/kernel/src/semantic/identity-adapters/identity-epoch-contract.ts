@@ -80,10 +80,12 @@ export type IdentityAdmissionInput = Readonly<{
     release: Release;
   }>;
 }>;
-/** The caller's authority. Every store command runs on one native partition, so the caller supplies an
- * authorization prepared for exactly that partition; an admission can touch several partitions. */
+/** The caller's authority. Every store command runs on one native partition.
+ * Colocated callers keep a single `authorization`. HTTP merge supplies `authorizationFor`
+ * because admission home and the redirected Subject partition can differ. */
 export type IdentityAdmissionAuthority = Readonly<{
   basis?: CommandBasis;
+  authorization?: CommandAuthorization;
   authorizationFor?: (partition: number) => Promise<CommandAuthorization>;
   deadline?: number;
   clock?: () => Date;
@@ -91,14 +93,14 @@ export type IdentityAdmissionAuthority = Readonly<{
 
 /** Command options for one store command on `partition`, with the caller's authorization prepared for it. */
 export async function commandAuthorityAt(authority: IdentityAdmissionAuthority, partition: number) {
+  const authorization =
+    authority.authorizationFor === undefined ? authority.authorization : await authority.authorizationFor(partition);
   return {
     partition,
     ...(authority.basis === undefined ? {} : { basis: authority.basis }),
     ...(authority.deadline === undefined ? {} : { deadline: authority.deadline }),
     ...(authority.clock === undefined ? {} : { clock: authority.clock }),
-    ...(authority.authorizationFor === undefined
-      ? {}
-      : { authorization: await authority.authorizationFor(partition) }),
+    ...(authorization === undefined ? {} : { authorization }),
   };
 }
 export type IdentityEpochStore = Readonly<{
