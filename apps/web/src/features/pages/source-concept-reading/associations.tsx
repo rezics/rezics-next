@@ -13,6 +13,10 @@ import { CandidateValue } from '../data';
 import { spoilerLevel } from '../shared';
 import { SpoilerGate } from '../values';
 import { linkClass } from './hierarchy';
+import type { ConceptFocus } from './navigation';
+
+type AssociationSection = Extract<ConceptFocus['section'], 'scheme' | 'code' | 'broader'>;
+type TargetHref = (href: string, focus: ConceptFocus) => string;
 
 /** Each reference value needs its own admitted summary; unavailable labels never become UUID captions. */
 function AssociationValue({
@@ -20,11 +24,17 @@ function AssociationValue({
   read,
   locale,
   returnTo,
+  hrefFor,
+  section,
+  focus,
 }: {
   part: ConceptStatement | ConceptStatement['qualifiers'][number];
   read: SubjectRead;
   locale: string;
   returnTo?: string | undefined;
+  hrefFor?: TargetHref | undefined;
+  section: AssociationSection;
+  focus: ConceptFocus;
 }) {
   const o = { locale: locale as never };
   if (part.property.data_type === 'wikibase-item' && part.value.type === 'value') {
@@ -38,11 +48,14 @@ function AssociationValue({
       (summary.type === conceptRequested.type || summary.type === conceptRequested.scheme)
         ? catalogueEntries.concepts({ id, label: label.text, locale })
         : subjectHref({ id, label: label.text }, locale);
+    const href = hrefFor?.(entry.href, focus) ?? (returnTo ? `${entry.href}?${new URLSearchParams({ returnTo })}` : entry.href);
     return (
       <a
         className={linkClass}
         lang={label.lang ?? undefined}
-        href={returnTo ? `${entry.href}?${new URLSearchParams({ returnTo })}` : entry.href}
+        href={href}
+        data-concept-target={id}
+        data-concept-target-section={section}
       >
         {label.text}
       </a>
@@ -55,10 +68,18 @@ function EvidenceParts({
   parts,
   read,
   locale,
+  returnTo,
+  hrefFor,
+  section,
+  focus,
 }: {
   parts: ConceptStatement['qualifiers'];
   read: SubjectRead;
   locale: string;
+  returnTo?: string | undefined;
+  hrefFor?: TargetHref | undefined;
+  section: AssociationSection;
+  focus: ConceptFocus;
 }) {
   return (
     <dl className="space-y-2">
@@ -71,7 +92,7 @@ function EvidenceParts({
               {label?.text || m.candidate_value_unavailable({}, { locale: locale as never })}
             </dt>
             <dd>
-              <AssociationValue part={part} read={read} locale={locale} />
+              <AssociationValue part={part} read={read} locale={locale} returnTo={returnTo} hrefFor={hrefFor} section={section} focus={focus} />
             </dd>
           </div>
         );
@@ -85,10 +106,18 @@ function Association({
   statement,
   reading,
   children,
+  returnTo,
+  hrefFor,
+  section,
+  focus,
 }: {
   statement: ConceptStatement;
   reading: ProfileReading;
   children: ReactNode;
+  returnTo?: string | undefined;
+  hrefFor?: TargetHref | undefined;
+  section: AssociationSection;
+  focus: ConceptFocus;
 }) {
   const { public: read, locale } = reading;
   const o = { locale: locale as never };
@@ -98,7 +127,7 @@ function Association({
       {!!statement.qualifiers.length && (
         <section aria-label={m.correction_qualifiers({}, o)}>
           <h3 className="font-medium">{m.correction_qualifiers({}, o)}</h3>
-          <EvidenceParts parts={statement.qualifiers} read={read} locale={locale} />
+          <EvidenceParts parts={statement.qualifiers} read={read} locale={locale} returnTo={returnTo} hrefFor={hrefFor} section={section} focus={focus} />
         </section>
       )}
       {!!statement.references.length && (
@@ -107,7 +136,7 @@ function Association({
           <ol className="space-y-3">
             {statement.references.map((reference, index) => (
               <li key={index}>
-                <EvidenceParts parts={reference.parts} read={read} locale={locale} />
+                <EvidenceParts parts={reference.parts} read={read} locale={locale} returnTo={returnTo} hrefFor={hrefFor} section={section} focus={focus} />
               </li>
             ))}
           </ol>
@@ -162,25 +191,27 @@ export function ConceptAssociations({
   reader,
   returnTo,
   codes,
+  hrefFor,
 }: {
   read: SubjectRead;
   locale: string;
   reader: Reader;
   returnTo?: string | undefined;
   codes: Extract<ConceptRead, { ok: true }>['codes'];
+  hrefFor?: TargetHref | undefined;
 }) {
   // Inspection uses the existing exact value address. No guide or per-row Subject read is added here.
   const reading: ProfileReading = { public: read, locale, reader, release: { types: {}, properties: {} } };
   const codeLabels = new Map(codes.map((code) => [code.property, code]));
   const groups = [
     {
-      key: 'scheme',
+      key: 'scheme' as const,
       title: m.concept_explore_scheme,
       empty: m.concept_explore_no_schemes,
       statements: read.subject.statements[conceptRequested.inScheme] ?? [],
     },
     {
-      key: 'code',
+      key: 'code' as const,
       title: m.concept_explore_source_code,
       empty: m.concept_explore_no_codes,
       statements: Object.values(read.subject.statements).flatMap((rows) =>
@@ -188,7 +219,7 @@ export function ConceptAssociations({
       ),
     },
     {
-      key: 'broader',
+      key: 'broader' as const,
       title: m.concept_explore_broader,
       empty: m.concept_explore_no_broader,
       statements: read.subject.statements[conceptRequested.broader] ?? [],
@@ -199,14 +230,21 @@ export function ConceptAssociations({
     <>
       {groups.map((group) => (
         <section key={group.key} className="space-y-3" aria-labelledby={`concept-${group.key}-heading`}>
-          <h2 id={`concept-${group.key}-heading`} className="font-sans text-lg font-semibold">
+          <h2 id={`concept-${group.key}-heading`} tabIndex={-1} className="font-sans text-lg font-semibold">
             {group.title({}, o)}
           </h2>
           {group.statements.length ? (
             <ul className="space-y-4">
               {group.statements.map((statement) => (
-                <li key={statement.id}>
-                  <Association statement={statement} reading={reading}>
+                <li key={statement.id} data-concept-association-row={statement.id}>
+                  <Association
+                    statement={statement}
+                    reading={reading}
+                    returnTo={returnTo}
+                    hrefFor={hrefFor}
+                    section={group.key}
+                    focus={{ section: group.key, row: statement.id }}
+                  >
                     {group.key === 'code' && (
                       <p lang={codeLabels.get(statement.property.id)?.labelLang ?? undefined}>
                         {codeLabels.get(statement.property.id)?.label !== statement.property.id
@@ -214,7 +252,15 @@ export function ConceptAssociations({
                           : m.concept_explore_source_code({}, o)}
                       </p>
                     )}
-                    <AssociationValue part={statement} read={read} locale={locale} returnTo={returnTo} />
+                    <AssociationValue
+                      part={statement}
+                      read={read}
+                      locale={locale}
+                      returnTo={returnTo}
+                      hrefFor={hrefFor}
+                      section={group.key}
+                      focus={{ section: group.key, row: statement.id }}
+                    />
                   </Association>
                 </li>
               ))}

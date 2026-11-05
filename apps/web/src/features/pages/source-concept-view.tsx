@@ -2,7 +2,7 @@ import { pickText } from '@rezics/composition';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
-import { useMemo } from 'react';
+import { useLayoutEffect, useMemo } from 'react';
 import { defaultReader, type Reader } from '../../subject/reader';
 import { useSession } from '../../session/query';
 import { FollowTargetControl } from '../../library/follow-target-control';
@@ -12,6 +12,16 @@ import type { ConceptRead } from '../catalogue/source-concept-explorer';
 import { actionClass, linkClass, ConceptHierarchy, visitAnnouncement } from './source-concept-reading/hierarchy';
 import { useConceptVisit, type ConceptTransport } from './source-concept-reading/visit';
 import { originatingConceptReturn } from './source-concept-reading/origin';
+import {
+  conceptVisitAddressFor,
+  conceptVisitHref,
+  conceptTargetHref,
+  conceptVisitDescriptorFor,
+  subjectVisitHref,
+  type ConceptFocus,
+  type ConceptHierarchyAddress,
+  type ConceptVisitDescriptor,
+} from './source-concept-reading/navigation';
 import {
   ConceptTaggedWorks,
   type ConceptWorksRoutePatch,
@@ -31,6 +41,13 @@ type Props = {
   reader?: Reader | undefined;
   worksRoute?: ConceptWorksRouteState | undefined;
   onWorksChange?: ((patch: ConceptWorksRoutePatch, options?: { replace?: boolean }) => void) | undefined;
+  conceptVisit?: ConceptVisitDescriptor | undefined;
+  invalidConceptVisit?: boolean | undefined;
+  hierarchyAddress?: ConceptHierarchyAddress | undefined;
+  invalidHierarchy?: boolean | undefined;
+  onHierarchyChange?:
+    | ((address: ConceptHierarchyAddress | undefined, options?: { replace?: boolean }) => void)
+    | undefined;
 };
 
 export function SourceConceptView(props: Props) {
@@ -52,6 +69,11 @@ function ConceptVisitView({
   admission,
   worksRoute,
   onWorksChange,
+  conceptVisit,
+  invalidConceptVisit,
+  hierarchyAddress,
+  invalidHierarchy,
+  onHierarchyChange,
 }: {
   id: string;
   locale: string;
@@ -64,10 +86,25 @@ function ConceptVisitView({
   admission: ReturnType<typeof useCatalogueLifetime>;
   worksRoute?: ConceptWorksRouteState | undefined;
   onWorksChange?: ((patch: ConceptWorksRoutePatch, options?: { replace?: boolean }) => void) | undefined;
+  conceptVisit?: ConceptVisitDescriptor | undefined;
+  invalidConceptVisit?: boolean | undefined;
+  hierarchyAddress?: ConceptHierarchyAddress | undefined;
+  invalidHierarchy?: boolean | undefined;
+  onHierarchyChange?:
+    | ((address: ConceptHierarchyAddress | undefined, options?: { replace?: boolean }) => void)
+    | undefined;
 }) {
   const o = { locale: locale as never };
   const returnTo = originatingConceptReturn(suppliedReturn, locale);
-  const visit = useConceptVisit({ id, role, transport, initial, admission });
+  const visit = useConceptVisit({
+    id,
+    role,
+    transport,
+    initial,
+    admission,
+    address: hierarchyAddress,
+    onAddressChange: onHierarchyChange,
+  });
   const { read, error, busy } = visit;
   const source = useCatalogueLifetime(
     JSON.stringify([
@@ -89,6 +126,67 @@ function ConceptVisitView({
     read.viewerActions.actions.some(
       (item) => item.action === 'statement:propose' && item.operations.includes('subject.propose'),
     );
+  const immediateReturn =
+    conceptVisit && conceptVisit.subject !== id
+      ? conceptVisitHref(conceptVisit, locale, returnTo)
+      : undefined;
+
+  const addressFor = (focus: ConceptFocus) => {
+    if (!read?.admitted) return;
+    return conceptVisitAddressFor(read, visit.history, visit.index, worksRoute, focus, locale, returnTo);
+  };
+  const hierarchyHrefFor = (base: string, row: { id: string; conceptPage: boolean }) => {
+    if (!read?.admitted) return base;
+    if (!row.conceptPage)
+      return subjectVisitHref(base, addressFor({ section: 'hierarchy', row: row.id }));
+    const descriptor = conceptVisitDescriptorFor(read, visit.history, visit.index, worksRoute, {
+      section: 'hierarchy',
+      row: row.id,
+    });
+    return conceptTargetHref(base, descriptor, returnTo);
+  };
+  const associationHrefFor = (base: string, focus: ConceptFocus) => {
+    if (!read?.admitted) return base;
+    const address = addressFor(focus);
+    if (base.endsWith('/concepts')) {
+      const descriptor = conceptVisitDescriptorFor(read, visit.history, visit.index, worksRoute, focus);
+      return conceptTargetHref(base, descriptor, returnTo);
+    }
+    return subjectVisitHref(base, address);
+  };
+  const workReturnHref = (_subject: { id: string }) => addressFor({ section: 'works' });
+
+  useLayoutEffect(() => {
+    if (!visit.focus || visit.loading || visit.busy || !read?.admitted) return;
+    const focus = visit.focus;
+    const focusWithin = (selector: string, attribute: string) =>
+      [...document.querySelectorAll<HTMLElement>(selector)].find((element) => element.dataset[attribute] === focus.row);
+    let target: HTMLElement | undefined;
+    if (focus.row && focus.section === 'hierarchy') {
+      target = focusWithin('[data-concept-hierarchy-row]', 'conceptHierarchyRow')?.querySelector('a') ?? undefined;
+    } else if (focus.row && ['scheme', 'code', 'broader'].includes(focus.section)) {
+      target = focusWithin('[data-concept-association-row]', 'conceptAssociationRow')?.querySelector('a[data-concept-target]') ?? undefined;
+    } else if (focus.section === 'works') {
+      target = document.getElementById('concept-tagged-works-heading') ?? undefined;
+    }
+    if (target) {
+      target.focus();
+      return;
+    }
+    visit.reportFocusMissing();
+  }, [visit.focus, visit.loading, visit.busy, visit.completed, read, visit.reportFocusMissing]);
+
+  useLayoutEffect(() => {
+    if (!visit.notice || visit.loading || visit.busy) return;
+    const section = visit.noticeSection ?? 'hierarchy';
+    const id =
+      section === 'hierarchy'
+        ? 'concept-narrower-heading'
+        : section === 'works'
+          ? 'concept-tagged-works-heading'
+          : `concept-${section}-heading`;
+    document.getElementById(id)?.focus();
+  }, [visit.notice, visit.noticeSection, visit.loading, visit.busy]);
   return (
     <article
       className="mx-auto w-full min-w-0 max-w-4xl space-y-6 [overflow-wrap:anywhere]"
@@ -118,10 +216,44 @@ function ConceptVisitView({
           </a>
         )}
       </header>
+      {immediateReturn && (
+        <a className={linkClass} href={immediateReturn}>
+          {m.concept_visit_return_previous({}, o)}
+        </a>
+      )}
+      {(invalidConceptVisit || invalidHierarchy) && (
+        <div className="space-y-2">
+          <p role="status">{m.concept_visit_invalid_return({}, o)}</p>
+          <Button
+            type="button"
+            variant="outline"
+            className={actionClass}
+            disabled={busy}
+            onClick={() =>
+              onHierarchyChange
+                ? onHierarchyChange(undefined, { replace: true })
+                : void visit.restart()
+            }
+          >
+            {m.concept_visit_restart({}, o)}
+          </Button>
+        </div>
+      )}
       {pinUnsupported && <p role="status">{m.concept_explore_pin_unsupported({}, o)}</p>}
       <p ref={visit.statusRef} role="status" tabIndex={-1} aria-live="polite" aria-atomic="true">
         {visitAnnouncement(visit, locale)}
       </p>
+      {visit.notice && visit.hierarchy?.state !== 'available' && visit.hierarchy?.state !== 'lagging' && (
+        <Button
+          type="button"
+          variant="outline"
+          className={actionClass}
+          disabled={busy}
+          onClick={() => void visit.restart()}
+        >
+          {m.concept_visit_restart({}, o)}
+        </Button>
+      )}
       {error && (
         <div className="space-y-2">
           <p role="alert" tabIndex={-1}>
@@ -202,9 +334,10 @@ function ConceptVisitView({
                 locale={locale}
                 reader={reader}
                 returnTo={returnTo}
+                hrefFor={associationHrefFor}
               />
 
-              <ConceptHierarchy visit={visit} locale={locale} returnTo={returnTo} />
+              <ConceptHierarchy visit={visit} locale={locale} returnTo={returnTo} hrefFor={hierarchyHrefFor} />
 
               <section className="space-y-2" aria-labelledby="concept-actions-heading">
                 <h2 id="concept-actions-heading" className="font-sans text-lg font-semibold">
@@ -253,6 +386,7 @@ function ConceptVisitView({
               locale={locale}
               route={{ ...(worksRoute ?? {}), role, returnTo }}
               onChange={onWorksChange}
+              conceptReturnForResult={workReturnHref}
             />
           )}
         </ConceptWorksDisclosure>

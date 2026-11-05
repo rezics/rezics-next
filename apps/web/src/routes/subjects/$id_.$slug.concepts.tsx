@@ -2,6 +2,13 @@ import { createFileRoute, notFound } from '@tanstack/react-router';
 import { SourceConceptSession } from '../../features/catalogue/source-concept-explorer/session';
 import { getLocale } from '../../paraglide/runtime.js';
 import { originatingConceptReturn } from '../../features/pages/source-concept-reading/origin';
+import {
+  conceptVisitWorkIntent,
+  conceptVisitPosition,
+  encodeConceptHierarchyAddress,
+  parseConceptHierarchyAddress,
+  parseConceptVisitDescriptor,
+} from '../../features/pages/source-concept-reading/navigation';
 import { m } from '../../paraglide/messages.js';
 import type { ConceptWorksRoutePatch } from '../../features/catalogue/concept-works/view';
 
@@ -19,8 +26,14 @@ export const Route = createFileRoute('/subjects/$id_/$slug/concepts')({
     const condition = search.condition;
     const tagQualifiers = search.tagQualifiers;
     const cursor = search.cursor;
+    const conceptVisitRaw = search.conceptVisit;
+    const hierarchyRaw = search.hierarchy;
     let invalid = false;
-    if (role !== undefined && (typeof role !== 'string' || role.length > 128)) invalid = true;
+    if (
+      role !== undefined &&
+      (typeof role !== 'string' || role.length < 1 || role.length > 128 || /[\u0000-\u001f\u007f]/u.test(role))
+    )
+      invalid = true;
     if (returnTo !== undefined && !originatingConceptReturn(returnTo, getLocale())) invalid = true;
     if (pin !== undefined && (typeof pin !== 'string' || pin.length > 128)) throw notFound();
     if (property !== undefined && (typeof property !== 'string' || property.length < 1 || property.length > 128))
@@ -34,8 +47,13 @@ export const Route = createFileRoute('/subjects/$id_/$slug/concepts')({
       invalid = true;
     if (cursor !== undefined && (typeof cursor !== 'string' || new TextEncoder().encode(cursor).byteLength > 4096))
       invalid = true;
+    const conceptVisit = parseConceptVisitDescriptor(conceptVisitRaw);
+    const hierarchyAddress = parseConceptHierarchyAddress(hierarchyRaw);
     return {
-      role: typeof role === 'string' && role.length <= 128 ? role : undefined,
+      role:
+        typeof role === 'string' && role.length > 0 && role.length <= 128 && !/[\u0000-\u001f\u007f]/u.test(role)
+          ? role
+          : undefined,
       returnTo: originatingConceptReturn(returnTo, getLocale()),
       pinUnsupported: pin !== undefined,
       property: typeof property === 'string' && property.length <= 128 ? property : undefined,
@@ -48,6 +66,12 @@ export const Route = createFileRoute('/subjects/$id_/$slug/concepts')({
       conditionText: typeof condition === 'string' && condition.length <= 16_384 ? condition : undefined,
       tagQualifiersText: typeof tagQualifiers === 'string' && tagQualifiers.length <= 2048 ? tagQualifiers : undefined,
       cursor: typeof cursor === 'string' && new TextEncoder().encode(cursor).byteLength <= 4096 ? cursor : undefined,
+      conceptVisit: typeof conceptVisitRaw === 'string' && conceptVisitRaw.length <= 8192 ? conceptVisitRaw : undefined,
+      conceptVisitDescriptor: conceptVisit,
+      invalidConceptVisit: conceptVisitRaw !== undefined && !conceptVisit,
+      hierarchy: typeof hierarchyRaw === 'string' && hierarchyRaw.length <= 8192 ? hierarchyRaw : undefined,
+      hierarchyAddress,
+      invalidHierarchy: hierarchyRaw !== undefined && !hierarchyAddress,
       invalid,
     };
   },
@@ -69,18 +93,46 @@ function ConceptsRoute() {
     conditionText,
     tagQualifiersText,
     cursor,
+    conceptVisitDescriptor,
+    invalidConceptVisit,
+    hierarchyAddress,
+    invalidHierarchy,
     invalid,
   } = Route.useSearch();
   const navigate = Route.useNavigate();
+  const resume = conceptVisitDescriptor?.subject === id ? conceptVisitDescriptor : undefined;
+  const roleValue = role ?? resume?.role;
+  const workIntent = resume ? conceptVisitWorkIntent(resume) : undefined;
+  const propertyValue = property ?? workIntent?.property;
+  const schemeValue = scheme ?? workIntent?.scheme;
+  const typeValue = type ?? workIntent?.type;
+  const childrenValue = includeChildren ?? workIntent?.includeChildren;
+  const spoilerValue = spoilerThreshold ?? workIntent?.spoilerThreshold;
+  const conditionValue = conditionText ?? workIntent?.conditionText;
+  const tagQualifiersValue = tagQualifiersText ?? workIntent?.tagQualifiersText;
+  const hierarchyMismatch =
+    !!hierarchyAddress && (hierarchyAddress.subject !== id || hierarchyAddress.role !== roleValue);
+  const effectiveHierarchy =
+    !hierarchyMismatch && hierarchyAddress
+      ? hierarchyAddress
+      : resume
+        ? conceptVisitPosition(resume)
+        : undefined;
   const onWorksChange = (patch: ConceptWorksRoutePatch, options?: { replace?: boolean }) => {
     void navigate({
       replace: options?.replace === true,
       search: (previous) => {
         const next = { ...previous } as Record<string, unknown>;
-        const retainedCondition = typeof next.conditionText === 'string' ? next.conditionText : undefined;
-        const retainedTagQualifiers = typeof next.tagQualifiersText === 'string' ? next.tagQualifiersText : undefined;
-        const retainedChildren = next.includeChildren === true;
-        const retainedSpoiler = typeof next.spoilerThreshold === 'number' ? next.spoilerThreshold : 0;
+        const savedWorks = conceptVisitDescriptor?.subject === id ? conceptVisitDescriptor.works : undefined;
+        const retainedCondition = typeof next.conditionText === 'string' ? next.conditionText : savedWorks?.conditionText;
+        const retainedTagQualifiers =
+          typeof next.tagQualifiersText === 'string' ? next.tagQualifiersText : savedWorks?.tagQualifiersText;
+        const retainedChildren = next.includeChildren === true || savedWorks?.includeChildren === true;
+        const retainedSpoiler =
+          typeof next.spoilerThreshold === 'number' ? next.spoilerThreshold : (savedWorks?.spoilerThreshold ?? 0);
+        const retainedProperty = typeof next.property === 'string' ? next.property : savedWorks?.property;
+        const retainedScheme = typeof next.scheme === 'string' ? next.scheme : savedWorks?.scheme;
+        const retainedType = typeof next.type === 'string' ? next.type : savedWorks?.type;
         for (const key of [
           'conditionText',
           'tagQualifiersText',
@@ -88,6 +140,10 @@ function ConceptsRoute() {
           'spoilerThreshold',
           'invalid',
           'pinUnsupported',
+          'conceptVisitDescriptor',
+          'hierarchyAddress',
+          'invalidConceptVisit',
+          'invalidHierarchy',
         ])
           delete next[key];
         const set = (key: string, value: string | undefined) => {
@@ -95,8 +151,11 @@ function ConceptsRoute() {
           else next[key] = value;
         };
         if ('property' in patch) set('property', patch.property);
+        else set('property', retainedProperty);
         if ('scheme' in patch) set('scheme', patch.scheme);
+        else set('scheme', retainedScheme);
         if ('type' in patch) set('type', patch.type);
+        else set('type', retainedType);
         if ('includeChildren' in patch) set('children', patch.includeChildren ? 'true' : undefined);
         if ('spoilerThreshold' in patch)
           set('spoiler', patch.spoilerThreshold ? String(patch.spoilerThreshold) : undefined);
@@ -111,26 +170,73 @@ function ConceptsRoute() {
       },
     });
   };
+  const onHierarchyChange = (address: Parameters<typeof encodeConceptHierarchyAddress>[0], options?: { replace?: boolean }) => {
+    const encoded = encodeConceptHierarchyAddress(address);
+    void navigate({
+      replace: options?.replace === true,
+      search: (previous) => {
+        const next = { ...previous } as Record<string, unknown>;
+        for (const key of [
+          'hierarchyAddress',
+          'conceptVisitDescriptor',
+          'invalidConceptVisit',
+          'invalidHierarchy',
+          'conditionText',
+          'tagQualifiersText',
+          'includeChildren',
+          'spoilerThreshold',
+          'invalid',
+          'pinUnsupported',
+        ])
+          delete next[key];
+        if (encoded) next.hierarchy = encoded;
+        else delete next.hierarchy;
+        const set = (key: string, value: string | undefined) => {
+          if (value === undefined || value === '') delete next[key];
+          else next[key] = value;
+        };
+        set('role', roleValue);
+        set('property', propertyValue);
+        set('scheme', schemeValue);
+        set('type', typeValue);
+        set('children', childrenValue ? 'true' : undefined);
+        set('spoiler', spoilerValue ? String(spoilerValue) : undefined);
+        set('condition', conditionValue);
+        set('tagQualifiers', tagQualifiersValue);
+        if (!address) {
+          delete next.hierarchy;
+          delete next.cursor;
+          if (invalidConceptVisit || resume) delete next.conceptVisit;
+        }
+        return next as typeof previous;
+      },
+    });
+  };
   return (
     <SourceConceptSession
-      key={JSON.stringify([id, getLocale(), role])}
+      key={JSON.stringify([id, getLocale(), roleValue])}
       id={id}
       locale={getLocale()}
-      role={role}
+      role={roleValue}
       returnTo={returnTo}
+      conceptVisit={conceptVisitDescriptor}
+      invalidConceptVisit={invalidConceptVisit}
+      hierarchyAddress={effectiveHierarchy}
+      invalidHierarchy={invalidHierarchy || hierarchyMismatch}
       pinUnsupported={pinUnsupported}
       worksRoute={{
-        property,
-        scheme,
-        type,
-        includeChildren,
-        spoilerThreshold,
-        conditionText,
-        tagQualifiersText,
+        property: propertyValue,
+        scheme: schemeValue,
+        type: typeValue,
+        includeChildren: childrenValue,
+        spoilerThreshold: spoilerValue,
+        conditionText: conditionValue,
+        tagQualifiersText: tagQualifiersValue,
         cursor,
         invalid,
       }}
       onWorksChange={onWorksChange}
+      onHierarchyChange={onHierarchyChange}
     />
   );
 }

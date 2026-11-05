@@ -613,6 +613,38 @@ function collectionReturn(url: URL, locale?: string): string | undefined {
   return `${url.pathname}${query ? `?${query}` : ''}${hash}`;
 }
 
+function sourceConceptReturn(url: URL, locale?: string): string | undefined {
+  const match = /^\/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)\/subjects\/([0-9a-f-]{36})\/[^/?#]+\/concepts$/i.exec(
+    url.pathname,
+  );
+  if (!match || (locale !== undefined && match[1] !== locale)) return;
+  const keys = [...url.searchParams.keys()];
+  if (new Set(keys).size !== keys.length || keys.some((key) => key !== 'conceptVisit' && key !== 'returnTo')) return;
+  const visit = url.searchParams.get('conceptVisit');
+  if (visit !== null && (!/^[A-Za-z0-9_-]+$/u.test(visit) || visit.length > 8192)) return;
+  const returnTo = url.searchParams.get('returnTo');
+  if (
+    returnTo !== null &&
+    (new TextEncoder().encode(returnTo).byteLength > 2048 ||
+      !returnTo.startsWith('/') ||
+      returnTo.startsWith('//') ||
+      returnTo.includes('\\') ||
+      /[\u0000-\u001f\u007f]/u.test(returnTo) ||
+      /%(?:2f|5c|25|0[0-9a-f]|1[0-9a-f]|7f)/i.test(returnTo))
+  )
+    return;
+  if (returnTo !== null) {
+    const original = new URL(returnTo, 'https://rezics.invalid');
+    if (
+      original.origin !== 'https://rezics.invalid' ||
+      original.pathname.endsWith('/concepts') ||
+      ['conceptVisit', 'via', 'returnTo'].some((key) => original.searchParams.has(key))
+    )
+      return;
+  }
+  return `${url.pathname}${url.search}`;
+}
+
 /** A public return address may restore one admitted Subject or Collection view window. */
 /** Keep one existing nested Subject return intent, but never grow an unbounded URL history. */
 function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested: boolean): string | undefined {
@@ -635,6 +667,8 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
     )
       return;
     const url = new URL(value, 'https://rezics.invalid');
+    const concept = sourceConceptReturn(url, locale);
+    if (url.origin === 'https://rezics.invalid' && concept) return concept;
     const importPath = importDestination.exec(url.pathname);
     if (importPath) {
       // A public work may return to the import landmark, never its private page, upload, reader or credential.

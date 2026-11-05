@@ -2,8 +2,8 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../../paraglide/messages.js';
 import { subjectHref } from '../../../subject/subject-href';
 import { catalogueEntries } from '../../catalogue/catalogue-entry';
-import { changePageHistoryLimit } from '../../catalogue/subject-changes-navigation';
 import { validConceptCursor, type ConceptHierarchyRow } from '../../catalogue/source-concept-explorer';
+import { conceptVisitHistoryLimit } from './navigation';
 import type { ConceptVisit } from './visit';
 
 export const actionClass =
@@ -15,10 +15,12 @@ export function HierarchyLinks({
   rows,
   locale,
   returnTo,
+  hrefFor,
 }: {
   rows: ConceptHierarchyRow[];
   locale: string;
   returnTo?: string | undefined;
+  hrefFor?: ((href: string, row: ConceptHierarchyRow) => string) | undefined;
 }) {
   return (
     <ul className="list-disc space-y-1 pl-5">
@@ -26,11 +28,12 @@ export function HierarchyLinks({
         const base = row.conceptPage
           ? catalogueEntries.concepts({ id: row.id, label: row.label, locale }).href
           : subjectHref({ id: row.id, label: row.label }, locale).href;
+        const href = hrefFor?.(base, row) ?? (returnTo ? `${base}?${new URLSearchParams({ returnTo })}` : base);
         return (
-          <li key={`${row.direction}:${row.id}`}>
+          <li key={`${row.direction}:${row.id}`} data-concept-hierarchy-row={row.id}>
             <a
               className={linkClass}
-              href={returnTo ? `${base}?${new URLSearchParams({ returnTo })}` : base}
+              href={href}
               lang={row.lang ?? undefined}
             >
               {row.label}
@@ -48,6 +51,8 @@ export function HierarchyLinks({
 export function visitAnnouncement(visit: ConceptVisit, locale: string) {
   const o = { locale: locale as never };
   if (visit.loading || visit.busy) return m.concept_explore_loading({}, o);
+  if (visit.notice === 'currentness') return m.concept_visit_currentness_changed({}, o);
+  if (visit.notice === 'row-missing') return m.concept_visit_focus_missing({}, o);
   if (visit.error)
     return visit.error.reason === 'denied' ? m.concept_explore_denied({}, o) : m.concept_explore_unreadable({}, o);
   if (!visit.read?.admitted) return m.concept_explore_unsupported({}, o);
@@ -72,10 +77,12 @@ export function ConceptHierarchy({
   visit,
   locale,
   returnTo,
+  hrefFor,
 }: {
   visit: ConceptVisit;
   locale: string;
   returnTo?: string | undefined;
+  hrefFor?: ((href: string, row: ConceptHierarchyRow) => string) | undefined;
 }) {
   const o = { locale: locale as never };
   const hierarchy = visit.hierarchy;
@@ -83,7 +90,7 @@ export function ConceptHierarchy({
   const canPage = hierarchy?.state === 'available' || hierarchy?.state === 'lagging';
   return (
     <section className="space-y-3" aria-labelledby="concept-narrower-heading" aria-busy={visit.busy}>
-      <h2 id="concept-narrower-heading" className="font-sans text-lg font-semibold">
+      <h2 id="concept-narrower-heading" tabIndex={-1} className="font-sans text-lg font-semibold">
         {m.concept_explore_narrower({}, o)}
       </h2>
       {visit.failed ? (
@@ -103,25 +110,47 @@ export function ConceptHierarchy({
         </p>
       )}
       {hierarchy?.rows.length ? (
-        <HierarchyLinks rows={hierarchy.rows} locale={locale} returnTo={returnTo} />
+        <HierarchyLinks rows={hierarchy.rows} locale={locale} returnTo={returnTo} hrefFor={hrefFor} />
       ) : hierarchy?.state === 'available' && hierarchy.exactEmpty ? (
         <p>{m.concept_explore_no_narrower({}, o)}</p>
       ) : hierarchy?.state === 'available' ? (
         <p>{m.concept_explore_page_empty({}, o)}</p>
       ) : null}
       {visit.failed && (
-        <Button
-          type="button"
-          variant="outline"
-          className={actionClass}
-          disabled={visit.busy}
-          onClick={() => void visit.retry()}
-        >
-          {m.concept_explore_retry({}, o)}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            className={actionClass}
+            disabled={visit.busy}
+            onClick={() => void visit.retry()}
+          >
+            {m.concept_explore_retry({}, o)}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className={actionClass}
+            disabled={visit.busy}
+            onClick={() => void visit.restart()}
+          >
+            {m.concept_visit_restart({}, o)}
+          </Button>
+        </div>
       )}
       {canPage && (
         <nav className="flex flex-wrap items-center gap-2" aria-label={m.concept_explore_hierarchy_navigation({}, o)}>
+          {(visit.history.truncated || visit.notice === 'row-missing' || visit.notice === 'currentness') && (
+            <Button
+              type="button"
+              variant="outline"
+              className={actionClass}
+              disabled={visit.busy}
+              onClick={() => void visit.restart()}
+            >
+              {m.concept_visit_restart({}, o)}
+            </Button>
+          )}
           <Button
             type="button"
             variant="outline"
@@ -146,7 +175,7 @@ export function ConceptHierarchy({
         </nav>
       )}
       {oversizedCursor && <p>{m.concept_explore_cursor_too_large({}, o)}</p>}
-      {visit.history.truncated && <p>{m.concept_explore_history_truncated({ limit: changePageHistoryLimit }, o)}</p>}
+      {visit.history.truncated && <p>{m.concept_explore_history_truncated({ limit: conceptVisitHistoryLimit }, o)}</p>}
     </section>
   );
 }
