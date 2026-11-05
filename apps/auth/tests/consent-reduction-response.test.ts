@@ -65,3 +65,7 @@ test.each(['headers', 'body'] as const)('whole POST deadline covers stalled %s i
   globalThis.fetch = (async () => where === 'headers' ? new Promise(() => {}) : new Response(new ReadableStream({ pull() { return new Promise(() => {}); } }))) as typeof fetch;
   expect(await reduceConsent(row, [])).toEqual({ kind: 'unknown' });
 }, 7000);
+
+test.each(['{', new Uint8Array([0xc3, 0x28])])('malformed JSON or UTF-8 remains unknown', async body => {
+  expect(await send(new Response(body))).toEqual({ kind: 'unknown' });
+});

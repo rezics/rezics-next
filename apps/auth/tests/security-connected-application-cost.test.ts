@@ -125,7 +125,7 @@ test('bounded page reads and a retained-scope reduction use one exact review and
   await mount();
   expect(inventoryCalls).toEqual([{ view: 'clients' }, { view: 'consents' }]);
 
-  await flush(() => inSection('#inventory-consents-heading', m.auth_inventory_reload()).click());
+  await flush(() => inSection('#inventory-consents-heading', m.auth_connected_reload_current()).click());
   await waitFor(() => inventoryCalls.filter(({ view }) => view === 'consents').length === 2);
   expect(nativeCalls).toHaveLength(0);
 
