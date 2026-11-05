@@ -5,7 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { changeQuestionBoundRating, type QuestionBoundRatingInput } from './rating-actions';
-import { sessionQueryKey, type BrowserSession } from '../../session/browser-state';
+import { sessionQueryKey, type BrowserSession } from '../../session';
 import { subjectOwnRatingQuery, subjectRatingQuery } from './subject-queries';
 import { displayRating, type RatingQuestion, type SubjectOwnRating } from './subject-ratings';
 import type { SubjectPersonalLease } from './subject-personal-reader';
