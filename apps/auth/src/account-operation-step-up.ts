@@ -87,9 +87,9 @@ function isPending(value: unknown): value is PendingAccountOperationStepUp {
 
 function canonicalOperation(value: unknown, kind: AccountOperationStepUpKind): AccountOperation | null {
   if (!isOperation(value, kind)) return null;
-  return kind === 'organization'
-    ? { kind, handle: value.handle }
-    : { kind, accountId: value.accountId };
+  if (kind === 'organization')
+    return { kind, handle: (value as Extract<AccountOperation, { kind: 'organization' }>).handle };
+  return { kind, accountId: (value as Extract<AccountOperation, { kind: 'delete' }>).accountId };
 }
 
 function canonicalPending(value: unknown): (PendingAccountOperationStepUp & { version: 1 }) | null {
