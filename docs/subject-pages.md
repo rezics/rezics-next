@@ -723,17 +723,9 @@ rerenders of that address; navigation to another definition address resets it be
 Changing only the validated return destination does not discard that local choice.
 An explicit guide retry keeps one disabled busy action until its read settles, then focuses the returned field or Type heading (the guide heading if neither exists), or its truthful empty/failure boundary; initial, hydrated and retired-address reads never move focus.
 
-Adopt the complete reader journey recommended by [subject design research](research/web-subject-design.md):
-discovery or a collection → current canonical identity → public facts and text → traversable relations, editions
-and credits → original evidence and current rights. Work, edition and agent identities remain separate until their
-native identity authority says otherwise. Presentation follows released definitions rather than a vertical-specific
-store. The research's Wikibase statement model, Open Library work/edition/author navigation, Schema.org role
-annotation and Omeka resource templates support these choices; they do not supply a REZICS API or permission.
-Research observations describe their inspected revision, so delivered native fixes take precedence.
+Subject reading starts from the current canonical identity, then exposes admitted facts and documents, traversable relations, editions, credits and original evidence. Work, edition and agent identities remain separate until their native identity authority relates them. Presentation follows released definitions. The adopted [subject design research](research/web-subject-design.md) is background evidence; current owner contracts and native authorities govern behavior.
 
-Decision: keep one Subject composition owner and place its identity hero before specialist evidence; settle optional
-readings independently, render Character bodies only from exact admitted document selections, and mount public offers
-only from current API-positive responses.
+One Subject composition owns the public reading. It places identity before specialist evidence, settles optional readings independently, renders Character text only from exact admitted document selections, and shows public offers only from current API-positive responses.
 
 ### Original authored catalogue text
 
@@ -913,23 +905,13 @@ The generated client binds the served revision-detail read through the private/n
 presentation examples do not establish native execution or visual acceptance. There is no guessed detail wire schema or
 successful runtime fallback. Definition labels use the existing locale fallback, independently of data languages.
 
-### Open owner joins
+### Reading ownership and evidence
 
-These joins complete the adopted journey; naming one here does not claim it is implemented:
+Web owns rendering, navigation grammar and the outer return. Semantic owns native relation evidence and node continuation; Search owns its admitted index and composition plans. Content owns the public document schema, mapper, and native disclosure and erasure. This page consumes those contracts without adding hydration or authorization paths.
 
-| Join                                   | Current authority and required binding                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Summary body                           | [Semantic authored installation](../services/kernel/src/semantic/authored.ts) emits `{language, document: id, digest}`. [Content document reads](../services/kernel/src/content/document-routes.ts) supply `{document: {availability, body, subjectId, candidateId, …}}` under current disclosure and rights. [Composition reads](../packages/composition/README.md#reads) currently admit no document descriptor. Content/Composition must provide a bounded, typed selected-summary binding inside the public page aggregate, retaining selected support and current erasure behavior. Web does not guess a descriptor, append per-statement reads or authorize from the locator. |
-| Relations, editions, credits and Works | Semantic owns native incoming/outgoing/count cursors; Composition and the sibling traversal region own full outgoing and independent group continuations, labels, qualifiers and truthful counts. Preserve their current inputs and newer integrated fixes.                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| Original source evidence               | The [source-record attribution contract](../services/kernel/src/semantic/source-record-attribution-contract.md) owns exact original tuples, selected support, metadata and fences. Its deferred producer/import registration and source-readiness bindings remain with those owners; reflective or fixture metadata is not delivery. The imported-suggestions region below retains its independent source review.                                                                                                                                                                                                                                                                   |
-| Realm and neighboring sections         | The native freeze below remains authoritative. Production Realm selection/revalidation and each rating, review, discussion and list population require their actual admitted bindings. A Global result never becomes Realm output through labeling.                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+Character document bodies must match the exact document, holder Subject, candidate, digest and language, and be available under current Content disclosure. A mismatch, erased or invalid body is unreadable; the page never substitutes supplied biography text. Direct native Character reads opt into document previews; aggregate pages retain their dependent document plan.
 
-Focused [canonical journey cases](../apps/web/tests/subject-canonical-journey.test.ts) cover the generated-client
-boundary, navigation, request bounds and public rendering using native recorded DTOs and explicit failure responses.
-They do not establish live native eligibility, document-body delivery or visual conformance. Full served-page,
-current-withdrawal and screenshot review remain integration proof across no-JS, keyboard, phone/desktop, locales and
-themes. The reusable [public reading pattern](../apps/web/src/subject/reading-state/index.tsx) has one story identity
-across those globals and is the same component used by About.
+The Character and Work visits use only their selected current native windows. Return and focus remain with the existing reader owners, and connected visitor focus takes precedence. Current native actions alone authorize correction. Fixtures, counts, walkthrough UUIDs and consumer stories do not prove native publication or browser acceptance.
 
 ## Edit a released profile
 
@@ -1827,139 +1809,21 @@ groups, and are labelled with the Context they come from.
 
 ## Character appearances and relationships
 
-### Character-origin work visits
+The Character page composes adopted work appearances, Character-qualified voice credits and exact document previews. The visit retains at most two assertion windows of twenty rows each and 256 related-reference summaries, subject to tighter installed caps. The selected page and its evidence remain current; it does not drain cursors or hydrate each row separately.
 
-The Character overview links directly to its public work appearances in the existing Connections reading. An
-anonymous reader sees the admitted incoming `schema:character` window as **Work appearances** and the independently
-admitted, Character-qualified incoming `wdt:P725` window as **Voice performances**. Both reuse the current loader,
-section state, released labels, shared covers, qualified values and native Previous/Next/Retry controls. Other connection
-streams and the signed-in Global correction workspace retain their separate uses. Character identity and main
-character associations remain their released producer's assertions; neither appearance roles nor voice credits
-establish identity.
+Appearances are inverse readings of admitted schema:character statements on works. Role, credited name, spoiler, part and appearance-specific quantities stay on that exact work statement; they do not become timeless Character biography or identity. Voice credit wdt:P725 keeps the Person or Organization performer as its main value. The released wdt:P453 value is the Character qualifier and slot key, not a second assertion. Forward Work cast and inverse Person credits retain distinct holders and evidence.
 
-Each row keeps its exact disclosed work holder, original property and statement. Duplicate assertions to one work
-stay separate. Role, performer and source information comes only from that assertion and its supplied summaries.
-Missing role/performer qualification is named as unavailable. A withheld work has no caption or destination. Source
-spoilers gate the entire row, including evidence actions, and native withheld counts never become local group totals.
-An original assertion without qualifiers still links by its native holder/property/statement identity; missing
-identity leaves inspection unavailable while retaining the independently disclosed work destination. Original
-inspection deliberately opens the existing public value destination in a labeled new tab. It does not construct a
-correction candidate or an immutable historical Item. Empty disclosed references mean no disclosed citations.
+A source spoiler gates the whole association, including href, label, evidence and accessible name. Direct native Character reads may request includeDocuments=true; aggregate pages keep their dependent document plan. Content owns the shared public document schema and mapper, current HTTP disclosure and erasure. Only an exact document, Subject, candidate, digest and language binding with an available validated body is readable. Mismatched, erased or invalid bodies remain unreadable and never supply biography.
 
-Decision: Character work visits use the existing Characters and Credits sections as separate loaded-window views;
-original assertion inspection uses the exact-holder public value destination in an explicitly labeled new tab.
+Character relationships remain separate from appearances and credits. The existing relation reader owns inverse behavior, examined-key cursors and same-Character degree/history bounds. Continuation resumes the selected node after its last examined key, including suppressed or ineligible keys. A changed reading or missing row offers the existing current restart; other groups keep their independent state.
 
-Ordinary work links retain normal modified-click behavior and the single bounded Connections return locator. The
-existing parser derives Characters/ Credits section ownership for these two exact native stream keys, preserving
-cursor, reading fingerprint and original holder/statement focus. Current Context is rechecked by the native loader;
-Realm and locale remain in the canonical return destination. Changed readings require an explicit stream restart;
-a missing selected row reports its absence and offers that same restart. Focus restoration yields to user movement.
-The shared session observation retires even batched session A/B/A results; replaced Character, Context, locale,
-release, reader or route windows cannot accept retired callbacks. Private workspace drafts are not part of this state.
+The Character correction entry preserves its current Subject Context and optional Realm through read admission, then uses the existing Global-only editor rules in [catalogue editing](catalogue-editing.md#sources-correction-visit). A visible fact, validation, citation or historical revision does not grant correction authority or provenance.
 
-**Cost:** Initial loading remains two page aggregates, one active pointer/release pair and one selected stream per
-nonempty native section: `4 + g <= 7` HTTP calls. The Character default chooses the admitted appearance and qualified
-voice directions; it adds zero calls. An explicit selected-stream replacement costs five calls, including exactly
-one existing native stream read. View composition consumes only its already loaded section. Three windows retain
-at most `3 * 12 = 36` rows and `3 * 1,048,576` UTF-8 JSON bytes. Inverse projection requests at most 256 distinct
-holder/qualifier/reference summaries per response, so three sections supply at most 768 such summary entries before
-per-assertion reuse. Qualifiers and references have no additional fixed array cap in this DTO; they and their strings
-are charged within each admitted response's measured UTF-8 bytes. Processing is linear in those supplied rows and
-bytes. No cursor drain, per-row Subject read, graph expansion or additional SQL producer is added. The optional
-Search-owned qualified work-context projection is not present on this native links DTO; no replacement enrichment
-pipeline is introduced.
-
-The released `wdt:P725` voice stream is admitted only for the exact `wdt:P453` slot key and the Character filter.
-Its native request page accepts at most 20 rows; the Character visitor requests 12. One indexed SQL statement merges
-the Global and selected Context projections, examines at most 20 ordered keys (at most 40 layer seeks plus two
-lookahead seeks), and returns the last examined key when more work remains. Current selected-holder hydration checks
-at most 20 candidate statements in one batched current-fact read, selects at most 12 current rows for output, and
-hydrates their current statements by source home (at most 12 homes). At most 256 distinct related Subjects are
-resolved for labels and assertion disclosure. Each statement retains the native admission bound of 16 qualifiers,
-16 references and 16 parts per reference; complete response bytes are charged by the existing 1 MiB stream adapter.
-The direct native Character preview selects at most 15 document bodies, caps each source at 262,144 bytes, and caps
-the retained documents map at 1 MiB, independently of relation lookup; page composition retains its existing 2 MiB
-native document limit. If the index scan reaches its 20-key cap before finding
-enough current assertions, the response includes `partial: true` and a continuation after the last examined key;
-the reader presents this as incomplete. Projection freshness can independently be eventual through the existing
-10-second deadline. The bounded growth test covers 64/512/4096 same-Character projection degree and unrelated
-history, charging statements, examined rows, blocks and response bytes. It does not establish imported Kurisu admission.
-
-Decision: the Character `wdt:P725` inverse keeps the released `wdt:P453` slot key, reports a capped scan as partial,
-and resumes from the last examined projection key while keeping the `wdt:P725` main value as the performer.
-
-Focused mounted cases exercise assertion separation, selected-window return, independent retry, withheld/spoiler
-rows and session/Context retirement. The adapter64/512/4096 case measures typed calls, retained rows and response
-bytes on native-shaped doubles; it is not native SQL growth evidence. Existing current-relation and directed-credit
-native growth acceptance, the actual seeded Character walkthrough, keyboard and 390/1440 light/dark captures remain
-integration acceptance. Earlier profile and credits references inform public-read/edit separation and per-read retry;
-no legacy implementation is ported here.
-
-A Character page distinguishes appearing in a work from a directed character-to-character relationship. Appearances
-are the inverse of admitted `schema:character` statements on works. Role, credited name, spoiler level, part and any
-admitted appearance-specific quantity (including age at that appearance) stay on that exact work statement. They never
-overwrite the character's timeless biography, traits or measurements, and they never imply another character identity.
-Voice credits (`wdt:P725` with the character qualifier) remain an independent stream.
-
-The Character correction entry preserves the current Subject Context and optional Realm through read admission; its
-Global-only mutation boundary and exact-evidence return are owned by [catalogue editing](catalogue-editing.md#correct-an-existing-character-from-the-selected-reading).
-
-Relationships are admitted association or world item properties whose targets include the character Type, read forward
-and inverse from the current release. Direction uses the property's labels and inverse labels. No relationship type,
-privacy inference or automatic merge is invented on the page. Classification ballots and source figures stay with their
-existing owner.
-
-Work appearances and Character-to-Character relations remain separate groups in the existing public Connections
-window. The Character relation presentation selects and pages that one current Relations stream; it adds no overview
-reader or target-subject reads. Incoming rows name the original holder and the released inverse meaning, with a
-separate original-property label when it differs. Every exact statement offers the existing original-assertion
-destination, while a target remains usable if statement identity is unavailable. A current page with no rows, a
-withheld summary, missing release configuration and a failed stream keep distinct states. Previous, Next, Retry and
-restart operate on the selected native window, and returning validates its stream, retained cursor addresses, reading
-and assertion focus before restoring focus.
-
-Unavailable configuration (age-at-appearance, main-character linkage, character-to-character properties the current
-release does not admit) is named on the page. An independently unreadable stream keeps the character identity and the
-other groups. A vanished endpoint keeps its count semantics and drops the unreadable summary rather than substituting
-another subject. Type descriptors for holders on the current page are read at most four at a time, deduplicated within
-that page, and not retained between calls.
-
-Correction opens the existing qualified relation editor with the selected statement, slot and holder, then returns to
-the same character, stream, cursor and selected work. Candidate review and Changes remain their existing surfaces.
-Changing the character, the selected work, the release or refusing the current reading retires previous rows and
-action authority before recovery. The Character identity editor keeps its existing groups; this reading does not fork
-the descriptor producer or the generic relation editor.
-
-Decision: appearance-specific age, role and main marks stay on the work's appearance statement. The current release
-admits appearance age (`wdt:P3629` in years) on that statement, the Character identity association
-(`rezics:relatedCharacterIdentity`, VNDB `chars.main`) and spouse, sibling, father, mother, partner and rival
-relations targeting Character. The appearance role code `main` remains a protagonist role. Older releases still name
-age-at-appearance, main-character linkage or character-to-character properties unavailable when they omit them.
-Unknown Bangumi relation codes stay unsupported provenance. Character pages reuse the existing viewer/actions
-envelope and add released identity meanings plus unavailable configuration; they do not introduce a second
-permission engine. Viewer-bearing `POST /v1/pages:read` stays private,
-no-store; public facts remain independently comparable after omitting viewer.
-
-Decision: source spoiler qualifiers gate the whole association until explicit reveal; reader image suitability applies to shared artwork because public summaries have no association-suitability field and withholding an image does not withhold the subject.
-
-The base-source review confirmed that Character already mounts the generic public Connections window; the new visit is
-only its relation-row presentation. Focused mounted tests and the 64/512/4096 adapter measurement exercise the
-consumer boundary. They do not establish native SQL growth or actual seeded page admission. Native producer suites
-remain with their owners, and a fixture story is not mounted-seed evidence.
+Seed evidence requires reconciliation of the actual source key, current Subject and database record, followed by proposal, separate acceptance and adoption, and independent readback. Counts and walkthrough UUIDs are not portable publication evidence.
 
 ## Person voice credits
 
-The Person page keeps the released `wdt:P725` voice-credit group separate from author, contributor and other work
-credits. The current catalogue release is `1.0.4`, pinned by
-`sha256:1ded81205f3588d10a0cb5dab75bfaec1fcb22cac3e2e54809cf0086f54806f7`. Its direction examples are
-work `schema:character` → Character `rezics:appearsIn`, and work `wdt:P725` → Person `rezics:voiceActorOf`; both
-retain the original statement property and its exact qualifiers. `wdt:P453` stays the voice statement's character
-qualifier, not another assertion. A Person page continuation keeps the release pin, statement, revision, Context and
-current disclosure result. Decision: voice-credit language remains the work's released `schema:inLanguage` fact.
-
-Decision: original Person credit inspection opens disclosed destinations in a separate tab to retain the exact loaded
-window and focus; correction reads one exact slot page and uses only its authorized original candidate payload,
-remaining unavailable when that page cannot supply it. A public empty citation list means no disclosed citations.
+The Person page keeps inverse wdt:P725 voice credits separate from author, contributor and other work credits. A voice statement's main value is its Person or Organization performer; wdt:P453 is its Character qualifier. Each direction retains its exact holder, statement, release, qualifiers and current disclosure. Voice-credit language remains the work's released schema:inLanguage fact.
 
 ### Inspect and return to a Person credit
 
@@ -1973,24 +1837,7 @@ Missing field labels have an unavailable label; identifiers live only in explici
 values, an empty disclosed citation list, refused correction and unavailable correction remain distinct.
 Return metadata preserves the native caller's link decision for an unlabelled work; it never substitutes a new anchor.
 
-Decision: Person credit returns carry one bounded assertion locator; Context is revalidated against the fresh native
-window, never used as an authority override. Work, Character and Sources destinations carry that single validated `via`
-address with locale, Realm, native node/cursor and exact assertion focus. Slot comparison uses the existing SHA-256
-byte digest so even an unlabelled Character key never appears in a destination or return link. Disclosed destinations open separately;
-explicit return reloads the current native window. `CreditVisitReturn` consumes its locator once on mount and reopens
-only an exact current holder/property/assertion/revision/release/slot and Definition pin in that Context. A missing,
-replaced or newly concealed row reports an unavailable reading and focuses its surviving window, yielding to deliberate
-focus movement. Hash changes cannot revive an old reading. Whole-association concealment unmounts the inspection portal,
-links, labels, evidence and accessible names together. Current correction advice still comes only from viewerActions
-and the existing exact editor read; no return address or public reading grants mutation.
-
-The comparison baseline was the read-only `legacy-final` author page/work credits and `legacy-main-final` work Sources:
-explicit role/byline separation, labelled source details and continuation on the actual work. No legacy code is ported.
-The existing correction, draft departure, exact uncertain-command and late-response handling remains with its native
-editor and session boundary. The named Person visit stories cover qualified voices, two credits to one work, current
-labels, partial dates/source unavailability, concealment, Context return, replacement, correction refusal/unavailability,
-retry and retired replies, with 390/1440 light/dark and anonymous/ordinary signed-in fixtures. Browser captures and the
-original native/Search receiving, denial and growth acceptance remain integration work, not inferred from those stories.
+Person credit return carries one bounded assertion locator and reopens only an exact current holder, property, assertion, revision, release, slot and Definition pin. Return rereads the public window. Whole-association concealment gates inspection, links, labels and evidence together. Public reading and return intent grant no mutation; current native advice and the existing exact editor own correction.
 
 ### Person credit visit Cost
 
@@ -2506,9 +2353,7 @@ acceptance; no canned seed or Storybook substitute is admitted. Native producer 
 
 After the connected native journey succeeds, its last step captures Home, both Realms, one work for each of
 Steins;Gate, CLANNAD and Fate, a character, a person, Search, Library, Collection, a board thread, settings and creator
-sales. Every page requires phone390 and desktop1440 in light and dark: 56 images under
-`.temp/screenshots/core/<nn>-<page>-<width>-<theme>.png`, with every resulting path listed by the task result. These
-captures are required mounted acceptance, not a substitute for growth assertions. The landing policy defers native
+sales. Every page requires phone390 and desktop1440 in light and dark, producing 56 mounted captures whose paths are reported by the accepted run. These captures are required mounted acceptance, not a substitute for growth assertions. The landing policy defers native
 acceptance and browser capture to the integration verifier; authored harnesses do not establish executed evidence.
 
 ## Explore the bounded catalogue graph
@@ -2756,33 +2601,11 @@ remain integration-owned.
 
 ## Character document previews
 
-Decision: a direct native Character read opts into public document previews with `includeDocuments=true`; page
-composition keeps its existing dependent document plan, so a page does not hydrate each body twice.
+Direct native Character reads opt into public document previews with includeDocuments=true. Aggregate pages keep their existing dependent document plan and do not hydrate each body twice. Content owns the shared public schema, types and mapper, plus current HTTP disclosure and erasure.
 
-Decision: Semantic and native Document routes share the public view mapper and strict schema from Content's narrow
-`document-public.ts` entry; the route module keeps compatibility exports for existing callers.
+The native read selects only document properties admitted on the Character by its recorded release and current Context. It uses the selected original candidate and reader-language rules. Each body must match the exact document ID, holder Subject, candidate, digest and language, and must be available and validated. Spoiler-bearing candidates remain excluded. A mismatch, erased, invalid, missing or unavailable body renders as unreadable; it never becomes supplied biography.
 
-`GET /v1/subjects/:id?includeDocuments=true` adds `documents`, keyed by the selected original candidate UUID, for
-`wd:Q95074`. It selects only document properties admitted on the Character by its recorded release and actually
-present in the current Context observation. Best rank, requested language and original-language fallback use
-`pageDocumentReferences`, also used by the page reader. Spoiler-bearing document candidates remain excluded from
-this public preview selection. This field is independent of `includeViewerActions` and grants no operation.
-
-Each entry is the existing public `document.get` representation, including original source/rights or author/licence.
-The native document owner rechecks current Subject and candidate disclosure and imported source fences. A preview
-must match document ID, Subject, candidate, language and digest, with an available, canonical body whose SHA-256
-matches. Missing, erased, oversized and mismatched bodies have no map entry; their assertion remains readable and
-the existing unavailable/retry presentation applies. Reads containing this field are private/no-store and merge
-the document owner's session anchors.
-
-The direct preview admits at most 15 selected bodies, each with a 262,144-byte source cap enforced by the native
-bounded document read before body transfer. The complete serialized `documents` map, including keys, labels in body
-content and source attribution, retains at most 1,048,576 UTF-8 bytes. Reads are serial and release native connections
-between documents and source homes. Work is proportional to those exact document IDs; no candidate-history,
-work-population or relationship scan is added. Page composition retains its existing 15-document budget and native
-2-MiB document limit, and includes the Character profile's admitted document fields even when a template omits
-Summary. Character profile rendering accepts either the native or composed map through the same exact
-`statementDocument` binding. Appearance and qualified voice associations retain their separate relation authority.
+The direct preview selects at most 15 bodies, with a 262,144-byte per-source cap and a 1,048,576-byte serialized-map cap. Page composition retains its existing 15-body budget and native 2-MiB document limit. Work stays within those selected IDs; no candidate-history, work-population or relationship scan is added.
 
 ## Person and Character supplied names
 

@@ -2,73 +2,38 @@
 
 ## Outcome
 
-Contributors can describe, relate and correct subjects in shared definitions, while readers browse launch verticals
-and routed Zones using the same catalogue and Collection capabilities.
+Contributors describe, relate and correct subjects through shared versioned definitions. Readers browse launch verticals and routed Zones through the same catalogue and common Collection capabilities.
 
 ## Done when
 
-- Versioned definitions support the launch verticals and an additional fixture vertical end to end without a new
-  backend path, table or executable configuration. Expansion remains bounded at ten and one hundred manifests.
-- Candidates, references, Context acceptance, revisions, disputes, related labels and identity redirects work through
-  native APIs with the required disclosure and provenance.
-- Books, recipes, visual novels, anime, manga and games, including their related release, character, credit and series
-  concepts, have usable definitions and presentation inputs in every launch locale.
-- Zones expose routed pages, saved catalogue scopes and mounted common Collections, with current viewer Access.
-- Shared filtering works across every occurrence of the abstraction, including same-statement qualifiers and unknown
-  evidence. Native disclosure dependencies prevent private facts leaking through membership, NOT, order or counts.
-- Deletion, takedown and restoration preserve owner lifecycle guarantees; large identity groups make bounded,
-  resumable progress rather than assuming a small alias set.
+- Definitions support the eight launch locales and verticals plus a fixture vertical without another backend path, table or executable configuration. Expansion stays bounded at ten Types and one hundred manifests.
+- Sourced candidates, references, Context acceptance, adoption, revisions, disputes, related labels and inverse freshness retain their separate native outcomes.
+- Books, recipes, visual novels, anime, manga and games have released meanings for their work, edition, release, character, credit and series grains.
+- Shared filters preserve disclosure across membership, negation, ordering and counts, including same-statement qualifiers and unknown evidence.
+- Identity operations progress one hop at a time, resume under bounded work and preserve current Access, custody and publication rules.
+- Zones expose routed pages, saved catalogue scopes and mounted common Collections with current viewer Access.
+- Deletion, takedown and restoration preserve each owner's lifecycle guarantees.
 
-Completion requires the scoped outcomes on main with recorded checks covering the promoted commit. Specified,
-implemented, exposed, tested and promoted are separate states; a passing local check alone does not complete a Goal.
+Completion requires revision-bound native persona, growth, installation and receiving evidence, plus applicable browser acceptance, on the promoted revision on main. Fixtures, typing and source review do not establish a native or browser pass.
 
 ## Scope
 
-Includes definitions, semantic editing and identity, Contexts, launch catalogue profiles, Zones and shared filter
-semantics. [Public scope](../scope.md) owns inclusion and deferral. User-saved personal dynamic queries are deferred.
-Library facts and common Collection storage remain with Commerce; rendering remains with Web. Missing released meanings
-extend existing bounded page composition and consumers under current grants; music personal profiles remain
-Commerce-owned. The [audit gap journey plan](../research/semantic-gap-journeys-plan.md) maps the three source audits to
-retained work and remaining native catalogue admission journeys; it does not reopen delivered UI.
+Semantic owns Definitions, shared filters, native Semantic and Zones, their current consumer contracts, Concept policy, identity, names and qualified-credit meaning. Public inclusion and deferral follow [first public scope](../scope.md). Personal dynamic queries, custom catalogue publication and advanced identity remain deferred behind their existing grants. Library facts, profiles and common Collection storage remain with Commerce; rendering and navigation remain with Web.
 
 ## Ownership
 
-Owns `packages/definitions/**`, `packages/filter/**`, `services/kernel/{src,db,test}/semantic/**` and
-`services/kernel/{src,db,test}/zones/**`. Contracts:
-[semantic](../../services/kernel/src/semantic/README.md), [definitions](../../packages/definitions/README.md),
-[filter](../../packages/filter/README.md), [Zones](../zones.md), [membership](../zone-membership.md),
-[Collection sources](../collection-source.md), [dynamic Collections](../dynamic-collections.md) and
-[deletion](../deletion.md). Search owns admitted index plans and presentation composition; Commerce owns library
-profile consumers and personal facts. Product contract corrections belong in these owners before dependent briefs.
-Web solely owns the connected provider-review route, UI, Context-choice adapter, messages, stories and caller closure.
-The [feature contract](../../apps/web/src/features/import-review/README.md) owns that Web surface; no parallel Semantic
-UI task or broader importer/catalogue expansion is included. The connected outcome joins named current Context
-selection to exact Subject/proposal comparison, bounded selection, explicit consent and immutable uncertain-decision
-readback; a UUID input or isolated chooser does not deliver it. The Web rating owner updates its own Goal document.
+Placement decision: each existing owner remains the sole authority for its contract: Definitions for vocabulary, Semantic for native behavior, Conversion for value fidelity, Imports for acquisition and publication, and Web for reading and correction. The [Semantic module](../../services/kernel/src/semantic/README.md), [Definitions](../../packages/definitions/README.md), [Conversion](../../packages/conversion/README.md), [filters](../../packages/filter/README.md), [Zones](../zones.md), [membership](../zone-membership.md), [Collection sources](../collection-source.md), [dynamic Collections](../dynamic-collections.md) and [deletion](../deletion.md) hold their contracts.
+
+Web owns subject rendering, navigation grammar and outer return, the connected provider-review UI, Context choice and caller closure; Semantic owns Work grouping, evidence and node continuation. See [subject pages](../subject-pages.md), [presentation](../../services/kernel/src/presentation/README.md) and the [connected review contract](../../apps/web/src/features/import-review/README.md). Search owns index plans, page composition, complete tag-descendant paging and counts, and shared title/name alias matching. Commerce owns Library facts, profiles and common Collection storage through the [Library contract](../../services/kernel/src/library/README.md). Accounts owns Auth, Access and grants; Content owns document and media disclosure and fences; Imports owns acquisition, proposals, separate acceptance and adoption, and independent readback through the [Importer contract](../../services/importer/README.md). Kernel retains runtime, command and storage authority.
 
 ## Dependencies
 
-Requires native Access, parent creation grants and kernel identity/storage primitives. Supplies complete public
-facet projections and disclosure dependencies to search, release-pinned profiles to Commerce, and definitions and
-Zone starters to presentation and Web. Search and Commerce supply their own admitted list plans; performance owns
-budget evidence. Native identity and creation-authority questions require their owner research before commitment.
-Native Context read/accept checks, independent Subject disclosure and importer registrations retain their existing
-authority.
+Requires native Access, parent creation grants and Kernel identity and storage primitives. Supplies definitions, complete public facets, Zones and qualified-credit meaning to Search, Commerce, presentation and Web. Each consumer keeps its admitted index, profile, disclosure and execution plans. Native identity storage and participant cost remain with the Semantic and Library owners.
 
 ## Acceptance
 
-Use [semantic outcomes](../../specs/semantic-outcomes.test.ts),
-[dynamic Collection outcomes](../../specs/dynamic-collections-outcomes.test.ts), native semantic and Zone tests,
-and definition/filter package checks. Exercise anonymous, editor, Context acceptor, suspended and hidden-resource
-cases through native Auth/Access. Use the cross-surface scenarios in
-[feature design](../development/feature-design.md), with filter preparation, sparse results and withheld facts.
-Run focused native commands through the kernel check runner; the applicable package manifests and
-[verification](../development/verification.md) own typecheck, growth and promotion requirements. Authored connected
-provider-review assertions remain pending integration acceptance; typing alone is not native, browser, growth or
-private-SSR proof. The audit journey plan does not certify acceptance. Journey sizes of 2,000–3,000 lines are
-implementation estimates, not acceptance evidence.
+Use the [Semantic capability acceptance map](semantic.capabilities.md) to map scoped outcomes to personas and evidence; the map does not certify coverage. Acceptance requires current native persona outcomes, native growth bounds, installation and receiving checks bound to the promoted revision, plus browser evidence for the owned reading and editing journeys. A fixture, walkthrough UUID, typecheck or source review is not native or browser acceptance. Controller integration owns landing checks and promotion.
 
 ## External conditions
 
-Source licensing and external vocabulary availability constrain imported definitions. Functional tests use pinned
-fixtures; production source availability and deployment configuration are external conditions.
+Source licensing, source availability and deployment configuration constrain imported definitions and production data. They remain external to deterministic functional acceptance.

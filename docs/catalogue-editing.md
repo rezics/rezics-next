@@ -1464,18 +1464,17 @@ definitions, identity search and authority stay independent.
 
 ## Sources correction visit
 
-Sources keeps selected evidence, reviewed source-record attribution/licence, authored text rights and cover rights separate.
-Public evidence does not confer editorial authority. Global correction eligibility is hydrated through the private BFF,
-bound to the current reader and the native mounted `subject.propose` action projection. Missing action data is unavailable,
-not denial. A confirmed empty action set refuses correction while retaining evidence. No private action envelope is emitted by SSR.
+Sources keeps selected evidence, reviewed source-record attribution and licence, authored-text rights and cover rights separate. A visible fact, validation result, citation or historical revision grants neither correction authority nor provenance. Current native subject:propose action is the only mutation authority; missing action data is unavailable, while a confirmed empty action set refuses correction. Private action data is never emitted by SSR.
 
-Decision: scalar selected statements open the existing exact-statement editor; single-statement comparison carries that same address and a validated Sources return, while Realm evidence stays read-only because the mounted destination cannot express its editorial scope.
-The destination rereads admission and selection and commands reauthorize, including retries. Return navigation rereads current
-Sources independently; proposing or accepting a candidate never injects it as selected support. Reader replacement retires
-pending reads, and provider observation inspection retains its independent digest pin and lifetime.
+Correction eligibility is limited to the exact currently disclosed own scalar evidence allowed by the native action projection. Selected or historical evidence does not establish a writable candidate. If the selected Context or Realm is unsupported, the page explains that scope and drops its unsupported intent. A Global-only correction requires an explicit fresh Global choice before the existing editor mounts; the editor then reacquires the current Global Subject and action advice, and commands reauthorize.
+
+Exact selected Sources receiving remains unsupported until the existing public producer supplies admitted Context, document, digest and language metadata. A separately named general Sources visit may show independently admitted facts, but it does not preserve the selected assertion binding. No identity is inferred from an href, spelling or locator, and no second producer, descriptor engine or controller is added. Return and focus remain with the existing Sources reader, with connected visitor focus taking precedence.
+
+The destination rereads current admission and selection. Proposing or accepting a candidate never injects it as selected support. Reader replacement retires pending reads; retries retain their exact command custody.
 
 ### Inspect selected evidence and current correction entry
 
-- Touches: one bounded selected Subject read, its reviewed metadata and native correction action preparation; comparison uses its existing page cap.
+- Touches: one bounded selected Subject read, reviewed metadata and native correction-action preparation; comparison uses its existing page cap.
 - Bound: existing evidence/reference budgets, one deduplicated native Global action resource, no per-citation permission reads or remote body fetches.
-- Growth check: unrelated sources, candidate history and authority history must not grow selected evidence bytes or the fixed comparison handoff. Native action preparation includes current authority and disclosure work.
+- Growth: unrelated sources, candidate history and authority history do not grow selected evidence bytes or the fixed comparison handoff. Native action preparation includes current authority and disclosure work.
+
