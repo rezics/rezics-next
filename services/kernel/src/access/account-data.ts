@@ -1,5 +1,4 @@
 import { readAvatarSummaries, type AvatarSummary } from '../content/avatar.ts';
-import { accountPublicViews } from './account-public-profile.ts';
 import type { PublicViews } from './public-views.ts';
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
@@ -195,7 +194,7 @@ async function publicIdentityForAccount(
       bio: row.biography,
       links: row.links as AccountLink[],
       avatar,
-      publicViews: accountPublicViews(row.publicViews),
+      publicViews: row.publicViews as AccountPublicViews,
       ...(row.kind === 'organization' ? { speakersListed: row.speakersListed } : {}),
       subject,
       verified: row.agentVerified,
