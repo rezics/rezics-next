@@ -1,6 +1,8 @@
+import { publicationJob } from './support/public-filter-binding.ts';
 import { expect, test } from 'bun:test';
 import {
   createPublicFilterSourceBinding,
+  readNativePublicFilterPublicationCompletion,
   type NativeSourceRepairLocator,
   type NativeSourceRepairStepVerification,
 } from '../../src/semantic/public-filter-source-binding.ts';
@@ -18,14 +20,22 @@ test('native public Source configuration and immutable meaning/read definition r
   try {
     const binding = createPublicFilterSourceBinding(f.db.pool, f.config.routeKey, f.config.access);
     const source = publicFilterSource(f.config);
-    const capture = { sort: 'id' as const, size: 10, filterDocument: undefined, text: undefined };
+    const capture = {
+      sort: 'id' as const,
+      size: 10,
+      filterDocument: undefined,
+      text: undefined,
+    };
     const result = await binding.resolve({ source, meaning: f.meaning, capture }, readContext());
     expect(result.status).toBe('resolved');
     if (result.status !== 'resolved') throw new Error(`Native Source binding ${result.reason}`);
     expect(result.definition.source.epoch).toBeGreaterThan(0);
     expect(result.definition.source.configuration.length).toBeGreaterThan(0);
     expect(result.definition.readDefinition.length).toBeGreaterThan(0);
-    expect(result.definition.dependencyKeys).toContainEqual({ kind: 'field', field: 'id' });
+    expect(result.definition.dependencyKeys).toContainEqual({
+      kind: 'field',
+      field: 'id',
+    });
     capture.size = 20;
     expect(result.definition.capture.size).toBe(10);
     expect(
@@ -61,7 +71,11 @@ test('canonical retained observation execution joins preserve complete compiler 
       size: 10,
       filterDocument: {
         not: {
-          statement: { property: 'schema:author', in: [person], qualifiers: [{ property: 'ex:left', in: [person] }] },
+          statement: {
+            property: 'schema:author',
+            in: [person],
+            qualifiers: [{ property: 'ex:left', in: [person] }],
+          },
         },
       },
       text: parseText('native -excluded'),
@@ -77,17 +91,30 @@ test('canonical retained observation execution joins preserve complete compiler 
       { kind: 'field', field: 'descriptions' },
     ] as const)
       expect(resolved.definition.dependencyKeys).toContainEqual(key);
-    await search.request('PUT', `/${index}`, { settings: { number_of_shards: 1, number_of_replicas: 0 } });
+    await search.request('PUT', `/${index}`, {
+      settings: { number_of_shards: 1, number_of_replicas: 0 },
+    });
     created = true;
     const registered = await custody.register(
-      { definition: resolved.definition, physicalTarget: index, consumerGeneration: '1', projectionGeneration: '1' },
+      {
+        definition: resolved.definition,
+        physicalTarget: index,
+        consumerGeneration: '1',
+        projectionGeneration: '1',
+      },
       search,
       readContext(),
     );
     expect(registered.status).toBe('registered');
     if (registered.status !== 'registered') throw new Error(registered.reason);
     const begun = await binding.begin(
-      { source, meaning: f.meaning, capture, consumer: registered.consumer, snapshot: 'prepared' },
+      {
+        source,
+        meaning: f.meaning,
+        capture,
+        consumer: registered.consumer,
+        snapshot: 'prepared',
+      },
       readContext(),
     );
     expect(begun.status).toBe('begun');
@@ -112,7 +139,11 @@ test('canonical retained observation execution joins preserve complete compiler 
     if (acquired.status !== 'acquired') throw new Error(acquired.reason);
     try {
       for (const ownRows of [[{ original: book, terminal: book }], []]) {
-        const execution = { id: crypto.randomUUID(), start: begun.bootstrap.covered, ownRows };
+        const execution = {
+          id: crypto.randomUUID(),
+          start: begun.bootstrap.covered,
+          ownRows,
+        };
         expect((await custody.appendExecution({ use: acquired.use, execution }, readContext())).status).toBe(
           'appended',
         );
@@ -160,24 +191,46 @@ test('native Source repair receipts revalidate original steps, replay, and curre
     const person = await f.create();
     const book = await f.create('schema:Book', {
       'schema:author': [
-        { property: { id: 'schema:author' }, value: { type: 'value', content: person }, qualifiers: [] },
+        {
+          property: { id: 'schema:author' },
+          value: { type: 'value', content: person },
+          qualifiers: [],
+        },
       ],
     });
     const binding = createPublicFilterSourceBinding(f.db.pool, f.config.routeKey, f.config.access);
     const source = publicFilterSource(f.config);
-    const capture = { sort: 'id' as const, size: 10, filterDocument: undefined, text: undefined };
+    const capture = {
+      sort: 'id' as const,
+      size: 10,
+      filterDocument: undefined,
+      text: undefined,
+    };
     const resolved = await binding.resolve({ source, meaning: f.meaning, capture }, readContext());
     if (resolved.status !== 'resolved') throw new Error(resolved.reason);
-    await search.request('PUT', `/${index}`, { settings: { number_of_shards: 1, number_of_replicas: 0 } });
+    await search.request('PUT', `/${index}`, {
+      settings: { number_of_shards: 1, number_of_replicas: 0 },
+    });
     created = true;
     const registered = await custody.register(
-      { definition: resolved.definition, physicalTarget: index, consumerGeneration: '1', projectionGeneration: '1' },
+      {
+        definition: resolved.definition,
+        physicalTarget: index,
+        consumerGeneration: '1',
+        projectionGeneration: '1',
+      },
       search,
       readContext(),
     );
     if (registered.status !== 'registered') throw new Error(registered.reason);
     const begun = await binding.begin(
-      { source, meaning: f.meaning, capture, consumer: registered.consumer, snapshot: 'prepared' },
+      {
+        source,
+        meaning: f.meaning,
+        capture,
+        consumer: registered.consumer,
+        snapshot: 'prepared',
+      },
       readContext(),
     );
     if (begun.status !== 'begun') throw new Error(begun.reason);
@@ -218,7 +271,11 @@ test('native Source repair receipts revalidate original steps, replay, and curre
     } finally {
       await custody.release(acquired.use, readContext());
     }
-    const original = { bootstrap: begun.bootstrap.id, queried: retained.queried, execution };
+    const original = {
+      bootstrap: begun.bootstrap.id,
+      queried: retained.queried,
+      execution,
+    };
     const forged: NativeSourceRepairLocator = {
       bootstrap: original.bootstrap,
       execution,
@@ -246,10 +303,20 @@ test('native Source repair receipts revalidate original steps, replay, and curre
       }
       found = true;
       const step = await binding.readRepairStep(
-        { bootstrap: original.bootstrap, queried: retained.queried, execution, predecessor: frontier },
+        {
+          bootstrap: original.bootstrap,
+          queried: retained.queried,
+          execution,
+          predecessor: frontier,
+        },
         readContext(),
       );
-      expect(step).toMatchObject({ status: 'verified', step: page.frontier, predecessor: frontier, complete: false });
+      expect(step).toMatchObject({
+        status: 'verified',
+        step: page.frontier,
+        predecessor: frontier,
+        complete: false,
+      });
       if (step.status !== 'verified') throw new Error('Native Source repair step was not verified');
       expect(step.receipts.map((receipt) => receipt.locatorDigest)).toEqual(
         page.repairs.map((entry) => entry.receipt.locatorDigest),
@@ -326,11 +393,25 @@ test('Native public Source repair step and complete original cut are durably rev
       execution: query.execution,
     };
 
+    const job = await publicationJob(f, source, query.queried.consumer);
+    const publication = { ...request, job };
+    expect((await readNativePublicFilterPublicationCompletion(binding, publication, readContext())).status).not.toBe(
+      'complete',
+    );
+    // Restart after the original observation: the persisted job resolves that same cut/execution.
+    const restarted = () => createPublicFilterSourceBinding(f.db.pool, f.config.routeKey, f.config.access);
+    expect((await readNativePublicFilterPublicationCompletion(restarted(), { job }, readContext())).status).not.toBe(
+      'complete',
+    );
     const first = await consumer.operations.repairStep(capture.repair, readContext());
     expect(first.status).toBe('progress');
     if (first.status !== 'progress') throw new Error(`Incomplete Source repair ${first.status}`);
     const incomplete = await binding.readRepairStep({ ...request, predecessor: null }, readContext());
-    expect(incomplete).toMatchObject({ status: 'verified', predecessor: null, complete: false });
+    expect(incomplete).toMatchObject({
+      status: 'verified',
+      predecessor: null,
+      complete: false,
+    });
     if (incomplete.status !== 'verified') throw new Error('Original Source step was not revalidated');
     expect(incomplete.frontier).toBe(incomplete.step);
     expect(incomplete.receipts.length).toBeLessThanOrEqual(256);
@@ -392,6 +473,30 @@ test('Native public Source repair step and complete original cut are durably rev
     expect(joined.execution).toEqual(retained.execution);
     expect(joined.covered).toEqual(retained.covered);
     expect(dispatch.settlement.id).toBeString();
+    // Native drain committed before a reply/restart. Both reads must return the original proof.
+    for (let restart = 0; restart < 2; restart++) {
+      const result = await readNativePublicFilterPublicationCompletion(restarted(), { job }, readContext());
+      expect(result.status).toBe('complete');
+      if (result.status !== 'complete') throw new Error(`Native publication completion ${result.reason}`);
+      expect(result.publication).toEqual(publication);
+      expect(result.covered).toEqual(retained.covered);
+      expect(result.execution).toEqual(retained.execution);
+      expect(result.terminal.step).toBe(complete.step);
+      expect(result.observation).toMatchObject({
+        status: 'observed',
+        coverage: 'all_native_homes',
+      });
+      expect(result.settlement.id).toBe(dispatch.settlement.id);
+    }
+    expect(
+      (
+        await readNativePublicFilterPublicationCompletion(
+          restarted(),
+          { ...publication, execution: crypto.randomUUID() },
+          readContext(),
+        )
+      ).status,
+    ).not.toBe('complete');
   } finally {
     try {
       await consumer?.close();
@@ -413,19 +518,37 @@ test('native Source retains and replays a durable empty repair-step locator list
   try {
     const binding = createPublicFilterSourceBinding(f.db.pool, f.config.routeKey, f.config.access);
     const source = publicFilterSource(f.config);
-    const capture = { sort: 'id' as const, size: 10, filterDocument: undefined, text: undefined };
+    const capture = {
+      sort: 'id' as const,
+      size: 10,
+      filterDocument: undefined,
+      text: undefined,
+    };
     const resolved = await binding.resolve({ source, meaning: f.meaning, capture }, readContext());
     if (resolved.status !== 'resolved') throw new Error(resolved.reason);
-    await search.request('PUT', `/${index}`, { settings: { number_of_shards: 1, number_of_replicas: 0 } });
+    await search.request('PUT', `/${index}`, {
+      settings: { number_of_shards: 1, number_of_replicas: 0 },
+    });
     created = true;
     const registered = await custody.register(
-      { definition: resolved.definition, physicalTarget: index, consumerGeneration: '1', projectionGeneration: '1' },
+      {
+        definition: resolved.definition,
+        physicalTarget: index,
+        consumerGeneration: '1',
+        projectionGeneration: '1',
+      },
       search,
       readContext(),
     );
     if (registered.status !== 'registered') throw new Error(registered.reason);
     const begun = await binding.begin(
-      { source, meaning: f.meaning, capture, consumer: registered.consumer, snapshot: 'prepared' },
+      {
+        source,
+        meaning: f.meaning,
+        capture,
+        consumer: registered.consumer,
+        snapshot: 'prepared',
+      },
       readContext(),
     );
     if (begun.status !== 'begun') throw new Error(begun.reason);
@@ -451,7 +574,14 @@ test('native Source retains and replays a durable empty repair-step locator list
       expect(
         (
           await custody.appendExecution(
-            { use: acquired.use, execution: { id: execution, start: begun.bootstrap.covered, ownRows: [] } },
+            {
+              use: acquired.use,
+              execution: {
+                id: execution,
+                start: begun.bootstrap.covered,
+                ownRows: [],
+              },
+            },
             readContext(),
           )
         ).status,
@@ -469,7 +599,12 @@ test('native Source retains and replays a durable empty repair-step locator list
     const page = await binding.repairPage(request, readContext());
     expect(page.status).toBe('progress');
     if (page.status !== 'progress') throw new Error('Native Source step did not persist');
-    const read = { bootstrap: begun.bootstrap.id, queried: retained.queried, execution, predecessor: null };
+    const read = {
+      bootstrap: begun.bootstrap.id,
+      queried: retained.queried,
+      execution,
+      predecessor: null,
+    };
     expect(await binding.readRepairStep(read, readContext())).toMatchObject({
       status: 'verified',
       step: page.frontier,
