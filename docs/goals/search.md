@@ -74,6 +74,10 @@ Keyed-template removal confirmation binds to the reviewed keyed entry and its ed
 or reader/visit retirement retires it, while equivalent rerenders and unrelated sibling changes keep a still-valid
 intention.
 
+Decision: Search, facet and typeahead recovery stays bound to the exact executed request and current reader/locale;
+`ready` requires useful output from an actual current-generation native observation, and Retry-After expiry enables only
+a deliberate retry.
+
 Search rating order and population are one pending native GET pair, applied only by Submit in both hydrated and
 unhydrated visits. A field change never dispatches. Application starts a first traversal, retaining every other
 executed operand; an unchanged submission retains ordinary native GET canonicalization. Request, reader, locale
