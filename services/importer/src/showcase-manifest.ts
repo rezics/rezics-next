@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { sameStatementProvenance } from './statement-provenance.ts';
 import type { BatchCommand, BatchStatement } from '@rezics/definitions/bulk';
 import type { SourceRecord } from '@rezics/conversion';
 import { vndbRecordUrl } from '@rezics/conversion/cross-media-entities';
@@ -875,5 +876,5 @@ export function showcaseSourceMatches(
 }
 
 export function showcaseStatementMatches(actual: BatchStatement | null, expected: BatchStatement): boolean {
-  return !!actual && showcaseDigest(actual) === showcaseDigest(expected);
+  return sameStatementProvenance(actual, expected);
 }
