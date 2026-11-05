@@ -16,6 +16,9 @@ import {
   type NativeRealmHomeObservation,
   type NativeRealmHomePage,
 } from './realm-home-native';
+import type { RealmBoardRecent } from './realm-community/recent';
+
+export type { RealmBoardRecent, RealmBoardRecentThread } from './realm-community/recent';
 
 /** Boards listed on a Realm page. The kernel allows at most 100. */
 export const BOARD_ROW_LIMIT = 20;
@@ -30,6 +33,8 @@ export type RealmBoard = {
   description?: string | null;
   purpose: 'discussion' | 'reviews';
   visibility: 'published' | 'draft' | 'protected' | 'taken_down';
+  /** Native home/shelf recent prefix. Absence means the older board list had none to admit. */
+  recent?: RealmBoardRecent;
 };
 
 export type PublishedSubject = {

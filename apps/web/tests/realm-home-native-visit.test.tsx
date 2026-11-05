@@ -432,6 +432,11 @@ test('one typed native page renders 0/1/6/12 works and explicit nonmember advice
     expect(calls.splice(0)).toEqual(['home']);
     expect(host.textContent).toContain('Native Realm');
     expect(host.textContent).toContain(m.realm_join());
+    expect(
+      [...host.querySelectorAll('h2')].filter((heading) => heading.textContent === m.realm_catalogue_heading()),
+    ).toHaveLength(1);
+    expect(host.textContent).toContain(m.realm_catalogue_works_heading());
+    expect(host.querySelector('[data-slot="realm-membership"]')).not.toBeNull();
     expect(host.querySelectorAll('a[href*="?realm="]')).toHaveLength(count);
     expect(host.textContent).not.toContain(m.community_manage());
     if (!count) expect(host.textContent).toContain(m.realm_published_empty());
@@ -707,6 +712,17 @@ test.each(['en', 'zh-Hant', 'ja'] as const)(
                         description: 'Independent description',
                         purpose: 'discussion',
                         visibility: 'published',
+                        recent: {
+                          state: 'current',
+                          complete: true,
+                          threads: [
+                            {
+                              id: id(81),
+                              title: 'Ordinary thread',
+                              comments: { state: 'current', kind: 'exact', value: 1 },
+                            },
+                          ],
+                        },
                       },
                     ],
                     next: null,
@@ -731,7 +747,10 @@ test.each(['en', 'zh-Hant', 'ja'] as const)(
     expect(link.closest('h3')).not.toBeNull();
     expect(link.textContent).not.toContain('Independent description');
     expect(link.className).not.toContain('absolute');
-    expect(section.querySelectorAll('a')).toHaveLength(1);
+    expect(section.querySelectorAll('a')).toHaveLength(2);
+    const recent = section.querySelector<HTMLAnchorElement>('[data-slot="realm-board-recent-link"]')!;
+    expect(recent.textContent).toBe('Ordinary thread');
+    expect(section.textContent).toContain(m.realm_board_recent_replies({ count: '1' }));
     const destination = new URL(link.href, 'https://site.test');
     expect(destination.pathname).toBe(`/${locale}/boards/${id(80)}`);
     expect(destination.searchParams.get('returnTo')).toBe(`${returnTo}#realm-board-${id(80)}`);
@@ -746,6 +765,7 @@ test.each(['en', 'zh-Hant', 'ja'] as const)(
       ),
       'https://site.test',
     );
+    expect(new URL(recent.href, 'https://site.test').href).toBe(thread.href);
     const backToBoard = admittedBoardReturn(thread.searchParams.get('boardReturn'))!;
     expect(backToBoard).toBe(link.getAttribute('href')!);
     expect(
@@ -754,3 +774,54 @@ test.each(['en', 'zh-Hant', 'ja'] as const)(
     expect(document.activeElement?.id).toBe('realm-boards-heading');
   },
 );
+
+test('native home mapping admits recent discussions from the Board shelf extra fields', async () => {
+  native = fixture(0);
+  native.boards = {
+    items: [
+      {
+        id: id(80),
+        realmId: id(1),
+        route: 1,
+        visibility: 'published',
+        securityRevision: '1',
+        createdAt: '2026-10-01T00:00:00Z',
+        title: 'Supplied Board',
+        purpose: 'discussion',
+        availability: 'available',
+        recent: {
+          state: 'current',
+          complete: true,
+          threads: [
+            {
+              thread: { id: id(81), title: 'Ordinary thread' },
+              target: { kind: 'thread', id: id(81), boardId: id(80) },
+              comments: {
+                state: 'current',
+                cohort: 'public',
+                count: { kind: 'exact', value: 1 },
+                lastActivityAt: '2026-11-01T00:00:00Z',
+                source: { epoch: 1, position: '16' },
+              },
+            },
+          ],
+        },
+      } as NativeRealmHomePage['boards']['items'][number],
+    ],
+    next: null,
+  };
+  const page = await readNativeRealmHome(operations, input);
+  expect(page.realm!.boards).toEqual([
+    {
+      id: id(80),
+      title: 'Supplied Board',
+      purpose: 'discussion',
+      visibility: 'published',
+      recent: {
+        state: 'current',
+        complete: true,
+        threads: [{ id: id(81), title: 'Ordinary thread', comments: { state: 'current', kind: 'exact', value: 1 } }],
+      },
+    },
+  ]);
+});

@@ -43,6 +43,7 @@ export function RealmParticipationView({
       tabIndex={-1}
       className="min-w-0"
       aria-labelledby={headingId}
+      data-slot="realm-membership"
       data-member-state={state}
       aria-busy={busy || refresh === 'checking'}
     >

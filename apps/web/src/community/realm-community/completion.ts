@@ -22,6 +22,18 @@ export type RealmPublicationCompletion = RealmCompletion & {
 /** True means that the eligible outer focus handoff actually happened. */
 export type RealmCompleted<Receipt extends RealmCompletion> = (receipt: Receipt) => boolean;
 
+export function isRealmPublicationCompletion(receipt: RealmCompletion): receipt is RealmPublicationCompletion {
+  return 'subjectId' in receipt && 'head' in receipt;
+}
+
+export function isRealmMembershipCompletion(receipt: RealmCompletion): receipt is RealmMembershipCompletion {
+  return (
+    'membership' in receipt &&
+    (receipt.action === 'join' || receipt.action === 'leave') &&
+    (receipt.membership === 'member' || receipt.membership === 'pending' || receipt.membership === 'none')
+  );
+}
+
 export type RealmCompletionFocus = {
   eligible: () => boolean;
   restore: (fallback: HTMLElement | null) => void;
