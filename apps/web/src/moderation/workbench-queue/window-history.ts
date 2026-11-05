@@ -1,7 +1,14 @@
 import type { QueryClient } from '@tanstack/react-query';
 import type { PrivateReaderRead } from '../private-reader-lifetime';
 import { parseWorkbenchCaseSearch, type WorkbenchCaseSearch } from '../workbench-case/read-model';
-import { workbenchScope, workbenchSearch, type WorkbenchQueueKind, type WorkbenchSearch } from './scope';
+import type { WorkbenchRead } from './read';
+import {
+  workbenchReadKey,
+  workbenchScope,
+  workbenchSearch,
+  type WorkbenchQueueKind,
+  type WorkbenchSearch,
+} from './scope';
 
 export const WORKBENCH_PRIOR_WINDOW_LIMIT = 8;
 const WORKBENCH_WINDOW_LIMIT = WORKBENCH_PRIOR_WINDOW_LIMIT + 1;
@@ -31,8 +38,9 @@ type PendingTransition =
   | { kind: 'case-return' };
 
 type FocusTicket = {
-  kind: 'window' | 'case-return';
+  kind: 'window' | 'case-return' | 'appeal-return';
   source: HTMLElement;
+  eligible: () => boolean;
   cancel: () => void;
 };
 
@@ -47,6 +55,18 @@ type WindowState = {
   transitionApproved: boolean;
   reportId?: string | undefined;
   focus?: FocusTicket | undefined;
+};
+
+type AppealVisit = {
+  visitId: string;
+  appealId: string;
+  queueSearch: WorkbenchSearch;
+  fence: ReaderFence;
+  generation: string;
+  mode: 'queue' | 'detail';
+  pending?: 'open' | 'return';
+  transitionApproved: boolean;
+  focus?: FocusTicket;
 };
 
 export type WorkbenchWindowView = {
@@ -66,7 +86,10 @@ export type WorkbenchPrivateVisit = PrivateReaderRead;
 
 export type WorkbenchNavigationTarget = { pathname: string; search: Record<string, unknown> };
 
-type FocusResult = { kind: 'window' } | { kind: 'case-return'; reportId?: string };
+type FocusResult =
+  | { kind: 'window' }
+  | { kind: 'case-return'; reportId?: string }
+  | { kind: 'appeal-return'; appealId: string };
 
 const histories = new WeakMap<QueryClient, WorkbenchQueueWindowHistory>();
 
@@ -187,14 +210,18 @@ function focusTicket(
   source: HTMLElement | undefined,
   keyboard: boolean,
   keepForCaseReturn = false,
+  preserveKeyboardPath = false,
 ): FocusTicket | undefined {
   if (!source || (keyboard && source.ownerDocument.activeElement !== source) || (!keyboard && !keepForCaseReturn))
     return undefined;
   const document = source.ownerDocument;
+  let eligible = true;
   const ticket: FocusTicket = {
     kind,
     source,
+    eligible: () => eligible,
     cancel() {
+      eligible = false;
       document.removeEventListener('pointerdown', cancel, true);
       document.removeEventListener('keydown', keydown, true);
       document.removeEventListener('focusin', focusin, true);
@@ -202,10 +229,10 @@ function focusTicket(
   };
   const cancel = () => ticket.cancel();
   const keydown = (event: KeyboardEvent) => {
-    if (event.key === 'Tab') cancel();
+    if (!preserveKeyboardPath && event.key === 'Tab') cancel();
   };
   const focusin = (event: FocusEvent) => {
-    if (event.target !== source && event.target !== document.body) cancel();
+    if (!preserveKeyboardPath && event.target !== source && event.target !== document.body) cancel();
   };
   document.addEventListener('pointerdown', cancel, true);
   document.addEventListener('keydown', keydown, true);
@@ -219,9 +246,22 @@ function allowedCaseReturnSearch(state: WindowState, raw: Record<string, unknown
   return address !== undefined && queueAddressMatches(state.identity, address, search) && !search.history;
 }
 
+function appealQueueSearch(search: WorkbenchSearch) {
+  return workbenchSearch({ ...search, case: '' });
+}
+
+function sameAppealQueue(a: WorkbenchSearch, b: WorkbenchSearch) {
+  return (
+    a.queue === 'appeals' &&
+    b.queue === 'appeals' &&
+    workbenchReadKey(appealQueueSearch(a)) === workbenchReadKey(appealQueueSearch(b))
+  );
+}
+
 /** One tab-local coordinate chain. Queue rows and action advice never enter this store. */
 export class WorkbenchQueueWindowHistory {
   private state: WindowState | undefined;
+  private appealVisit: AppealVisit | undefined;
   private revision = 0;
   private readonly listeners = new Set<() => void>();
 
@@ -238,8 +278,16 @@ export class WorkbenchQueueWindowHistory {
   }
 
   private clear() {
+    if (!this.state) return;
     this.state?.focus?.cancel();
     this.state = undefined;
+    this.publish();
+  }
+
+  private clearAppeal() {
+    if (!this.appealVisit) return;
+    this.appealVisit.focus?.cancel();
+    this.appealVisit = undefined;
     this.publish();
   }
 
@@ -477,12 +525,176 @@ export class WorkbenchQueueWindowHistory {
     return true;
   }
 
+  beginAppealDeparture(input: {
+    visitId: string | undefined;
+    page: WorkbenchRead;
+    search: WorkbenchSearch;
+    appealId: string;
+    locale: string;
+    source?: HTMLElement;
+    keyboard: boolean;
+  }) {
+    const fence = fenceOf(input.page, input.locale);
+    if (
+      !input.visitId ||
+      !fence ||
+      input.page.state !== 'ready' ||
+      input.search.queue !== 'appeals' ||
+      input.search.case ||
+      !input.page.cases.some((item) => item.kind === 'appeal' && item.id === input.appealId)
+    ) {
+      this.clearAppeal();
+      return false;
+    }
+    this.clearAppeal();
+    this.appealVisit = {
+      visitId: input.visitId,
+      appealId: input.appealId,
+      queueSearch: appealQueueSearch(input.search),
+      fence,
+      generation: input.page.generation,
+      mode: 'queue',
+      pending: 'open',
+      transitionApproved: false,
+      focus: focusTicket('appeal-return', input.source, input.keyboard, false, true),
+    };
+    this.publish();
+    return true;
+  }
+
+  beginAppealReturn(input: {
+    visitId: string | undefined;
+    page: WorkbenchRead;
+    search: WorkbenchSearch;
+    appealId: string;
+    locale: string;
+  }) {
+    const state = this.appealVisit;
+    const fence = fenceOf(input.page, input.locale);
+    if (
+      !input.visitId ||
+      !fence ||
+      !state ||
+      state.visitId !== input.visitId ||
+      state.mode !== 'detail' ||
+      state.appealId !== input.appealId ||
+      input.search.queue !== 'appeals' ||
+      input.search.case !== input.appealId ||
+      input.page.state !== 'ready' ||
+      state.generation !== input.page.generation ||
+      input.page.selectedAppeal?.id !== input.appealId ||
+      !sameAppealQueue(state.queueSearch, input.search) ||
+      !sameFence(state.fence, fence)
+    ) {
+      this.clearAppealForVisit(input.visitId);
+      return false;
+    }
+    state.pending = 'return';
+    state.transitionApproved = false;
+    this.publish();
+    return true;
+  }
+
+  /** Admit only the exact selected appeal or the exact captured queue after its native reread. */
+  admitAppeal(input: {
+    visitId: string | undefined;
+    page: WorkbenchRead;
+    search: WorkbenchSearch;
+    locale: string;
+    admitted: boolean;
+  }): FocusResult | null {
+    const state = this.appealVisit;
+    const fence = fenceOf(input.page, input.locale);
+    if (!state) return null;
+    if (!input.visitId || !input.admitted || !fence || input.page.state !== 'ready') {
+      this.clearAppeal();
+      return null;
+    }
+    if (input.search.queue !== 'appeals' || !sameFence(state.fence, fence)) {
+      this.clearAppeal();
+      return null;
+    }
+    if (input.search.case) {
+      const exactSelection =
+        input.search.case === state.appealId && input.page.selectedAppeal?.id === state.appealId;
+      const sameDetail =
+        state.mode === 'detail' &&
+        state.visitId === input.visitId &&
+        state.generation === input.page.generation &&
+        exactSelection &&
+        sameAppealQueue(state.queueSearch, input.search);
+      const openedFromQueue =
+        state.mode === 'queue' &&
+        state.pending === 'open' &&
+        state.transitionApproved &&
+        exactSelection &&
+        sameAppealQueue(state.queueSearch, input.search);
+      if (!sameDetail && !openedFromQueue) {
+        this.clearAppeal();
+        return null;
+      }
+      if (openedFromQueue) {
+        state.visitId = input.visitId;
+        state.mode = 'detail';
+        state.generation = input.page.generation;
+        state.pending = undefined;
+        state.transitionApproved = false;
+        this.publish();
+      }
+      return null;
+    }
+    const returnedToQueue =
+      state.mode === 'detail' &&
+      state.pending === 'return' &&
+      state.transitionApproved &&
+      sameAppealQueue(state.queueSearch, input.search) &&
+      input.page.cases.some((item) => item.kind === 'appeal' && item.id === state.appealId);
+    if (!returnedToQueue) {
+      this.clearAppeal();
+      return null;
+    }
+    const appealId = state.appealId;
+    const focus = state.focus;
+    const restoreFocus = focus?.eligible() ?? false;
+    this.clearAppeal();
+    return restoreFocus ? { kind: 'appeal-return', appealId } : null;
+  }
+
   navigate(
     visitId: string | undefined,
     target: WorkbenchNavigationTarget,
     current: WorkbenchSearch | WorkbenchCaseSearch,
     page: WorkbenchPrivateVisit & { state?: string; next?: string | null },
   ) {
+    if (this.appealVisit && this.appealVisit.visitId !== visitId) this.clearAppeal();
+    const appeal = this.appealVisit;
+    if (appeal && appeal.visitId === visitId) {
+      const fence = fenceOf(page, appeal.fence.locale);
+      const currentSearch = !('boardId' in current) ? workbenchSearch(current as WorkbenchSearch) : null;
+      const next = workbenchTarget(target);
+      const exactFence = fence && sameFence(appeal.fence, fence);
+      const openAllowed =
+        appeal.pending === 'open' &&
+        currentSearch &&
+        !currentSearch.case &&
+        sameAppealQueue(appeal.queueSearch, currentSearch) &&
+        next?.case === appeal.appealId &&
+        sameAppealQueue(appeal.queueSearch, next);
+      const returnAllowed =
+        appeal.pending === 'return' &&
+        currentSearch?.case === appeal.appealId &&
+        sameAppealQueue(appeal.queueSearch, currentSearch) &&
+        next &&
+        !next.case &&
+        sameAppealQueue(appeal.queueSearch, next);
+      if (!exactFence || (!openAllowed && !returnAllowed)) {
+        this.clearAppeal();
+        return false;
+      }
+      appeal.transitionApproved = true;
+      this.publish();
+      return true;
+    }
     const state = this.state;
     if (!visitId || !state || state.visitId !== visitId || !state.pending) {
       this.clearForVisit(visitId);
@@ -710,8 +922,9 @@ export class WorkbenchQueueWindowHistory {
     const document = ticket.source.ownerDocument;
     const active = document.activeElement;
     const stillOwnsHandoff = active === document.body || !active || !active.isConnected;
+    const eligible = ticket.eligible();
     ticket.cancel();
-    if (!stillOwnsHandoff) return null;
+    if (!eligible || !stillOwnsHandoff) return null;
     if (ticket.kind === 'case-return' && pageState === 'ready') {
       const reportId = state.reportId;
       return { kind: 'case-return', ...(reportId ? { reportId } : {}) };
@@ -721,6 +934,10 @@ export class WorkbenchQueueWindowHistory {
 
   clearForVisit(visitId: string | undefined) {
     if (this.state && (!visitId || this.state.visitId === visitId)) this.clear();
+  }
+
+  clearAppealForVisit(visitId: string | undefined) {
+    if (this.appealVisit && (!visitId || this.appealVisit.visitId === visitId)) this.clearAppeal();
   }
 }
 

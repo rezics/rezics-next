@@ -92,6 +92,10 @@ Decision: require every returned row and exact selection to match an appeal-ID-b
 partition, epoch and exact position; missing, malformed, foreign or replaced coverage discards the whole inspection.
 Parent provenance independently binds authorization and never supplies fallback row coverage.
 
+Decision: an appeal opened from a listed row carries keyboard return focus only through its exact admitted selection
+and the captured admitted queue address. Pointer input, changed selection, reader or session replacement, and a row
+that is no longer present cancel the handoff.
+
 The provenance type comes from the existing Board/thread callable. While the generated declaration lacks the
 producer’s additive observations, the reader uses a runtime validation seam on that response and keeps the installed
 type intact. No new native DTO or endpoint is authored by Web.

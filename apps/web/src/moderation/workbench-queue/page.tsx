@@ -216,7 +216,7 @@ export function WorkbenchPage({
       return;
     onRetry?.();
   }
-  function openCase(item: WorkbenchCase, href: string) {
+  function openCase(item: WorkbenchCase, href: string, source?: HTMLAnchorElement, keyboard = false) {
     if (!isCurrent()) return;
     if (item.kind === 'report' && windowHistory && navigation?.visitId && windowFence)
       windowHistory.beginCaseDeparture({
@@ -225,7 +225,34 @@ export function WorkbenchPage({
         fence: windowFence,
         reportId: item.id,
       });
+    if (item.kind === 'appeal' && windowHistory && navigation?.visitId)
+      windowHistory.beginAppealDeparture({
+        visitId: navigation.visitId,
+        page: data,
+        search,
+        appealId: item.id,
+        locale: locale.current,
+        ...(source ? { source } : {}),
+        keyboard,
+      });
     onOpenCase?.(item, href);
+  }
+  function returnAppeal(
+    appealId: string,
+    _source: HTMLAnchorElement,
+    event: MouseEvent<HTMLAnchorElement>,
+  ) {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    if (!isCurrent() || unresolved.current || readingRef.current) return;
+    windowHistory?.beginAppealReturn({
+      visitId: navigation?.visitId,
+      page: data,
+      search,
+      appealId,
+      locale: locale.current,
+    });
+    onSearch(workbenchSearch({ ...search, case: '' }));
   }
   async function retryInspection(event?: MouseEvent<HTMLButtonElement>) {
     if (!isCurrent() || unresolved.current || readingRef.current) return;
@@ -306,9 +333,22 @@ export function WorkbenchPage({
   }
   useLayoutEffect(() => {
     if (owner && (!owner.available() || !isCurrent())) {
-      if (navigation?.isCurrent() !== false && !owner.healthy()) windowHistory?.clearForVisit(navigation?.visitId);
+      if (navigation?.isCurrent() !== false && !owner.healthy()) {
+        windowHistory?.clearForVisit(navigation?.visitId);
+        windowHistory?.clearAppealForVisit(navigation?.visitId);
+      }
       return;
     }
+    const appealFocus =
+      search.queue === 'appeals'
+        ? windowHistory?.admitAppeal({
+            visitId: navigation?.visitId,
+            page: data,
+            search,
+            locale: locale.current,
+            admitted: !owner || owner.available(),
+          })
+        : null;
     const focus = windowHistory?.admitQueue({
       visitId: navigation?.visitId,
       page: data,
@@ -316,14 +356,22 @@ export function WorkbenchPage({
       locale: locale.current,
       admitted: !owner || owner.available(),
     });
+    const appealTarget =
+      appealFocus?.kind === 'appeal-return'
+        ? [...(boundary.current?.querySelectorAll<HTMLAnchorElement>('[data-workbench-appeal-activator]') ?? [])].find(
+            (link) => link.dataset.workbenchAppealActivator === encodeURIComponent(appealFocus.appealId),
+          )
+        : null;
     if (focus) {
       const returnTarget =
         focus.kind === 'case-return' && focus.reportId
-          ? document.getElementById(`workbench-case-${encodeURIComponent(focus.reportId)}`)
+          ? document
+              .getElementById(`workbench-case-${encodeURIComponent(focus.reportId)}`)
+              ?.querySelector<HTMLElement>('a')
           : null;
       const queueHeading = boundary.current?.querySelector<HTMLElement>('[data-workbench-current-queue]');
       (returnTarget ?? queueHeading ?? boundary.current?.querySelector<HTMLElement>('article'))?.focus();
-    }
+    } else appealTarget?.focus();
     // A direct visit or pointer navigation has no focus ticket to restore.
   }, [owner, data, search, navigation?.visitId, version]);
   useLayoutEffect(() => {
@@ -376,6 +424,7 @@ export function WorkbenchPage({
           page={view}
           onSearch={navigateSearch}
           onOpenCase={openCase}
+          onReturnAppeal={returnAppeal}
           selection={controller}
           onAction={submit}
           isCurrent={isCurrent}

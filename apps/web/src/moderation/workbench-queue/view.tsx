@@ -57,7 +57,8 @@ export type WorkbenchViewProps = {
   retryWindow?: WorkbenchWindowRetry;
   onWindowMove?: (move: WorkbenchWindowMove, source?: HTMLButtonElement, keyboard?: boolean) => void;
   onRetryWindow?: (source?: HTMLButtonElement, keyboard?: boolean) => void;
-  onOpenCase?: (item: WorkbenchCase, href: string) => void;
+  onOpenCase?: (item: WorkbenchCase, href: string, source?: HTMLAnchorElement, keyboard?: boolean) => void;
+  onReturnAppeal?: (appealId: string, source: HTMLAnchorElement, event: MouseEvent<HTMLAnchorElement>) => void;
 };
 
 function CaseRow({
@@ -96,7 +97,6 @@ function CaseRow({
         onClick={(event) => {
           if (isCurrent && !isCurrent()) event.preventDefault();
           else if (
-            item.kind === 'report' &&
             onOpenCase &&
             event.button === 0 &&
             !event.metaKey &&
@@ -105,10 +105,13 @@ function CaseRow({
             !event.altKey
           ) {
             event.preventDefault();
-            const open = () => onOpenCase(item, href);
+            const source = event.currentTarget;
+            const keyboard = event.detail === 0 && source.ownerDocument.activeElement === source;
+            const open = () => onOpenCase(item, href, source, keyboard);
             requestDeparture(open);
           }
         }}
+        {...(item.kind === 'appeal' ? { 'data-workbench-appeal-activator': encodeURIComponent(item.id) } : {})}
       >
         {m.moderation_workbench_open_case({ id: item.id })}
       </a>
@@ -133,6 +136,7 @@ export function WorkbenchView({
   onWindowMove,
   onRetryWindow,
   onOpenCase,
+  onReturnAppeal,
 }: WorkbenchViewProps) {
   const departure = useAuthoringDeparture(
     false,
@@ -411,6 +415,7 @@ export function WorkbenchView({
                 {...(isCurrent ? { isCurrent } : {})}
                 {...(onRetry ? { onRetry } : {})}
                 {...(onRestart ? { onRestart } : {})}
+                {...(onReturnAppeal ? { onReturn: onReturnAppeal } : {})}
                 {...(onUnresolvedAppealChange ? { onUnresolvedChange: onUnresolvedAppealChange } : {})}
               />
               {onRefresh ? (
