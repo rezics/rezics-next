@@ -21,7 +21,8 @@ function streamed(bytes: Uint8Array, status = 200, headers: HeadersInit = {}, cu
     { status, headers },
   );
 }
-const unavailable = (result: RecoveryCommandResult) => expect(result).toMatchObject({ ok: false, status: 503, code: 'unavailable' });
+const unavailable = (result: RecoveryCommandResult) =>
+  expect(result).toMatchObject({ ok: false, status: 503, code: 'unavailable' });
 
 test('typed commands send one fixed POST and require exact acknowledgements and admitted refusals', async () => {
   const replies = [
@@ -97,8 +98,7 @@ test('bounded reads reject lying lengths, split or malformed UTF-8, overflow, pa
   const request = spyOn(globalThis, 'fetch').mockImplementation(async () => values.shift()!);
   const parse = spyOn(JSON, 'parse');
   try {
-    for (let index = 0; index < 4; index++)
-      unavailable(await startRecovery({ email: 'reader@example.test' }));
+    for (let index = 0; index < 4; index++) unavailable(await startRecovery({ email: 'reader@example.test' }));
     const parsesBeforeOverflow = parse.mock.calls.length;
     unavailable(await startRecovery({ email: 'reader@example.test' }));
     expect(parse).toHaveBeenCalledTimes(parsesBeforeOverflow);

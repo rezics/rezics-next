@@ -56,13 +56,10 @@ async function submitRecovery(
       });
       const value = await readJsonBounded(
         response,
-        response.status === 200
-          ? recoveryResponseByteBounds.acknowledgement
-          : recoveryResponseByteBounds.nativeError,
+        response.status === 200 ? recoveryResponseByteBounds.acknowledgement : recoveryResponseByteBounds.nativeError,
         signal,
       );
-      if (response.status === 200)
-        return isRecoveryAcknowledgement(value) ? { ok: true, body: value } : unavailable();
+      if (response.status === 200) return isRecoveryAcknowledgement(value) ? { ok: true, body: value } : unavailable();
       const code = compatibleFailure(phase, response.status, value);
       if (!code) return unavailable();
       const retryAfter = response.headers.get('Retry-After');
@@ -99,7 +96,10 @@ export function definitiveRecoveryRefusal(result: Exclude<AuthPostResult, { ok: 
   );
 }
 
-export function recoveryFailure(result: Exclude<AuthPostResult, { ok: true }>, phase: 'start' | 'complete' = 'complete'): string {
+export function recoveryFailure(
+  result: Exclude<AuthPostResult, { ok: true }>,
+  phase: 'start' | 'complete' = 'complete',
+): string {
   // The real native handler uses authentication_denied for both validation
   // refusals; the browser HTTP fixtures also exercise the more specific codes.
   const code =

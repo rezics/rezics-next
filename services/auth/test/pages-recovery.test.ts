@@ -243,11 +243,13 @@ test('recovery by email answers the same success, delivers one link, and complet
   expect(signedIn.status).toBe(200);
   const session = cookieOf(signedIn);
   expect((await pool.query('SELECT id FROM session WHERE "userId"=$1', [activeId])).rows).toHaveLength(1);
-  const completed = await shot(await request('/recovery/complete', {
-    account_id: params.get('account_id'),
-    token: params.get('token'),
-    new_password: replacement,
-  }));
+  const completed = await shot(
+    await request('/recovery/complete', {
+      account_id: params.get('account_id'),
+      token: params.get('token'),
+      new_password: replacement,
+    }),
+  );
   expect(completed.status).toBe(200);
   expect(completed.body).toBe('{"success":true}');
   expect((await pool.query('SELECT id FROM session WHERE "userId"=$1', [activeId])).rows).toEqual([]);

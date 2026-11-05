@@ -227,9 +227,7 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
       if (uncertain) setMessage(m.auth_recovery_start_unknown());
       return;
     }
-    setMessage(
-      uncertain ? m.auth_recovery_start_unknown() : recoveryFailure(result, 'start'),
-    );
+    setMessage(uncertain ? m.auth_recovery_start_unknown() : recoveryFailure(result, 'start'));
   }
 
   async function submitComplete(event: FormEvent<HTMLFormElement>) {
