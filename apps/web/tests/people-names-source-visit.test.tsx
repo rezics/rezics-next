@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement as h, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -14,9 +14,11 @@ import {
 import { PeopleNamesEntry, type PeopleNamesReading } from '../src/features/catalogue/people-names/entry';
 import { namesReturn } from '../src/features/catalogue/work-names/navigation';
 import { contextHref } from '../src/features/pages/context-navigation';
-import { SubjectSourcesPage } from '../src/features/catalogue/subject-sources-page';
 import { personReaderExample } from '../src/features/catalogue/person-reader/examples';
 import { characterRelationshipsFixture } from '../src/kernel/fake/character-relationships';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { SubjectSourcesPage } = await import('../src/features/catalogue/subject-sources-page');
 
 const realm = '00000000-0000-4000-8000-000000000777';
 const otherContext = '00000000-0000-4000-8000-000000000778';
