@@ -479,7 +479,12 @@ test('installed correction route rereads selected Contexts, retires A/B/A result
     expect(ui.host.textContent).toContain(ui.m.screen_visit_occurrence_missing());
     expect(ui.host.querySelector(`#${contract.screenCurrentInspectionId(statement.id)}`)).toBeNull();
     expect(ui.host.innerHTML).not.toContain(statement.id);
-    expect(link(ui.m.screen_visit_inspect())).toBeUndefined();
+    const visibleInspections = [...ui.host.querySelectorAll('a')]
+      .filter((anchor) => anchor.textContent === ui.m.screen_visit_inspect())
+      .map((anchor) =>
+        contract.screenCurrentRouteVisit(new URL(anchor.getAttribute('href')!, 'https://site.invalid').search),
+      );
+    expect(visibleInspections.some((result) => result.kind === 'current' && result.visit.occurrence?.statement === statement.id)).toBe(false);
 
     // Withheld evidence cannot be reconstructed from a previously valid locator.
     await go(source);
