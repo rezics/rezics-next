@@ -618,6 +618,7 @@ import type {
 } from './public-filter-custody-contract.ts';
 import {
   createPublicFilterCustody,
+  stepRetainedObservationErasure,
   encodePublicFilterNativeState as encodeNative,
   decodePublicFilterNativeState as decodeNative,
   readPublicFilterRepairSettlement,
@@ -1583,11 +1584,26 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       } finally {
         m.add((await custody.release(acquired.use, context)).cost);
       }
-      if (publication) {
-        const closed = m.take(await custody.closeObservation(q, config.search, context));
-        if (closed.status !== 'closed') return m.unavailable('observation_lost');
-        owned.delete(q.snapshot.observation);
-      }
+    }
+    if (publication && work.materializing && work.queried) {
+      const materializing = work.materializing;
+      const retired = m.take(
+        await stepRetainedObservationErasure(
+          config.pool,
+          {
+            partition: work.registration.partition,
+            registration: work.registration.id,
+            observation: materializing.snapshot.observation,
+            incarnation: materializing.consumer.incarnation,
+          },
+          config.search,
+          context,
+        ),
+      );
+      if (retired.state !== 'removed') return { status: 'preparing', repair: job, cost: m.cost };
+      owned.delete(materializing.snapshot.observation);
+      work.materializing = null;
+      encoded = await save(work, encoded, true, m);
     }
     const q = work.queried!;
     await physical(q, m, context);
