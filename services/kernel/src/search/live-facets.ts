@@ -89,8 +89,9 @@ export async function readLiveFacets(request: LiveFacetRequest): Promise<LiveFac
 
   // A dropped candidate or uncertain relation proof cannot establish an exact count. An empty engine sample also
   // cannot prove current absence: `complete` describes engine exhaustion, not source truth.
-  const exactCandidates =
-    request.complete && request.hits.length > 0 && checked.dropped === 0 && checked.relationRejected !== true;
+  // Engine exhaustion and returned-row checks cannot prove that stale indexed exclusions or ordering
+  // omitted current matches. Exact totals belong to the complete native query-level facet proof.
+  const exactCandidates = false;
   const counts = facets.map(() => new Map<string, number>());
   const overflow = facets.map(() => false);
 

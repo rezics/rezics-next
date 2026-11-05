@@ -117,6 +117,9 @@ function codeProvider(): FacetDiscoveryProvider {
           }),
           asOf: '2026-01-01T00:00:00.000Z',
           cost,
+          async finalize() {
+            return { status: 'current', cost };
+          },
         };
       },
       async repairStep() {

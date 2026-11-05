@@ -354,5 +354,11 @@ export async function readFacetDiscovery(
     );
   }
   checkDeadline();
+  const final = await page.finalize();
+  charge(final.cost);
+  if (final.status !== 'current') {
+    if (positions.some(Boolean)) throw restart();
+    throw ready();
+  }
   return { facets: result, as_of: page.asOf };
 }

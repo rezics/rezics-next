@@ -267,6 +267,7 @@ export function createFacetNativeOperations(
 
     async pageFacets({ reads }, context) {
       const pageObservations = new Set(reads.map(({ queried }) => queried.snapshot.observation));
+      const pageExecutions = new Map<string, RetainedExecution>();
       try {
         const meter = empty();
         if (reads.length === 0) return { status: 'preparing' as const, cost: meter };
@@ -276,6 +277,7 @@ export function createFacetNativeOperations(
           seen.add(read.queried.snapshot.observation);
           const retained = executions.get(read.queried.snapshot.observation);
           if (!retained) return { status: 'preparing' as const, cost: meter };
+          pageExecutions.set(read.queried.snapshot.observation, retained);
           const start = await observe(read.queried, retained, context);
           add(meter, start.cost);
           if (start.status === 'unready' || start.status === 'unavailable' || !cleanForExecution(start, retained))
@@ -324,58 +326,49 @@ export function createFacetNativeOperations(
             after: values.at(-1)?.value ?? null,
             hasMore: eligible.length > read.size,
           });
-          const retained = executions.get(read.queried.snapshot.observation);
-          if (!retained) return { status: 'preparing' as const, cost: meter };
-          const currentSource = await observe(read.queried, retained, context);
-          add(meter, currentSource.cost);
-          const currentScope = read.plan.scope ? await observeScope(read.plan.scope, context) : undefined;
-          if (currentScope) add(meter, currentScope.cost);
-          if (
-            currentSource.status !== 'observed' ||
-            !cleanForExecution(currentSource, retained) ||
-            (currentScope !== undefined && currentScope.status !== 'observed')
-          ) {
-            for (const candidate of reads) {
-              const invalidated = await storage.retireFacetCandidates(candidate, context);
-              add(meter, invalidated.cost);
-            }
-            return { status: 'preparing' as const, cost: meter };
-          }
         }
-        seen.clear();
-        for (const read of reads) {
-          if (seen.has(read.queried.snapshot.observation)) continue;
-          seen.add(read.queried.snapshot.observation);
-          const retained = executions.get(read.queried.snapshot.observation);
-          if (!retained) return { status: 'preparing' as const, cost: meter };
-          const final = await observe(read.queried, retained, context);
-          add(meter, final.cost);
-          if (final.status === 'unready' || final.status === 'unavailable' || !cleanForExecution(final, retained)) {
-            for (const candidate of reads) {
-              const invalidated = await storage.retireFacetCandidates(candidate, context);
-              add(meter, invalidated.cost);
+        let finalized = false;
+        return {
+          status: 'ready' as const,
+          facets,
+          asOf,
+          cost: meter,
+          async finalize() {
+            const finalCost = empty();
+            const retire = async () => {
+              for (const candidate of reads) {
+                const invalidated = await storage.retireFacetCandidates(candidate, context);
+                add(finalCost, invalidated.cost);
+              }
+              return { status: 'changed' as const, cost: finalCost };
+            };
+            if (finalized) throw new TypeError('Facet page finalization can only run once');
+            finalized = true;
+            const checked = new Set<string>();
+            for (const read of reads) {
+              const observation = read.queried.snapshot.observation;
+              if (checked.has(observation)) continue;
+              checked.add(observation);
+              const retained = pageExecutions.get(observation);
+              if (!retained) throw new Error('Facet page lost its retained native execution');
+              const final = await observe(read.queried, retained, context);
+              add(finalCost, final.cost);
+              if (final.status !== 'observed' || !cleanForExecution(final, retained)) return retire();
             }
-            return { status: 'preparing' as const, cost: meter };
-          }
-        }
-        seen.clear();
-        for (const read of reads) {
-          const admission = read.plan.scope;
-          if (!admission) continue;
-          const key = scopedFacetIdentityKey(admission.identity);
-          if (seen.has(key)) continue;
-          seen.add(key);
-          const final = await observeScope(admission, context);
-          add(meter, final.cost);
-          if (final.status !== 'observed') {
-            for (const candidate of reads) {
-              const invalidated = await storage.retireFacetCandidates(candidate, context);
-              add(meter, invalidated.cost);
+            checked.clear();
+            for (const read of reads) {
+              const admission = read.plan.scope;
+              if (!admission) continue;
+              const key = scopedFacetIdentityKey(admission.identity);
+              if (checked.has(key)) continue;
+              checked.add(key);
+              const final = await observeScope(admission, context);
+              add(finalCost, final.cost);
+              if (final.status !== 'observed') return retire();
             }
-            return { status: 'preparing' as const, cost: meter };
-          }
-        }
-        return { status: 'ready' as const, facets, asOf, cost: meter };
+            return { status: 'current' as const, cost: finalCost };
+          },
+        };
       } finally {
         for (const observation of pageObservations) executions.delete(observation);
       }
