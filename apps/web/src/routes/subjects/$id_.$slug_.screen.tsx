@@ -1,4 +1,4 @@
-import { createFileRoute, notFound, redirect } from '@tanstack/react-router';
+import { createFileRoute, notFound, redirect, useLocation } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { setResponseHeader } from '@tanstack/react-start/server';
 import { ScreenProfileSession } from '../../features/catalogue/screen-profile-session';
@@ -59,7 +59,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/screen')({
 });
 function ScreenRoute() {
   const { classificationHandoff } = Route.useSearch();
-  const location = Route.useLocation();
+  const location = useLocation();
   const { id } = Route.useLoaderData();
   const locale = getLocale();
   const visitSearch = screenCurrentRouteVisit(location.searchStr, classificationHandoff);
