@@ -397,7 +397,8 @@ const readKindsWithLocale = createServerFn({ method: 'GET' })
           ...(reader ? { headers: { authorization: reader.authorization } } : {}),
           fetch: { signal: getRequest().signal, cache: 'no-store' },
         });
-        if (response.error || response.status !== 200) recovery = searchRecoveryFromResponse(response);
+        if (response.error || response.status !== 200)
+          recovery = searchRecoveryFromResponse(response, Date.now(), data.kindCursor);
         return response;
       },
     );
@@ -720,6 +721,7 @@ export function SearchPage({
   onRetry,
   locale: localeProp,
   session = null,
+  readerOwner,
   searchHref,
 }: {
   query: string;
@@ -732,6 +734,7 @@ export function SearchPage({
   onRetry?: (() => PromiseLike<unknown> | void) | undefined;
   locale?: string;
   session?: string | null;
+  readerOwner?: string | undefined;
   searchHref?: string | undefined;
 }) {
   const sourceData = data;
@@ -1020,7 +1023,7 @@ export function SearchPage({
   const revertStatus = useRef<HTMLParagraphElement>(null);
   const checkpoint = discovery?.status === 'ready' ? discovery.page.as_of : result?.as_of;
   const requestOwnerKey = JSON.stringify([stateKey, locale, session]);
-  const recoveryOwnerKey = JSON.stringify([requestOwnerKey, checkpoint]);
+  const recoveryOwnerKey = JSON.stringify([requestOwnerKey, readerOwner, checkpoint]);
   const retryFocus = useSearchRetryFocus(
     {
       scope: requestOwnerKey,
@@ -1032,12 +1035,13 @@ export function SearchPage({
         : result?.emptyRecovery
           ? { observation: result.emptyRecovery }
           : {}),
+      reader: readerOwner,
     },
     data?.recovery?.status !== 'loading',
   );
   const results = (
     <SearchResultsRegion
-      key={JSON.stringify([stateKey, locale, session])}
+      key={JSON.stringify([stateKey, locale, session, readerOwner])}
       query={query}
       result={result}
       locale={locale}
@@ -1339,11 +1343,18 @@ export function SearchPage({
       {!typeRefinementAvailable && type && <input type="hidden" name="type" value={type} />}
       {data?.discovery?.status === 'ready' && data.queryState && (
         <DiscoveryKinds
-          key={JSON.stringify([data.queryState, locale, data.discovery.page.as_of])}
+          key={JSON.stringify([data.queryState, locale, session, readerOwner, data.discovery.page])}
           initial={data.discovery.page.kinds}
+          checkpoint={data.discovery.page.as_of}
           locale={locale}
           selected={data.queryState.kinds ?? []}
           hydrated={hydrated}
+          onRefresh={onRetry ? () => void onRetry() : undefined}
+          onRefreshFocus={retryFocus.captureRetryFocus}
+          onRefusalFocus={(source) => retryFocus.captureRetryFocus(source, true)}
+          onRefusal={(state) => {
+            if (sourceData && currentData.current === sourceData) setInvalidation({ owner: sourceData, state });
+          }}
           load={async (kindCursor, signal) => {
             const response = await readKindsWithLocale({
               data: {
@@ -1358,14 +1369,6 @@ export function SearchPage({
                 ? { headers: { 'X-CSRF-Token': sessionCsrfToken() ?? '' } }
                 : {}),
             });
-            if (
-              !signal.aborted &&
-              sourceData &&
-              currentData.current === sourceData &&
-              response.recovery &&
-              ['session', 'closed', 'denied', 'restart'].includes(response.recovery.status)
-            )
-              setInvalidation({ owner: sourceData, state: response.recovery });
             return response;
           }}
         />

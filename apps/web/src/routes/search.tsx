@@ -223,7 +223,7 @@ function LoadedSearchResults({
   reader?: string;
   session: string | null;
 }) {
-  const { data, retry } = useSearchQuery(locale, deps, reader);
+  const { data, readerOwner, retry } = useSearchQuery(locale, deps, reader);
   const realms = useQuery({ ...realmDiscoveryQueryOptions(locale), enabled: isRealmDiscoverySearch(deps) });
   return (
     <SearchPage
@@ -232,6 +232,7 @@ function LoadedSearchResults({
       locale={locale}
       searchHref={searchHref}
       onRetry={retry}
+      readerOwner={readerOwner}
       session={session}
       {...(realms.data ? { realmDiscovery: realms.data } : {})}
     />
