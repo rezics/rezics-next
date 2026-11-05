@@ -77,6 +77,7 @@ test('the mounted Person visit returns to the exact current assertion and keeps 
   const { m } = await import('../src/paraglide/messages.js');
   const { setLocale } = await import('../src/paraglide/runtime.js');
   setLocale('zh-Hant', { reload: false });
+  const o = { locale: 'zh-Hant' as never };
   const host = window.document.createElement('main') as HTMLElement;
   window.document.body.append(host);
   const root = createRoot(host);
@@ -128,7 +129,7 @@ test('the mounted Person visit returns to the exact current assertion and keeps 
     const concealed = structuredClone(fixture.person);
     delete concealed.related[targetId];
     await act(async () => root.render(render(concealed, '2')));
-    expect(host.textContent).toContain(m.people_biography_unreadable());
+    expect(host.textContent).toContain(m.people_biography_unreadable({}, o));
     expect(host.textContent).not.toContain(targetId);
     expect([...host.querySelectorAll('a')].some((link) => link.href.includes(targetId))).toBe(false);
     expect(window.document.activeElement?.id).toBe(`people-assertion-${assertion}`);
@@ -136,7 +137,7 @@ test('the mounted Person visit returns to the exact current assertion and keeps 
     const replaced = structuredClone(fixture.person);
     replaced.subject.statements['wdt:P106'] = [statement('00000000-0000-4000-8000-00000000d222', targetId)];
     await act(async () => root.render(render(replaced, '3')));
-    expect(host.textContent).toContain(m.people_facts_changed());
+    expect(host.textContent).toContain(m.people_facts_changed({}, o));
     expect(window.document.activeElement?.id).toBe('people-field-wdt%3AP106');
   } finally {
     await act(async () => root.unmount());
