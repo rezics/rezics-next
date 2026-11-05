@@ -2064,6 +2064,7 @@ function CollectionPageLifetime({
               savedCover={draftPage.cover ?? null}
               savedCoverSource={draftPage.coverSource}
               listPresentations={draftPage.listPresentations}
+              typeRatios={draftPage.typeRatios}
               comparisonDefinitions={draftPage.comparisonDefinitions}
               firstPage={draftPage.firstPage}
               saveConfirmed={saveConfirmed}
@@ -2087,7 +2088,7 @@ function CollectionPageLifetime({
                 )
                   setCoverMediaId(value);
               }}
-              members={draftPage.members}
+              members={saveDesiredMembers}
               disabled={pending || draftFrozen || transfer !== null || !isCurrent('collection.update')}
             />
             <VisibilityField

@@ -65,6 +65,10 @@ ordered and noted. Dynamic membership derives unique subjects from native facts 
 output. Canonical browsing may combine matching originals into one card but never rewrites curated occurrences.
 Presentation kind and client layout do not change membership or authorization.
 
+Decision: the owner presentation preview follows the current draft occurrence order and removals, using the same
+released member presentation and explicit cover-ratio fallback as the reader. Cover selection remains independent;
+removing its preview occurrence does not clear a configured cover or turn mixed presentation into a Type override.
+
 Decision: Public ranked Collection reads preserve the current complete publication's occurrence order and IDs; the
 description, covers and notes come from that same read, and row links return to the exact Collection address and
 occurrence fragment.
