@@ -461,8 +461,11 @@ retention retain their existing owners; this composition introduces no scheduler
 
 Decision: retain the original native session, Continue and Feed assertions; add causal regressions only for defects
 reached by the seeded record/correct/journal/clear journey, and compare native responses with the same persona's pages.
-Native discovery fixture setup delegates through the installed grant command with a real Auth-issued grantor and
-the consumer's runtime pool. Session fixtures configure dedicated receipt keys independently of token sealing keys.
+Native discovery fixture setup delegates through the mounted grant route with a real Auth-issued grantor and
+the consumer's runtime pool. Session fixtures use the existing native lifecycle, mounted Subject creation,
+compiled compatibility Book profile and Entry Source producers; they retain every original outcome assertion.
+Session fixtures configure dedicated receipt keys independently of token sealing keys. The native policy adapter
+maps SQL's `live` operand into the policy deadline fact; a live grant must remain usable and an expired one denied.
 Owner journal discovery passes the resolved request Access instance and original absolute request deadline to
 current subject presentation.
 

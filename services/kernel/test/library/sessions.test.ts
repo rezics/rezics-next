@@ -1,62 +1,46 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { createHash, randomUUID } from 'node:crypto';
-import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { randomUUID } from 'node:crypto';
 import { Value } from 'typebox/value';
-import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import { EVENT_TYPES, readBatch } from '../../src/events/log.ts';
 import { LibraryNotFoundError } from '../../src/library/command-support.ts';
 import { createSessionCommands } from '../../src/library/sessions.ts';
 import type { ProgressMode, ProgressUnit } from '../../src/library/progress.ts';
 import type { AccountActor, Actor } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import { bootstrapRelease } from '../../src/semantic/definitions.ts';
-import { createSubject, subjectTarget } from '../../src/semantic/subject.ts';
 import { measure, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
-import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
+import { authenticateAccount } from '../support/admitted-access.ts';
+import { createLibraryOutcomeFixture } from './support/profile-entry-fixture.ts';
 
 const route = 0x21b0;
 const eventType = 'com.rezics.library.progress_session.updated.v1';
 const scopes = [
+  'subject:create',
   'subject:read',
+  'library_entry:update',
+  'library_entry:read',
   'progress_session:create',
   'progress_session:update',
   'progress_session:read',
   'progress_session:list',
 ];
-const persona = (accountId: string, permissions = scopes): AccountActor => ({
-  kind: 'account',
-  accountId,
-  scopes: permissions,
-  clientId: 'sessions-test',
-  requestedBy: null,
-  authnEpoch: 1,
-});
-let owner = persona(newId(route));
-let other = persona(newId(route));
-const suspended = persona(newId(route));
+let owner: AccountActor;
+let other: AccountActor;
+let suspended: AccountActor;
+let unscoped: AccountActor;
 const anonymous: Actor = { kind: 'anonymous' };
-const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(59)]]) };
+let native: Awaited<ReturnType<typeof createLibraryOutcomeFixture>>;
+let ownerIdentity: Awaited<ReturnType<typeof native.identity>>;
 let database: GrowthDatabase;
 let commands: ReturnType<typeof createSessionCommands>;
 let subjectId: string;
 let versionSubjectId: string;
-let now = Date.parse('2026-10-26T12:00:00.000Z');
+let now = Date.now();
 const clock = () => new Date(now);
 const key = () => randomUUID();
 
 async function subject(): Promise<string> {
-  const request = key();
-  const result = await createSubject(database.pool, {
-    actor: owner,
-    target: subjectTarget(new Uint8Array(32).fill(73), owner.accountId, request),
-    idempotencyKey: request,
-    digest: createHash('sha256').update(request).digest(),
-    item: { type: 'schema:Book', labels: { en: 'Progress book' } },
-    release: { digest: bundledDigest, release: bundledRelease },
-    authorize: async () => true,
-  });
-  return result.subject.id;
+  return native.book(ownerIdentity, 'Progress book');
 }
 
 async function start(mode: ProgressMode, unit: ProgressUnit = 'page') {
@@ -80,33 +64,22 @@ beforeAll(async () => {
   database = await openGrowthDatabase();
   configureTestReceiptKeys(database.pool);
   configureTestReceiptKeys(database.admin);
-  await bootstrapRelease(database.pool, bundledRelease);
-  for (const actor of [owner, other, suspended]) {
-    await database.admin.query(
-      `INSERT INTO access.account
-      (route, account_id, kind, state, transaction_id, authn_fenced, minimum_authn_epoch)
-      VALUES ($1, $2, 'actor', $3, $4, false, 1)`,
-      [route, actor.accountId, 'active', newId(route)],
-    );
-    if (actor === suspended) await suspendAccount(database.admin, actor.accountId);
-  }
-  const access = admittedAccess({
-    actions: new Map<string, { anonymous: boolean; authority?: 'own-account' }>([
-      ['subject:read', { anonymous: true }],
-      ...['progress_session:create', 'progress_session:update', 'progress_session:read', 'progress_session:list'].map(
-        (action) => [action, { anonymous: false, authority: 'own-account' as const }] as const,
-      ),
-    ]),
+  native = await createLibraryOutcomeFixture({ pool: database.pool, clock });
+  ownerIdentity = await native.identity(scopes, undefined, route);
+  owner = ownerIdentity.actor;
+  unscoped = await authenticateAccount(native.access, { pool: database.pool, deadline: Date.now() + 300_000 }, {
+    ...owner, scopes: [],
   });
-  const context = { pool: database.pool, deadline: Date.now() + 300_000 };
-  owner = await authenticateAccount(access, context, owner);
-  other = await authenticateAccount(access, context, other);
-  commands = createSessionCommands({ pool: database.pool, access, tokens, clock });
+  other = (await native.identity(scopes, undefined, route)).actor;
+  suspended = (await native.identity(scopes, undefined, route)).actor;
+  await native.suspend(suspended.accountId);
+  commands = createSessionCommands({ pool: database.pool, access: native.access, tokens: native.tokens, clock });
   subjectId = await subject();
   versionSubjectId = await subject();
 });
 
 afterAll(async () => {
+  await native?.close();
   if (database) await database.close();
 });
 
@@ -355,7 +328,7 @@ test('journal receipts retain public command identity across private admission c
     commands.patchSessionJournal(owner, session.id, { ...patch, reflection: 'Different body' }, request),
   ).rejects.toThrow();
   await expect(
-    commands.patchSessionJournal(persona(owner.accountId, []), session.id, patch, request),
+    commands.patchSessionJournal(unscoped, session.id, patch, request),
   ).rejects.toThrow();
   expect((await commands.readSessionJournal(owner, session.id)).reflection).toBeNull();
   expect(await snapshot()).toEqual(before);
@@ -397,7 +370,7 @@ test('unknown subjects and versions are not found; invalid creation changes noth
 test('foreign, anonymous, suspended and unscoped personas never read or change a session', async () => {
   const session = await start('completed_units');
   const before = await snapshot();
-  for (const candidate of [other, anonymous, suspended, persona(owner.accountId, [])]) {
+  for (const candidate of [other, anonymous, suspended, unscoped]) {
     for (const read of [
       () => commands.readSession(candidate, session.id),
       () => commands.listUnits(candidate, session.id),
@@ -411,7 +384,7 @@ test('foreign, anonymous, suspended and unscoped personas never read or change a
     ])
       await expect(write()).rejects.toThrow();
   }
-  for (const candidate of [anonymous, suspended, persona(owner.accountId, [])]) {
+  for (const candidate of [anonymous, suspended, unscoped]) {
     await expect(commands.listSessions(candidate, subjectId)).rejects.toThrow();
     await expect(
       commands.startSession(candidate, { subjectId, mode: 'scalar_amount', unit: 'page' }, key()),

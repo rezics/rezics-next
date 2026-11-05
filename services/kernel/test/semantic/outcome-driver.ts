@@ -18,7 +18,6 @@ import { createNativeAccountBindings } from '../../src/access/native-account-bin
 import { createWorkflowApprovals } from '../../src/access/workflow-approvals.ts';
 import { admitGroup, PlatformClosedError } from '../../src/access/gates/admission.ts';
 import { createSuspensionCommands } from '../../src/access/suspension.ts';
-import { createGrantCommands } from '../../src/access/grant-commands.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { startRelays } from '../../src/events/relays.ts';
@@ -508,12 +507,6 @@ async function startDriver(
         `Collection exposure setup failed: ${collectionExposure.status}: ${JSON.stringify(collectionExposure.body)}`,
       );
 
-    const grants = createGrantCommands({
-      pool: runtimePool,
-      access,
-      managementAction: 'access:grant',
-      ...(options.clock ? { clock: options.clock } : {}),
-    });
     async function grantAccount(
       account: Account,
       actions: string[],
@@ -522,20 +515,20 @@ async function startDriver(
     ) {
       const route = resourceId === GLOBAL_CONTEXT ? 0 : routeOf(resourceId);
       if (route === null) throw new Error(`Cannot grant an unroutable resource: ${resourceId}`);
-      // Setup uses the installed native command with the real grantor's current
-      // Auth identity. Its admission, management and delegated-action checks all
-      // run against the same runtime pool as the mounted consumer under test.
-      const context = { pool: runtimePool!, deadline: Date.now() + 10_000 };
-      await grants.create(
-        { ...context, actor: await access.authenticate(grantor.bearer, context) },
+      const response = await send(
+        grantor,
+        'POST',
+        '/v1/grants',
         {
           resource: { route, id: resourceId },
           subject: { kind: 'account', id: account.accountId },
           actions,
           valid: '(,)',
-          key: randomUUID(),
         },
+        { 'Idempotency-Key': key() },
       );
+      if (response.status !== 201)
+        throw new Error(`Grant administration failed: ${response.status}: ${JSON.stringify(response.body)}`);
     }
 
     await grantAccount(accounts.editor, ['subject:create', 'statement:propose', 'context:create']);

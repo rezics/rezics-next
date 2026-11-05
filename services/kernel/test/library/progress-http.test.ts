@@ -1,30 +1,23 @@
-import { suspendAccount } from '../support/native-suspension-driver.ts';
-import { createAccess } from '../../src/access/index.ts';
-import { deriveAccess } from '../../src/access/derived-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { Buffer } from 'node:buffer';
-import { createHash, randomUUID } from 'node:crypto';
-import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
-import { type Access } from '../../src/request/access.ts';
-import { newId, routeOf } from '../../src/route/route.ts';
-import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
-import { bootstrapRelease } from '../../src/semantic/definitions.ts';
-import { createSubject as createSemanticSubject, subjectTarget } from '../../src/semantic/subject.ts';
+import { newId } from '../../src/route/route.ts';
 import { capture, costOf, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
+import { createLibraryOutcomeFixture } from './support/profile-entry-fixture.ts';
+import { testRouteKey } from '../support/test-kernel.ts';
 
-const issuer = 'https://auth.progress.test';
-const audience = 'https://kernel.progress.test';
 const accountRoute = 0x2600;
-const owner = newId(accountRoute);
-const other = newId(accountRoute);
-const suspended = newId(accountRoute);
-const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(19)]]) };
+let owner: string;
+let other: string;
+let suspended: string;
+let native: Awaited<ReturnType<typeof createLibraryOutcomeFixture>>;
+const identities = new Map<string, Awaited<ReturnType<typeof native.identity>>>();
 const scopes = [
   'subject:create',
   'subject:read',
+  'library_entry:update',
+  'library_entry:read',
   'progress_session:create',
   'progress_session:list',
   'progress_session:read',
@@ -65,24 +58,7 @@ async function request(
 }
 
 async function createSubject(accountId = owner): Promise<string> {
-  const requestKey = randomUUID();
-  const created = await createSemanticSubject(db.pool, {
-    actor: {
-      kind: 'account',
-      accountId,
-      clientId: 'web',
-      scopes,
-      requestedBy: null,
-      authnEpoch: 1,
-    },
-    target: subjectTarget(new Uint8Array(32).fill(23), accountId, requestKey),
-    idempotencyKey: requestKey,
-    digest: createHash('sha256').update(requestKey).digest(),
-    item: { type: 'schema:Book', labels: { en: `Progress subject ${serial}` } },
-    release: { digest: bundledDigest, release: bundledRelease },
-    authorize: async () => true,
-  });
-  return created.subject.id;
+  return native.book(identities.get(accountId)!, `Progress subject ${serial}`);
 }
 
 async function start(
@@ -138,71 +114,30 @@ beforeAll(async () => {
   db = await openGrowthDatabase();
   configureTestReceiptKeys(db.admin);
   db.pool.options.max = 1;
-  await bootstrapRelease(db.pool, bundledRelease);
-
-  const signing = await generateKeyPair('ES256', { extractable: true });
-  const jwk = { ...(await exportJWK(signing.publicKey)), kid: 'progress-http', alg: 'ES256' };
-  const native = createAccess({
-    actions: new Map(scopes.map((action) => [action, { anonymous: false }])),
-    auth: { issuer, audience, jwksUrl: `${issuer}/jwks`, fetch: async () => Response.json({ keys: [jwk] }) },
-  });
-  const access: Access = deriveAccess(native, {
-    async authorize(_client, actor, action) {
-      return actor.kind === 'account' && actor.scopes.includes(action);
-    },
-  });
+  native = await createLibraryOutcomeFixture({ pool: db.pool, singleConnection: true });
+  const people = await Promise.all(Array.from({ length: 3 }, () => native.identity(scopes, undefined, accountRoute)));
+  [owner, other, suspended] = people.map((person) => person.actor.accountId) as [string, string, string];
+  for (const person of people) {
+    identities.set(person.actor.accountId, person);
+    credentials.set(person.actor.accountId, person.bearer);
+  }
+  await native.suspend(suspended);
   app = createKernel({
     receiptKeys: testReceiptKeys(),
     pool: db.pool,
-    routeKey: new Uint8Array(32).fill(23),
-    tokens,
-    access,
+    routeKey: testRouteKey(),
+    tokens: native.tokens,
+    access: native.access,
     writeRate: {
       async spend() {
         return { allowed: true as const };
       },
     },
   });
-
-  for (const [accountId, state] of [
-    [owner, 'active'],
-    [other, 'active'],
-    [suspended, 'active'],
-  ] as const) {
-    await db.admin.query(
-      `INSERT INTO access.account(route, account_id, kind, state, transaction_id, membership_inverse_complete)
-       VALUES ($1, $2, 'actor', $3, $2, true)`,
-      [routeOf(accountId), accountId, state],
-    );
-  }
-  for (const accountId of [owner, other, suspended]) {
-    credentials.set(
-      accountId,
-      await new SignJWT({
-        client_id: 'web',
-        scope: scopes.join(' '),
-        authn_epoch: 1,
-        auth_time: Math.floor(Date.now() / 1000),
-        amr: ['pwd'],
-      })
-        .setProtectedHeader({ alg: 'ES256', kid: 'progress-http', typ: 'at+jwt' })
-        .setIssuer(issuer)
-        .setAudience(audience)
-        .setSubject(accountId)
-        .setIssuedAt()
-        .setExpirationTime('5m')
-        .sign(signing.privateKey),
-    );
-  }
-  await suspendAccount(db.admin, suspended);
-  await db.admin.query(
-    `INSERT INTO access.exposure_opening ("group", valid, transaction_id)
-     VALUES ('reading_progress', tstzrange('2020-01-01T00:00:00Z', NULL, '[)'), $1)`,
-    [randomUUID()],
-  );
 });
 
 afterAll(async () => {
+  await native?.close();
   await db?.close();
 });
 

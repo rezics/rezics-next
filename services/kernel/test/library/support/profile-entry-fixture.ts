@@ -513,3 +513,26 @@ export async function createProfileEntryFixture(
     throw error;
   }
 }
+
+/** Original session outcomes use the released Book vocabulary with every original mode.
+ * Creation and Entry setup still traverse the same native authority and Source producers.
+ */
+export async function createLibraryOutcomeFixture(options: Parameters<typeof createProfileEntryFixture>[0] = {}) {
+  const native = await createProfileEntryFixture(options);
+  const release = await compileLibraryOutcomeRelease();
+  await native.activate(await native.publish(release));
+  const open = await native.send('steward', 'POST', '/v1/platform/exposure/reading_progress:open');
+  expect(open.status).toBe(200);
+  return {
+    ...native,
+    async book(identity: { actor: AccountActor; bearer: string }, label: string) {
+      const response = await native.send(identity.bearer, 'POST', '/v1/subjects', {
+        type: 'schema:Book', labels: { en: label },
+      });
+      expect(response.status).toBe(201);
+      const { subject } = await response.json() as { subject: { id: string } };
+      await native.commands.putEntry(identity.actor, subject.id, { state: 'planned' }, entryKey());
+      return subject.id;
+    },
+  };
+}

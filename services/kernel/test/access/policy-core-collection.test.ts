@@ -28,7 +28,7 @@ const catalogue = compileNativePolicyCatalogue(actions, roles);
 function projection(overrides: Partial<NativePermissionProjection> = {}): NativePermissionProjection {
   return {
     assignmentValid: true,
-    deadlineLive: true,
+    live: true,
     localDenied: false,
     actorActionGrant: false,
     actorResourceRoleGrant: false,
@@ -126,4 +126,11 @@ test('exact registered Global reach is the only alternate path, and unavailable 
 
   const unknown = decideNativePermission(catalogue, collection, projection({ actorActionGrant: null }));
   expect(unknown.decision).toBe('unavailable');
+});
+
+// Native permission-check.sql returns `live`, including for the prepared grant path.
+test('native deadline projection admits a live grant and rejects an expired execution', () => {
+  const input = { ...collection, hasPrincipal: false };
+  expect(decideNativePermission(catalogue, input, projection({ actorActionGrant: true })).decision).toBe('allow');
+  expect(decideNativePermission(catalogue, input, projection({ actorActionGrant: true, live: false })).decision).toBe('deny');
 });
