@@ -231,7 +231,7 @@ test('phone and desktop retain immediate meaning, keyboard focus and independent
         if (locale === 'fr') {
           const chip = view.host.querySelector<HTMLButtonElement>('[data-home-filter-remove="kind"]');
           const description = [...(chip?.querySelectorAll('span') ?? [])].find(
-            (node) => node.textContent === bookDescriptions.en,
+            (node) => node.textContent === bookDescriptions?.en,
           );
           expect(description?.getAttribute('lang')).toBe('en');
           expect(view.panel().querySelector<HTMLSelectElement>('select')?.value).toBe(kind.id);
