@@ -2,6 +2,9 @@
 
 The importer owns source acquisition, run/record state, candidate journals and recovery. It writes through ordinary public APIs under caller authority; it has no privileged catalogue writer.
 
+Selected work-relation composition and its finite cost bounds are owned by
+[the franchise component](showcase-franchise.md).
+
 ## Sources, grain and rights
 
 - **Bangumi:** JSONL native subject IDs/grain; unsupported types remain skipped members. CC-BY-SA-3.0 metadata and attributed summaries; covers have separate rights.

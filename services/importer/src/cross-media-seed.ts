@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { showcaseFranchiseSelection } from './showcase-franchise.ts';
 import type { DevelopmentShowcaseContext, DevelopmentShowcaseResult } from './showcase-persona.ts';
 import { createReadStream } from 'node:fs';
 import { existsSync } from 'node:fs';
@@ -2079,6 +2080,8 @@ export type CrossMediaSeedResult = {
   episodeDiagnostics: ShowcaseEpisodeDiagnostic[];
   unresolved: { holder: string; target: string; property: string; reason: string }[];
   releaseSupersessions?: GraphEdgeEvidence[];
+  /** Current selected work rows from the existing durable graph owner, including exact reopen. */
+  workRelations?: GraphEdgeEvidence[];
   bangumiGenrePublication?: BangumiGenrePublication;
   bangumiGameGenrePublication?: BangumiGameGenrePublication;
 };
@@ -2740,6 +2743,7 @@ export async function seedCrossMedia(
       episodeDiagnostics,
       unresolved,
       releaseSupersessions: graph.evidence(releaseSupersessionDrafts),
+      workRelations: graph.evidence(graphEdges.filter((edge) => edge.table === 'subject-relations')),
     };
     const vocabulary = extras?.prepareBangumiCreatorCreditBindings
       ? await extras.prepareBangumiCreatorCreditBindings({
@@ -2954,6 +2958,7 @@ export async function seedCrossMedia(
       episodeDiagnostics,
       unresolved,
       releaseSupersessions: graph.evidence(releaseSupersessionDrafts),
+      workRelations: graph.evidence(graphEdges.filter((edge) => edge.table === 'subject-relations')),
       ...(bangumiGenrePublication ? { bangumiGenrePublication } : {}),
       ...(bangumiGameGenrePublication ? { bangumiGameGenrePublication } : {}),
     };
@@ -3065,7 +3070,7 @@ export async function runCrossMediaSeedCli(
   const input = new CrossMediaDumpFiles(values.get('--bangumi')!, values.get('--vndb')!);
   let plan = await planCrossMediaSeed(input, {
     deferVndbCharacterAppearances: true,
-    ...(options.selection ? { selection: options.selection } : {}),
+    ...(options.selection ? { selection: showcaseFranchiseSelection(options.selection) } : {}),
   });
   const characterVocabulary = await planShowcaseCharacterVocabulary(input, plan);
   const showcasePath = values.has('--showcase-state') ? resolve(values.get('--showcase-state')!) : undefined;

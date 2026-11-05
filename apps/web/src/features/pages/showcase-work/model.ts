@@ -7,7 +7,7 @@ import { bestRank, isRecord, type Stmt } from '../shared';
 import { relationItemRows } from '../relation-item-identity';
 import type { ProfileRelationWindow } from '../views';
 
-export type ShowcaseWorkKind = 'visual-novel' | 'game' | 'screen' | 'book';
+export type ShowcaseWorkKind = 'visual-novel' | 'game' | 'screen' | 'book' | 'book-series';
 
 type Statement = NonNullable<SubjectRead['subject']['statements'][string]>[number];
 type RelatedSubject = NonNullable<Related[string]>;
@@ -28,6 +28,7 @@ export function showcaseWorkKind(
 ): ShowcaseWorkKind | undefined {
   const declared = [type, ...types].filter((value): value is string => typeof value === 'string');
   if (declared.includes('wd:Q689445')) return 'visual-novel';
+  if (declared.includes('schema:BookSeries')) return 'book-series';
   if (declared.includes('schema:Book')) return 'book';
   if (declared.some(isScreenType)) return 'screen';
   if (gameReaderEntry(type ?? '', types)) return 'game';
