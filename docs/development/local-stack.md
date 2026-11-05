@@ -33,7 +33,8 @@ the first Docker image download and dataset downloads still need network access.
 
 When `WEBSITE_CONFIGURATION_FILE` selects a deployment's public registration artifact, local Auth registration,
 generated Web bindings and Web launch use its exact scopes. Setup never rewrites that artifact. Without it, scopes
-come from the mounted Kernel action catalogue. After changing registration scopes, sign in again for new consent;
+come from the mounted Kernel action catalogue. Relative artifact paths resolve from the repository root before Web
+starts in its workspace. After changing registration scopes, sign in again for new consent;
 changing origins or restarting the stack does not renew existing session authority.
 
 ## Persona and import permissions

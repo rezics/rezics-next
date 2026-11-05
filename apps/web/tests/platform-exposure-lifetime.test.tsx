@@ -67,6 +67,7 @@ const { Window } = await import(
 );
 const window = new Window({ url: 'https://site.test/en/platform/exposure' });
 window.document.documentElement.lang = 'en';
+window.document.head.innerHTML = '<link rel="canonical" href="https://site.test/en/platform/exposure">';
 const globals = {
   window,
   document: window.document,
@@ -84,6 +85,7 @@ const globals = {
   KeyboardEvent: window.KeyboardEvent,
   location: window.location,
   getComputedStyle: window.getComputedStyle.bind(window),
+  scrollTo: window.scrollTo.bind(window),
   requestAnimationFrame: window.requestAnimationFrame.bind(window),
   cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,

@@ -63,16 +63,18 @@ export function developmentAuthPageBindings(website: { AUTH_SECURITY_SCOPE_CONFI
 export function developmentWebsiteScopeConfiguration(
   mounted: { scopes: string[]; WEBSITE_SCOPES: string },
   environment: NodeJS.ProcessEnv = process.env,
-) {
+): { scopes: string[]; WEBSITE_SCOPES: string; WEBSITE_CONFIGURATION_FILE?: string } {
   if (!environment.WEBSITE_CONFIGURATION_FILE) return mounted;
-  const WEBSITE_SCOPES = websiteWorkerScopes(environment);
-  return { scopes: WEBSITE_SCOPES.split(' '), WEBSITE_SCOPES };
+  // Web starts in apps/web; retain the selected artifact across that working-directory change.
+  const WEBSITE_CONFIGURATION_FILE = resolve(root, environment.WEBSITE_CONFIGURATION_FILE);
+  const WEBSITE_SCOPES = websiteWorkerScopes({ ...environment, WEBSITE_CONFIGURATION_FILE });
+  return { scopes: WEBSITE_SCOPES.split(' '), WEBSITE_SCOPES, WEBSITE_CONFIGURATION_FILE };
 }
 
 /** Build the Web launch bindings from the same mounted website scope composition. */
 export function developmentWebsiteBindings(
   keys: Pick<DevelopmentKeys, 'website'>,
-  website: { scopes: readonly string[] },
+  website: { scopes: readonly string[]; WEBSITE_CONFIGURATION_FILE?: string },
 ) {
   return {
     AUTH_ISSUER: origins.issuer,
@@ -80,6 +82,7 @@ export function developmentWebsiteBindings(
     WEBSITE_CLIENT_ID: 'rezics-website',
     WEBSITE_CLIENT_KEY: JSON.stringify(keys.website),
     WEBSITE_SCOPES: website.scopes.join(' '),
+    ...(website.WEBSITE_CONFIGURATION_FILE ? { WEBSITE_CONFIGURATION_FILE: website.WEBSITE_CONFIGURATION_FILE } : {}),
     SITE_ORIGINS: origins.web,
     KERNEL_ORIGIN: origins.kernel,
   };

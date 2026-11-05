@@ -75,6 +75,13 @@ Every capability uses the `privacy` fixture contract from `docs/research/api-acc
 
 **Native acceptance:** `bun run --cwd services/kernel check test/access/gates/platform-gates-outcome.test.ts`.
 
+**Worker repair evidence:** Focused Web operation/lifetime regressions passed (4 tests), including a new explicit
+review after a recorded operation; local Auth binding regressions passed (16 tests), including deployment scope
+artifact preservation. Both workspace typechecks reached compilation after compiler-Docker startup retries and
+reported retained-source errors in Web community/catalogue pages and Kernel library/search/semantic dependencies.
+These worker checks do not accept the seeded persona/API/browser cycle or the original native suite; those remain
+for integration verification.
+
 ## agent-identity
 
 **User job:** A reader resolves one public page for a human, organization or software agent and follows a verified subject address to the active account handle.
