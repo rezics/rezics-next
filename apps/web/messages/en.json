@@ -11044,6 +11044,8 @@
   "library_archive_entry_upload_help": "Upload a completed V1, V2 or V3 Library archive, up to 34 MiB. The native decoder checks depth, format and counts. V4 is not supported. No changes happen on upload.",
   "library_archive_entry_scope": "Recover selected Entries, private labels, assignments, annotations and journal fields where native review supports them. Other rows remain private evidence. Nothing is published.",
   "library_archive_personal_help": "Unselected fields preserve current native values. Choose Set from archive or Clear deliberately. Native review shows current values before confirmation.",
+  "library_archive_personal_assessment_evidence": "Assessments remain evidence here. A missing assessment is not zero or a request to clear a current value.",
+  "library_archive_personal_observation_evidence": "Source observations remain evidence here. Privacy and source timestamps are not applied.",
   "library_archive_personal_incarnation": "Current Entry incarnation ID",
   "library_archive_personal_session": "Current non-retired Session ID",
   "library_archive_personal_note": "Annotation note",

@@ -10,6 +10,9 @@ Decision: Recovered annotations, source observations and occurrence assessments 
 
 Decision: Unselected fields preserve their current native values; only an explicit field-level `set` or `clear` changes a fact.
 
+Decision: until the installed generated review client publishes assessment and observation operands, the Web form
+explains their retained-evidence status without inferring assessment zero/clear or applying privacy/source timestamps.
+
 ## Evidence and supported operations
 
 `decodeLibraryArchive(bytes)` accepts completed V1, V2 and V3 manifests using exact per-version section inventories
@@ -153,7 +156,8 @@ requires raw JSON text or `{manifest, records}` upload and the exact `reviewRevi
 selected personal facts. The installed client snapshot now includes annotation and journal date/reflection operands,
 original-text upload, and immutable review-revision confirmation. It still lacks `journal.fields.assessment` and the
 source-observation review variant, including the exact current revision needed for correction. Content owns the
-generated route operands; they must come from the producer and never be handwritten. The
-[assessment client continuation](../.temp/continuation/archive-assessment-client.md) tracks prior client installation
-work; the [Web assessment and observation continuation](../.temp/continuation/archive-assessment-observation-client.md)
-tracks receiving work that depends on the missing operands.
+generated route operands; they must come from the producer and never be handwritten. The integrated native route
+already declares both branches, including correction's exact `revision`; publication into the installed client remains
+required before Web can map them. The Web form currently explains these retained-evidence limitations beside the
+affected rows. Assessment and observation mapping, addressed current readback and their mounted/native acceptance
+remain dependent on that publication.

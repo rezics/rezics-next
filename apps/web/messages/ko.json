@@ -10823,6 +10823,8 @@
   "library_archive_entry_upload_help": "완료된 V1, V2, V3 라이브러리 아카이브를 최대 34 MiB까지 업로드하세요. 네이티브 디코더가 깊이, 형식, 개수를 검증합니다. V4는 지원하지 않습니다. 업로드만으로 변경되지 않습니다.",
   "library_archive_entry_scope": "선택한 항목, 비공개 라벨, 할당, 주석과 네이티브 검토가 지원하는 일지 필드를 복구합니다. 다른 레코드는 비공개 증거로 유지합니다. 아무것도 공개하지 않습니다.",
   "library_archive_personal_help": "선택하지 않은 필드는 현재 네이티브 값을 유지합니다. 보관 값 설정 또는 지우기를 명시적으로 선택하세요. 확인 전에 네이티브 검토에서 현재 값을 보여줍니다.",
+  "library_archive_personal_assessment_evidence": "평가는 여기에서 증거로 보관됩니다. 평가가 없다고 해서 0점이거나 현재 값을 지우라는 뜻은 아닙니다.",
+  "library_archive_personal_observation_evidence": "원본 관측 정보는 여기에서 증거로 보관됩니다. 공개 범위와 원본 타임스탬프는 적용되지 않습니다.",
   "library_archive_personal_incarnation": "현재 Entry incarnation ID",
   "library_archive_personal_session": "현재 종료되지 않은 Session ID",
   "library_archive_personal_note": "주석",
