@@ -41,7 +41,9 @@ updates only settlement and marks access for refresh; it cannot authorize a read
 Creator statement and line amounts use the same recorded-money formatter. A missing or unknown unit keeps the signed
 minor amount and the unknown-unit message; it is never replaced by a generic unavailable label or a current currency
 exponent. HTTP `markPaid` uses the Kernel command clock, matching royalty recording, so an authorized external
-reference can close only a prior UTC month. The seeded creator-statement journey is the native host walk
+reference can close only a prior UTC month. The native web stack keeps that clock on wall time until a
+test advances it, so governance grants that open at bootstrap time remain current through fixture setup.
+The seeded creator-statement journey is the native host walk
 in `apps/web/tests/native/native-creator-statements.host.test.ts`, plus the focused statement and
 payment-reference unit files; it is not a mock server or fixture application.
 

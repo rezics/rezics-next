@@ -714,8 +714,10 @@ async function startStack(): Promise<
     // The semantic harness reads DATABASE_URL during module evaluation.
     const { createSemanticDriver } = await import('../../../../services/kernel/test/semantic/outcome-driver.ts');
     const { createKernel } = await import('../../../../services/kernel/src/http/kernel.ts');
-    let kernelNow = Date.now();
-    const kernelClock = () => new Date(kernelNow);
+    // Stay on wall time until a test advances the clock. Bootstrap grants open at wall-clock
+    // time; a clock frozen before that setup makes those grants not yet current.
+    let kernelNow: number | undefined;
+    const kernelClock = () => new Date(kernelNow ?? Date.now());
     const commerce = process.env.NATIVE_WEB_COMMERCE === '1' ? readCommerceConfig(process.env) : null;
     const { readSearchConfig } = await import('../../../../services/kernel/src/search/work.ts');
     const searchConfig = readSearchConfig({ ...process.env, KERNEL_SEARCH_PREFIX: searchPrefix });
@@ -829,6 +831,7 @@ async function startStack(): Promise<
         return kernel;
       },
       {
+        clock: kernelClock,
         linkProjection: 'external',
         strictCleanup: true,
       },
@@ -1075,7 +1078,7 @@ async function startStack(): Promise<
         advanceNativeAuthClock(seconds);
       },
       async advanceKernelClock(seconds) {
-        kernelNow += seconds * 1000;
+        kernelNow = (kernelNow ?? Date.now()) + seconds * 1000;
       },
       async enableAccountOperations() {
         const probe = await authHandler(
