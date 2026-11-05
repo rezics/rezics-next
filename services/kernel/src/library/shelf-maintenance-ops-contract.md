@@ -195,8 +195,9 @@ enter DBOS payloads. This protocol adds neither an input cap nor a per-type sour
 ## Cost
 
 Decision: compose costs at the existing request/page/recovery/segment owner, preserving phase semantics and replay;
-use the existing native one-attempt maintenance policy and DBOS's eight attempts without renewing the deadline.
-There is no finite whole-account rebuild declaration.
+select Core's existing one-attempt maintenance hook and DBOS's eight attempts without renewing the deadline.
+Use causal additions to the existing native maintenance/page/activity suites, retaining growth and Search receiving.
+There is no finite whole-account rebuild declaration; erasure retains its separate command retry and worker policy.
 
 The closed declarations in [shelf-maintenance-bounds.ts](shelf-maintenance-bounds.ts) retain literal SQL and original
 serialized binds before dispatch. Schema-specific projection shapes account for JSON escaping, UUIDs, bigint decimals,
@@ -221,7 +222,7 @@ A native size point in the same RR snapshot prices an unbounded full Type/addres
 changes neither source meaning nor authorization. Initial source bytes and root comparisons use exact native lengths;
 staged continuation stays at 100 edges of 256 bytes. Reservation publication prices whole-value work using the native
 reservation length; retirement measures at most 100 indexed old-generation lengths before deleting them. These scalar
-lengths are cost operands, never source/currentness evidence. Original and current identities still use the existing
+lengths are cost operands, never source/currentness evidence. Historical null staging bytes still charge their full text. Original and current identities still use the existing
 independent observations, and the same private transaction-bound allocator admission repeats every native check.
 
 Page and segment limits remain 100, command deadline 5,000ms, workflow 4,096 bytes, cursor 2,048 bytes, edge 256 bytes

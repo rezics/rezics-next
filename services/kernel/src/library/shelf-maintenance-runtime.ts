@@ -628,9 +628,12 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
       tx: CommandTransaction,
       context: { transactionId: string; time: import('../command/command.ts').AuthoritativeTime },
     ) => Promise<CommandResult<T>>,
+    policy: 'rebuild' | 'purge' = 'rebuild',
   ) {
-    const declaration = shelfMaintenanceCommandPlan(pool, options);
     const dispatch = () => ('principal' in options ? runCommand(pool, options, body) : runCommand(pool, options, body));
+    // Erasure retains its own command retry policy and cost owner.
+    if (policy === 'purge') return dispatch();
+    const declaration = shelfMaintenanceCommandPlan(pool, options);
     return runLibraryCommand(
       () => withSingleCommandAttempt(dispatch),
       (run) => consumeShelfMaintenance('command', declaration.total, run),
@@ -760,6 +763,7 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
         const requested = await createRun(tx, owner, gate, 'purge');
         return { value: requested, events: [event(owner)] };
       },
+      'purge',
     );
     return result.value;
   }
@@ -770,7 +774,10 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
   ): Promise<ShelfMaintenanceReceipt> {
     const owner = { route: binding.route, accountId: binding.accountId };
     const args = { ...runArgs(owner, binding.runId), epoch: BigInt(binding.epoch), sequence: BigInt(binding.sequence) };
-    const header = await withConnection(pool, (client) => stepRead.run(client, args));
+    const { header, scheduledRun } = await withConnection(pool, async (client) => {
+      const header = await stepRead.run(client, args);
+      return { header, scheduledRun: header ? await runRead.run(client, runArgs(owner, binding.runId)) : null };
+    });
     if (!header) throw new TypeError('Unknown native shelf maintenance step');
     const cursor = cursorOf(header);
     let admitted: { gate: Gate; run: Run } | undefined;
@@ -778,13 +785,12 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
     // On replay the applied header supplies that exact commitment without a source read.
     let typeInput: Awaited<ReturnType<typeof prepareType>> | undefined;
     if (header.inputIdentity === null && (header.phase === 'types' || header.phase === 'validate')) {
-      const current = await withConnection(pool, (c) => runRead.run(c, runArgs(owner, binding.runId)));
       if (
-        current &&
-        !current.cancelled &&
-        BigInt(current.epoch) === args.epoch &&
-        BigInt(current.sequence) === args.sequence &&
-        (header.phase === 'types' || current.kind === 'backfill')
+        scheduledRun &&
+        !scheduledRun.cancelled &&
+        BigInt(scheduledRun.epoch) === args.epoch &&
+        BigInt(scheduledRun.sequence) === args.sequence &&
+        (header.phase === 'types' || scheduledRun.kind === 'backfill')
       )
         typeInput = await prepareType(deps, owner, header, binding.runId);
     }
@@ -1110,6 +1116,7 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
           };
           return { value, events: [event(owner)] };
         },
+        scheduledRun?.kind === 'purge' ? 'purge' : 'rebuild',
       );
       return outcome.value;
     } catch (error) {
@@ -1176,16 +1183,20 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
         );
       await enqueueShelfMaintenance(client!, binding, BigInt(row.attempt).toString());
       // Conditional acknowledgement cannot erase a concurrently advanced successor intent.
-      await command({ partition: partitionOf(owner.route), deadline: workStepDeadline(), clock }, async (tx) => {
-        await ack.run(tx, {
-          ...runArgs(owner, row.runId),
-          epoch: BigInt(row.epoch),
-          sequence: BigInt(row.sequence),
-          segment: row.segment,
-          attempt: BigInt(row.attempt),
-        });
-        return noEffect(null);
-      });
+      await command(
+        { partition: partitionOf(owner.route), deadline: workStepDeadline(), clock },
+        async (tx) => {
+          await ack.run(tx, {
+            ...runArgs(owner, row.runId),
+            epoch: BigInt(row.epoch),
+            sequence: BigInt(row.sequence),
+            segment: row.segment,
+            attempt: BigInt(row.attempt),
+          });
+          return noEffect(null);
+        },
+        row.kind === 'purge' ? 'purge' : 'rebuild',
+      );
       enqueued.push(binding);
     }
     const last = rows.at(-1);

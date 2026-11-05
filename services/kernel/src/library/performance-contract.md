@@ -128,8 +128,10 @@ permits refill, account-history scans, cap increases or a second native admissio
 # Shelf rebuild invocation custody
 
 Decision: compose costs at the existing request/page/recovery/segment owner, preserve exact Core replay and
-publication/retirement, and use the existing native one-attempt maintenance policy beneath DBOS's eight attempts.
-Retain one original five-second deadline through released preparation and the one conflict reconciliation.
+publication/retirement, and select Core's existing one-attempt maintenance hook beneath DBOS's eight attempts.
+Retain one original five-second deadline through released preparation and the one conflict reconciliation. Use the
+existing maintenance/page/activity suites for receiving, adding only causal interruption, source-change, replay and
+retirement assertions; retain their growth scales and all five Search suites.
 
 `shelf-maintenance-bounds.ts` owns immutable nine-axis SQL and command declarations. Each dispatch retains literal SQL,
 serialized original operands, schema-specific escaped projections, logical result limit and examined-work bound.
@@ -158,7 +160,7 @@ commit together; rollback leaves the same resumable header. Only whole-build nat
 Old-generation counts/reservations and scratch retire through their bounded phases before the terminal receipt.
 
 Page100 and segment100 bound invocations, not future durable pages or a whole-account rebuild. Purge remains the
-separate erasure owner's policy. Native receiving must exercise interruption/retry, full-page EOF, source changes,
+separate erasure owner's command retry and worker policy. Native receiving must exercise interruption/retry, full-page EOF, source changes,
 duplicate/out-of-order replay, publication and acknowledged retirement with unrelated population growth. Compiler
 output and arithmetic declarations are not receiving passes; affected Kernel/root receiving remains required after
 integration. Search's five receiving suites remain unchanged.

@@ -1,8 +1,9 @@
 import type { ShelfReadGenerationReader } from './shelf-contract.ts';
 import gateReadQuery from './shelf-maintenance-gate-read.sql';
 import { shelfMaintenanceQuery } from './shelf-maintenance-bounds.ts';
-const gateRead = shelfMaintenanceQuery(gateReadQuery);
 import { ShelfReadUnavailableError } from './shelf-reader-unavailable.ts';
+
+const gateRead = shelfMaintenanceQuery(gateReadQuery);
 
 /** Indexed current-state probe, after owner admission. Absence requests guarded initialization, never empty. */
 export const shelfNeedsInitialization = async (
