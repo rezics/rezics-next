@@ -58,7 +58,9 @@ function decodeAddress(value: string): string | undefined {
   try {
     const standard = value.replaceAll('-', '+').replaceAll('_', '/');
     const binary = atob(standard + '='.repeat((4 - (standard.length % 4)) % 4));
-    return new TextDecoder('utf-8', { fatal: true }).decode(Uint8Array.from(binary, (character) => character.charCodeAt(0)));
+    return new TextDecoder('utf-8', { fatal: true }).decode(
+      Uint8Array.from(binary, (character) => character.charCodeAt(0)),
+    );
   } catch {
     return;
   }

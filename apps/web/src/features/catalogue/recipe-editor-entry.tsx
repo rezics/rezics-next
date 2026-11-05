@@ -1,10 +1,6 @@
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { catalogueEntries } from './catalogue-entry';
-import {
-  recipeCorrectionHref,
-  recipePublicSubjectHref,
-  type RecipeVisit,
-} from './recipe-current-visit';
+import { recipeCorrectionHref, recipePublicSubjectHref, type RecipeVisit } from './recipe-current-visit';
 
 export function RecipeEditorEntry({
   id,
@@ -24,12 +20,7 @@ export function RecipeEditorEntry({
   const entry = catalogueEntries.recipe({ id, label, locale });
   const returnHref =
     id && context
-      ? recipePublicSubjectHref(
-          { id, label: label ?? '' },
-          locale,
-          { context, ...(realm ? { realm } : {}) },
-          previous,
-        )
+      ? recipePublicSubjectHref({ id, label: label ?? '' }, locale, { context, ...(realm ? { realm } : {}) }, previous)
       : undefined;
   const visit: RecipeVisit | undefined =
     id && context
@@ -42,9 +33,7 @@ export function RecipeEditorEntry({
   return (
     <a
       href={
-        id && visit
-          ? recipeCorrectionHref({ id, label: label ?? '' }, locale, visit satisfies RecipeVisit)
-          : entry.href
+        id && visit ? recipeCorrectionHref({ id, label: label ?? '' }, locale, visit satisfies RecipeVisit) : entry.href
       }
       className={buttonVariants({ variant: 'outline', size: 'sm' })}
     >

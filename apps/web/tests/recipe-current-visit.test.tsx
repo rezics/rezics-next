@@ -54,14 +54,18 @@ test('recipe public return is bounded to one prior visit and admits only the exa
   expect(parseRecipeVisit(new URL(route, 'https://site.test').search, 'en', recipeId)).toEqual({ valid: true, visit });
 
   const occurrence = { property: 'schema:recipeIngredient', statement, holder: recipeId };
-  const href = recipeCurrentReturnHref(returnHref, {
-    recipe: recipeId,
-    context,
-    realm,
-    occurrence,
-    focus: 'keyboard',
-    visit: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e23',
-  }, 'en')!;
+  const href = recipeCurrentReturnHref(
+    returnHref,
+    {
+      recipe: recipeId,
+      context,
+      realm,
+      occurrence,
+      focus: 'keyboard',
+      visit: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e23',
+    },
+    'en',
+  )!;
   const intent = parseRecipeCurrentReturn(href, 'en');
   expect(intent.kind).toBe('valid');
   if (intent.kind !== 'valid') throw new Error('Expected a public recipe return');
@@ -75,14 +79,18 @@ test('recipe public return is bounded to one prior visit and admits only the exa
   expect(recipeCurrentReturnState(intent.value, { ...observed, context: candidateContext })).toBe('changed');
   expect(recipeCurrentReturnState(intent.value, { ...observed, realm: context })).toBe('changed');
   expect(recipeCurrentReturnState(intent.value, { ...observed, occurrences: [] })).toBe('removed');
+  expect(recipeCurrentReturnState(intent.value, { ...observed, subject: { id: recipeId, type: 'schema:Book' } })).toBe(
+    'unsupported',
+  );
   expect(
-    recipeCurrentReturnState(intent.value, { ...observed, subject: { id: recipeId, type: 'schema:Book' } }),
-  ).toBe('unsupported');
-  expect(
-    parseRecipeCurrentReturn(`${href}&recipeReturn=${new URL(href, 'https://site.test').searchParams.get('recipeReturn')}`, 'en'),
+    parseRecipeCurrentReturn(
+      `${href}&recipeReturn=${new URL(href, 'https://site.test').searchParams.get('recipeReturn')}`,
+      'en',
+    ),
   ).toEqual({ kind: 'invalid' });
-  expect(parseRecipeCurrentReturn(`/fr/subjects/${recipeId}/lentil-soup${new URL(href, 'https://site.test').search}`, 'en'))
-    .toEqual({ kind: 'invalid' });
+  expect(
+    parseRecipeCurrentReturn(`/fr/subjects/${recipeId}/lentil-soup${new URL(href, 'https://site.test').search}`, 'en'),
+  ).toEqual({ kind: 'invalid' });
 });
 
 test('native recipe admission sends the selected Context and rejects mismatched replies before offering editing', async () => {
@@ -166,7 +174,8 @@ test('mounted recipe intent selects the exact duplicate occurrence and explains 
   const user = userEvent.setup({ document: window.document });
   const { RecipeEditor } = await import('../src/features/catalogue/recipe-editor-view');
   const { RecipeEditorEntry } = await import('../src/features/catalogue/recipe-editor-entry');
-  const { RecipeCurrentVisitReturn, RecipeVisitNotice } = await import('../src/features/catalogue/recipe-current-visit-view');
+  const { RecipeCurrentVisitReturn, RecipeVisitNotice } =
+    await import('../src/features/catalogue/recipe-current-visit-view');
   const { CandidateReaderBoundary } = await import('../src/subject/candidate-lifetime');
   const { m } = await import('../src/paraglide/messages.js');
   const host = window.document.createElement('div');
@@ -294,12 +303,7 @@ test('mounted recipe intent selects the exact duplicate occurrence and explains 
     if (keyboard.kind !== 'valid') throw new Error('Expected a keyboard return intent');
     const renderReturn = (state: 'ready' | 'changed') => (
       <>
-        <RecipeCurrentVisitReturn
-          locale="en"
-          address={keyboardHref}
-          intent={keyboard.value}
-          state={state}
-        />
+        <RecipeCurrentVisitReturn locale="en" address={keyboardHref} intent={keyboard.value} state={state} />
         <button type="button">Keep focus</button>
         <article data-recipe-current-statement={statement} />
       </>

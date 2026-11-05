@@ -782,10 +782,7 @@ export function SubjectPage({
         return `${url.pathname}${url.search}${url.hash}`;
       })()
     : '';
-  const recipeReturnInput = useMemo(
-    () => parseRecipeCurrentReturn(currentAddress, locale),
-    [currentAddress, locale],
-  );
+  const recipeReturnInput = useMemo(() => parseRecipeCurrentReturn(currentAddress, locale), [currentAddress, locale]);
   const recipeReturn = recipeReturnInput.kind === 'valid' ? recipeReturnInput.value : undefined;
   const recipeReturnState = recipeReturn
     ? recipeCurrentReturnState(
@@ -809,7 +806,12 @@ export function SubjectPage({
       ? (() => {
           const identity = { id: read.subject.id, label: subjectPageTitle(page, locale) };
           const context = page.context?.id ?? read.subject.context;
-          const returnHref = recipePublicSubjectHref(identity, locale, { context, ...(realm ? { realm } : {}) }, visitReturn);
+          const returnHref = recipePublicSubjectHref(
+            identity,
+            locale,
+            { context, ...(realm ? { realm } : {}) },
+            visitReturn,
+          );
           return recipeCorrectionHref(identity, locale, {
             context,
             ...(realm ? { realm } : {}),

@@ -328,8 +328,7 @@ function RecipeEditorLive({
     !!selectedOccurrence &&
     selectedOccurrence.holder === read.public.subject.id &&
     (read.public.subject.statements[selectedOccurrence.property] ?? []).some(
-      (source) =>
-        source.id === selectedOccurrence.statement && spoilerLevel(source) <= defaultReader.spoilerLevel,
+      (source) => source.id === selectedOccurrence.statement && spoilerLevel(source) <= defaultReader.spoilerLevel,
     );
   useLayoutEffect(() => {
     if (!occurrenceFocus.current.pending || !read) return;
@@ -759,20 +758,21 @@ function RecipeEditorLive({
           holder: id,
         }
       : undefined;
-  const acknowledgedReturnHref = returnedRow?.returnVisit && !visit?.returnUnsupported
-    ? recipeCurrentReturnHref(
-        visit?.returnHref ?? currentHref,
-        {
-          recipe: id ?? read?.public?.subject.id ?? '',
-          context: visit?.context ?? context,
-          ...(visit?.realm ? { realm: visit.realm } : {}),
-          ...(returnOccurrence ? { occurrence: returnOccurrence } : {}),
-          focus: returnedRow.sourceFocus ?? 'pointer',
-          visit: returnedRow.returnVisit,
-        },
-        locale,
-      )
-    : undefined;
+  const acknowledgedReturnHref =
+    returnedRow?.returnVisit && !visit?.returnUnsupported
+      ? recipeCurrentReturnHref(
+          visit?.returnHref ?? currentHref,
+          {
+            recipe: id ?? read?.public?.subject.id ?? '',
+            context: visit?.context ?? context,
+            ...(visit?.realm ? { realm: visit.realm } : {}),
+            ...(returnOccurrence ? { occurrence: returnOccurrence } : {}),
+            focus: returnedRow.sourceFocus ?? 'pointer',
+            visit: returnedRow.returnVisit,
+          },
+          locale,
+        )
+      : undefined;
   const Workspace = id ? 'div' : 'form';
   return (
     <article className="mx-auto min-w-0 w-full max-w-3xl space-y-6 px-4 py-8 [overflow-wrap:anywhere] sm:px-6 [&_label]:min-w-0 [&_label]:max-w-full [&_label]:flex-wrap">
@@ -1061,39 +1061,39 @@ function RecipeEditorLive({
                               className={recipeActionClassName}
                               disabled={rows.some((row) => row.source?.id === source.id)}
                               onClick={(event) => {
-                              const current = fieldAdmission.current;
-                              if (
-                                !lifetime.active() ||
-                                !isReadEpochCurrent(readEpoch) ||
-                                !current.read ||
-                                current.read !== read ||
-                                !current.read.fields.includes(field) ||
-                                current.rows.some((row) => row.source?.id === source.id)
-                              )
-                                return;
-                              const admittedSource = (current.read.public?.subject.statements[field] ?? []).find(
-                                (statement) => statement.id === source.id,
-                              );
-                              const definition = current.read.release.properties[field];
-                              if (!admittedSource || !definition) return;
-                              const row = {
-                                id: crypto.randomUUID(),
-                                source: admittedSource,
-                                sourceFocus: event.detail === 0 ? ('keyboard' as const) : ('pointer' as const),
-                                definition: structuredClone(definition),
-                                statement: statementInput(admittedSource),
-                              };
-                              current.rows = [...current.rows, row];
-                              setLatestCorrectionRow(row.id);
-                              orientSourceCorrection(
-                                row.id,
-                                admittedSource.id,
-                                readEpoch,
-                                event.currentTarget,
-                                event.detail === 0,
-                              );
-                              setRows(current.rows);
-                            }}
+                                const current = fieldAdmission.current;
+                                if (
+                                  !lifetime.active() ||
+                                  !isReadEpochCurrent(readEpoch) ||
+                                  !current.read ||
+                                  current.read !== read ||
+                                  !current.read.fields.includes(field) ||
+                                  current.rows.some((row) => row.source?.id === source.id)
+                                )
+                                  return;
+                                const admittedSource = (current.read.public?.subject.statements[field] ?? []).find(
+                                  (statement) => statement.id === source.id,
+                                );
+                                const definition = current.read.release.properties[field];
+                                if (!admittedSource || !definition) return;
+                                const row = {
+                                  id: crypto.randomUUID(),
+                                  source: admittedSource,
+                                  sourceFocus: event.detail === 0 ? ('keyboard' as const) : ('pointer' as const),
+                                  definition: structuredClone(definition),
+                                  statement: statementInput(admittedSource),
+                                };
+                                current.rows = [...current.rows, row];
+                                setLatestCorrectionRow(row.id);
+                                orientSourceCorrection(
+                                  row.id,
+                                  admittedSource.id,
+                                  readEpoch,
+                                  event.currentTarget,
+                                  event.detail === 0,
+                                );
+                                setRows(current.rows);
+                              }}
                             >
                               {m.recipe_correct({}, o)}
                             </Button>
