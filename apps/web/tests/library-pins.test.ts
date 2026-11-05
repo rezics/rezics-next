@@ -155,7 +155,11 @@ test('Pins reads keep permission, closure, preparation and transport distinct', 
   const document = { paths: { '/v1/libraryPins': { get: { operationId: 'library_pin.list' } } } };
   const scenarios = [
     ['openapi', { error: { status: 403 } }, { state: 'denied' }],
-    ['openapi', { error: { status: 403, value: { code: 'platform_closed' } } }, { state: 'closed', platformClosed: true }],
+    [
+      'openapi',
+      { error: { status: 403, value: { code: 'platform_closed' } } },
+      { state: 'closed', platformClosed: true },
+    ],
     ['list', { error: { status: 403 } }, { state: 'denied' }],
     ['list', { error: { status: 403, value: { code: 'platform_closed' } } }, { state: 'closed', platformClosed: true }],
     ['list', new PlatformClosedError(403, { code: 'platform_closed' }), { state: 'closed', platformClosed: true }],
