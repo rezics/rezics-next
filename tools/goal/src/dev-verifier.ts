@@ -184,16 +184,18 @@ export function projectSourceInterval(
   return interval;
 }
 function landingTasks(store: Pick<WorkerStore, 'tasks'>, interval: Pick<SourceInterval, 'landed'>): Task[] {
-  return store.tasks().filter(
-    (task) =>
-      ['integrated', 'merged'].includes(task.state) &&
-      (task.integratedCommit ?? task.mergedCommit) &&
-      [...(task.integratedCommits ?? []), task.integratedCommit ?? task.mergedCommit!].some((commit) =>
-        interval.landed.has(commit),
-      ) &&
-      task.brief.kind !== undefined &&
-      !skippedKinds.has(task.brief.kind),
-  );
+  return store
+    .tasks()
+    .filter(
+      (task) =>
+        ['integrated', 'merged'].includes(task.state) &&
+        (task.integratedCommit ?? task.mergedCommit) &&
+        [...(task.integratedCommits ?? []), task.integratedCommit ?? task.mergedCommit!].some((commit) =>
+          interval.landed.has(commit),
+        ) &&
+        task.brief.kind !== undefined &&
+        !skippedKinds.has(task.brief.kind),
+    );
 }
 export function projectVerifierLandings(
   cwd: string,
@@ -240,8 +242,7 @@ function taskCommits(task: Task, interval: SourceInterval): string[] {
 }
 function filesInCommits(interval: SourceInterval, commitList: readonly string[]): string[] {
   const files = new Set<string>();
-  for (const commit of commitList)
-    for (const file of interval.filesByCommit.get(commit) ?? []) files.add(file);
+  for (const commit of commitList) for (const file of interval.filesByCommit.get(commit) ?? []) files.add(file);
   return [...files];
 }
 function recordVerified(
@@ -264,11 +265,7 @@ function recordVerified(
     });
   }
 }
-function createChecks(
-  settings: Settings,
-  history: VerifierLandings,
-  candidate = history.interval.target,
-): Check[] {
+function createChecks(settings: Settings, history: VerifierLandings, candidate = history.interval.target): Check[] {
   const checkout = settings.mainCheckout;
   const files = changedFiles(checkout, history.interval.base, history.interval.target);
   if (!files.length) return [];
@@ -1685,14 +1682,7 @@ export async function verifyDev(options: DevVerifierOptions): Promise<void> {
       return;
     }
     if (bootFailed) return;
-    advanceVerified(
-      settings,
-      store,
-      verified,
-      finalHead === dev ? dev : finalHead,
-      finalHistory,
-      finalPassedTasks,
-    );
+    advanceVerified(settings, store, verified, finalHead === dev ? dev : finalHead, finalHistory, finalPassedTasks);
   } catch (error) {
     if (error instanceof LeaseHeldError) return;
     throw error;
