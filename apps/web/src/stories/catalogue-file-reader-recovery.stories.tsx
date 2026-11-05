@@ -6,7 +6,7 @@ import {
   type CatalogueFileReaderVisit,
 } from '../features/catalogue/catalogue-file-reader/model';
 import { CatalogueFileReader } from '../features/catalogue/catalogue-file-reader/reader';
-import { CatalogueFileProfileContextUnavailable } from '../features/catalogue/catalogue-file-profile/session';
+import { CatalogueFileProfileContextUnavailable } from '../features/catalogue/catalogue-file-profile/context-unavailable';
 import { catalogueFileGlobalHref } from '../features/catalogue/catalogue-file-profile/origin';
 import { catalogueFileProfileFixture, catalogueFile } from '../kernel/fake/catalogue-file-profile';
 import { AppShell } from '../shell/shell';
