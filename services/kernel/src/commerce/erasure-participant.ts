@@ -1,7 +1,7 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { Pool } from 'pg';
 import { acknowledgeErasure, resolveRetention, type RetentionException } from '../access/erasure.ts';
-import { noEffect, runCommand } from '../command/command.ts';
+import { authoritativeTimeValue, noEffect, runCommand } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { readHistoryOwnerCoverage } from '../history/receiving.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -138,11 +138,11 @@ export async function prepareCommerceOrderRetention(pool: Pool, input: { orderId
       },
     },
     async (tx, { time }) => {
-      if (input.expiresAt.getTime() <= time.getTime())
+      if (Date.parse(expiresAt) <= Date.parse(authoritativeTimeValue(time)))
         throw new Error('Native Commerce retention expiry must be after configuration');
-      const owner = await readRetentionOwner.run(tx, ownerKey);
+      const owner = (await readRetentionOwner.run(tx, ownerKey))[0];
       if (!owner) throw new Error('Order retention configuration requires a genuine active native order');
-      const prior = await listRetentionPolicy.run(tx, { route, account_id: owner.buyerAccountId });
+      const prior = (await listRetentionPolicy.run(tx, { route, account_id: owner.buyerAccountId }))[0];
       if (
         prior &&
         (prior.purpose !== NATIVE_TEST_ORDER_RETENTION_PURPOSE ||
@@ -157,11 +157,11 @@ export async function prepareCommerceOrderRetention(pool: Pool, input: { orderId
         purpose: NATIVE_TEST_ORDER_RETENTION_PURPOSE,
         expires_at: expiresAt,
       });
-      const retained = await readRetentionPolicy.run(tx, {
+      const retained = (await readRetentionPolicy.run(tx, {
         route,
         order_id: input.orderId,
         account_id: owner.buyerAccountId,
-      });
+      }))[0];
       if (
         !retained ||
         retained.purpose !== NATIVE_TEST_ORDER_RETENTION_PURPOSE ||
@@ -220,20 +220,21 @@ export async function advanceCommerceErasure(pool: Pool, accountId: string): Pro
       if (progress.phase === 'none') return noEffect('none' as const);
       if (progress.phase === 'pending') return noEffect('pending' as const);
       if (progress.phase === 'retained') {
+        const now = authoritativeTimeValue(time);
         if (
           progress.retentionExpiresAt !== null &&
-          Date.parse(progress.retentionExpiresAt) <= time.getTime()
+          Date.parse(progress.retentionExpiresAt) <= Date.parse(now)
         ) {
           const retained = await pageRetained.run(tx, {
             ...key,
             after: progress.cursor,
-            now: time.toISOString(),
+            now,
           });
           if (retained.length) {
             const removed = await purgeRetained.run(tx, {
               ...key,
               ids: retained.map((row) => row.id),
-              now: time.toISOString(),
+              now,
             });
             if (removed.length !== retained.length) throw new Error('Commerce retained-order purge was incomplete');
           }
