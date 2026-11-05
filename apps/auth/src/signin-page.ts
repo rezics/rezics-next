@@ -1,4 +1,5 @@
 import { privateAuthRead } from './private-auth-read';
+import { readJsonBounded } from './private-auth-json';
 
 export type SignInPageViewer = { kind: 'signed-out' } | { kind: 'signed-in'; account_id: string; email: string | null };
 
@@ -39,7 +40,7 @@ export async function loadSignInPage(query: string, origin: string, caller?: Abo
         signal,
       });
       if (response.status !== 200) return null;
-      return parseSignInPage(await readJsonBounded(response), origin);
+      return parseSignInPage(await readJsonBounded(response, maxResponseBytes, signal), origin);
     }, caller);
     return page ? { kind: 'ready', page } : { kind: 'unavailable' };
   } catch {
@@ -132,34 +133,6 @@ export function parseSignInPage(value: unknown, origin: string): SignInPage | nu
 
 export function canContinueAsCurrentAccount(page: SignInPage): boolean {
   return page.viewer.kind === 'signed-in' && !page.continuation.requires_sign_in;
-}
-
-async function readJsonBounded(response: Response): Promise<unknown> {
-  const announced = Number(response.headers.get('content-length'));
-  if (Number.isSafeInteger(announced) && announced > maxResponseBytes)
-    throw new Error('Sign-in page response too large');
-  const reader = response.body?.getReader();
-  if (!reader) throw new Error('Sign-in page response is empty');
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      size += value.byteLength;
-      if (size > maxResponseBytes) throw new Error('Sign-in page response too large');
-      chunks.push(value);
-    }
-  } finally {
-    await reader.cancel().catch(() => {});
-  }
-  const bytes = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)) as unknown;
 }
 
 function record(value: unknown): value is Record<string, unknown> {

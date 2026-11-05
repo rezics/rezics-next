@@ -100,10 +100,9 @@ and can continue or open the existing sign-in form to switch accounts. A `prompt
 interactive sign-in. The projection is advice only; `/authorize` and `/signin` still evaluate the current native
 session and request when used.
 
-The page read accepts at most 4,096 UTF-8 query bytes and returns at most 16 KiB. It projects two fixed method flags,
-zero or one current viewer, and at most one account identity row sought by its full user primary key. It sends no
-credential inventory or entered email. An Auth or Access read failure returns an unavailable page with a retry; it
-never becomes an empty method list or a signed-out result inferred from a transport failure.
+The page read accepts 4,096 UTF-8 query bytes and returns at most 16 KiB: two fixed method flags, at most one current
+viewer and one same-origin continuation, with one exact user-key identity read. It sends no credential inventory
+or entered email. Auth/Access failure offers Retry, never inferred sign-out or an empty method list.
 
 The sign-in form has labelled email and password fields with password-manager autocomplete. `src/sign-in.ts` holds the
 provisional client id (`login`) and scope (`[]`). It uses the shared `src/api.ts` client to send JSON to same-origin
@@ -350,10 +349,16 @@ development. Auth's response returns unchanged, without page headers.
 
 ## Private review reads
 
-each private session, consent and inventory read has a five-second deadline through response-body
-completion and browser BFF transport, preserving caller cancellation. Failures reuse the localized unavailable and
-explicit read-retry controls for the current page/account/selection; they never replay a mutation. Independent
-inventories keep their own availability, and existing page generations retire old completions.
+Private reads keep one five-second deadline through headers, body and BFF delivery, caller cancellation,
+unavailable/Retry, independent inventory availability and generation-based retirement. They never retry writes.
+
+`private-auth-json.ts` counts bytes before retaining chunks, then performs fatal UTF-8 decoding and JSON parsing.
+It rejects announced excess, checks dishonest/missing lengths and cancels excess/abort without awaiting cleanup.
+Errors disclose no body excerpts. Sign-in keeps its native 16,384-byte allowance, five-second full-call bound and
+request count: zero extra requests.
+
+Security allowances require native bounds for session `user_agent` length and mounted `siteActions` scope count
+before migrating decodes. Keep valid configured names/scopes, native DTO/account checks, row caps and classifications.
 
 ## Security
 
@@ -923,15 +928,12 @@ prefix. Auth's own issuer endpoints stay on that host without passing through th
 
 ## Cost
 
-The static page frames make zero K, D, R and A calls. Development forwarding makes one Auth request per forwarded
-request, streams both bodies, and buffers nothing. Both costs are constant per request.
-The sign-in page makes one Auth `POST /signin/page` read on entry or BFCache restoration, and one per explicit
-Retry or Review current session. Switching alone adds no page read. Review never chains reads or retries authentication. A password
-sign-in adds one `POST /signin` and one navigation on success. A passkey sign-in remains two Auth requests and one
-navigation on success. The page read adds no kernel calls and carries no preparation token into submission.
-Recovery makes no kernel reads and adds one Auth request per submit.
-Auth pages make no kernel reads. Step-up is one `POST /signin` per submit.
-Sign-up makes no kernel reads. A successful submit is one browser `POST /signup` and one browser `POST /signin`.
+Static frames make no service calls. Development forwarding streams without buffering: one Auth request per
+forwarded request. Auth pages make no kernel calls. Sign-in reads `POST /signin/page` once on entry/BFCache return
+or explicit Retry/Review. Switching adds no read; review never retries authentication. Password sign-in adds one
+`POST /signin` and navigation; passkey sign-in adds two Auth requests and navigation. No preparation token enters
+submission. Recovery and step-up each make one Auth request per submit. Successful sign-up makes one browser
+`POST /signup` and one browser `POST /signin`.
 
 ### Account home
 
