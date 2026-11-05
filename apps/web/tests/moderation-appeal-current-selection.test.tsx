@@ -10,10 +10,12 @@ mock.module('../src/threads/authoring-departure', () => ({
   useAuthoringDeparture: () => ({ release() {} }),
 }));
 const sent: ResolutionCommand[] = [];
+let acknowledge = false;
 mock.module('../src/moderation/actions', () => ({
   actionOnReport: async () => ({ ok: true }),
   actionOnAppeal: async ({ data }: { data: ResolutionCommand }) => {
     sent.push(data);
+    if (acknowledge) return { state: 'resolved', outcome: data.outcome, statement: data.statement };
     throw new Error('Response lost');
   },
 }));
@@ -134,6 +136,7 @@ afterEach(async () => {
   cache?.clear();
   host?.remove();
   sent.length = 0;
+  acknowledge = false;
 });
 afterAll(async () => {
   await browser.happyDOM.close();
@@ -236,6 +239,7 @@ test.each([false, true])('mounted exact retry receives covered cross-home select
   const { createKernelClient } = await import('@rezics/client');
   const { readWorkbenchPage } = await import('../src/moderation/workbench-queue/read');
   const source = { partition: 3, epoch: 4, position: '70' };
+  let nativeResolved = resolved;
   const requests: string[] = [];
   const client = createKernelClient('https://kernel.test', {
     fetch: async (input, init) => {
@@ -261,7 +265,7 @@ test.each([false, true])('mounted exact retry receives covered cross-home select
           selectedAppeal: {
             ...selected,
             source,
-            resolution: resolved
+            resolution: nativeResolved
               ? { outcome: 'upheld', statement: 'Native retained outcome.', resolvedAt: selected.createdAt }
               : null,
             resolutionCommand: {
@@ -288,4 +292,45 @@ test.each([false, true])('mounted exact retry receives covered cross-home select
   expect(new Set(requests).size).toBe(1);
   expect(new URL(requests[0]!).searchParams.get('inspect')).toBe('appeal');
   expect(new URL(requests[0]!).searchParams.get('cursor')).toBe('captured');
+  if (resolved) return;
+
+  const { createRequire } = await import('node:module');
+  const storybookRequire = createRequire(createRequire(import.meta.url).resolve('storybook/test'));
+  const { default: userEvent } = await import(storybookRequire.resolve('@testing-library/user-event'));
+  const user = userEvent.setup({ document: browser.document });
+  await act(async () => user.type(host.querySelector('textarea')!, '  Original review.  '));
+  await click(button(m.moderation_appeal_uphold_action()));
+  expect(sent).toHaveLength(1);
+  expect(sent[0]).toMatchObject({
+    id: selected.id, outcome: 'uphold', statement: 'Original review.', nativeSession: 'opaque-native',
+  });
+  expect(button(m.moderation_queue_refresh()).disabled).toBe(true);
+  expect(requests).toHaveLength(3);
+  acknowledge = true;
+  await click(button(m.moderation_appeal_intent_retry()));
+  expect(sent[1]).toBe(sent[0]);
+  expect(host.textContent).toContain('Original review.');
+  expect(button(m.moderation_queue_refresh()).disabled).toBe(false);
+  expect(requests).toHaveLength(3);
+
+  // Acknowledgement and the next source admission are separate visits.
+  await act(async () => root!.unmount());
+  cache.clear();
+  host.remove();
+  nativeResolved = true;
+  await mount(await read(search), read);
+  expect(host.textContent).toContain('Native retained outcome.');
+  expect(host.querySelector('textarea')).toBeNull();
+  expect(host.textContent).not.toContain('Original review.');
+  const returnLink = [...host.querySelectorAll('a')].find((link) =>
+    link.textContent === m.moderation_workbench_history_return(),
+  )!;
+  const address = new URL(returnLink.href, browser.location.href);
+  expect(address.pathname).toContain('/moderation/workbench');
+  expect(address.searchParams.get('queue')).toBe('appeals');
+  expect(address.searchParams.get('board')).toBe('board');
+  expect(address.searchParams.get('cursor')).toBe('captured');
+  expect(address.searchParams.has('case')).toBe(false);
+  expect(requests).toHaveLength(4);
+  expect(new Set(requests).size).toBe(1);
 });
