@@ -5,6 +5,9 @@ types:
   schema:Organization: 組織
   schema:SoftwareApplication: ソフトウェアアプリケーション
   rezics:ReleaseGroup: 'リリースグループ'
+  schema:Place: '場所'
+  schema:AdministrativeArea: '行政区域'
+  schema:Event: 'イベント'
 properties:
   rezics:penNameOf: '筆名の使用者'
   wdt:P186: 材料
@@ -74,6 +77,10 @@ properties:
   rezics:codec: 'コーデック'
   rezics:fileQuality: 'ファイル品質'
   rezics:releaseGroup: 'リリースグループ'
+  schema:containedInPlace: '所在場所'
+  schema:location: '場所'
+  schema:startDate: '開始日'
+  schema:endDate: '終了日'
 inverseProperties:
   rezics:penNameOf: '筆名'
   wdt:P186: 使用先
@@ -167,6 +174,10 @@ propertyDescriptions:
   rezics:codec: 'ソースが示したコーデックコードをそのまま保存し、未認識のコードも保持します。'
   rezics:fileQuality: 'ソースが示した品質コードをそのまま保存し、未認識のコードも保持します。'
   rezics:releaseGroup: 'このファイルに関連付けられた AniDB のソースグループです。刊行リリースや個人の所有物とは別に読めます。'
+  schema:containedInPlace: 'この場所を直接含む場所です。行政区域などを記録します。'
+  schema:location: 'このイベントが行われる場所です。イベントや個々の公演そのものを指すものではありません。'
+  schema:startDate: '対象期間の開始として情報源に示された日付です。精度と暦を保ちます。'
+  schema:endDate: '対象期間の終了として情報源に示された日付です。精度と暦を保ちます。'
 typeDescriptions:
   wd:Q2095: '小麦粉などの食品や食用の物質。調理方法を記すレシピとは別の対象です。'
   wd:Q2620972: '作品内のエピソードや章を順にまとめた、名前のある物語の区間。最初と最後の番号で範囲を示します。'
@@ -175,3 +186,6 @@ typeDescriptions:
   schema:SoftwareApplication: '閲覧ツールなど、個別に識別できるアプリケーション。ゲーム作品とそのリリースには別の型があります。'
 
   rezics:ReleaseGroup: 'AniDB が識別し、配布するファイルと関連付けるソースグループです。各ファイルや刊行リリースとは別の識別対象です。'
+  schema:Place: '地理上または建造物として特定できる場所です。そこで行われるイベントとは別の対象です。'
+  schema:AdministrativeArea: '場所として表す名称のある行政区域です。その区域内の会場とは別の対象です。'
+  schema:Event: '独自の識別対象となる期間の定まった出来事です。場所や参加者とは別に記録します。'

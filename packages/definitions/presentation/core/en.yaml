@@ -5,6 +5,9 @@ types:
   schema:Organization: organization
   schema:SoftwareApplication: software application
   rezics:ReleaseGroup: 'release group'
+  schema:Place: 'place'
+  schema:AdministrativeArea: 'administrative area'
+  schema:Event: 'event'
 properties:
   rezics:penNameOf: 'pen name of'
   wdt:P186: made from material
@@ -74,6 +77,10 @@ properties:
   rezics:codec: 'codec'
   rezics:fileQuality: 'file quality'
   rezics:releaseGroup: 'release group'
+  schema:containedInPlace: 'contained in place'
+  schema:location: 'location'
+  schema:startDate: 'start date'
+  schema:endDate: 'end date'
 inverseProperties:
   rezics:penNameOf: 'pen names'
   wdt:P186: Used in
@@ -167,6 +174,10 @@ propertyDescriptions:
   rezics:codec: 'The exact codec code reported by the source, including codes not yet recognized.'
   rezics:fileQuality: 'The exact file quality code reported by the source, including codes not yet recognized.'
   rezics:releaseGroup: 'The independently readable AniDB source group associated with this file, separate from a publication release and personal copy.'
+  schema:containedInPlace: 'The immediate place containing this place, such as its administrative area.'
+  schema:location: 'The place where this event occurs; it does not identify the event or a performance occurrence.'
+  schema:startDate: 'The stated beginning of the subject''s time span, preserving source precision and calendar.'
+  schema:endDate: 'The stated end of the subject''s time span, preserving source precision and calendar.'
 typeDescriptions:
   wd:Q2095: 'A food or edible substance, such as flour; a recipe describes how to prepare it.'
   wd:Q2620972: 'A named, ordered span of episodes or chapters within a work, with first and last part numbers.'
@@ -175,3 +186,6 @@ typeDescriptions:
   schema:SoftwareApplication: 'An identified software application, such as a reading tool; game works and their releases have separate Types.'
 
   rezics:ReleaseGroup: 'An AniDB source group linked to the files it releases. Its identity remains separate from each file and publication release.'
+  schema:Place: 'A specific geographic or constructed place, distinct from events held there.'
+  schema:AdministrativeArea: 'A named administrative region represented as a place, distinct from a venue within it.'
+  schema:Event: 'A bounded occurrence with its own identity, distinct from its venue and participants.'

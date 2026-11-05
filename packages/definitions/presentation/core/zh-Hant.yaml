@@ -5,6 +5,9 @@ types:
   schema:Organization: 組織
   schema:SoftwareApplication: 軟體應用程式
   rezics:ReleaseGroup: '發佈組'
+  schema:Place: '地點'
+  schema:AdministrativeArea: '行政區'
+  schema:Event: '活動'
 properties:
   rezics:penNameOf: '筆名使用者'
   wdt:P186: 材料
@@ -74,6 +77,10 @@ properties:
   rezics:codec: '編解碼器'
   rezics:fileQuality: '檔案品質'
   rezics:releaseGroup: '發佈組'
+  schema:containedInPlace: '所屬地點'
+  schema:location: '地點'
+  schema:startDate: '開始日期'
+  schema:endDate: '結束日期'
 inverseProperties:
   rezics:penNameOf: '筆名'
   wdt:P186: 用於
@@ -167,6 +174,10 @@ propertyDescriptions:
   rezics:codec: '原樣保存來源提供的編解碼器代碼，包括尚未識別的代碼。'
   rezics:fileQuality: '原樣保存來源提供的品質代碼，包括尚未識別的代碼。'
   rezics:releaseGroup: '與此檔案關聯的 AniDB 來源群組，可獨立讀取，並與出版發行版及個人副本區分。'
+  schema:containedInPlace: '直接包含此地點的上級地點，例如其所屬行政區。'
+  schema:location: '此活動發生的地點；它不代表活動本身或某一場演出。'
+  schema:startDate: '來源所述對象時間範圍的起點，保留來源的精度與曆法。'
+  schema:endDate: '來源所述對象時間範圍的終點，保留來源的精度與曆法。'
 typeDescriptions:
   wd:Q2095: '可供食用的食品或物質，例如麵粉；食譜則說明食物的製作方式。'
   wd:Q2620972: '作品內具有名稱且依序排列的一段集數或章節，以起訖編號界定範圍。'
@@ -175,3 +186,6 @@ typeDescriptions:
   schema:SoftwareApplication: '可獨立識別的軟體應用程式，例如閱讀工具；遊戲作品與其發行版各有專用類型。'
 
   rezics:ReleaseGroup: '由 AniDB 識別並與其發佈的檔案關聯的來源群組。其身分與各檔案及出版發行版分開保留。'
+  schema:Place: '可具體識別的地理地點或建成場所，與在該處舉行的活動分別建檔。'
+  schema:AdministrativeArea: '以地點表示的具名行政區域，與其中的活動場所分別識別。'
+  schema:Event: '具有自身身分與時間範圍的事件，與地點及參與者分別識別。'

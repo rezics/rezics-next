@@ -1,0 +1,17 @@
+types:
+  schema:MusicVenue: '音樂場所'
+  schema:MusicEvent: '音樂活動'
+  wd:Q34379: '樂器'
+
+properties:
+  schema:performer: '表演者'
+  wdt:P1303: '使用的樂器'
+
+typeDescriptions:
+  schema:MusicVenue: '用於音樂演出的具體場所，與在此舉辦的音樂活動分別識別。'
+  schema:MusicEvent: '具有自身時間與地點的特定音樂活動，與單次演出或場所分別識別。'
+  wd:Q34379: '樂器這一類對象的身分，不代表某一件樂器或使用它的人。'
+
+propertyDescriptions:
+  schema:performer: '在此音樂活動中署名的表演者或組織；署名及其來源屬於這筆具體陳述。'
+  wdt:P1303: '署名表演者在這筆具體陳述中使用的樂器；樂器不會因此成為表演者身分的一部分。'

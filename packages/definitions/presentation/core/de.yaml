@@ -5,6 +5,9 @@ types:
   schema:Organization: 'Organisation'
   schema:SoftwareApplication: 'Softwareanwendung'
   rezics:ReleaseGroup: 'Release-Gruppe'
+  schema:Place: 'Ort'
+  schema:AdministrativeArea: 'Verwaltungsgebiet'
+  schema:Event: 'Ereignis'
 properties:
   rezics:penNameOf: 'Pseudonym von'
   wdt:P186: hergestellt aus
@@ -74,6 +77,10 @@ properties:
   rezics:codec: 'Codec'
   rezics:fileQuality: 'Dateiqualität'
   rezics:releaseGroup: 'Release-Gruppe'
+  schema:containedInPlace: 'liegt innerhalb von'
+  schema:location: 'Ort'
+  schema:startDate: 'Beginn'
+  schema:endDate: 'Ende'
 inverseProperties:
   rezics:penNameOf: 'Pseudonyme'
   wdt:P186: Verwendet in
@@ -104,6 +111,9 @@ typeDescriptions:
   schema:Organization: 'Eine Organisation oder als Mitwirkende genannte Gruppe, etwa ein Verlag oder Studio.'
   schema:SoftwareApplication: 'Eine identifizierbare Anwendung, etwa ein Leseprogramm; Spiele und ihre Veröffentlichungen haben eigene Typen.'
   rezics:ReleaseGroup: 'Eine von AniDB identifizierte Quellgruppe, die mit den von ihr veröffentlichten Dateien verknüpft ist. Ihre Identität bleibt von jeder Datei und Veröffentlichung getrennt.'
+  schema:Place: 'Ein bestimmter geografischer oder baulicher Ort, getrennt von den dort stattfindenden Ereignissen.'
+  schema:AdministrativeArea: 'Ein benanntes Verwaltungsgebiet als Ort, getrennt von einem Veranstaltungsort darin.'
+  schema:Event: 'Ein zeitlich bestimmtes Ereignis mit eigener Identität, getrennt von Ort und Beteiligten.'
 propertyDescriptions:
   rezics:penNameOf: 'Die Person oder Organisation hinter diesem Pseudonym oder Kollektivnamen.'
   wdt:P186: 'Ein Lebensmittel oder zubereitetes Rezept als Zutat oder Bestandteil; Menge und Listenposition können ergänzt werden.'
@@ -174,3 +184,7 @@ propertyDescriptions:
   rezics:codec: 'Der genaue von der Quelle gemeldete Codec-Code, auch wenn er noch nicht erkannt wird.'
   rezics:fileQuality: 'Der genaue von der Quelle gemeldete Qualitätscode, auch wenn er noch nicht erkannt wird.'
   rezics:releaseGroup: 'Die unabhängig lesbare AniDB-Quellgruppe dieser Datei, getrennt von Veröffentlichung und persönlicher Kopie.'
+  schema:containedInPlace: 'Der unmittelbar übergeordnete Ort, etwa das Verwaltungsgebiet dieses Ortes.'
+  schema:location: 'Der Ort, an dem dieses Ereignis stattfindet; er ist weder das Ereignis noch eine einzelne Aufführung.'
+  schema:startDate: 'Der angegebene Beginn des Zeitraums dieses Subjekts, mit der Genauigkeit und dem Kalender der Quelle.'
+  schema:endDate: 'Das angegebene Ende des Zeitraums dieses Subjekts, mit der Genauigkeit und dem Kalender der Quelle.'

@@ -1,0 +1,17 @@
+types:
+  schema:MusicVenue: '音楽会場'
+  schema:MusicEvent: '音楽イベント'
+  wd:Q34379: '楽器'
+
+properties:
+  schema:performer: '出演者'
+  wdt:P1303: '使用楽器'
+
+typeDescriptions:
+  schema:MusicVenue: '音楽公演に使われる具体的な場所です。そこで開催される音楽イベントとは別の対象です。'
+  schema:MusicEvent: '日時と場所を持つ特定の音楽イベントです。個々の公演や会場とは別の対象です。'
+  wd:Q34379: '楽器という種類の識別対象です。個々の楽器や使用する人そのものではありません。'
+
+propertyDescriptions:
+  schema:performer: 'この音楽イベントの出演者として記録された人または組織です。クレジットと出典はこの声明に属します。'
+  wdt:P1303: 'この声明で出演者が使用した楽器です。出演者の識別対象に楽器を含めるものではありません。'

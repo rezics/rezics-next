@@ -10,11 +10,9 @@ properties:
   marcrel:fds: 'distribuidor cinematográfico'
   schema:copyrightNotice: aviso de derechos de autor
   schema:duration: duración
-  schema:endDate: fecha de finalización
   schema:episodeNumber: número de episodio
   schema:isPartOf: forma parte de
   schema:numberOfEpisodes: número de episodios
-  schema:startDate: fecha de inicio
   wdt:P449: emisora original
   wdt:P973: descrito en la URL
   schema:associatedMedia: 'contenido multimedia asociado'
@@ -135,11 +133,9 @@ propertyDescriptions:
   marcrel:fds: 'Una persona u organización acreditada por distribuir esta publicación audiovisual; no se copian créditos ajenos de la obra.'
   schema:copyrightNotice: 'El aviso de derechos de autor declarado por la fuente; no establece una licencia de reutilización.'
   schema:duration: 'Duración declarada como cantidad entera no negativa en segundos (wd:Q11574), por ejemplo 1440 para 24 minutos.'
-  schema:endDate: 'El final del período original de emisión o lanzamiento, conservando la precisión de la fuente.'
   schema:episodeNumber: 'El ordinal del episodio en la fuente como texto, incluidos 0, especiales o fracciones; separado de su identificador.'
   schema:isPartOf: 'La serie televisiva o temporada que contiene este episodio.'
   schema:numberOfEpisodes: 'Número de episodios de esta obra o temporada como cantidad entera no negativa y sin unidad.'
-  schema:startDate: 'El inicio del período original de emisión o lanzamiento, conservando la precisión de la fuente.'
   wdt:P449: 'La organización que la fuente identifica como emisora original; no cualquier distribuidor posterior.'
   wdt:P973: 'Una URL de una página que describe esta obra de anime; no equivale a una coincidencia exacta de identidad.'
 

@@ -10,11 +10,9 @@ properties:
   marcrel:fds: '映画配給者'
   schema:copyrightNotice: 著作権表示
   schema:duration: 再生時間
-  schema:endDate: 終了日
   schema:episodeNumber: 話数
   schema:isPartOf: 以下の一部分
   schema:numberOfEpisodes: 話数
-  schema:startDate: 開始日
   wdt:P449: 放送当初のネットワーク
   wdt:P973: 詳細情報URL
   schema:associatedMedia: '関連メディア'
@@ -127,11 +125,9 @@ propertyDescriptions:
   marcrel:fds: 'この映像刊行物の配給担当としてクレジットされた人物または組織。作品側の無関係なクレジットは転記しません。'
   schema:copyrightNotice: '出典に記された著作権表示。再利用のライセンスを示すものではありません。'
   schema:duration: '明記された上映時間を秒（wd:Q11574）単位の0以上の整数の数量で記録します。24分なら1440です。'
-  schema:endDate: '当初の放送期間や公開期間の終了日。出典の日付の精度を保ちます。'
   schema:episodeNumber: '出典のエピソード番号を文字列で保存します。0、特別編、小数の番号も扱い、エピソードの識別子とは区別します。'
   schema:isPartOf: 'このエピソードが属するテレビシリーズまたはシーズン。'
   schema:numberOfEpisodes: 'この作品やシーズンのエピソード数。単位なしの0以上の整数の数量です。'
-  schema:startDate: '当初の放送期間や公開期間の開始日。出典の日付の精度を保ちます。'
   wdt:P449: '出典が初回放送局として示す組織。後の配給者すべてを指すものではありません。'
   wdt:P973: 'このアニメ作品を説明するページのURL。同一実体の完全一致とは区別します。'
 
