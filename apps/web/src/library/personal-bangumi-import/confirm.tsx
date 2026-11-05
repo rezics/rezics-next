@@ -3,6 +3,7 @@ import { ImportSourceChecks, ImportSourceEvidence } from '../rich-private-entry/
 import type { BangumiRowMeta } from './contract';
 import { BangumiAction } from './controls';
 import { bangumiMatchLabel, bangumiMediumLabel, bangumiStateLabel } from './meaning';
+import { BangumiScoreConfirmation } from './score';
 
 export function BangumiConfirmPage({
   rows,
@@ -12,6 +13,7 @@ export function BangumiConfirmPage({
   onBack,
   onConfirm,
   onConfirmSource,
+  onScoreConsent,
 }: {
   rows: BangumiRowMeta[];
   busy: boolean;
@@ -20,9 +22,14 @@ export function BangumiConfirmPage({
   onBack: () => void;
   onConfirm: () => void;
   onConfirmSource: (choice: { privacy?: boolean; timestamps?: boolean }) => void;
+  onScoreConsent: (ordinal: number, consent: boolean) => void;
 }) {
   const ready = rows.filter((row) => row.reviewToken);
-  const gated = busy || ready.length === 0 || !confirmPrivacy || !confirmTimestamps;
+  const scoreConsentReady = ready.every((row) => {
+    const action = row.scoreReview?.native.selection.action ?? 'preserve';
+    return action === 'preserve' || (!!row.target && !!row.scoreReview?.native.question && row.scoreConsent);
+  });
+  const gated = busy || ready.length === 0 || !confirmPrivacy || !confirmTimestamps || !scoreConsentReady;
   return (
     <section className="space-y-4" data-bangumi-stage="confirm">
       <p>{m.library_bangumi_confirm_help({ count: ready.length })}</p>
@@ -49,6 +56,11 @@ export function BangumiConfirmPage({
             ) : (
               <p className="text-sm">{m.library_bangumi_absence()}</p>
             )}
+            <BangumiScoreConfirmation
+              row={row}
+              disabled={busy}
+              onConsent={(consent) => onScoreConsent(row.ordinal, consent)}
+            />
             <ImportSourceEvidence preview={row.sourcePreview} />
           </li>
         ))}

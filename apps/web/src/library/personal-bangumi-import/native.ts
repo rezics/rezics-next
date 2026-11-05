@@ -4,21 +4,22 @@ import type { SessionEnv } from '../../session/client';
 import { prepareSession, viewerCredential } from '../../session/request';
 import { mapSourceAdmissionPort } from '../rich-private-entry/admission';
 import { admitPrivateSourceObservation } from '../rich-private-entry/native';
+import { libraryFullQuery } from '../reads';
 import {
-  BANGUMI_APPLY,
   BANGUMI_PAGE,
   SUBJECT_ID,
   quotedIdempotencyKey,
-  type BangumiApplyBody,
   type BangumiApplyCallResult,
   type BangumiApplyResult,
-  type BangumiChoice,
   type BangumiCommand,
   type BangumiCurrent,
+  type BangumiEntryReadback,
   type BangumiEvidence,
   type BangumiFailure,
   type BangumiFailureKind,
   type BangumiGuard,
+  type BangumiInspectionCommand,
+  type BangumiInspectionResult,
   type BangumiImportPort,
   type BangumiMatch,
   type BangumiMutateResult,
@@ -30,55 +31,26 @@ import {
   type BangumiReview,
   type BangumiReviewResult,
   type BangumiRow,
+  type BangumiScoreOutcome,
+  type BangumiScoreReview,
+  type BangumiScoreSelection,
+  type BangumiVoteReadback,
   type BangumiUnknown,
 } from './contract';
 
-type NativeResult = { data?: unknown; error?: { value?: unknown }; status: number };
+type NativeResult = { data?: unknown; error?: { value?: unknown } | null; status: number };
 type NativeHeaders = { authorization: string; 'idempotency-key'?: string };
-type PreviewResource = {
-  post: (body: { upload: string }, options: { headers: NativeHeaders }) => Promise<NativeResult>;
-};
-type ReviewResource = {
-  post: (body: { ordinal: number; target?: string }, options: { headers: NativeHeaders }) => Promise<NativeResult>;
-};
-type ApplyResource = {
-  post: (body: BangumiApplyBody, options: { headers: NativeHeaders }) => Promise<NativeResult>;
-};
-type CancelResource = {
-  post: (body?: Record<string, never>, options?: { headers: NativeHeaders }) => Promise<NativeResult>;
-};
-type IdResource = {
-  get: (options: { query?: { after?: number }; headers: NativeHeaders }) => Promise<NativeResult>;
-  $review?: ReviewResource;
-  review?: ReviewResource;
-  $apply?: ApplyResource;
-  apply?: ApplyResource;
-  $cancel?: CancelResource;
-  cancel?: CancelResource;
-  delete: (body: undefined, options: { headers: NativeHeaders }) => Promise<NativeResult>;
-};
-export type BangumiSurface = ((params: { uploadId: string }) => IdResource) & {
-  $preview?: PreviewResource;
-  preview?: PreviewResource;
-};
+type BangumiSurface = NonNullable<KernelClient['libraryImports']['bangumi']>;
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function asSurface(value: unknown): BangumiSurface | undefined {
-  if (typeof value !== 'function') return undefined;
-  const surface = value as BangumiSurface;
-  const preview = surface.$preview ?? surface.preview;
-  if (!preview || typeof preview.post !== 'function') return undefined;
-  return surface;
-}
-
 /** Bind installed `libraryImports.bangumi` methods. Missing methods stay unavailable. */
 export function nativeBangumiImport(client: KernelClient): BangumiSurface | undefined {
-  const imports = client.libraryImports;
-  if (!imports || typeof imports !== 'object' || !('bangumi' in imports)) return undefined;
-  return asSurface(imports.bangumi);
+  const surface = client.libraryImports?.bangumi;
+  if (typeof surface !== 'function' || typeof surface.$preview?.post !== 'function') return undefined;
+  return surface;
 }
 
 function publicDetail(detail: unknown): string | undefined {
@@ -170,6 +142,99 @@ function isCurrent(value: unknown): value is BangumiCurrent {
   return true;
 }
 
+function isScoreSource(value: unknown): value is BangumiScoreReview['source'] {
+  return (
+    record(value) &&
+    (value.state === 'score' || value.state === 'unrated' || value.state === 'absent' || value.state === 'unsupported') &&
+    record(value.scale) &&
+    value.scale.minimum === 1 &&
+    value.scale.maximum === 10 &&
+    typeof value.reason === 'string' &&
+    (!('value' in value) ||
+      value.value === null ||
+      typeof value.value === 'string' ||
+      typeof value.value === 'boolean' ||
+      (typeof value.value === 'number' && Number.isFinite(value.value)))
+  );
+}
+
+function isScoreQuestion(value: unknown): value is NonNullable<BangumiScoreReview['native']['question']> {
+  if (
+    !record(value) ||
+    typeof value.id !== 'string' ||
+    !Number.isSafeInteger(value.revision) ||
+    (value.meaning !== null && typeof value.meaning !== 'string') ||
+    typeof value.label !== 'string' ||
+    (value.grain !== 'work' && value.grain !== 'release' && value.grain !== 'episode' && value.grain !== 'character') ||
+    (value.lifecycleState !== 'active' && value.lifecycleState !== 'retired') ||
+    !record(value.scale) ||
+    !Number.isSafeInteger(value.scale.minimum) ||
+    !Number.isSafeInteger(value.scale.maximum) ||
+    !Number.isSafeInteger(value.scale.step)
+  )
+    return false;
+  return value.scale.minimum <= value.scale.maximum && value.scale.step > 0;
+}
+
+function isScoreCurrentVote(value: unknown): value is NonNullable<BangumiScoreReview['native']['currentVote']> {
+  if (!record(value)) return false;
+  if (value.state === 'absent' || value.state === 'cleared') return true;
+  return (
+    value.state === 'set' &&
+    Number.isSafeInteger(value.units) &&
+    Number.isSafeInteger(value.revision) &&
+    typeof value.at === 'string'
+  );
+}
+
+function isScoreSelection(value: unknown): value is BangumiScoreSelection {
+  if (!record(value)) return false;
+  if (value.action === 'preserve' || value.action === 'clear') return true;
+  return value.action === 'set' && Number.isSafeInteger(value.units);
+}
+
+function isScoreReview(value: unknown): value is BangumiScoreReview {
+  if (!record(value) || !isScoreSource(value.source) || !record(value.native)) return false;
+  const native = value.native;
+  if (typeof native.questionId !== 'string') return false;
+  if (native.question !== null && !isScoreQuestion(native.question)) return false;
+  if (native.currentVote !== null && !isScoreCurrentVote(native.currentVote)) return false;
+  if (!isScoreSelection(native.selection) || !record(native.admission)) return false;
+  const admission = native.admission;
+  const reviewed = admission.status === 'reviewed' && admission.reason === 'native_review_observed';
+  const unavailable =
+    admission.status === 'unavailable' &&
+    (admission.reason === 'native_vote_scope_required' ||
+      admission.reason === 'target_not_selected' ||
+      admission.reason === 'question_unavailable' ||
+      admission.reason === 'question_revision_unsupported' ||
+      admission.reason === 'question_scale_unsupported' ||
+      admission.reason === 'conditional_admission_unavailable');
+  if (!reviewed && !unavailable) return false;
+  return true;
+}
+
+function isScoreOutcome(value: unknown): value is BangumiScoreOutcome {
+  if (!record(value)) return false;
+  if (value.action !== 'preserve' && value.action !== 'set' && value.action !== 'clear') return false;
+  if (
+    value.status !== 'applied' &&
+    value.status !== 'skipped' &&
+    value.status !== 'stale' &&
+    value.status !== 'unsupported' &&
+    value.status !== 'failed' &&
+    value.status !== 'unavailable'
+  )
+    return false;
+  if ('reason' in value && typeof value.reason !== 'string') return false;
+  if ('vote' in value) {
+    if (!record(value.vote)) return false;
+    if (!Number.isSafeInteger(value.vote.units) || !Number.isSafeInteger(value.vote.revision)) return false;
+    if (typeof value.vote.at !== 'string') return false;
+  }
+  return true;
+}
+
 function isReview(value: unknown): value is BangumiReview {
   if (!record(value) || typeof value.token !== 'string' || !SUBJECT_ID.test(value.token)) return false;
   if (!isMatch(value.match) || !Array.isArray(value.candidates) || typeof value.conflict !== 'boolean') return false;
@@ -177,6 +242,7 @@ function isReview(value: unknown): value is BangumiReview {
   if (value.guard !== null && !isGuard(value.guard)) return false;
   if (value.proposedState !== null && typeof value.proposedState !== 'string') return false;
   if (value.current !== null && !isCurrent(value.current)) return false;
+  if ('score' in value && !isScoreReview(value.score)) return false;
   return value.candidates.every((id) => typeof id === 'string' && SUBJECT_ID.test(id));
 }
 
@@ -188,13 +254,14 @@ function isOutcome(value: unknown): value is BangumiOutcome {
     !Array.isArray(value.retained)
   )
     return false;
-  return (
+  const validStatus = (
     value.status === 'applied' ||
     value.status === 'skipped' ||
     value.status === 'stale' ||
     value.status === 'unsupported' ||
     value.status === 'failed'
   );
+  return validStatus && (!('score' in value) || isScoreOutcome(value.score));
 }
 
 function isRow(value: unknown): value is BangumiRow {
@@ -223,12 +290,6 @@ function isApply(value: unknown): value is BangumiApplyResult {
   return value.outcomes.every(isOutcome) && value.remaining.every((ordinal) => typeof ordinal === 'number');
 }
 
-function isChoice(value: unknown): value is BangumiChoice {
-  if (!record(value) || typeof value.ordinal !== 'number' || typeof value.reviewToken !== 'string') return false;
-  if (!SUBJECT_ID.test(value.reviewToken) || typeof value.skip !== 'boolean') return false;
-  return value.state === 'preserve' || value.state === 'replace' || value.state === 'omit';
-}
-
 async function withSession(
   request: Request,
   sessionEnv: Partial<SessionEnv>,
@@ -242,8 +303,70 @@ async function withSession(
     return { authorization };
   } catch (error) {
     if (isPlatformClosedError(error)) return { kind: 'unavailable' };
-    return { kind: 'unavailable' };
+    throw error;
   }
+}
+
+function responseReason(result: NativeResult): string {
+  const body = record(result.error) && 'value' in result.error ? result.error.value : result.error;
+  if (record(body)) {
+    if (typeof body.reason === 'string' && body.reason.trim()) return body.reason;
+    if (typeof body.code === 'string' && body.code.trim()) return body.code;
+  }
+  return `http_${result.status}`;
+}
+
+function unavailableReadback(result: NativeResult): BangumiEntryReadback | BangumiVoteReadback {
+  return {
+    status: result.status === 409 ? 'stale' : 'unavailable',
+    reason: responseReason(result),
+  };
+}
+
+async function readCurrentEntry(
+  client: KernelClient,
+  subjectId: string,
+  authorization: string,
+): Promise<BangumiEntryReadback> {
+  const result = await client.libraryEntries({ subjectId }).get({
+    query: libraryFullQuery(),
+    headers: { authorization },
+    fetch: { cache: 'no-store', redirect: 'manual' },
+  });
+  if (result.status === 404) return { status: 'absent' };
+  if (result.error || !record(result.data) || !record(result.data.libraryEntry)) return unavailableReadback(result);
+  const entry = result.data.libraryEntry;
+  if (entry.subjectId !== subjectId || typeof entry.state !== 'string' || !Number.isSafeInteger(entry.revision))
+    return { status: 'unavailable', reason: 'entry_read_response_invalid' };
+  if ('incarnationId' in entry && entry.incarnationId !== null && typeof entry.incarnationId !== 'string')
+    return { status: 'unavailable', reason: 'entry_read_response_invalid' };
+  return {
+    status: 'present',
+    state: entry.state,
+    revision: entry.revision as number,
+    ...(entry.incarnationId === undefined ? {} : { incarnationId: entry.incarnationId as string | null }),
+  };
+}
+
+async function readCurrentVote(
+  client: KernelClient,
+  subjectId: string,
+  questionId: string,
+  authorization: string,
+): Promise<BangumiVoteReadback> {
+  const result = await client.subjects({ id: subjectId }).ratings({ questionId }).vote.get({
+    headers: { authorization },
+    fetch: { cache: 'no-store', redirect: 'manual' },
+  });
+  if (result.status === 404) return { status: 'current', vote: { state: 'absent' } };
+  if (result.error || !record(result.data)) return unavailableReadback(result);
+  const vote = result.data;
+  if (!Number.isSafeInteger(vote.units) || !Number.isSafeInteger(vote.revision) || typeof vote.at !== 'string')
+    return { status: 'unavailable', reason: 'vote_read_response_invalid' };
+  return {
+    status: 'current',
+    vote: { state: 'set', units: vote.units as number, revision: vote.revision as number, at: vote.at },
+  };
 }
 
 export function kernelBangumiPort(
@@ -280,11 +403,8 @@ export function kernelBangumiPort(
     async preview(command) {
       return call(
         command,
-        (bangumi, authorization) => {
-          const preview = bangumi.$preview ?? bangumi.preview;
-          if (!preview) return Promise.resolve({ status: 503, error: { value: { code: 'unavailable' } } });
-          return preview.post({ upload: command.upload }, { headers: headers(authorization, command.key) });
-        },
+        (bangumi, authorization) =>
+          bangumi.$preview.post({ upload: command.upload }, { headers: headers(authorization, command.key) }),
         (data) => {
           if (!record(data) || typeof data.uploadId !== 'string' || !SUBJECT_ID.test(data.uploadId)) return undefined;
           if (typeof data.count !== 'number' || !Number.isInteger(data.count) || data.count < 1) return undefined;
@@ -308,10 +428,12 @@ export function kernelBangumiPort(
         command,
         (bangumi, authorization) => {
           const resource = bangumi({ uploadId: command.uploadId });
-          const review = resource.$review ?? resource.review;
-          if (!review) return Promise.resolve({ status: 503, error: { value: { code: 'unavailable' } } });
-          return review.post(
-            command.target ? { ordinal: command.ordinal, target: command.target } : { ordinal: command.ordinal },
+          return resource.$review.post(
+            {
+              ordinal: command.ordinal,
+              ...(command.target ? { target: command.target } : {}),
+              ...(command.score ? { score: command.score } : {}),
+            },
             { headers: headers(authorization, command.key) },
           );
         },
@@ -322,15 +444,11 @@ export function kernelBangumiPort(
       );
     },
     async apply(command) {
-      if (command.body.rows.length === 0 || command.body.rows.length > BANGUMI_APPLY) return { kind: 'malformed' };
-      if (!command.body.rows.every(isChoice)) return { kind: 'malformed' };
       return call(
         command,
         (bangumi, authorization) => {
           const resource = bangumi({ uploadId: command.uploadId });
-          const apply = resource.$apply ?? resource.apply;
-          if (!apply) return Promise.resolve({ status: 503, error: { value: { code: 'unavailable' } } });
-          return apply.post(command.body, { headers: headers(authorization) });
+          return resource.$apply.post(command.body, { headers: headers(authorization) });
         },
         (data) => (isApply(data) ? ({ kind: 'applied', result: data } as const) : undefined),
       );
@@ -338,12 +456,8 @@ export function kernelBangumiPort(
     async cancel(command) {
       return call(
         command,
-        (bangumi, authorization) => {
-          const resource = bangumi({ uploadId: command.uploadId });
-          const cancel = resource.$cancel ?? resource.cancel;
-          if (!cancel) return Promise.resolve({ status: 503, error: { value: { code: 'unavailable' } } });
-          return cancel.post({}, { headers: headers(authorization, command.key) });
-        },
+        (bangumi, authorization) =>
+          bangumi({ uploadId: command.uploadId }).$cancel.post({}, { headers: headers(authorization, command.key) }),
         (data) => {
           if (!record(data) || typeof data.uploadId !== 'string' || data.cancelled !== true) return undefined;
           return { kind: 'cancelled' as const, uploadId: data.uploadId };
@@ -373,6 +487,20 @@ export function kernelBangumiPort(
         if (isPlatformClosedError(error)) return { kind: 'unavailable' };
         return unknown(command);
       }
+    },
+    async inspect(command: BangumiInspectionCommand): Promise<BangumiInspectionResult> {
+      const session = await withSession(request, sessionEnv, originConfigured);
+      if ('kind' in session) {
+        const unavailable = { status: 'unavailable', reason: session.kind } as const;
+        return { entry: unavailable, vote: command.questionId ? unavailable : null };
+      }
+      const [entry, vote] = await Promise.all([
+        readCurrentEntry(client, command.subjectId, session.authorization),
+        command.questionId
+          ? readCurrentVote(client, command.subjectId, command.questionId, session.authorization)
+          : Promise.resolve(null),
+      ]);
+      return { entry, vote };
     },
   };
 }

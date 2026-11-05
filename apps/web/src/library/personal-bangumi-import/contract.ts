@@ -1,4 +1,14 @@
-import type { PersonalEntrySourceAdmission } from '@rezics/client';
+import type {
+  BangumiChoice as KernelBangumiChoice,
+  BangumiOutcome as KernelBangumiOutcome,
+  BangumiReview as KernelBangumiReview,
+  BangumiScoreChoice as KernelBangumiScoreChoice,
+  BangumiScoreCurrentVote,
+  BangumiScoreOutcome as KernelBangumiScoreOutcome,
+  BangumiScoreReview as KernelBangumiScoreReview,
+  BangumiScoreSelection,
+  PersonalEntrySourceAdmission,
+} from '@rezics/client';
 import type { SourceAdmissionCustody } from '../rich-private-entry/admission';
 import type { SourceAdmissionOutcome, SourceAdmissionPreview } from '../rich-private-entry/admission';
 
@@ -33,7 +43,7 @@ export type BangumiMedium = (typeof BANGUMI_MEDIA)[keyof typeof BANGUMI_MEDIA];
 export type BangumiStateRole = (typeof BANGUMI_ROLES)[keyof typeof BANGUMI_ROLES];
 export type BangumiMatch = 'matched' | 'already_matched' | 'ambiguous' | 'unmatched' | 'unavailable' | 'chosen';
 export type BangumiApplyState = 'preserve' | 'replace' | 'omit';
-export type BangumiOutcomeStatus = 'applied' | 'skipped' | 'stale' | 'unsupported' | 'failed';
+export type BangumiOutcomeStatus = KernelBangumiOutcome['status'];
 export type BangumiFieldMeaning = 'known' | 'unknown' | 'invalid';
 
 export type BangumiJson = string | number | boolean | null | BangumiJson[] | { readonly [key: string]: BangumiJson };
@@ -50,30 +60,20 @@ export type BangumiEvidence = {
   medium: string;
   stateRole: string | null;
 };
-export type BangumiGuard = { subjectId: string; releaseDigest: string; identityEpoch: string };
-export type BangumiCurrent = { state: string; revision: number; incarnationId?: string | null };
-export type BangumiReview = {
-  token: string;
-  match: BangumiMatch;
-  candidates: string[];
-  target: string | null;
-  guard: BangumiGuard | null;
-  proposedState: string | null;
-  current: BangumiCurrent | null;
-  conflict: boolean;
+export type BangumiGuard = NonNullable<KernelBangumiReview['guard']>;
+export type BangumiCurrent = NonNullable<KernelBangumiReview['current']>;
+type KernelScoreAdmission = KernelBangumiScoreReview['native']['admission'];
+export type BangumiScoreAdmission =
+  | KernelScoreAdmission
+  | { status: 'reviewed'; reason: 'native_review_observed' };
+export type BangumiScoreReview = Omit<KernelBangumiScoreReview, 'native'> & {
+  native: Omit<KernelBangumiScoreReview['native'], 'admission'> & { admission: BangumiScoreAdmission };
 };
-export type BangumiChoice = {
-  ordinal: number;
-  reviewToken: string;
-  state: BangumiApplyState;
-  skip: boolean;
-};
-export type BangumiOutcome = {
-  ordinal: number;
-  status: BangumiOutcomeStatus;
-  applied: string[];
-  retained: string[];
-};
+export type BangumiReview = Omit<KernelBangumiReview, 'score'> & { score?: BangumiScoreReview };
+export type BangumiScoreChoice = KernelBangumiScoreChoice;
+export type BangumiScoreOutcome = KernelBangumiScoreOutcome;
+export type BangumiChoice = KernelBangumiChoice;
+export type BangumiOutcome = KernelBangumiOutcome;
 export type BangumiRow = {
   ordinal: number;
   evidence: BangumiEvidence;
@@ -102,10 +102,26 @@ export type BangumiRowMeta = {
   conflict: boolean;
   reviewToken: string | null;
   choice: { state: BangumiApplyState; skip: boolean };
+  scoreReview: BangumiScoreReview | null;
+  scoreConsent: boolean;
   outcome: BangumiOutcome | null;
+  entryReadback: BangumiEntryReadback | null;
+  voteReadback: BangumiVoteReadback | null;
   sourcePreview: SourceAdmissionPreview;
   sourceAdmission: SourceAdmissionOutcome | null;
 };
+
+export type BangumiEntryReadback =
+  | { status: 'present'; state: string; revision: number; incarnationId?: string | null }
+  | { status: 'absent' }
+  | { status: 'stale' | 'unavailable'; reason: string };
+
+export type BangumiVoteReadback =
+  | { status: 'current'; vote: BangumiScoreCurrentVote }
+  | { status: 'stale' | 'unavailable'; reason: string };
+
+export type BangumiInspectionCommand = { subjectId: string; questionId: string | null };
+export type BangumiInspectionResult = { entry: BangumiEntryReadback; vote: BangumiVoteReadback | null };
 
 export type BangumiFailureKind =
   | 'denied'
@@ -120,7 +136,7 @@ export type BangumiFailure = { kind: BangumiFailureKind; detail?: string };
 export type BangumiCommand =
   | { kind: 'preview'; key: string; upload: string }
   | { kind: 'page'; uploadId: string; after: number }
-  | { kind: 'review'; key: string; uploadId: string; ordinal: number; target?: string }
+  | { kind: 'review'; key: string; uploadId: string; ordinal: number; target?: string; score?: BangumiScoreSelection }
   | { kind: 'apply'; uploadId: string; body: BangumiApplyBody }
   | {
       kind: 'admit-source';
@@ -157,6 +173,7 @@ export type BangumiImportPort = {
   review(command: Extract<BangumiCommand, { kind: 'review' }>): Promise<BangumiReviewResult>;
   apply(command: Extract<BangumiCommand, { kind: 'apply' }>): Promise<BangumiApplyCallResult>;
   admitSource(command: Extract<BangumiCommand, { kind: 'admit-source' }>): Promise<BangumiAdmitResult>;
+  inspect(command: BangumiInspectionCommand): Promise<BangumiInspectionResult>;
   cancel(command: Extract<BangumiCommand, { kind: 'cancel' }>): Promise<BangumiMutateResult>;
   delete(command: Extract<BangumiCommand, { kind: 'delete' }>): Promise<BangumiMutateResult>;
 };

@@ -1,12 +1,15 @@
 import { QueryClientContext } from '@tanstack/react-query';
 import { useContext, useMemo, useSyncExternalStore } from 'react';
 import { sessionQuery } from '../../session/query';
+import { browserObservation } from '../../session/observation';
+import { getLocale } from '../../paraglide/runtime.js';
 
 type SessionValue = { state?: string; subject?: string | null; csrfToken?: string | null };
 
 export type BangumiVisit = {
   subject: string;
   csrfToken: string;
+  identity: number;
   controller: AbortController;
   current: (signal?: AbortSignal) => boolean;
   retire: () => void;
@@ -16,20 +19,26 @@ function sessionIdentity(session: SessionValue | undefined): string {
   return JSON.stringify([session?.state ?? 'unknown', session?.subject ?? null, session?.csrfToken ?? null]);
 }
 
-function useSessionValue(): SessionValue | undefined {
-  const client = useContext(QueryClientContext);
-  return useSyncExternalStore(
-    (notify) => client?.getQueryCache().subscribe(() => notify()) ?? (() => {}),
-    () => client?.getQueryData<SessionValue>(sessionQuery.queryKey),
-    () => undefined,
-  );
-}
+const noSubscription = () => () => {};
+const noObservation = () => undefined;
+let nextIdentity = 0;
 
 /** Private visit bound to the current signed-in viewer and CSRF. Replacement retires Bangumi state. */
 export function useBangumiVisit(): BangumiVisit | null {
-  const session = useSessionValue();
-  const owner = sessionIdentity(session);
+  const client = useContext(QueryClientContext);
+  const observation = client ? browserObservation(client) : null;
+  const observed = useSyncExternalStore(
+    observation?.subscribe ?? noSubscription,
+    observation?.getSnapshot ?? noObservation,
+    observation?.getServerSnapshot ?? noObservation,
+  );
+  const session = client?.getQueryData<SessionValue>(sessionQuery.queryKey);
+  const sessionKey = sessionIdentity(session);
+  const incarnation = observed?.state === 'signed-in' ? observed.observation.id : null;
+  const locale = getLocale();
+  const owner = `${sessionKey}:${incarnation}:${locale}`;
   const ready =
+    observed?.state === 'signed-in' &&
     session?.state === 'signed-in' &&
     typeof session.subject === 'string' &&
     session.subject.length > 0 &&
@@ -40,6 +49,7 @@ export function useBangumiVisit(): BangumiVisit | null {
   return useMemo(() => {
     if (!ready || !subject || !csrfToken) return null;
     const state: BangumiVisit & { retired: boolean; owner: string } = {
+      identity: ++nextIdentity,
       controller: new AbortController(),
       retired: false,
       owner,
@@ -50,9 +60,18 @@ export function useBangumiVisit(): BangumiVisit | null {
         state.controller.abort();
       },
       current(signal) {
+        const latest = observation?.getSnapshot();
+        if (
+          latest?.state !== 'signed-in' ||
+          latest.observation.id !== incarnation ||
+          latest.observation.subject !== subject ||
+          sessionIdentity(client?.getQueryData<SessionValue>(sessionQuery.queryKey)) !== sessionKey ||
+          getLocale() !== locale
+        )
+          state.retire();
         return !state.retired && !state.controller.signal.aborted && signal?.aborted !== true;
       },
     };
     return state;
-  }, [csrfToken, owner, ready, subject]);
+  }, [client, csrfToken, incarnation, locale, observation, owner, ready, sessionKey, subject]);
 }

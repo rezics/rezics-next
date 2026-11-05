@@ -11,6 +11,7 @@ import { useBangumiImportPort } from './port';
 import { BangumiResultPage } from './results';
 import { BangumiReviewPage } from './review';
 import type { RowDraft } from './row';
+import { scoreSelectionFromDraft } from './score';
 import { BangumiApplying, BangumiCancelledNotice, BangumiRemovedNotice, BangumiSignedOut } from './states';
 import { BangumiUploadForm } from './upload';
 import { useBangumiVisit, type BangumiVisit } from './visit';
@@ -28,7 +29,7 @@ export function PersonalBangumiImportPage({ visit }: { visit?: BangumiVisit | nu
   const current = visit === undefined ? observed : visit;
   useOperation('library_entry.put');
   if (!current) return <BangumiSignedOut />;
-  return <BangumiImportSession key={`${current.subject}:${current.csrfToken}`} visit={current} />;
+  return <BangumiImportSession key={current.identity} visit={current} />;
 }
 
 function BangumiImportSession({ visit }: { visit: BangumiVisit }) {
@@ -45,8 +46,14 @@ function BangumiImportSession({ visit }: { visit: BangumiVisit }) {
 
   async function saveReview(draft: RowDraft) {
     await act(async (current) => {
-      current.choose(draft.ordinal, { state: draft.state, skip: draft.skip });
-      return current.review(draft.ordinal, draft.target);
+      const prior = current.snapshot().meta.find((item) => item.ordinal === draft.ordinal);
+      const targetChanged = prior?.target !== draft.target;
+      current.choose(draft.ordinal, { state: draft.state, skip: draft.skip, target: draft.target });
+      const score = targetChanged || !draft.target
+        ? { action: 'preserve' as const }
+        : scoreSelectionFromDraft(draft.score, prior?.scoreReview, true);
+      if (!score) return current.snapshot();
+      return current.review(draft.ordinal, draft.target, score);
     });
   }
 
@@ -65,15 +72,17 @@ function BangumiImportSession({ visit }: { visit: BangumiVisit }) {
         </BangumiAction>
       ) : null}
       {snap.stage === 'upload' ? (
-        <BangumiUploadForm busy={snap.busy} onUpload={(upload) => void act((current) => current.preview(upload))} />
+        <BangumiUploadForm busy={locked} onUpload={(upload) => void act((current) => current.preview(upload))} />
       ) : null}
       {snap.stage === 'review' ? (
         <BangumiReviewPage
           snap={snap}
-          busy={snap.busy}
+          busy={locked}
           onSave={(draft) => void saveReview(draft)}
           onChoose={(draft) =>
-            act((current) => current.choose(draft.ordinal, { state: draft.state, skip: draft.skip }))
+            act((current) =>
+              current.choose(draft.ordinal, { state: draft.state, skip: draft.skip, target: draft.target }),
+            )
           }
           onNext={() => void act((current) => current.nextPage())}
           onConfirm={() => act((current) => current.openConfirm())}
@@ -82,12 +91,13 @@ function BangumiImportSession({ visit }: { visit: BangumiVisit }) {
       {snap.stage === 'confirm' ? (
         <BangumiConfirmPage
           rows={snap.meta}
-          busy={snap.busy}
+          busy={locked}
           confirmPrivacy={snap.confirmPrivacy}
           confirmTimestamps={snap.confirmTimestamps}
           onBack={() => act((current) => current.backToReview())}
           onConfirm={() => void act((current) => current.confirm())}
           onConfirmSource={(choice) => act((current) => current.confirmSource(choice))}
+          onScoreConsent={(ordinal, consent) => act((current) => current.confirmScore(ordinal, consent))}
         />
       ) : null}
       {snap.stage === 'applying' ? <BangumiApplying applied={snap.applied} applying={snap.applying} /> : null}
@@ -96,12 +106,13 @@ function BangumiImportSession({ visit }: { visit: BangumiVisit }) {
           outcomes={snap.outcomes}
           remaining={snap.remaining}
           meta={snap.meta}
-          busy={snap.busy}
+          busy={locked}
           cancelled={snap.cancelled}
           canRetry={snap.outcomes.some((item) => item.status === 'failed')}
           onRetry={() => void act((current) => current.retryFailed())}
           onReview={() => act((current) => current.backToReview())}
           onRefresh={() => void act((current) => current.refresh())}
+          onInspect={(ordinal) => void act((current) => current.inspectCurrent(ordinal))}
         />
       ) : null}
       {snap.stage === 'cancelled' ? (
@@ -114,7 +125,7 @@ function BangumiImportSession({ visit }: { visit: BangumiVisit }) {
             <BangumiAction
               type="button"
               variant="outline"
-              disabled={locked && snap.stage !== 'applying'}
+              disabled={locked}
               onClick={() => void act((current) => current.cancelAdmission())}
             >
               {snap.busy ? m.library_bangumi_cancelling() : m.library_bangumi_cancel()}
