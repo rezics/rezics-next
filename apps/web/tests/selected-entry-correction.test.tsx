@@ -5,7 +5,6 @@ import * as start from '../.storybook/react-start';
 import type { EntryAnnotationCorrectionPage } from '@rezics/client';
 import { SelectedCorrection } from '../src/library/selected-entry-correction/controller';
 import { correctionIssues, initialDraft, captureSelection } from '../src/library/selected-entry-correction/contract';
-import { shelfMutationLease } from '../src/library/shelf-rows';
 import type { CorrectionCommand, CorrectionPort } from '../src/library/selected-entry-correction/native';
 
 mock.module('@tanstack/react-start', () => start);
@@ -205,7 +204,7 @@ for (const width of [390, 1280])
             children: createElement(CorrectionVisit, {
               selection: [selected],
               isCurrent: () => true,
-              lease: shelfMutationLease(),
+              lease: { current: false, listeners: new Set() },
               refreshEntries: async () => {},
               onClose: () => {
                 closed = true;
