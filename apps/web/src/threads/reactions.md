@@ -77,3 +77,7 @@ success retains the combined Zone payload but requires Follow's own fresh admiss
 contract. A changed browser session state retires the combined source and loads a new one; removing the session
 cache requires an explicit fresh session read before private recovery. The focused tests use a known initial
 session for reaction recovery and cover session loss separately.
+
+Composition slots invoke Puck's render callbacks instead of mounting those newly created functions as component
+types. Pending session fetches and current private readback therefore retain the same action elements and queue;
+the reaction caller still retires them on a committed session replacement through its existing admission.
