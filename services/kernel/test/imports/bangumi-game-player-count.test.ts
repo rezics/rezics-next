@@ -128,7 +128,7 @@ test('selected Game player-count range is independently adopted and current, and
     expect(candidate.source).toMatchObject({
       source: crossMediaAliases.bangumi,
       external_id: gameId,
-      converter_revision: 'cross-media-entities@11+bangumi@15',
+      converter_revision: 'cross-media-entities@12+bangumi@15',
     });
     expect(candidate.statement.value).toEqual({ type: 'value', content: { amount: '+4', unit: '1' } });
     expect(candidate.statement.qualifiers).toEqual([
