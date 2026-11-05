@@ -176,7 +176,6 @@ export async function readConnectionStream(
 }
 
 type ConnectionDependencies = {
-  groups?: readonly ConnectionGroup[];
   page?: typeof loadSubjectPage;
   release?: typeof fetchGuideRelease;
   observe?: (work: Readonly<ConnectionWork>) => void;
@@ -236,7 +235,7 @@ export async function readConnectionVisit(
         } else graph = { ok: false, status: response.status };
       }
     } else {
-      const requested = address.only ? [address.only] : (dependencies.groups ?? connectionGroups);
+      const requested = address.only ? [address.only] : connectionGroups;
       const results = await Promise.allSettled(
         requested.map(async (group) => {
           const selected = address.selection?.[group];

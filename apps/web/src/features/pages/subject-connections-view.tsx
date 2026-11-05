@@ -12,6 +12,7 @@ import {
 import { Button } from '@rezics/ui/shadcn/button';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { m } from '../../paraglide/messages.js';
+import { CharacterAssociationBinding } from '../catalogue/character-public-reading/bridge';
 import { PlainLink } from './shared';
 import { CoverList } from './cover-list';
 import { SpoilerGate } from './values';
@@ -151,16 +152,18 @@ export function SubjectConnections({
     };
   }
   return (
-    <ConnectionsReading
-      key={incarnation.current!.serial}
-      window={incarnation.current!.window}
-      character={character}
-      ready={ready}
-      unavailable={viewer.state === 'unavailable' || !lifetime.available}
-      returnTo={subjectVisitReturn(returnTo, value.locale)}
-      resume={incarnation.current!.resume}
-      retiredReturn={incarnation.current!.retiredReturn}
-    />
+    <CharacterAssociationBinding source={page} window={incarnation.current!.window}>
+      <ConnectionsReading
+        key={incarnation.current!.serial}
+        window={incarnation.current!.window}
+        character={character}
+        ready={ready}
+        unavailable={viewer.state === 'unavailable' || !lifetime.available}
+        returnTo={subjectVisitReturn(returnTo, value.locale)}
+        resume={incarnation.current!.resume}
+        retiredReturn={incarnation.current!.retiredReturn}
+      />
+    </CharacterAssociationBinding>
   );
 }
 
