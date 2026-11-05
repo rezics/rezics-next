@@ -1,8 +1,29 @@
 import 'reylo/register';
 import { expect, test } from 'bun:test';
 import { developmentEnv } from '../../kernel/scripts/database.ts';
-import { developmentWebsiteBindings, developmentWebsiteConfiguration, type DevelopmentKeys } from './dev-stack.ts';
+import {
+  developmentMediaBindings,
+  developmentWebsiteBindings,
+  developmentWebsiteConfiguration,
+  origins,
+  type DevelopmentKeys,
+} from './dev-stack.ts';
 import { websiteRequestedScopes } from '../../../apps/web/src/session/website-scopes.ts';
+
+test('only explicit local storage receives a stable private native object binding', () => {
+  const keys = { secret: 'development-media-binding-test-secret' };
+  expect(developmentMediaBindings({}, keys)).toEqual({});
+  const binding = developmentMediaBindings({ CONTENT_LOCAL_MEDIA_ROOT: '.temp/local-stack/content-media' }, keys);
+  expect(binding.LOCAL_MEDIA_ORIGIN).toBe(origins.native);
+  expect(binding.LOCAL_MEDIA_TOKEN).toMatch(/^[a-f0-9]{64}$/);
+  expect(developmentMediaBindings({ CONTENT_LOCAL_MEDIA_ROOT: '.temp/local-stack/content-media' }, keys)).toEqual(
+    binding,
+  );
+  expect(
+    developmentMediaBindings({ CONTENT_LOCAL_MEDIA_ROOT: '.temp/local-stack/content-media' }, { secret: 'rotated' })
+      .LOCAL_MEDIA_TOKEN,
+  ).not.toBe(binding.LOCAL_MEDIA_TOKEN);
+});
 
 test('local setup and launch carry the complete real mounted host scope composition', async () => {
   const env = Object.fromEntries(

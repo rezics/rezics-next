@@ -2901,6 +2901,11 @@ Cost per operation:
 
 ## Media claims
 
+Decision: the supported local site reads the native worker's file store through a private loopback object port,
+using the existing uploader-bound site writer and current download admission. Its focused transport acceptance
+checks external credentials, keys, byte limits, ranges and deletion of the exact failed original; the native media
+outcomes retain lifecycle, claim, disclosure, collection and growth acceptance.
+
 Post-image download and document media presentation inherit the permanent
 `claimed_item_id` post's current disclosure chain, including its reservation
 container, board and Realm. A claim must still belong to that container's chain;
