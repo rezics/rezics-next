@@ -143,7 +143,7 @@ test('original showcase claims enable admission; publication waits for the nativ
     read.subject.statements = {
       'wdt:P6298': [{ value: { type: 'value', content: '8' } }],
       ...(!withdrawn ? { 'wdt:P3180': [{ value: { type: 'value', content: 's7' } }] } : {}),
-    } as ReviewedPersonRead['subject']['statements'];
+    } as unknown as ReviewedPersonRead['subject']['statements'];
     return Response.json(read);
   }) as typeof fetch });
   const comparison = await readPersonComparison(client, 'Bearer reviewer', pair);
