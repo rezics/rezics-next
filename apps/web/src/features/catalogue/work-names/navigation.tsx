@@ -37,7 +37,6 @@ function returnFocus(value: unknown): NamesReturnFocus | undefined {
   if (
     focus.kind !== 'name' ||
     typeof focus.language !== 'string' ||
-    focus.language.length > 2048 ||
     !/^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/.test(focus.language) ||
     (focus.role !== 'title' && focus.role !== 'alias') ||
     typeof focus.identity !== 'string' ||
@@ -305,7 +304,6 @@ export function NamesHandoff({
           };
         if (!current()) return;
         const saved = namesReturn(descriptor, locale);
-        if (!saved) return;
         // Preserve back navigation as well as the explicit Terms return, without putting filters in URLs.
         router.history.replace(router.history.location.href, {
           ...router.history.location.state,
