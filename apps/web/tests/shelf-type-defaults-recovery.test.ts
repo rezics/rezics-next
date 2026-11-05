@@ -300,14 +300,14 @@ test('a confirmed receipt plus failed GET then newer current keeps a later edit 
       },
       read: async () => {
         reads++;
-        if (reads === 1)
+        if (reads === 2)
           return {
             signedIn: true,
             state: 'unavailable',
             failure: { status: 503, code: 'dependency_unavailable', requestId: 'refresh-keep' },
             securityHref: null,
           };
-        return { signedIn: true, preferences: newer, securityHref: null };
+        return { signedIn: true, preferences: reads >= 3 ? newer : initial, securityHref: null };
       },
     },
     {
@@ -323,6 +323,7 @@ test('a confirmed receipt plus failed GET then newer current keeps a later edit 
   await draft.submit();
   const original = draft.snapshot().pending?.input;
   draft.edit({ gridSize: 'small' }, 'gridSize');
+  await draft.reload();
   await draft.retry();
   expect(commands).toHaveLength(2);
   expect(commands[1]).toBe(original);
@@ -336,8 +337,9 @@ test('a confirmed receipt plus failed GET then newer current keeps a later edit 
   expect(draft.snapshot().draft.gridSize).toBe('small');
   expect(Object.isFrozen(original)).toBe(true);
 
-  await draft.reload();
   expect(reads).toBe(2);
+  await draft.reload();
+  expect(reads).toBe(3);
   expect(draft.snapshot().known.version).toBe(3);
   expect(draft.snapshot().current).toBe(true);
   expect(draft.snapshot().draft.layout).toBe('grid');
