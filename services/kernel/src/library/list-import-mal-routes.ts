@@ -16,7 +16,7 @@ import { MAL_LIMITS } from './list-import-mal-parser.ts';
 import { MAL_LABEL_LIMITS } from './list-import-mal-tags.ts';
 import { MAL_DATE_LIMITS } from './list-import-mal.ts';
 import { ENTRY_IMPORT_METADATA_LIMITS } from './list-import-entry-metadata.ts';
-import { createVoteCommands, STANDARD_QUESTION_ID } from '../rating/votes.ts';
+import { STANDARD_QUESTION_ID } from '../rating/votes.ts';
 
 const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' }),
