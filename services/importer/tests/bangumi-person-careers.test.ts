@@ -125,8 +125,9 @@ test('ordinary Person refresh follows current career bindings and retains names 
         (command): command is Extract<BatchCommand, { op: 'propose' }> =>
           command.op === 'propose' && command.statement.property.id === 'schema:name',
       );
+    expect(currentNames).toHaveLength(names.length);
     expect(currentNames.map((command) => command.statement)).toEqual(
-      names.map((command) => command.statement),
+      expect.arrayContaining(names.map((command) => command.statement)),
     );
     expect(
       currentNames.every(
