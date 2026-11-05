@@ -24,7 +24,7 @@ const canonicalManga = createServerFn({ method: 'GET', strict: false })
   })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
-    const path = `${subjectHref({ id: data.id, label: data.slug }, data.locale).href}/manga`;
+    const path = `/${encodeURIComponent(data.locale)}/subjects/${encodeURIComponent(data.id)}/${encodeURIComponent(data.slug)}/manga`;
     const visit = parseMangaPublicVisit(data.search, data.id, data.locale, path);
     const [{ kernelClient }, { loadSubject }] = await Promise.all([
       import('../../kernel/client'),
