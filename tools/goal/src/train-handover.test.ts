@@ -70,6 +70,39 @@ test('a pump that finds the train held returns at once without an error', async 
   }
 });
 
+test('a stale train hands off only after both lane leases are released', async () => {
+  const s = setup();
+  try {
+    s.queue.enqueue(s.branch('first', 'first-result'));
+    s.queue.enqueue(s.branch('second', 'second-result'));
+    let current = true;
+    let held = false;
+    await new MergeTrain({
+      ...s.options,
+      startedCodeVersion: 'loaded',
+      codeIsCurrent: () => current,
+      async runGate() {
+        current = false;
+        return { passed: true, output: '', timedOut: false };
+      },
+      handOff() {
+        for (const name of ['train.lease', 'train-main.lease']) {
+          try {
+            acquireDirectoryLease(join(s.options.stateDirectory, name)).release();
+          } catch {
+            held = true;
+          }
+        }
+      },
+    }).runWaiting();
+    expect(held).toBe(false);
+    expect(s.outcomes.map((outcome) => outcome.taskId)).toEqual(['first']);
+    expect(s.queue.next()?.request.taskId).toBe('second');
+  } finally {
+    s.close();
+  }
+});
+
 test('a request queued while the holder drains is landed by the holder after it releases', async () => {
   const s = setup();
   try {

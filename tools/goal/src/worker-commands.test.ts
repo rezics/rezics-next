@@ -106,6 +106,11 @@ test('diagnostics are read-only, tolerate unknown dependencies and use controlle
   expect(heldStatus.waitingFor).toEqual(expected.filter(([, , ready]) => !ready).map(([id]) => id));
   expect(heldStatus.pendingRetry).toEqual({ reason: 'dependencies', waitingFor: heldStatus.waitingFor });
   expect(JSON.parse(output[1]!)).toMatchObject(heldStatus);
+  expect(status.trains).toEqual([
+    { lane: 'main', state: 'missing' },
+    { lane: 'dev', state: 'missing' },
+  ]);
+  expect(JSON.parse(output[1]!).trains).toEqual(status.trains);
   expect(status.tasks.map(({ id }: Task) => id)).toEqual(all.map(({ id }) => id));
   for (const malformed of status.tasks.slice(2))
     expect(malformed.dependencies).toMatchObject([{ state: 'unknown', ready: false }]);

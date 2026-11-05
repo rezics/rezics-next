@@ -1502,6 +1502,8 @@ export type TrainOptions = {
   supermanager?: string;
   inboxDirectory?: string;
   codeIsCurrent?: () => boolean;
+  /** Loaded tools/goal object id captured at process start; written onto the lane lease for status. */
+  startedCodeVersion?: string;
   handOff?: () => void | Promise<void>;
   /** Runs after the landing lease is released, in the same process that drained the queue. */
   promote?: () => Promise<void>;
@@ -1936,23 +1938,30 @@ export class MergeTrain {
     failWhenInitiallyHeld: boolean,
     refreshConfiguration?: TrainConfigurationReloader,
   ): Promise<void> {
-    let handOff: Promise<void> | undefined;
-    const handOffOnce = () => {
-      handOff ??= Promise.resolve(this.options.handOff?.());
-      return handOff;
+    // Spawn only after both lanes have released. A child that starts while either lease is held exits at once
+    // and consumes the only wake, leaving remaining work stranded.
+    let handOffRequested = false;
+    const requestHandOff = () => {
+      handOffRequested = true;
+      return Promise.resolve();
     };
     const start = (lane: 'main' | 'dev') =>
       new Promise<void>((resolve, reject) => {
         const train = refreshConfiguration ? new MergeTrain({ ...this.options }) : this;
         if (train !== this) train.workspaceFailures = this.workspaceFailures;
         setTimeout(
-          () => train.drain(lane, failWhenInitiallyHeld, handOffOnce, refreshConfiguration).then(resolve, reject),
+          () => train.drain(lane, failWhenInitiallyHeld, requestHandOff, refreshConfiguration).then(resolve, reject),
           0,
         );
       });
     // Start dev first: a strict run must not mistake its own main release's dev lease for another train.
     // Once dev has acquired its lane, later contention already uses the normal quiet return path.
     await Promise.all([start('dev'), start('main')]);
+    if (handOffRequested) await Promise.resolve(this.options.handOff?.());
+  }
+
+  private trainLeaseExtras(): { codeVersion: string } | undefined {
+    return this.options.startedCodeVersion ? { codeVersion: this.options.startedCodeVersion } : undefined;
   }
 
   private async drain(
@@ -1966,16 +1975,17 @@ export class MergeTrain {
     const leasePath = join(o.stateDirectory, lane === 'main' ? 'train-main.lease' : 'train.lease');
     let acquired = false;
     const retryDeferred = new Set<number>();
+    const stale = () => Boolean(o.codeIsCurrent && !o.codeIsCurrent());
     for (;;) {
       // Check immediately before every acquisition attempt. A process that turns stale while queued must
       // leave the request for a fresh train instead of briefly taking the lease to discover that fact.
-      if (o.codeIsCurrent && !o.codeIsCurrent()) {
+      if (stale()) {
         await handOff();
         return;
       }
       let lease: ReturnType<typeof acquireDirectoryLease>;
       try {
-        lease = acquireDirectoryLease(leasePath, this.options.policy?.leases);
+        lease = acquireDirectoryLease(leasePath, this.options.policy?.leases, this.trainLeaseExtras());
       } catch (error) {
         if (error instanceof LeaseHeldError) {
           if (failWhenInitiallyHeld && !acquired) throw error;
@@ -1988,16 +1998,17 @@ export class MergeTrain {
       const deferred = new Set<number>();
       const pendingDevResolutions: DevResolutionHandoff[] = [];
       let processedEntry = false;
+      let retire = false;
+      let stop = false;
       try {
-        if (o.codeIsCurrent && !o.codeIsCurrent()) {
-          await handOff();
-          return;
-        }
-        for (;;) {
-          if (o.codeIsCurrent && !o.codeIsCurrent()) {
-            await handOff();
-            return;
-          }
+        if (stale()) {
+          retire = true;
+        } else {
+          for (;;) {
+            if (stale()) {
+              retire = true;
+              break;
+            }
           if (refreshConfiguration) Object.assign(o, await refreshConfiguration());
           o.configurationRevision ??= trainConfigurationRevision(o);
           const entry = o.queue.nextBatch(1, [...deferred], lane)[0];
@@ -2060,8 +2071,9 @@ export class MergeTrain {
               const integration = await this.integrateOrdinary(entry, lane, handOff);
               if (!integration) {
                 // Leave the request pending for the next pump, without retrying contention in this drain.
-                if (o.codeIsCurrent && !o.codeIsCurrent()) await handOff();
-                return;
+                if (stale()) retire = true;
+                stop = true;
+                break;
               }
               if (isDevResolutionHandoff(integration)) {
                 o.queue.beginResolution(entry.id);
@@ -2119,6 +2131,7 @@ export class MergeTrain {
             retryDeferred.delete(entry.id);
           }
         }
+        }
         // The main and dev lanes drain concurrently. A hook intended to observe a finished landing must not
         // be consumed by the idle lane before the lane with queued work reaches its handoff.
         if (processedEntry) await o.beforeRelease?.();
@@ -2128,13 +2141,18 @@ export class MergeTrain {
 
       if (pendingDevResolutions.length) {
         for (const pending of pendingDevResolutions) await this.resolveDevLanding(pending);
+        if (retire || stale()) {
+          await handOff();
+          return;
+        }
         continue;
       }
 
-      if (o.codeIsCurrent && !o.codeIsCurrent()) {
+      if (retire || stale()) {
         await handOff();
         return;
       }
+      if (stop) return;
       // The empty check is outside the lease: enqueueing while we drained can wake no owner, so retry if needed.
       if (o.queue.nextBatch(1, [...deferred], lane).length) continue;
       if (o.queue.nextBatch(1, [], lane).length) {
@@ -2145,7 +2163,7 @@ export class MergeTrain {
         continue;
       }
       await o.promote?.();
-      if (o.codeIsCurrent && !o.codeIsCurrent()) {
+      if (stale()) {
         await handOff();
         return;
       }
@@ -2900,7 +2918,11 @@ export class MergeTrain {
       }
       let lease: ReturnType<typeof acquireDirectoryLease>;
       try {
-        lease = acquireDirectoryLease(join(o.stateDirectory, 'train.lease'), this.options.policy?.leases);
+        lease = acquireDirectoryLease(
+          join(o.stateDirectory, 'train.lease'),
+          this.options.policy?.leases,
+          this.trainLeaseExtras(),
+        );
       } catch (error) {
         if (!(error instanceof LeaseHeldError)) throw error;
         const remaining = deadline - performance.now();

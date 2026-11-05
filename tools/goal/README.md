@@ -162,9 +162,15 @@ ref guards and finite retry budget. Other main and dev work retains independent
 lanes. Each lane remains serial. A train releases its lease and checks its lane's
 queue again, reacquiring the lease to drain a request that arrived during shutdown. Detached train processes wait for
 the lane lease and recheck the control-plane version while they wait. Every process records the Git object id for
-`main:tools/goal` when it starts; a stale train finishes its active landing, releases its lease and hands the remaining
-queue to current code before it can take another request. Pumps used by short commands still return quietly when
-another process holds the lane lease.
+`main:tools/goal` when it starts and writes that loaded revision onto its lane lease; a later settings reload or a moved
+ref does not recapture it. `goal status` reports each live train's loaded revision from that lease, distinct from the
+settings revision, and reports a stopped or missing lane rather than substituting the status process's own code. After
+finishing the current landing, including resolver work, a stale train releases both lane leases and exits without taking
+another request so the ordinary controller spawn can start current main code. An unrelated main change outside
+`tools/goal` does not retire trains. Pumps used by short commands still return quietly when another process holds the
+lane lease.
+Decision: persist the `tools/goal` object id captured at process start on the lane lease; after the current landing,
+release both leases and exit so replacement starts from published main; status reads that captured id, not current main.
 Detached trains reload effective local train settings between landings; each landing log records the SHA-256 revision of the settings used for that landing.
 Failures return to the same profile and session, trigger one consultation, or reach the owning manager's inbox as
 described under [integration](#integration-promotion-culprit-isolation-and-attempt-fencing).
@@ -2214,7 +2220,9 @@ bun tools/goal/src/cli.ts inbox send <manager> <kind> <summary> [--task <task>] 
 `status`, `attempts` and `report` are read-only: they do not recover orphans, record manager commands or drain queued
 work. For held tasks, `status` keeps `waitingFor` as the blocking dependency IDs and adds `dependencies` entries with
 their state and readiness. Missing or malformed dependencies have state `unknown`; readiness follows the same target
-and integration-commit policy used to release held work.
+and integration-commit policy used to release held work. The same `status` object includes `trains`: each main and dev
+lane with `state` `running`, `stopped` or `missing`, and for a recorded owner the captured `codeVersion` of the
+`tools/goal` tree that process loaded. That field is not the current `main` ref and is not the settings revision.
 
 `retry <task> [--brief <file>]` retries a task, optionally replacing its brief after checking that its Goal and manager stay the same. Brief comparison canonicalizes line endings to LF and ignores trailing end-of-file whitespace. If the supplied brief matches the current contract after that normalization, the command reports that the contract is unchanged and exits without starting another attempt. A changed brief records SHA-256 hashes of the previous and new contract on the new attempt; a stopped task can still be restarted with plain `retry <task>`.
 

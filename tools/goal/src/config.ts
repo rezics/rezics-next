@@ -43,7 +43,7 @@ import { bootSmokeRepairBrief, verifyDev, type BootSmokeRepair } from './dev-ver
 import { gateRunner, processGroupRunner, type GateRunner } from './merge.ts';
 import { bootSmokeEnvironment } from './verification.ts';
 import { randomUUID } from 'node:crypto';
-import { codeVersion } from './runtime-version.ts';
+import { captureLoadedCodeVersion, codeVersion } from './runtime-version.ts';
 import { completionChecker } from './completion.ts';
 import { TermspacesWindows } from './windows.ts';
 import type { IntegrationRuntime } from './integration-cli.ts';
@@ -517,7 +517,13 @@ export type RuntimeOptions = {
   managerServices?: Partial<ManagerServices>;
   train?: Pick<
     TrainOptions,
-    'merge' | 'beforeRelease' | 'beforeIntegrationAdvance' | 'beforePromotionAdvance' | 'promote' | 'derivedFiles'
+    | 'merge'
+    | 'beforeRelease'
+    | 'beforeIntegrationAdvance'
+    | 'beforePromotionAdvance'
+    | 'promote'
+    | 'derivedFiles'
+    | 'handOff'
   >;
 };
 
@@ -582,8 +588,9 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
   const settings = options.settings ?? options.tasks?.settings ?? loadSettings();
   const flowThresholds = settings.flowThresholds ?? DEFAULT_FLOW_THRESHOLDS;
   // Synthetic runtime fixtures may not contain the control-plane tree in their main checkout.
+  // Snapshot once: later settings reloads and moved refs must not recapture this process's loaded identity.
   const startedCodeVersion = existsSync(join(settings.mainCheckout, 'tools/goal'))
-    ? codeVersion(settings.mainCheckout, 'tools/goal')
+    ? captureLoadedCodeVersion(settings.mainCheckout)
     : undefined;
   const codeIsCurrent = () =>
     startedCodeVersion === undefined || codeVersion(settings.mainCheckout, 'tools/goal') === startedCodeVersion;
@@ -778,6 +785,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
       ),
     gateIdentity: JSON.stringify(settings.gate),
     codeIsCurrent,
+    ...(startedCodeVersion ? { startedCodeVersion } : {}),
     handOff,
     ...options.train,
     runTypecheck: typecheckGate,

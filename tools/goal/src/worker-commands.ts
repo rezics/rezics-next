@@ -20,6 +20,7 @@ import { authenticatedManager } from './priority-authority.ts';
 import { submitOwnerDecision } from './owner-decisions.ts';
 import { listOpenToolIncidents, toolIncidentForRetry } from './tool-incidents.ts';
 import { parseWorkerCommandArguments, type ParsedWorkerCommandArguments } from './command-arguments.ts';
+import { trainLaneStatus } from './lease.ts';
 
 export type WorkerCommandOptions = {
   runtime?: Runtime;
@@ -188,10 +189,11 @@ export async function runWorkerCommand(
       };
       const tasksValue = arg ? show(store.task(arg)) : store.tasks().map(show);
       const toolIncidents = listOpenToolIncidents(store);
+      const trains = trainLaneStatus(settings.stateDirectory);
       print(
         JSON.stringify(
           arg
-            ? { ...tasksValue, toolIncidents }
+            ? { ...tasksValue, toolIncidents, trains }
             : {
                 devVerification: devVerificationState(
                   settings.mainCheckout,
@@ -200,6 +202,7 @@ export async function runWorkerCommand(
                   store.tasks(),
                 ),
                 toolIncidents,
+                trains,
                 tasks: tasksValue,
               },
           null,
