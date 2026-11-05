@@ -341,17 +341,12 @@ beforeAll(async () => {
 afterAll(async () => {
   try {
     await mkdir(evidenceDir, { recursive: true });
+    const subjects = [vn, anime, book].flatMap((subject) =>
+      subject ? [{ id: subject.id, type: subject.type, label: subject.label, unit: subject.unit }] : [],
+    );
     await writeFile(
       join(evidenceDir, 'walk.json'),
-      `${JSON.stringify(
-        {
-          digest: bundledDigest,
-          subjects: [vn, anime, book].map(({ id, type, label, unit }) => ({ id, type, label, unit })),
-          walks,
-        },
-        null,
-        2,
-      )}\n`,
+      `${JSON.stringify({ digest: bundledDigest, subjects, walks }, null, 2)}\n`,
     );
   } finally {
     await auth?.stop();
