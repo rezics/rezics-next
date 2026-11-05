@@ -189,7 +189,7 @@ export function createPersonalLabelCommands(config: {
       transactionId: 'f'.repeat(36),
       time: '\u0000'.repeat(64),
     });
-    const execution = (dispatch: () => Promise<unknown>) =>
+    const execution: LibraryCommandExecutionBinding = <T>(dispatch: () => Promise<T>) =>
       executeLabelOperation(
         composeLabelOperation(
           operation,
@@ -310,7 +310,7 @@ export function createPersonalLabelCommands(config: {
       time: '\u0000'.repeat(64),
       includeRead: true,
     });
-    const execution = (dispatch: () => Promise<unknown>) =>
+    const execution: LibraryCommandExecutionBinding = <T>(dispatch: () => Promise<T>) =>
       executeLabelOperation(
         composeLabelOperation(
           plan,
@@ -347,7 +347,7 @@ export function createPersonalLabelCommands(config: {
               label: { id: 'f'.repeat(36), revision: 2_147_483_647 },
             }),
           ],
-          true,
+          false,
         );
         return executeLabelOperation(composed, async () => {
           const current = await store.readPersonalLabel(tx, route, owner.accountId, labelId);
@@ -392,7 +392,7 @@ export function createPersonalLabelCommands(config: {
       restore,
       includeRead: true,
     });
-    const execution = (dispatch: () => Promise<unknown>) =>
+    const execution: LibraryCommandExecutionBinding = <T>(dispatch: () => Promise<T>) =>
       executeLabelOperation(
         composeLabelOperation(
           plan,
@@ -438,7 +438,7 @@ export function createPersonalLabelCommands(config: {
                 : { deleted: true, revision: 2_147_483_647 },
             ),
           ],
-          true,
+          false,
         );
         return executeLabelOperation(composed, async () => {
           const current = await store.readPersonalLabel(tx, route, owner.accountId, labelId, true);
