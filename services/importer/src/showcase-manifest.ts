@@ -2,19 +2,19 @@ import { createHash } from 'node:crypto';
 import { sameStatementProvenance } from './statement-provenance.ts';
 import type { BatchCommand, BatchStatement } from '@rezics/definitions/bulk';
 import type { SourceRecord } from '@rezics/conversion';
-import { bangumiRecordUrl, vndbRecordUrl } from '@rezics/conversion/cross-media-entities';
+import { bangumiRecordUrl, crossMediaCoverDigest, vndbRecordUrl } from '@rezics/conversion/cross-media-entities';
 import { bangumiVocabularyRevision } from '@rezics/conversion/bangumi-vocabulary';
 import { vndbTagsRatingMetric, vndbVocabularyRevision } from '@rezics/conversion/vndb-vocabulary';
 import { sourceDigest } from '../../../packages/conversion/src/support.ts';
 import { createSelectedFamilySourceRegistration, crossMediaBangumiRevision } from './source-registry.ts';
 import type { CrossMediaPlan, CrossMediaReading } from './cross-media-seed.ts';
 import { bangumiAppearanceSource, graphEdgeCommandKey, graphEdgeSource } from './cross-media-bindings.ts';
-import type { CrossMediaMediaOutcome } from './showcase-media.ts';
-import { validAvailableCover } from './showcase-media.ts';
+import { BANGUMI_MEDIA_BATCH_LIMIT, validAvailableCover, type CrossMediaMediaOutcome } from './showcase-media.ts';
 import type { VndbTagRatingObservation } from './showcase-vndb-tag-ratings.ts';
 
 export const showcaseLimits = Object.freeze({
   records: 768,
+  media: BANGUMI_MEDIA_BATCH_LIMIT,
   candidates: 8192,
   vocabulary: 512,
   candidatesPerRecord: 128,
@@ -408,6 +408,20 @@ export function showcaseMediaContext(input: {
     (candidate) => candidate.sourceAlias === input.alias && candidate.externalId === input.externalId,
   );
   const sourceUrl = (row?.payload as { images?: { large?: unknown } } | undefined)?.images?.large;
+  const characterCoverDigest =
+    row?.key.startsWith('character:') && typeof sourceUrl === 'string'
+      ? crossMediaCoverDigest(
+          createSelectedFamilySourceRegistration('bangumi', input.alias).convert(
+            {
+              external_id: row.key,
+              record_revision: row.revision ?? 'unversioned',
+              record: row.payload,
+            },
+            { source: input.alias },
+          ).digest,
+          sourceUrl,
+        )
+      : undefined;
   if (
     !row ||
     typeof sourceUrl !== 'string' ||
@@ -434,6 +448,7 @@ export function showcaseMediaContext(input: {
     outcome.provenance.external_id !== row.key ||
     outcome.provenance.record_revision !== (row.revision ?? 'unversioned') ||
     outcome.provenance.field_group !== 'cover' ||
+    (row.key.startsWith('character:') && outcome.provenance.digest !== characterCoverDigest) ||
     outcome.provenance.converter_revision.length === 0 ||
     outcome.credit?.rightsHolder !== '(c) rights holder' ||
     outcome.credit.via.name !== 'Bangumi' ||
@@ -686,7 +701,7 @@ export function buildShowcaseManifest(input: {
   }
 
   const media: ShowcaseMediaRecord[] = [];
-  for (const outcome of mediaOutcomes.slice(0, 320)) {
+  for (const outcome of mediaOutcomes.slice(0, showcaseLimits.media)) {
     const record = records.find(
       (candidate) => candidate.sourceAlias === outcome.sourceAlias && candidate.sourceKey === outcome.externalId,
     );
@@ -735,7 +750,7 @@ export function buildShowcaseManifest(input: {
       ...(gap ? { gap } : {}),
     });
   }
-  if (mediaOutcomes.length > 320)
+  if (mediaOutcomes.length > showcaseLimits.media)
     omissions.push({ provider: 'bangumi', sourceKey: 'selected-family', code: 'cover-source-unavailable' });
 
   const vocabulary: ShowcaseVocabularyRecord[] = [];
