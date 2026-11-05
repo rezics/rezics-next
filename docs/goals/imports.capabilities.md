@@ -4,6 +4,8 @@ Current user cases, native scenarios and evidence limits for the [Imports Goal](
 
 Authority split: module READMEs hold current contracts and costs; this file holds user outcomes, exact native scenarios, commands and what the evidence does not prove.
 
+Decision: Type-only repairs preserve existing outcome assertions and add tests only for behavior newly required by the contract.
+
 ## User outcome
 
 Maintainers and community tools import licensed records through ordinary APIs and permissions, inspect omissions, and safely refresh changed or vanished facts. Pure revisioned converters produce proposals. Independent authorized review accepts and adopts them; separate current public reads verify the result. Refresh preserves source identity, existing adoption and unrelated editorial choices.
