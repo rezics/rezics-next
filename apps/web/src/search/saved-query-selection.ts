@@ -6,7 +6,13 @@ import type { SearchLoaderDeps } from './search-params';
 /** Save only a predicate that the dynamic Collection rule can represent without changing Search meaning. */
 export function searchSavedQuerySelection(state: SearchLoaderDeps | undefined): SavedQuerySelection {
   if (!state) return { state: 'empty' };
-  if (state.invalidInput || state.query.trim() || state.sort === 'rating' || state.ratingPopulation || state.resourceScope)
+  if (
+    state.invalidInput ||
+    state.query.trim() ||
+    state.sort === 'rating' ||
+    state.ratingPopulation ||
+    state.resourceScope
+  )
     return { state: 'invalid', issues: [{ key: 'search', reason: 'unrepresentable' }] };
 
   const clauses: unknown[] = [];

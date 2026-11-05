@@ -14,10 +14,7 @@ test('property Search saves its exact catalogue predicate without adding a priva
   expect(selection).toEqual({
     state: 'admitted',
     filter: parseFilter({
-      and: [
-        { type: { in: ['schema:Book'] } },
-        { statement: { property: 'schema:keywords', in: ['space opera'] } },
-      ],
+      and: [{ type: { in: ['schema:Book'] } }, { statement: { property: 'schema:keywords', in: ['space opera'] } }],
     }),
     sort: 'id',
     source: { kind: 'catalogue' },

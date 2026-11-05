@@ -479,9 +479,7 @@ function RuleForm({
     page.state === 'ready' ? page.rule.filter : (seed ?? { and: [presence] }),
   );
   const source: SavedQuerySource =
-    page.state === 'ready'
-      ? (page.rule.source ?? { kind: 'owner' })
-      : (seedSource ?? { kind: 'owner' });
+    page.state === 'ready' ? (page.rule.source ?? { kind: 'owner' }) : (seedSource ?? { kind: 'owner' });
   const [choices, setChoices] = useState(page.choices);
   const [query, setQuery] = useState('');
   const prefix = collectionRuleLabelPrefix(query);

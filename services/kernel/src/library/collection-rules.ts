@@ -195,7 +195,8 @@ export async function readSavedCollectionRule(
   collectionId: string,
 ): Promise<SavedCollectionRule | null> {
   const row = await read.run({ query: client.query.bind(client) }, { route, collection_id: collectionId });
-  if (!row || row.releaseDigest === null || row.filter === null || row.sort === null || row.source === null) return null;
+  if (!row || row.releaseDigest === null || row.filter === null || row.sort === null || row.source === null)
+    return null;
   const rule = parseCollectionRule({ filter: JSON.parse(row.filter), sort: row.sort, source: { kind: row.source } });
   return {
     ...rule,

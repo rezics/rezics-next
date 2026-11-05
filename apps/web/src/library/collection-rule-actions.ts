@@ -107,17 +107,15 @@ export async function submitCollectionRule(
     if (!asSession(session)) return session;
     const headers = kernelHeaders(session.authorization, input.idempotencyKey);
     const result = input.id
-      ? await client
-          .collections({ collectionId: input.id })
-          .rule.put(
-            {
-              revision: input.revision!,
-              filter: input.filter,
-              sort: input.sort,
-              ...(input.source ? { source: input.source } : {}),
-            },
-            { headers },
-          )
+      ? await client.collections({ collectionId: input.id }).rule.put(
+          {
+            revision: input.revision!,
+            filter: input.filter,
+            sort: input.sort,
+            ...(input.source ? { source: input.source } : {}),
+          },
+          { headers },
+        )
       : await client.collections.post(
           {
             membershipKind: 'dynamic',
