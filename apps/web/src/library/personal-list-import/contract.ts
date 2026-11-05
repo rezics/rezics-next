@@ -25,8 +25,8 @@ export const VNDB_PAGE = 8;
 export const VNDB_APPLY = 8;
 export const VNDB_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-/** Keep native fields intact; the decoder additionally admits only JSON source evidence. */
-export type VndbRow = GeneratedVndbPage['rows'][number] & { evidence: VndbJson };
+/** Preserve the mounted native row, including its private source evidence. */
+export type VndbRow = GeneratedVndbPage['rows'][number];
 export type VndbSourceValue = VndbRow['fields'][string];
 export type VndbState = NonNullable<VndbRow['target']>['states'][number];
 export type VndbBaseline = NonNullable<VndbRow['target']>['baseline'];
