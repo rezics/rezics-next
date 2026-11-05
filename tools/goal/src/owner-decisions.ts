@@ -214,11 +214,7 @@ function projectOwnerDecision(
     if (!body) continue;
     const decisionId = body.decisionId;
     const decisionSequence = body.decisionSequence;
-    if (
-      typeof decisionId !== 'string' ||
-      typeof decisionSequence !== 'number' ||
-      event.sequence <= decisionSequence
-    )
+    if (typeof decisionId !== 'string' || typeof decisionSequence !== 'number' || event.sequence <= decisionSequence)
       continue;
     const key = decisionDeliveryKey(decisionId, decisionSequence);
     let delivery = deliveryByDecision.get(key);
@@ -245,9 +241,7 @@ function projectOwnerDecision(
     )
       decision = candidate;
   }
-  const delivery = decision
-    ? deliveryByDecision.get(decisionDeliveryKey(decision.id, decision.sequence))
-    : undefined;
+  const delivery = decision ? deliveryByDecision.get(decisionDeliveryKey(decision.id, decision.sequence)) : undefined;
   return {
     decision,
     delivery: delivery ?? { summaryDelivered: false, deliveredDocumentPaths: new Set<string>() },
