@@ -145,6 +145,10 @@ for (const kind of ['Person', 'Character'] as const)
       expect(host.querySelector<HTMLInputElement>('input')?.value).toBe('Mél');
       expect(host.textContent).toContain('Mél—旅人 39');
       expect(document.activeElement === host.querySelector('[data-names-sources] a')).toBe(true);
+      for (const anchor of host.querySelectorAll<HTMLAnchorElement>('[data-names-sources] a, [data-names-terms] a')) {
+        const returnedVia = new URL(new URL(anchor.href).searchParams.get('via')!, 'https://rezics.invalid');
+        expect(returnedVia.searchParams.get('realm')).toBe(realm);
+      }
       await act(async () => {
         history.forward();
         await router.load();

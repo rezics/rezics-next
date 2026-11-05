@@ -21,10 +21,6 @@ type Visit = {
 export function PeopleNamesVisit(props: Visit) {
   const { reading, lifetime, address } = props;
   const { subject } = reading.public;
-  const host = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => {
-    if (host.current) installPeopleNamesReturn(host.current, address.returnHref, reading.locale);
-  });
   const binding = lifetime.caller
     ? JSON.stringify([
         subject.id,
@@ -37,19 +33,17 @@ export function PeopleNamesVisit(props: Visit) {
       ])
     : undefined;
   return (
-    <div ref={host} className="min-w-0 space-y-3">
-      <NamesHandoff
-        {...{ binding }}
-        returnHref={address.returnHref}
-        locale={reading.locale}
-        current={lifetime.current}
-        names={props.names.state === 'ready' ? props.names.groups : []}
-      >
-        {(restored, returnStatus, focusTargets) => (
-          <AdvisedVisit {...props} {...{ restored, returnStatus, focusTargets }} />
-        )}
-      </NamesHandoff>
-    </div>
+    <NamesHandoff
+      {...{ binding }}
+      returnHref={address.returnHref}
+      locale={reading.locale}
+      current={lifetime.current}
+      names={props.names.state === 'ready' ? props.names.groups : []}
+    >
+      {(restored, returnStatus, focusTargets) => (
+        <AdvisedVisit {...props} {...{ restored, returnStatus, focusTargets }} />
+      )}
+    </NamesHandoff>
   );
 }
 
@@ -75,6 +69,10 @@ function CurrentNames({
   advice,
   retryAdvice,
 }: Visit & Restoration & { advice: NamesAdvice; retryAdvice?: (() => void) | undefined }) {
+  const host = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (host.current) installPeopleNamesReturn(host.current, address.returnHref, reading.locale);
+  });
   const Link = reading.link ?? PlainLink;
   // Unsupported destinations stay visible without silently making a different Context reading.
   const UnavailableLink: PageLink = ({ children, className }) => (
@@ -83,7 +81,7 @@ function CurrentNames({
     </span>
   );
   return (
-    <>
+    <div ref={host} className="min-w-0 space-y-3">
       {!lifetime.retired && !address.supported && (
         <p role="status">{m.people_names_context_unsupported({}, { locale: reading.locale as never })}</p>
       )}
@@ -103,6 +101,6 @@ function CurrentNames({
         captureSourcesVisit
         link={address.supported ? Link : UnavailableLink}
       />
-    </>
+    </div>
   );
 }
