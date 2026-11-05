@@ -302,7 +302,10 @@ test.each([false, true])('mounted exact retry receives covered cross-home select
   await click(button(m.moderation_appeal_uphold_action()));
   expect(sent).toHaveLength(1);
   expect(sent[0]).toMatchObject({
-    id: selected.id, outcome: 'uphold', statement: 'Original review.', nativeSession: 'opaque-native',
+    id: selected.id,
+    outcome: 'uphold',
+    statement: 'Original review.',
+    nativeSession: 'opaque-native',
   });
   expect(button(m.moderation_queue_refresh()).disabled).toBe(true);
   expect(requests).toHaveLength(3);
@@ -322,8 +325,8 @@ test.each([false, true])('mounted exact retry receives covered cross-home select
   expect(host.textContent).toContain('Native retained outcome.');
   expect(host.querySelector('textarea')).toBeNull();
   expect(host.textContent).not.toContain('Original review.');
-  const returnLink = [...host.querySelectorAll('a')].find((link) =>
-    link.textContent === m.moderation_workbench_history_return(),
+  const returnLink = [...host.querySelectorAll('a')].find(
+    (link) => link.textContent === m.moderation_workbench_history_return(),
   )!;
   const address = new URL(returnLink.href, browser.location.href);
   expect(address.pathname).toContain('/moderation/workbench');

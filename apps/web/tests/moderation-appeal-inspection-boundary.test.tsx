@@ -149,7 +149,9 @@ test('composed inspection seam admits only current actor/session, exact outcome,
     {
       ...page,
       provenance: Object.assign(Object.create({ sourceObservations: provenance.sourceObservations }), {
-        actorId: provenance.actorId, session: provenance.session, source: provenance.source,
+        actorId: provenance.actorId,
+        session: provenance.session,
+        source: provenance.source,
       }),
     },
     { ...page, provenance: { ...provenance, actorId: 'other' } },
