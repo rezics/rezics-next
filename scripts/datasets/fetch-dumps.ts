@@ -11,7 +11,14 @@ export const DEFAULT_CROSS_MEDIA_DUMP_CACHE = '/home/edge/projects/rezics/rezics
 export const BANGUMI_ARCHIVE_URL =
   'https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip';
 export const BANGUMI_ARCHIVE_SHA256 = '9fe8de272398ff4bd12994b73e25aac37cca631372383f6aadc503528623aa93';
-export const VNDB_ARCHIVE_URL = 'https://dl.vndb.org/dump/vndb-db-2026-10-25.tar.zst';
+export const VNDB_ARCHIVE_URL = 'https://dl.vndb.org/dump/vndb-db-2026-11-04.tar.zst';
+export const VNDB_ARCHIVE_SHA256 = 'fadbe611c4d6475ef63a0c1861512bc9ff64d21c6c9804a988522c7c65f6fa85';
+export const VNDB_ARCHIVE_TIMESTAMP = '2026-11-04 08:00:24+00';
+export const DEVELOPMENT_VNDB_PIN = {
+  url: VNDB_ARCHIVE_URL,
+  sha256: VNDB_ARCHIVE_SHA256,
+  timestamp: VNDB_ARCHIVE_TIMESTAMP,
+} as const;
 export const VNDB_DUMP_INDEX_URL = 'https://dl.vndb.org/dump/';
 export const VNDB_DUMP_MANIFEST = 'manifest.json';
 const VNDB_DATED_DUMP = /^vndb-db-\d{4}-\d{2}-\d{2}\.tar\.zst$/;
@@ -91,6 +98,7 @@ export const VNDB_DUMP_TABLES = [
 const MARKER = '.cross-media-dump-sha256';
 
 type FetchOptions = { fetchImpl?: typeof fetch };
+type VndbDumpPin = Readonly<{ url: string; sha256: string; timestamp: string }>;
 type CommandRunner = (command: string, args: string[]) => Promise<void>;
 
 export type CrossMediaDumpPaths = Readonly<{
@@ -325,10 +333,14 @@ async function bangumiDirectory(root: string): Promise<string | undefined> {
   });
 }
 
-async function vndbDirectory(root: string): Promise<string | undefined> {
+async function vndbDirectory(root: string, timestamp?: string): Promise<string | undefined> {
   return locateDirectory(root, async (candidate) => {
     if (!(await regularFile(join(candidate, 'README.txt')))) return false;
     if (!(await regularFile(join(candidate, 'schema_vndbid.sql')))) return false;
+    if (timestamp !== undefined) {
+      const stamp = join(candidate, 'TIMESTAMP');
+      if (!(await regularFile(stamp)) || (await readFile(stamp, 'utf8')).trimEnd() !== timestamp) return false;
+    }
     const db = join(candidate, 'db');
     for (const table of VNDB_DUMP_TABLES) {
       const file = join(db, table);
@@ -472,9 +484,17 @@ async function cachedArchiveDigest(path: string): Promise<string | undefined> {
 
 async function fetchVndbArchive(
   cacheRoot: string,
-  options: FetchOptions,
+  options: FetchOptions & { pin?: VndbDumpPin },
 ): Promise<{ archive: string; digest: string; file: string; url: string }> {
   const downloads = join(cacheRoot, 'downloads');
+  if (options.pin) {
+    // A development snapshot cannot be replaced by a different machine-local manifest or a rotated dump.
+    const { url, sha256 } = options.pin;
+    const file = dumpFileName(url);
+    const archive = join(downloads, file);
+    const digest = await cacheDumpAsset(url, archive, sha256, options);
+    return { archive, digest, file, url };
+  }
   const cached = await readVndbManifest(vndbDumpManifestPath(cacheRoot));
   if (cached) {
     const archive = join(downloads, cached.file);
@@ -514,7 +534,7 @@ async function fetchVndbArchive(
 
 /** Fetch one VNDB dump, verifying it and recording the resolved file and checksum. */
 export async function fetchVndbDump(
-  options: FetchOptions & { cacheRoot?: string } = {},
+  options: FetchOptions & { cacheRoot?: string; pin?: VndbDumpPin } = {},
 ): Promise<{ cacheRoot: string; vndb: string; vndbArchive: string; manifest: VndbDumpManifest }> {
   const cacheRoot = resolve(options.cacheRoot ?? crossMediaDumpCacheRoot());
   await mkdir(cacheRoot, { recursive: true });
@@ -523,7 +543,7 @@ export async function fetchVndbDump(
     fetched.archive,
     fetched.digest,
     join(cacheRoot, 'vndb', fetched.file.replace(/\.tar\.zst$/, '')),
-    vndbDirectory,
+    (root) => vndbDirectory(root, options.pin?.timestamp),
     validateVndbArchive,
     (path, destination) => runCommand('tar', ['--zstd', '-xf', path, '-C', destination]),
   );
@@ -550,7 +570,7 @@ export async function fetchCrossMediaDumps(
     (path) => runCommand('unzip', ['-tqq', path]),
     (path, destination) => runCommand('unzip', ['-qq', path, '-d', destination]),
   );
-  const vndbDump = await fetchVndbDump({ ...options, cacheRoot });
+  const vndbDump = await fetchVndbDump({ ...options, cacheRoot, pin: DEVELOPMENT_VNDB_PIN });
   return {
     cacheRoot,
     bangumi,
