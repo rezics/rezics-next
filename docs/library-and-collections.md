@@ -494,6 +494,8 @@ original support and terminal: a withheld original never becomes public because 
 
 ## Destinations and actions
 
+Decision: Personal Library entry reading opens one exact row from the admitted shelf page without another read or write. It shows the reconciled row's supplied state, recorded dates, active Progress snapshot and current Work context; source or row identity changes retire it, while uncertainty stays with the originating row and Work/Progress use the existing row destinations.
+
 Decision: My Collections admits an optional string cursor of at most 4096 characters and only rows/previews layout
 (default rows when absent); malformed addresses retain bounded escaped context and make no private list or pins
 read until explicit GET correction or restart. Cursor correction/restart keeps a valid layout; layout correction

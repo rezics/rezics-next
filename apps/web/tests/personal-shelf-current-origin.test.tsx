@@ -51,6 +51,32 @@ function response(subject: string): PersonalLibraryCurrentRead {
     navigation: { pins: { state: 'closed' }, collections: [], collectionsState: 'loaded' },
   };
 }
+function receivedReadingResponse(subject: string): PersonalLibraryCurrentRead {
+  const result = response(subject);
+  const entry = result.page.signedIn ? result.page.entries[0]! : undefined;
+  if (!entry) throw new Error('Expected the signed-in personal shelf page.');
+  entry.createdAt = '2042-06-07T08:09:10.000Z';
+  entry.updatedAt = '2043-07-08T09:10:11.000Z';
+  entry.lastActivityAt = '2044-08-09T10:11:12.000Z';
+  entry.finishedAt = null;
+  entry.state = 'planned';
+  entry.stateLabel = 'Planned';
+  entry.stateOptions = [
+    { id: 'planned', label: { text: 'Planned', lang: 'en' } },
+    { id: 'completed', label: { text: 'Completed', lang: 'en' } },
+  ];
+  entry.activeProgressSession = {
+    mode: 'scalar_amount',
+    unit: 'page',
+    amount: '0.50',
+    total: null,
+    completedUnitCount: 0,
+    locator: null,
+    unitLabel: 'pages',
+    unitLabelLanguage: 'en',
+  };
+  return result;
+}
 const saved = (n: number): LibraryMutationResult => ({
   ok: true,
   entry: { subjectId: id(n), state: 'completed', revision: 8, incarnationId: id(90 + n), updatedAt: '2026-02-01' },
@@ -349,6 +375,95 @@ test('Whole personal Shelf reads, sequential commands and Undo retire on actual 
     await ui.settle(ui.reads.at(-1)!, { ...response('B'), sessionSubject: 'A' });
     expect(ui.host.textContent).not.toContain('Private A');
     expect(ui.host.textContent).not.toContain('Private B');
+  } finally {
+    await ui.close();
+  }
+});
+
+test('Received Entry reading uses supplied state, exact dates and active Progress without another read or write, then restores trigger focus', async () => {
+  const ui = await mount();
+  try {
+    await ui.settle(ui.reads[0]!, receivedReadingResponse('A'));
+    const trigger = () => ui.host.querySelector<HTMLButtonElement>('[data-received-entry-reading-trigger]')!;
+    const before = { reads: ui.reads.length, writes: ui.writes.length, continues: ui.continues.length };
+    await ui.run(() => trigger().click());
+
+    const reader = ui.host.querySelector<HTMLElement>('[data-received-entry-reading]')!;
+    const record = reader.querySelector<HTMLElement>('[data-received-entry-record]')!;
+    expect(reader.getAttribute('role')).toBe('dialog');
+    expect(reader.getAttribute('aria-modal')).toBe('false');
+    expect(document.activeElement).toBe(reader.querySelector('h2'));
+    expect(record.textContent).toContain('Planned');
+    expect(record.textContent).toContain('2042-06-07T08:09:10.000Z');
+    expect(record.textContent).toContain('2043-07-08T09:10:11.000Z');
+    expect(record.textContent).toContain('2044-08-09T10:11:12.000Z');
+    expect(record.textContent).toContain(ui.m.library_entry_reading_date_empty());
+    expect(record.textContent).toContain('0.50');
+    expect(record.textContent).toContain(ui.m.library_entry_reading_total_unknown());
+    expect(record.textContent).toContain(ui.m.library_entry_reading_context_unavailable());
+
+    const details = reader.querySelector<HTMLDetailsElement>('[data-entry-reading-exact-date]')!;
+    await ui.run(() => details.querySelector('summary')!.click());
+    expect(details.open).toBe(true);
+    await ui.run(() => reader.querySelector<HTMLButtonElement>('[data-received-entry-reading-close]')!.click());
+    expect(document.activeElement).toBe(trigger());
+    expect(ui.host.querySelector('[data-received-entry-reading]')).toBeNull();
+    expect(ui.reads).toHaveLength(before.reads);
+    expect(ui.writes).toHaveLength(before.writes);
+    expect(ui.continues).toHaveLength(before.continues);
+
+    await ui.run(() => trigger().click());
+    await ui.run(() =>
+      ui.host.querySelector<HTMLButtonElement>('[data-received-entry-progress-destination]')!.click(),
+    );
+    expect(ui.router.state.location.pathname).toBe('/library/progress');
+    expect(ui.router.state.location.search).toMatchObject({ subjectId: id(1) });
+    expect(ui.host.querySelector('[data-received-entry-reading]')).toBeNull();
+  } finally {
+    await ui.close();
+  }
+});
+
+test('Received Entry reading keeps uncertain commands unconfirmed and retires on replacement and viewer change', async () => {
+  const ui = await mount();
+  try {
+    await ui.settle(ui.reads[0]!, receivedReadingResponse('A'));
+    await ui.run(() => {
+      void ui.controls.changeState(id(1), 'completed');
+    });
+    expect(ui.writes).toHaveLength(1);
+    await ui.settle(ui.writes[0]!.work, { ok: false, reason: 'unavailable' });
+    await ui.run(() => ui.host.querySelector<HTMLButtonElement>('[data-received-entry-reading-trigger]')!.click());
+
+    const record = ui.host.querySelector<HTMLElement>('[data-received-entry-record]')!;
+    expect(record.textContent).toContain('Planned');
+    expect(record.textContent).not.toContain('Completed');
+    expect(record.textContent).toContain(ui.m.library_entry_reading_state_unknown());
+    expect(record.textContent).toContain(ui.m.library_entry_reading_last_received());
+
+    const replacement = receivedReadingResponse('A');
+    if (!replacement.page.signedIn) throw new Error('Expected the signed-in personal shelf page.');
+    replacement.page.entries[0]!.revision = 8;
+    replacement.page.entries[0]!.incarnationId = id(991);
+    replacement.page.entries[0]!.subject!.label = 'Replacement A';
+    await ui.refresh();
+    await ui.settle(ui.reads.at(-1)!, replacement);
+    expect(ui.host.querySelector('[data-received-entry-reading]')).toBeNull();
+    expect(ui.host.textContent).not.toContain('2042-06-07T08:09:10.000Z');
+    expect(ui.host.textContent).toContain('Replacement A');
+
+    await ui.run(() => ui.host.querySelector<HTMLButtonElement>('[data-received-entry-reading-trigger]')!.click());
+    expect(ui.host.querySelector('[data-received-entry-reading]')).not.toBeNull();
+    await ui.run(() => ui.session('B'));
+    expect(ui.host.querySelector('[data-received-entry-reading]')).toBeNull();
+    expect(ui.host.textContent).not.toContain('Replacement A');
+    expect(ui.host.textContent).not.toContain('2042-06-07T08:09:10.000Z');
+    await ui.refresh();
+    await ui.settle(ui.reads.at(-1)!, receivedReadingResponse('B'));
+    expect(ui.host.textContent).toContain('Private B 1');
+    expect(ui.host.textContent).not.toContain('Replacement A');
+    expect(ui.host.querySelector('[data-received-entry-reading]')).toBeNull();
+    expect(ui.writes).toHaveLength(1);
   } finally {
     await ui.close();
   }

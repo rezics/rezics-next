@@ -25,7 +25,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { SelectionBar as SharedSelectionBar } from '@rezics/ui/selection-bar';
 import { useLocation, useNavigate } from '@tanstack/react-router';
 import { EllipsisIcon } from 'lucide-react';
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { coverSrc } from '../media/cover-src';
 import { m } from '../paraglide/messages.js';
 import { subjectHref } from '../subject/subject-href';
@@ -63,6 +63,7 @@ import type { LabelShelfEntry } from './label-shelf-read';
 import { SelectionReviewView, SelectionReviewList, type SelectionReviewItem } from './selection-review-view';
 import { appendSelectionWithinLimit, selectionReviewSignature, selectionResultState } from './selection-review';
 import { SelectionResultView } from './selection-result-view';
+import { useReceivedEntryReading } from './received-entry-reading/use-reading';
 
 export function stateLabel(state: LibraryEntryStateRead, label?: string): string | undefined {
   return state ? (label ?? m.library_other()) : undefined;
@@ -114,6 +115,7 @@ type Controls = ReturnType<typeof useShelfRows> & {
   layout: ShelfLayout;
   size: ShelfSize;
   columns?: string;
+  readEntry: (row: ShelfRow) => ReactNode;
 };
 function hrefOf(entry: PersonalLibraryEntry, locale: string): string {
   return entry.subject
@@ -462,6 +464,7 @@ function GridView({ controls, size }: { controls: Controls; size: ShelfSize }) {
         const statusHref = stateHref(entry.state, locale, controls);
         const progress = entryProgress(entry, locale);
         const title = titleOf(entry, locale);
+        const readEntry = controls.readEntry(row);
         const notes =
           row.conflict || row.failure ? (
             <div className="space-y-1">
@@ -479,7 +482,12 @@ function GridView({ controls, size }: { controls: Controls; size: ShelfSize }) {
               title={title.text}
               {...(title.lang ? { titleLang: title.lang } : {})}
               cover={coverOf(entry)}
-              secondary={<ShelfWorkContextView entry={entry} locale={locale} isCurrent={controls.isCurrent} />}
+              secondary={
+                <>
+                  <ShelfWorkContextView entry={entry} locale={locale} isCurrent={controls.isCurrent} />
+                  {readEntry ? <div className="mt-2 flex justify-center">{readEntry}</div> : null}
+                </>
+              }
               {...(progress ? { progress } : {})}
               {...(status ? { status: { label: status, ...(statusHref ? { href: statusHref } : {}) } } : {})}
               menuTrigger={<ItemMenuTriggerSlot />}
@@ -502,6 +510,7 @@ function ListView({ controls }: { controls: Controls }) {
         const status = stateLabel(entry.state, entry.stateLabel);
         const href = stateHref(entry.state, locale, controls);
         const progress = entryProgress(entry, locale);
+        const readEntry = controls.readEntry(row);
         if (!entry.subject)
           return (
             <li key={entry.subjectId} className="space-y-2 border-b py-3">
@@ -509,6 +518,7 @@ function ListView({ controls }: { controls: Controls }) {
               <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                 {status ? <span>{status}</span> : null}
                 {progress ? <ProgressRow {...progress} /> : null}
+                {readEntry}
                 <EntryMenu row={row} controls={controls} trigger={{ variant: 'ghost' }}>
                   <Updated entry={entry} locale={locale} />
                 </EntryMenu>
@@ -527,6 +537,7 @@ function ListView({ controls }: { controls: Controls }) {
               <>
                 <span>{entry.subject?.typeLabel}</span>
                 <ShelfWorkContextView entry={entry} locale={locale} isCurrent={controls.isCurrent} />
+                {readEntry}
               </>
             }
             {...(progress ? { progress } : {})}
@@ -595,9 +606,12 @@ function TableView({ controls, state }: { controls: Controls; state?: string }) 
       status: (
         <span className="inline-flex items-center gap-1">
           {!activityVisible ? (
-            <EntryMenu row={row} controls={controls} trigger={{ variant: 'ghost' }}>
-              {null}
-            </EntryMenu>
+            <>
+              <EntryMenu row={row} controls={controls} trigger={{ variant: 'ghost' }}>
+                {null}
+              </EntryMenu>
+              {controls.readEntry(row)}
+            </>
           ) : null}
           {statusVisible ? (
             status && href ? (
@@ -614,6 +628,7 @@ function TableView({ controls, state }: { controls: Controls; state?: string }) 
       finished: entry.finishedAt ? <RelativeTime value={entry.finishedAt} locale={locale} timeZone="UTC" /> : '—',
       lastActivity: (
         <span className="inline-flex items-center gap-1">
+          {activityVisible ? controls.readEntry(row) : null}
           <EntryMenu row={row} controls={controls} trigger={{ variant: 'ghost' }}>
             <Updated entry={entry} locale={locale} />
           </EntryMenu>
@@ -704,6 +719,13 @@ export function ShelfEntries(props: ShelfEntriesProps) {
     active: true,
     landedEntries: [] as ShelfRemovalIdentity[],
   });
+  const pageEntries = useMemo(
+    () =>
+      props.entries.filter(
+        (entry) => !source.landedEntries.some((landed) => matchesRemovedShelfEntry(entry, landed)),
+      ),
+    [props.entries, source.landedEntries],
+  );
   const latest = useRef(props.isCurrent);
   latest.current = props.isCurrent;
   const [fallbackLease] = useState(shelfMutationLease);
@@ -739,9 +761,9 @@ export function ShelfEntries(props: ShelfEntriesProps) {
     <ShelfEntriesPage
       key={source.generation}
       {...props}
-      entries={props.entries.filter(
-        (entry) => !source.landedEntries.some((landed) => matchesRemovedShelfEntry(entry, landed)),
-      )}
+      entries={pageEntries}
+      population={pageEntries}
+      readingOrigin={source}
       isCurrent={() => source.active && (latest.current?.() ?? true)}
       mutationLease={mutationLease}
       onBulkRemovalLanded={onBulkRemovalLanded}
@@ -764,12 +786,24 @@ function ShelfEntriesPage({
   onBulkRemovalLanded,
   isCurrent,
   empty,
+  population,
+  readingOrigin,
 }: ShelfEntriesProps & {
   mutationLease: ShelfMutationLease;
   onBulkRemovalLanded: (targets: readonly ShelfRemovalIdentity[]) => void;
+  population: readonly PersonalLibraryEntry[];
+  readingOrigin: object;
 }) {
   const hydrated = useHydrated();
   const shelfRows = useShelfRows(entries, locale, mutationLease, isCurrent);
+  const reading = useReceivedEntryReading({
+    originKey: readingOrigin,
+    population,
+    rows: shelfRows.rows,
+    locale,
+    isCurrent: shelfRows.isCurrent,
+    progressAdmitted: shelfRows.progressAdmitted,
+  });
   const [selectionLimitReached, setSelectionLimitReached] = useState(false);
   const controls: Controls = {
     ...shelfRows,
@@ -801,6 +835,7 @@ function ShelfEntriesPage({
     ...(type ? { type } : {}),
     ...(sort ? { sort } : {}),
     ...(filterSort ? { filterSort } : {}),
+    readEntry: reading.trigger,
   };
   const bulkRemoval = useBulkLibraryRemoval({
     rows: shelfRows.rows,
@@ -890,20 +925,31 @@ function ShelfEntriesPage({
           </div>
         ))}
       </noscript>
-      <fieldset disabled={shelfRows.pending} aria-busy={shelfRows.pending} className="min-w-0">
-        {layout === 'grid' ? <GridView controls={controls} size={size} /> : null}
-        {layout === 'list' ? <ListView controls={controls} /> : null}
-        {layout === 'table' ? (
-          <>
-            <div className="hidden sm:block">
-              <TableView controls={controls} {...(state ? { state } : {})} />
-            </div>
-            <div className="sm:hidden">
-              <ListView controls={controls} />
-            </div>
-          </>
-        ) : null}
-      </fieldset>
+      <div
+        ref={reading.shelf}
+        tabIndex={-1}
+        role="region"
+        aria-label={m.library_heading()}
+        data-personal-library-shelf-focus=""
+        className="min-w-0 outline-none"
+      >
+        <fieldset disabled={shelfRows.pending} aria-busy={shelfRows.pending} className="min-w-0">
+          <legend className="sr-only">{m.library_heading()}</legend>
+          {layout === 'grid' ? <GridView controls={controls} size={size} /> : null}
+          {layout === 'list' ? <ListView controls={controls} /> : null}
+          {layout === 'table' ? (
+            <>
+              <div className="hidden sm:block">
+                <TableView controls={controls} {...(state ? { state } : {})} />
+              </div>
+              <div className="sm:hidden">
+                <ListView controls={controls} />
+              </div>
+            </>
+          ) : null}
+        </fieldset>
+      </div>
+      {reading.surface}
       {shelfRows.selected.length ? <div aria-hidden="true" className="h-40 md:hidden" /> : null}
       <Exposure operation="library_entry.delete">
         <AlertDialog open={leaving !== undefined} onOpenChange={(open) => !open && shelfRows.cancelRemove()}>
