@@ -3,6 +3,7 @@ import { installPostReadingDom } from './post-reading-dom';
 import { act, useState } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { parseDocument, withDocumentIds, type DocumentNode, type DocumentSnapshot } from '@rezics/document';
+import type { DocumentMentions } from '@rezics/ui/document-body';
 import * as start from '../.storybook/react-start';
 import { preparedPostReading } from '../src/stories/post-reading-fixtures';
 import { m } from '../src/paraglide/messages.js';
@@ -117,20 +118,15 @@ test('script-free reading keeps ordinary safe anchors, authored titles and repea
   expect(new Set(ids).size).toBe(2);
 });
 
-async function mountPublishedReader(body: DocumentSnapshot) {
+async function mountPublishedReader(body: DocumentSnapshot, mentions: DocumentMentions = {}) {
   const container = window.document.createElement('div');
   window.document.body.append(container);
   const root = createRoot(container);
   const initial = preparedPostReading(1).post;
-  let identity: object = {};
-  let replace = () => {};
+  let replace = (_mentions: DocumentMentions = mentions) => {};
   function Reader() {
-    const [visit, setVisit] = useState(identity);
-    replace = () => {
-      const next = {};
-      identity = next;
-      setVisit(next);
-    };
+    const [visit, setVisit] = useState({ mentions });
+    replace = (nextMentions = mentions) => setVisit({ mentions: nextMentions });
     return (
       <>
         <button id="replace-reader" onClick={() => replace()}>
@@ -138,7 +134,7 @@ async function mountPublishedReader(body: DocumentSnapshot) {
         </button>
         <ThreadPostReadingBody
           post={{ ...initial, body }}
-          mentions={{}}
+          mentions={visit.mentions}
           readerIdentity={visit}
           isReaderCurrent={() => true}
         />
@@ -151,7 +147,7 @@ async function mountPublishedReader(body: DocumentSnapshot) {
     document: window.document,
     container,
     root,
-    replace: () => replace(),
+    replace: (nextMentions = mentions) => replace(nextMentions),
     async restore() {
       await act(async () => root.unmount());
       container.remove();
@@ -277,6 +273,57 @@ test('published reader inspects one occurrence, returns without changing its fra
     expect(mounted.container.querySelector('textarea')).toBeNull();
     expect(mounted.container.textContent).not.toContain(m.post_references_return_previous());
     expect(mounted.document.body.textContent).not.toContain(m.post_references_copy_success());
+  } finally {
+    await mounted.restore();
+  }
+});
+
+
+test('mounted disclosed mentions follow the current handle and return to the exact occurrence and cursor', async () => {
+  const accountId = '0192f3a0-6c1e-7b2a-9d4e-000000000001';
+  const hiddenId = '0192f3a0-6c1e-7b2a-9d4e-000000000002';
+  const body = snapshot([
+    {
+      type: 'paragraph',
+      content: [
+        { type: 'text', text: 'Before ' },
+        { type: 'mention', attrs: { accountId } },
+        { type: 'mention', attrs: { accountId: hiddenId }, marks: [{ type: 'spoiler' }] },
+        { type: 'text', text: ' ordinary source ', marks: [{ type: 'link', attrs: { href: 'https://source.example/' } }] },
+        { type: 'mention', attrs: { accountId } },
+        { type: 'text', text: ' after' },
+      ],
+    },
+  ]);
+  const mounted = await mountPublishedReader(body, {
+    [accountId]: { handle: 'current_handle' },
+    [hiddenId]: { handle: 'hidden_handle' },
+  });
+  try {
+    mounted.window.history.replaceState(null, '', '/en/threads/original/title?cursor=exact-page#post-retained');
+    const originalAddress = mounted.window.location.href;
+    const source = mounted.container.querySelector<HTMLElement>('[data-slot="document-body"]')!;
+    const occurrence = source.querySelectorAll<HTMLAnchorElement>('a[href="/en/@current_handle"]')[1]!;
+    await act(async () => button(mounted.container, m.post_references_title()).click());
+    const navigation = mounted.document.querySelector<HTMLElement>(`nav[aria-label="${m.post_references_title()}"]`)!;
+    expect(navigation.textContent).not.toContain('hidden_handle');
+    expect(navigation.querySelectorAll('li')).toHaveLength(3);
+    await act(async () => button(navigation, entryName(3, '@current_handle')).click());
+    const dialog = mounted.document.querySelector<HTMLElement>('[role="dialog"]')!;
+    expect(dialog.querySelector('textarea')?.value).toBe('/en/@current_handle');
+    expect(dialog.querySelector('a')?.getAttribute('href')).toBe('/en/@current_handle');
+    await act(async () => button(dialog, m.post_references_return()).click());
+    const closing = mounted.document.querySelector<HTMLElement>('[role="dialog"]');
+    if (closing) await act(async () => closing.dispatchEvent(new mounted.window.Event('transitionend', { bubbles: true })));
+    expect(mounted.document.activeElement).toBe(occurrence);
+    expect(mounted.window.location.href).toBe(originalAddress);
+    expect(source.textContent).toContain('Before ');
+    expect(source.textContent).toContain(' after');
+    await act(async () => mounted.replace({}));
+    expect(mounted.container.textContent).not.toContain('current_handle');
+    expect(mounted.container.querySelector('a[href="/en/@current_handle"]')).toBeNull();
+    expect(mounted.container.textContent).toContain('Before @');
+    expect(mounted.window.location.href).toBe(originalAddress);
   } finally {
     await mounted.restore();
   }
