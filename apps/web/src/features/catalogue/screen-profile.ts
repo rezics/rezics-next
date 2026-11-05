@@ -216,9 +216,7 @@ function screenReaderGroups(release: Release, type: string): Record<string, stri
 
 function releasedScreenGrain(release: Release, type: string, locale: string) {
   const selected = pickText(release.types[type]?.labels ?? {}, locale);
-  return selected.text
-    ? { ...selected, text: displayTypeLabel(selected.text, selected.lang ?? locale) }
-    : selected;
+  return selected.text ? { ...selected, text: displayTypeLabel(selected.text, selected.lang ?? locale) } : selected;
 }
 
 /** Ordinary Screen reader visit. TVSeries and TVSeason readers can browse released work-parts membership. */
@@ -314,7 +312,7 @@ export function screenReaderVisit(input: {
     state: groups.length || profileSourceRecords(publicRead.subject).length ? 'ready' : 'empty',
     type: publicRead.subject.type,
     grain,
-      ...(meaning ? { description: meaning } : {}),
+    ...(meaning ? { description: meaning } : {}),
     library,
     unpublished,
     groups,

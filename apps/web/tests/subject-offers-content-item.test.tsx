@@ -410,7 +410,12 @@ async function retainedSummaryContract() {
       maximumFractionDigits: 0,
     }).format(1299);
     const zeroCapture = m.money_formatted_recorded_minor(
-      { display: zeroPrice, amount: String(zero.unitAmountMinor), currency: zero.currency.toUpperCase(), exponent: '2' },
+      {
+        display: zeroPrice,
+        amount: String(zero.unitAmountMinor),
+        currency: zero.currency.toUpperCase(),
+        exponent: '2',
+      },
       { locale },
     );
     const unknownCapture = m.money_raw_minor_unknown_unit(
@@ -505,10 +510,7 @@ async function retainedRecoveryContract() {
       [...document.querySelectorAll('button')]
         .filter((button) => !button.closest('[data-subject-offer-choice]'))
         .map((button) => button.textContent),
-    ).toEqual([
-      m.subject_purchase_restart({}, { locale }),
-      m.subject_purchase_retry({}, { locale }),
-    ]);
+    ).toEqual([m.subject_purchase_restart({}, { locale }), m.subject_purchase_retry({}, { locale })]);
 
     document.body.innerHTML = renderToStaticMarkup(
       <SubjectOffersView

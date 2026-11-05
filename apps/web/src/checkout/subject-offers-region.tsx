@@ -170,7 +170,12 @@ export function SubjectOffersView({
       </section>
     );
   if (noPresentation) return null;
-  return <div className="mt-6 flex min-w-0 flex-col gap-3">{state}{controls}</div>;
+  return (
+    <div className="mt-6 flex min-w-0 flex-col gap-3">
+      {state}
+      {controls}
+    </div>
+  );
 }
 
 function PreparedSubjectOffersRegion({

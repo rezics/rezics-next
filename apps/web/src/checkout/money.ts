@@ -37,11 +37,14 @@ export function formatMinorAmount(locale: string, currency: string, minor: numbe
   if (reading.kind !== 'known')
     return m.money_raw_minor_unknown_unit({ amount: String(minor), currency: code }, messageOptions);
   if (!displayCurrencies.has(currency.toLowerCase()))
-    return m.money_raw_minor_recorded_unit({
-      amount: String(minor),
-      currency: code,
-      exponent: String(reading.unit.exponent),
-    }, messageOptions);
+    return m.money_raw_minor_recorded_unit(
+      {
+        amount: String(minor),
+        currency: code,
+        exponent: String(reading.unit.exponent),
+      },
+      messageOptions,
+    );
   const parts = decimalParts(minor, reading.unit.exponent);
   if (!parts.ok) return null;
   try {
@@ -64,12 +67,15 @@ export function formatMinorAmount(locale: string, currency: string, minor: numbe
       .formatToParts(signedWhole)
       .map((part) => (part.type === 'fraction' ? localizedFraction : part.value))
       .join('');
-    return m.money_formatted_recorded_minor({
-      display,
-      amount: String(minor),
-      currency: code,
-      exponent: String(exponent),
-    }, messageOptions);
+    return m.money_formatted_recorded_minor(
+      {
+        display,
+        amount: String(minor),
+        currency: code,
+        exponent: String(exponent),
+      },
+      messageOptions,
+    );
   } catch {
     return null;
   }

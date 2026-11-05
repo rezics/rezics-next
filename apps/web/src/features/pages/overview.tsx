@@ -1703,12 +1703,7 @@ function SummaryContent({
       {selectorUnavailable && <p role="status">{m.subject_synopsis_choices_unavailable({}, options)}</p>}
       {noSynopsis && <p role="status">{m.subject_synopsis_none({}, options)}</p>}
       <div id="subject-summary-reading" tabIndex={-1} className="scroll-mt-32 focus-visible:outline-2">
-        {legacyUnavailable && (
-          <SubjectReadingState
-            locale={value.locale}
-            href={documentFallbackHref}
-          />
-        )}
+        {legacyUnavailable && <SubjectReadingState locale={value.locale} href={documentFallbackHref} />}
         {selectedUnavailable && (
           <p role="status" className="text-sm text-muted-foreground">
             {m.subject_synopsis_unavailable({}, options)}

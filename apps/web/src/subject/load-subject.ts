@@ -36,10 +36,7 @@ function pathsFor(subject: Subject): PagePaths {
 }
 
 function isAgentType(read: SubjectRead): boolean {
-  return (
-    agentRoots.has(read.subject.type) ||
-    (read.summary?.types.some((type) => agentRoots.has(type)) ?? false)
-  );
+  return agentRoots.has(read.subject.type) || (read.summary?.types.some((type) => agentRoots.has(type)) ?? false);
 }
 
 export async function verifiedHandle(client: KernelClient, read: SubjectRead): Promise<string | undefined> {

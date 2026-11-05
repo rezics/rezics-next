@@ -390,12 +390,10 @@ export function SubjectOverview({
     useQuery(subjectRatingQuery(id, locale, 'statistics')),
   ];
   const publicRatings: RatingSources = {
-    question:
-      questionQuery.data?.question ?? (questionQuery.isError ? { kind: 'failed' } : { kind: 'idle' }),
+    question: questionQuery.data?.question ?? (questionQuery.isError ? { kind: 'failed' } : { kind: 'idle' }),
     figure: figureQuery.data?.figure ?? (figureQuery.isError ? { kind: 'failed' } : { kind: 'idle' }),
     global: globalQuery.data?.global ?? (globalQuery.isError ? { kind: 'failed' } : { kind: 'idle' }),
-    statistics:
-      statisticsQuery.data?.statistics ?? (statisticsQuery.isError ? { kind: 'failed' } : { kind: 'idle' }),
+    statistics: statisticsQuery.data?.statistics ?? (statisticsQuery.isError ? { kind: 'failed' } : { kind: 'idle' }),
   };
   const retryRatingSource = (source: RatingSource) => {
     const request = {
