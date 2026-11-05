@@ -398,7 +398,10 @@ test('the actual statement Refresh asks before reloading, and discarding the dra
       (anchor) => anchor.textContent?.trim() === m.statements_refresh(),
     )!;
     expect(refresh.href).toBe(`https://site.test${href}`);
-    const clickRefresh = async () => await act(async () => refresh.click());
+    const clickRefresh = async () =>
+      await act(async () =>
+        refresh.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })),
+      );
 
     await clickRefresh();
     expect(dialog()?.textContent).toContain(m.payment_reference_draft_navigation_title());
@@ -425,8 +428,10 @@ test('the actual statement Refresh asks before reloading, and discarding the dra
       rerenderSession();
     });
     await act(async () => {
-      refresh.click();
-      refresh.click();
+      const click = () =>
+        refresh.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
+      click();
+      click();
     });
     expect(dialog()).not.toBeNull();
     await act(async () => button(m.payment_reference_draft_navigation_discard()).click());
