@@ -20,7 +20,7 @@ test('Kernel typecheck reuses SQL analysis, keeps diagnostics, and scopes invali
   const tsc = join(bin, 'tsc');
   writeFileSync(
     tsc,
-    "#!/bin/sh\n[ -n \"$REYLO_CONFIG\" ] || exit 9\n[ -z \"$DATABASE_URL\" ] || exit 9\nprintf '%s\\n' 'services/kernel/src/query.ts(12,3): error TS2345: same cold/warm diagnostic' > \"$DIAGNOSTIC_FILE\"\nexit 2\n",
+    '#!/bin/sh\n[ -n "$REYLO_CONFIG" ] || exit 9\n[ -z "$DATABASE_URL" ] || exit 9\nprintf \'%s\\n\' \'services/kernel/src/query.ts(12,3): error TS2345: same cold/warm diagnostic\' > "$DIAGNOSTIC_FILE"\nexit 2\n',
   );
   chmodSync(tsc, 0o755);
   let dumps = {
@@ -44,7 +44,8 @@ test('Kernel typecheck reuses SQL analysis, keeps diagnostics, and scopes invali
       const configDirectory = dirname(configFile);
       const output = join(configDirectory, '.reylo/queries');
       mkdirSync(output, { recursive: true });
-      for (const file of files) writeFileSync(join(output, `${randomUUID()}.json`), readFileSync(join(workspace, file)));
+      for (const file of files)
+        writeFileSync(join(output, `${randomUUID()}.json`), readFileSync(join(workspace, file)));
       return { status: 0, stdout: '', stderr: '' };
     },
   };
@@ -55,7 +56,7 @@ test('Kernel typecheck reuses SQL analysis, keeps diagnostics, and scopes invali
         DATABASE_URL: 'postgres://rezics:rezics@127.0.0.1:5432/rezics',
         KERNEL_DATABASE_CONTAINER: 'fixture-container',
         DIAGNOSTIC_FILE: diagnosticsFile,
-          REZICS_CHECK_PHASES: phasesFile,
+        REZICS_CHECK_PHASES: phasesFile,
       },
       {
         recognize: () => ({
@@ -75,8 +76,18 @@ test('Kernel typecheck reuses SQL analysis, keeps diagnostics, and scopes invali
   };
 
   try {
-    await withCommandPhase('database-image', () => undefined, phaseEnv, () => (phaseClock += 1_000_000_000n));
-    await withCommandPhase('migrations', () => undefined, phaseEnv, () => (phaseClock += 1_000_000_000n));
+    await withCommandPhase(
+      'database-image',
+      () => undefined,
+      phaseEnv,
+      () => (phaseClock += 1_000_000_000n),
+    );
+    await withCommandPhase(
+      'migrations',
+      () => undefined,
+      phaseEnv,
+      () => (phaseClock += 1_000_000_000n),
+    );
     const cold = await check();
     const warm = await check();
     expect(cold).toEqual({ status: 2, analyzed: 2, total: 2, diagnostics });
