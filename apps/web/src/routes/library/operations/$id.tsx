@@ -168,21 +168,20 @@ function RecoveryReader({
           : await readBulkOperationRecoveryPage({ data: { operationId: id, cursor: target.cursor } });
       if (!addressCurrent(pathname, owner, lease) || windows.current !== path || path.target !== target) return;
       if (result.state === 'available') {
+        const accepted = previous as Extract<LibraryBulkRecoveryRead, { state: 'available' }>;
         const next =
           'operation' in result
             ? result
-            : previous.state === 'available'
-              ? target.kind === 'next'
-                ? appendBulkOutcomePage({
-                    addressOperationId: requestedId ?? '',
-                    authorized: lease(),
-                    requestedOperationId: id,
-                    requestedCursor: target.cursor!,
-                    current: previous,
-                    page: result.page,
-                  })
-                : { ...previous, outcomes: result.page.outcomes, next: result.page.next }
-              : previous;
+            : target.kind === 'next'
+              ? appendBulkOutcomePage({
+                  addressOperationId: requestedId ?? '',
+                  authorized: lease(),
+                  requestedOperationId: id,
+                  requestedCursor: target.cursor!,
+                  current: accepted,
+                  page: result.page,
+                })
+              : { ...accepted, outcomes: result.page.outcomes, next: result.page.next };
         path.commit(target);
         updateRead(next, owner);
       } else if (result.state === 'invalid' && target.cursor !== undefined) {
