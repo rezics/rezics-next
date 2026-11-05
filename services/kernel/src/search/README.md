@@ -1935,7 +1935,9 @@ Source completion for the persisted job and cut. Consumer checkpoints, counts, A
 elapsed time do not satisfy the fence. The ordinary writer resolves that actual reader before reporting drained
 or held. Its original prepared proof payload is emptied only after original readers release, while immutable
 proof metadata remains available for replay. Every other retained copy and dispatched writer still blocks the
-drain. Reconciliation retries preserve the original Source tuple and the retained alias intent.
+drain. Preparation retires its temporary materialization observation through the existing finite custody
+cleanup, retaining its locator until removal so a restart resumes child-before-parent retirement.
+Reconciliation retries preserve the original Source tuple and the retained alias intent.
 
 Cost: pages admit 50 native inputs, preserve the lower owner 100/256-key limits and meter public-filter costs;
 steps retain a scalar frontier rather than rechecking every partition in one request. Source enumeration runs
