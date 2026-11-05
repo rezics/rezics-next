@@ -180,6 +180,10 @@ Current implementation evidence is narrower than the capability:
   evidence remains unavailable. Admission consumes the actual `compileCurrentOwnerFilter` exports, which share
   Search's Boolean interpreter with catalogue-only compilation. No raw ordinal window is returned as a filtered
   page. Native receiving acceptance remains controller-owned.
+- A stored `source: catalogue` rule now enters the registered Search scope with its retained release digest and
+  read-only preparation, then uses the same live Search prefix/currentness path as catalogue queries. Its cursor binds
+  the exact Collection, rule, source generation, query basis and account lifetime. Saved `source: owner` rules still
+  use the private Library Source and owner-fact closure above; catalogue membership does not require a curator entry.
 - Admission now also returns `owner: OwnerFilterLeafProvider | null`. Its full-key native entry, live-parent label,
   retained session and retained copy points are bound to that admitted viewer and private family set, with the
   original request deadline. The caller must use its source-authorized snapshot and the same `NativeCollectionWork`

@@ -102,6 +102,8 @@ export interface OwnerFilterLeafProvider {
 export type CollectionMemberAdmission = {
   filter: FilterDocument | undefined;
   sort: 'id';
+  /** Saved population is part of the admitted meaning; it selects the native receiving Source. */
+  source: 'owner' | 'catalogue';
   plan: CurrentOwnerFilterPlan | null;
   /** Immutable admitted meaning and exact expanded query; private cursor/preparation input, never permission. */
   releaseDigest: string | null;
@@ -620,13 +622,14 @@ async function finishCollectionMemberAdmission(
   const admission: CollectionMemberAdmission = {
     filter,
     sort: 'id',
+    source: source.kind,
     plan: filter === undefined ? null : compileCurrentOwnerFilter(filter),
     releaseDigest,
     release,
     queryDigest:
       'sha256:' +
       createHash('sha256')
-        .update(canonicalize({ filter: filter ?? null, sort: 'id', releaseDigest })!)
+        .update(canonicalize({ filter: filter ?? null, sort: 'id', source: source.kind, releaseDigest })!)
         .digest('hex'),
     owner:
       filter !== undefined && reads.length && viewer.kind === 'account'

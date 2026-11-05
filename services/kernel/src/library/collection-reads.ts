@@ -69,6 +69,8 @@ import type { ViewerPersonalActionsReader, ViewerPersonalActionsPage } from './v
 import { readSubjectSummaryObservation } from '../semantic/summaries.ts';
 import { MAX_VIEWER_FACTS_ROWS } from './viewer-facts-schema.ts';
 import { specializeCollectionListPolicy } from './collection-list-policy.ts';
+import { createSearchScopeForService } from '../search/service-scope.ts';
+import { scopeAllowance, ScopeWork } from '../search/scope-execution.ts';
 
 type CuratorPageOptions = {
   curatorAccountId: string | null;
@@ -378,41 +380,45 @@ export function createCollectionReads(
       return readOnly(pool, async (connection) => {
         const client = deadlineClient(connection, deadline);
         const time = at ?? (await mintReadTime(client, dependencies.clock));
-        const account = await readAccount(client, accountRoute!, accountViewer.accountId);
-        if (
-          !account ||
-          account.kind !== 'actor' ||
-          account.state !== 'active' ||
-          account.fenced ||
-          !Number.isSafeInteger(accountViewer.authnEpoch) ||
-          accountViewer.authnEpoch < 1 ||
-          account.minimumAuthnEpoch > BigInt(accountViewer.authnEpoch)
-        )
-          throw notFound();
-        const row = await collectionRead.run(queryOf(client), { route: route!, id });
-        // A broad management grant never grants another curator's personal predicates.
-        if (
-          !row ||
-          row.state !== 'active' ||
-          row.curatorAccountId !== accountViewer.accountId ||
-          row.membershipKind !== 'dynamic' ||
-          !accountViewer.scopes.includes('collection:update') ||
-          !(await update(client, time))
-        )
-          throw notFound();
-        const rule = await readSavedCollectionRule(client, route!, id);
-        if (!rule) throw notFound();
-        await authorizeCollectionRule(client, { time }, checks);
-        const partition = await readPartition(client, partitionOf(route!));
-        if (!partition || partition.writeState !== 'active') throw new ProblemError('dependency_unavailable');
-        return {
-          rule,
-          time,
-          epoch: partition.epoch,
-          node: partition.node,
-          floor: account.minimumAuthnEpoch,
-          operator: account.operatorAccountId,
-        };
+        try {
+          const account = await readAccount(client, accountRoute!, accountViewer.accountId);
+          if (
+            !account ||
+            account.kind !== 'actor' ||
+            account.state !== 'active' ||
+            account.fenced ||
+            !Number.isSafeInteger(accountViewer.authnEpoch) ||
+            accountViewer.authnEpoch < 1 ||
+            account.minimumAuthnEpoch > BigInt(accountViewer.authnEpoch)
+          )
+            throw notFound();
+          const row = await collectionRead.run(queryOf(client), { route: route!, id });
+          // A broad management grant never grants another curator's personal predicates.
+          if (
+            !row ||
+            row.state !== 'active' ||
+            row.curatorAccountId !== accountViewer.accountId ||
+            row.membershipKind !== 'dynamic' ||
+            !accountViewer.scopes.includes('collection:update') ||
+            !(await update(client, time))
+          )
+            throw notFound();
+          const rule = await readSavedCollectionRule(client, route!, id);
+          if (!rule) throw notFound();
+          await authorizeCollectionRule(client, { time }, checks);
+          const partition = await readPartition(client, partitionOf(route!));
+          if (!partition || partition.writeState !== 'active') throw new ProblemError('dependency_unavailable');
+          return {
+            rule,
+            time,
+            epoch: partition.epoch,
+            node: partition.node,
+            floor: account.minimumAuthnEpoch,
+            operator: account.operatorAccountId,
+          };
+        } finally {
+          if (at === undefined) releaseOperationalTime(time);
+        }
       });
     }
     const original = await capture();
@@ -420,23 +426,27 @@ export function createCollectionReads(
     const finalTime = await withConnection(pool, (client) =>
       mintReadTime(deadlineClient(client, deadline), dependencies.clock),
     );
-    const checks = await prepareCollectionRuleAuthority(
-      { pool, access },
-      viewer,
-      original.rule.filter,
-      { time: finalTime, read: true },
-      deadline,
-    );
-    const terminal = await capture(checks, finalTime);
-    if (
-      terminal.floor !== original.floor ||
-      terminal.operator !== original.operator ||
-      terminal.epoch !== original.epoch ||
-      terminal.node !== original.node ||
-      JSON.stringify(terminal.rule) !== JSON.stringify(original.rule)
-    )
-      throw new ProblemError('dependency_unavailable');
-    return terminal.rule;
+    try {
+      const checks = await prepareCollectionRuleAuthority(
+        { pool, access },
+        viewer,
+        original.rule.filter,
+        { time: finalTime, read: true },
+        deadline,
+      );
+      const terminal = await capture(checks, finalTime);
+      if (
+        terminal.floor !== original.floor ||
+        terminal.operator !== original.operator ||
+        terminal.epoch !== original.epoch ||
+        terminal.node !== original.node ||
+        JSON.stringify(terminal.rule) !== JSON.stringify(original.rule)
+      )
+        throw new ProblemError('dependency_unavailable');
+      return terminal.rule;
+    } finally {
+      releaseOperationalTime(finalTime);
+    }
   }
 
   async function loadCollection(
@@ -516,18 +526,22 @@ export function createCollectionReads(
     return readOnly(pool, async (connection) => {
       const client = deadlineClient(connection, deadline);
       const time = await mintReadTime(client, dependencies.clock);
-      const account = await readAccount(client, accountRoute, viewer.accountId);
-      const row = await collectionRead.run(queryOf(client), { route, id });
-      if (
-        !account ||
-        !grantCapable(account, viewer) ||
-        !row ||
-        row.state !== 'active' ||
-        row.curatorAccountId !== viewer.accountId ||
-        !(await check(client, time))
-      )
-        throw notFound();
-      return read(client, row, account);
+      try {
+        const account = await readAccount(client, accountRoute, viewer.accountId);
+        const row = await collectionRead.run(queryOf(client), { route, id });
+        if (
+          !account ||
+          !grantCapable(account, viewer) ||
+          !row ||
+          row.state !== 'active' ||
+          row.curatorAccountId !== viewer.accountId ||
+          !(await check(client, time))
+        )
+          throw notFound();
+        return read(client, row, account);
+      } finally {
+        releaseOperationalTime(time);
+      }
     });
   }
 
@@ -564,27 +578,38 @@ export function createCollectionReads(
     let afterRevision: number | null = null;
     let cursorEpoch: number | null = null;
     let cursorLifetime: string | null = null;
+    let cursorPartitionEpoch: number | null = null;
+    let cursorPartitionNode: string | null = null;
     if (cursor !== null) {
       if (cursor.length > MAX_CURSOR_LENGTH) throw invalidCursor();
       const decoded = decodeCursor(tokens, binding, cursor);
       if (
         !decoded.ok ||
-        decoded.after.length !== 2 ||
+        decoded.after.length !== 4 ||
         typeof decoded.after[0] !== 'number' ||
-        typeof decoded.after[1] !== 'string'
+        typeof decoded.after[1] !== 'string' ||
+        typeof decoded.after[2] !== 'number' ||
+        typeof decoded.after[3] !== 'string'
       )
         throw invalidCursor();
       cursorEpoch = decoded.epoch;
       afterRevision = decoded.after[0];
       cursorLifetime = decoded.after[1];
+      cursorPartitionEpoch = decoded.after[2];
+      cursorPartitionNode = decoded.after[3];
     }
-    return withCurrentMetadataOwner(viewer, id, deadline, async (client, row, account) => {
+    const capture = () => withCurrentMetadataOwner(viewer, id, deadline, async (client, row, account) => {
+      const route = routeOf(id)!;
+      const partition = await readPartition(client, partitionOf(route));
+      if (!partition || partition.writeState !== 'active') throw new ProblemError('dependency_unavailable');
       if (
         cursorEpoch !== null &&
-        (cursorEpoch !== row.revision || cursorLifetime !== account.minimumAuthnEpoch.toString())
+        (cursorEpoch !== row.revision ||
+          cursorLifetime !== account.minimumAuthnEpoch.toString() ||
+          cursorPartitionEpoch !== partition.epoch ||
+          cursorPartitionNode !== partition.node)
       )
         throw new ProblemError('stale_cursor');
-      const route = routeOf(id)!;
       const coverage = await readCollectionMetadataHistoryState(client, {
         route,
         collectionId: id,
@@ -597,28 +622,43 @@ export function createCollectionReads(
         afterRevision,
         limit: limit + 1,
       });
-      const hasMore = rows.length > limit;
-      const items = rows.slice(0, limit).map((change) => ({
-        revision: change.revision,
-        recordedAt: new Date(change.recordedAt).toISOString(),
-        changedFields: collectionMetadataHistoryFields(change.changedFields),
-      }));
-      const last = items.at(-1);
       return {
-        collectionId: id,
         basis: historyBasis(row, viewer, account),
         coverage,
-        items,
-        next:
-          hasMore && last
-            ? encodeCursor(tokens, binding, {
-                epoch: row.revision,
-                after: [last.revision, account.minimumAuthnEpoch.toString()],
-              })
-            : null,
-        actions: { review: true, reapply: false },
+        rows,
+        partition: { epoch: partition.epoch, node: partition.node },
+        operator: account.operatorAccountId,
       };
     });
+    const first = await capture();
+    const final = await capture();
+    if (JSON.stringify(first) !== JSON.stringify(final)) throw new ProblemError('dependency_unavailable');
+    const hasMore = first.rows.length > limit;
+    const items = first.rows.slice(0, limit).map((change) => ({
+      revision: change.revision,
+      recordedAt: new Date(change.recordedAt).toISOString(),
+      changedFields: collectionMetadataHistoryFields(change.changedFields),
+    }));
+    const last = items.at(-1);
+    return {
+      collectionId: id,
+      basis: first.basis,
+      coverage: first.coverage,
+      items,
+      next:
+        hasMore && last
+          ? encodeCursor(tokens, binding, {
+              epoch: first.basis.collectionRevision,
+              after: [
+                last.revision,
+                first.basis.minimumAuthnEpoch,
+                first.partition.epoch,
+                first.partition.node,
+              ],
+            })
+          : null,
+      actions: { review: true, reapply: false },
+    };
   }
 
   async function readCollectionMetadataHistoryChange(
@@ -632,6 +672,8 @@ export function createCollectionReads(
     const route = routeOf(id);
     if (route === null) throw notFound();
     const first = await withCurrentMetadataOwner(viewer, id, deadline, async (client, row, account) => {
+      const partition = await readPartition(client, partitionOf(route));
+      if (!partition || partition.writeState !== 'active') throw new ProblemError('dependency_unavailable');
       const change = await readCollectionMetadataHistoryEntry(client, {
         route,
         collectionId: id,
@@ -639,7 +681,12 @@ export function createCollectionReads(
         revision,
       });
       if (!change) throw notFound();
-      return { basis: historyBasis(row, viewer, account), change: collectionMetadataHistoryEntry(change) };
+      return {
+        basis: historyBasis(row, viewer, account),
+        change: collectionMetadataHistoryEntry(change),
+        partition: { epoch: partition.epoch, node: partition.node },
+        operator: account.operatorAccountId,
+      };
     });
     const mediaIds = [
       ...new Set(
@@ -655,6 +702,8 @@ export function createCollectionReads(
       }),
     );
     const final = await withCurrentMetadataOwner(viewer, id, deadline, async (client, row, account) => {
+      const partition = await readPartition(client, partitionOf(route));
+      if (!partition || partition.writeState !== 'active') throw new ProblemError('dependency_unavailable');
       const change = await readCollectionMetadataHistoryEntry(client, {
         route,
         collectionId: id,
@@ -662,7 +711,12 @@ export function createCollectionReads(
         revision,
       });
       if (!change) throw new ProblemError('dependency_unavailable');
-      return { basis: historyBasis(row, viewer, account), change: collectionMetadataHistoryEntry(change) };
+      return {
+        basis: historyBasis(row, viewer, account),
+        change: collectionMetadataHistoryEntry(change),
+        partition: { epoch: partition.epoch, node: partition.node },
+        operator: account.operatorAccountId,
+      };
     });
     if (JSON.stringify(first) !== JSON.stringify(final)) throw new ProblemError('dependency_unavailable');
     const present = (snapshot: typeof first.change.before): CollectionMetadataHistorySnapshot => {
@@ -1024,6 +1078,7 @@ export function createCollectionReads(
     if (result.members.length > MAX_VIEWER_FACTS_ROWS)
       throw new RangeError('Collection personal actions accept at most 100 raw members');
     let facts: ViewerPersonalActionsPage;
+    let subjectsCurrent: (() => Promise<boolean>) | undefined;
     try {
       if (!dependencies.viewerPersonalActions) {
         facts = { state: 'unavailable', reason: 'currentness', retryable: true };
@@ -1031,6 +1086,7 @@ export function createCollectionReads(
         const subjects = await readSubjectSummaryObservation({ ...dependencies, actor: viewer, deadline }, [
           ...new Set(result.members.map((member) => member.subjectId)),
         ]);
+        subjectsCurrent = () => subjects.current();
         // Missing native type evidence is unavailable, never a fabricated type or canonical sibling operand.
         const rows = result.members.flatMap((member, index) => {
           const subject = subjects.summaries.get(member.subjectId);
@@ -1043,7 +1099,8 @@ export function createCollectionReads(
             ? { state: 'unavailable', reason: 'identity', retryable: true }
             : await dependencies.viewerPersonalActions(viewer, rows, STANDARD_QUESTION_ID, deadline);
       }
-      if (!(await subjects.current())) facts = { state: 'unavailable', reason: 'currentness', retryable: true };
+      if (subjectsCurrent && !(await subjectsCurrent()))
+        facts = { state: 'unavailable', reason: 'currentness', retryable: true };
     } catch (error) {
       // Operand/size violations are errors, never a truncated or successful private result.
       if (error instanceof RangeError) throw error;
@@ -1108,6 +1165,137 @@ export function createCollectionReads(
     if (saved.collectionRevision !== collection.revision || saved.sourceGeneration !== collection.sourceGeneration)
       throw new ProblemError('stale_cursor');
     const admission = await admitSavedCollectionMemberQuery(dependencies, viewer, saved, options, deadline);
+    if (admission.source === 'catalogue') {
+      if (!dependencies.search || !dependencies.routeKey) throw new ProblemError('dependency_unavailable');
+      const limit = options.limit ?? DEFAULT_PAGE_SIZE;
+      const reservationId = `library.collection.rule:${collectionId}:${saved.revision}`;
+      const work = new ScopeWork(scopeAllowance(limit + 1, reservationId));
+      const allowance = () => ({ reservationId, remaining: work.remaining().remaining });
+      const time = await withConnection(pool, (client) =>
+        mintReadTime(deadlineClient(client, deadline), dependencies.clock),
+      );
+      const lifetime = async () => {
+        const account = await withConnection(pool, (client) =>
+          readAccount(deadlineClient(client, deadline), route, viewer.accountId),
+        );
+        if (!account || !grantCapable(account, viewer)) throw notFound();
+        return {
+          minimumAuthnEpoch: account.minimumAuthnEpoch.toString(),
+          operator: account.operatorAccountId ?? '',
+        };
+      };
+      try {
+        const authorize = async (at: AuthoritativeTime) => {
+          const checks = await prepareCollectionRuleAuthority(
+            dependencies,
+            viewer,
+            admission.filter!,
+            { time: at, read: true },
+            deadline,
+          );
+          await readOnly(pool, (client) => authorizeCollectionRule(client, { time: at }, checks));
+          await revalidate();
+        };
+        const firstLifetime = await lifetime();
+        await authorize(time);
+        const search = createSearchScopeForService(dependencies.search, {
+          access,
+          actor: viewer,
+          routeKey: dependencies.routeKey,
+          nativeT: time,
+          deadline,
+        });
+        const prepared = await search.prepare(admission.filter!, {
+          releaseDigest: saved.releaseDigest,
+          allowance: allowance(),
+          readOnly: true,
+        });
+        work.native(search.work(prepared));
+        const cursorBinding: CursorBinding = {
+          operation: 'library.collection.saved-catalogue-members',
+          parameters: {
+            collectionId,
+            viewerAccountId: viewer.accountId,
+            collectionRevision: saved.collectionRevision,
+            ruleRevision: saved.revision,
+            sourceGeneration: saved.sourceGeneration,
+            releaseDigest: saved.releaseDigest,
+            queryDigest: admission.queryDigest,
+            limit,
+            view: options.view ?? 'BASIC',
+          },
+        };
+        let afterSubject: string | null = null;
+        const token = cursorToken(options.cursor ?? null);
+        if (token !== null) {
+          const decoded = decodeCursor(tokens, cursorBinding, token);
+          if (
+            !decoded.ok ||
+            decoded.after.length !== 5 ||
+            decoded.after.some((value) => typeof value !== 'string') ||
+            typeof decoded.after[0] !== 'string' ||
+            typeof decoded.after[1] !== 'string' ||
+            typeof decoded.after[2] !== 'string' ||
+            typeof decoded.after[3] !== 'string' ||
+            typeof decoded.after[4] !== 'string' ||
+            routeOf(decoded.after[3]) === null
+          )
+            throw invalidCursor();
+          if (
+            decoded.epoch !== collection.revision ||
+            decoded.after[0] !== prepared.basis.query ||
+            decoded.after[1] !== prepared.basis.canonical ||
+            decoded.after[2] !== firstLifetime.operator ||
+            decoded.after[4] !== firstLifetime.minimumAuthnEpoch ||
+            routeOf(decoded.after[3]) === null
+          )
+            throw new ProblemError('stale_cursor');
+          afterSubject = decoded.after[3];
+        }
+        const page = await search.prefix(prepared, {
+          afterSubject,
+          quota: limit,
+          budget: limit + 1,
+          allowance: allowance(),
+        });
+        if (page.basis.query !== prepared.basis.query || page.basis.canonical !== prepared.basis.canonical)
+          throw new ProblemError('stale_cursor');
+        work.native(page.usage.work!);
+        const finalTime = await withConnection(pool, (client) =>
+          mintReadTime(deadlineClient(client, deadline), dependencies.clock),
+        );
+        try {
+          await authorize(finalTime);
+          const finalLifetime = await lifetime();
+          if (
+            finalLifetime.minimumAuthnEpoch !== firstLifetime.minimumAuthnEpoch ||
+            finalLifetime.operator !== firstLifetime.operator
+          )
+            throw new ProblemError('stale_cursor');
+        } finally {
+          releaseOperationalTime(finalTime);
+        }
+        const last = page.hits.at(-1);
+        return {
+          members: page.hits.map((hit) => ({ kind: 'dynamic' as const, subjectId: hit.id })),
+          next:
+            page.exhausted || !last
+              ? null
+              : encodeCursor(tokens, cursorBinding, {
+                  epoch: collection.revision,
+                  after: [
+                    page.basis.query,
+                    page.basis.canonical,
+                    firstLifetime.operator,
+                    last.id,
+                    firstLifetime.minimumAuthnEpoch,
+                  ],
+                }),
+        };
+      } finally {
+        releaseOperationalTime(time);
+      }
+    }
     const pagePlan = ordinaryCollectionPagePlan(
       options.limit ?? DEFAULT_PAGE_SIZE,
       options.view === 'FULL' ? 'FULL' : 'BASIC',

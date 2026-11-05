@@ -68,13 +68,16 @@ export async function createCollectionRulesFixture(additionalScopes: readonly st
     const profile = selectLibraryProfile(bundledRelease, 'schema:Book');
     if (!profile?.entryStateSet?.states.length) throw new Error('Released Book entry states are required');
     const state = profile.entryStateSet.states[0]!.id;
-    async function subject(title: string) {
-      const response = await send('POST', '/v1/subjects', { type: 'schema:Book', labels: { en: title } });
+    async function subject(title: string, type = 'schema:Book') {
+      const response = await send('POST', '/v1/subjects', { type, labels: { en: title } });
       expect(response.status).toBe(201);
       return ((await response.json()) as { subject: { id: string } }).subject.id;
     }
-    async function entry(subjectId: string) {
-      const response = await send('PUT', `/v1/libraryEntries/${subjectId}`, { state });
+    async function entry(subjectId: string, type = 'schema:Book') {
+      const selected = selectLibraryProfile(bundledRelease, type);
+      const currentState = selected?.entryStateSet?.states[0]?.id;
+      if (!currentState) throw new Error(`Released ${type} entry states are required`);
+      const response = await send('PUT', `/v1/libraryEntries/${subjectId}`, { state: currentState });
       expect(response.status).toBe(201);
       return (await response.json()).libraryEntry;
     }
