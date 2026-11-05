@@ -140,7 +140,7 @@ function reyloAnalysisIdentity(repository: string, workspace: string): string {
     ['services/kernel/package.json', join(workspace, 'package.json')],
     ['services/kernel/tsconfig.json', join(workspace, 'tsconfig.json')],
     ['services/kernel/scripts/typecheck.ts', fileURLToPath(import.meta.url)],
-    ['typescript/package.json', join(workspace, 'node_modules/typescript/package.json')],
+    ['typescript/package.json', join(repository, 'node_modules/typescript/package.json')],
     ['reylo/package.json', join(workspace, 'node_modules/reylo/package.json')],
     ['reylo/src/cli.js', join(workspace, 'node_modules/reylo/src/cli.js')],
     ['postgres-engine/package.json', join(workspace, 'node_modules/@reylosql/postgres/package.json')],
