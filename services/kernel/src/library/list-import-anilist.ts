@@ -1092,7 +1092,7 @@ export function createAniListImport(deps: Dependencies) {
       const header = await load<Header>(actor, id, -1);
       if (header.cancelled) break;
       const stored = await load(actor, id, confirmation.ordinal);
-      const reviewed = stored.review;
+      let reviewed = stored.review;
       if (
         !reviewed ||
         reviewed.id !== confirmation.reviewId ||
