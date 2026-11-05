@@ -1102,7 +1102,7 @@ conflict, refusal or account replacement. New input cannot replace it; another v
 No outcome history is persisted in storage, URLs, cookies or browser history. Reload without a retained descriptor
 makes no historical claim.
 
-Decision: rename alone uses the public approval/execution DTOs and byte allowances in
+Decision: rename uses the public approval/execution DTOs and byte allowances in
 `account-operation-response-bounds.ts`. Approval is exactly `{reference,expiresAt}`: Access `workflow-approvals`
 seals a base64url body plus a 43-character SHA-256 MAC separated by a dot; native unseal and execute text admission
 cap it at 4,096 ASCII characters. Expiry is the producer's canonical `Date.toISOString()` (at most 27 ASCII bytes,

@@ -1139,7 +1139,7 @@ identity or reason; action loss may retain an admitted profile. Both require sam
 requires freshness. Cost: exact profile read, full-key current-account seek, bounded self action advice (one candidate,
 before/final snapshots, one Access formula), eight closed source entries/matches; no inventory or availability lookup.
 
-Decision: rename alone uses public `account-operation-response-bounds.ts`. Approval is exactly `{reference,expiresAt}`.
+Decision: rename uses public `account-operation-response-bounds.ts`. Approval is exactly `{reference,expiresAt}`.
 Access `workflow-approvals.ts` seals base64url body + dot + SHA-256 MAC43; native unseal/execute cap it at 4096 ASCII
 characters. Expiry is canonical `Date.toISOString()` (maximum 27 ASCII bytes). The UTF-8 allowance is the closed
 empty-string JSON skeleton plus `4096 + 27`; references stay opaque. Invalid approval returns 503 unavailable. Workflow/replay return only `{accountId}`; its compatible opaque ID
