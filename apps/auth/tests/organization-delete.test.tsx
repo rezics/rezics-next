@@ -38,7 +38,7 @@ test('unavailable review recovers the selected organization and freshly confirms
   const page = await open(content(first, read), body);
   expect(page.host.querySelector('form')).toBeNull();
   unavailable = false;
-  await flush(() => button(page.host, 'Retry')!.click());
+  await flush(() => button(page.host, 'Check current organization')!.click());
   expect(selections.map(({ organizationId }) => organizationId)).toEqual([first, first, first]);
   expect(selections.every(({ signal }) => signal instanceof AbortSignal)).toBe(true);
   await confirm(page.host, 'wrong');
@@ -219,7 +219,7 @@ test('current native refusal has no authentication loop or destructive control',
   );
   expect(page.host.querySelector('form')).toBeNull();
   expect(button(page.host, 'Authenticate to review')).toBeUndefined();
-  expect(page.host.textContent).toContain('cannot currently manage');
+  expect(page.host.textContent).toContain('Current deletion review was denied.');
   expect(page.calls).toHaveLength(0);
 });
 
@@ -248,18 +248,31 @@ test('refused generic key storage preserves the exact deletion continuation with
 
 test('refused unknown-marker persistence retains custody and cannot dispatch or unlock another delete', async () => {
   const page = await open(content(first, async () => ready(first)), body);
-  const nativeStorageSet = window.Storage.prototype.setItem;
-  const setItem = spyOn(window.Storage.prototype, 'setItem').mockImplementation(function (this: Storage, key, value) {
-    if (key === `rezics.organization-delete.step-up.unknown.${first}`)
-      throw new Error('storage unavailable');
-    nativeStorageSet.call(this, key, value);
+  const storage = window.sessionStorage;
+  const descriptor = Object.getOwnPropertyDescriptor(window, 'sessionStorage');
+  const unknownKey = `rezics.organization-delete.step-up.unknown.${first}`;
+  let refusedWrites = 0;
+  Object.defineProperty(window, 'sessionStorage', {
+    configurable: true,
+    value: new Proxy(storage, {
+      get(target, property) {
+        if (property === 'setItem')
+          return (key: string, value: string) => {
+            if (key === unknownKey) {
+              refusedWrites++;
+              throw new Error('storage unavailable');
+            }
+            target.setItem(key, value);
+          };
+        const value = Reflect.get(target, property, target);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    }),
   });
   try {
     await confirm(page.host, '@first');
     await flush(() => page.calls[0]!.resolve(approval()));
-    expect(setItem.mock.calls.some(([key]) => key === `rezics.organization-delete.step-up.unknown.${first}`)).toBe(
-      true,
-    );
+    expect(refusedWrites).toBeGreaterThan(0);
     expect(page.calls.map(({ path }) => path)).toEqual(['/account-operations/approve']);
     expect(readOrganizationDeleteUnknown(first)).toEqual({ kind: 'absent' });
     expect(page.host.textContent).toContain('The deletion result is unknown');
@@ -272,6 +285,7 @@ test('refused unknown-marker persistence retains custody and cannot dispatch or 
     expect(page.host.querySelector('form')).toBeNull();
     expect(page.unload()).toBe(true);
   } finally {
-    setItem.mockRestore();
+    if (descriptor) Object.defineProperty(window, 'sessionStorage', descriptor);
+    else Reflect.deleteProperty(window, 'sessionStorage');
   }
 });

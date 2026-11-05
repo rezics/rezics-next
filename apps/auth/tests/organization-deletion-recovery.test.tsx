@@ -81,13 +81,15 @@ test('single readback survives storage loss; late advice cannot affect replaceme
   const replacement = { humanAccountId: human, organizationId: second, operationKey: 'b'.repeat(32) };
   storeOrganizationDeleteStepUp(replacement);
   await page.render(content(second, read));
-  const input = page.host.querySelector<HTMLInputElement>('input')!;
-  input.focus();
+  expect(page.host.querySelector('form')).toBeNull();
+  expect(page.host.textContent).toContain('The deletion result is unknown');
+  expect(page.host.textContent).not.toContain('Private organization');
   await flush(() =>
     delayed.resolve({ kind: 'authentication-required', humanAccountId: human, action: 'authenticate' }),
   );
-  expect(document.activeElement).toBe(input);
-  expect(page.host.textContent).not.toContain('The deletion result is unknown');
+  expect(page.host.querySelector('form')).toBeNull();
+  expect(page.host.textContent).toContain('The deletion result is unknown');
+  expect(page.host.textContent).not.toContain('Private organization');
   expect(readOrganizationDeleteStepUp()).toMatchObject({ kind: 'pending', value: replacement });
   expect(readOrganizationDeleteUnknown(first)).toEqual(original);
   // The replacement's own continuation still warns; the old attempt must not.

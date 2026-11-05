@@ -166,13 +166,14 @@ test('acknowledgement of an old command preserves an independently replaced unkn
 
 test('changed target releases the old review prompt immediately', async () => {
   const page = await setup();
+  const oldInput = page.input;
   await flush(() => fill(page.input, '@first'));
   await page.navigate();
   await page.render(page.view(second));
   expect(page.router.history.location.pathname).toBe('/away');
   expect(document.querySelector('[role="alertdialog"]')).toBeNull();
   expect(page.unload()).toBe(false);
-  expect(document.activeElement).not.toBe(page.host.querySelector('input'));
+  expect(document.activeElement).not.toBe(oldInput);
 });
 
 test('lost authority releases an open prompt without sending a native command', async () => {

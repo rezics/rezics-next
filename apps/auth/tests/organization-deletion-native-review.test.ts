@@ -132,6 +132,7 @@ test('default review distinguishes safe outcomes and refuses changed sessions, p
   expect(await loadOrganizationDeletion(organizationId)).toEqual({ kind: 'unavailable' });
   f.read({ kind: 'ready', account: { ...account, email: 'secret' } } as OrganizationDeletionRead);
   expect(await loadOrganizationDeletion(organizationId)).toEqual({ kind: 'unavailable' });
+  f.read({ kind: 'ready', account });
   for (const profile of [
     { ...proof, scope: ['account:delete', 'account:read'] },
     { ...proof, client_id: 'website' },
