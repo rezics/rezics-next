@@ -100,7 +100,7 @@ export async function readPersonComparison(
     if (response.status !== 200 || !response.data) return providerFailure(response.status, response.headers);
   const reads = responses.map((r) => r.data) as unknown as [ReviewedPersonRead, ReviewedPersonRead];
   for (const read of reads)
-    if (read.reviewedIdentity !== undefined && !isReviewedPersonEndpoint(read.reviewedIdentity))
+    if (read.reviewedIdentity != null && !isReviewedPersonEndpoint(read.reviewedIdentity))
       throw new TypeError('Invalid native reviewed Person identity');
   return personComparison(pair, reads);
 }
@@ -114,9 +114,9 @@ export async function mergePersonComparison(
     headers: { authorization, 'idempotency-key': JSON.stringify(command.key) },
     ...(signal === undefined ? {} : { fetch: { signal } }),
   });
-  if (response.status !== 202 || !response.data) return providerFailure(response.status, response.headers);
-  const admission = response.data as unknown as ReviewedPersonAdmission;
-  if (!admission.operation || !uuid.test(admission.operation.id))
+  if (response.status !== 200 || !response.data) return providerFailure(response.status, response.headers);
+  const admission = response.data;
+  if (!uuid.test(admission.survivor) || !uuid.test(admission.redirected) || !Number.isSafeInteger(admission.revision) || admission.revision < 2)
     throw new TypeError('Invalid native identity admission');
   return { ok: true, admission };
 }

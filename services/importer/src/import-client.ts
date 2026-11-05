@@ -743,11 +743,15 @@ export function createImportTransport(options: ImportTransportOptions) {
           headers: { 'idempotency-key': idempotencyKey(key) },
           ...fetchOptions(signal),
         }),
-      202,
+      200,
       signal,
     );
     const result = reply.body as ReviewedPersonAdmission;
-    ensure(typeof result?.operation?.id === 'string' && uuid.test(result.operation.id));
+    ensure(
+      typeof result?.survivor === 'string' && uuid.test(result.survivor) &&
+      typeof result.redirected === 'string' && uuid.test(result.redirected) &&
+      Number.isSafeInteger(result.revision) && result.revision >= 2,
+    );
     return result;
   }
   async function reviewedCandidates(
