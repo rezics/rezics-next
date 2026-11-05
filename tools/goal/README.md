@@ -929,10 +929,9 @@ filesystem component sizes and systemd microsecond conversions are fixed represe
 
 ### Delivery flow telemetry
 
-`report --flow [--since <time>] [--json]` reads durable, timestamped per-task and per-attempt flow events. It reports
-stage totals and p50/p90 durations, Goal totals and percentiles, working-time efficiency from dispatch through
-integration, attempts per integrated task, and the length and oldest age of the start, check, landing, verification
-and promotion queues. Its guard ledger prices registered attempt endings and landing refusals over seven days by
+`report --flow [--since <time>] [--json]` reads durable flow events. Decision: after one stable sort, `flowReport`
+builds one in-memory next-boundary and integration index; no per-request history rescan or second event store. It
+reports stage/Goal totals, efficiency, attempts per integrated task, and queue length and age. Its guard ledger prices registered attempt endings and landing refusals over seven days by
 firings, attempt-hours, next-attempt hours, tokens, rewritten share and landed share; repeated guards with at least 20
 firings and under 10% rewritten are marked `repairable in place`. The hourly report groups guard endings by GuardId.
 It also counts launched worker and manager prompts over budget by layer. Missing lifecycle
@@ -2279,8 +2278,8 @@ always gates its own frozen integration candidate.
 
 ### Development verification
 
-Landing on `dev` is a mechanical integration step. A single leased verifier checks each new `dev` head independently
-after the merge train has landed its batch; it cannot hold the train lease or block later ready landings. On each new
+Landing on `dev` is a mechanical integration step. A leased verifier checks each new `dev` head
+after the merge train lands its batch; it cannot hold the train lease or block later ready landings. On each new
 dev head it first runs the repository boot smoke named in `bootSmoke.tests` (Kernel and Web client-graph boot tests by
 default; a missing file is skipped until it lands). Heads that arrive while that smoke runs coalesce onto the newest
 head; older heads are skipped for this stage. The smoke uses a local process group with `policy.verifier.bootSmokeTimeoutMs`
@@ -2298,9 +2297,8 @@ commit to that resolution task's original manager, even if an earlier owner's so
 only the culprit's integrated changes in one commit, returns the task to its manager with the exact failing log, and
 keeps the worker's source branch available for the owner's fix. It then advances the verified ref past the culprit so
 the fix can start from that verified base. A transport or other recognized infrastructure failure during a culprit
-probe is retried up to twice and remains unassigned if it still cannot run; it is not treated as an assertion. This
-moves expensive checks after integration and lets a batch share them while keeping unstable `dev` separate from
-promotion's verified input.
+probe is retried up to twice and remains unassigned if it still cannot run; it is not treated as an assertion.
+Decision: source-presence and failed-input hashes use one Git batch-check per revision; missing paths, cwd, closure/package trees, env/toolchain identity and hashes stay.
 
 When a Codex manager reaches 90% of its token budget, the host delivers one instruction to replace
 `.temp/goal/<manager>/CONTINUATION.md` with at most 8,000 characters (live task IDs, decisions in force as links to
@@ -2556,6 +2554,13 @@ same command. Unknown setup, absent commands, transport or other infrastructure 
 unknown rather than clean baseline results. Findings and exact run evidence are bounded and stored in SQLite so an
 unchanged finding does not start another sweep after restart. Baseline runs, probes and retries all share the ordinary
 three-check concurrency cap.
+
+Decision: the landing train and dev verifier share pure changed-path selection. Each caller retains its configured order,
+closures, exclusions, workspace placement and execution authority.
+
+Decision: each verification builds one source-interval landing history (one Git log of `base..target`, plus one optional
+batched extra-commit read). That projection is not reused across source intervals, and a landing is not treated as
+verified unless its acceptance passed on that exact head.
 
 Each fresh verifier tree installs its own dependencies, even after an earlier tree's setup passed. Installation uses
 an available matching repository Bun or bootstraps with the verifier process's Bun, and logs the executable used.

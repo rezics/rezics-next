@@ -1,4 +1,5 @@
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { relative, sep } from 'node:path';
 import type { Database } from 'bun:sqlite';
@@ -35,55 +36,104 @@ CREATE INDEX check_results_expiry ON check_results(time);`,
 
 const GLOBAL =
   /^(?:bun\.lock|package\.json|bunfig\.toml|tsconfig[^/]*|patches\/|scripts\/|contracts\/|specs\/|\.github\/workflows\/|\.oxlintrc|\.oxfmtrc|\.prettier|\.editorconfig|\.gitattributes|\.gitignore|AGENTS\.md|services\/(?:kernel\/scripts\/database\.ts|auth\/scripts\/database\.ts|kernel\/db\/search\/opensearch\/Dockerfile))/;
-const globalInputCaches = new WeakMap<ControlPolicy['storage'], Map<string, [string, string][]>>();
-function globalInputs(root: string, commit: string, policy: ControlPolicy['storage']): [string, string][] {
-  let globalInputCache = globalInputCaches.get(policy);
-  if (!globalInputCache) {
-    globalInputCache = new Map();
-    globalInputCaches.set(policy, globalInputCache);
+type WorkspaceManifest = { value: unknown } | { error: unknown };
+type SourceProjection = {
+  globalInputs: [string, string][];
+  workspaceDirs: string[];
+  workspaceByName: Map<unknown, string>;
+  workspaceManifests: Map<string, WorkspaceManifest>;
+  trees: Map<string, string>;
+};
+const sourceProjectionCaches = new WeakMap<ControlPolicy['storage'], Map<string, SourceProjection>>();
+
+function readBlobs(root: string, objects: readonly string[]): string[] {
+  if (!objects.length) return [];
+  const result = spawnSync('git', ['cat-file', '--batch'], {
+    cwd: root,
+    input: `${objects.join('\n')}\n`,
+    maxBuffer: defaultPolicy.merge.gitBufferBytes,
+    timeout: defaultPolicy.merge.commandTimeoutMs,
+  });
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw new Error(result.stderr?.toString().trim() || 'git cat-file --batch failed');
+  let offset = 0;
+  return objects.map(() => {
+    const endOfHeader = result.stdout.indexOf(0x0a, offset);
+    const size = Number(result.stdout.toString('utf8', offset, endOfHeader).split(' ')[2]);
+    const contentStart = endOfHeader + 1;
+    const contentEnd = contentStart + size;
+    const content = result.stdout.toString('utf8', contentStart, contentEnd);
+    offset = contentEnd + 1;
+    return content;
+  });
+}
+
+function sourceProjection(root: string, commit: string, policy: ControlPolicy['storage']): SourceProjection {
+  let cache = sourceProjectionCaches.get(policy);
+  if (!cache) {
+    cache = new Map();
+    sourceProjectionCaches.set(policy, cache);
   }
   const cacheKey = `${root}\0${commit}`;
-  const cached = globalInputCache.get(cacheKey);
+  const cached = cache.get(cacheKey);
   if (cached) return cached;
-  const inputs = git(root, 'ls-tree', '-r', '--format=%(objectname) %(path)', commit)
+
+  const entries = git(root, 'ls-tree', '-r', '-t', '--format=%(objectname) %(objecttype) %(path)', commit)
     .split('\n')
     .flatMap((line) => {
-      const split = line.indexOf(' ');
-      if (split < 0) return [];
-      const object = line.slice(0, split),
-        path = line.slice(split + 1);
-      return GLOBAL.test(path) ? [[path, object] as [string, string]] : [];
+      const objectEnd = line.indexOf(' ');
+      const typeEnd = line.indexOf(' ', objectEnd + 1);
+      if (objectEnd < 0 || typeEnd < 0) return [];
+      return [
+        { object: line.slice(0, objectEnd), type: line.slice(objectEnd + 1, typeEnd), path: line.slice(typeEnd + 1) },
+      ];
     });
-  if (globalInputCache.size > policy.globalInputCacheClearAboveEntries) globalInputCache.clear();
-  globalInputCache.set(cacheKey, inputs);
-  return inputs;
-}
-function workspaceClosure(root: string, cwd: string, commit: string): string[] {
-  const here = relative(root, cwd).split(sep).join('/');
-  const dirs = git(root, 'ls-tree', '-r', '--name-only', commit)
-    .split('\n')
-    .filter((path) => /^(?:(?:apps|services|packages)\/[^/]+|tools\/goal)\/package\.json$/.test(path))
-    .map((path) => path.replace(/\/package\.json$/, ''))
-    .sort();
-  const byName = new Map<string, string>();
-  for (const dir of dirs) {
+  const blobs = entries.filter((entry) => entry.type === 'blob');
+  const globalInputs = blobs.flatMap(({ object, path }) =>
+    GLOBAL.test(path) ? [[path, object] as [string, string]] : [],
+  );
+  const manifestPaths = blobs
+    .map(({ object, path }) => ({ object, path }))
+    .filter(({ path }) => /^(?:(?:apps|services|packages)\/[^/]+|tools\/goal)\/package\.json$/.test(path))
+    .sort((left, right) => (left.path < right.path ? -1 : left.path > right.path ? 1 : 0));
+  const workspaceDirs = manifestPaths.map(({ path }) => path.replace(/\/package\.json$/, ''));
+  const workspaceByName = new Map<unknown, string>();
+  const workspaceManifests = new Map<string, WorkspaceManifest>();
+  const manifests = readBlobs(
+    root,
+    manifestPaths.map(({ object }) => object),
+  );
+  for (const [index, dir] of workspaceDirs.entries()) {
     try {
-      byName.set(JSON.parse(git(root, 'show', `${commit}:${dir}/package.json`)).name, dir);
-    } catch {}
+      const value: unknown = JSON.parse(manifests[index]!);
+      workspaceManifests.set(dir, { value });
+      workspaceByName.set((value as { name?: unknown }).name, dir);
+    } catch (error) {
+      workspaceManifests.set(dir, { error });
+    }
   }
-  const start = dirs.find((dir) => here === dir || here.startsWith(`${dir}/`));
+  const trees = new Map(entries.filter((entry) => entry.type === 'tree').map(({ object, path }) => [path, object]));
+  const projection = { globalInputs, workspaceDirs, workspaceByName, workspaceManifests, trees };
+  if (cache.size > policy.globalInputCacheClearAboveEntries) cache.clear();
+  cache.set(cacheKey, projection);
+  return projection;
+}
+
+function workspaceClosure(projection: SourceProjection, root: string, cwd: string): string[] {
+  const here = relative(root, cwd).split(sep).join('/');
+  const start = projection.workspaceDirs.find((dir) => here === dir || here.startsWith(`${dir}/`));
   if (!start) return [];
   const seen = new Set<string>();
   const visit = (dir: string) => {
     if (seen.has(dir)) return;
     seen.add(dir);
-    const manifest = JSON.parse(git(root, 'show', `${commit}:${dir}/package.json`)) as Record<
-      string,
-      Record<string, string>
-    >;
+    const source = projection.workspaceManifests.get(dir)!;
+    if ('error' in source) throw source.error;
+    const manifest = source.value as Record<string, Record<string, string>>;
     for (const field of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'])
       for (const [name, version] of Object.entries(manifest[field] ?? {}))
-        if (version.startsWith('workspace:') && byName.has(name)) visit(byName.get(name)!);
+        if (version.startsWith('workspace:') && projection.workspaceByName.has(name))
+          visit(projection.workspaceByName.get(name)!);
   };
   visit(start);
   return [...seen].sort();
@@ -107,15 +157,16 @@ export function checkResultKey(input: {
 }): { key: string; unit: string } {
   const { root, cwd, command } = input;
   const commit = input.commit ?? git(cwd, 'rev-parse', 'HEAD');
+  const projection = sourceProjection(root, commit, input.policy ?? defaultPolicy.storage);
   const here = relative(root, cwd).split(sep).join('/');
   const atRoot = here === '' || here === '.';
-  let unitDirs = atRoot ? ['.'] : workspaceClosure(root, cwd, commit);
+  let unitDirs = atRoot ? ['.'] : workspaceClosure(projection, root, cwd);
   const workdir = atRoot || unitDirs.length ? undefined : here;
   if (workdir) unitDirs = ['.'];
   const unit = workdir ?? (unitDirs.join(',') || '.');
   const trees = unitDirs.map((dir) => [
     dir,
-    git(root, 'rev-parse', dir === '.' ? `${commit}^{tree}` : `${commit}:${dir}`),
+    dir === '.' ? git(root, 'rev-parse', `${commit}^{tree}`) : projection.trees.get(dir)!,
   ]);
   const env = Object.fromEntries(CHECK_RESULT_ENV.map((name) => [name, input.env?.[name] ?? '']));
   const toolchain = {
@@ -134,7 +185,7 @@ export function checkResultKey(input: {
     command: [...command],
     env,
     trees,
-    global: globalInputs(root, commit, input.policy ?? defaultPolicy.storage),
+    global: projection.globalInputs,
     toolchain,
     workdir: here || '.',
   };

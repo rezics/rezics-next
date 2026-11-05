@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openDb } from './db.ts';
-import { checkFlowAlarms, dispatchDailyStepAudit, ensureFlow, flowReport, readFlow, recordFlow } from './flow.ts';
+import { checkFlowAlarms, dispatchDailyStepAudit, ensureFlow, flowReport, readFlow, recordFlow, type FlowTask } from './flow.ts';
 import type { Task } from './types.ts';
 import { readControlPolicy } from './policy.ts';
 
@@ -142,6 +142,69 @@ test('incomplete lifecycle phases remain unknown instead of receiving inferred t
   });
   expect(result.tasks[0]?.workingMs).toBeNull();
   expect(result.queues.find((q) => q.stage === 'check')).toMatchObject({ length: 1, tasks: ['t1'] });
+});
+
+test('one ordered interval index keeps equal-time reports and does linear work after sorting', () => {
+  const now = Date.parse(date(20));
+  const measure = (copies: number) => {
+    let visits = 0;
+    const events: any[] = [];
+    const tasks: (ReturnType<typeof task> & Pick<FlowTask, 'terminalState'>)[] = [];
+    const add = (event: { taskId: string; attempt: number; stage: string; action: string; at: string }) => {
+      const taskId = event.taskId;
+      events.push(
+        Object.defineProperty({ ...event }, 'taskId', {
+          configurable: true,
+          enumerable: true,
+          get() {
+            visits += 1;
+            return taskId;
+          },
+        }),
+      );
+    };
+    for (let i = 0; i < copies; i++) {
+      const id = `live-${i}`;
+      const cancelled = `stopped-${i}`;
+      const reverse = `equal-${i}`;
+      const promo = `promo-${i}`;
+      tasks.push(
+        { ...task(id), terminalState: 'running' },
+        { ...task(cancelled), terminalState: 'cancelled' },
+        { ...task(reverse), terminalState: 'running' },
+        { ...task(promo), terminalState: 'running' },
+      );
+      add({ taskId: id, attempt: 1, stage: 'start', action: 'requested', at: date(1) });
+      add({ taskId: id, attempt: 1, stage: 'start', action: 'started', at: date(1) });
+      add({ taskId: id, attempt: 1, stage: 'start', action: 'requested', at: date(2) });
+      add({ taskId: id, attempt: 1, stage: 'check', action: 'requested', at: date(3) });
+      add({ taskId: id, attempt: 1, stage: 'check', action: 'closed', at: date(4) });
+      add({ taskId: id, attempt: 1, stage: 'worker', action: 'started', at: date(3) });
+      add({ taskId: id, attempt: 1, stage: 'landing', action: 'enqueued', at: date(5) });
+      add({ taskId: id, attempt: 1, stage: 'landing', action: 'finished', at: date(8) });
+      add({ taskId: promo, attempt: 1, stage: 'verification', action: 'requested', at: date(9) });
+      add({ taskId: promo, attempt: 1, stage: 'integration', action: 'integrated', at: date(9) });
+      add({ taskId: promo, attempt: 1, stage: 'promotion', action: 'requested', at: date(10) });
+      add({ taskId: cancelled, attempt: 1, stage: 'check', action: 'requested', at: date(1) });
+      add({ taskId: reverse, attempt: 1, stage: 'start', action: 'started', at: date(1) });
+      add({ taskId: reverse, attempt: 1, stage: 'start', action: 'requested', at: date(1) });
+    }
+    return { report: flowReport(events, tasks, now), visits, n: events.length };
+  };
+  const small = measure(8);
+  const large = measure(32);
+  expect(small.report.queues.find((q) => q.stage === 'start')?.length).toBe(16);
+  expect(small.report.queues.find((q) => q.stage === 'check')?.length).toBe(0);
+  expect(small.report.queues.find((q) => q.stage === 'landing')?.length).toBe(0);
+  expect(small.report.queues.find((q) => q.stage === 'verification')?.length).toBe(0);
+  expect(small.report.queues.find((q) => q.stage === 'promotion')?.length).toBe(8);
+  expect(small.report.bottleneck).toBe('start');
+  expect(small.report.stages.find((s) => s.stage === 'landing')).toMatchObject({ count: 8, totalMs: 1_440_000 });
+  expect(small.report.tasks.every((t) => t.workingMs === null)).toBe(true);
+  expect(large.report.queues.find((q) => q.stage === 'start')?.length).toBe(64);
+  expect(large.report.queues.find((q) => q.stage === 'promotion')?.length).toBe(32);
+  expect(large.visits / large.n).toBeLessThanOrEqual(small.visits / small.n + 2);
+  expect(large.visits / small.visits).toBeLessThan(5);
 });
 
 test('retry and closure events cannot create timed intervals from unrelated endpoints', () => {
