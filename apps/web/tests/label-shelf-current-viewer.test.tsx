@@ -334,24 +334,45 @@ test('The actual named-label Library renders private FULL assignments and remove
       root = hydrateRoot(host, tree());
     });
     visible(A, null);
-    for (const outcome of [{ status: 400, code: 'invalid_cursor' }, { status: 409, code: 'stale_cursor' }]) {
+    for (const outcome of [
+      { status: 400, code: 'invalid_cursor' },
+      { status: 409, code: 'stale_cursor' },
+    ]) {
       assignmentOverride = outcome;
-      const query = currentQuery(), before = reads.filter((req) => new URL(req.url).pathname === '/v1/libraryLabelAssignments').length;
-      await act(async () => client.invalidateQueries({ queryKey: query.queryKey, exact: true })); await settle();
+      const query = currentQuery(),
+        before = reads.filter((req) => new URL(req.url).pathname === '/v1/libraryLabelAssignments').length;
+      await act(async () => client.invalidateQueries({ queryKey: query.queryKey, exact: true }));
+      await settle();
       const recovery = currentQuery().state.data as CurrentLabelShelfData;
-      expect(recovery).toMatchObject({ state: 'cursor-rejected', labelId, provenance: { subject: A, locale: 'en', source: { labelId, cursor: 'source-one' } } });
+      expect(recovery).toMatchObject({
+        state: 'cursor-rejected',
+        labelId,
+        provenance: { subject: A, locale: 'en', source: { labelId, cursor: 'source-one' } },
+      });
       absent();
-      const link = host.querySelector<HTMLAnchorElement>('a[href*="/library?label="]')!, address = new URL(link.href);
-      expect([address.pathname, address.searchParams.get('label'), address.searchParams.get('cursor'), address.searchParams.get('layout')]).toEqual(['/en/library', labelId, null, 'list']);
-      expect(reads.filter((req) => new URL(req.url).pathname === '/v1/libraryLabelAssignments')).toHaveLength(before + 1);
-      const otherSource = { ...recovery, provenance: { ...recovery.provenance, source: { ...recovery.provenance.source, cursor: 'source-two' } } };
+      const link = host.querySelector<HTMLAnchorElement>('a[href*="/library?label="]')!,
+        address = new URL(link.href);
+      expect([
+        address.pathname,
+        address.searchParams.get('label'),
+        address.searchParams.get('cursor'),
+        address.searchParams.get('layout'),
+      ]).toEqual(['/en/library', labelId, null, 'list']);
+      expect(reads.filter((req) => new URL(req.url).pathname === '/v1/libraryLabelAssignments')).toHaveLength(
+        before + 1,
+      );
+      const otherSource = {
+        ...recovery,
+        provenance: { ...recovery.provenance, source: { ...recovery.provenance.source, cursor: 'source-two' } },
+      };
       flushSync(() => client.setQueryData(query.queryKey, otherSource));
       expect(host.querySelector('a[href*="/library?label="]')).toBeNull();
       flushSync(() => client.setQueryData(query.queryKey, recovery));
     }
     assignmentOverride = null;
     const rejectedQuery = currentQuery();
-    await act(async () => client.invalidateQueries({ queryKey: rejectedQuery.queryKey, exact: true })); await settle();
+    await act(async () => client.invalidateQueries({ queryKey: rejectedQuery.queryKey, exact: true }));
+    await settle();
     visible(A, null);
     // Read admission is independent of missing CSRF and of unassign admission.
     const reading = () => host.querySelector('[data-received-assignment-reader]');
