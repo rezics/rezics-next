@@ -15,7 +15,7 @@ import { partitionOf } from '../route/route.ts';
 import { createWorkClient, type WorkClient } from '../work/client.ts';
 import { requireRoute } from './command-support.ts';
 import apply from './listing-apply.sql';
-import page from './listing-page.sql';
+import { executeSubjectCollectionPairs, subjectCollectionPairPlan } from './subject-collection-read-bounds.ts';
 import {
   admitListingSource,
   observeListingSource,
@@ -201,11 +201,11 @@ export async function subjectCollections(pool: Pool, subjectId: string, after: s
     throw new RangeError('Page limit must be an integer from 1 through 5000');
   const route = requireRoute(subjectId);
   if (after !== null) requireRoute(after);
+  const plan = subjectCollectionPairPlan({
+    route, subject_id: subjectId, after: after ?? '00000000-0000-0000-0000-000000000000', limit,
+  });
   return withConnection(pool, async (client) => {
-    const rows = await page.run(
-      { query: client.query.bind(client) },
-      { route, subject_id: subjectId, after: after ?? '00000000-0000-0000-0000-000000000000', limit },
-    );
+    const rows = await executeSubjectCollectionPairs({ query: client.query.bind(client) }, plan);
     return rows.map((row) => ({ ...row, updatedAt: new Date(row.updatedAt).toISOString() }));
   });
 }

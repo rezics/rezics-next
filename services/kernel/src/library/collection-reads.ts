@@ -1154,13 +1154,13 @@ export function createCollectionReads(
   async function listSubjectCollections(
     viewer: Actor,
     subjectId: string,
-    options: { cursor?: string | null; limit?: number } = {},
+    options: { cursor?: string | null; limit?: number; view?: 'BASIC' | 'FULL' } = {},
   ): Promise<{
     collections: PublicCollectionView[];
     count: { value: number; exact: true };
     next: string | null;
   }> {
-    const page = pageRequest(options, ['cursor', 'limit']);
+    const page = pageRequest(options, ['cursor', 'limit', 'view']);
     if (typeof subjectId !== 'string' || (await resolveSubject(anchors, viewer, subjectId)) === null) throw notFound();
     const route = routeOf(subjectId)!;
     const counts = await listingCounts.run(pool, {
@@ -1170,7 +1170,7 @@ export function createCollectionReads(
     const count = counts[0]?.publicCollectionCount ?? 0;
     const binding: CursorBinding = {
       operation: 'library.subject.collections',
-      parameters: { subjectId },
+      parameters: { subjectId, limit: page.limit, view: options.view ?? 'BASIC' },
     };
     const cursor = unseal(cursorToken(page.cursor), binding);
     const after = subjectPosition(cursor);

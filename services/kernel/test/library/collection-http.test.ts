@@ -952,3 +952,35 @@ test('native Auth suspension rejects the old Collection bearer and sign-in witho
     await admin.end();
   }
 }, 180_000);
+
+test('Subject BASIC and FULL continuations preserve the public Collection population', async () => {
+  const shelves = [await collection('public'), await collection('public')];
+  for (const shelf of shelves) {
+    await add(shelf.id);
+    await syncSubjectListing({ pool: db.pool }, { subjectId, collectionId: shelf.id });
+  }
+  const populations: string[][] = [];
+  for (const view of ['BASIC', 'FULL']) {
+    const url = `/v1/subjects/${subjectId}/collections?limit=1&view=${view}`;
+    let cursor: string | null = null;
+    const ids: string[] = [];
+    do {
+      const result: { collections: { id: string }[]; next: string | null; count: SubjectCollectionCount } =
+        await json(await request('GET', `${url}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`, undefined, 'anonymous'));
+      expect(result.count.exact).toBe(true);
+      expect(result.count.value).toBeGreaterThanOrEqual(shelves.length);
+      ids.push(...result.collections.map(({ id }) => id));
+      if (cursor === null) {
+        expect(result.next).toBeString();
+        const foreignView = view === 'BASIC' ? 'FULL' : 'BASIC';
+        await problem(await request('GET', `/v1/subjects/${subjectId}/collections?limit=1&view=${foreignView}&cursor=${encodeURIComponent(result.next!)}`), 400, 'invalid_cursor');
+        await problem(await request('GET', `/v1/subjects/${subjectId}/collections?limit=2&view=${view}&cursor=${encodeURIComponent(result.next!)}`), 400, 'invalid_cursor');
+      }
+      cursor = result.next;
+    } while (cursor);
+    expect(ids).toEqual([...new Set(ids)].sort());
+    expect(ids).toEqual(expect.arrayContaining(shelves.map(({ id }) => id)));
+    populations.push(ids);
+  }
+  expect(populations[0]).toEqual(populations[1]);
+});

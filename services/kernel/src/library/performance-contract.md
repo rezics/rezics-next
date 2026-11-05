@@ -250,3 +250,20 @@ connection controls, response serialization, retries and DBOS/outbox controls be
 must price one bounded page/segment, retain the original cutoff and exact deletion locator through continuation,
 and include negative/racing candidates and cleanup. PAGE_BOUND and SEGMENT_BOUND remain 100; neither bounds future
 scheduled invocations. Undo never reads the private session or renews the original deletion's eligibility.
+
+## Subject Collection pair seek
+
+Decision: bind Subject continuation to its exact BASIC/FULL view and public page limit at the HTTP/service
+boundary; keep the helper's independent 5,000-pair capacity and the public default 20/maximum 100.
+The existing native HTTP journey tests both views across first and next pages and rejects cross-view/limit replay.
+
+`subject-collection-read-bounds.ts` snapshots the actual `listing-page.sql` operands before the existing
+`listing.ts` connection dispatch. The subject-leading `(route, subject_id, collection_id)` primary key visits
+at most the requested positive pairs, including the sentinel. The declaration counts both index rows and LIMIT
+rows, one seek/statement, original serialized binds, literal SQL and the escaped UUID/int4/timestamp projection.
+Empty results do not reduce the declaration. This SQL leaf has no identity, witness or Search producer.
+
+This is a leaf, not the complete reverse-discovery operation or a native grant. Subject resolution, maintained
+count, partition/currentness, repeated curator checks, connection controls and FULL disclosure still belong to the
+enclosing immutable operation. Count and pair observations remain independent; no atomic snapshot, refill or
+count recomputation is introduced. Directory/preview composition retains its existing callers and limits.

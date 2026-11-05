@@ -1431,7 +1431,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
             viewDependencies(),
             actor,
             query.view,
-            await read().listSubjectCollections(actor, params.id, basicQuery(query)),
+            await read().listSubjectCollections(actor, params.id, query),
           ),
         ),
     );

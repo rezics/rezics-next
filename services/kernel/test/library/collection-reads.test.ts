@@ -792,18 +792,18 @@ test("a subject's public Collections page shows only Collections that are public
     code: 'invalid_cursor',
     status: 400,
   });
-  const binding = { operation: 'library.subject.collections', parameters: { subjectId } };
+  const binding = { operation: 'library.subject.collections', parameters: { subjectId, limit: 1, view: 'BASIC' } };
   const decoded = decodeCursor(tokens, binding, prior.next!);
   expect(decoded.ok).toBe(true);
   if (!decoded.ok) return;
   const stale = encodeCursor(tokens, binding, { epoch: decoded.epoch + 1, after: decoded.after });
-  expect(await refusal(reads.listSubjectCollections(owner, subjectId, { cursor: stale }))).toMatchObject({
+  expect(await refusal(reads.listSubjectCollections(owner, subjectId, { limit: 1, cursor: stale }))).toMatchObject({
     code: 'stale_cursor',
     status: 409,
   });
   const foreign = encodeCursor(
     tokens,
-    { operation: 'library.subject.collections', parameters: { subjectId: denied } },
+    { operation: 'library.subject.collections', parameters: { subjectId: denied, limit: 1, view: 'BASIC' } },
     { epoch: decoded.epoch, after: decoded.after },
   );
   expect(await refusal(reads.listSubjectCollections(anonymous, subjectId, { cursor: foreign }))).toMatchObject({
