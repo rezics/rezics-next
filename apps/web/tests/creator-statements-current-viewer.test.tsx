@@ -551,6 +551,7 @@ test('mounted actual routes keep only current viewer/address data across hydrati
     expect(host.textContent).toContain(`Private payment ${B}`);
     pointId = creatorStatementFixture.id;
     locale = 'fr';
+    initialDetail = detail(B, pointId, search.cursor!, search.from!, locale);
     const moved = pending.length;
     await show(viewer(B));
     privateAbsent(B);
