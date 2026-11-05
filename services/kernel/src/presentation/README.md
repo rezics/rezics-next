@@ -36,6 +36,8 @@ is never converted into an empty catalogue read. The Home's four selectors are
 `schema:Book`, `schema:TVSeries` plus `schema:Movie`, `wd:Q689445`, and
 `schema:Recipe`.
 
+Route page reads bind the active definition release before admitting their TypeLists, just as subject and account pages do.
+
 ## Release scope and evidence
 
 The closed composition format, platform profile and released definitions cover the eight launch configurations through the shared renderer; the generic page needs no vertical-specific implementation. This proves neither native execution nor browser acceptance for every type. Original Zone starters remain inert documents and do not provide the common Zone page runtime.

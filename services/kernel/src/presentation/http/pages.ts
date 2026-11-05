@@ -439,12 +439,11 @@ function nativePageRoute<App, const Path extends string>(
       let account: PageAccount | null = null;
       let resolved: ResolvedTemplate;
       let views: View[] | null = null;
-      let definitionRelease: Awaited<ReturnType<typeof activeRelease>> | undefined;
+      const definitionRelease = await activeRelease(pool);
       if ('route' in target) {
         resolved = resolveTemplate(active.profile, { route: target.route });
       } else {
-        const release = await activeRelease(pool);
-        definitionRelease = release;
+        const release = definitionRelease;
         let subjectTarget: string | null = null;
         let kind = 'actor';
         let automated = false;
