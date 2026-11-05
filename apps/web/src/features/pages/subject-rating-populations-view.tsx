@@ -30,7 +30,8 @@ import { admitPopulationEnvelope } from './population-envelope-admission';
 
 type Session = ReturnType<typeof useSession>;
 export type PopulationTransport = (input: PopulationInput, signal?: AbortSignal) => Promise<PopulationEnvelope>;
-const transport: PopulationTransport = (data, signal) => readSubjectRatingPopulations({ data, signal });
+const transport: PopulationTransport = (data, signal) =>
+  readSubjectRatingPopulations(signal ? { data, signal } : { data });
 const actionClass =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring';
 let serial = 0;
