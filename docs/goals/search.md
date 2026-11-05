@@ -83,6 +83,8 @@ unhydrated visits. A field change never dispatches. Application starts a first t
 executed operand; an unchanged submission retains ordinary native GET canonicalization. Request, reader, locale
 or native rating-advice replacement retires pending edits. Recovery links always restart the exact executed pair,
 using native readiness without promoting missing adapters or replacing an unlisted committed population.
+Decision: Rating Search may show useful pages after current-source checks while same-generation freshness says
+catching-up; that observation is not a completeness certificate, and cursor recovery restarts the executed pair.
 
 ## Ownership
 
