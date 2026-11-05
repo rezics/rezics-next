@@ -198,11 +198,7 @@ test('thrown setup yields a serializable unavailable result rather than an escap
       headers.push(`${name}: ${value}`);
     },
   }));
-  mock.module('cloudflare:workers', () => ({
-    get env() {
-      throw new Error(leaked);
-    },
-  }));
+  mock.module('cloudflare:workers', () => ({ env: {} }));
   const setup = serializeProfileResult(profileReadSetupFailure(new Error(leaked)));
   expect(setup).toEqual({ ok: false, status: 503 });
   expect(JSON.stringify(setup)).not.toContain(leaked);

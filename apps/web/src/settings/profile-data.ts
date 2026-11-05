@@ -178,6 +178,16 @@ export function profileChanges(before: ProfileValues, after: ProfileValues): Pro
   return body;
 }
 
+/** Matching current fields update the projection only; local preview stays local until original acknowledgement. */
+export function profileHasLocalPreview(
+  changed: boolean,
+  localAvatar: boolean,
+  attempt: unknown,
+  acknowledged: unknown,
+): boolean {
+  return changed || localAvatar || attempt != null || acknowledged != null;
+}
+
 export async function saveProfileRecord(
   client: KernelClient,
   authorization: string,
