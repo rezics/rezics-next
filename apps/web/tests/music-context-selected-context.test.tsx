@@ -441,7 +441,10 @@ test('selected Context stays bound through the Subject entry, route, session, ac
     await act(async () => sourceRetry.click());
     await until(() => subjectCalls.length === 9);
     await resolve(8, contextA, 'Fresh source release', contextA, nextRelease);
-    await until(() => relationCalls.length === 9 && host.textContent?.includes('Fresh source release') === true);
+    await until(
+      () => relationCalls.length === 9 && host.textContent?.includes('Fresh source release') === true,
+      () => `subjects=${subjectCalls.length}; relations=${relationCalls.length}; view=${host.textContent}`,
+    );
     expect(relationCalls.at(-1)?.query.context).toBe(contextA);
     expect(host.textContent).toContain('exact selected Context');
     const generalTarget = [...host.querySelectorAll<HTMLAnchorElement>('a')].find(
