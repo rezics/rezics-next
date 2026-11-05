@@ -2135,8 +2135,7 @@ export class Importer {
       else if (statisticOnly) {
         // A confirmed statistic-only refresh changes the input projection without
         // replacing any acknowledged semantic candidate or its immutable journal.
-        if (!store.key(run.source, row.recordKey, run).resolved)
-          store.acknowledgeStatisticRefresh(run, row.recordKey);
+        if (!store.key(run.source, row.recordKey, run).resolved) store.acknowledgeStatisticRefresh(run, row.recordKey);
       } else if (
         (this.options.vocabularyAdmission || this.options.identifierLookup || unavailableCover) &&
         conversion &&
