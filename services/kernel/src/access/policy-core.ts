@@ -139,8 +139,11 @@ export function hasNativePolicyProfile(catalogue: PolicyCatalogue, action: strin
 
 /** A point Resource omits its type, so only a single registered type is inferable. */
 export function uniqueNativePolicyResourceType(catalogue: PolicyCatalogue, action: string): string | undefined {
-  const types = catalogue.actionByName[action]?.resourceTypes;
-  return types?.length === 1 ? types[0] : undefined;
+  const registered = catalogue.actionByName[action];
+  const types = registered?.resourceTypes;
+  if (!types?.length) return undefined;
+  if (registered.authority === 'own-account' && types.includes('access.account')) return 'access.account';
+  return types.length === 1 ? types[0] : undefined;
 }
 
 /** Evaluate ordinary and explicit forms from distinct SQL branches. `allowed` is intentionally absent. */

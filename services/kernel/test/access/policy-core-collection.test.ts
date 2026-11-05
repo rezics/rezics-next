@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import {
   compileNativePolicyCatalogue,
   decideNativePermission,
+  uniqueNativePolicyResourceType,
   type NativePermissionProjection,
 } from '../../src/access/policy-core.ts';
 import type { ActionCatalogue } from '../../src/request/access.ts';
@@ -151,4 +152,14 @@ test('own-account Library writes keep the SQL live clock as deadline evidence', 
       live: true,
     }).decision,
   ).toBe('allow');
+  const mixed = compileNativePolicyCatalogue(
+    new Map([
+      [
+        'rating:vote',
+        { anonymous: false, authority: 'own-account', 'x-resource-types': ['ex:Child'] },
+      ],
+    ]),
+    { roles: new Map(), types: new Map([['ex:Child', { standing: [] }]]) },
+  );
+  expect(uniqueNativePolicyResourceType(mixed, 'rating:vote')).toBe('access.account');
 });
