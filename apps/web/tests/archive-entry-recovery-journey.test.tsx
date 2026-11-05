@@ -672,7 +672,11 @@ test('Retained source observation evidence explains that privacy and timestamps 
   const f = fixture();
   try {
     const row: ArchiveRow = {
-      ordinal: 6, section: 'provenance', status: 'unsupported', review: null, reviewRevision: 0,
+      ordinal: 6,
+      section: 'provenance',
+      status: 'unsupported',
+      review: null,
+      reviewRevision: 0,
       evidence: { observation: { provider: 'source', recordId: 'record', sourceCreated: '2005-02' } },
     };
     f.pages(new Map([[-1, previewPage([row], null)]]), new Map());
