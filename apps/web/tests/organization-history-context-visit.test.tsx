@@ -169,7 +169,8 @@ test('a selected Context and exact dated Organization assertion survive target, 
 
     const replaced = structuredClone(organization);
     replaced.subject.statements['wdt:P749']![1] = { ...second, id: '00000000-0000-4000-8000-00000000d816' };
-    await render('initial', replaced, {});
+    window.history.replaceState(window.history.state, '', via);
+    await render('initial', replaced, {}, true);
     expect(host.querySelector('[role="region"]')).toBeNull();
     expect(host.textContent).toContain(m.organization_reader_changed());
     expect(
