@@ -404,6 +404,13 @@ test('The actual personal Library accepts only matching prepared-viewer and sour
         root = hydrateRoot(host, tree(), { onRecoverableError: (error) => hydrationErrors.push(error) });
       } else root.render(tree());
     });
+    const observation = browserObservation(client).getSnapshot();
+    expect(observation).toMatchObject({ state: 'signed-in', observation: { subject: viewer.subject } });
+    if (observation.state === 'signed-in')
+      expect(client.getQueryData(['exposure', 'viewer', observation.subject, observation.id])).toMatchObject({
+        subject: observation.subject,
+        state: admitted ? 'ready' : 'denied',
+      });
   };
   const tick = async () => {
     await act(async () => {
