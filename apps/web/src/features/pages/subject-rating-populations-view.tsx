@@ -152,16 +152,12 @@ export function useRatingPopulations(
   useSyncExternalStore(registry.subscribe, registry.snapshot, registry.serverSnapshot);
   const cached = client.getQueryData<Session>(['session']);
   const reader =
-    input.session.state === 'signed-in' &&
     cached?.state === 'signed-in' &&
-    cached.subject === input.session.subject &&
-    cached.csrfToken === input.session.csrfToken &&
     observation.state === 'signed-in' &&
     observation.observation.subject === cached.subject
       ? (cached.subject ?? null)
       : null;
-  const anonymous =
-    input.session.state === 'signed-out' && cached?.state === 'signed-out' && observation.state === 'signed-out';
+  const anonymous = cached?.state === 'signed-out' && observation.state === 'signed-out';
   const enabled = input.enabled !== false && (anonymous || reader !== null);
   const signature = JSON.stringify([
     registry.id,

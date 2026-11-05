@@ -11,7 +11,6 @@ import realmRecording from '../src/kernel/recorded/realm.json';
 import { GLOBAL, QUESTION, RATING_SOURCES, readRatings } from '../src/features/pages/subject-ratings';
 import { readRatingPopulations, type PopulationInput } from '../src/features/pages/subject-rating-populations';
 import type { SessionEnv } from '../src/session/client';
-import { browserObservation } from '../src/session';
 
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -235,7 +234,7 @@ mock.module('../src/settings/preferences', () => ({
 }));
 
 const { createRoot } = await import('react-dom/client');
-const { QueryClient, QueryClientProvider, dehydrate, useQuery, useQueryClient } = await import('@tanstack/react-query');
+const { QueryClient, QueryClientProvider, dehydrate, useQuery } = await import('@tanstack/react-query');
 const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } =
   await import('@tanstack/react-router');
 const { SubjectOverview } = await import('../src/routes/subjects/$id_.$slug');
@@ -290,7 +289,6 @@ function PopulationOwner({
   enabled?: boolean;
 }) {
   const { data } = useQuery({ ...sessionQuery, enabled: false });
-  if (extraCache) console.log('population owner session', data, useQueryClient().getQueryData(sessionQuery.queryKey));
   useQuery({ ...subjectRatingQuery(id, 'en', 'question'), enabled: false });
   return (
     <SubjectRatingPopulations
@@ -938,18 +936,6 @@ test('independent QueryClients serialize private responses separately and requir
   extraCache.setQueryDefaults(sessionQuery.queryKey, { gcTime: Infinity });
   extraCache.setQueryData(sessionQuery.queryKey, session(preparedReader, null));
   await paint(subjectId, extraCache);
-  console.log(
-    'independent client admission',
-    extraCache.getQueryData(sessionQuery.queryKey),
-    browserObservation(extraCache).getSnapshot(),
-    extraCache.getQueryCache().findAll({ queryKey: ['subject-rating-populations'] }).map((query) => ({
-      key: query.queryKey,
-      status: query.state.status,
-      fetchStatus: query.state.fetchStatus,
-      data: query.state.data,
-    })),
-    requests.slice(-8).map((request) => new URL(request.url).pathname),
-  );
   await until(() => boxes().length === 20);
   const second = extraCache
     .getQueryCache()
