@@ -92,6 +92,9 @@ function nativeSubject(
 }
 
 nativeClient = {
+  contexts: ({ id }: { id: string }) => ({
+    get: async () => ({ status: 200, data: { context: { id } }, headers: new Headers() }),
+  }),
   definitions: {
     active: {
       get: async () => ({
@@ -368,8 +371,8 @@ test('selected Context stays bound through the Subject entry, route, session, ac
     expect(host.textContent).not.toContain('Retired Context B');
     expect(host.querySelector('[data-context]')?.getAttribute('data-context')).toBe(contextA);
     expect(relationCalls.map((call) => call.query.context)).toEqual([contextA, contextB, contextA, contextA, contextA]);
-    expect(subjectCalls[4]?.fetch).toEqual({ cache: 'no-store', redirect: 'manual' });
-    expect(relationCalls[4]?.fetch).toEqual({ cache: 'no-store', redirect: 'manual' });
+    expect(subjectCalls[4]?.fetch).toEqual({ cache: 'no-store', redirect: 'manual', signal: expect.any(AbortSignal) });
+    expect(relationCalls[4]?.fetch).toEqual({ cache: 'no-store', redirect: 'manual', signal: expect.any(AbortSignal) });
 
     const next = [...host.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
       button.textContent?.includes('Next page'),

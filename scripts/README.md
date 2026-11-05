@@ -376,6 +376,7 @@ exits 0 for started/replayed, 1 for durable refusal and 2 for unknown custody.
       "address": "root@check.example",
       "identity": ".secrets/server/check-small/operator-ed25519",
       "memoryMaxGiB": 10,
+      "memoryPerRunGiB": 6,
       "cpuQuotaPercent": 800,
       "slots": 4,
       "processorsPerSlot": 2,
@@ -392,6 +393,7 @@ exits 0 for started/replayed, 1 for durable refusal and 2 for unknown custody.
 | `address`                       | SSH destination in `user@host` form. It identifies the machine, not a resource limit.                                                                                                                                                                                                |
 | `identity`                      | Nonempty path to the caller's SSH private key. SSH uses only the specified identity and batch authentication.                                                                                                                                                                        |
 | `memoryMaxGiB`                  | Positive memory limit in GiB. Admission uses this for capacity when slice memory cannot be read. Provision the slice with the matching value.                                                                                                                                        |
+| `memoryPerRunGiB`               | Positive per-run MemoryMax in GiB, at most `memoryMaxGiB`. Omitted: **6**. Each run's nested slice and scope receive this cap and `MemorySwapMax` 0. Concurrent runs are also capped at `floor(memoryMaxGiB / memoryPerRunGiB)`, so a 28 GiB host at 6 GiB per run takes at most 4.  |
 | `cpuQuotaPercent`               | Positive CPU quota; 100 means one processor. This is the admission fallback when slice `cpu.max` is unreadable or unlimited. Provision the matching quota.                                                                                                                           |
 | `slots`                         | Positive integer ceiling on concurrent slot units, including the express slot. Slot counts in the hosts file are a processor bound and do not change systemd limits.                                                                                                                 |
 | `processorsPerSlot`             | Positive finite processor count required per slot. Defaults to 2.                                                                                                                                                                                                                    |
@@ -404,12 +406,14 @@ Editing JSON alone does not resize the slice. Provisioning takes memory and CPU 
 ### Admission and queueing
 
 Each slot requires the host's configured `processorsPerSlot` (default **2**). Slot counts in the hosts file are a
-processor bound. Runs reserve their command class's measured memory: `worker-check` passes its class weight with
+processor bound. Concurrent runs are also bounded by per-run memory: `floor(memoryMaxGiB / memoryPerRunGiB)` (default
+**6** GiB per run). A host with `memoryMaxGiB` 28 and 6 GiB per run therefore takes at most 4 runs, even when it still
+has a free slot. Runs reserve their command class's measured memory: `worker-check` passes its class weight with
 `--memory-gib <positive integer>`, while other callers without a request retain the **2.5 GiB** default per slot.
 Multi-slot requests retain one reservation per requested slot. For each answering host, compute:
 
 ```text
-C = min(configured slots, floor(slice processors / processorsPerSlot))
+C = min(configured slots, floor(slice processors / processorsPerSlot), floor(memoryMaxGiB / memoryPerRunGiB))
 O = max(0, C - 1)        ordinary capacity
 G = max(0, O - 1)        gate capacity
 ```
@@ -434,7 +438,10 @@ When a reservation still does not fit on any answering host, admission writes `m
 the slice's `memory.reclaim` once and re-probes before waiting or reporting no slot. A missing or unwritable
 `memory.reclaim` is ignored and does not fail the run. The slot-wait line reports the reclaimable file-cache amount.
 When slice memory cannot be read, it uses the machine's `MemAvailable` instead. Every run also sets Node's compile cache to a directory inside its run directory; cleanup removes the cache with that run.
-Slots reserve admission capacity. They do not impose a separate CPU or memory cap on each run.
+Slots and per-run MemoryMax together reserve admission capacity. Each run's nested slice and scope have `MemoryMax`
+(`memoryPerRunGiB`, default 6 GiB) and `MemorySwapMax` 0, covering the command and its containers. A kernel OOM kill
+exits 137 and reports `check exceeded its memory limit (<n> GiB)` with the test file that was running (from command
+output, else the last test path in argv). It does not wait for the run-lifetime timeout.
 
 One slot is express capacity. Only a non-gate, one-slot run with an explicit estimate of at most
 120,000 ms qualifies. It takes an ordinary slot first, then express if needed.
@@ -658,7 +665,9 @@ remain separate questions for the existing compiler/health chain; this cohort su
 
 5. Execute inside a transient `rezics-check-<run-id>.scope` in a nested per-run slice under `rezics-check.slice`.
    The slice name replaces run-ID hyphens with underscores. `REZICS_CHECK_SLICE` names that slice.
-   Remote runs set `REZICS_STACK_LEASE=off`; remote admission has already reserved their slots.
+   systemd-run sets `MemoryMax=<memoryPerRunGiB>G` (default 6) and `MemorySwapMax=0` on the scope and, when supported,
+   on the slice; the command also writes those cgroup files so older systemd still contains the run. Remote runs set
+   `REZICS_STACK_LEASE=off`; remote admission has already reserved their slots.
 6. Once the remote run is terminal, release its execution slots before checking or copying declared return paths and
    before removing the run directory. Return paths are copied after success or command failure; missing paths are logged
    and skipped. Output streams to the caller. The command's exit code becomes the caller's exit code.
@@ -877,9 +886,11 @@ Read the per-run CPU seconds, average cores and peak memory lines, including con
 Measure complete runs on a quiet slice and repeat with the intended mix of concurrent checks.
 
 Choose concurrent runs so their measured core demand fits the slice's processors and their memory peaks fit its memory.
-For similar one-slot runs, start with the smaller of `floor(slice processors / measured cores per run)`
-and `floor(slice GiB / measured peak GiB per run)`, leaving headroom for variation.
-Set `processorsPerSlot` to the measured processor demand per run (default two). Set each caller's memory request to its measured class peak with reasonable headroom; callers without a request use 2.5 GiB.
+Admission already takes the smaller of slot capacity and `floor(memoryMaxGiB / memoryPerRunGiB)`. For similar one-slot
+runs, start with the smaller of `floor(slice processors / measured cores per run)` and that memory packing, leaving
+headroom for variation. Set `processorsPerSlot` to the measured processor demand per run (default two). Set
+`memoryPerRunGiB` to the hard per-run cap (default 6). Set each caller's memory request to its measured class peak with
+reasonable headroom; callers without a request use 2.5 GiB.
 Include express capacity when setting `slots`; ordinary concurrency is one lower.
 Use multiple slots for heavier runs and keep their requests within the non-gate cap.
 Increasing `slots` beyond slice capacity adds no usable capacity.

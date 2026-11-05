@@ -39,7 +39,9 @@ import {
   parseRemotePhysicalRunReceipt,
   requestExecutionCancellation,
   CHECK_SLOT_MEMORY_BYTES,
+  CHECK_RUN_MEMORY_GIB,
   CHECK_SLOT_PROCESSORS,
+  hostAdmittedRunCapacity,
   CHECK_HOST_MIN_TMP_BYTES,
   CHECK_HOST_MIN_TMP_INODES,
   BASE_REFRESH_INTERVAL_SECONDS,
@@ -1143,6 +1145,7 @@ type HostConfig = {
   load?: number;
   cpuQuotaPercent?: number;
   memoryMaxGiB?: number;
+  memoryPerRunGiB?: number;
   busy?: number;
   grantOnly?: number;
   slots?: number;
@@ -1311,6 +1314,7 @@ function scenario(hosts: Record<string, HostConfig>): { env: Record<string, stri
         address: `ops@${name}.test`,
         identity: `/keys/${name}`,
         memoryMaxGiB: hosts[name]!.memoryMaxGiB ?? 16,
+        memoryPerRunGiB: hosts[name]!.memoryPerRunGiB ?? 1,
         cpuQuotaPercent: hosts[name]!.cpuQuotaPercent ?? 800,
         slots: hosts[name]!.slots ?? 2,
         ...(hosts[name]!.fallback ? { fallback: true } : {}),
@@ -1382,6 +1386,7 @@ function rewriteHosts(
         address: `ops@${name}.test`,
         identity: `/keys/${name}`,
         memoryMaxGiB: 16,
+        memoryPerRunGiB: 1,
         cpuQuotaPercent: 800,
         slots,
         ...(fallback ? { fallback: true } : {}),
@@ -2352,6 +2357,7 @@ test('a processor-bounded host does not lose slots to its memoryMaxGiB', async (
       available: 16 * 2 ** 30,
       memoryMax: 4 * 2 ** 30,
       memoryMaxGiB: 4,
+      memoryPerRunGiB: 0.5,
       memoryHeadroom: 4 * 2 ** 30,
       sliceProcessors: 12,
       cpuQuotaPercent: 1200,
@@ -2649,6 +2655,83 @@ test('memory requests must be positive integers before any host is contacted', a
 test('a host without processorsPerSlot keeps 2 processors per slot', () => {
   const { env } = scenario({ a: {} });
   expect(readHosts(env.KERNEL_CHECK_REMOTE!)[0]?.processorsPerSlot).toBe(CHECK_SLOT_PROCESSORS);
+});
+
+test('a host without memoryPerRunGiB keeps a 6 GiB per-run memory cap', () => {
+  const { env } = scenario({ a: {} });
+  const hostsFile = env.KERNEL_CHECK_REMOTE!;
+  const parsed = JSON.parse(readFileSync(hostsFile, 'utf8')) as { hosts: Array<Record<string, unknown>> };
+  delete parsed.hosts[0]!.memoryPerRunGiB;
+  writeFileSync(hostsFile, JSON.stringify(parsed));
+  expect(readHosts(hostsFile)[0]?.memoryPerRunGiB).toBe(CHECK_RUN_MEMORY_GIB);
+});
+
+test('a non-positive memoryPerRunGiB or one above memoryMaxGiB fails host loading with the host name', () => {
+  const { env } = scenario({ namedHost: {} });
+  const hostsFile = env.KERNEL_CHECK_REMOTE!;
+  const contents = readFileSync(hostsFile, 'utf8');
+  for (const invalid of ['null', '0', '-1']) {
+    writeFileSync(hostsFile, contents.replace('"memoryPerRunGiB":1', `"memoryPerRunGiB":${invalid}`));
+    expect(() => readHosts(hostsFile)).toThrow('host namedHost: bad memoryPerRunGiB');
+  }
+  writeFileSync(hostsFile, contents.replace('"memoryPerRunGiB":1', '"memoryPerRunGiB":32'));
+  expect(() => readHosts(hostsFile)).toThrow('host namedHost: memoryPerRunGiB exceeds memoryMaxGiB');
+});
+
+test('a host with 28 GiB and 6 GiB per run admits at most 4 concurrent slot units', () => {
+  expect(
+    hostAdmittedRunCapacity(
+      {
+        name: 'a',
+        address: 'ops@a.test',
+        identity: '/keys/a',
+        memoryMaxGiB: 28,
+        memoryPerRunGiB: 6,
+        cpuQuotaPercent: 1100,
+        slots: 5,
+        processorsPerSlot: 2,
+      },
+      11,
+    ),
+  ).toBe(4);
+});
+
+test('a 28 GiB host at 6 GiB per run takes no ordinary run once three ordinary slots are busy', async () => {
+  const { env, events } = scenario({
+    a: {
+      slots: 5,
+      memoryMaxGiB: 28,
+      memoryPerRunGiB: 6,
+      memoryMax: 28 * 2 ** 30,
+      memoryHeadroom: 28 * 2 ** 30,
+      cpuQuotaPercent: 1100,
+      ordinaryBusy: 3,
+    },
+  });
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      '--eval',
+      `const { tryRemoteCheck, readHosts } = await import(${JSON.stringify(remoteCheck)});
+       console.log('TRY_ONCE ' + JSON.stringify(await tryRemoteCheck({ hosts: readHosts(process.env.KERNEL_CHECK_REMOTE), workspace: ${JSON.stringify(workspace())}, command: ['true'] }, new AbortController().signal)));`,
+    ],
+    { env, stdout: 'pipe', stderr: 'pipe' },
+  );
+  const [code, stdout, stderr] = await Promise.all([
+    child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
+  expect(code, stderr).toBe(0);
+  expect(
+    JSON.parse(
+      stdout
+        .split('\n')
+        .filter((line) => line.startsWith('TRY_ONCE '))[0]!
+        .slice('TRY_ONCE '.length),
+    ).status,
+  ).toBe('no-slot');
+  expect(events().some((event) => event.kind === 'slot' && event.granted)).toBe(false);
 });
 
 test('a non-positive or non-finite processorsPerSlot fails host loading with the host name', () => {
@@ -4694,7 +4777,7 @@ const cgroup = (slice: string) => directory + '/cgroup/rezics-check.slice/' + sl
 if (command === 'systemd-run') {
   if (args.some((arg) => ['--unit=rezics-check-cache-maintenance', '--unit=rezics-check-cache-registration'].includes(arg))) process.exit(0);
   if (args.includes('--help')) {
-    if (process.env.SYSTEMD_MODE === 'systemd-259') console.log('--expand-environment');
+    if (process.env.SYSTEMD_MODE === 'systemd-259') console.log('--expand-environment\\n--slice-property');
     process.exit(0);
   }
   if (process.env.SYSTEMD_MODE === 'old' && args.some((argument) => argument.startsWith('--expand-environment'))) {
@@ -4817,7 +4900,7 @@ writeFileSync(stateFile, JSON.stringify(state));
 }
 
 async function generatedRun(command = ['sh', '-c', 'docker run database; docker container create search; exit 7']) {
-  const { env, events } = scenario({ a: { available: 20e9 } });
+  const { env, events } = scenario({ a: { available: 20e9, memoryPerRunGiB: CHECK_RUN_MEMORY_GIB } });
   expect((await remote(env, workspace(), command)).code).toBe(0);
   const script = (kind: string) => String(events().find((event) => event.kind === kind)!.script);
   return { run: script('run'), cleanup: script('cleanup'), slot: script('slot') };
@@ -5065,12 +5148,80 @@ test('each run and every container it starts share one run slice', async () => {
   expect(scope.run).toMatch(/^[a-z0-9-]+$/);
   expect(scope.slice).toBe(`rezics-check-${scope.run.replaceAll('-', '_')}.slice`);
   expect(scope.args).toContain(`--slice=${scope.slice}`);
+  expect(scope.args).toContain('--slice-property=MemoryMax=6G');
+  expect(scope.args).toContain('--slice-property=MemorySwapMax=0');
+  expect(scope.args).toContain('-p');
+  expect(scope.args).toContain('MemoryMax=6G');
+  expect(scope.args).toContain('MemorySwapMax=0');
   const containers = fixture.events().filter((event) => event.command === 'docker');
   expect(containers).toHaveLength(2);
   for (const container of containers) {
     expect(container.args).toContain(`--cgroup-parent=${scope.slice}`);
     expect(container.args).toContain(`rezics.check.run=${scope.run}`);
   }
+});
+
+test('each check run executes in its own cgroup with MemoryMax 6 GiB and MemorySwapMax 0', () => {
+  const script = runScript(
+    'memory-cap',
+    '/srv/rezics-check/runs/memory-cap',
+    '.',
+    ['bun', 'test', 'services/kernel/test/library/continue-http.test.ts'],
+    'a',
+    hostRuntime(),
+  );
+  expect(script).toContain('-p MemoryMax=6G');
+  expect(script).toContain('-p MemorySwapMax=0');
+  expect(script).toContain("slice_properties='--slice-property=MemoryMax=6G --slice-property=MemorySwapMax=0'");
+  expect(script).toContain('memory.max');
+  expect(script).toContain('memory.swap.max');
+});
+
+test('a host memoryPerRunGiB override is the run MemoryMax', () => {
+  const script = runScript(
+    'memory-override',
+    '/srv/rezics-check/runs/memory-override',
+    '.',
+    ['true'],
+    'a',
+    hostRuntime(),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    [],
+    undefined,
+    undefined,
+    8,
+  );
+  expect(script).toContain('-p MemoryMax=8G');
+  expect(script).toContain('-p MemorySwapMax=0');
+});
+
+test('a run killed for memory reports the limit and the test file that was running', () => {
+  const fixture = runFixture();
+  const script = runScript(
+    'oom-run',
+    '/srv/rezics-check/runs/oom-run',
+    '.',
+    [
+      'sh',
+      '-c',
+      'printf "%s:\\n" "$2"; slice=$(systemctl show --property=ControlGroup --value "$REZICS_CHECK_SLICE"); printf "oom_kill 1\\n" > "/sys/fs/cgroup$slice/memory.events"; exit 137',
+      'oom',
+      'services/kernel/test/library/continue-http.test.ts',
+    ],
+    'a',
+    hostRuntime(),
+  );
+  const result = fixture.execute(script);
+  expect(result.status, result.stderr).toBe(137);
+  expect(result.stderr).toContain('check exceeded its memory limit (6 GiB)');
+  expect(result.stderr).toContain('services/kernel/test/library/continue-http.test.ts');
+  expect(result.stderr).not.toContain('infrastructure failure');
 });
 
 test('a run reports its CPU seconds, average cores and peak memory including its containers', async () => {
