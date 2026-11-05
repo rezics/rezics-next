@@ -304,7 +304,6 @@ function observation(metadata: NativeCollectionMetadata, basis: CanonicalBasis):
     },
   };
 }
-const sourceDrivers = ['member', 'entry', 'label', 'session', 'copy', 'output'] as const;
 function decodeSourceAfter(value: CollectionSourceAfter | null): CanonicalRawKey | null {
   if (value === null) return null;
   const parts = /^1:([0-5]):([0-9a-f-]{36}):([0-9a-f-]{36})$/.exec(value);
