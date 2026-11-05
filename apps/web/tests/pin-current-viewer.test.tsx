@@ -16,10 +16,16 @@ mock.module('../src/session/query', () => ({ sessionQuery, useSession: () => vie
 mock.module('../src/kernel/exposure', () => ({
   useOperation: (operation: string) => (operation === 'library_pin.put' ? putAdmitted : removeAdmitted),
 }));
-mock.module('../src/library/library-workspace-admission', () => ({ useLibraryWorkspaceAdmission: () => ({
-  store: { read: () => ({ viewer: 0 }), allowed: (operation: string) => operation === 'library_pin.put' ? putAdmitted : removeAdmitted, dispatchVersion: () => 0 },
-  value: { viewer: 0, granted: [putAdmitted, removeAdmitted], dispatch: [0, 0] },
-}) }));
+mock.module('../src/library/library-workspace-admission', () => ({
+  useLibraryWorkspaceAdmission: () => ({
+    store: {
+      read: () => ({ viewer: 0 }),
+      allowed: (operation: string) => (operation === 'library_pin.put' ? putAdmitted : removeAdmitted),
+      dispatchVersion: () => 0,
+    },
+    value: { viewer: 0, granted: [putAdmitted, removeAdmitted], dispatch: [0, 0] },
+  }),
+}));
 mock.module('../src/threads/composer', () => ({ csrfHeaders: () => ({ 'X-CSRF-Token': viewer.csrfToken }) }));
 
 function deferred<T>() {

@@ -63,9 +63,7 @@ export async function putLibraryPin(
       return { ok: false, reason: 'unavailable' };
     return { ok: true, revision: result.data.revision };
   } catch (error) {
-    return isPlatformClosedError(error)
-      ? { ok: false, reason: 'closed' }
-      : { ok: false, reason: 'unavailable' };
+    return isPlatformClosedError(error) ? { ok: false, reason: 'closed' } : { ok: false, reason: 'unavailable' };
   }
 }
 
@@ -91,9 +89,7 @@ export async function deleteLibraryPin(
       return { ok: false, reason: 'unavailable' };
     return { ok: true, revision: result.data.revision };
   } catch (error) {
-    return isPlatformClosedError(error)
-      ? { ok: false, reason: 'closed' }
-      : { ok: false, reason: 'unavailable' };
+    return isPlatformClosedError(error) ? { ok: false, reason: 'closed' } : { ok: false, reason: 'unavailable' };
   }
 }
 

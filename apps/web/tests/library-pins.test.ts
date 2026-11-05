@@ -220,13 +220,25 @@ test('native Pin adapters distinguish refusals from uncertainty and preserve exa
         if (reply instanceof Error) throw reply;
         return reply;
       };
-      const client = { libraryPins: ({ collectionId }: { collectionId: string }) => (sent.push(collectionId), { put: send, delete: send }) };
-      const result = operation === 'put'
-        ? await putLibraryPin(client as never, 'Bearer viewer', 'collection', 23, 'anchor', key)
-        : await deleteLibraryPin(client as never, 'Bearer viewer', 'collection', 23, key);
+      const client = {
+        libraryPins: ({ collectionId }: { collectionId: string }) => (
+          sent.push(collectionId),
+          { put: send, delete: send }
+        ),
+      };
+      const result =
+        operation === 'put'
+          ? await putLibraryPin(client as never, 'Bearer viewer', 'collection', 23, 'anchor', key)
+          : await deleteLibraryPin(client as never, 'Bearer viewer', 'collection', 23, key);
       expect(result).toEqual({ ok: false, reason: operation === 'put' ? putReason : deleteReason });
-      expect(sent.slice(0, 2)).toEqual(['collection', operation === 'put' ? { revision: 23, after: 'anchor' } : undefined]);
-      expect(sent[2]).toMatchObject({ headers: { authorization: 'Bearer viewer', 'idempotency-key': JSON.stringify(key) }, ...(operation === 'delete' ? { query: { revision: 23 } } : {}) });
+      expect(sent.slice(0, 2)).toEqual([
+        'collection',
+        operation === 'put' ? { revision: 23, after: 'anchor' } : undefined,
+      ]);
+      expect(sent[2]).toMatchObject({
+        headers: { authorization: 'Bearer viewer', 'idempotency-key': JSON.stringify(key) },
+        ...(operation === 'delete' ? { query: { revision: 23 } } : {}),
+      });
     }
 });
 
