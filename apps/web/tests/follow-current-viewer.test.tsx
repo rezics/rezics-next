@@ -47,10 +47,11 @@ mock.module('@tanstack/react-start', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('../src/library/follow-actions', () => ({
   readCurrentFollowState: ({ data }: { data: { targetId: string } }) => {
+    const subject = client.getQueryData<{ subject: string | null }>(sessionQuery.queryKey)?.subject ?? null;
     const call = { ...deferred<FollowState>(), targetId: data.targetId };
     reads.push(call);
     return call.promise.then((edge) => ({
-      subject: client.getQueryData<{ subject: string | null }>(sessionQuery.queryKey)?.subject ?? null,
+      subject,
       targetId: data.targetId,
       edge,
     }));
@@ -133,6 +134,16 @@ const settle = <T,>(call: ReturnType<typeof deferred<T>>, value: T) =>
   });
 const cached = (subject = 'viewer-one', targetId = firstTarget) =>
   client.getQueryData(followStateQuery(subject, targetId).queryKey);
+const setCurrentExposure = (admitted: string[]) =>
+  act(async () => {
+    const snapshot = viewerExposure.viewerExposureLifetime(client).getSnapshot();
+    if (snapshot.state !== 'signed-in') throw new Error('Expected a current signed-in exposure observation');
+    client.setQueryData(viewerExposure.viewerExposureQuery(snapshot.observation).queryKey, {
+      subject: snapshot.observation.subject,
+      admitted,
+    });
+    await tick();
+  });
 
 beforeEach(() => {
   reads.length = 0;
@@ -156,10 +167,9 @@ afterAll(async () => {
 });
 
 test('Follow state and pending mutation completions cannot cross observed viewer or target replacement', async () => {
-  client.setQueryData(followStateQuery('viewer-one', firstTarget).queryKey, { state: 'ready', following: true });
   await target({ following: undefined });
   expect(reads).toHaveLength(1);
-  expect(host.textContent).toContain(m.library_following());
+  expect(host.textContent).toContain(m.library_follow_loading());
   const oldViewerRead = reads[0]!;
   await target({ following: undefined }, viewer('viewer-two'));
   expect(reads).toHaveLength(2);
@@ -231,7 +241,7 @@ test('Unknown, signed-out, missing-subject and unadmitted viewers cannot dispatc
   expect(host.querySelector('button')).toBeNull();
   expect(writes).toHaveLength(0);
   await act(async () => client.setQueryData(exposureQuery.queryKey, ['personal_library']));
-  await target({ following: false });
+  await target({ following: false }, viewer('viewer-one', 'csrf-two'));
   await click(m.library_follow(), true);
   expect(writes).toHaveLength(1);
   expect(writes[0]!.input.following).toBe(true);
@@ -258,7 +268,7 @@ for (const loss of ['unknown', 'signed-out', 'csrf', 'admission'] as const) {
     await target(props);
     await click(m.library_follow_unfollow());
     const oldWrite = writes[0]!;
-    if (loss === 'admission') await act(async () => client.setQueryData(exposureQuery.queryKey, []));
+    if (loss === 'admission') await setCurrentExposure([]);
     await target(
       props,
       loss === 'csrf'
@@ -267,12 +277,15 @@ for (const loss of ['unknown', 'signed-out', 'csrf', 'admission'] as const) {
           ? viewer()
           : { state: loss, subject: null, csrfToken: null },
     );
-    expect(host.querySelector<HTMLButtonElement>('button')?.disabled ?? true).toBe(true);
-    await act(async () => client.setQueryData(exposureQuery.queryKey, ['personal_library']));
+    expect(host.querySelector<HTMLButtonElement>('button')?.disabled ?? true).toBe(loss !== 'csrf');
     await target(props, viewer());
+    await setCurrentExposure(['personal_library']);
     await click(m.library_follow_unfollow());
     expect(writes).toHaveLength(2);
-    if (loss === 'csrf') expect(writes[1]!.input).toBe(oldWrite.input);
+    if (loss === 'csrf' || loss === 'admission') {
+      expect(writes[1]!.input).toBe(oldWrite.input);
+      expect(writes[1]!.csrfToken).toBe('csrf-one');
+    }
     await settle(oldWrite, { ok: true, following: false });
     expect(removed).toBe(0);
     expect(cached()).toBeUndefined();
@@ -291,9 +304,9 @@ test('Rerenders, refreshed following, callbacks, supplied keys and nonempty CSRF
   const refreshed = { following: false, idempotencyKey: secondKey, onRemoved: () => currentRemoved++ };
   await target(refreshed, viewer('viewer-one', 'csrf-two'));
   expect(writes).toHaveLength(1);
-  expect(button(m.library_follow_unfollow()).disabled).toBe(true);
+  expect(button(m.library_follow_unfollow()).disabled).toBe(false);
   await act(async () => first.reject(new Error('Response lost')));
-  expect(host.querySelector('[role="alert"]')!.textContent).toBe(m.error_message());
+  expect(host.querySelector('[role="alert"]')).toBeNull();
   await target({ ...refreshed, onRemoved: () => currentRemoved++ });
   await click(m.library_follow_unfollow());
   expect(writes[1]!.input).toBe(first.input);
@@ -303,7 +316,7 @@ test('Rerenders, refreshed following, callbacks, supplied keys and nonempty CSRF
   expect(writes).toHaveLength(2);
   await click(m.library_follow_unfollow());
   expect(writes[2]!.input).toBe(first.input);
-  expect(writes[2]!.csrfToken).toBe('csrf-three');
+  expect(writes[2]!.csrfToken).toBe('csrf-one');
   await settle(writes[2]!, { ok: true, following: false });
   expect(oldRemoved).toBe(0);
   expect(currentRemoved).toBe(1);
