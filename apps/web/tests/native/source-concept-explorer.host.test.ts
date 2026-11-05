@@ -344,9 +344,12 @@ test('anonymous and member walk a real Concept hierarchy to filtered native Work
     await ui(page.getByRole('heading', { name: 'Works carrying this Concept', exact: true })).toBeVisible();
 
     evidence.sequence.push(`${persona}:locale-and-desktop`);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.emulateMedia({ colorScheme: 'dark' });
     const language = page.getByRole('button', { name: /Language: English/i });
+    await ui(language).toBeVisible();
     await language.click();
-    await page.getByRole('radio', { name: /繁體中文/ }).click();
+    await page.getByRole('menuitemradio', { name: /繁體中文/ }).click();
     await page.waitForURL((url) => url.pathname.startsWith('/zh-Hant/'));
     await hydrate(page);
     expect(new URL(page.url()).pathname).toContain(`/${parent}/`);
@@ -360,8 +363,6 @@ test('anonymous and member walk a real Concept hierarchy to filtered native Work
     expect(new URL(page.url()).pathname).toContain(`/${parent}/`);
     await ui(page.getByRole('heading', { name: worksTitles.ja, exact: true })).toBeVisible();
 
-    await page.setViewportSize({ width: 1280, height: 900 });
-    await page.emulateMedia({ colorScheme: 'dark' });
     await page.goto(
       new URL(
         `${catalogueEntries.concepts({ id: parent, label: parentLabel, locale: 'en' }).href}?${new URLSearchParams({
