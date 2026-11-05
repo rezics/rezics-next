@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { converter_revision } from '../../../../packages/conversion/src/bangumi.ts';
 import { runJourney } from './cli-bangumi-scope-transition-fixture.ts';
 
 test('ordinary Bangumi CLI preserves complete membership and native identity across supported ignored and supported input transitions', async () => {
@@ -16,7 +17,7 @@ test('ordinary Bangumi CLI preserves complete membership and native identity acr
     expect(r.ignoredMediaRequests).toEqual([]);
     expect(r.retainedPrivateMarkers).toEqual([]);
     expect(r.returnedProposals.length).toBeGreaterThan(0);
-    expect(r.returnedProposals.every((c) => c.source.converter_revision === 'bangumi@15')).toBe(true);
+    expect(r.returnedProposals.every((c) => c.source.converter_revision === converter_revision)).toBe(true);
     expect(r.returnedCandidateIds.some((id) => r.oldCandidateIds.includes(id))).toBe(false);
     expect(r.independentSelectionAfter).toEqual(r.independentSelectionBefore);
     expect(r.unchangedWrites).toEqual([]);

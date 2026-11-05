@@ -110,10 +110,10 @@ test('exact VNDB parent assertions need separate native acceptance and adoption 
             references: cite(schemeUri),
           },
         },
-        ...[
+        ...([
           [childId, childUri],
           [parentId, parentUri],
-        ].flatMap(([subject, uri]) => [
+        ] as const).flatMap(([subject, uri]) => [
           {
             op: 'propose' as const,
             key: `concept-uri-${subject}`,
