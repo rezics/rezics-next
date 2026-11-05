@@ -80,6 +80,7 @@ test('the production graph route gates unsupported origins and a fresh Global ch
     base,
     publicReturn,
     observed,
+    parse,
   } = await graphFixtures();
   const start = await import('../.storybook/react-start');
   mock.module('@tanstack/react-start', () => start);

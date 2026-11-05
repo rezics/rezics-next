@@ -135,7 +135,7 @@ export function SubjectExploreSlot({
   const o = { locale: locale as never };
   const observedContext = context ?? candidateContext;
   const graphReturn = graphPublicSourceReturnHref({
-    path: subjectHref(address).href,
+    path: subjectHref(address, locale).href,
     id: subjectId,
     locale,
     context: observedContext,
