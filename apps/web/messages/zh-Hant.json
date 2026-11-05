@@ -9184,6 +9184,7 @@
   "curation_retry_activation_help": "使用保留的設定與原命令金鑰重試啟用。不會發佈新設定。",
   "curation_retry_activation": "重試啟用",
   "own_media_recovery_heading": "原媒體刪除操作",
+  "own_media_movement_withheld": "此刪除操作確認或遭拒絕前，無法切換頁面。你仍可查看目前頁面的其他列。",
   "own_media_recovery_browsing": "查看其他列不會取消此刪除操作。重試會送出原始請求。",
   "own_media_recovery_withheld": "原媒體或權限已無法使用，暫時無法恢復此操作。",
   "own_media_recovery_return": "返回原媒體",

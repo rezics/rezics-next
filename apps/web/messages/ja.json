@@ -9184,6 +9184,7 @@
   "curation_retry_activation_help": "保持されたプロフィールと元の操作キーで有効化を再試行します。新しいプロフィールは公開されません。",
   "curation_retry_activation": "有効化を再試行",
   "own_media_recovery_heading": "元のメディアの削除",
+  "own_media_movement_withheld": "この削除が確認または拒否されるまで、ページは移動できません。このページの行は引き続き確認できます。",
   "own_media_recovery_browsing": "別の行を確認しても、この削除はキャンセルされません。再試行すると元のリクエストを送信します。",
   "own_media_recovery_withheld": "元のメディアまたは権限が利用できないため、再試行できません。",
   "own_media_recovery_return": "元のメディアに戻る",

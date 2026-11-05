@@ -9181,6 +9181,7 @@
   "curation_retry_activation_help": "Aktivierung mit dem gespeicherten Profil und ursprünglichen Befehlsschlüssel erneut versuchen. Es wird kein neues Profil veröffentlicht.",
   "curation_retry_activation": "Aktivierung erneut versuchen",
   "own_media_recovery_heading": "Ursprüngliche Medienentfernung",
+  "own_media_movement_withheld": "Ein Seitenwechsel ist erst möglich, wenn diese Entfernung bestätigt oder abgelehnt wurde. Sie können hier weiterhin Zeilen öffnen.",
   "own_media_recovery_browsing": "Das Öffnen einer anderen Zeile bricht diese Entfernung nicht ab. Erneutes Versuchen sendet die ursprüngliche Anfrage.",
   "own_media_recovery_withheld": "Die Wiederaufnahme ist nicht verfügbar, da die ursprünglichen Medien oder die Berechtigung nicht mehr verfügbar sind.",
   "own_media_recovery_return": "Zu den ursprünglichen Medien",

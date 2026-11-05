@@ -9181,6 +9181,7 @@
   "curation_retry_activation_help": "Vuelve a intentar la activación con el perfil conservado y la clave de acción original. No se publicará otro perfil.",
   "curation_retry_activation": "Reintentar activación",
   "own_media_recovery_heading": "Eliminación original del archivo",
+  "own_media_movement_withheld": "Podrás cambiar de página cuando se confirme o rechace esta eliminación. Puedes seguir consultando las filas de esta página.",
   "own_media_recovery_browsing": "Consultar otra fila no cancela esta eliminación. Reintentar envía la solicitud original.",
   "own_media_recovery_withheld": "La recuperación no está disponible porque el archivo original o la autorización ya no están disponibles.",
   "own_media_recovery_return": "Volver al archivo original",

@@ -105,7 +105,7 @@ async function mount() {
     });
   const buttons = () => Array.from(host.querySelectorAll('button'));
   const button = (text: string) => buttons().find((b) => b.textContent === text)!;
-  const click = async (target: HTMLButtonElement) =>
+  const click = async (target: HTMLElement) =>
     act(async () => {
       target.click();
     });
@@ -116,6 +116,8 @@ async function mount() {
     await act(async () => {
       const confirm = button('Confirm removal');
       confirm.click();
+      // Reentrant movement before React publishes the sending episode.
+      host.querySelector<HTMLAnchorElement>('a[href*="cursor="]')!.click();
       confirm.click();
     });
   };
@@ -129,6 +131,8 @@ async function mount() {
     begin,
     render,
     refreshes: () => refreshes,
+    location: () => router.state.location.href,
+    next: () => host.querySelector<HTMLAnchorElement>('a[href*="cursor="]')!,
     retire: () => {
       current = false;
     },
@@ -152,10 +156,16 @@ test('browsing during removal keeps the original sender and exact uncertain comm
   try {
     await h.begin();
     const original = h.calls[0]!;
+    expect(h.location()).toBe('/library/media');
+    expect(h.next().getAttribute('aria-disabled')).toBe('true');
+    expect(h.host.textContent).toContain('Page movement is unavailable');
     await h.select(1);
     await h.click(h.button('Remove this media'));
     expect(h.calls).toHaveLength(1);
     await h.finish('uncertain');
+    await h.click(h.next());
+    expect(h.location()).toBe('/library/media');
+    expect(h.next().getAttribute('aria-disabled')).toBe('true');
     expect(h.host.querySelector('[role="alert"]')?.textContent).toContain('A');
     expect(h.host.querySelector('[role="alert"]')?.textContent).toContain('Removal is not confirmed');
     await h.click(h.button('Return to original media'));
@@ -176,6 +186,7 @@ test('browsing during removal keeps the original sender and exact uncertain comm
     await h.select(1);
     await h.finish('acknowledged');
     expect(h.refreshes()).toBe(1);
+    expect(h.next().getAttribute('aria-disabled')).toBe('false');
     expect(h.host.querySelector('[role="status"]')?.textContent).toContain('A');
     expect(h.props.page.nextCursor).toBe('opaque-next');
     expect(h.host.querySelector('a[href="/media/B/original"]')).not.toBeNull();

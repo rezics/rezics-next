@@ -9303,6 +9303,7 @@
   "curation_retry_activation_help": "Retry activation with the retained profile and original command key. No new profile will be published.",
   "curation_retry_activation": "Retry activation",
   "own_media_recovery_heading": "Original media removal",
+  "own_media_movement_withheld": "Page movement is unavailable until this removal is confirmed or refused. You can still inspect rows here.",
   "own_media_recovery_browsing": "Inspecting another row does not cancel this removal. Retry sends the original request.",
   "own_media_recovery_withheld": "Recovery is withheld because the original media or authority is no longer available.",
   "own_media_recovery_return": "Return to original media",

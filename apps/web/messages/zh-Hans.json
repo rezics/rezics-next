@@ -9181,6 +9181,7 @@
   "curation_retry_activation_help": "使用保留的配置和原命令密钥重试启用。不会发布新配置。",
   "curation_retry_activation": "重试启用",
   "own_media_recovery_heading": "原媒体删除操作",
+  "own_media_movement_withheld": "此删除操作确认或被拒绝前，无法切换页面。你仍可查看当前页面的其他行。",
   "own_media_recovery_browsing": "查看其他行不会取消此删除操作。重试会发送原始请求。",
   "own_media_recovery_withheld": "原媒体或权限已不可用，暂无法恢复此操作。",
   "own_media_recovery_return": "返回原媒体",
