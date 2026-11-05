@@ -103,6 +103,8 @@ scopes. They add no resource type or scope and change no Collection action. The 
 
 **SUBJECT PICKER INPUT DECISION:** Preserve raw drafts with local normalized-name feedback and a separate 1000 UTF-16-unit transport bound; empty prefixes list labels, while empty names require correction before creation.
 
+**SUBJECT LABEL ASSIGNMENT REVIEW DECISION:** Keep review inline in the existing picker; Edit returns to the captured choice or raw name, and Discard returns focus to the originating picker control without closing the picker.
+
 **WEB NAME READER DECISION:** Measured overflow offers local inline expansion and collapse beside the independent shelf link, following the Collection note reader; fitting names have no reader control, and reading preserves exact text, locale and focus without requests or rename permission.
 
 The catalogue's single visible heading name is the shelf link; its row hit area stays separate from the local reader control, whose actual touch target is at least 44px in each dimension.

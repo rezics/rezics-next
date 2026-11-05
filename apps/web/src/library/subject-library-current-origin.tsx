@@ -12,15 +12,19 @@ export type SlotFamily = 'entry' | 'labels' | 'collections';
 export type SlotLifetime = { seed: string; active: boolean; current: (...operations: Operation[]) => boolean };
 const operations = {
   entry: ['library_entry.get', 'library_entry.put', 'library_entry.delete', 'library_entry.restore'],
-  labels: [
-    'library_label.assignment_list',
-    'library_label.list',
-    'library_label.assign',
-    'library_label.create',
-    'library_label.unassign',
-  ],
+  // The admitted read family owns private label observations. Create, assign and unassign are checked per action;
+  // losing one writer must not retire a healthy picker choice for another writer.
+  labels: ['library_label.assignment_list', 'library_label.list'],
   collections: ['collection.list', 'collection_member.create'],
 } as const;
+const allOperations = [
+  ...operations.entry,
+  ...operations.labels,
+  'library_label.assign',
+  'library_label.create',
+  'library_label.unassign',
+  ...operations.collections,
+];
 const families = ['entry', 'labels', 'collections'] as const;
 
 /** One owning address, observing actual scoped admission synchronously, including transitions batched by React. */
@@ -53,6 +57,7 @@ export function useSubjectLibraryObservation(subject: SubjectReference, locale: 
     let exposureData: unknown;
     let validGates: Partial<Record<SlotFamily, string>> = {};
     let previousGates: Partial<Record<SlotFamily, string>> = {};
+    let previousAllGates: string | undefined;
     let invalid = false;
     const read = () => {
       const session = client.getQueryState<ReturnType<typeof useSession>>(sessionQuery.queryKey);
@@ -109,7 +114,9 @@ export function useSubjectLibraryObservation(subject: SubjectReference, locale: 
           JSON.stringify(operations[family].map((operation) => operationIsAdmitted(operation, admitted))),
         ]),
       );
-      const gateChange = families.some((family) => previousGates[family] !== nextGates[family]);
+      const allGates = JSON.stringify(allOperations.map((operation) => operationIsAdmitted(operation, admitted)));
+      const gateChange = previousAllGates !== allGates;
+      previousAllGates = allGates;
       for (const family of families) {
         const gates = nextGates[family]!;
         if (identityChanged || (changed && !gateChange) || previousGates[family] !== gates) next[family]++;

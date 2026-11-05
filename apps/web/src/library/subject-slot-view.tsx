@@ -40,6 +40,19 @@ import {
 import { normalizeLibraryLabelName } from './subject-label-name';
 import { subjectLabelInputIssue } from './subject-label-input.ts';
 import { SubjectLabelInput } from './subject-label-input.tsx';
+import { SubjectLabelAssignmentReview } from './subject-label-assignment-review/review-panel';
+import {
+  resolveSubjectLabelReviewChoice,
+  selectSubjectLabelReviewChoice,
+  subjectLabelAssignmentsKey,
+  subjectLabelOptionsKey,
+  subjectLabelReviewAlreadyAssigned,
+  subjectLabelReviewIsCurrent,
+  type SubjectLabelReview,
+  type SubjectLabelReviewChoice,
+  type SubjectLabelReviewOrigin,
+  type SubjectLabelReviewTrigger,
+} from './subject-label-assignment-review/choice';
 import type {
   LibraryLabelSummary,
   SubjectLabel,
@@ -332,6 +345,8 @@ function SubjectLibrarySlotView({
   const entryPutAdmitted = useOperation('library_entry.put');
   const entryDeleteAdmitted = useOperation('library_entry.delete');
   const labelListAdmitted = useOperation('library_label.list');
+  const labelAssignAdmitted = useOperation('library_label.assign');
+  const labelCreateAdmitted = useOperation('library_label.create');
   const [labels, setLabels] = useState(data.labels ?? []);
   const [labelQuery, setLabelQuery] = useState('');
   const [labelNameSubmitted, setLabelNameSubmitted] = useState(false);
@@ -339,6 +354,17 @@ function SubjectLibrarySlotView({
   const [labelNext, setLabelNext] = useState<string | null>(null);
   const [labelReadReason, setLabelReadReason] = useState<string>();
   const [labelChoices, setLabelChoices] = useState<LibraryLabelSummary[]>([]);
+  const [labelReview, setLabelReview] = useState<SubjectLabelReview | null>(null);
+  const labelReviewRef = useRef<SubjectLabelReview | null>(null);
+  const [labelReviewDraft, setLabelReviewDraft] = useState<SubjectLabelReviewChoice | null>(null);
+  const [labelReviewNotice, setLabelReviewNotice] = useState<'stale' | undefined>();
+  const labelOptionRevision = useRef(0);
+  const labelNameInput = useRef<HTMLInputElement>(null);
+  const labelChoiceElements = useRef(new Map<string, HTMLButtonElement>());
+  const labelCreateElement = useRef<HTMLButtonElement>(null);
+  const labelSubmitElement = useRef<HTMLButtonElement>(null);
+  const labelReviewFocus = useRef<SubjectLabelReviewTrigger | null>(null);
+  const appliedLabelReview = useRef<SubjectLabelReview | null>(null);
   const [labelSearchState, setLabelSearchState] = useState<'idle' | 'loaded' | 'closed' | 'unavailable' | 'signed-out'>(
     'idle',
   );
@@ -368,6 +394,29 @@ function SubjectLibrarySlotView({
   if (searchOrigin.current.query !== labelQuery || searchOrigin.current.open !== labelPickerOpen)
     searchOrigin.current = { query: labelQuery, open: labelPickerOpen, sequence: searchOrigin.current.sequence + 1 };
   const searchSequence = searchOrigin.current.sequence;
+  const currentLabelReviewOrigin = (): SubjectLabelReviewOrigin => ({
+    subjectId: subject.id,
+    locale,
+    lifetimeSeed: labelLifetime.seed,
+    query: labelQuery,
+    pickerSequence: searchSequence,
+    optionRevision: labelOptionRevision.current,
+    optionsKey: subjectLabelOptionsKey(labelChoices),
+    assignmentsKey: subjectLabelAssignmentsKey(labels),
+  });
+  const isCurrentLabelReview = (review: SubjectLabelReview) =>
+    labelPickerOpen &&
+    labelListAdmitted &&
+    labelSearchState === 'loaded' &&
+    labelLifetime.current('library_label.assignment_list', 'library_label.list') &&
+    subjectLabelReviewIsCurrent(review, currentLabelReviewOrigin());
+  if (labelReview && !isCurrentLabelReview(labelReview)) {
+    labelReviewRef.current = null;
+    setLabelReview(null);
+    setLabelReviewDraft(null);
+    setLabelReviewNotice('stale');
+    labelReviewFocus.current = { kind: 'input' };
+  }
   const [entryOrigin, setEntryOrigin] = useState(entryLifetime);
   const [labelOrigin, setLabelOrigin] = useState(labelLifetime);
   const [collectionOrigin, setCollectionOrigin] = useState(collectionLifetime);
@@ -399,6 +448,13 @@ function SubjectLibrarySlotView({
       restoredLabelEpisodes.current.clear();
     }
     setLabelOrigin(labelLifetime);
+    labelReviewRef.current = null;
+    setLabelReview(null);
+    setLabelReviewDraft(null);
+    setLabelReviewNotice(undefined);
+    labelReviewFocus.current = null;
+    appliedLabelReview.current = null;
+    labelOptionRevision.current++;
     setLabels(data.labels ?? []);
     setLabelPickerOpen(false);
     setLabelQuery('');
@@ -495,6 +551,8 @@ function SubjectLibrarySlotView({
       labelLifetime.current('library_label.assignment_list', 'library_label.list') &&
       searchOrigin.current.sequence === searchSequence;
     setLabelNext(null);
+    invalidateLabelReview();
+    labelOptionRevision.current++;
     setLabelChoices([]);
     setLabelSearchState('idle');
     setLabelReadReason(undefined);
@@ -514,6 +572,7 @@ function SubjectLibrarySlotView({
             return;
           }
           setLabelNext(response.next ?? null);
+          labelOptionRevision.current++;
           setLabelChoices(response.labels);
           setLabelReadReason(response.reason);
           if (labelReadMessage(response.reason)) {
@@ -531,6 +590,20 @@ function SubjectLibrarySlotView({
       clearTimeout(timeout);
     };
   }, [labelLifetime, labelListAdmitted, hydrated, labelPickerOpen, labelQuery, searchSequence]);
+  useEffect(() => {
+    if (labelReview || !labelReviewFocus.current) return;
+    const focus = labelReviewFocus.current;
+    labelReviewFocus.current = null;
+    const target =
+      focus.kind === 'input'
+        ? labelNameInput.current
+        : focus.kind === 'submit'
+          ? labelSubmitElement.current
+          : focus.kind === 'existing'
+            ? labelChoiceElements.current.get(focus.id)
+            : labelCreateElement.current;
+    target?.focus();
+  }, [labelReview, labelPickerOpen, labelQuery, labelChoices, labelReviewDraft]);
   const result = memberResult ?? actionResult ?? data.result;
   const resultText =
     result === 'saved'
@@ -903,6 +976,135 @@ function SubjectLibrarySlotView({
     return response;
   }
 
+  function updateLabelReview(review: SubjectLabelReview | null) {
+    labelReviewRef.current = review;
+    setLabelReview(review);
+  }
+
+  function invalidateLabelReview() {
+    const hadReview = labelReviewRef.current !== null;
+    updateLabelReview(null);
+    setLabelReviewDraft(null);
+    appliedLabelReview.current = null;
+    if (hadReview) {
+      setLabelReviewNotice('stale');
+      labelReviewFocus.current = { kind: 'input' };
+    }
+  }
+
+  function startLabelReview(choice: SubjectLabelReviewChoice, trigger: SubjectLabelReviewTrigger) {
+    if (
+      !labelPickerOpen ||
+      labelSearchState !== 'loaded' ||
+      !labelListAdmitted ||
+      !labelLifetime.current('library_label.assignment_list', 'library_label.list') ||
+      uncertainLabel.current
+    )
+      return;
+    if (choice.kind === 'proposed') {
+      setLabelNameSubmitted(true);
+      if (subjectLabelInputIssue(choice.name)) {
+        labelNameInput.current?.focus();
+        return;
+      }
+    }
+    const exactChoice =
+      choice.kind === 'existing'
+        ? selectSubjectLabelReviewChoice(choice.label, labelChoices, choice.rawName)
+        : resolveSubjectLabelReviewChoice(choice.name, labelChoices);
+    if (!exactChoice) return;
+    const review: SubjectLabelReview = {
+      choice: exactChoice,
+      origin: currentLabelReviewOrigin(),
+      trigger:
+        exactChoice.kind === 'existing' && choice.kind === 'proposed'
+          ? { kind: 'existing', id: exactChoice.label.id }
+          : trigger,
+    };
+    labelReviewFocus.current = null;
+    setLabelReviewNotice(undefined);
+    setLabelReviewDraft(exactChoice);
+    updateLabelReview(review);
+  }
+
+  function labelReviewCanApply(review: SubjectLabelReview): boolean {
+    if (!isCurrentLabelReview(review) || !data.csrfToken || labelPending || uncertainLabel.current) return false;
+    if (review.choice.kind === 'existing')
+      return (
+        labelAssignAdmitted &&
+        labelLifetime.current('library_label.assignment_list', 'library_label.assign')
+      );
+    return (
+      labelCreateAdmitted &&
+      labelAssignAdmitted &&
+      labelLifetime.current(
+        'library_label.assignment_list',
+        'library_label.list',
+        'library_label.create',
+        'library_label.assign',
+      )
+    );
+  }
+
+  function editLabelReview(review: SubjectLabelReview) {
+    if (!isCurrentLabelReview(review)) {
+      invalidateLabelReview();
+      return;
+    }
+    setLabelReviewDraft(review.choice);
+    labelReviewFocus.current =
+      review.choice.kind === 'existing' ? { kind: 'existing', id: review.choice.label.id } : { kind: 'input' };
+    updateLabelReview(null);
+  }
+
+  function discardLabelReview(review: SubjectLabelReview) {
+    if (!isCurrentLabelReview(review)) {
+      invalidateLabelReview();
+      return;
+    }
+    setLabelReviewDraft(null);
+    setLabelReviewNotice(undefined);
+    labelReviewFocus.current = review.trigger;
+    updateLabelReview(null);
+  }
+
+  function applyLabelReview(review: SubjectLabelReview) {
+    if (!labelReviewCanApply(review)) return;
+    if (subjectLabelReviewAlreadyAssigned(review, labels)) {
+      setLabelReviewNotice(undefined);
+      setLabelReviewDraft(review.choice);
+      return;
+    }
+    appliedLabelReview.current = review;
+    updateLabelReview(null);
+    if (review.choice.kind === 'existing') {
+      void writeLabel({ intent: 'assign', label: review.choice.label });
+    } else {
+      void writeLabel({ intent: 'create-and-assign', name: review.choice.name });
+    }
+  }
+
+  function labelReviewApplyAction(review: SubjectLabelReview) {
+    const button = (
+      <button
+        type="button"
+        disabled={!labelReviewCanApply(review)}
+        className={labelButtonClass}
+        onClick={() => applyLabelReview(review)}
+        data-subject-label-review-apply
+      >
+        {m.library_subject_label_review_apply()}
+      </button>
+    );
+    return review.choice.kind === 'existing' ? (
+      <Exposure operation="library_label.assign">{button}</Exposure>
+    ) : (
+      <Exposure operation="library_label.create">
+        <Exposure operation="library_label.assign">{button}</Exposure>
+      </Exposure>
+    );
+  }
+
   function labelFailure(reason: string) {
     if (!labelLifetime.current()) return;
     if (reason === 'restore-stale') {
@@ -995,11 +1197,27 @@ function SubjectLibrarySlotView({
           : response;
       if (!labelLifetime.current()) return;
       if (!response.ok) {
-        if (operation.response) uncertainLabel.current = null;
+        if (operation.response) {
+          uncertainLabel.current = null;
+          const rejectedReview = appliedLabelReview.current;
+          appliedLabelReview.current = null;
+          if (rejectedReview && isCurrentLabelReview(rejectedReview)) {
+            setLabelReviewDraft(rejectedReview.choice);
+            updateLabelReview(rejectedReview);
+          } else {
+            setLabelReviewDraft(null);
+          }
+        } else {
+          appliedLabelReview.current = null;
+        }
         labelFailure(response.reason);
         return;
       }
       uncertainLabel.current = null;
+      appliedLabelReview.current = null;
+      updateLabelReview(null);
+      setLabelReviewDraft(null);
+      setLabelReviewNotice(undefined);
       if (input.intent === 'unassign') {
         const removedInput = input;
         setLabels((current) => current.filter((row) => row.id !== removedInput.assignmentId));
@@ -1044,6 +1262,7 @@ function SubjectLibrarySlotView({
         setLabelQuery('');
         setLabelNameSubmitted(false);
         latestLabelQuery.current = '';
+        labelOptionRevision.current++;
         setLabelChoices([]);
       }
       await Promise.all([
@@ -1051,6 +1270,7 @@ function SubjectLibrarySlotView({
         router.invalidate(),
       ]);
     } catch {
+      appliedLabelReview.current = null;
       if (labelLifetime.current()) setLabelNotice('unavailable');
     } finally {
       operation.running = false;
@@ -1101,23 +1321,27 @@ function SubjectLibrarySlotView({
     await performLabel(command, input.label);
   }
 
-  async function submitLabelName(event: FormEvent<HTMLFormElement>) {
+  function submitLabelName(event: FormEvent<HTMLFormElement>) {
     if (!hydrated) return;
     event.preventDefault();
-    if (!labelLifetime.current()) return;
+    if (!labelLifetime.current() || uncertainLabel.current) return;
     setLabelNameSubmitted(true);
-    if (subjectLabelInputIssue(labelQuery)) return;
+    if (subjectLabelInputIssue(labelQuery)) {
+      labelNameInput.current?.focus();
+      return;
+    }
     if (
       !labelLifetime.current('library_label.assignment_list', 'library_label.list') ||
       !labelListAdmitted ||
       labelSearchState !== 'loaded'
     )
       return;
-    const name = normalizeLibraryLabelName(labelQuery);
-    if (!name) return;
-    const existing = labelChoices.find((candidate) => normalizeLibraryLabelName(candidate.name) === name);
-    if (existing) await writeLabel({ intent: 'assign', label: existing });
-    else await writeLabel({ intent: 'create-and-assign', name: labelQuery });
+    const choice = resolveSubjectLabelReviewChoice(labelQuery, labelChoices);
+    if (!choice) return;
+    const active = document.activeElement;
+    const trigger: SubjectLabelReviewTrigger =
+      active === labelSubmitElement.current ? { kind: 'submit' } : { kind: 'input' };
+    startLabelReview(choice, trigger);
   }
 
   async function removeLabel(label: SubjectLabel) {
@@ -1408,7 +1632,10 @@ function SubjectLibrarySlotView({
                 onToggle={(event) => {
                   if (hydrated && !labelLifetime.current()) return;
                   const open = event.currentTarget.open;
-                  if (!open) setLabelNameSubmitted(false);
+                  if (!open) {
+                    setLabelNameSubmitted(false);
+                    invalidateLabelReview();
+                  }
                   if (searchOrigin.current.open !== open)
                     searchOrigin.current = {
                       ...searchOrigin.current,
@@ -1428,7 +1655,17 @@ function SubjectLibrarySlotView({
                   {m.library_subject_label_add()}
                 </summary>
                 {/* Keep the no-script form; hydrated closed pickers have no inactive required controls. */}
-                {!hydrated || labelPickerOpen ? (
+                {(!hydrated || labelPickerOpen) && !uncertainLabel.current ? (
+                  labelReview && isCurrentLabelReview(labelReview) ? (
+                    <SubjectLabelAssignmentReview
+                      review={labelReview}
+                      subjectName={subject.label}
+                      alreadyAssigned={subjectLabelReviewAlreadyAssigned(labelReview, labels)}
+                      applyAction={labelReviewApplyAction(labelReview)}
+                      onEdit={() => editLabelReview(labelReview)}
+                      onDiscard={() => discardLabelReview(labelReview)}
+                    />
+                  ) : (
                   <form
                     data-subject-label-picker
                     method="post"
@@ -1444,8 +1681,11 @@ function SubjectLibrarySlotView({
                     <SubjectLabelInput
                       value={labelQuery}
                       issue={labelInputIssue}
+                      inputRef={labelNameInput}
                       onChange={(value) => {
                         if (!labelLifetime.current()) return;
+                        invalidateLabelReview();
+                        labelOptionRevision.current++;
                         searchOrigin.current = {
                           ...searchOrigin.current,
                           query: value,
@@ -1464,6 +1704,7 @@ function SubjectLibrarySlotView({
                       <Exposure operation="library_label.create">
                         <button
                           type="submit"
+                          ref={labelSubmitElement}
                           disabled={!data.csrfToken || (hydrated && labelPending)}
                           className={labelButtonClass}
                         >
@@ -1475,6 +1716,8 @@ function SubjectLibrarySlotView({
                         className={labelButtonClass}
                         onClick={() => {
                           if (!labelLifetime.current()) return;
+                          invalidateLabelReview();
+                          labelOptionRevision.current++;
                           searchOrigin.current = {
                             query: '',
                             open: false,
@@ -1484,6 +1727,7 @@ function SubjectLibrarySlotView({
                           setLabelQuery('');
                           setLabelNameSubmitted(false);
                           latestLabelQuery.current = '';
+                          setLabelReviewNotice(undefined);
                           labelPickerTrigger.current?.focus();
                         }}
                       >
@@ -1507,12 +1751,19 @@ function SubjectLibrarySlotView({
                       }
                       onPage={(page) => {
                         if (!labelLifetime.current() || searchOrigin.current.sequence !== searchSequence) return;
+                        invalidateLabelReview();
+                        labelOptionRevision.current++;
                         setLabelNext(page.next ?? null);
                         setLabelChoices(page.labels);
                         setLabelSearchState(page.state);
                       }}
                     />
                     <SubjectLabelReadNotice {...(labelReadReason !== undefined ? { reason: labelReadReason } : {})} />
+                    {labelReviewNotice === 'stale' ? (
+                      <p role="status" className="text-sm text-muted-foreground" data-label-review-stale>
+                        {m.library_subject_label_review_stale()}
+                      </p>
+                    ) : null}
                     {labelSearchState === 'loaded' ? (
                       <ul aria-label={m.library_subject_label_input()} className="space-y-1">
                         {labelChoices.map((choice) => (
@@ -1521,8 +1772,22 @@ function SubjectLibrarySlotView({
                               <button
                                 type="button"
                                 disabled={!data.csrfToken || (hydrated && labelPending)}
-                                onClick={() => void writeLabel({ intent: 'assign', label: choice })}
-                                className={labelChoiceClass}
+                                ref={(element) => {
+                                  if (element) labelChoiceElements.current.set(choice.id, element);
+                                  else labelChoiceElements.current.delete(choice.id);
+                                }}
+                                aria-pressed={labelReviewDraft?.kind === 'existing' && labelReviewDraft.label.id === choice.id}
+                                onClick={() =>
+                                  startLabelReview(
+                                    { kind: 'existing', label: choice, rawName: labelQuery },
+                                    { kind: 'existing', id: choice.id },
+                                  )
+                                }
+                                className={`${labelChoiceClass}${
+                                  labelReviewDraft?.kind === 'existing' && labelReviewDraft.label.id === choice.id
+                                    ? ' bg-muted font-medium'
+                                    : ''
+                                }`}
                               >
                                 {choice.name}
                               </button>
@@ -1537,9 +1802,13 @@ function SubjectLibrarySlotView({
                             <Exposure operation="library_label.create">
                               <button
                                 type="button"
+                                ref={labelCreateElement}
                                 disabled={!data.csrfToken || (hydrated && labelPending)}
-                                onClick={() => void writeLabel({ intent: 'create-and-assign', name: labelQuery })}
-                                className={`${labelChoiceClass} font-medium text-primary`}
+                                aria-pressed={labelReviewDraft?.kind === 'proposed'}
+                                onClick={() => startLabelReview({ kind: 'proposed', name: labelQuery }, { kind: 'proposed' })}
+                                className={`${labelChoiceClass} font-medium text-primary${
+                                  labelReviewDraft?.kind === 'proposed' ? ' bg-muted' : ''
+                                }`}
                               >
                                 {m.library_subject_label_create({ name: normalizeLibraryLabelName(labelQuery) })}
                               </button>
@@ -1562,6 +1831,7 @@ function SubjectLibrarySlotView({
                       </p>
                     ) : null}
                   </form>
+                  )
                 ) : null}
               </details>
             </Exposure>
