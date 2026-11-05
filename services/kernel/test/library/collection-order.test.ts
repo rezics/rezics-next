@@ -205,6 +205,42 @@ test('Large Collections keep bounded point edits and resumable order repair', as
         expect(rawWindow.rows).toHaveLength(128);
         expect(rawWindow.rows.filter((row) => row.active)).toHaveLength(127);
         expect(rawWindow.rows.some((row) => row.member_id === deleted.id && !row.active)).toBe(true);
+
+        // The worker can stop after committing this exact full raw page and
+        // resume its still-pending outbox locator. The repeated old step must
+        // observe the committed frontier without rewriting any occurrence.
+        const boundaryIds = [...dense.slice(4992).map((row) => row.id), deleted.id];
+        const boundaryRows = async () =>
+          (
+            await f.pool.query(
+              `SELECT member_id,ordinal_key,transaction_id,deletion_id,note,added_at,xmin::text AS version
+               FROM library.collection_member WHERE route=$1 AND collection_id=$2 AND member_id=ANY($3::uuid[])
+               ORDER BY ordinal_key,member_id`,
+              [route, collection.id, boundaryIds],
+            )
+          ).rows;
+        const boundaryLocator = { ...locator, step };
+        const committed = await advanceCollectionOrderRepair(
+          { pool: f.pool, clock: () => new Date() },
+          boundaryLocator,
+        );
+        expect(committed.value.state).toBe('more');
+        const afterCommit = await boundaryRows();
+        const rewritten = afterCommit.filter((row) => row.deletion_id === null);
+        expect(rewritten).toHaveLength(127);
+        expect(rewritten.every((row) => row.transaction_id === committed.transactionId)).toBe(true);
+        expect(afterCommit.find((row) => row.member_id === deleted.id)?.transaction_id).not.toBe(
+          committed.transactionId,
+        );
+        expect(
+          (
+            await advanceCollectionOrderRepair(
+              { pool: f.pool, clock: () => new Date() },
+              boundaryLocator,
+            )
+          ).value.state,
+        ).toBe('stale');
+        expect(await boundaryRows()).toEqual(afterCommit);
       }
       const row = (
         await f.pool.query(
@@ -277,6 +313,11 @@ test('Large Collections keep bounded point edits and resumable order repair', as
     expect((await advanceCollectionOrderRepair({ pool: f.pool, clock: () => new Date() }, locator)).value.state).toBe(
       'stale',
     );
+    await f.grant(collection.id, f.owner.actor.accountId, true);
+    const beforeUnauthorizedRetry = await f.snapshot([collection.id]);
+    expect((await add()).status).toBe(403);
+    expect(await f.snapshot([collection.id])).toEqual(beforeUnauthorizedRetry);
+    await f.grant(collection.id, f.owner.actor.accountId);
     const applied = await add();
     expect(applied.status, await applied.clone().text()).toBe(201);
     const inserted = (await applied.json()).member;

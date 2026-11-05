@@ -38,13 +38,30 @@ export type OwnAccountCommand = {
   kind: string;
   requestKey: string;
   input: unknown;
+  /** Local cost owners may bind this execution to their existing descriptor. */
+  execution?: LibraryCommandExecutionBinding;
 };
 
 export type TrustedAccountCommand = {
   kind: string;
   stepKey: string;
   input: unknown;
+  /** Local cost owners may bind this execution to their existing descriptor. */
+  execution?: LibraryCommandExecutionBinding;
 };
+
+/** Wrap an existing Library command without changing its identity, authorization,
+ * deadline, attempts, transaction, or result handling. This is a local cost
+ * binding seam, not another admission or funding protocol.
+ */
+export type LibraryCommandExecutionBinding = <T>(dispatch: () => Promise<T>) => Promise<T>;
+
+export function runLibraryCommand<T>(
+  dispatch: () => Promise<T>,
+  bind?: LibraryCommandExecutionBinding,
+): Promise<T> {
+  return bind ? bind(dispatch) : dispatch();
+}
 
 export class LibraryNotFoundError extends Error {
   constructor() {
@@ -172,24 +189,28 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
       },
     };
 
-    return runCommand(
-      pool,
-      {
-        ...identity,
-        partition: partitionOf(route),
-        deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
-        clock,
-        receipt: {
-          kind: request.kind,
-          key: request.requestKey,
-          digest: receiptOnly ?? digest(identity, request.kind, request.input),
-        },
-        authorization,
-      },
-      async (tx, command) => {
-        await enterShelfWrite(tx, { route, accountId: owner.accountId });
-        return body(tx, command);
-      },
+    return runLibraryCommand(
+      () =>
+        runCommand(
+          pool,
+          {
+            ...identity,
+            partition: partitionOf(route),
+            deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
+            clock,
+            receipt: {
+              kind: request.kind,
+              key: request.requestKey,
+              digest: receiptOnly ?? digest(identity, request.kind, request.input),
+            },
+            authorization,
+          },
+          async (tx, command) => {
+            await enterShelfWrite(tx, { route, accountId: owner.accountId });
+            return body(tx, command);
+          },
+        ),
+      request.execution,
     );
   }
 
@@ -281,24 +302,28 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
       basis: null,
     });
 
-    return runCommand(
-      pool,
-      {
-        partition: partitionOf(route),
-        deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
-        clock,
-        receipt: {
-          actorAccountId: accountId,
-          kind: request.kind,
-          key: request.stepKey,
-          digest: digest(identity, request.kind, request.input),
-        },
-        authorization: { ...activeAccountAuthorization(accountId, route), ...(prepare ? { prepare } : {}) },
-      },
-      async (tx, command) => {
-        await enterShelfWrite(tx, { route, accountId });
-        return body(tx, command);
-      },
+    return runLibraryCommand(
+      () =>
+        runCommand(
+          pool,
+          {
+            partition: partitionOf(route),
+            deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
+            clock,
+            receipt: {
+              actorAccountId: accountId,
+              kind: request.kind,
+              key: request.stepKey,
+              digest: digest(identity, request.kind, request.input),
+            },
+            authorization: { ...activeAccountAuthorization(accountId, route), ...(prepare ? { prepare } : {}) },
+          },
+          async (tx, command) => {
+            await enterShelfWrite(tx, { route, accountId });
+            return body(tx, command);
+          },
+        ),
+      request.execution,
     );
   }
 
