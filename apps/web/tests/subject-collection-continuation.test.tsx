@@ -290,9 +290,11 @@ test('a Subject reader continues three public pages, adds a later curated Collec
   expect(host.textContent).toContain('Public 2-0');
   expect(window.document.activeElement).toBe(panel.querySelector('h3'));
   expect(host.textContent).toContain(m.library_subject_public_collections({ count: 50 }));
-  expect([...panel.querySelectorAll('button')].some(
-    (node) => node.textContent === m.library_subject_continuation_previous(),
-  )).toBe(false);
+  expect(
+    [...panel.querySelectorAll('button')].some(
+      (node) => node.textContent === m.library_subject_continuation_previous(),
+    ),
+  ).toBe(false);
   await click(m.library_subject_continuation_restart());
   expect(publics[3]!.data).toEqual({ subjectId: subject.id });
   await act(async () => publics[3]!.resolve(publicPage(1, null)));
@@ -364,17 +366,28 @@ test('public recovery uses the current origin, keeps sparse pages and retires la
   const staleRead = mock(async () => publicPage(9, null));
   const readPage = (cursor?: string) => hold(publics, { data: { cursor } });
   const render = async (source = readPage) => {
-    await act(async () => root.render(
-      <PublicCollectionsPanel locale="ja" collections={[]} next="sparse" count={{ kind: 'unknown' }}
-        current={() => current} readPage={source} />,
-    ));
+    await act(async () =>
+      root.render(
+        <PublicCollectionsPanel
+          locale="ja"
+          collections={[]}
+          next="sparse"
+          count={{ kind: 'unknown' }}
+          current={() => current}
+          readPage={source}
+        />,
+      ),
+    );
     host.querySelector<HTMLDetailsElement>('details')!.open = true;
   };
   await render(staleRead);
   await render();
   const next = button(m.library_subject_continuation_next());
   next.focus();
-  await act(async () => { next.click(); next.click(); });
+  await act(async () => {
+    next.click();
+    next.click();
+  });
   expect(publics).toHaveLength(1);
   expect(staleRead).not.toHaveBeenCalled();
   expect(publics[0]!.data).toEqual({ cursor: 'sparse' });
