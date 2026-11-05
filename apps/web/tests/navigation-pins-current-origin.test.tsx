@@ -375,8 +375,10 @@ test('Prepared navigation origin, independent admissions, retired callbacks and 
     expect(control.pending).toBe(false);
 
     // Unrelated owner Collections admission cannot revoke this same-viewer removal of a null target.
+    const personalLibraryRead = pendingReads.length;
     await act(async () => admit(['personal_library']));
     await tick();
+    await settle(personalLibraryRead, response('C', ['b', 'c'], 42));
     await act(async () => select(m.library_pin_unpin())());
     expect(writes[4]!.operation).toBe('delete');
     expect(writes[4]!.input.data).toEqual({
