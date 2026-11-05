@@ -337,12 +337,17 @@ test('remote commands run with the lease off', async () => {
   writeFileSync(
     join(bin, 'ssh'),
     `#!/usr/bin/env bun
-    const script = process.argv.at(-1);
-    if (script.includes('/proc/loadavg')) {
-      console.log('MEMORY_CURRENT -\\nMEMORY_MAX -\\nMEMORY_HEADROOM 4000000000\\nPROCESSORS 4\\nSLICE_PROCESSORS 2\\nLOAD 0\\nSLOTS_USED 0');
-    }
+    const command = process.argv.at(-1);
+    const script = command.startsWith('python3 -c ') ? await Bun.stdin.text() : command;
+    if (script.includes('REMOTE_CHECK_CONTROL_PROBE')) console.log('REMOTE_CHECK_CONTROL_OK');
     else if (script.includes('systemd-run')) await Bun.write(${JSON.stringify(scriptFile)}, script);
-    else if (script.includes('SLOT')) { console.log('SLOT 0'); await Bun.stdin.text(); }
+    else if (script.includes('MemAvailable')) {
+      console.log('MEMORY_CURRENT -\\nMEMORY_MAX -\\nMEMORY_HEADROOM 17179869184\\nAVAILABLE 17179869184\\nMEMORY_RESERVED 0\\nPROCESSORS 8\\nSLICE_PROCESSORS 8\\nLOAD 0\\nORDINARY_SLOTS_USED 0\\nEXPRESS_SLOT_USED 0\\nGATE_WAITING 0\\nMULTI_SLOT_WAITING_SLOTS 0\\nMULTI_SLOT_WAITING_ID -\\nLANDING_WAITING_SLOTS 0\\nLANDING_WAITING_ID -\\nLANDING_WAITING_STARTED -\\nLANDING_WAITING_ESTIMATE_MS -1\\nLANDING_WAITING_MEMORY_BYTES 2684354560\\nTMP_BYTES 17179869184\\nTMP_INODES 1000000');
+    }
+    else if (script.includes('REMOTE_CHECK_RESERVATION')) { console.log('RESERVATION'); await Bun.stdin.text(); }
+    else if (script.includes('REMOTE_CHECK_BASE_STATE')) console.log('BASE -\\nAGE -\\nZSTD 0');
+    else if (script.includes('REMOTE_CHECK_SLOT_')) { console.log('SLOTS 1'); await Bun.stdin.text(); }
+    else if (script.includes('CLEANED')) console.log('CLEANED ' + script.match(/^run_id='?([^'\\r\\n]+)'?/m)?.[1]);
   `,
   );
   writeFileSync(join(bin, 'rsync'), '#!/usr/bin/env bun\nawait Bun.stdin.text();\n');
@@ -352,7 +357,7 @@ test('remote commands run with the lease off', async () => {
     hosts,
     JSON.stringify({
       hosts: [
-        { name: 'test', address: 'ops@test', identity: '/unused', memoryMaxGiB: 8, cpuQuotaPercent: 200, slots: 1 },
+        { name: 'test', performance: true, address: 'ops@test', identity: '/unused', memoryMaxGiB: 16, cpuQuotaPercent: 800, slots: 2 },
       ],
     }),
   );
