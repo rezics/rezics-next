@@ -338,7 +338,8 @@ Decision: extend existing routes on small owner-backed seams; keep ten slices in
 - **Native Board opening receiver.** The installed `boards({ id }).page.get` method and `BoardPageResponse` DTO
   bind Content's mounted `GET /v1/boards/:id/page`. Decision: use that composed response for Board opening cards
   and continuation, retaining the existing membership, pin, watch and slow-mode command owners. Generated binding
-  and prepared examples do not establish seeded native/browser acceptance. Details:
+  and prepared examples do not establish seeded native/browser acceptance. The seeded walk is
+  `apps/web/tests/thread-board-reading.walk.ts`. Details:
   [Board opening receiver](../../apps/web/src/threads/board-opening.md).
 - **Slow mode.** Show the native board posting interval (`off`, 30, 60 or 300 seconds) and the caller's next
   permitted attempt beside new-thread and reply writing. An admitted moderator inspects and changes that interval on
