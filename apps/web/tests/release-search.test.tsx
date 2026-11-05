@@ -759,9 +759,13 @@ test('current release visits retire pending windows and bound cursor progress wi
     expect(group().querySelectorAll('ul > li')).toHaveLength(20);
     button()!.focus();
     await click();
+    button()!.blur(); // Loading can move browser focus to the body without a new visitor intent.
+    await complete(ready('recover', 20));
+    expect(window.document.activeElement).toBe(button());
+    await click();
     const elsewhere = host.querySelector('[name="q"]') as HTMLInputElement;
     elsewhere.focus();
-    await complete(ready('second', 20));
+    await complete(ready('after-focus', 20));
     expect(window.document.activeElement).toBe(elsewhere);
     for (const replace of [
       () => {

@@ -96,6 +96,16 @@ export function ReleaseChildWindow({
   const current = (request: AbortController) => owner.mounted && owner.read.current() && !request.signal.aborted;
 
   useLayoutEffect(() => {
+    const source = focus.current;
+    if (view.status !== 'loading' || !source) return;
+    const moved = (event: Event) => {
+      if (event.target !== source) focus.current = null;
+    };
+    source.ownerDocument.addEventListener('pointerdown', moved, true);
+    return () => source.ownerDocument.removeEventListener('pointerdown', moved, true);
+  }, [view.status]);
+
+  useLayoutEffect(() => {
     // Keep dispatch captured until the settled view is committed, even for an immediately resolved transport.
     if (view.status !== 'loading') pending.current = null;
     if (!open || !visible) focus.current = null;
@@ -104,7 +114,7 @@ export function ReleaseChildWindow({
     focus.current = null;
     if (!owner.mounted || !owner.read.current() || !region.current?.open) return;
     const active = source.ownerDocument.activeElement;
-    if (active !== source && !(active === source.ownerDocument.body && !source.isConnected)) return;
+    if (active !== source && active !== source.ownerDocument.body) return;
     if (action.current && !action.current.disabled) action.current.focus();
     else region.current.focus();
   }, [view, open, visible, owner]);
@@ -161,7 +171,12 @@ export function ReleaseChildWindow({
           if (!event.currentTarget.open) focus.current = null;
         }}
         onBlurCapture={(event) => {
-          if (focus.current && event.relatedTarget !== null && event.relatedTarget !== focus.current)
+          if (
+            focus.current &&
+            event.relatedTarget !== null &&
+            event.relatedTarget !== focus.current &&
+            event.relatedTarget !== event.currentTarget.ownerDocument.body
+          )
             focus.current = null;
         }}
       >

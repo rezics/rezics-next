@@ -27,7 +27,7 @@ function ReleaseSearchRoute() {
   const client = useQueryClient();
   const store = browserObservation(client);
   const observation = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getServerSnapshot);
-  const readerKey = JSON.stringify([principal, observation]);
+  const readerKey = observation.state === 'unknown' ? principal : JSON.stringify([principal, observation]);
   const options = releaseSearchQueryOptions(locale, raw, readerKey);
   const query = useQuery(options);
   const address = useReaderAddress(null, undefined, locale);
