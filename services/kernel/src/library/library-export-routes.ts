@@ -1,4 +1,5 @@
 import { t } from 'elysia';
+import type { Static } from 'typebox';
 import { defineRateLimit } from '../http/rate-limit.ts';
 import { problemSchema } from '../http/problem.ts';
 import { idempotencyKeyOf, IDEMPOTENCY_HEADER } from '../http/request.ts';
@@ -351,9 +352,9 @@ export function libraryExportRoutes(
       },
       async ({ request, actor, headers, admission, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';
-        return admission.run('normal', job, () =>
+        return (await admission.run('normal', job, () =>
           service().create(actor, idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]), requestSignal(request, job.signal)),
-        );
+        )) satisfies Static<typeof statusSchema>;
       },
     )
     .get(
@@ -365,7 +366,7 @@ export function libraryExportRoutes(
       },
       async ({ request, actor, params, admission, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';
-        return admission.run('normal', job, () => service().get(actor, params.id, requestSignal(request, job.signal)));
+        return (await admission.run('normal', job, () => service().get(actor, params.id, requestSignal(request, job.signal)))) satisfies Static<typeof statusSchema>;
       },
     )
     .get(
@@ -416,9 +417,9 @@ export function libraryExportRoutes(
       },
       async ({ request, actor, params, admission, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';
-        return admission.run('normal', job, () =>
+        return (await admission.run('normal', job, () =>
           service().cancel(actor, params.id, requestSignal(request, job.signal)),
-        );
+        )) satisfies Static<typeof statusSchema>;
       },
     );
 }

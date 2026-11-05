@@ -421,11 +421,11 @@ export function searchRoutes<App>(
               ? prepareQueryShare(body, labels)
               : unavailableQueryShare('unsupported');
           projection.viewer = actor.kind === 'account' ? 'signed-in' : 'anonymous';
-          return projection;
+          return projection satisfies Static<typeof QueryShareSchema>;
         }
-        if (body.representation === 'discovery-v1') return mixed();
-        if (body.representation === 'release-groups-v1') return grouped();
-        return catalogue();
+        if (body.representation === 'discovery-v1') return (await mixed()) satisfies Static<typeof DiscoveryPageSchema>;
+        if (body.representation === 'release-groups-v1') return (await grouped()) satisfies Static<typeof releaseGroupsResponse>;
+        return (await catalogue()) satisfies Static<typeof searchResponse>;
       },
     )
     .post(

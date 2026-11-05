@@ -1250,8 +1250,7 @@ export function createAniListImport(deps: Dependencies) {
         } else if (
           reviewed.score.action === 'vote' &&
           reviewed.score.native.currentVote.status === 'current' &&
-          reviewed.score.native.currentVote.vote?.units !== null &&
-          reviewed.score.native.currentVote.vote !== null &&
+          reviewed.score.native.currentVote.vote.state === 'counted' &&
           !reviewed.input.replace
         ) {
           scoreOutcome = {

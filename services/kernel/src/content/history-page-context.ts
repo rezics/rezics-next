@@ -590,7 +590,7 @@ export async function readContentHistoryPage(
     subjects: {
       state: subjectState,
       retryable: subjectState === 'unavailable',
-      limit: HISTORY_SUBJECT_LIMIT,
+      limit: HISTORY_SUBJECT_LIMIT as typeof HISTORY_SUBJECT_LIMIT,
       items: subjectItems,
     },
     reviewScores: review,

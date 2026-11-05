@@ -286,9 +286,10 @@ const copyListContextSchema = t.Union([
     },
     closed,
   ),
-  ...(['scope', 'withheld', 'missing', 'unavailable'] as const).map((state) =>
-    t.Object({ state: t.Literal(state) }, closed),
-  ),
+  t.Object({ state: t.Literal('scope') }, closed),
+  t.Object({ state: t.Literal('withheld') }, closed),
+  t.Object({ state: t.Literal('missing') }, closed),
+  t.Object({ state: t.Literal('unavailable') }, closed),
 ]);
 const followSchema = t.Object(
   {
