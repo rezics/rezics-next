@@ -10,7 +10,7 @@ import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, statS
 import { basename, dirname, join } from 'node:path';
 import { retainPoolReadings } from './pacing.ts';
 import { NO_COMPILE_CACHE, remoteCheckEnvironment } from './merge.ts';
-import { temporaryEnvironment } from '../../../scripts/tmp-janitor.ts';
+import { removeTemporaryDirectory, temporaryEnvironment } from '../../../scripts/tmp-janitor.ts';
 import {
   processIdentity,
   terminateProcessGroup,
@@ -79,11 +79,23 @@ export function launchCommand(
   const { resumeSession: _session, ...fresh } = options;
   return adapter.start(fresh);
 }
+/**
+ * Chromium's profile socket lives under the temporary directory, and a Unix socket path is limited to 108 bytes, which a
+ * directory under the worktree exceeds. A worker's temporary directory is therefore short and outside the worktree.
+ */
+export function workerTemporaryDirectory(taskId: string): string {
+  return join('/tmp', `rz-${taskId.slice(0, 8)}`);
+}
+/** The attempt's settlement removes its worker temporary directory; the next launch recreates it. */
+export function releaseWorkerTemporaryDirectory(taskId: string): void {
+  removeTemporaryDirectory(workerTemporaryDirectory(taskId));
+}
 export function workerEnvironment(
   pool: Pool,
   extra: NodeJS.ProcessEnv = {},
   parent: NodeJS.ProcessEnv = process.env,
   worktree?: string,
+  temporaryDirectory?: string,
 ): NodeJS.ProcessEnv {
   const env = { ...parent };
   for (const key of Object.keys(env)) if (key.startsWith('GOAL_')) delete env[key];
@@ -91,7 +103,7 @@ export function workerEnvironment(
     ...cleanAgentEnvironment(env),
     ...NO_COMPILE_CACHE,
     ...extra,
-    ...(worktree ? temporaryEnvironment(join(worktree, '.temp/worker-tmp')) : {}),
+    ...(temporaryDirectory ? temporaryEnvironment(temporaryDirectory) : {}),
   });
   const wrapperDirectory = worktree && join(worktree, 'scripts', 'check-host');
   if (wrapperDirectory && existsSync(join(wrapperDirectory, 'docker')))
@@ -317,6 +329,7 @@ export async function launch(
     attemptEnvironment(task, attempt, dirname(dirname(dirname(attempt.logPath)))),
     process.env,
     task.worktree,
+    workerTemporaryDirectory(task.id),
   );
   let unrecordedWorker: ProcessIdentity | null = null;
   try {

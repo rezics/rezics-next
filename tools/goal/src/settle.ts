@@ -7,7 +7,7 @@ import { makeRecord, readLogTail, readMeasurement, reportedApproaches, reportsSu
 import { agentAdapter } from './agents.ts';
 import { evidenceBundle } from './evidence.ts';
 import { stopProcessesUnder, terminateProcessGroup } from './process.ts';
-import { type RunningWorker } from './launch.ts';
+import { releaseWorkerTemporaryDirectory, type RunningWorker } from './launch.ts';
 import { removeAttemptContainers } from './worker-containers.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
 import type { WorkerTasks } from './tasks.ts';
@@ -132,6 +132,8 @@ export async function settle(
           tasks.settings.policy?.process,
         );
     }
+    // A check still pending may be running in this directory, so it outlives this settlement.
+    if (!pendingChecks?.length) releaseWorkerTemporaryDirectory(ref.taskId);
     let queued = false;
     let finished = false;
     let exited = false;

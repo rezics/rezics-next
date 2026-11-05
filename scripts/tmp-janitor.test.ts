@@ -37,6 +37,7 @@ test('janitor removes stale known entries, preserving recent, unknown and symlin
     'rezics-producer-lifecycle-old',
     '.tmpAb1234',
     'playwright_chromiumdev_profile-old',
+    'rz-0badc0de',
   ];
   for (const name of stale) {
     const path = join(t.path, name);
@@ -150,8 +151,8 @@ test('a failing test cleans forgotten fixture trees and its invocation scratch d
 
 test('workers and gates confine child runtime scratch and disable Node compile caching', async () => {
   const t = temporaryDirectory();
-  const environment = workerEnvironment(fixturePool(), {}, process.env, t.path);
-  expect(environment.TMPDIR).toBe(join(t.path, '.temp/worker-tmp'));
+  const environment = workerEnvironment(fixturePool(), {}, process.env, t.path, join(t.path, 'worker-tmp'));
+  expect(environment.TMPDIR).toBe(join(t.path, 'worker-tmp'));
   expect(environment.NODE_DISABLE_COMPILE_CACHE).toBe('1');
   expect(environment.NODE_COMPILE_CACHE).toBe('');
   const runner = processGroupRunner();

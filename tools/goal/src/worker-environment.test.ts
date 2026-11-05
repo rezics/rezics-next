@@ -2,7 +2,12 @@ import { expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { attemptEnvironment } from './launch.ts';
+import {
+  attemptEnvironment,
+  releaseWorkerTemporaryDirectory,
+  workerEnvironment,
+  workerTemporaryDirectory,
+} from './launch.ts';
 import { gateEnvironment } from './merge.ts';
 
 test('a worker environment leaves affected-test selection to the check runner and neutralizes the debuginfod path', () => {
@@ -13,6 +18,27 @@ test('a worker environment leaves affected-test selection to the check runner an
     MOZ_GMP_PATH: 'none',
     EDITOR: 'nano',
   });
+});
+
+test('Chromium and Playwright launched by a worker get a short temporary directory outside the worktree', () => {
+  // A synthetic task id: releasing a real task's directory would remove a live worker's browser profile.
+  const taskId = '0badc0de-1111-4222-8333-444455556666';
+  const worktree = `/home/edge/projects/rezics/worktrees/${taskId}`;
+  try {
+    const env = workerEnvironment(
+      { cli: 'codex', configDirectory: '/config' } as never,
+      {},
+      { PATH: '/bin' },
+      worktree,
+      workerTemporaryDirectory(taskId),
+    );
+    expect(env.TMPDIR).toBe('/tmp/rz-0badc0de');
+    expect(env.TMPDIR!.length).toBeLessThan(60);
+    // Chromium's profile socket sits two levels under TMPDIR, and a Unix socket path holds at most 108 bytes.
+    expect(join(env.TMPDIR!, '.org.chromium.Chromium.abcdef', 'SingletonSocket').length).toBeLessThan(108);
+  } finally {
+    releaseWorkerTemporaryDirectory(taskId);
+  }
 });
 
 function state(withHosts: boolean): { directory: string; remove: () => void } {
