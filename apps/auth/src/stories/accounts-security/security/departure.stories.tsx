@@ -21,15 +21,16 @@ import {
 
 export default { title: 'Pages/Account/Security departure', parameters: reviewParameters, decorators: [authLocale] };
 const ready = initial as Extract<typeof initial, { kind: 'ready' }>;
+const sessions = (['last-credential', 'unavailable', 'step-up-required'] as const).map((revoke, i) => ({
+  ...ready.sessions[0]!,
+  id: `advice-${i}`,
+  revoke,
+  client_display_name: 'Reading companion with a very long application and device label for shared responsibilities',
+}));
 export const adviceInitial = {
   ...ready,
-  sessions: (['last-credential', 'unavailable', 'step-up-required'] as const).map((revoke, i) => ({
-    ...ready.sessions[0]!,
-    id: `advice-${i}`,
-    revoke,
-    client_display_name: 'Reading companion with a very long application and device label for shared responsibilities',
-  })),
-  page: undefined,
+  sessions,
+  page: { ...ready.page!, sessions: { kind: 'ready' as const, rows: sessions, limit: 64, truncated: false } },
 };
 function DeparturePage() {
   const [router] = useState(() => {
