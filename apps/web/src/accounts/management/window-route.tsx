@@ -1,3 +1,4 @@
+import { useRouter, useRouterState } from '@tanstack/react-router';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useLayoutEffect, useReducer, useRef, useSyncExternalStore, type MouseEvent } from 'react';
 import { browserObservation } from '../../session';
@@ -51,22 +52,27 @@ export function useManagementWindow<T extends Inventory | Detail>({
   navigate: (cursors: Cursors) => void;
   retry: () => void;
 }) {
+  const router = useRouter();
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
   const observation = browserObservation(useQueryClient());
   const snapshot = useSyncExternalStore(observation.subscribe, observation.getSnapshot, observation.getServerSnapshot);
   const reader = snapshot.state === 'signed-in' ? snapshot.observation.id : null;
   const scope = `${getLocale()}:${target}`;
-  const key = `${scope}:${reader}`;
+  const key = `${scope}:${pathname}:${reader}`;
   const [, render] = useReducer((value: number) => value + 1, 0);
   const bootstrap = useRef(new WeakSet<object>(read.reader === null ? [read] : []));
   const owner = useRef<{
     key: string;
+    pathname: string;
+    seen: WeakSet<object>;
+    blocked: WeakSet<object>;
     history: ManagementWindow;
     initial: WeakSet<object>;
     hydrated: boolean;
     attached: boolean;
     retired: boolean;
     signedOut?: boolean;
-    handoff?: { control: HTMLElement; field: Feed; cancel: () => void };
+    handoff?: { control: HTMLElement; field: Feed; cancel: () => void } | undefined;
   } | null>(null);
   const retire = () => {
     if (!owner.current) return;
@@ -78,9 +84,15 @@ export function useManagementWindow<T extends Inventory | Detail>({
   if (!owner.current || owner.current.key !== key) {
     const hydrated = bootstrap.current.has(read) && (snapshot.state === 'unknown' || snapshot.state === 'signed-in');
     if (reader !== null || snapshot.state === 'signed-out') bootstrap.current = new WeakSet();
+    const previous = owner.current;
+    const staleAddress =
+      previous && previous.pathname !== pathname && (previous.seen.has(read) || previous.blocked.has(read));
     retire();
     owner.current = {
       key,
+      pathname,
+      seen: new WeakSet(),
+      blocked: new WeakSet(staleAddress ? [read] : []),
       history: new ManagementWindow(cursors),
       initial: new WeakSet([read]),
       hydrated,
@@ -89,12 +101,15 @@ export function useManagementWindow<T extends Inventory | Detail>({
     };
   }
   const visit = owner.current;
-  const current = () => !visit.retired && observation.getSnapshot() === snapshot;
+  const current = () =>
+    !visit.retired && observation.getSnapshot() === snapshot && router.state.location.pathname === pathname;
   const accepted =
     current() &&
+    !visit.blocked.has(read) &&
     read.scope === scope &&
     ((reader !== null && read.reader === reader) ||
       (visit.hydrated && visit.initial.has(read) && read.reader === null));
+  if (accepted) visit.seen.add(read);
   const page: Page<T> = visit.signedOut
     ? { state: 'signed-out' }
     : accepted
@@ -105,7 +120,7 @@ export function useManagementWindow<T extends Inventory | Detail>({
     const value = page.value;
     if (field === 'organizationsCursor' && 'organizations' in value) return value.organizations.state === 'ready';
     if (field === 'membersCursor' && 'members' in value) return value.members.state === 'ready';
-    return true;
+    return field !== 'operatorsCursor' || value.responsibilities !== null;
   };
   const handoff = (control: HTMLElement, field: Feed) => {
     visit.handoff?.cancel();

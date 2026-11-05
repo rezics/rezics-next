@@ -6,7 +6,7 @@ import { AccountManagementPage, ManagedAccountsPage, managementHref } from '../s
 import type { Cursors, Detail, Inventory, Page, PageFailure } from '../src/accounts/management/data';
 import { automation, detailExample, human, inventoryExample, organization } from '../src/accounts/management/story-api';
 import { m } from '../src/paraglide/messages.js';
-import { getLocale, locales, setLocale } from '../src/paraglide/runtime.js';
+import { getLocale, locales, overwriteGetLocale } from '../src/paraglide/runtime.js';
 
 // UNRUN. Mounted actual-view coverage, with supplied data only. Happy DOM cannot establish pixel geometry;
 // the additive canonical phone390/desktop1280/RTL story plays author that separate browser obligation.
@@ -33,7 +33,7 @@ test('directory, organization, account and recovery retain independent phone con
     IS_REACT_ACT_ENVIRONMENT: true,
   };
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-  const previousLocale = getLocale();
+  const previousGetLocale = getLocale;
   const previousFetch = globalThis.fetch;
   let requests = 0;
   globalThis.fetch = (async () => {
@@ -123,7 +123,7 @@ test('directory, organization, account and recovery retain independent phone con
   };
   try {
     // One connected view walk: use the actual emitted destination to choose the next supplied page.
-    setLocale('en', { reload: false });
+    overwriteGetLocale(() => 'en');
     await mount(directory());
     assertControls();
     expect(text()).toContain(m.managed_owner());
@@ -180,7 +180,7 @@ test('directory, organization, account and recovery retain independent phone con
 
     for (const locale of locales) {
       window.history.replaceState(null, '', `/${locale}/accounts`);
-      await setLocale(locale, { reload: false });
+      overwriteGetLocale(() => locale);
       expect(getLocale()).toBe(locale);
       for (const dir of ['ltr', 'rtl'] as const) {
         host.dir = dir;
@@ -305,7 +305,7 @@ test('directory, organization, account and recovery retain independent phone con
   } finally {
     await act(async () => root.unmount());
     await window.happyDOM.close();
-    setLocale(previousLocale, { reload: false });
+    overwriteGetLocale(previousGetLocale);
     globalThis.fetch = previousFetch;
     for (const [key, descriptor] of previous) {
       if (descriptor) Object.defineProperty(globalThis, key, descriptor);
