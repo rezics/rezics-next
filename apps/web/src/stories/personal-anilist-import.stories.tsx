@@ -190,7 +190,7 @@ function makeJourneyPort() {
               : {
                   status: 'current',
                   question: { id: QUESTION, revision: questionRevision, label: 'Overall' },
-                  vote: scoreAction === 'clear' ? null : { units: scoreUnits, revision: 4 },
+                  vote: scoreAction === 'clear' ? null : { units: scoreUnits!, revision: 4 },
                 },
           );
         }
