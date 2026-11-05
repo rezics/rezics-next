@@ -655,6 +655,20 @@ test('clear is explicit and results replace the supplied current vote observatio
   expect(host.textContent).not.toContain(m.library_anilist_score_readback_absent());
 });
 
+test('the existing importer reopens a retained native upload without submitting another file', async () => {
+  const { port } = recordingPort(1);
+  await mount({ ...port, async preview() { throw new Error('Reopening must not upload'); } });
+  const label = [...host.querySelectorAll('label')].find((item) => item.textContent === m.library_anilist_retained_id())!;
+  const input = document.getElementById(label.htmlFor) as HTMLInputElement;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, id);
+    input.dispatchEvent(new window.Event('input', { bubbles: true }));
+  });
+  await click(m.library_anilist_reopen());
+  expect(host.textContent).toContain('Show 1');
+  expect(host.textContent).toContain(id);
+});
+
 test('a changed account retires the upload and former-account callbacks', async () => {
   let pages = 0;
   const { port } = recordingPort(1);

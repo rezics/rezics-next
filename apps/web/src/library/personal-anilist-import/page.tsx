@@ -84,8 +84,10 @@ function AniListImportSession({ visit }: { visit: AniListVisit }) {
         <AniListUploadForm
           busy={snap.busy}
           onUpload={(upload, scoreFormat) => void act((current) => current.preview(upload, scoreFormat))}
+          onReopen={(importId) => void act((current) => current.loadPage(importId, -1))}
         />
       ) : null}
+      {snap.importId ? <p className="break-all text-sm">{m.library_anilist_retained_id()}: {snap.importId}</p> : null}
       {snap.stage === 'review' ? (
         <AniListReviewPage
           snap={snap}
