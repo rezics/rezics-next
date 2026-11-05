@@ -564,6 +564,7 @@ export function SubjectPage({
   refreshCommunityAdvice,
   recoverCatalogueFileReader,
   recoverMusicReleaseReader,
+  readingAdmission,
 }: {
   page: SubjectPageData;
   verification?: VerificationConfig;
@@ -572,6 +573,8 @@ export function SubjectPage({
   recoverCatalogueFileReader?: () => Promise<void>;
   /** Obtain a newly admitted ordinary Subject source before recovering an edition window. */
   recoverMusicReleaseReader?: () => Promise<void>;
+  /** Existing route session identity retires public selections without starting another session read. */
+  readingAdmission?: string | undefined;
   /** Mounted native connection readers share this visit’s labels, disclosure and selected Context. */
   connections?: ReactNode;
   /** The current frame's label for list-only documents that do not repeat the subject read. */
@@ -940,6 +943,12 @@ export function SubjectPage({
                 realm={realm}
                 continuation={page.continuation}
                 viewer={page.requestedReader ?? null}
+                admission={readingAdmission}
+                currentHref={currentHref}
+                release={page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined}
+                propertyLabels={
+                  page.catalogue?.state === 'released' ? page.catalogue.definitions?.properties : undefined
+                }
                 definitions={relations ?? EMPTY_RELATION_DEFINITIONS}
                 windows={profileRelationWindows(page)}
                 reader={reader ?? defaultReader}

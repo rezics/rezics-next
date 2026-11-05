@@ -472,6 +472,11 @@ export function SubjectOverview({
               <SubjectPage
                 page={page}
                 currentHref={currentHref}
+                readingAdmission={JSON.stringify([
+                  browserSession.state,
+                  browserSession.subject,
+                  browserSession.csrfToken,
+                ])}
                 refreshCommunityAdvice={() => router.invalidate()}
                 recoverCatalogueFileReader={() => router.invalidate()}
                 recoverMusicReleaseReader={() => router.invalidate()}

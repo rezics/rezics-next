@@ -6,6 +6,9 @@ import { defaultReader } from '../../../subject/reader';
 import type { PageLink } from '../../pages/shared';
 import type { ProfileRelationWindow } from '../../pages/views';
 import { mangaReaderAddress } from './navigation';
+import { mangaCurrentAddress, mangaSelectedAddress } from './navigation';
+import { subjectVisitReturn } from '../../pages/subject-visit-navigation';
+import type { MangaPropertyLabels } from './evidence';
 import { MangaReader } from './view';
 
 export function MangaReaderEntry({
@@ -18,6 +21,10 @@ export function MangaReaderEntry({
   realm,
   continuation,
   viewer,
+  admission,
+  currentHref,
+  release,
+  propertyLabels,
   definitions,
   windows,
   reader = defaultReader,
@@ -32,6 +39,10 @@ export function MangaReaderEntry({
   realm?: string | undefined;
   continuation?: PageContinuation | undefined;
   viewer: string | null;
+  admission?: string | undefined;
+  currentHref?: string | undefined;
+  release?: object | undefined;
+  propertyLabels?: MangaPropertyLabels | undefined;
   definitions: Record<string, RelationDefinition>;
   windows: readonly ProfileRelationWindow[];
   reader: Reader;
@@ -45,6 +56,7 @@ export function MangaReaderEntry({
     realm,
     continuation,
   });
+  const currentAddress = mangaCurrentAddress(subjectVisitReturn(currentHref, locale), address);
   return (
     <MangaReader
       subject={subject}
@@ -55,15 +67,21 @@ export function MangaReaderEntry({
       reader={reader}
       observation={{
         source,
-        release: definitions,
+        release: release ?? definitions,
         subject: subject.id,
         context,
         locale,
         viewer,
         view,
         window: continuation ? `${continuation.node}\u0000${continuation.cursor}` : null,
+        realm,
+        reader: JSON.stringify(reader),
+        admission,
+        address: mangaSelectedAddress(currentAddress),
       }}
-      recoveryHref={address}
+      recoveryHref={mangaSelectedAddress(currentAddress)}
+      currentHref={currentAddress}
+      propertyLabels={propertyLabels}
       {...(link ? { link } : {})}
     />
   );
