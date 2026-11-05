@@ -1,6 +1,7 @@
 import { type DiscoveryFilterDocument, type FilterQualifier, type FilterRelease, type SpoilerThreshold } from '@rezics/filter';
 import { type IndexedSubject, type RelationFacetMatch, type SubjectSource } from './source.ts';
 import type { CharacterPersonDiscoveryContexts } from './discovery.ts';
+import { type Release } from '@rezics/definitions';
 /** An inverse edge from a selected work to the candidate Character or Person. */
 export type InverseRelationFacetProbe = {
     subject: string;
@@ -13,9 +14,10 @@ export type CurrentRelationRelease = {
     digest: string;
     head: number;
     release: FilterRelease;
+    definitions?: Release;
 };
 /** No release permission survives foreign disclosure I/O. Missing/replaced releases withhold the window. */
-export declare function withCurrentRelationRelease<T>(observe: () => Promise<CurrentRelationRelease | null>, work: (release: FilterRelease) => Promise<T>, unavailable: T): Promise<T>;
+export declare function withCurrentRelationRelease<T>(observe: () => Promise<CurrentRelationRelease | null>, work: (release: FilterRelease, pin: CurrentRelationRelease) => Promise<T>, unavailable: T): Promise<T>;
 /**
  * Execute inverse membership through the existing selected-value seek and same-statement matcher.
  * The selected source ids bound work independently of actor degree. No inbound sample, pooled

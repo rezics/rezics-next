@@ -69,7 +69,7 @@ export function collectionSchema() {
         allowedVisibilityActions: t.Optional(t.Array(visibility, { uniqueItems: true })),
         presentationKind: nullableString,
         presentationKindSource: t.Union([t.Literal('owner'), t.Literal('mixed')]),
-        cover: t.Optional(CoverSummarySchema),
+        cover: t.Optional(t.Union([CoverSummarySchema, t.Null()])),
         coverSource: t.Union([t.Literal('owner'), t.Literal('member'), t.Literal('none'), t.Literal('pending')]),
         coverMediaId: t.Optional(t.Union([t.String({ format: 'uuid' }), t.Null()])),
         revision,

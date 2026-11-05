@@ -1,11 +1,15 @@
 import type { FilterRelease } from '@rezics/filter';
+import { type TextNode } from './text.ts';
 import type { PublicFilterSource } from '../semantic/public-filter-source-contract.ts';
 import type { KeyRing } from '../tokens/seal.ts';
+import type { ConceptFilterExecution } from './concept-browse-statements.ts';
 import { type MixedDiscoveryRequest } from './discovery-request.ts';
 import type { DiscoveryPage, DiscoveryReadContext, DiscoveryRegistry, DiscoveryOwnerRegistry, DiscoveryKey } from './discovery.ts';
+import type { DiscoverySearch } from './discovery-api.ts';
+import type { IndexedSubject } from './source.ts';
 import type { PublicFilterConsumerJob, PublicDiscoveryConsumerOperations, PublicFilterQueriedObservation } from './public-filter-consumer-contract.ts';
 type Principal = 'anonymous' | `account:${string}`;
-export type DiscoverySearch = (principal: Principal, request: MixedDiscoveryRequest, context: DiscoveryReadContext) => Promise<DiscoveryPage>;
+export type { DiscoverySearch } from './discovery-api.ts';
 export type RetainedDiscoveryRead = Readonly<{
     search(): Promise<DiscoveryPage>;
     currentPrimaryCandidates(keys: readonly DiscoveryKey[]): Promise<readonly boolean[]>;
@@ -23,7 +27,15 @@ type DiscoveryConfiguration = {
         digest: string;
     }>;
     now(): number;
-    asOf(queried: PublicFilterQueriedObservation): Promise<string>;
+    asOf(queried: PublicFilterQueriedObservation): Promise<string | import('./search-context.ts').SearchObservation>;
+    prepareConceptFilter?(input: Readonly<{
+        principal: string;
+        request: unknown;
+        filter: import('@rezics/filter').DiscoveryFilterDocument;
+        limit: number;
+        countCandidateLimit: number;
+    }>): Promise<ConceptFilterExecution | undefined>;
+    currentTextMatches?: (physicalTarget: string, subject: IndexedSubject, query: TextNode) => Promise<boolean>;
     prepare?(job: PublicFilterConsumerJob): Promise<void>;
 };
 /** The public completed search and retained readers use the same native execution. The
@@ -35,4 +47,3 @@ export declare function createRetainedDiscoverySearch(config: DiscoveryConfigura
  * native owner integration is absent, in which case it returns readiness before enumeration.
  */
 export declare function createDiscoverySearch(config: DiscoveryConfiguration): DiscoverySearch;
-export {};

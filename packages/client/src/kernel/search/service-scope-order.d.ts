@@ -5,6 +5,44 @@ import type { NativeOrdinalFrontier, NativeOrdinalKey, RawOrdinalCollectionPrefi
 import { type NativeSourceIdentity } from '../library/native-source-custody.ts';
 import type { LeafOptions } from '../semantic/scope-leaf-evidence.ts';
 import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
+/** Fixed selected-work schedule for one raw ordinal continuation. This bounds work; it grants no dispatch authority. */
+export declare const SEARCH_SCOPE_ORDINAL_OPERATION: Readonly<{
+    axes: readonly ["candidateKeys", "nativeRows", "identityMetadataRows", "emptySeeks", "nativePoints", "witnessKeys", "statements", "bytes", "engineRequests"];
+    rawLimit: 1;
+    schedule: Readonly<{
+        definitionGetters: 11;
+        membersSnapshots: 4;
+        orderCurrentnessReads: 2;
+        sourcePrepare: 1;
+        ordinalPrefix: 1;
+        rawOrdinalRowsMaximum: 1;
+        terminalQueriesBeforeEvaluationMaximum: 1;
+        distinctGroupQueries: 1;
+        earliestOrdinalProbesMaximum: 99;
+        evaluatedSubjectsMaximum: 1;
+        closurePasses: 2;
+        terminalQueriesPerClosureMaximum: 49;
+        factQueriesPerClosureMaximum: 50;
+        ownerFactReadsPerClosureMaximum: 98;
+        pinnedReleaseReadsPerClosureMaximum: 98;
+        ownerCandidateReads: 2;
+    }>;
+    nativeStatement: Readonly<{
+        limit: number;
+        requestBytes: number;
+        resultBytes: number;
+        work: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
+    }>;
+    terms: Readonly<{
+        metadataPrefix: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
+        searchBody: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
+        collectionState: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
+        nativeOrdinal: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
+        sourceTransaction: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
+    }>;
+    cost: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
+    ceiling: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
+}>;
 /** Internal Source locator, never an authority assertion or public Search sort. */
 export type SearchScopeOrder = Readonly<{
     kind: 'id';
@@ -42,7 +80,7 @@ export declare function createSearchScopeOrder(config: Readonly<{
         work: WorkReceipt;
     }>;
     rawOrdinal(collection: SearchScopeCollection, after: NativeOrdinalKey | null, limit: number, allowance: WorkAllowance): Promise<RawOrdinalCollectionPrefix>;
-    prefix(collection: SearchScopeCollection, afterSubjectId: string | null, allowance: WorkAllowance): Promise<import("../library/collection-source.ts").CanonicalCollectionPrefix>;
+    prefix(collection: SearchScopeCollection, afterSubjectId: string | null, allowance: WorkAllowance, candidateLimit?: number): Promise<import("../library/collection-source.ts").CanonicalCollectionPrefix>;
     contains(collection: SearchScopeCollection, subjectId: string, allowance: WorkAllowance, progress?: CollectionAliasProgress): Promise<import("../library/collection-source.ts").CollectionSubjectMembership>;
 };
 /** Full scoped observation comparison; a committed revision alone is not a Source identity. */

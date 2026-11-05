@@ -30,10 +30,29 @@ exit codes retain the compiler contract. `.reylo` caches are never returned. Ext
 
 Decision: emit source-checked declarations before the full workspace compiler and construct checks so tests can
 consume refreshed client types; all checks must pass before publication. The generated closure includes modules
-referenced by the public client entrypoint as well as mounted routes.
+referenced by the public client entrypoint as well as mounted routes. The declaration compiler inherits the prepared
+SQL analysis environment, including its Reylo project when the database URL is intentionally removed.
 
 Decision: publish the complete mounted and public-root declaration closure for every admitted Kernel input
 independently of future source candidates or unfinished consumers.
+
+Decision: public client aliases retain their names while referencing native modules; provisional transports are removed
+when complete mounted declarations provide their callables. Reviewed Person transport stays unchanged until its
+native Semantic operands are admitted. The admitted producer now declares the guarded read/merge operands and a
+202 merge admission (`operation.id`) and operation-status read; callers retain the original admission and
+read the completed operation before checking publication. Public helper types derive from those mounted callables.
+Grouped release match evidence is optional because the native grouped reader omits it; ordinary catalogue evidence
+retains its explicit state. Focused publication tests exercise installed public-root callables and retained operational
+engine-request accounting; broader native/browser/root acceptance remains with integration.
+Publication fixture assertions use native retained-candidate discriminants and current candidate ranks for adoption,
+complete native references, and fetch callables with their connection API. The command-capture adapter preserves
+the supplied port type so review commands remain available to the existing native journeys. Archive result readback
+retains each confirmed choice across later edits; private-entry callers retain native authorization and idempotency
+headers through the generated command signatures. Watch removal retains the same native credentials, and bodyless
+Library export creation sends credentials and its original key as request options. Ordinary Search evidence remains required; only grouped release
+evidence is optional. Native basis composition retains the original SQL query identities used by its bound and
+projection maps. Static Source costs re-export the canonical leaf declaration, and ordinal SQL initializes before
+runtime dependencies can request its bound during module assembly.
 
 Decision: Account client exports project mounted route types and add no parallel producer for account profile, avatar,
 managed-account navigation or unread data.
@@ -84,6 +103,20 @@ published candidate is revalidated before completing interrupted cleanup. A live
 result refuses concurrent receiving. Missing/malformed lock custody fails closed. Repeating the same terminal result
 checks the receipt and entire current catalogue without replacing it. The original foreground command, cancellation,
 parent-group closure, receiving fence and cleanup retain their existing lifetime; this profile adds no retry/launcher.
+
+Decision: Realm presentation schemas and the Search scope work ledger initialize in dependency-free native leaves.
+Their existing entrypoints re-export the same definitions, preserving readers, media validation and work ceilings
+while avoiding the cold-import errors exposed by the original native tests.
+
+Declaration freshness tests prepare the official complete SQL fixture before the timed declaration assertions, then
+use a fresh declaration cache and an incremental emit. Both must equal the committed public closure. The declaration
+timeout and the file lane's setup and wall bounds remain unchanged. Generator fixtures use relative workspace paths
+and enter the migrated Kernel lane through `test/client-generator.test.ts`; route inventory lists each distinct mounted
+method/path exactly once.
+
+Publication retains the native memoized schema factories and derives public types from their schema return values.
+Literal tuple and nullable-response repairs belong inside those factories; integration retains current typed fixtures
+and native work dimensions rather than replacing them with earlier transport casts or estimates.
 
 ## Development database
 

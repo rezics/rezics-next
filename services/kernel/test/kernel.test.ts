@@ -328,19 +328,6 @@ const typed = [
   'POST /v1/recentSearches',
   'DELETE /v1/recentSearches/:id',
   'POST /v1/recentSearches/$clear',
-  'POST /v1/libraryImports/anilist/:importId/$reviewLabels',
-  'POST /v1/libraryImports/anilist/:importId/$applyLabels',
-  'POST /v1/libraryImports/vndb/$preview',
-  'GET /v1/libraryImports/vndb/:uploadId',
-  'GET /v1/libraryImports/vndb/:uploadId/source',
-  'POST /v1/libraryImports/vndb/:uploadId/$review',
-  'POST /v1/libraryImports/vndb/:uploadId/$apply',
-  'POST /v1/libraryImports/vndb/:uploadId/$cancel',
-  'DELETE /v1/libraryImports/vndb/:uploadId',
-  'POST /v1/libraryImports/vndb/:uploadId/labels/$review',
-  'GET /v1/libraryImports/vndb/:uploadId/labels',
-  'POST /v1/libraryImports/vndb/:uploadId/labels/$apply',
-  'POST /v1/libraryImports/vndb/:uploadId/labels/$cancel',
   'POST /v1/libraryImports/bangumi/$preview',
   'GET /v1/libraryImports/bangumi/:uploadId',
   'POST /v1/libraryImports/bangumi/:uploadId/$review',
@@ -477,6 +464,7 @@ const typed = [
   'POST /v1/zones',
   'GET /v1/zones',
   'GET /v1/zones/:id',
+  'GET /v1/zones/:id/collections',
   'POST /v1/zones/:id/$readPage',
   'GET /v1/zones/:id/configuration',
   'PUT /v1/zones/:id/configuration',
@@ -522,6 +510,7 @@ const typed = [
   'GET /v1/realms/:realmId/review-destinations',
   'GET /v1/realms/:realmId/rulesAuthoring',
   'GET /v1/realms/:realmId/settings',
+  'GET /v1/subjectIdentityOperations/:id',
   'GET /v1/subjects/:id/candidates/:candidate/lifecycle',
   'GET /v1/subjects/:id/source-statistics/:source/observations',
   'GET /v1/threads/:id/reading-page',
@@ -558,7 +547,7 @@ const typed = [
   'PUT /v1/libraryYearlyCompletionGoal',
 ] as const satisfies readonly Routes[];
 type Missing = Exclude<Routes, (typeof typed)[number]>;
-const complete: [Missing] extends [never] ? true : Missing = true;
+const complete: [Missing] extends [never] ? true : `Unlisted route: ${Missing}` = true;
 type Loose = LooseRoutes<Kernel['~Routes']>;
 const precise: [Loose] extends [never] ? true : Loose = true;
 

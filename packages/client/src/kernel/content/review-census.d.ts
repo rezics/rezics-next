@@ -38,6 +38,13 @@ export type ReviewCensusPage = Readonly<{
 }>;
 /** Candidate installation is intentionally weaker than anonymous eligibility coverage. */
 export type ReviewCensusCoverage = Readonly<{
+    state: 'ready';
+    partition: number;
+    position: bigint;
+    generation: string;
+    installed: true;
+    total: number;
+}> | Readonly<{
     state: 'preparing' | 'unavailable';
     partition: number;
     position: bigint | null;
@@ -58,7 +65,7 @@ export declare function sameReviewCensusCut(left: ReviewCensusCut, right: Review
 /** Durable native projection maintenance. Like the existing Realm Subject candidate
  * store, projection writes do not invent a domain log position. Owner observations
  * happen before writes, and only core home metadata is rechecked during the CAS.
- * This store cannot mint an anonymous-eligibility certificate.
+ * Readiness still depends on the reader's current anonymous authority observations.
  */
 export declare function createReviewCensus(pool: Pool, reader: Reader): Readonly<{
     coverage(partition: number, deadline: number): Promise<ReviewCensusCoverage>;

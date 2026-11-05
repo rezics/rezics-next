@@ -6,6 +6,7 @@ import type { Access, Actor } from '../request/access.ts';
 import { ScopeWork } from '../search/scope-execution.ts';
 import { type SearchService } from '../search/service-scope.ts';
 import { type WorkAllowance, type WorkReceipt, type WorkDimensions } from './collection-source.ts';
+import { type OrdinaryCollectionPagePlan } from './ordinary-read-bounds.ts';
 export type OwnerQueryDependencies = {
     pool: Pool;
     access: Access;
@@ -14,10 +15,12 @@ export type OwnerQueryDependencies = {
     search?: SearchService;
 };
 declare class OwnerQueryWork extends ScopeWork {
+    readonly plan: OrdinaryCollectionPagePlan;
+    constructor(plan: OrdinaryCollectionPagePlan);
     consume(used: WorkDimensions): void;
 }
 /** Canonical and Search work settle into the same request reservation, including failed dispatches. */
-export declare function ownerQueryWork(limit: number): OwnerQueryWork;
+export declare function ownerQueryWork(limit: number, view?: 'BASIC' | 'FULL'): OwnerQueryWork;
 /** One current native Source and the registered Search service. No owner/client impersonation or GET work. */
 export declare function openOwnerQuery(deps: OwnerQueryDependencies, input: {
     actor: Actor;
@@ -41,7 +44,7 @@ export declare function openOwnerQuery(deps: OwnerQueryDependencies, input: {
         scope: {
             realm: {
                 realms(scope: import("../search/realm-scope.ts").PreparedRealmScope): readonly string[];
-                prepare(filter: import("@rezics/filter").DiscoveryFilterDocument, allowance: WorkAllowance): Promise<Readonly<{
+                prepare(filter: import("@rezics/filter").DiscoveryFilterDocument, allowance: WorkAllowance, expectedReleaseDigest?: string): Promise<Readonly<{
                     scope: import("../search/realm-scope.ts").PreparedRealmScope;
                     work: WorkReceipt;
                 }>>;
@@ -114,6 +117,7 @@ export declare function openOwnerQuery(deps: OwnerQueryDependencies, input: {
             sourcePrefix(prepared: import("../search/scope-source.ts").PreparedSearchScope, request: {
                 afterSubjectId: string | null;
                 allowance: WorkAllowance;
+                candidateLimit?: number;
             }): Promise<{
                 basis: import("../search/scope-source.ts").ScopeBasis;
                 work: WorkReceipt;

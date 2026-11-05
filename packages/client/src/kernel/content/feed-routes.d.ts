@@ -1,3 +1,4 @@
+import type { OperationCatalogue } from '@rezics/operations';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { Access } from '../request/access.ts';
 import { type FeedDependencies } from './feed.ts';
@@ -5,6 +6,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
     access: () => Access;
     contentAccess: () => Access;
     workClient: FeedDependencies['workClient'];
+    operations: OperationCatalogue;
 }): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
     typebox: {};
     error: [{
@@ -305,6 +307,27 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                 post: {
                     body: {
                         subjects: string[];
+                        expectedIdentity?: {
+                            endpoints: [{
+                                subject: string;
+                                revision: number;
+                                securityRevision: string;
+                                source: "bangumi" | "bangumi_cross_media" | "vndb" | "vndb_cross_media";
+                                externalId: string;
+                                claimTransactionId: string;
+                                property: "wdt:P3180" | "wdt:P6298";
+                                value: string;
+                            }, {
+                                subject: string;
+                                revision: number;
+                                securityRevision: string;
+                                source: "bangumi" | "bangumi_cross_media" | "vndb" | "vndb_cross_media";
+                                externalId: string;
+                                claimTransactionId: string;
+                                property: "wdt:P3180" | "wdt:P6298";
+                                value: string;
+                            }];
+                        };
                     };
                     params: {};
                     query: unknown;
@@ -313,9 +336,14 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     };
                     response: {
                         200: {
-                            survivor: string;
-                            redirected: string;
-                            revision: number;
+                            operation: {
+                                id: string;
+                            };
+                        };
+                        202: {
+                            operation: {
+                                id: string;
+                            };
                         };
                         400: Response | {
                             type: unknown;
@@ -402,6 +430,86 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
     };
 } & {
     v1: {
+        subjectIdentityOperations: {
+            ":id": {
+                get: {
+                    body: unknown;
+                    params: {
+                        id: string;
+                    };
+                    query: unknown;
+                    headers: unknown;
+                    response: {
+                        200: {
+                            operation: {
+                                id: string;
+                                done: false;
+                            } | {
+                                id: string;
+                                done: true;
+                                result: {
+                                    survivor: string;
+                                    redirected: string;
+                                    revision: number;
+                                };
+                            };
+                        };
+                        401: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        404: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        422: Response | {
+                            type: 'validation';
+                            code: 'validation';
+                            title: 'Validation Error';
+                            status: 422;
+                            detail?: string;
+                            on: string;
+                            found?: unknown;
+                            property?: string;
+                            expected?: unknown;
+                            errors?: {
+                                message?: string;
+                                [key: string]: unknown;
+                            }[];
+                        };
+                        503: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                    };
+                    error: never;
+                };
+            };
+        };
+    };
+} & {
+    v1: {
         subjects: {
             ":id": {
                 get: {
@@ -412,6 +520,10 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     query: {
                         context?: string;
                         language?: string;
+                        includeViewerActions?: boolean;
+                        includeDocuments?: boolean;
+                        reviewIdentitySource?: "bangumi" | "bangumi_cross_media" | "vndb" | "vndb_cross_media";
+                        reviewIdentityExternalId?: string;
                     };
                     headers: unknown;
                     response: {
@@ -488,6 +600,16 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     attribution?: string;
                                 }[];
                             };
+                            reviewedIdentity?: {
+                                subject: string;
+                                revision: number;
+                                securityRevision: string;
+                                source: "bangumi" | "bangumi_cross_media" | "vndb" | "vndb_cross_media";
+                                externalId: string;
+                                claimTransactionId: string;
+                                property: "wdt:P3180" | "wdt:P6298";
+                                value: string;
+                            } | null;
                             account: {
                                 id: string;
                             } | null;
@@ -559,12 +681,33 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     };
                                 } | null;
                             }>;
+                            documents?: Record<string, import("./document-public.ts").PublicDocumentView>;
+                            viewerActions?: {
+                                state: "available";
+                                actions: {
+                                    action: string;
+                                    operations: string[];
+                                }[];
+                            } | {
+                                state: "unavailable";
+                            };
                         };
                         308: {
                             redirect: {
                                 from: string;
                                 to: string;
                             };
+                        };
+                        400: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
                         };
                         401: Response | {
                             type: unknown;
@@ -1035,6 +1178,106 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             };
                         };
                         error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        subjects: {
+            ":id": {
+                candidates: {
+                    ":candidate": {
+                        lifecycle: {
+                            get: {
+                                body: unknown;
+                                params: {
+                                    id: string;
+                                    candidate: string;
+                                };
+                                query: {
+                                    property: string;
+                                };
+                                headers: unknown;
+                                response: {
+                                    200: {
+                                        subject: string;
+                                        candidate: string;
+                                        property: string;
+                                        viewer: "account" | "anonymous";
+                                        state: "available" | "deleted";
+                                        selected: boolean;
+                                        actions: {
+                                            state: "available";
+                                            operations: ("delete" | "restore")[];
+                                        } | {
+                                            state: "unavailable";
+                                        };
+                                    };
+                                    400: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    401: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    404: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    422: Response | {
+                                        type: 'validation';
+                                        code: 'validation';
+                                        title: 'Validation Error';
+                                        status: 422;
+                                        detail?: string;
+                                        on: string;
+                                        found?: unknown;
+                                        property?: string;
+                                        expected?: unknown;
+                                        errors?: {
+                                            message?: string;
+                                            [key: string]: unknown;
+                                        }[];
+                                    };
+                                    503: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                };
+                                error: never;
+                            };
+                        };
                     };
                 };
             };
@@ -2657,6 +2900,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             context?: string;
                             property?: string;
                             filter?: string;
+                            qualifier?: string;
                             type?: string;
                             language?: string;
                         };
@@ -2717,6 +2961,11 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                             release: string;
                                             revision: number;
                                         };
+                                    };
+                                    creditSlot?: {
+                                        property: string;
+                                        target: string;
+                                        key?: string;
                                     };
                                     related?: Record<string, {
                                         id: string;
@@ -2793,6 +3042,1316 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                         } | null;
                                     };
                                 }[];
+                                workReleaseCards?: {
+                                    state: "unavailable";
+                                } | {
+                                    state: "available";
+                                    cards: {
+                                        subject: string;
+                                        type: string;
+                                        summary: {
+                                            id: string;
+                                            type: string;
+                                            types: string[];
+                                            label: {
+                                                value: string;
+                                                language: string;
+                                            } | null;
+                                            creativeWork: boolean;
+                                            cover: {
+                                                media: string;
+                                                width: number;
+                                                height: number;
+                                                placeholder: {
+                                                    thumbhash: string;
+                                                    color: string;
+                                                };
+                                                variants: {
+                                                    format: "avif" | "webp";
+                                                    width: number;
+                                                }[];
+                                                focalPoint: {
+                                                    x: number;
+                                                    y: number;
+                                                } | null;
+                                                credit: {
+                                                    rightsHolder: string;
+                                                    via: {
+                                                        name: string;
+                                                        url: string;
+                                                    };
+                                                    license: string;
+                                                    obligations: string[];
+                                                };
+                                            } | null;
+                                        };
+                                        membership: {
+                                            id: string;
+                                            rank: "deprecated" | "normal" | "preferred";
+                                            property: {
+                                                id: string;
+                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                            };
+                                            value: {
+                                                type: "value";
+                                                content: any;
+                                            } | {
+                                                type: "somevalue";
+                                            } | {
+                                                type: "novalue";
+                                            };
+                                            qualifiers: {
+                                                property: {
+                                                    id: string;
+                                                    data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                };
+                                                value: {
+                                                    type: "value";
+                                                    content: any;
+                                                } | {
+                                                    type: "somevalue";
+                                                } | {
+                                                    type: "novalue";
+                                                };
+                                            }[];
+                                            references: {
+                                                parts: {
+                                                    property: {
+                                                        id: string;
+                                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                    };
+                                                    value: {
+                                                        type: "value";
+                                                        content: any;
+                                                    } | {
+                                                        type: "somevalue";
+                                                    } | {
+                                                        type: "novalue";
+                                                    };
+                                                }[];
+                                                hash: string;
+                                            }[];
+                                            rezics: {
+                                                release: string;
+                                                revision: number;
+                                            };
+                                        };
+                                        related: Record<string, {
+                                            id: string;
+                                            type: string;
+                                            types: string[];
+                                            label: {
+                                                value: string;
+                                                language: string;
+                                            } | null;
+                                            creativeWork: boolean;
+                                            cover: {
+                                                media: string;
+                                                width: number;
+                                                height: number;
+                                                placeholder: {
+                                                    thumbhash: string;
+                                                    color: string;
+                                                };
+                                                variants: {
+                                                    format: "avif" | "webp";
+                                                    width: number;
+                                                }[];
+                                                focalPoint: {
+                                                    x: number;
+                                                    y: number;
+                                                } | null;
+                                                credit: {
+                                                    rightsHolder: string;
+                                                    via: {
+                                                        name: string;
+                                                        url: string;
+                                                    };
+                                                    license: string;
+                                                    obligations: string[];
+                                                };
+                                            } | null;
+                                        }>;
+                                        fields: {
+                                            'schema:gamePlatform': {
+                                                state: "unsupported";
+                                            } | {
+                                                state: "withheld";
+                                            } | {
+                                                state: "missing";
+                                            } | {
+                                                state: "unavailable";
+                                            } | {
+                                                state: "available";
+                                                statements: {
+                                                    id: string;
+                                                    rank: "deprecated" | "normal" | "preferred";
+                                                    property: {
+                                                        id: string;
+                                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                    };
+                                                    value: {
+                                                        type: "value";
+                                                        content: any;
+                                                    } | {
+                                                        type: "somevalue";
+                                                    } | {
+                                                        type: "novalue";
+                                                    };
+                                                    qualifiers: {
+                                                        property: {
+                                                            id: string;
+                                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                        };
+                                                        value: {
+                                                            type: "value";
+                                                            content: any;
+                                                        } | {
+                                                            type: "somevalue";
+                                                        } | {
+                                                            type: "novalue";
+                                                        };
+                                                    }[];
+                                                    references: {
+                                                        parts: {
+                                                            property: {
+                                                                id: string;
+                                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                            };
+                                                            value: {
+                                                                type: "value";
+                                                                content: any;
+                                                            } | {
+                                                                type: "somevalue";
+                                                            } | {
+                                                                type: "novalue";
+                                                            };
+                                                        }[];
+                                                        hash: string;
+                                                    }[];
+                                                    rezics: {
+                                                        release: string;
+                                                        revision: number;
+                                                    };
+                                                }[];
+                                                related: Record<string, {
+                                                    id: string;
+                                                    type: string;
+                                                    types: string[];
+                                                    label: {
+                                                        value: string;
+                                                        language: string;
+                                                    } | null;
+                                                    creativeWork: boolean;
+                                                    cover: {
+                                                        media: string;
+                                                        width: number;
+                                                        height: number;
+                                                        placeholder: {
+                                                            thumbhash: string;
+                                                            color: string;
+                                                        };
+                                                        variants: {
+                                                            format: "avif" | "webp";
+                                                            width: number;
+                                                        }[];
+                                                        focalPoint: {
+                                                            x: number;
+                                                            y: number;
+                                                        } | null;
+                                                        credit: {
+                                                            rightsHolder: string;
+                                                            via: {
+                                                                name: string;
+                                                                url: string;
+                                                            };
+                                                            license: string;
+                                                            obligations: string[];
+                                                        };
+                                                    } | null;
+                                                }>;
+                                            };
+                                            'schema:inLanguage': {
+                                                state: "unsupported";
+                                            } | {
+                                                state: "withheld";
+                                            } | {
+                                                state: "missing";
+                                            } | {
+                                                state: "unavailable";
+                                            } | {
+                                                state: "available";
+                                                statements: {
+                                                    id: string;
+                                                    rank: "deprecated" | "normal" | "preferred";
+                                                    property: {
+                                                        id: string;
+                                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                    };
+                                                    value: {
+                                                        type: "value";
+                                                        content: any;
+                                                    } | {
+                                                        type: "somevalue";
+                                                    } | {
+                                                        type: "novalue";
+                                                    };
+                                                    qualifiers: {
+                                                        property: {
+                                                            id: string;
+                                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                        };
+                                                        value: {
+                                                            type: "value";
+                                                            content: any;
+                                                        } | {
+                                                            type: "somevalue";
+                                                        } | {
+                                                            type: "novalue";
+                                                        };
+                                                    }[];
+                                                    references: {
+                                                        parts: {
+                                                            property: {
+                                                                id: string;
+                                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                            };
+                                                            value: {
+                                                                type: "value";
+                                                                content: any;
+                                                            } | {
+                                                                type: "somevalue";
+                                                            } | {
+                                                                type: "novalue";
+                                                            };
+                                                        }[];
+                                                        hash: string;
+                                                    }[];
+                                                    rezics: {
+                                                        release: string;
+                                                        revision: number;
+                                                    };
+                                                }[];
+                                                related: Record<string, {
+                                                    id: string;
+                                                    type: string;
+                                                    types: string[];
+                                                    label: {
+                                                        value: string;
+                                                        language: string;
+                                                    } | null;
+                                                    creativeWork: boolean;
+                                                    cover: {
+                                                        media: string;
+                                                        width: number;
+                                                        height: number;
+                                                        placeholder: {
+                                                            thumbhash: string;
+                                                            color: string;
+                                                        };
+                                                        variants: {
+                                                            format: "avif" | "webp";
+                                                            width: number;
+                                                        }[];
+                                                        focalPoint: {
+                                                            x: number;
+                                                            y: number;
+                                                        } | null;
+                                                        credit: {
+                                                            rightsHolder: string;
+                                                            via: {
+                                                                name: string;
+                                                                url: string;
+                                                            };
+                                                            license: string;
+                                                            obligations: string[];
+                                                        };
+                                                    } | null;
+                                                }>;
+                                            };
+                                            'schema:datePublished': {
+                                                state: "unsupported";
+                                            } | {
+                                                state: "withheld";
+                                            } | {
+                                                state: "missing";
+                                            } | {
+                                                state: "unavailable";
+                                            } | {
+                                                state: "available";
+                                                statements: {
+                                                    id: string;
+                                                    rank: "deprecated" | "normal" | "preferred";
+                                                    property: {
+                                                        id: string;
+                                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                    };
+                                                    value: {
+                                                        type: "value";
+                                                        content: any;
+                                                    } | {
+                                                        type: "somevalue";
+                                                    } | {
+                                                        type: "novalue";
+                                                    };
+                                                    qualifiers: {
+                                                        property: {
+                                                            id: string;
+                                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                        };
+                                                        value: {
+                                                            type: "value";
+                                                            content: any;
+                                                        } | {
+                                                            type: "somevalue";
+                                                        } | {
+                                                            type: "novalue";
+                                                        };
+                                                    }[];
+                                                    references: {
+                                                        parts: {
+                                                            property: {
+                                                                id: string;
+                                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                            };
+                                                            value: {
+                                                                type: "value";
+                                                                content: any;
+                                                            } | {
+                                                                type: "somevalue";
+                                                            } | {
+                                                                type: "novalue";
+                                                            };
+                                                        }[];
+                                                        hash: string;
+                                                    }[];
+                                                    rezics: {
+                                                        release: string;
+                                                        revision: number;
+                                                    };
+                                                }[];
+                                                related: Record<string, {
+                                                    id: string;
+                                                    type: string;
+                                                    types: string[];
+                                                    label: {
+                                                        value: string;
+                                                        language: string;
+                                                    } | null;
+                                                    creativeWork: boolean;
+                                                    cover: {
+                                                        media: string;
+                                                        width: number;
+                                                        height: number;
+                                                        placeholder: {
+                                                            thumbhash: string;
+                                                            color: string;
+                                                        };
+                                                        variants: {
+                                                            format: "avif" | "webp";
+                                                            width: number;
+                                                        }[];
+                                                        focalPoint: {
+                                                            x: number;
+                                                            y: number;
+                                                        } | null;
+                                                        credit: {
+                                                            rightsHolder: string;
+                                                            via: {
+                                                                name: string;
+                                                                url: string;
+                                                            };
+                                                            license: string;
+                                                            obligations: string[];
+                                                        };
+                                                    } | null;
+                                                }>;
+                                            };
+                                            'schema:creativeWorkStatus': {
+                                                state: "unsupported";
+                                            } | {
+                                                state: "withheld";
+                                            } | {
+                                                state: "missing";
+                                            } | {
+                                                state: "unavailable";
+                                            } | {
+                                                state: "available";
+                                                statements: {
+                                                    id: string;
+                                                    rank: "deprecated" | "normal" | "preferred";
+                                                    property: {
+                                                        id: string;
+                                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                    };
+                                                    value: {
+                                                        type: "value";
+                                                        content: any;
+                                                    } | {
+                                                        type: "somevalue";
+                                                    } | {
+                                                        type: "novalue";
+                                                    };
+                                                    qualifiers: {
+                                                        property: {
+                                                            id: string;
+                                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                        };
+                                                        value: {
+                                                            type: "value";
+                                                            content: any;
+                                                        } | {
+                                                            type: "somevalue";
+                                                        } | {
+                                                            type: "novalue";
+                                                        };
+                                                    }[];
+                                                    references: {
+                                                        parts: {
+                                                            property: {
+                                                                id: string;
+                                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                            };
+                                                            value: {
+                                                                type: "value";
+                                                                content: any;
+                                                            } | {
+                                                                type: "somevalue";
+                                                            } | {
+                                                                type: "novalue";
+                                                            };
+                                                        }[];
+                                                        hash: string;
+                                                    }[];
+                                                    rezics: {
+                                                        release: string;
+                                                        revision: number;
+                                                    };
+                                                }[];
+                                                related: Record<string, {
+                                                    id: string;
+                                                    type: string;
+                                                    types: string[];
+                                                    label: {
+                                                        value: string;
+                                                        language: string;
+                                                    } | null;
+                                                    creativeWork: boolean;
+                                                    cover: {
+                                                        media: string;
+                                                        width: number;
+                                                        height: number;
+                                                        placeholder: {
+                                                            thumbhash: string;
+                                                            color: string;
+                                                        };
+                                                        variants: {
+                                                            format: "avif" | "webp";
+                                                            width: number;
+                                                        }[];
+                                                        focalPoint: {
+                                                            x: number;
+                                                            y: number;
+                                                        } | null;
+                                                        credit: {
+                                                            rightsHolder: string;
+                                                            via: {
+                                                                name: string;
+                                                                url: string;
+                                                            };
+                                                            license: string;
+                                                            obligations: string[];
+                                                        };
+                                                    } | null;
+                                                }>;
+                                            };
+                                            'wdt:P5804': {
+                                                state: "unsupported";
+                                            } | {
+                                                state: "withheld";
+                                            } | {
+                                                state: "missing";
+                                            } | {
+                                                state: "unavailable";
+                                            } | {
+                                                state: "available";
+                                                statements: {
+                                                    id: string;
+                                                    rank: "deprecated" | "normal" | "preferred";
+                                                    property: {
+                                                        id: string;
+                                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                    };
+                                                    value: {
+                                                        type: "value";
+                                                        content: any;
+                                                    } | {
+                                                        type: "somevalue";
+                                                    } | {
+                                                        type: "novalue";
+                                                    };
+                                                    qualifiers: {
+                                                        property: {
+                                                            id: string;
+                                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                        };
+                                                        value: {
+                                                            type: "value";
+                                                            content: any;
+                                                        } | {
+                                                            type: "somevalue";
+                                                        } | {
+                                                            type: "novalue";
+                                                        };
+                                                    }[];
+                                                    references: {
+                                                        parts: {
+                                                            property: {
+                                                                id: string;
+                                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                            };
+                                                            value: {
+                                                                type: "value";
+                                                                content: any;
+                                                            } | {
+                                                                type: "somevalue";
+                                                            } | {
+                                                                type: "novalue";
+                                                            };
+                                                        }[];
+                                                        hash: string;
+                                                    }[];
+                                                    rezics: {
+                                                        release: string;
+                                                        revision: number;
+                                                    };
+                                                }[];
+                                                related: Record<string, {
+                                                    id: string;
+                                                    type: string;
+                                                    types: string[];
+                                                    label: {
+                                                        value: string;
+                                                        language: string;
+                                                    } | null;
+                                                    creativeWork: boolean;
+                                                    cover: {
+                                                        media: string;
+                                                        width: number;
+                                                        height: number;
+                                                        placeholder: {
+                                                            thumbhash: string;
+                                                            color: string;
+                                                        };
+                                                        variants: {
+                                                            format: "avif" | "webp";
+                                                            width: number;
+                                                        }[];
+                                                        focalPoint: {
+                                                            x: number;
+                                                            y: number;
+                                                        } | null;
+                                                        credit: {
+                                                            rightsHolder: string;
+                                                            via: {
+                                                                name: string;
+                                                                url: string;
+                                                            };
+                                                            license: string;
+                                                            obligations: string[];
+                                                        };
+                                                    } | null;
+                                                }>;
+                                            };
+                                            'rezics:releaseStatus': {
+                                                state: "unsupported";
+                                            } | {
+                                                state: "withheld";
+                                            } | {
+                                                state: "missing";
+                                            } | {
+                                                state: "unavailable";
+                                            } | {
+                                                state: "available";
+                                                statements: {
+                                                    id: string;
+                                                    rank: "deprecated" | "normal" | "preferred";
+                                                    property: {
+                                                        id: string;
+                                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                    };
+                                                    value: {
+                                                        type: "value";
+                                                        content: any;
+                                                    } | {
+                                                        type: "somevalue";
+                                                    } | {
+                                                        type: "novalue";
+                                                    };
+                                                    qualifiers: {
+                                                        property: {
+                                                            id: string;
+                                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                        };
+                                                        value: {
+                                                            type: "value";
+                                                            content: any;
+                                                        } | {
+                                                            type: "somevalue";
+                                                        } | {
+                                                            type: "novalue";
+                                                        };
+                                                    }[];
+                                                    references: {
+                                                        parts: {
+                                                            property: {
+                                                                id: string;
+                                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                            };
+                                                            value: {
+                                                                type: "value";
+                                                                content: any;
+                                                            } | {
+                                                                type: "somevalue";
+                                                            } | {
+                                                                type: "novalue";
+                                                            };
+                                                        }[];
+                                                        hash: string;
+                                                    }[];
+                                                    rezics: {
+                                                        release: string;
+                                                        revision: number;
+                                                    };
+                                                }[];
+                                                related: Record<string, {
+                                                    id: string;
+                                                    type: string;
+                                                    types: string[];
+                                                    label: {
+                                                        value: string;
+                                                        language: string;
+                                                    } | null;
+                                                    creativeWork: boolean;
+                                                    cover: {
+                                                        media: string;
+                                                        width: number;
+                                                        height: number;
+                                                        placeholder: {
+                                                            thumbhash: string;
+                                                            color: string;
+                                                        };
+                                                        variants: {
+                                                            format: "avif" | "webp";
+                                                            width: number;
+                                                        }[];
+                                                        focalPoint: {
+                                                            x: number;
+                                                            y: number;
+                                                        } | null;
+                                                        credit: {
+                                                            rightsHolder: string;
+                                                            via: {
+                                                                name: string;
+                                                                url: string;
+                                                            };
+                                                            license: string;
+                                                            obligations: string[];
+                                                        };
+                                                    } | null;
+                                                }>;
+                                            };
+                                            'schema:contentRating': {
+                                                state: "unsupported";
+                                            } | {
+                                                state: "withheld";
+                                            } | {
+                                                state: "missing";
+                                            } | {
+                                                state: "unavailable";
+                                            } | {
+                                                state: "available";
+                                                statements: {
+                                                    id: string;
+                                                    rank: "deprecated" | "normal" | "preferred";
+                                                    property: {
+                                                        id: string;
+                                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                    };
+                                                    value: {
+                                                        type: "value";
+                                                        content: any;
+                                                    } | {
+                                                        type: "somevalue";
+                                                    } | {
+                                                        type: "novalue";
+                                                    };
+                                                    qualifiers: {
+                                                        property: {
+                                                            id: string;
+                                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                        };
+                                                        value: {
+                                                            type: "value";
+                                                            content: any;
+                                                        } | {
+                                                            type: "somevalue";
+                                                        } | {
+                                                            type: "novalue";
+                                                        };
+                                                    }[];
+                                                    references: {
+                                                        parts: {
+                                                            property: {
+                                                                id: string;
+                                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                            };
+                                                            value: {
+                                                                type: "value";
+                                                                content: any;
+                                                            } | {
+                                                                type: "somevalue";
+                                                            } | {
+                                                                type: "novalue";
+                                                            };
+                                                        }[];
+                                                        hash: string;
+                                                    }[];
+                                                    rezics: {
+                                                        release: string;
+                                                        revision: number;
+                                                    };
+                                                }[];
+                                                related: Record<string, {
+                                                    id: string;
+                                                    type: string;
+                                                    types: string[];
+                                                    label: {
+                                                        value: string;
+                                                        language: string;
+                                                    } | null;
+                                                    creativeWork: boolean;
+                                                    cover: {
+                                                        media: string;
+                                                        width: number;
+                                                        height: number;
+                                                        placeholder: {
+                                                            thumbhash: string;
+                                                            color: string;
+                                                        };
+                                                        variants: {
+                                                            format: "avif" | "webp";
+                                                            width: number;
+                                                        }[];
+                                                        focalPoint: {
+                                                            x: number;
+                                                            y: number;
+                                                        } | null;
+                                                        credit: {
+                                                            rightsHolder: string;
+                                                            via: {
+                                                                name: string;
+                                                                url: string;
+                                                            };
+                                                            license: string;
+                                                            obligations: string[];
+                                                        };
+                                                    } | null;
+                                                }>;
+                                            };
+                                            'schema:publisher': {
+                                                state: "unsupported";
+                                            } | {
+                                                state: "withheld";
+                                            } | {
+                                                state: "missing";
+                                            } | {
+                                                state: "unavailable";
+                                            } | {
+                                                state: "available";
+                                                statements: {
+                                                    id: string;
+                                                    rank: "deprecated" | "normal" | "preferred";
+                                                    property: {
+                                                        id: string;
+                                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                    };
+                                                    value: {
+                                                        type: "value";
+                                                        content: any;
+                                                    } | {
+                                                        type: "somevalue";
+                                                    } | {
+                                                        type: "novalue";
+                                                    };
+                                                    qualifiers: {
+                                                        property: {
+                                                            id: string;
+                                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                        };
+                                                        value: {
+                                                            type: "value";
+                                                            content: any;
+                                                        } | {
+                                                            type: "somevalue";
+                                                        } | {
+                                                            type: "novalue";
+                                                        };
+                                                    }[];
+                                                    references: {
+                                                        parts: {
+                                                            property: {
+                                                                id: string;
+                                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                            };
+                                                            value: {
+                                                                type: "value";
+                                                                content: any;
+                                                            } | {
+                                                                type: "somevalue";
+                                                            } | {
+                                                                type: "novalue";
+                                                            };
+                                                        }[];
+                                                        hash: string;
+                                                    }[];
+                                                    rezics: {
+                                                        release: string;
+                                                        revision: number;
+                                                    };
+                                                }[];
+                                                related: Record<string, {
+                                                    id: string;
+                                                    type: string;
+                                                    types: string[];
+                                                    label: {
+                                                        value: string;
+                                                        language: string;
+                                                    } | null;
+                                                    creativeWork: boolean;
+                                                    cover: {
+                                                        media: string;
+                                                        width: number;
+                                                        height: number;
+                                                        placeholder: {
+                                                            thumbhash: string;
+                                                            color: string;
+                                                        };
+                                                        variants: {
+                                                            format: "avif" | "webp";
+                                                            width: number;
+                                                        }[];
+                                                        focalPoint: {
+                                                            x: number;
+                                                            y: number;
+                                                        } | null;
+                                                        credit: {
+                                                            rightsHolder: string;
+                                                            via: {
+                                                                name: string;
+                                                                url: string;
+                                                            };
+                                                            license: string;
+                                                            obligations: string[];
+                                                        };
+                                                    } | null;
+                                                }>;
+                                            };
+                                            'schema:producer': {
+                                                state: "unsupported";
+                                            } | {
+                                                state: "withheld";
+                                            } | {
+                                                state: "missing";
+                                            } | {
+                                                state: "unavailable";
+                                            } | {
+                                                state: "available";
+                                                statements: {
+                                                    id: string;
+                                                    rank: "deprecated" | "normal" | "preferred";
+                                                    property: {
+                                                        id: string;
+                                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                    };
+                                                    value: {
+                                                        type: "value";
+                                                        content: any;
+                                                    } | {
+                                                        type: "somevalue";
+                                                    } | {
+                                                        type: "novalue";
+                                                    };
+                                                    qualifiers: {
+                                                        property: {
+                                                            id: string;
+                                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                        };
+                                                        value: {
+                                                            type: "value";
+                                                            content: any;
+                                                        } | {
+                                                            type: "somevalue";
+                                                        } | {
+                                                            type: "novalue";
+                                                        };
+                                                    }[];
+                                                    references: {
+                                                        parts: {
+                                                            property: {
+                                                                id: string;
+                                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                            };
+                                                            value: {
+                                                                type: "value";
+                                                                content: any;
+                                                            } | {
+                                                                type: "somevalue";
+                                                            } | {
+                                                                type: "novalue";
+                                                            };
+                                                        }[];
+                                                        hash: string;
+                                                    }[];
+                                                    rezics: {
+                                                        release: string;
+                                                        revision: number;
+                                                    };
+                                                }[];
+                                                related: Record<string, {
+                                                    id: string;
+                                                    type: string;
+                                                    types: string[];
+                                                    label: {
+                                                        value: string;
+                                                        language: string;
+                                                    } | null;
+                                                    creativeWork: boolean;
+                                                    cover: {
+                                                        media: string;
+                                                        width: number;
+                                                        height: number;
+                                                        placeholder: {
+                                                            thumbhash: string;
+                                                            color: string;
+                                                        };
+                                                        variants: {
+                                                            format: "avif" | "webp";
+                                                            width: number;
+                                                        }[];
+                                                        focalPoint: {
+                                                            x: number;
+                                                            y: number;
+                                                        } | null;
+                                                        credit: {
+                                                            rightsHolder: string;
+                                                            via: {
+                                                                name: string;
+                                                                url: string;
+                                                            };
+                                                            license: string;
+                                                            obligations: string[];
+                                                        };
+                                                    } | null;
+                                                }>;
+                                            };
+                                            'wdt:P178': {
+                                                state: "unsupported";
+                                            } | {
+                                                state: "withheld";
+                                            } | {
+                                                state: "missing";
+                                            } | {
+                                                state: "unavailable";
+                                            } | {
+                                                state: "available";
+                                                statements: {
+                                                    id: string;
+                                                    rank: "deprecated" | "normal" | "preferred";
+                                                    property: {
+                                                        id: string;
+                                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                    };
+                                                    value: {
+                                                        type: "value";
+                                                        content: any;
+                                                    } | {
+                                                        type: "somevalue";
+                                                    } | {
+                                                        type: "novalue";
+                                                    };
+                                                    qualifiers: {
+                                                        property: {
+                                                            id: string;
+                                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                        };
+                                                        value: {
+                                                            type: "value";
+                                                            content: any;
+                                                        } | {
+                                                            type: "somevalue";
+                                                        } | {
+                                                            type: "novalue";
+                                                        };
+                                                    }[];
+                                                    references: {
+                                                        parts: {
+                                                            property: {
+                                                                id: string;
+                                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                            };
+                                                            value: {
+                                                                type: "value";
+                                                                content: any;
+                                                            } | {
+                                                                type: "somevalue";
+                                                            } | {
+                                                                type: "novalue";
+                                                            };
+                                                        }[];
+                                                        hash: string;
+                                                    }[];
+                                                    rezics: {
+                                                        release: string;
+                                                        revision: number;
+                                                    };
+                                                }[];
+                                                related: Record<string, {
+                                                    id: string;
+                                                    type: string;
+                                                    types: string[];
+                                                    label: {
+                                                        value: string;
+                                                        language: string;
+                                                    } | null;
+                                                    creativeWork: boolean;
+                                                    cover: {
+                                                        media: string;
+                                                        width: number;
+                                                        height: number;
+                                                        placeholder: {
+                                                            thumbhash: string;
+                                                            color: string;
+                                                        };
+                                                        variants: {
+                                                            format: "avif" | "webp";
+                                                            width: number;
+                                                        }[];
+                                                        focalPoint: {
+                                                            x: number;
+                                                            y: number;
+                                                        } | null;
+                                                        credit: {
+                                                            rightsHolder: string;
+                                                            via: {
+                                                                name: string;
+                                                                url: string;
+                                                            };
+                                                            license: string;
+                                                            obligations: string[];
+                                                        };
+                                                    } | null;
+                                                }>;
+                                            };
+                                            'wdt:P162': {
+                                                state: "unsupported";
+                                            } | {
+                                                state: "withheld";
+                                            } | {
+                                                state: "missing";
+                                            } | {
+                                                state: "unavailable";
+                                            } | {
+                                                state: "available";
+                                                statements: {
+                                                    id: string;
+                                                    rank: "deprecated" | "normal" | "preferred";
+                                                    property: {
+                                                        id: string;
+                                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                    };
+                                                    value: {
+                                                        type: "value";
+                                                        content: any;
+                                                    } | {
+                                                        type: "somevalue";
+                                                    } | {
+                                                        type: "novalue";
+                                                    };
+                                                    qualifiers: {
+                                                        property: {
+                                                            id: string;
+                                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                        };
+                                                        value: {
+                                                            type: "value";
+                                                            content: any;
+                                                        } | {
+                                                            type: "somevalue";
+                                                        } | {
+                                                            type: "novalue";
+                                                        };
+                                                    }[];
+                                                    references: {
+                                                        parts: {
+                                                            property: {
+                                                                id: string;
+                                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                            };
+                                                            value: {
+                                                                type: "value";
+                                                                content: any;
+                                                            } | {
+                                                                type: "somevalue";
+                                                            } | {
+                                                                type: "novalue";
+                                                            };
+                                                        }[];
+                                                        hash: string;
+                                                    }[];
+                                                    rezics: {
+                                                        release: string;
+                                                        revision: number;
+                                                    };
+                                                }[];
+                                                related: Record<string, {
+                                                    id: string;
+                                                    type: string;
+                                                    types: string[];
+                                                    label: {
+                                                        value: string;
+                                                        language: string;
+                                                    } | null;
+                                                    creativeWork: boolean;
+                                                    cover: {
+                                                        media: string;
+                                                        width: number;
+                                                        height: number;
+                                                        placeholder: {
+                                                            thumbhash: string;
+                                                            color: string;
+                                                        };
+                                                        variants: {
+                                                            format: "avif" | "webp";
+                                                            width: number;
+                                                        }[];
+                                                        focalPoint: {
+                                                            x: number;
+                                                            y: number;
+                                                        } | null;
+                                                        credit: {
+                                                            rightsHolder: string;
+                                                            via: {
+                                                                name: string;
+                                                                url: string;
+                                                            };
+                                                            license: string;
+                                                            obligations: string[];
+                                                        };
+                                                    } | null;
+                                                }>;
+                                            };
+                                            'wdt:P2899': {
+                                                state: "unsupported";
+                                            } | {
+                                                state: "withheld";
+                                            } | {
+                                                state: "missing";
+                                            } | {
+                                                state: "unavailable";
+                                            } | {
+                                                state: "available";
+                                                statements: {
+                                                    id: string;
+                                                    rank: "deprecated" | "normal" | "preferred";
+                                                    property: {
+                                                        id: string;
+                                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                    };
+                                                    value: {
+                                                        type: "value";
+                                                        content: any;
+                                                    } | {
+                                                        type: "somevalue";
+                                                    } | {
+                                                        type: "novalue";
+                                                    };
+                                                    qualifiers: {
+                                                        property: {
+                                                            id: string;
+                                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                        };
+                                                        value: {
+                                                            type: "value";
+                                                            content: any;
+                                                        } | {
+                                                            type: "somevalue";
+                                                        } | {
+                                                            type: "novalue";
+                                                        };
+                                                    }[];
+                                                    references: {
+                                                        parts: {
+                                                            property: {
+                                                                id: string;
+                                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                            };
+                                                            value: {
+                                                                type: "value";
+                                                                content: any;
+                                                            } | {
+                                                                type: "somevalue";
+                                                            } | {
+                                                                type: "novalue";
+                                                            };
+                                                        }[];
+                                                        hash: string;
+                                                    }[];
+                                                    rezics: {
+                                                        release: string;
+                                                        revision: number;
+                                                    };
+                                                }[];
+                                                related: Record<string, {
+                                                    id: string;
+                                                    type: string;
+                                                    types: string[];
+                                                    label: {
+                                                        value: string;
+                                                        language: string;
+                                                    } | null;
+                                                    creativeWork: boolean;
+                                                    cover: {
+                                                        media: string;
+                                                        width: number;
+                                                        height: number;
+                                                        placeholder: {
+                                                            thumbhash: string;
+                                                            color: string;
+                                                        };
+                                                        variants: {
+                                                            format: "avif" | "webp";
+                                                            width: number;
+                                                        }[];
+                                                        focalPoint: {
+                                                            x: number;
+                                                            y: number;
+                                                        } | null;
+                                                        credit: {
+                                                            rightsHolder: string;
+                                                            via: {
+                                                                name: string;
+                                                                url: string;
+                                                            };
+                                                            license: string;
+                                                            obligations: string[];
+                                                        };
+                                                    } | null;
+                                                }>;
+                                            };
+                                        };
+                                    }[];
+                                };
                                 count?: {
                                     value: number;
                                     exact: boolean;
@@ -2802,6 +4361,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     target_seconds: 10;
                                     caught_up: boolean;
                                 };
+                                partial?: boolean;
                                 next: string | null;
                             };
                             308: {
@@ -5189,9 +6749,8 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
         spaceId: import("typebox").TOptional<import("typebox").TString>;
         ratingQuestionId: import("typebox").TOptional<import("typebox").TString>;
     }>;
-    transform: unknown;
     response: {
-        200: import("typebox").TObject<{
+        readonly 200: import("typebox").TObject<{
             feedItems: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TObject<{
                 id: import("typebox").TString;
                 occurredAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
@@ -5237,6 +6796,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             obligations: import("typebox").TArray<import("typebox").TString>;
                         }>;
                     }>, import("typebox").TNull]>;
+                    subjectReactions: import("typebox").TOptional<import("typebox").TObject<{
+                        target: import("typebox").TObject<{
+                            targetKind: import("typebox").TLiteral<"subject">;
+                            targetId: import("typebox").TString;
+                        }>;
+                        counts: import("typebox").TUnion<[import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"available">;
+                            values: import("typebox").TObject<{
+                                like: import("typebox").TOptional<import("typebox").TInteger>;
+                                love: import("typebox").TOptional<import("typebox").TInteger>;
+                                laugh: import("typebox").TOptional<import("typebox").TInteger>;
+                                insightful: import("typebox").TOptional<import("typebox").TInteger>;
+                                sad: import("typebox").TOptional<import("typebox").TInteger>;
+                            }>;
+                            asOf: import("typebox").TUnion<[import("typebox").TUnsafe<Readonly<{
+                                epoch: number;
+                                position: string;
+                            }>>, import("typebox").TNull]>;
+                        }>, import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"unavailable">;
+                        }>]>;
+                        viewer: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"available">;
+                            kind: import("typebox").TUnion<[import("typebox").TUnsafe<"insightful" | "laugh" | "like" | "love" | "sad">, import("typebox").TNull]>;
+                        }>, import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"unavailable">;
+                        }>]>>;
+                        action: import("typebox").TUnion<[import("typebox").TLiteral<"sign_in">, import("typebox").TLiteral<"allowed">, import("typebox").TLiteral<"denied">, import("typebox").TLiteral<"unavailable">]>;
+                    }>>;
                 }>;
                 destination: import("typebox").TObject<{
                     kind: import("typebox").TLiteral<"subject">;
@@ -5253,7 +6841,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     route: import("typebox").TInteger;
                     id: import("typebox").TString;
                 }>;
-                summary: import("typebox").TUnsafe<import("../search/discovery.ts").AccountDiscoverySummary>;
+                summary: import("typebox").TUnsafe<import("../search/discovery-api.ts").AccountDiscoverySummary>;
                 destination: import("typebox").TObject<{
                     kind: import("typebox").TLiteral<"account">;
                     id: import("typebox").TString;
@@ -5273,6 +6861,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     id: string;
                     title: string;
                     description: string | null;
+                    card: import("../library/collection-discovery-summaries.ts").PublicCollectionDiscoverySummary;
                 }>>;
                 destination: import("typebox").TObject<{
                     kind: import("typebox").TLiteral<"collection">;
@@ -5302,7 +6891,9 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         id: string;
                         title: string | null;
                     }> | null;
-                }> & Pick<import("./feed-contract.ts").FeedContentSummary, "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">>;
+                    source?: import("../search/review-context.ts").ReviewContextSource;
+                    searchContext?: import("../search/review-context.ts").SearchReviewContext;
+                }> & Pick<import("./feed-contract.ts").FeedContentSummary, "conversationActivity" | "reactionAdvice" | "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">>;
                 destination: import("typebox").TObject<{
                     kind: import("typebox").TLiteral<"thread">;
                     id: import("typebox").TString;
@@ -5327,6 +6918,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         id: string;
                         title: string | null;
                     }> | null;
+                    presentation?: import("../community/space-discovery-entry-contract.ts").SpaceEntryPresentation;
                 }>>;
                 destination: import("typebox").TObject<{
                     kind: import("typebox").TLiteral<"space">;
@@ -5379,6 +6971,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             obligations: import("typebox").TArray<import("typebox").TString>;
                         }>;
                     }>, import("typebox").TNull]>;
+                    subjectReactions: import("typebox").TOptional<import("typebox").TObject<{
+                        target: import("typebox").TObject<{
+                            targetKind: import("typebox").TLiteral<"subject">;
+                            targetId: import("typebox").TString;
+                        }>;
+                        counts: import("typebox").TUnion<[import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"available">;
+                            values: import("typebox").TObject<{
+                                like: import("typebox").TOptional<import("typebox").TInteger>;
+                                love: import("typebox").TOptional<import("typebox").TInteger>;
+                                laugh: import("typebox").TOptional<import("typebox").TInteger>;
+                                insightful: import("typebox").TOptional<import("typebox").TInteger>;
+                                sad: import("typebox").TOptional<import("typebox").TInteger>;
+                            }>;
+                            asOf: import("typebox").TUnion<[import("typebox").TUnsafe<Readonly<{
+                                epoch: number;
+                                position: string;
+                            }>>, import("typebox").TNull]>;
+                        }>, import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"unavailable">;
+                        }>]>;
+                        viewer: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"available">;
+                            kind: import("typebox").TUnion<[import("typebox").TUnsafe<"insightful" | "laugh" | "like" | "love" | "sad">, import("typebox").TNull]>;
+                        }>, import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"unavailable">;
+                        }>]>>;
+                        action: import("typebox").TUnion<[import("typebox").TLiteral<"sign_in">, import("typebox").TLiteral<"allowed">, import("typebox").TLiteral<"denied">, import("typebox").TLiteral<"unavailable">]>;
+                    }>>;
                 }>;
                 destination: import("typebox").TObject<{
                     kind: import("typebox").TLiteral<"subject">;
@@ -5417,7 +7038,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 structure: 'unverified';
                                 recording: Readonly<{
                                     state: 'supported';
-                                    inputRules: import("../library/progress-model.ts").ProgressInputRules;
+                                    inputRules: import("@rezics/progress").ProgressInputRules;
                                 } | {
                                     state: 'unsupported' | 'unavailable';
                                 }>;
@@ -5506,6 +7127,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             obligations: import("typebox").TArray<import("typebox").TString>;
                         }>;
                     }>, import("typebox").TNull]>;
+                    subjectReactions: import("typebox").TOptional<import("typebox").TObject<{
+                        target: import("typebox").TObject<{
+                            targetKind: import("typebox").TLiteral<"subject">;
+                            targetId: import("typebox").TString;
+                        }>;
+                        counts: import("typebox").TUnion<[import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"available">;
+                            values: import("typebox").TObject<{
+                                like: import("typebox").TOptional<import("typebox").TInteger>;
+                                love: import("typebox").TOptional<import("typebox").TInteger>;
+                                laugh: import("typebox").TOptional<import("typebox").TInteger>;
+                                insightful: import("typebox").TOptional<import("typebox").TInteger>;
+                                sad: import("typebox").TOptional<import("typebox").TInteger>;
+                            }>;
+                            asOf: import("typebox").TUnion<[import("typebox").TUnsafe<Readonly<{
+                                epoch: number;
+                                position: string;
+                            }>>, import("typebox").TNull]>;
+                        }>, import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"unavailable">;
+                        }>]>;
+                        viewer: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"available">;
+                            kind: import("typebox").TUnion<[import("typebox").TUnsafe<"insightful" | "laugh" | "like" | "love" | "sad">, import("typebox").TNull]>;
+                        }>, import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"unavailable">;
+                        }>]>>;
+                        action: import("typebox").TUnion<[import("typebox").TLiteral<"sign_in">, import("typebox").TLiteral<"allowed">, import("typebox").TLiteral<"denied">, import("typebox").TLiteral<"unavailable">]>;
+                    }>>;
                 }>;
                 destination: import("typebox").TObject<{
                     kind: import("typebox").TLiteral<"subject">;
@@ -5565,6 +7215,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     title: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                 }>;
             }>]>>;
+            viewerPersonalActions: import("typebox").TOptional<import("typebox").TUnsafe<import("../library/viewer-personal-actions.ts").ViewerPersonalActionsPage>>;
             next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
             asOf: import("typebox").TString;
             reactionsAsOf: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TUnsafe<Readonly<{
@@ -5577,7 +7228,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                 continue: import("typebox").TUnion<[import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"preparing">, import("typebox").TLiteral<"unavailable">, import("typebox").TLiteral<"not_requested">]>;
             }>;
         }>;
-        400: import("typebox").TObject<{
+        readonly 400: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
             status: import("typebox").TLiteral<number>;
@@ -5588,10 +7239,10 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
-        401: import("typebox").TObject<{
+        readonly 401: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
             status: import("typebox").TLiteral<number>;
@@ -5602,10 +7253,10 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
-        403: import("typebox").TObject<{
+        readonly 403: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
             status: import("typebox").TLiteral<number>;
@@ -5616,10 +7267,10 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
-        404: import("typebox").TObject<{
+        readonly 404: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
             status: import("typebox").TLiteral<number>;
@@ -5630,10 +7281,10 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
-        409: import("typebox").TObject<{
+        readonly 409: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
             status: import("typebox").TLiteral<number>;
@@ -5644,10 +7295,10 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
-        422: import("typebox").TObject<{
+        readonly 422: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
             status: import("typebox").TLiteral<number>;
@@ -5658,10 +7309,10 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
-        503: import("typebox").TObject<{
+        readonly 503: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
             status: import("typebox").TLiteral<number>;
@@ -5672,7 +7323,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
     };
@@ -5685,7 +7336,13 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
         } | {
             bearerAuth: never[];
         })[];
+        'x-resource-types'?: readonly string[];
+        'x-replay-authorization'?: "self-account-read";
+        'x-authority-anchor'?: "own-account";
+        'x-authority-resource-types'?: readonly string[];
+        'x-rate-limit'?: import("../http/rate-limit.ts").RateLimitDeclaration;
     };
+    transform: unknown;
 }, {}, "/v1/feedItems">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ actor, query, admission, job, request }: {
     server: import("elysia").Server | null;
     redirect: import("elysia").redirect;
@@ -5696,7 +7353,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
         redirect?: never;
     };
     status: import("elysia").SelectiveStatus<{
-        200: {
+        readonly 200: {
             feedItems: ({
                 id: string;
                 occurredAt: string | null;
@@ -5742,6 +7399,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             obligations: string[];
                         };
                     } | null;
+                    subjectReactions?: {
+                        target: {
+                            targetKind: "subject";
+                            targetId: string;
+                        };
+                        counts: {
+                            state: "available";
+                            values: {
+                                like?: number;
+                                love?: number;
+                                laugh?: number;
+                                insightful?: number;
+                                sad?: number;
+                            };
+                            asOf: Readonly<{
+                                epoch: number;
+                                position: string;
+                            }> | null;
+                        } | {
+                            state: "unavailable";
+                        };
+                        viewer?: {
+                            state: "available";
+                            kind: "insightful" | "laugh" | "like" | "love" | "sad" | null;
+                        } | {
+                            state: "unavailable";
+                        };
+                        action: "allowed" | "denied" | "sign_in" | "unavailable";
+                    };
                 };
                 destination: {
                     kind: "subject";
@@ -5758,7 +7444,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     route: number;
                     id: string;
                 };
-                summary: import("../search/discovery.ts").AccountDiscoverySummary;
+                summary: import("../search/discovery-api.ts").AccountDiscoverySummary;
                 destination: {
                     kind: "account";
                     id: string;
@@ -5778,6 +7464,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     id: string;
                     title: string;
                     description: string | null;
+                    card: import("../library/collection-discovery-summaries.ts").PublicCollectionDiscoverySummary;
                 }>;
                 destination: {
                     kind: "collection";
@@ -5807,7 +7494,9 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         id: string;
                         title: string | null;
                     }> | null;
-                }> & Pick<import("./feed-contract.ts").FeedContentSummary, "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">;
+                    source?: import("../search/review-context.ts").ReviewContextSource;
+                    searchContext?: import("../search/review-context.ts").SearchReviewContext;
+                }> & Pick<import("./feed-contract.ts").FeedContentSummary, "conversationActivity" | "reactionAdvice" | "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">;
                 destination: {
                     kind: "thread";
                     id: string;
@@ -5832,6 +7521,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         id: string;
                         title: string | null;
                     }> | null;
+                    presentation?: import("../community/space-discovery-entry-contract.ts").SpaceEntryPresentation;
                 }>;
                 destination: {
                     kind: "space";
@@ -5884,6 +7574,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             obligations: string[];
                         };
                     } | null;
+                    subjectReactions?: {
+                        target: {
+                            targetKind: "subject";
+                            targetId: string;
+                        };
+                        counts: {
+                            state: "available";
+                            values: {
+                                like?: number;
+                                love?: number;
+                                laugh?: number;
+                                insightful?: number;
+                                sad?: number;
+                            };
+                            asOf: Readonly<{
+                                epoch: number;
+                                position: string;
+                            }> | null;
+                        } | {
+                            state: "unavailable";
+                        };
+                        viewer?: {
+                            state: "available";
+                            kind: "insightful" | "laugh" | "like" | "love" | "sad" | null;
+                        } | {
+                            state: "unavailable";
+                        };
+                        action: "allowed" | "denied" | "sign_in" | "unavailable";
+                    };
                 };
                 destination: {
                     kind: "subject";
@@ -5922,7 +7641,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 structure: 'unverified';
                                 recording: Readonly<{
                                     state: 'supported';
-                                    inputRules: import("../library/progress-model.ts").ProgressInputRules;
+                                    inputRules: import("@rezics/progress").ProgressInputRules;
                                 } | {
                                     state: 'unsupported' | 'unavailable';
                                 }>;
@@ -6011,6 +7730,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             obligations: string[];
                         };
                     } | null;
+                    subjectReactions?: {
+                        target: {
+                            targetKind: "subject";
+                            targetId: string;
+                        };
+                        counts: {
+                            state: "available";
+                            values: {
+                                like?: number;
+                                love?: number;
+                                laugh?: number;
+                                insightful?: number;
+                                sad?: number;
+                            };
+                            asOf: Readonly<{
+                                epoch: number;
+                                position: string;
+                            }> | null;
+                        } | {
+                            state: "unavailable";
+                        };
+                        viewer?: {
+                            state: "available";
+                            kind: "insightful" | "laugh" | "like" | "love" | "sad" | null;
+                        } | {
+                            state: "unavailable";
+                        };
+                        action: "allowed" | "denied" | "sign_in" | "unavailable";
+                    };
                 };
                 destination: {
                     kind: "subject";
@@ -6070,6 +7818,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     title: string | null;
                 };
             })[];
+            viewerPersonalActions?: import("../library/viewer-personal-actions.ts").ViewerPersonalActionsPage;
             next: string | null;
             asOf: string;
             reactionsAsOf?: Readonly<{
@@ -6082,7 +7831,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                 continue: "not_requested" | "preparing" | "ready" | "unavailable";
             };
         };
-        400: {
+        readonly 400: {
             type: unknown;
             title: unknown;
             status: number;
@@ -6093,7 +7842,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             detail: unknown;
             errors: unknown;
         };
-        401: {
+        readonly 401: {
             type: unknown;
             title: unknown;
             status: number;
@@ -6104,7 +7853,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             detail: unknown;
             errors: unknown;
         };
-        403: {
+        readonly 403: {
             type: unknown;
             title: unknown;
             status: number;
@@ -6115,7 +7864,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             detail: unknown;
             errors: unknown;
         };
-        404: {
+        readonly 404: {
             type: unknown;
             title: unknown;
             status: number;
@@ -6126,7 +7875,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             detail: unknown;
             errors: unknown;
         };
-        409: {
+        readonly 409: {
             type: unknown;
             title: unknown;
             status: number;
@@ -6137,7 +7886,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             detail: unknown;
             errors: unknown;
         };
-        422: {
+        readonly 422: {
             type: unknown;
             title: unknown;
             status: number;
@@ -6148,7 +7897,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             detail: unknown;
             errors: unknown;
         };
-        503: {
+        readonly 503: {
             type: unknown;
             title: unknown;
             status: number;
@@ -6161,7 +7910,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
         };
     }>;
     problem: import("elysia").SelectiveProblem<{
-        200: {
+        readonly 200: {
             feedItems: ({
                 id: string;
                 occurredAt: string | null;
@@ -6207,6 +7956,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             obligations: string[];
                         };
                     } | null;
+                    subjectReactions?: {
+                        target: {
+                            targetKind: "subject";
+                            targetId: string;
+                        };
+                        counts: {
+                            state: "available";
+                            values: {
+                                like?: number;
+                                love?: number;
+                                laugh?: number;
+                                insightful?: number;
+                                sad?: number;
+                            };
+                            asOf: Readonly<{
+                                epoch: number;
+                                position: string;
+                            }> | null;
+                        } | {
+                            state: "unavailable";
+                        };
+                        viewer?: {
+                            state: "available";
+                            kind: "insightful" | "laugh" | "like" | "love" | "sad" | null;
+                        } | {
+                            state: "unavailable";
+                        };
+                        action: "allowed" | "denied" | "sign_in" | "unavailable";
+                    };
                 };
                 destination: {
                     kind: "subject";
@@ -6223,7 +8001,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     route: number;
                     id: string;
                 };
-                summary: import("../search/discovery.ts").AccountDiscoverySummary;
+                summary: import("../search/discovery-api.ts").AccountDiscoverySummary;
                 destination: {
                     kind: "account";
                     id: string;
@@ -6243,6 +8021,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     id: string;
                     title: string;
                     description: string | null;
+                    card: import("../library/collection-discovery-summaries.ts").PublicCollectionDiscoverySummary;
                 }>;
                 destination: {
                     kind: "collection";
@@ -6272,7 +8051,9 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         id: string;
                         title: string | null;
                     }> | null;
-                }> & Pick<import("./feed-contract.ts").FeedContentSummary, "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">;
+                    source?: import("../search/review-context.ts").ReviewContextSource;
+                    searchContext?: import("../search/review-context.ts").SearchReviewContext;
+                }> & Pick<import("./feed-contract.ts").FeedContentSummary, "conversationActivity" | "reactionAdvice" | "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">;
                 destination: {
                     kind: "thread";
                     id: string;
@@ -6297,6 +8078,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         id: string;
                         title: string | null;
                     }> | null;
+                    presentation?: import("../community/space-discovery-entry-contract.ts").SpaceEntryPresentation;
                 }>;
                 destination: {
                     kind: "space";
@@ -6349,6 +8131,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             obligations: string[];
                         };
                     } | null;
+                    subjectReactions?: {
+                        target: {
+                            targetKind: "subject";
+                            targetId: string;
+                        };
+                        counts: {
+                            state: "available";
+                            values: {
+                                like?: number;
+                                love?: number;
+                                laugh?: number;
+                                insightful?: number;
+                                sad?: number;
+                            };
+                            asOf: Readonly<{
+                                epoch: number;
+                                position: string;
+                            }> | null;
+                        } | {
+                            state: "unavailable";
+                        };
+                        viewer?: {
+                            state: "available";
+                            kind: "insightful" | "laugh" | "like" | "love" | "sad" | null;
+                        } | {
+                            state: "unavailable";
+                        };
+                        action: "allowed" | "denied" | "sign_in" | "unavailable";
+                    };
                 };
                 destination: {
                     kind: "subject";
@@ -6387,7 +8198,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 structure: 'unverified';
                                 recording: Readonly<{
                                     state: 'supported';
-                                    inputRules: import("../library/progress-model.ts").ProgressInputRules;
+                                    inputRules: import("@rezics/progress").ProgressInputRules;
                                 } | {
                                     state: 'unsupported' | 'unavailable';
                                 }>;
@@ -6476,6 +8287,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             obligations: string[];
                         };
                     } | null;
+                    subjectReactions?: {
+                        target: {
+                            targetKind: "subject";
+                            targetId: string;
+                        };
+                        counts: {
+                            state: "available";
+                            values: {
+                                like?: number;
+                                love?: number;
+                                laugh?: number;
+                                insightful?: number;
+                                sad?: number;
+                            };
+                            asOf: Readonly<{
+                                epoch: number;
+                                position: string;
+                            }> | null;
+                        } | {
+                            state: "unavailable";
+                        };
+                        viewer?: {
+                            state: "available";
+                            kind: "insightful" | "laugh" | "like" | "love" | "sad" | null;
+                        } | {
+                            state: "unavailable";
+                        };
+                        action: "allowed" | "denied" | "sign_in" | "unavailable";
+                    };
                 };
                 destination: {
                     kind: "subject";
@@ -6535,6 +8375,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     title: string | null;
                 };
             })[];
+            viewerPersonalActions?: import("../library/viewer-personal-actions.ts").ViewerPersonalActionsPage;
             next: string | null;
             asOf: string;
             reactionsAsOf?: Readonly<{
@@ -6547,7 +8388,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                 continue: "not_requested" | "preparing" | "ready" | "unavailable";
             };
         };
-        400: {
+        readonly 400: {
             type: unknown;
             title: unknown;
             status: number;
@@ -6558,7 +8399,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             detail: unknown;
             errors: unknown;
         };
-        401: {
+        readonly 401: {
             type: unknown;
             title: unknown;
             status: number;
@@ -6569,7 +8410,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             detail: unknown;
             errors: unknown;
         };
-        403: {
+        readonly 403: {
             type: unknown;
             title: unknown;
             status: number;
@@ -6580,7 +8421,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             detail: unknown;
             errors: unknown;
         };
-        404: {
+        readonly 404: {
             type: unknown;
             title: unknown;
             status: number;
@@ -6591,7 +8432,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             detail: unknown;
             errors: unknown;
         };
-        409: {
+        readonly 409: {
             type: unknown;
             title: unknown;
             status: number;
@@ -6602,7 +8443,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             detail: unknown;
             errors: unknown;
         };
-        422: {
+        readonly 422: {
             type: unknown;
             title: unknown;
             status: number;
@@ -6613,7 +8454,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             detail: unknown;
             errors: unknown;
         };
-        503: {
+        readonly 503: {
             type: unknown;
             title: unknown;
             status: number;
@@ -6634,9 +8475,8 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             spaceId: import("typebox").TOptional<import("typebox").TString>;
             ratingQuestionId: import("typebox").TOptional<import("typebox").TString>;
         }>;
-        transform: unknown;
         response: {
-            200: import("typebox").TObject<{
+            readonly 200: import("typebox").TObject<{
                 feedItems: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TObject<{
                     id: import("typebox").TString;
                     occurredAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
@@ -6682,6 +8522,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 obligations: import("typebox").TArray<import("typebox").TString>;
                             }>;
                         }>, import("typebox").TNull]>;
+                        subjectReactions: import("typebox").TOptional<import("typebox").TObject<{
+                            target: import("typebox").TObject<{
+                                targetKind: import("typebox").TLiteral<"subject">;
+                                targetId: import("typebox").TString;
+                            }>;
+                            counts: import("typebox").TUnion<[import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"available">;
+                                values: import("typebox").TObject<{
+                                    like: import("typebox").TOptional<import("typebox").TInteger>;
+                                    love: import("typebox").TOptional<import("typebox").TInteger>;
+                                    laugh: import("typebox").TOptional<import("typebox").TInteger>;
+                                    insightful: import("typebox").TOptional<import("typebox").TInteger>;
+                                    sad: import("typebox").TOptional<import("typebox").TInteger>;
+                                }>;
+                                asOf: import("typebox").TUnion<[import("typebox").TUnsafe<Readonly<{
+                                    epoch: number;
+                                    position: string;
+                                }>>, import("typebox").TNull]>;
+                            }>, import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"unavailable">;
+                            }>]>;
+                            viewer: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"available">;
+                                kind: import("typebox").TUnion<[import("typebox").TUnsafe<"insightful" | "laugh" | "like" | "love" | "sad">, import("typebox").TNull]>;
+                            }>, import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"unavailable">;
+                            }>]>>;
+                            action: import("typebox").TUnion<[import("typebox").TLiteral<"sign_in">, import("typebox").TLiteral<"allowed">, import("typebox").TLiteral<"denied">, import("typebox").TLiteral<"unavailable">]>;
+                        }>>;
                     }>;
                     destination: import("typebox").TObject<{
                         kind: import("typebox").TLiteral<"subject">;
@@ -6698,7 +8567,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         route: import("typebox").TInteger;
                         id: import("typebox").TString;
                     }>;
-                    summary: import("typebox").TUnsafe<import("../search/discovery.ts").AccountDiscoverySummary>;
+                    summary: import("typebox").TUnsafe<import("../search/discovery-api.ts").AccountDiscoverySummary>;
                     destination: import("typebox").TObject<{
                         kind: import("typebox").TLiteral<"account">;
                         id: import("typebox").TString;
@@ -6718,6 +8587,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         id: string;
                         title: string;
                         description: string | null;
+                        card: import("../library/collection-discovery-summaries.ts").PublicCollectionDiscoverySummary;
                     }>>;
                     destination: import("typebox").TObject<{
                         kind: import("typebox").TLiteral<"collection">;
@@ -6747,7 +8617,12 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             id: string;
                             title: string | null;
                         }> | null;
-                    }> & Pick<import("./feed-contract.ts").FeedContentSummary, "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">>;
+                        source?: Readonly<{
+                            openingRevisionId: string;
+                            sourceVersion: string;
+                        }>;
+                        searchContext?: import("../search/review-context.ts").SearchReviewContext;
+                    }> & Pick<import("./feed-contract.ts").FeedContentSummary, "conversationActivity" | "reactionAdvice" | "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">>;
                     destination: import("typebox").TObject<{
                         kind: import("typebox").TLiteral<"thread">;
                         id: import("typebox").TString;
@@ -6772,6 +8647,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             id: string;
                             title: string | null;
                         }> | null;
+                        presentation?: import("../community/space-discovery-entry-contract.ts").SpaceEntryPresentation;
                     }>>;
                     destination: import("typebox").TObject<{
                         kind: import("typebox").TLiteral<"space">;
@@ -6824,6 +8700,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 obligations: import("typebox").TArray<import("typebox").TString>;
                             }>;
                         }>, import("typebox").TNull]>;
+                        subjectReactions: import("typebox").TOptional<import("typebox").TObject<{
+                            target: import("typebox").TObject<{
+                                targetKind: import("typebox").TLiteral<"subject">;
+                                targetId: import("typebox").TString;
+                            }>;
+                            counts: import("typebox").TUnion<[import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"available">;
+                                values: import("typebox").TObject<{
+                                    like: import("typebox").TOptional<import("typebox").TInteger>;
+                                    love: import("typebox").TOptional<import("typebox").TInteger>;
+                                    laugh: import("typebox").TOptional<import("typebox").TInteger>;
+                                    insightful: import("typebox").TOptional<import("typebox").TInteger>;
+                                    sad: import("typebox").TOptional<import("typebox").TInteger>;
+                                }>;
+                                asOf: import("typebox").TUnion<[import("typebox").TUnsafe<Readonly<{
+                                    epoch: number;
+                                    position: string;
+                                }>>, import("typebox").TNull]>;
+                            }>, import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"unavailable">;
+                            }>]>;
+                            viewer: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"available">;
+                                kind: import("typebox").TUnion<[import("typebox").TUnsafe<"insightful" | "laugh" | "like" | "love" | "sad">, import("typebox").TNull]>;
+                            }>, import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"unavailable">;
+                            }>]>>;
+                            action: import("typebox").TUnion<[import("typebox").TLiteral<"sign_in">, import("typebox").TLiteral<"allowed">, import("typebox").TLiteral<"denied">, import("typebox").TLiteral<"unavailable">]>;
+                        }>>;
                     }>;
                     destination: import("typebox").TObject<{
                         kind: import("typebox").TLiteral<"subject">;
@@ -6862,7 +8767,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     structure: 'unverified';
                                     recording: Readonly<{
                                         state: 'supported';
-                                        inputRules: import("../library/progress-model.ts").ProgressInputRules;
+                                        inputRules: import("@rezics/progress").ProgressInputRules;
                                     } | {
                                         state: 'unsupported' | 'unavailable';
                                     }>;
@@ -6951,6 +8856,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 obligations: import("typebox").TArray<import("typebox").TString>;
                             }>;
                         }>, import("typebox").TNull]>;
+                        subjectReactions: import("typebox").TOptional<import("typebox").TObject<{
+                            target: import("typebox").TObject<{
+                                targetKind: import("typebox").TLiteral<"subject">;
+                                targetId: import("typebox").TString;
+                            }>;
+                            counts: import("typebox").TUnion<[import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"available">;
+                                values: import("typebox").TObject<{
+                                    like: import("typebox").TOptional<import("typebox").TInteger>;
+                                    love: import("typebox").TOptional<import("typebox").TInteger>;
+                                    laugh: import("typebox").TOptional<import("typebox").TInteger>;
+                                    insightful: import("typebox").TOptional<import("typebox").TInteger>;
+                                    sad: import("typebox").TOptional<import("typebox").TInteger>;
+                                }>;
+                                asOf: import("typebox").TUnion<[import("typebox").TUnsafe<Readonly<{
+                                    epoch: number;
+                                    position: string;
+                                }>>, import("typebox").TNull]>;
+                            }>, import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"unavailable">;
+                            }>]>;
+                            viewer: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"available">;
+                                kind: import("typebox").TUnion<[import("typebox").TUnsafe<"insightful" | "laugh" | "like" | "love" | "sad">, import("typebox").TNull]>;
+                            }>, import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"unavailable">;
+                            }>]>>;
+                            action: import("typebox").TUnion<[import("typebox").TLiteral<"sign_in">, import("typebox").TLiteral<"allowed">, import("typebox").TLiteral<"denied">, import("typebox").TLiteral<"unavailable">]>;
+                        }>>;
                     }>;
                     destination: import("typebox").TObject<{
                         kind: import("typebox").TLiteral<"subject">;
@@ -7010,6 +8944,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         title: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                     }>;
                 }>]>>;
+                viewerPersonalActions: import("typebox").TOptional<import("typebox").TUnsafe<import("../library/viewer-personal-actions.ts").ViewerPersonalActionsPage>>;
                 next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                 asOf: import("typebox").TString;
                 reactionsAsOf: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TUnsafe<Readonly<{
@@ -7022,7 +8957,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     continue: import("typebox").TUnion<[import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"preparing">, import("typebox").TLiteral<"unavailable">, import("typebox").TLiteral<"not_requested">]>;
                 }>;
             }>;
-            400: import("typebox").TObject<{
+            readonly 400: import("typebox").TObject<{
                 type: import("typebox").TSchema;
                 title: import("typebox").TSchema;
                 status: import("typebox").TLiteral<number>;
@@ -7033,10 +8968,10 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
-            401: import("typebox").TObject<{
+            readonly 401: import("typebox").TObject<{
                 type: import("typebox").TSchema;
                 title: import("typebox").TSchema;
                 status: import("typebox").TLiteral<number>;
@@ -7047,10 +8982,10 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
-            403: import("typebox").TObject<{
+            readonly 403: import("typebox").TObject<{
                 type: import("typebox").TSchema;
                 title: import("typebox").TSchema;
                 status: import("typebox").TLiteral<number>;
@@ -7061,10 +8996,10 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
-            404: import("typebox").TObject<{
+            readonly 404: import("typebox").TObject<{
                 type: import("typebox").TSchema;
                 title: import("typebox").TSchema;
                 status: import("typebox").TLiteral<number>;
@@ -7075,10 +9010,10 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
-            409: import("typebox").TObject<{
+            readonly 409: import("typebox").TObject<{
                 type: import("typebox").TSchema;
                 title: import("typebox").TSchema;
                 status: import("typebox").TLiteral<number>;
@@ -7089,10 +9024,10 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
-            422: import("typebox").TObject<{
+            readonly 422: import("typebox").TObject<{
                 type: import("typebox").TSchema;
                 title: import("typebox").TSchema;
                 status: import("typebox").TLiteral<number>;
@@ -7103,10 +9038,10 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
-            503: import("typebox").TObject<{
+            readonly 503: import("typebox").TObject<{
                 type: import("typebox").TSchema;
                 title: import("typebox").TSchema;
                 status: import("typebox").TLiteral<number>;
@@ -7117,7 +9052,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
         };
@@ -7130,7 +9065,13 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             } | {
                 bearerAuth: never[];
             })[];
+            'x-resource-types'?: readonly string[];
+            'x-replay-authorization'?: "self-account-read";
+            'x-authority-anchor'?: "own-account";
+            'x-authority-resource-types'?: readonly string[];
+            'x-rate-limit'?: import("../http/rate-limit.ts").RateLimitDeclaration;
         };
+        transform: unknown;
     }, {}, "/v1/feedItems">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
         derive: {
             readonly admission: import("../http/admission.ts").Admission;
@@ -7226,6 +9167,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     obligations: string[];
                 };
             } | null;
+            subjectReactions?: {
+                target: {
+                    targetKind: "subject";
+                    targetId: string;
+                };
+                counts: {
+                    state: "available";
+                    values: {
+                        like?: number;
+                        love?: number;
+                        laugh?: number;
+                        insightful?: number;
+                        sad?: number;
+                    };
+                    asOf: Readonly<{
+                        epoch: number;
+                        position: string;
+                    }> | null;
+                } | {
+                    state: "unavailable";
+                };
+                viewer?: {
+                    state: "available";
+                    kind: "insightful" | "laugh" | "like" | "love" | "sad" | null;
+                } | {
+                    state: "unavailable";
+                };
+                action: "allowed" | "denied" | "sign_in" | "unavailable";
+            };
         };
         destination: {
             kind: "subject";
@@ -7242,7 +9212,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             route: number;
             id: string;
         };
-        summary: import("../search/discovery.ts").AccountDiscoverySummary;
+        summary: import("../search/discovery-api.ts").AccountDiscoverySummary;
         destination: {
             kind: "account";
             id: string;
@@ -7262,6 +9232,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             id: string;
             title: string;
             description: string | null;
+            card: import("../library/collection-discovery-summaries.ts").PublicCollectionDiscoverySummary;
         }>;
         destination: {
             kind: "collection";
@@ -7291,7 +9262,9 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                 id: string;
                 title: string | null;
             }> | null;
-        }> & Pick<import("./feed-contract.ts").FeedContentSummary, "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">;
+            source?: import("../search/review-context.ts").ReviewContextSource;
+            searchContext?: import("../search/review-context.ts").SearchReviewContext;
+        }> & Pick<import("./feed-contract.ts").FeedContentSummary, "conversationActivity" | "reactionAdvice" | "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">;
         destination: {
             kind: "thread";
             id: string;
@@ -7316,6 +9289,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                 id: string;
                 title: string | null;
             }> | null;
+            presentation?: import("../community/space-discovery-entry-contract.ts").SpaceEntryPresentation;
         }>;
         destination: {
             kind: "space";
@@ -7368,6 +9342,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     obligations: string[];
                 };
             } | null;
+            subjectReactions?: {
+                target: {
+                    targetKind: "subject";
+                    targetId: string;
+                };
+                counts: {
+                    state: "available";
+                    values: {
+                        like?: number;
+                        love?: number;
+                        laugh?: number;
+                        insightful?: number;
+                        sad?: number;
+                    };
+                    asOf: Readonly<{
+                        epoch: number;
+                        position: string;
+                    }> | null;
+                } | {
+                    state: "unavailable";
+                };
+                viewer?: {
+                    state: "available";
+                    kind: "insightful" | "laugh" | "like" | "love" | "sad" | null;
+                } | {
+                    state: "unavailable";
+                };
+                action: "allowed" | "denied" | "sign_in" | "unavailable";
+            };
         };
         destination: {
             kind: "subject";
@@ -7406,7 +9409,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         structure: 'unverified';
                         recording: Readonly<{
                             state: 'supported';
-                            inputRules: import("../library/progress-model.ts").ProgressInputRules;
+                            inputRules: import("@rezics/progress").ProgressInputRules;
                         } | {
                             state: 'unsupported' | 'unavailable';
                         }>;
@@ -7495,6 +9498,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     obligations: string[];
                 };
             } | null;
+            subjectReactions?: {
+                target: {
+                    targetKind: "subject";
+                    targetId: string;
+                };
+                counts: {
+                    state: "available";
+                    values: {
+                        like?: number;
+                        love?: number;
+                        laugh?: number;
+                        insightful?: number;
+                        sad?: number;
+                    };
+                    asOf: Readonly<{
+                        epoch: number;
+                        position: string;
+                    }> | null;
+                } | {
+                    state: "unavailable";
+                };
+                viewer?: {
+                    state: "available";
+                    kind: "insightful" | "laugh" | "like" | "love" | "sad" | null;
+                } | {
+                    state: "unavailable";
+                };
+                action: "allowed" | "denied" | "sign_in" | "unavailable";
+            };
         };
         destination: {
             kind: "subject";
@@ -7554,6 +9586,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             title: string | null;
         };
     })[];
+    viewerPersonalActions?: import("../library/viewer-personal-actions.ts").ViewerPersonalActionsPage;
     next: string | null;
     asOf: string;
     reactionsAsOf?: Readonly<{
@@ -7574,1450 +9607,8 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
         spaceId: import("typebox").TOptional<import("typebox").TString>;
         ratingQuestionId: import("typebox").TOptional<import("typebox").TString>;
     }>;
-    transform: ({ request, set }: Omit<{
-        server: import("elysia").Server | null;
-        redirect: import("elysia").redirect;
-        set: {
-            headers: import("elysia").HTTPHeaders;
-            status?: number | keyof import("elysia").StatusMap;
-            cookie?: Record<string, import("elysia").BaseCookie>;
-            redirect?: never;
-        };
-        status: import("elysia").SelectiveStatus<{
-            200: {
-                feedItems: ({
-                    id: string;
-                    occurredAt: string | null;
-                    source: "discovery";
-                    key: {
-                        owner: "semantic";
-                        kind: string;
-                        route: number;
-                        id: string;
-                    };
-                    summary: {
-                        id: string;
-                        type: string;
-                        types: string[];
-                        label: {
-                            value: string;
-                            language: string;
-                        } | null;
-                        creativeWork: boolean;
-                        cover: {
-                            media: string;
-                            width: number;
-                            height: number;
-                            placeholder: {
-                                thumbhash: string;
-                                color: string;
-                            };
-                            variants: {
-                                format: "avif" | "webp";
-                                width: number;
-                            }[];
-                            focalPoint: {
-                                x: number;
-                                y: number;
-                            } | null;
-                            credit: {
-                                rightsHolder: string;
-                                via: {
-                                    name: string;
-                                    url: string;
-                                };
-                                license: string;
-                                obligations: string[];
-                            };
-                        } | null;
-                    };
-                    destination: {
-                        kind: "subject";
-                        id: string;
-                        title: string | null;
-                    };
-                } | {
-                    id: string;
-                    occurredAt: string | null;
-                    source: "discovery";
-                    key: {
-                        owner: "accounts";
-                        kind: "account";
-                        route: number;
-                        id: string;
-                    };
-                    summary: import("../search/discovery.ts").AccountDiscoverySummary;
-                    destination: {
-                        kind: "account";
-                        id: string;
-                        title: string | null;
-                    };
-                } | {
-                    id: string;
-                    occurredAt: string | null;
-                    source: "discovery";
-                    key: {
-                        owner: "commerce";
-                        kind: "collection";
-                        route: number;
-                        id: string;
-                    };
-                    summary: Readonly<{
-                        id: string;
-                        title: string;
-                        description: string | null;
-                    }>;
-                    destination: {
-                        kind: "collection";
-                        id: string;
-                        title: string | null;
-                    };
-                } | {
-                    id: string;
-                    occurredAt: string | null;
-                    source: "discovery";
-                    key: {
-                        owner: "content";
-                        kind: "review";
-                        route: number;
-                        id: string;
-                    };
-                    summary: Readonly<{
-                        id: string;
-                        kind: 'review';
-                        title: string | null;
-                        author?: Readonly<{
-                            displayName: string | null;
-                            handle: string | null;
-                        }>;
-                        excerpt?: string;
-                        subject?: Readonly<{
-                            id: string;
-                            title: string | null;
-                        }> | null;
-                    }> & Pick<import("./feed-contract.ts").FeedContentSummary, "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">;
-                    destination: {
-                        kind: "thread";
-                        id: string;
-                        title: string | null;
-                    };
-                } | {
-                    id: string;
-                    occurredAt: string | null;
-                    source: "discovery";
-                    key: {
-                        owner: "content";
-                        kind: "space";
-                        route: number;
-                        id: string;
-                    };
-                    summary: Readonly<{
-                        id: string;
-                        title: string;
-                        address: string;
-                        summary?: string;
-                        realm?: Readonly<{
-                            id: string;
-                            title: string | null;
-                        }> | null;
-                    }>;
-                    destination: {
-                        kind: "space";
-                        id: string;
-                        title: string | null;
-                        address: string;
-                    };
-                } | {
-                    id: string;
-                    occurredAt: string | null;
-                    source: "continue";
-                    key: {
-                        owner: "semantic";
-                        kind: string;
-                        route: number;
-                        id: string;
-                    };
-                    summary: {
-                        id: string;
-                        type: string;
-                        types: string[];
-                        label: {
-                            value: string;
-                            language: string;
-                        } | null;
-                        creativeWork: boolean;
-                        cover: {
-                            media: string;
-                            width: number;
-                            height: number;
-                            placeholder: {
-                                thumbhash: string;
-                                color: string;
-                            };
-                            variants: {
-                                format: "avif" | "webp";
-                                width: number;
-                            }[];
-                            focalPoint: {
-                                x: number;
-                                y: number;
-                            } | null;
-                            credit: {
-                                rightsHolder: string;
-                                via: {
-                                    name: string;
-                                    url: string;
-                                };
-                                license: string;
-                                obligations: string[];
-                            };
-                        } | null;
-                    };
-                    destination: {
-                        kind: "subject";
-                        id: string;
-                        title: string | null;
-                    };
-                    continue: {
-                        subjectId: string;
-                        state: string | null;
-                        lastActivityAt: string;
-                        activeProgressSession: {
-                            id: string;
-                            subjectId: string;
-                            versionSubjectId: string | null;
-                            mode: "completed_units" | "cursor_position" | "scalar_amount";
-                            unit: string;
-                            total: string | null;
-                            amount: string | null;
-                            locator: string | null;
-                            position: string | null;
-                            completedUnitCount: number;
-                            state: "abandoned" | "active" | "completed" | "retired";
-                            revision: number;
-                            startedAt: string;
-                            completedAt: string | null;
-                            measures?: {
-                                unit: string;
-                                amount: string | null;
-                                total: string | null;
-                                presentation?: Readonly<{
-                                    meaning: 'known' | 'unknown' | 'unavailable';
-                                    unitLabel?: string;
-                                    unitLabelLanguage?: string;
-                                    unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
-                                    dimension?: string;
-                                    structure: 'unverified';
-                                    recording: Readonly<{
-                                        state: 'supported';
-                                        inputRules: import("../library/progress-model.ts").ProgressInputRules;
-                                    } | {
-                                        state: 'unsupported' | 'unavailable';
-                                    }>;
-                                }>;
-                            }[];
-                        } | null;
-                        subject?: {
-                            id: string;
-                            type: string;
-                            types: string[];
-                            label: {
-                                value: string;
-                                language: string;
-                            } | null;
-                            creativeWork: boolean;
-                            cover: {
-                                media: string;
-                                width: number;
-                                height: number;
-                                placeholder: {
-                                    thumbhash: string;
-                                    color: string;
-                                };
-                                variants: {
-                                    format: "avif" | "webp";
-                                    width: number;
-                                }[];
-                                focalPoint: {
-                                    x: number;
-                                    y: number;
-                                } | null;
-                                credit: {
-                                    rightsHolder: string;
-                                    via: {
-                                        name: string;
-                                        url: string;
-                                    };
-                                    license: string;
-                                    obligations: string[];
-                                };
-                            } | null;
-                        } | null;
-                    };
-                } | {
-                    id: string;
-                    occurredAt: string | null;
-                    source: "following";
-                    key: {
-                        owner: "semantic";
-                        kind: string;
-                        route: number;
-                        id: string;
-                    };
-                    summary: {
-                        id: string;
-                        type: string;
-                        types: string[];
-                        label: {
-                            value: string;
-                            language: string;
-                        } | null;
-                        creativeWork: boolean;
-                        cover: {
-                            media: string;
-                            width: number;
-                            height: number;
-                            placeholder: {
-                                thumbhash: string;
-                                color: string;
-                            };
-                            variants: {
-                                format: "avif" | "webp";
-                                width: number;
-                            }[];
-                            focalPoint: {
-                                x: number;
-                                y: number;
-                            } | null;
-                            credit: {
-                                rightsHolder: string;
-                                via: {
-                                    name: string;
-                                    url: string;
-                                };
-                                license: string;
-                                obligations: string[];
-                            };
-                        } | null;
-                    };
-                    destination: {
-                        kind: "subject";
-                        id: string;
-                        title: string | null;
-                    };
-                } | {
-                    id: string;
-                    occurredAt: string | null;
-                    source: "following";
-                    key: {
-                        owner: "content";
-                        kind: "thread";
-                        route: number;
-                        id: string;
-                    };
-                    summary: Pick<import("./reads.ts").ThreadView, "createdAt" | "id" | "kind" | "title"> & import("./feed-contract.ts").FeedContentSummary;
-                    destination: {
-                        kind: "thread";
-                        id: string;
-                        title: string | null;
-                    };
-                } | {
-                    id: string;
-                    occurredAt: string | null;
-                    source: "following";
-                    key: {
-                        owner: "content";
-                        kind: "post";
-                        route: number;
-                        id: string;
-                    };
-                    summary: Pick<import("./model.ts").ItemView, "createdAt" | "id" | "threadId"> & Pick<import("./reads.ts").ThreadView, "title"> & import("./feed-contract.ts").FeedContentSummary & {
-                        parentContext?: import("./model.ts").FeedParentContext;
-                    };
-                    destination: {
-                        kind: "post";
-                        id: string;
-                        title: string | null;
-                        threadId: string;
-                        postId: string;
-                    };
-                } | {
-                    id: string;
-                    occurredAt: string | null;
-                    source: "following";
-                    key: {
-                        owner: "library";
-                        kind: "collection";
-                        route: number;
-                        id: string;
-                    };
-                    summary: Pick<import("../library/collection-reads.ts").CollectionResourceView, "description" | "id" | "title">;
-                    destination: {
-                        kind: "collection";
-                        id: string;
-                        title: string | null;
-                    };
-                })[];
-                next: string | null;
-                asOf: string;
-                reactionsAsOf?: Readonly<{
-                    epoch: number;
-                    position: string;
-                }> | null;
-                sources: {
-                    discovery: "not_requested" | "preparing" | "ready" | "unavailable";
-                    following: "not_requested" | "preparing" | "ready" | "unavailable";
-                    continue: "not_requested" | "preparing" | "ready" | "unavailable";
-                };
-            };
-            400: {
-                type: unknown;
-                title: unknown;
-                status: number;
-                code: unknown;
-                retryable: unknown;
-                effect_status: "not_applicable" | "not_applied";
-                request_id: string;
-                detail: unknown;
-                errors: unknown;
-            };
-            401: {
-                type: unknown;
-                title: unknown;
-                status: number;
-                code: unknown;
-                retryable: unknown;
-                effect_status: "not_applicable" | "not_applied";
-                request_id: string;
-                detail: unknown;
-                errors: unknown;
-            };
-            403: {
-                type: unknown;
-                title: unknown;
-                status: number;
-                code: unknown;
-                retryable: unknown;
-                effect_status: "not_applicable" | "not_applied";
-                request_id: string;
-                detail: unknown;
-                errors: unknown;
-            };
-            404: {
-                type: unknown;
-                title: unknown;
-                status: number;
-                code: unknown;
-                retryable: unknown;
-                effect_status: "not_applicable" | "not_applied";
-                request_id: string;
-                detail: unknown;
-                errors: unknown;
-            };
-            409: {
-                type: unknown;
-                title: unknown;
-                status: number;
-                code: unknown;
-                retryable: unknown;
-                effect_status: "not_applicable" | "not_applied";
-                request_id: string;
-                detail: unknown;
-                errors: unknown;
-            };
-            422: {
-                type: unknown;
-                title: unknown;
-                status: number;
-                code: unknown;
-                retryable: unknown;
-                effect_status: "not_applicable" | "not_applied";
-                request_id: string;
-                detail: unknown;
-                errors: unknown;
-            };
-            503: {
-                type: unknown;
-                title: unknown;
-                status: number;
-                code: unknown;
-                retryable: unknown;
-                effect_status: "not_applicable" | "not_applied";
-                request_id: string;
-                detail: unknown;
-                errors: unknown;
-            };
-        }>;
-        problem: import("elysia").SelectiveProblem<{
-            200: {
-                feedItems: ({
-                    id: string;
-                    occurredAt: string | null;
-                    source: "discovery";
-                    key: {
-                        owner: "semantic";
-                        kind: string;
-                        route: number;
-                        id: string;
-                    };
-                    summary: {
-                        id: string;
-                        type: string;
-                        types: string[];
-                        label: {
-                            value: string;
-                            language: string;
-                        } | null;
-                        creativeWork: boolean;
-                        cover: {
-                            media: string;
-                            width: number;
-                            height: number;
-                            placeholder: {
-                                thumbhash: string;
-                                color: string;
-                            };
-                            variants: {
-                                format: "avif" | "webp";
-                                width: number;
-                            }[];
-                            focalPoint: {
-                                x: number;
-                                y: number;
-                            } | null;
-                            credit: {
-                                rightsHolder: string;
-                                via: {
-                                    name: string;
-                                    url: string;
-                                };
-                                license: string;
-                                obligations: string[];
-                            };
-                        } | null;
-                    };
-                    destination: {
-                        kind: "subject";
-                        id: string;
-                        title: string | null;
-                    };
-                } | {
-                    id: string;
-                    occurredAt: string | null;
-                    source: "discovery";
-                    key: {
-                        owner: "accounts";
-                        kind: "account";
-                        route: number;
-                        id: string;
-                    };
-                    summary: import("../search/discovery.ts").AccountDiscoverySummary;
-                    destination: {
-                        kind: "account";
-                        id: string;
-                        title: string | null;
-                    };
-                } | {
-                    id: string;
-                    occurredAt: string | null;
-                    source: "discovery";
-                    key: {
-                        owner: "commerce";
-                        kind: "collection";
-                        route: number;
-                        id: string;
-                    };
-                    summary: Readonly<{
-                        id: string;
-                        title: string;
-                        description: string | null;
-                    }>;
-                    destination: {
-                        kind: "collection";
-                        id: string;
-                        title: string | null;
-                    };
-                } | {
-                    id: string;
-                    occurredAt: string | null;
-                    source: "discovery";
-                    key: {
-                        owner: "content";
-                        kind: "review";
-                        route: number;
-                        id: string;
-                    };
-                    summary: Readonly<{
-                        id: string;
-                        kind: 'review';
-                        title: string | null;
-                        author?: Readonly<{
-                            displayName: string | null;
-                            handle: string | null;
-                        }>;
-                        excerpt?: string;
-                        subject?: Readonly<{
-                            id: string;
-                            title: string | null;
-                        }> | null;
-                    }> & Pick<import("./feed-contract.ts").FeedContentSummary, "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">;
-                    destination: {
-                        kind: "thread";
-                        id: string;
-                        title: string | null;
-                    };
-                } | {
-                    id: string;
-                    occurredAt: string | null;
-                    source: "discovery";
-                    key: {
-                        owner: "content";
-                        kind: "space";
-                        route: number;
-                        id: string;
-                    };
-                    summary: Readonly<{
-                        id: string;
-                        title: string;
-                        address: string;
-                        summary?: string;
-                        realm?: Readonly<{
-                            id: string;
-                            title: string | null;
-                        }> | null;
-                    }>;
-                    destination: {
-                        kind: "space";
-                        id: string;
-                        title: string | null;
-                        address: string;
-                    };
-                } | {
-                    id: string;
-                    occurredAt: string | null;
-                    source: "continue";
-                    key: {
-                        owner: "semantic";
-                        kind: string;
-                        route: number;
-                        id: string;
-                    };
-                    summary: {
-                        id: string;
-                        type: string;
-                        types: string[];
-                        label: {
-                            value: string;
-                            language: string;
-                        } | null;
-                        creativeWork: boolean;
-                        cover: {
-                            media: string;
-                            width: number;
-                            height: number;
-                            placeholder: {
-                                thumbhash: string;
-                                color: string;
-                            };
-                            variants: {
-                                format: "avif" | "webp";
-                                width: number;
-                            }[];
-                            focalPoint: {
-                                x: number;
-                                y: number;
-                            } | null;
-                            credit: {
-                                rightsHolder: string;
-                                via: {
-                                    name: string;
-                                    url: string;
-                                };
-                                license: string;
-                                obligations: string[];
-                            };
-                        } | null;
-                    };
-                    destination: {
-                        kind: "subject";
-                        id: string;
-                        title: string | null;
-                    };
-                    continue: {
-                        subjectId: string;
-                        state: string | null;
-                        lastActivityAt: string;
-                        activeProgressSession: {
-                            id: string;
-                            subjectId: string;
-                            versionSubjectId: string | null;
-                            mode: "completed_units" | "cursor_position" | "scalar_amount";
-                            unit: string;
-                            total: string | null;
-                            amount: string | null;
-                            locator: string | null;
-                            position: string | null;
-                            completedUnitCount: number;
-                            state: "abandoned" | "active" | "completed" | "retired";
-                            revision: number;
-                            startedAt: string;
-                            completedAt: string | null;
-                            measures?: {
-                                unit: string;
-                                amount: string | null;
-                                total: string | null;
-                                presentation?: Readonly<{
-                                    meaning: 'known' | 'unknown' | 'unavailable';
-                                    unitLabel?: string;
-                                    unitLabelLanguage?: string;
-                                    unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
-                                    dimension?: string;
-                                    structure: 'unverified';
-                                    recording: Readonly<{
-                                        state: 'supported';
-                                        inputRules: import("../library/progress-model.ts").ProgressInputRules;
-                                    } | {
-                                        state: 'unsupported' | 'unavailable';
-                                    }>;
-                                }>;
-                            }[];
-                        } | null;
-                        subject?: {
-                            id: string;
-                            type: string;
-                            types: string[];
-                            label: {
-                                value: string;
-                                language: string;
-                            } | null;
-                            creativeWork: boolean;
-                            cover: {
-                                media: string;
-                                width: number;
-                                height: number;
-                                placeholder: {
-                                    thumbhash: string;
-                                    color: string;
-                                };
-                                variants: {
-                                    format: "avif" | "webp";
-                                    width: number;
-                                }[];
-                                focalPoint: {
-                                    x: number;
-                                    y: number;
-                                } | null;
-                                credit: {
-                                    rightsHolder: string;
-                                    via: {
-                                        name: string;
-                                        url: string;
-                                    };
-                                    license: string;
-                                    obligations: string[];
-                                };
-                            } | null;
-                        } | null;
-                    };
-                } | {
-                    id: string;
-                    occurredAt: string | null;
-                    source: "following";
-                    key: {
-                        owner: "semantic";
-                        kind: string;
-                        route: number;
-                        id: string;
-                    };
-                    summary: {
-                        id: string;
-                        type: string;
-                        types: string[];
-                        label: {
-                            value: string;
-                            language: string;
-                        } | null;
-                        creativeWork: boolean;
-                        cover: {
-                            media: string;
-                            width: number;
-                            height: number;
-                            placeholder: {
-                                thumbhash: string;
-                                color: string;
-                            };
-                            variants: {
-                                format: "avif" | "webp";
-                                width: number;
-                            }[];
-                            focalPoint: {
-                                x: number;
-                                y: number;
-                            } | null;
-                            credit: {
-                                rightsHolder: string;
-                                via: {
-                                    name: string;
-                                    url: string;
-                                };
-                                license: string;
-                                obligations: string[];
-                            };
-                        } | null;
-                    };
-                    destination: {
-                        kind: "subject";
-                        id: string;
-                        title: string | null;
-                    };
-                } | {
-                    id: string;
-                    occurredAt: string | null;
-                    source: "following";
-                    key: {
-                        owner: "content";
-                        kind: "thread";
-                        route: number;
-                        id: string;
-                    };
-                    summary: Pick<import("./reads.ts").ThreadView, "createdAt" | "id" | "kind" | "title"> & import("./feed-contract.ts").FeedContentSummary;
-                    destination: {
-                        kind: "thread";
-                        id: string;
-                        title: string | null;
-                    };
-                } | {
-                    id: string;
-                    occurredAt: string | null;
-                    source: "following";
-                    key: {
-                        owner: "content";
-                        kind: "post";
-                        route: number;
-                        id: string;
-                    };
-                    summary: Pick<import("./model.ts").ItemView, "createdAt" | "id" | "threadId"> & Pick<import("./reads.ts").ThreadView, "title"> & import("./feed-contract.ts").FeedContentSummary & {
-                        parentContext?: import("./model.ts").FeedParentContext;
-                    };
-                    destination: {
-                        kind: "post";
-                        id: string;
-                        title: string | null;
-                        threadId: string;
-                        postId: string;
-                    };
-                } | {
-                    id: string;
-                    occurredAt: string | null;
-                    source: "following";
-                    key: {
-                        owner: "library";
-                        kind: "collection";
-                        route: number;
-                        id: string;
-                    };
-                    summary: Pick<import("../library/collection-reads.ts").CollectionResourceView, "description" | "id" | "title">;
-                    destination: {
-                        kind: "collection";
-                        id: string;
-                        title: string | null;
-                    };
-                })[];
-                next: string | null;
-                asOf: string;
-                reactionsAsOf?: Readonly<{
-                    epoch: number;
-                    position: string;
-                }> | null;
-                sources: {
-                    discovery: "not_requested" | "preparing" | "ready" | "unavailable";
-                    following: "not_requested" | "preparing" | "ready" | "unavailable";
-                    continue: "not_requested" | "preparing" | "ready" | "unavailable";
-                };
-            };
-            400: {
-                type: unknown;
-                title: unknown;
-                status: number;
-                code: unknown;
-                retryable: unknown;
-                effect_status: "not_applicable" | "not_applied";
-                request_id: string;
-                detail: unknown;
-                errors: unknown;
-            };
-            401: {
-                type: unknown;
-                title: unknown;
-                status: number;
-                code: unknown;
-                retryable: unknown;
-                effect_status: "not_applicable" | "not_applied";
-                request_id: string;
-                detail: unknown;
-                errors: unknown;
-            };
-            403: {
-                type: unknown;
-                title: unknown;
-                status: number;
-                code: unknown;
-                retryable: unknown;
-                effect_status: "not_applicable" | "not_applied";
-                request_id: string;
-                detail: unknown;
-                errors: unknown;
-            };
-            404: {
-                type: unknown;
-                title: unknown;
-                status: number;
-                code: unknown;
-                retryable: unknown;
-                effect_status: "not_applicable" | "not_applied";
-                request_id: string;
-                detail: unknown;
-                errors: unknown;
-            };
-            409: {
-                type: unknown;
-                title: unknown;
-                status: number;
-                code: unknown;
-                retryable: unknown;
-                effect_status: "not_applicable" | "not_applied";
-                request_id: string;
-                detail: unknown;
-                errors: unknown;
-            };
-            422: {
-                type: unknown;
-                title: unknown;
-                status: number;
-                code: unknown;
-                retryable: unknown;
-                effect_status: "not_applicable" | "not_applied";
-                request_id: string;
-                detail: unknown;
-                errors: unknown;
-            };
-            503: {
-                type: unknown;
-                title: unknown;
-                status: number;
-                code: unknown;
-                retryable: unknown;
-                effect_status: "not_applicable" | "not_applied";
-                request_id: string;
-                detail: unknown;
-                errors: unknown;
-            };
-        }>;
-        defer: (fn: import("elysia/types").AfterResponseHandler<{
-            params: {};
-            query: {
-                stream?: string;
-                limit?: string;
-                cursor?: string;
-                kind?: string;
-                spaceId?: string;
-                ratingQuestionId?: string;
-            } & {
-                [key: string]: unknown;
-            };
-            response: {
-                200: {
-                    feedItems: ({
-                        id: string;
-                        occurredAt: string | null;
-                        source: "discovery";
-                        key: {
-                            owner: "semantic";
-                            kind: string;
-                            route: number;
-                            id: string;
-                        };
-                        summary: {
-                            id: string;
-                            type: string;
-                            types: string[];
-                            label: {
-                                value: string;
-                                language: string;
-                            } | null;
-                            creativeWork: boolean;
-                            cover: {
-                                media: string;
-                                width: number;
-                                height: number;
-                                placeholder: {
-                                    thumbhash: string;
-                                    color: string;
-                                };
-                                variants: {
-                                    format: "avif" | "webp";
-                                    width: number;
-                                }[];
-                                focalPoint: {
-                                    x: number;
-                                    y: number;
-                                } | null;
-                                credit: {
-                                    rightsHolder: string;
-                                    via: {
-                                        name: string;
-                                        url: string;
-                                    };
-                                    license: string;
-                                    obligations: string[];
-                                };
-                            } | null;
-                        };
-                        destination: {
-                            kind: "subject";
-                            id: string;
-                            title: string | null;
-                        };
-                    } | {
-                        id: string;
-                        occurredAt: string | null;
-                        source: "discovery";
-                        key: {
-                            owner: "accounts";
-                            kind: "account";
-                            route: number;
-                            id: string;
-                        };
-                        summary: import("../search/discovery.ts").AccountDiscoverySummary;
-                        destination: {
-                            kind: "account";
-                            id: string;
-                            title: string | null;
-                        };
-                    } | {
-                        id: string;
-                        occurredAt: string | null;
-                        source: "discovery";
-                        key: {
-                            owner: "commerce";
-                            kind: "collection";
-                            route: number;
-                            id: string;
-                        };
-                        summary: Readonly<{
-                            id: string;
-                            title: string;
-                            description: string | null;
-                        }>;
-                        destination: {
-                            kind: "collection";
-                            id: string;
-                            title: string | null;
-                        };
-                    } | {
-                        id: string;
-                        occurredAt: string | null;
-                        source: "discovery";
-                        key: {
-                            owner: "content";
-                            kind: "review";
-                            route: number;
-                            id: string;
-                        };
-                        summary: Readonly<{
-                            id: string;
-                            kind: 'review';
-                            title: string | null;
-                            author?: Readonly<{
-                                displayName: string | null;
-                                handle: string | null;
-                            }>;
-                            excerpt?: string;
-                            subject?: Readonly<{
-                                id: string;
-                                title: string | null;
-                            }> | null;
-                        }> & Pick<import("./feed-contract.ts").FeedContentSummary, "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">;
-                        destination: {
-                            kind: "thread";
-                            id: string;
-                            title: string | null;
-                        };
-                    } | {
-                        id: string;
-                        occurredAt: string | null;
-                        source: "discovery";
-                        key: {
-                            owner: "content";
-                            kind: "space";
-                            route: number;
-                            id: string;
-                        };
-                        summary: Readonly<{
-                            id: string;
-                            title: string;
-                            address: string;
-                            summary?: string;
-                            realm?: Readonly<{
-                                id: string;
-                                title: string | null;
-                            }> | null;
-                        }>;
-                        destination: {
-                            kind: "space";
-                            id: string;
-                            title: string | null;
-                            address: string;
-                        };
-                    } | {
-                        id: string;
-                        occurredAt: string | null;
-                        source: "continue";
-                        key: {
-                            owner: "semantic";
-                            kind: string;
-                            route: number;
-                            id: string;
-                        };
-                        summary: {
-                            id: string;
-                            type: string;
-                            types: string[];
-                            label: {
-                                value: string;
-                                language: string;
-                            } | null;
-                            creativeWork: boolean;
-                            cover: {
-                                media: string;
-                                width: number;
-                                height: number;
-                                placeholder: {
-                                    thumbhash: string;
-                                    color: string;
-                                };
-                                variants: {
-                                    format: "avif" | "webp";
-                                    width: number;
-                                }[];
-                                focalPoint: {
-                                    x: number;
-                                    y: number;
-                                } | null;
-                                credit: {
-                                    rightsHolder: string;
-                                    via: {
-                                        name: string;
-                                        url: string;
-                                    };
-                                    license: string;
-                                    obligations: string[];
-                                };
-                            } | null;
-                        };
-                        destination: {
-                            kind: "subject";
-                            id: string;
-                            title: string | null;
-                        };
-                        continue: {
-                            subjectId: string;
-                            state: string | null;
-                            lastActivityAt: string;
-                            activeProgressSession: {
-                                id: string;
-                                subjectId: string;
-                                versionSubjectId: string | null;
-                                mode: "completed_units" | "cursor_position" | "scalar_amount";
-                                unit: string;
-                                total: string | null;
-                                amount: string | null;
-                                locator: string | null;
-                                position: string | null;
-                                completedUnitCount: number;
-                                state: "abandoned" | "active" | "completed" | "retired";
-                                revision: number;
-                                startedAt: string;
-                                completedAt: string | null;
-                                measures?: {
-                                    unit: string;
-                                    amount: string | null;
-                                    total: string | null;
-                                    presentation?: Readonly<{
-                                        meaning: 'known' | 'unknown' | 'unavailable';
-                                        unitLabel?: string;
-                                        unitLabelLanguage?: string;
-                                        unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
-                                        dimension?: string;
-                                        structure: 'unverified';
-                                        recording: Readonly<{
-                                            state: 'supported';
-                                            inputRules: import("../library/progress-model.ts").ProgressInputRules;
-                                        } | {
-                                            state: 'unsupported' | 'unavailable';
-                                        }>;
-                                    }>;
-                                }[];
-                            } | null;
-                            subject?: {
-                                id: string;
-                                type: string;
-                                types: string[];
-                                label: {
-                                    value: string;
-                                    language: string;
-                                } | null;
-                                creativeWork: boolean;
-                                cover: {
-                                    media: string;
-                                    width: number;
-                                    height: number;
-                                    placeholder: {
-                                        thumbhash: string;
-                                        color: string;
-                                    };
-                                    variants: {
-                                        format: "avif" | "webp";
-                                        width: number;
-                                    }[];
-                                    focalPoint: {
-                                        x: number;
-                                        y: number;
-                                    } | null;
-                                    credit: {
-                                        rightsHolder: string;
-                                        via: {
-                                            name: string;
-                                            url: string;
-                                        };
-                                        license: string;
-                                        obligations: string[];
-                                    };
-                                } | null;
-                            } | null;
-                        };
-                    } | {
-                        id: string;
-                        occurredAt: string | null;
-                        source: "following";
-                        key: {
-                            owner: "semantic";
-                            kind: string;
-                            route: number;
-                            id: string;
-                        };
-                        summary: {
-                            id: string;
-                            type: string;
-                            types: string[];
-                            label: {
-                                value: string;
-                                language: string;
-                            } | null;
-                            creativeWork: boolean;
-                            cover: {
-                                media: string;
-                                width: number;
-                                height: number;
-                                placeholder: {
-                                    thumbhash: string;
-                                    color: string;
-                                };
-                                variants: {
-                                    format: "avif" | "webp";
-                                    width: number;
-                                }[];
-                                focalPoint: {
-                                    x: number;
-                                    y: number;
-                                } | null;
-                                credit: {
-                                    rightsHolder: string;
-                                    via: {
-                                        name: string;
-                                        url: string;
-                                    };
-                                    license: string;
-                                    obligations: string[];
-                                };
-                            } | null;
-                        };
-                        destination: {
-                            kind: "subject";
-                            id: string;
-                            title: string | null;
-                        };
-                    } | {
-                        id: string;
-                        occurredAt: string | null;
-                        source: "following";
-                        key: {
-                            owner: "content";
-                            kind: "thread";
-                            route: number;
-                            id: string;
-                        };
-                        summary: Pick<import("./reads.ts").ThreadView, "createdAt" | "id" | "kind" | "title"> & import("./feed-contract.ts").FeedContentSummary;
-                        destination: {
-                            kind: "thread";
-                            id: string;
-                            title: string | null;
-                        };
-                    } | {
-                        id: string;
-                        occurredAt: string | null;
-                        source: "following";
-                        key: {
-                            owner: "content";
-                            kind: "post";
-                            route: number;
-                            id: string;
-                        };
-                        summary: Pick<import("./model.ts").ItemView, "createdAt" | "id" | "threadId"> & Pick<import("./reads.ts").ThreadView, "title"> & import("./feed-contract.ts").FeedContentSummary & {
-                            parentContext?: import("./model.ts").FeedParentContext;
-                        };
-                        destination: {
-                            kind: "post";
-                            id: string;
-                            title: string | null;
-                            threadId: string;
-                            postId: string;
-                        };
-                    } | {
-                        id: string;
-                        occurredAt: string | null;
-                        source: "following";
-                        key: {
-                            owner: "library";
-                            kind: "collection";
-                            route: number;
-                            id: string;
-                        };
-                        summary: Pick<import("../library/collection-reads.ts").CollectionResourceView, "description" | "id" | "title">;
-                        destination: {
-                            kind: "collection";
-                            id: string;
-                            title: string | null;
-                        };
-                    })[];
-                    next: string | null;
-                    asOf: string;
-                    reactionsAsOf?: Readonly<{
-                        epoch: number;
-                        position: string;
-                    }> | null;
-                    sources: {
-                        discovery: "not_requested" | "preparing" | "ready" | "unavailable";
-                        following: "not_requested" | "preparing" | "ready" | "unavailable";
-                        continue: "not_requested" | "preparing" | "ready" | "unavailable";
-                    };
-                };
-                400: {
-                    type: unknown;
-                    title: unknown;
-                    status: number;
-                    code: unknown;
-                    retryable: unknown;
-                    effect_status: "not_applicable" | "not_applied";
-                    request_id: string;
-                    detail: unknown;
-                    errors: unknown;
-                };
-                401: {
-                    type: unknown;
-                    title: unknown;
-                    status: number;
-                    code: unknown;
-                    retryable: unknown;
-                    effect_status: "not_applicable" | "not_applied";
-                    request_id: string;
-                    detail: unknown;
-                    errors: unknown;
-                };
-                403: {
-                    type: unknown;
-                    title: unknown;
-                    status: number;
-                    code: unknown;
-                    retryable: unknown;
-                    effect_status: "not_applicable" | "not_applied";
-                    request_id: string;
-                    detail: unknown;
-                    errors: unknown;
-                };
-                404: {
-                    type: unknown;
-                    title: unknown;
-                    status: number;
-                    code: unknown;
-                    retryable: unknown;
-                    effect_status: "not_applicable" | "not_applied";
-                    request_id: string;
-                    detail: unknown;
-                    errors: unknown;
-                };
-                409: {
-                    type: unknown;
-                    title: unknown;
-                    status: number;
-                    code: unknown;
-                    retryable: unknown;
-                    effect_status: "not_applicable" | "not_applied";
-                    request_id: string;
-                    detail: unknown;
-                    errors: unknown;
-                };
-                422: {
-                    type: unknown;
-                    title: unknown;
-                    status: number;
-                    code: unknown;
-                    retryable: unknown;
-                    effect_status: "not_applicable" | "not_applied";
-                    request_id: string;
-                    detail: unknown;
-                    errors: unknown;
-                };
-                503: {
-                    type: unknown;
-                    title: unknown;
-                    status: number;
-                    code: unknown;
-                    retryable: unknown;
-                    effect_status: "not_applicable" | "not_applied";
-                    request_id: string;
-                    detail: unknown;
-                    errors: unknown;
-                };
-            };
-        }, {
-            decorator: {};
-            store: {};
-            derive: {};
-        }>) => import("elysia/types").MaybePromise<void>;
-        readonly path: string;
-        route?: string;
-        rid?: string;
-        request: Request;
-        store: {};
-        body: unknown;
-        query: {
-            [x: string]: unknown;
-            stream?: string;
-            limit?: string;
-            cursor?: string;
-            kind?: string;
-            spaceId?: string;
-            ratingQuestionId?: string;
-        };
-        params: {};
-        headers: Record<string, string | undefined>;
-        cookie: Record<string, import("elysia").Cookie<unknown>>;
-    }, "cookie"> & {
-        cookie: undefined;
-    }) => void;
     response: {
-        200: import("typebox").TObject<{
+        readonly 200: import("typebox").TObject<{
             feedItems: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TObject<{
                 id: import("typebox").TString;
                 occurredAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
@@ -9063,6 +9654,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             obligations: import("typebox").TArray<import("typebox").TString>;
                         }>;
                     }>, import("typebox").TNull]>;
+                    subjectReactions: import("typebox").TOptional<import("typebox").TObject<{
+                        target: import("typebox").TObject<{
+                            targetKind: import("typebox").TLiteral<"subject">;
+                            targetId: import("typebox").TString;
+                        }>;
+                        counts: import("typebox").TUnion<[import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"available">;
+                            values: import("typebox").TObject<{
+                                like: import("typebox").TOptional<import("typebox").TInteger>;
+                                love: import("typebox").TOptional<import("typebox").TInteger>;
+                                laugh: import("typebox").TOptional<import("typebox").TInteger>;
+                                insightful: import("typebox").TOptional<import("typebox").TInteger>;
+                                sad: import("typebox").TOptional<import("typebox").TInteger>;
+                            }>;
+                            asOf: import("typebox").TUnion<[import("typebox").TUnsafe<Readonly<{
+                                epoch: number;
+                                position: string;
+                            }>>, import("typebox").TNull]>;
+                        }>, import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"unavailable">;
+                        }>]>;
+                        viewer: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"available">;
+                            kind: import("typebox").TUnion<[import("typebox").TUnsafe<"insightful" | "laugh" | "like" | "love" | "sad">, import("typebox").TNull]>;
+                        }>, import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"unavailable">;
+                        }>]>>;
+                        action: import("typebox").TUnion<[import("typebox").TLiteral<"sign_in">, import("typebox").TLiteral<"allowed">, import("typebox").TLiteral<"denied">, import("typebox").TLiteral<"unavailable">]>;
+                    }>>;
                 }>;
                 destination: import("typebox").TObject<{
                     kind: import("typebox").TLiteral<"subject">;
@@ -9079,7 +9699,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     route: import("typebox").TInteger;
                     id: import("typebox").TString;
                 }>;
-                summary: import("typebox").TUnsafe<import("../search/discovery.ts").AccountDiscoverySummary>;
+                summary: import("typebox").TUnsafe<import("../search/discovery-api.ts").AccountDiscoverySummary>;
                 destination: import("typebox").TObject<{
                     kind: import("typebox").TLiteral<"account">;
                     id: import("typebox").TString;
@@ -9099,6 +9719,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     id: string;
                     title: string;
                     description: string | null;
+                    card: import("../library/collection-discovery-summaries.ts").PublicCollectionDiscoverySummary;
                 }>>;
                 destination: import("typebox").TObject<{
                     kind: import("typebox").TLiteral<"collection">;
@@ -9128,7 +9749,9 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         id: string;
                         title: string | null;
                     }> | null;
-                }> & Pick<import("./feed-contract.ts").FeedContentSummary, "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">>;
+                    source?: import("../search/review-context.ts").ReviewContextSource;
+                    searchContext?: import("../search/review-context.ts").SearchReviewContext;
+                }> & Pick<import("./feed-contract.ts").FeedContentSummary, "conversationActivity" | "reactionAdvice" | "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">>;
                 destination: import("typebox").TObject<{
                     kind: import("typebox").TLiteral<"thread">;
                     id: import("typebox").TString;
@@ -9153,6 +9776,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         id: string;
                         title: string | null;
                     }> | null;
+                    presentation?: import("../community/space-discovery-entry-contract.ts").SpaceEntryPresentation;
                 }>>;
                 destination: import("typebox").TObject<{
                     kind: import("typebox").TLiteral<"space">;
@@ -9205,6 +9829,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             obligations: import("typebox").TArray<import("typebox").TString>;
                         }>;
                     }>, import("typebox").TNull]>;
+                    subjectReactions: import("typebox").TOptional<import("typebox").TObject<{
+                        target: import("typebox").TObject<{
+                            targetKind: import("typebox").TLiteral<"subject">;
+                            targetId: import("typebox").TString;
+                        }>;
+                        counts: import("typebox").TUnion<[import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"available">;
+                            values: import("typebox").TObject<{
+                                like: import("typebox").TOptional<import("typebox").TInteger>;
+                                love: import("typebox").TOptional<import("typebox").TInteger>;
+                                laugh: import("typebox").TOptional<import("typebox").TInteger>;
+                                insightful: import("typebox").TOptional<import("typebox").TInteger>;
+                                sad: import("typebox").TOptional<import("typebox").TInteger>;
+                            }>;
+                            asOf: import("typebox").TUnion<[import("typebox").TUnsafe<Readonly<{
+                                epoch: number;
+                                position: string;
+                            }>>, import("typebox").TNull]>;
+                        }>, import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"unavailable">;
+                        }>]>;
+                        viewer: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"available">;
+                            kind: import("typebox").TUnion<[import("typebox").TUnsafe<"insightful" | "laugh" | "like" | "love" | "sad">, import("typebox").TNull]>;
+                        }>, import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"unavailable">;
+                        }>]>>;
+                        action: import("typebox").TUnion<[import("typebox").TLiteral<"sign_in">, import("typebox").TLiteral<"allowed">, import("typebox").TLiteral<"denied">, import("typebox").TLiteral<"unavailable">]>;
+                    }>>;
                 }>;
                 destination: import("typebox").TObject<{
                     kind: import("typebox").TLiteral<"subject">;
@@ -9243,7 +9896,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 structure: 'unverified';
                                 recording: Readonly<{
                                     state: 'supported';
-                                    inputRules: import("../library/progress-model.ts").ProgressInputRules;
+                                    inputRules: import("@rezics/progress").ProgressInputRules;
                                 } | {
                                     state: 'unsupported' | 'unavailable';
                                 }>;
@@ -9332,6 +9985,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             obligations: import("typebox").TArray<import("typebox").TString>;
                         }>;
                     }>, import("typebox").TNull]>;
+                    subjectReactions: import("typebox").TOptional<import("typebox").TObject<{
+                        target: import("typebox").TObject<{
+                            targetKind: import("typebox").TLiteral<"subject">;
+                            targetId: import("typebox").TString;
+                        }>;
+                        counts: import("typebox").TUnion<[import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"available">;
+                            values: import("typebox").TObject<{
+                                like: import("typebox").TOptional<import("typebox").TInteger>;
+                                love: import("typebox").TOptional<import("typebox").TInteger>;
+                                laugh: import("typebox").TOptional<import("typebox").TInteger>;
+                                insightful: import("typebox").TOptional<import("typebox").TInteger>;
+                                sad: import("typebox").TOptional<import("typebox").TInteger>;
+                            }>;
+                            asOf: import("typebox").TUnion<[import("typebox").TUnsafe<Readonly<{
+                                epoch: number;
+                                position: string;
+                            }>>, import("typebox").TNull]>;
+                        }>, import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"unavailable">;
+                        }>]>;
+                        viewer: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"available">;
+                            kind: import("typebox").TUnion<[import("typebox").TUnsafe<"insightful" | "laugh" | "like" | "love" | "sad">, import("typebox").TNull]>;
+                        }>, import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"unavailable">;
+                        }>]>>;
+                        action: import("typebox").TUnion<[import("typebox").TLiteral<"sign_in">, import("typebox").TLiteral<"allowed">, import("typebox").TLiteral<"denied">, import("typebox").TLiteral<"unavailable">]>;
+                    }>>;
                 }>;
                 destination: import("typebox").TObject<{
                     kind: import("typebox").TLiteral<"subject">;
@@ -9391,6 +10073,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     title: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                 }>;
             }>]>>;
+            viewerPersonalActions: import("typebox").TOptional<import("typebox").TUnsafe<import("../library/viewer-personal-actions.ts").ViewerPersonalActionsPage>>;
             next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
             asOf: import("typebox").TString;
             reactionsAsOf: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TUnsafe<Readonly<{
@@ -9403,7 +10086,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                 continue: import("typebox").TUnion<[import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"preparing">, import("typebox").TLiteral<"unavailable">, import("typebox").TLiteral<"not_requested">]>;
             }>;
         }>;
-        400: import("typebox").TObject<{
+        readonly 400: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
             status: import("typebox").TLiteral<number>;
@@ -9414,10 +10097,10 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
-        401: import("typebox").TObject<{
+        readonly 401: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
             status: import("typebox").TLiteral<number>;
@@ -9428,10 +10111,10 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
-        403: import("typebox").TObject<{
+        readonly 403: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
             status: import("typebox").TLiteral<number>;
@@ -9442,10 +10125,10 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
-        404: import("typebox").TObject<{
+        readonly 404: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
             status: import("typebox").TLiteral<number>;
@@ -9456,10 +10139,10 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
-        409: import("typebox").TObject<{
+        readonly 409: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
             status: import("typebox").TLiteral<number>;
@@ -9470,10 +10153,10 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
-        422: import("typebox").TObject<{
+        readonly 422: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
             status: import("typebox").TLiteral<number>;
@@ -9484,10 +10167,10 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
-        503: import("typebox").TObject<{
+        readonly 503: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
             status: import("typebox").TLiteral<number>;
@@ -9498,7 +10181,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
     };
@@ -9511,5 +10194,1728 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
         } | {
             bearerAuth: never[];
         })[];
+        'x-resource-types'?: readonly string[];
+        'x-replay-authorization'?: "self-account-read";
+        'x-authority-anchor'?: "own-account";
+        'x-authority-resource-types'?: readonly string[];
+        'x-rate-limit'?: import("../http/rate-limit.ts").RateLimitDeclaration;
     };
+    transform: ({ request, set }: Omit<{
+        server: import("elysia").Server | null;
+        redirect: import("elysia").redirect;
+        set: {
+            headers: import("elysia").HTTPHeaders;
+            status?: number | keyof import("elysia").StatusMap;
+            cookie?: Record<string, import("elysia").BaseCookie>;
+            redirect?: never;
+        };
+        status: import("elysia").SelectiveStatus<{
+            readonly 200: {
+                feedItems: ({
+                    id: string;
+                    occurredAt: string | null;
+                    source: "discovery";
+                    key: {
+                        owner: "semantic";
+                        kind: string;
+                        route: number;
+                        id: string;
+                    };
+                    summary: {
+                        id: string;
+                        type: string;
+                        types: string[];
+                        label: {
+                            value: string;
+                            language: string;
+                        } | null;
+                        creativeWork: boolean;
+                        cover: {
+                            media: string;
+                            width: number;
+                            height: number;
+                            placeholder: {
+                                thumbhash: string;
+                                color: string;
+                            };
+                            variants: {
+                                format: "avif" | "webp";
+                                width: number;
+                            }[];
+                            focalPoint: {
+                                x: number;
+                                y: number;
+                            } | null;
+                            credit: {
+                                rightsHolder: string;
+                                via: {
+                                    name: string;
+                                    url: string;
+                                };
+                                license: string;
+                                obligations: string[];
+                            };
+                        } | null;
+                        subjectReactions?: {
+                            target: {
+                                targetKind: "subject";
+                                targetId: string;
+                            };
+                            counts: {
+                                state: "available";
+                                values: {
+                                    like?: number;
+                                    love?: number;
+                                    laugh?: number;
+                                    insightful?: number;
+                                    sad?: number;
+                                };
+                                asOf: Readonly<{
+                                    epoch: number;
+                                    position: string;
+                                }> | null;
+                            } | {
+                                state: "unavailable";
+                            };
+                            viewer?: {
+                                state: "available";
+                                kind: "insightful" | "laugh" | "like" | "love" | "sad" | null;
+                            } | {
+                                state: "unavailable";
+                            };
+                            action: "allowed" | "denied" | "sign_in" | "unavailable";
+                        };
+                    };
+                    destination: {
+                        kind: "subject";
+                        id: string;
+                        title: string | null;
+                    };
+                } | {
+                    id: string;
+                    occurredAt: string | null;
+                    source: "discovery";
+                    key: {
+                        owner: "accounts";
+                        kind: "account";
+                        route: number;
+                        id: string;
+                    };
+                    summary: import("../search/discovery-api.ts").AccountDiscoverySummary;
+                    destination: {
+                        kind: "account";
+                        id: string;
+                        title: string | null;
+                    };
+                } | {
+                    id: string;
+                    occurredAt: string | null;
+                    source: "discovery";
+                    key: {
+                        owner: "commerce";
+                        kind: "collection";
+                        route: number;
+                        id: string;
+                    };
+                    summary: Readonly<{
+                        id: string;
+                        title: string;
+                        description: string | null;
+                        card: import("../library/collection-discovery-summaries.ts").PublicCollectionDiscoverySummary;
+                    }>;
+                    destination: {
+                        kind: "collection";
+                        id: string;
+                        title: string | null;
+                    };
+                } | {
+                    id: string;
+                    occurredAt: string | null;
+                    source: "discovery";
+                    key: {
+                        owner: "content";
+                        kind: "review";
+                        route: number;
+                        id: string;
+                    };
+                    summary: Readonly<{
+                        id: string;
+                        kind: 'review';
+                        title: string | null;
+                        author?: Readonly<{
+                            displayName: string | null;
+                            handle: string | null;
+                        }>;
+                        excerpt?: string;
+                        subject?: Readonly<{
+                            id: string;
+                            title: string | null;
+                        }> | null;
+                        source?: import("../search/review-context.ts").ReviewContextSource;
+                        searchContext?: import("../search/review-context.ts").SearchReviewContext;
+                    }> & Pick<import("./feed-contract.ts").FeedContentSummary, "conversationActivity" | "reactionAdvice" | "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">;
+                    destination: {
+                        kind: "thread";
+                        id: string;
+                        title: string | null;
+                    };
+                } | {
+                    id: string;
+                    occurredAt: string | null;
+                    source: "discovery";
+                    key: {
+                        owner: "content";
+                        kind: "space";
+                        route: number;
+                        id: string;
+                    };
+                    summary: Readonly<{
+                        id: string;
+                        title: string;
+                        address: string;
+                        summary?: string;
+                        realm?: Readonly<{
+                            id: string;
+                            title: string | null;
+                        }> | null;
+                        presentation?: import("../community/space-discovery-entry-contract.ts").SpaceEntryPresentation;
+                    }>;
+                    destination: {
+                        kind: "space";
+                        id: string;
+                        title: string | null;
+                        address: string;
+                    };
+                } | {
+                    id: string;
+                    occurredAt: string | null;
+                    source: "continue";
+                    key: {
+                        owner: "semantic";
+                        kind: string;
+                        route: number;
+                        id: string;
+                    };
+                    summary: {
+                        id: string;
+                        type: string;
+                        types: string[];
+                        label: {
+                            value: string;
+                            language: string;
+                        } | null;
+                        creativeWork: boolean;
+                        cover: {
+                            media: string;
+                            width: number;
+                            height: number;
+                            placeholder: {
+                                thumbhash: string;
+                                color: string;
+                            };
+                            variants: {
+                                format: "avif" | "webp";
+                                width: number;
+                            }[];
+                            focalPoint: {
+                                x: number;
+                                y: number;
+                            } | null;
+                            credit: {
+                                rightsHolder: string;
+                                via: {
+                                    name: string;
+                                    url: string;
+                                };
+                                license: string;
+                                obligations: string[];
+                            };
+                        } | null;
+                        subjectReactions?: {
+                            target: {
+                                targetKind: "subject";
+                                targetId: string;
+                            };
+                            counts: {
+                                state: "available";
+                                values: {
+                                    like?: number;
+                                    love?: number;
+                                    laugh?: number;
+                                    insightful?: number;
+                                    sad?: number;
+                                };
+                                asOf: Readonly<{
+                                    epoch: number;
+                                    position: string;
+                                }> | null;
+                            } | {
+                                state: "unavailable";
+                            };
+                            viewer?: {
+                                state: "available";
+                                kind: "insightful" | "laugh" | "like" | "love" | "sad" | null;
+                            } | {
+                                state: "unavailable";
+                            };
+                            action: "allowed" | "denied" | "sign_in" | "unavailable";
+                        };
+                    };
+                    destination: {
+                        kind: "subject";
+                        id: string;
+                        title: string | null;
+                    };
+                    continue: {
+                        subjectId: string;
+                        state: string | null;
+                        lastActivityAt: string;
+                        activeProgressSession: {
+                            id: string;
+                            subjectId: string;
+                            versionSubjectId: string | null;
+                            mode: "completed_units" | "cursor_position" | "scalar_amount";
+                            unit: string;
+                            total: string | null;
+                            amount: string | null;
+                            locator: string | null;
+                            position: string | null;
+                            completedUnitCount: number;
+                            state: "abandoned" | "active" | "completed" | "retired";
+                            revision: number;
+                            startedAt: string;
+                            completedAt: string | null;
+                            measures?: {
+                                unit: string;
+                                amount: string | null;
+                                total: string | null;
+                                presentation?: Readonly<{
+                                    meaning: 'known' | 'unknown' | 'unavailable';
+                                    unitLabel?: string;
+                                    unitLabelLanguage?: string;
+                                    unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
+                                    dimension?: string;
+                                    structure: 'unverified';
+                                    recording: Readonly<{
+                                        state: 'supported';
+                                        inputRules: import("@rezics/progress").ProgressInputRules;
+                                    } | {
+                                        state: 'unsupported' | 'unavailable';
+                                    }>;
+                                }>;
+                            }[];
+                        } | null;
+                        subject?: {
+                            id: string;
+                            type: string;
+                            types: string[];
+                            label: {
+                                value: string;
+                                language: string;
+                            } | null;
+                            creativeWork: boolean;
+                            cover: {
+                                media: string;
+                                width: number;
+                                height: number;
+                                placeholder: {
+                                    thumbhash: string;
+                                    color: string;
+                                };
+                                variants: {
+                                    format: "avif" | "webp";
+                                    width: number;
+                                }[];
+                                focalPoint: {
+                                    x: number;
+                                    y: number;
+                                } | null;
+                                credit: {
+                                    rightsHolder: string;
+                                    via: {
+                                        name: string;
+                                        url: string;
+                                    };
+                                    license: string;
+                                    obligations: string[];
+                                };
+                            } | null;
+                        } | null;
+                    };
+                } | {
+                    id: string;
+                    occurredAt: string | null;
+                    source: "following";
+                    key: {
+                        owner: "semantic";
+                        kind: string;
+                        route: number;
+                        id: string;
+                    };
+                    summary: {
+                        id: string;
+                        type: string;
+                        types: string[];
+                        label: {
+                            value: string;
+                            language: string;
+                        } | null;
+                        creativeWork: boolean;
+                        cover: {
+                            media: string;
+                            width: number;
+                            height: number;
+                            placeholder: {
+                                thumbhash: string;
+                                color: string;
+                            };
+                            variants: {
+                                format: "avif" | "webp";
+                                width: number;
+                            }[];
+                            focalPoint: {
+                                x: number;
+                                y: number;
+                            } | null;
+                            credit: {
+                                rightsHolder: string;
+                                via: {
+                                    name: string;
+                                    url: string;
+                                };
+                                license: string;
+                                obligations: string[];
+                            };
+                        } | null;
+                        subjectReactions?: {
+                            target: {
+                                targetKind: "subject";
+                                targetId: string;
+                            };
+                            counts: {
+                                state: "available";
+                                values: {
+                                    like?: number;
+                                    love?: number;
+                                    laugh?: number;
+                                    insightful?: number;
+                                    sad?: number;
+                                };
+                                asOf: Readonly<{
+                                    epoch: number;
+                                    position: string;
+                                }> | null;
+                            } | {
+                                state: "unavailable";
+                            };
+                            viewer?: {
+                                state: "available";
+                                kind: "insightful" | "laugh" | "like" | "love" | "sad" | null;
+                            } | {
+                                state: "unavailable";
+                            };
+                            action: "allowed" | "denied" | "sign_in" | "unavailable";
+                        };
+                    };
+                    destination: {
+                        kind: "subject";
+                        id: string;
+                        title: string | null;
+                    };
+                } | {
+                    id: string;
+                    occurredAt: string | null;
+                    source: "following";
+                    key: {
+                        owner: "content";
+                        kind: "thread";
+                        route: number;
+                        id: string;
+                    };
+                    summary: Pick<import("./reads.ts").ThreadView, "createdAt" | "id" | "kind" | "title"> & import("./feed-contract.ts").FeedContentSummary;
+                    destination: {
+                        kind: "thread";
+                        id: string;
+                        title: string | null;
+                    };
+                } | {
+                    id: string;
+                    occurredAt: string | null;
+                    source: "following";
+                    key: {
+                        owner: "content";
+                        kind: "post";
+                        route: number;
+                        id: string;
+                    };
+                    summary: Pick<import("./model.ts").ItemView, "createdAt" | "id" | "threadId"> & Pick<import("./reads.ts").ThreadView, "title"> & import("./feed-contract.ts").FeedContentSummary & {
+                        parentContext?: import("./model.ts").FeedParentContext;
+                    };
+                    destination: {
+                        kind: "post";
+                        id: string;
+                        title: string | null;
+                        threadId: string;
+                        postId: string;
+                    };
+                } | {
+                    id: string;
+                    occurredAt: string | null;
+                    source: "following";
+                    key: {
+                        owner: "library";
+                        kind: "collection";
+                        route: number;
+                        id: string;
+                    };
+                    summary: Pick<import("../library/collection-reads.ts").CollectionResourceView, "description" | "id" | "title">;
+                    destination: {
+                        kind: "collection";
+                        id: string;
+                        title: string | null;
+                    };
+                })[];
+                viewerPersonalActions?: import("../library/viewer-personal-actions.ts").ViewerPersonalActionsPage;
+                next: string | null;
+                asOf: string;
+                reactionsAsOf?: Readonly<{
+                    epoch: number;
+                    position: string;
+                }> | null;
+                sources: {
+                    discovery: "not_requested" | "preparing" | "ready" | "unavailable";
+                    following: "not_requested" | "preparing" | "ready" | "unavailable";
+                    continue: "not_requested" | "preparing" | "ready" | "unavailable";
+                };
+            };
+            readonly 400: {
+                type: unknown;
+                title: unknown;
+                status: number;
+                code: unknown;
+                retryable: unknown;
+                effect_status: "not_applicable" | "not_applied";
+                request_id: string;
+                detail: unknown;
+                errors: unknown;
+            };
+            readonly 401: {
+                type: unknown;
+                title: unknown;
+                status: number;
+                code: unknown;
+                retryable: unknown;
+                effect_status: "not_applicable" | "not_applied";
+                request_id: string;
+                detail: unknown;
+                errors: unknown;
+            };
+            readonly 403: {
+                type: unknown;
+                title: unknown;
+                status: number;
+                code: unknown;
+                retryable: unknown;
+                effect_status: "not_applicable" | "not_applied";
+                request_id: string;
+                detail: unknown;
+                errors: unknown;
+            };
+            readonly 404: {
+                type: unknown;
+                title: unknown;
+                status: number;
+                code: unknown;
+                retryable: unknown;
+                effect_status: "not_applicable" | "not_applied";
+                request_id: string;
+                detail: unknown;
+                errors: unknown;
+            };
+            readonly 409: {
+                type: unknown;
+                title: unknown;
+                status: number;
+                code: unknown;
+                retryable: unknown;
+                effect_status: "not_applicable" | "not_applied";
+                request_id: string;
+                detail: unknown;
+                errors: unknown;
+            };
+            readonly 422: {
+                type: unknown;
+                title: unknown;
+                status: number;
+                code: unknown;
+                retryable: unknown;
+                effect_status: "not_applicable" | "not_applied";
+                request_id: string;
+                detail: unknown;
+                errors: unknown;
+            };
+            readonly 503: {
+                type: unknown;
+                title: unknown;
+                status: number;
+                code: unknown;
+                retryable: unknown;
+                effect_status: "not_applicable" | "not_applied";
+                request_id: string;
+                detail: unknown;
+                errors: unknown;
+            };
+        }>;
+        problem: import("elysia").SelectiveProblem<{
+            readonly 200: {
+                feedItems: ({
+                    id: string;
+                    occurredAt: string | null;
+                    source: "discovery";
+                    key: {
+                        owner: "semantic";
+                        kind: string;
+                        route: number;
+                        id: string;
+                    };
+                    summary: {
+                        id: string;
+                        type: string;
+                        types: string[];
+                        label: {
+                            value: string;
+                            language: string;
+                        } | null;
+                        creativeWork: boolean;
+                        cover: {
+                            media: string;
+                            width: number;
+                            height: number;
+                            placeholder: {
+                                thumbhash: string;
+                                color: string;
+                            };
+                            variants: {
+                                format: "avif" | "webp";
+                                width: number;
+                            }[];
+                            focalPoint: {
+                                x: number;
+                                y: number;
+                            } | null;
+                            credit: {
+                                rightsHolder: string;
+                                via: {
+                                    name: string;
+                                    url: string;
+                                };
+                                license: string;
+                                obligations: string[];
+                            };
+                        } | null;
+                        subjectReactions?: {
+                            target: {
+                                targetKind: "subject";
+                                targetId: string;
+                            };
+                            counts: {
+                                state: "available";
+                                values: {
+                                    like?: number;
+                                    love?: number;
+                                    laugh?: number;
+                                    insightful?: number;
+                                    sad?: number;
+                                };
+                                asOf: Readonly<{
+                                    epoch: number;
+                                    position: string;
+                                }> | null;
+                            } | {
+                                state: "unavailable";
+                            };
+                            viewer?: {
+                                state: "available";
+                                kind: "insightful" | "laugh" | "like" | "love" | "sad" | null;
+                            } | {
+                                state: "unavailable";
+                            };
+                            action: "allowed" | "denied" | "sign_in" | "unavailable";
+                        };
+                    };
+                    destination: {
+                        kind: "subject";
+                        id: string;
+                        title: string | null;
+                    };
+                } | {
+                    id: string;
+                    occurredAt: string | null;
+                    source: "discovery";
+                    key: {
+                        owner: "accounts";
+                        kind: "account";
+                        route: number;
+                        id: string;
+                    };
+                    summary: import("../search/discovery-api.ts").AccountDiscoverySummary;
+                    destination: {
+                        kind: "account";
+                        id: string;
+                        title: string | null;
+                    };
+                } | {
+                    id: string;
+                    occurredAt: string | null;
+                    source: "discovery";
+                    key: {
+                        owner: "commerce";
+                        kind: "collection";
+                        route: number;
+                        id: string;
+                    };
+                    summary: Readonly<{
+                        id: string;
+                        title: string;
+                        description: string | null;
+                        card: import("../library/collection-discovery-summaries.ts").PublicCollectionDiscoverySummary;
+                    }>;
+                    destination: {
+                        kind: "collection";
+                        id: string;
+                        title: string | null;
+                    };
+                } | {
+                    id: string;
+                    occurredAt: string | null;
+                    source: "discovery";
+                    key: {
+                        owner: "content";
+                        kind: "review";
+                        route: number;
+                        id: string;
+                    };
+                    summary: Readonly<{
+                        id: string;
+                        kind: 'review';
+                        title: string | null;
+                        author?: Readonly<{
+                            displayName: string | null;
+                            handle: string | null;
+                        }>;
+                        excerpt?: string;
+                        subject?: Readonly<{
+                            id: string;
+                            title: string | null;
+                        }> | null;
+                        source?: import("../search/review-context.ts").ReviewContextSource;
+                        searchContext?: import("../search/review-context.ts").SearchReviewContext;
+                    }> & Pick<import("./feed-contract.ts").FeedContentSummary, "conversationActivity" | "reactionAdvice" | "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">;
+                    destination: {
+                        kind: "thread";
+                        id: string;
+                        title: string | null;
+                    };
+                } | {
+                    id: string;
+                    occurredAt: string | null;
+                    source: "discovery";
+                    key: {
+                        owner: "content";
+                        kind: "space";
+                        route: number;
+                        id: string;
+                    };
+                    summary: Readonly<{
+                        id: string;
+                        title: string;
+                        address: string;
+                        summary?: string;
+                        realm?: Readonly<{
+                            id: string;
+                            title: string | null;
+                        }> | null;
+                        presentation?: import("../community/space-discovery-entry-contract.ts").SpaceEntryPresentation;
+                    }>;
+                    destination: {
+                        kind: "space";
+                        id: string;
+                        title: string | null;
+                        address: string;
+                    };
+                } | {
+                    id: string;
+                    occurredAt: string | null;
+                    source: "continue";
+                    key: {
+                        owner: "semantic";
+                        kind: string;
+                        route: number;
+                        id: string;
+                    };
+                    summary: {
+                        id: string;
+                        type: string;
+                        types: string[];
+                        label: {
+                            value: string;
+                            language: string;
+                        } | null;
+                        creativeWork: boolean;
+                        cover: {
+                            media: string;
+                            width: number;
+                            height: number;
+                            placeholder: {
+                                thumbhash: string;
+                                color: string;
+                            };
+                            variants: {
+                                format: "avif" | "webp";
+                                width: number;
+                            }[];
+                            focalPoint: {
+                                x: number;
+                                y: number;
+                            } | null;
+                            credit: {
+                                rightsHolder: string;
+                                via: {
+                                    name: string;
+                                    url: string;
+                                };
+                                license: string;
+                                obligations: string[];
+                            };
+                        } | null;
+                        subjectReactions?: {
+                            target: {
+                                targetKind: "subject";
+                                targetId: string;
+                            };
+                            counts: {
+                                state: "available";
+                                values: {
+                                    like?: number;
+                                    love?: number;
+                                    laugh?: number;
+                                    insightful?: number;
+                                    sad?: number;
+                                };
+                                asOf: Readonly<{
+                                    epoch: number;
+                                    position: string;
+                                }> | null;
+                            } | {
+                                state: "unavailable";
+                            };
+                            viewer?: {
+                                state: "available";
+                                kind: "insightful" | "laugh" | "like" | "love" | "sad" | null;
+                            } | {
+                                state: "unavailable";
+                            };
+                            action: "allowed" | "denied" | "sign_in" | "unavailable";
+                        };
+                    };
+                    destination: {
+                        kind: "subject";
+                        id: string;
+                        title: string | null;
+                    };
+                    continue: {
+                        subjectId: string;
+                        state: string | null;
+                        lastActivityAt: string;
+                        activeProgressSession: {
+                            id: string;
+                            subjectId: string;
+                            versionSubjectId: string | null;
+                            mode: "completed_units" | "cursor_position" | "scalar_amount";
+                            unit: string;
+                            total: string | null;
+                            amount: string | null;
+                            locator: string | null;
+                            position: string | null;
+                            completedUnitCount: number;
+                            state: "abandoned" | "active" | "completed" | "retired";
+                            revision: number;
+                            startedAt: string;
+                            completedAt: string | null;
+                            measures?: {
+                                unit: string;
+                                amount: string | null;
+                                total: string | null;
+                                presentation?: Readonly<{
+                                    meaning: 'known' | 'unknown' | 'unavailable';
+                                    unitLabel?: string;
+                                    unitLabelLanguage?: string;
+                                    unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
+                                    dimension?: string;
+                                    structure: 'unverified';
+                                    recording: Readonly<{
+                                        state: 'supported';
+                                        inputRules: import("@rezics/progress").ProgressInputRules;
+                                    } | {
+                                        state: 'unsupported' | 'unavailable';
+                                    }>;
+                                }>;
+                            }[];
+                        } | null;
+                        subject?: {
+                            id: string;
+                            type: string;
+                            types: string[];
+                            label: {
+                                value: string;
+                                language: string;
+                            } | null;
+                            creativeWork: boolean;
+                            cover: {
+                                media: string;
+                                width: number;
+                                height: number;
+                                placeholder: {
+                                    thumbhash: string;
+                                    color: string;
+                                };
+                                variants: {
+                                    format: "avif" | "webp";
+                                    width: number;
+                                }[];
+                                focalPoint: {
+                                    x: number;
+                                    y: number;
+                                } | null;
+                                credit: {
+                                    rightsHolder: string;
+                                    via: {
+                                        name: string;
+                                        url: string;
+                                    };
+                                    license: string;
+                                    obligations: string[];
+                                };
+                            } | null;
+                        } | null;
+                    };
+                } | {
+                    id: string;
+                    occurredAt: string | null;
+                    source: "following";
+                    key: {
+                        owner: "semantic";
+                        kind: string;
+                        route: number;
+                        id: string;
+                    };
+                    summary: {
+                        id: string;
+                        type: string;
+                        types: string[];
+                        label: {
+                            value: string;
+                            language: string;
+                        } | null;
+                        creativeWork: boolean;
+                        cover: {
+                            media: string;
+                            width: number;
+                            height: number;
+                            placeholder: {
+                                thumbhash: string;
+                                color: string;
+                            };
+                            variants: {
+                                format: "avif" | "webp";
+                                width: number;
+                            }[];
+                            focalPoint: {
+                                x: number;
+                                y: number;
+                            } | null;
+                            credit: {
+                                rightsHolder: string;
+                                via: {
+                                    name: string;
+                                    url: string;
+                                };
+                                license: string;
+                                obligations: string[];
+                            };
+                        } | null;
+                        subjectReactions?: {
+                            target: {
+                                targetKind: "subject";
+                                targetId: string;
+                            };
+                            counts: {
+                                state: "available";
+                                values: {
+                                    like?: number;
+                                    love?: number;
+                                    laugh?: number;
+                                    insightful?: number;
+                                    sad?: number;
+                                };
+                                asOf: Readonly<{
+                                    epoch: number;
+                                    position: string;
+                                }> | null;
+                            } | {
+                                state: "unavailable";
+                            };
+                            viewer?: {
+                                state: "available";
+                                kind: "insightful" | "laugh" | "like" | "love" | "sad" | null;
+                            } | {
+                                state: "unavailable";
+                            };
+                            action: "allowed" | "denied" | "sign_in" | "unavailable";
+                        };
+                    };
+                    destination: {
+                        kind: "subject";
+                        id: string;
+                        title: string | null;
+                    };
+                } | {
+                    id: string;
+                    occurredAt: string | null;
+                    source: "following";
+                    key: {
+                        owner: "content";
+                        kind: "thread";
+                        route: number;
+                        id: string;
+                    };
+                    summary: Pick<import("./reads.ts").ThreadView, "createdAt" | "id" | "kind" | "title"> & import("./feed-contract.ts").FeedContentSummary;
+                    destination: {
+                        kind: "thread";
+                        id: string;
+                        title: string | null;
+                    };
+                } | {
+                    id: string;
+                    occurredAt: string | null;
+                    source: "following";
+                    key: {
+                        owner: "content";
+                        kind: "post";
+                        route: number;
+                        id: string;
+                    };
+                    summary: Pick<import("./model.ts").ItemView, "createdAt" | "id" | "threadId"> & Pick<import("./reads.ts").ThreadView, "title"> & import("./feed-contract.ts").FeedContentSummary & {
+                        parentContext?: import("./model.ts").FeedParentContext;
+                    };
+                    destination: {
+                        kind: "post";
+                        id: string;
+                        title: string | null;
+                        threadId: string;
+                        postId: string;
+                    };
+                } | {
+                    id: string;
+                    occurredAt: string | null;
+                    source: "following";
+                    key: {
+                        owner: "library";
+                        kind: "collection";
+                        route: number;
+                        id: string;
+                    };
+                    summary: Pick<import("../library/collection-reads.ts").CollectionResourceView, "description" | "id" | "title">;
+                    destination: {
+                        kind: "collection";
+                        id: string;
+                        title: string | null;
+                    };
+                })[];
+                viewerPersonalActions?: import("../library/viewer-personal-actions.ts").ViewerPersonalActionsPage;
+                next: string | null;
+                asOf: string;
+                reactionsAsOf?: Readonly<{
+                    epoch: number;
+                    position: string;
+                }> | null;
+                sources: {
+                    discovery: "not_requested" | "preparing" | "ready" | "unavailable";
+                    following: "not_requested" | "preparing" | "ready" | "unavailable";
+                    continue: "not_requested" | "preparing" | "ready" | "unavailable";
+                };
+            };
+            readonly 400: {
+                type: unknown;
+                title: unknown;
+                status: number;
+                code: unknown;
+                retryable: unknown;
+                effect_status: "not_applicable" | "not_applied";
+                request_id: string;
+                detail: unknown;
+                errors: unknown;
+            };
+            readonly 401: {
+                type: unknown;
+                title: unknown;
+                status: number;
+                code: unknown;
+                retryable: unknown;
+                effect_status: "not_applicable" | "not_applied";
+                request_id: string;
+                detail: unknown;
+                errors: unknown;
+            };
+            readonly 403: {
+                type: unknown;
+                title: unknown;
+                status: number;
+                code: unknown;
+                retryable: unknown;
+                effect_status: "not_applicable" | "not_applied";
+                request_id: string;
+                detail: unknown;
+                errors: unknown;
+            };
+            readonly 404: {
+                type: unknown;
+                title: unknown;
+                status: number;
+                code: unknown;
+                retryable: unknown;
+                effect_status: "not_applicable" | "not_applied";
+                request_id: string;
+                detail: unknown;
+                errors: unknown;
+            };
+            readonly 409: {
+                type: unknown;
+                title: unknown;
+                status: number;
+                code: unknown;
+                retryable: unknown;
+                effect_status: "not_applicable" | "not_applied";
+                request_id: string;
+                detail: unknown;
+                errors: unknown;
+            };
+            readonly 422: {
+                type: unknown;
+                title: unknown;
+                status: number;
+                code: unknown;
+                retryable: unknown;
+                effect_status: "not_applicable" | "not_applied";
+                request_id: string;
+                detail: unknown;
+                errors: unknown;
+            };
+            readonly 503: {
+                type: unknown;
+                title: unknown;
+                status: number;
+                code: unknown;
+                retryable: unknown;
+                effect_status: "not_applicable" | "not_applied";
+                request_id: string;
+                detail: unknown;
+                errors: unknown;
+            };
+        }>;
+        defer: (fn: import("elysia/types").AfterResponseHandler<{
+            params: {};
+            query: {
+                stream?: string;
+                limit?: string;
+                cursor?: string;
+                kind?: string;
+                spaceId?: string;
+                ratingQuestionId?: string;
+            } & {
+                [key: string]: unknown;
+            };
+            response: {
+                readonly 200: {
+                    feedItems: ({
+                        id: string;
+                        occurredAt: string | null;
+                        source: "discovery";
+                        key: {
+                            owner: "semantic";
+                            kind: string;
+                            route: number;
+                            id: string;
+                        };
+                        summary: {
+                            id: string;
+                            type: string;
+                            types: string[];
+                            label: {
+                                value: string;
+                                language: string;
+                            } | null;
+                            creativeWork: boolean;
+                            cover: {
+                                media: string;
+                                width: number;
+                                height: number;
+                                placeholder: {
+                                    thumbhash: string;
+                                    color: string;
+                                };
+                                variants: {
+                                    format: "avif" | "webp";
+                                    width: number;
+                                }[];
+                                focalPoint: {
+                                    x: number;
+                                    y: number;
+                                } | null;
+                                credit: {
+                                    rightsHolder: string;
+                                    via: {
+                                        name: string;
+                                        url: string;
+                                    };
+                                    license: string;
+                                    obligations: string[];
+                                };
+                            } | null;
+                            subjectReactions?: {
+                                target: {
+                                    targetKind: "subject";
+                                    targetId: string;
+                                };
+                                counts: {
+                                    state: "available";
+                                    values: {
+                                        like?: number;
+                                        love?: number;
+                                        laugh?: number;
+                                        insightful?: number;
+                                        sad?: number;
+                                    };
+                                    asOf: Readonly<{
+                                        epoch: number;
+                                        position: string;
+                                    }> | null;
+                                } | {
+                                    state: "unavailable";
+                                };
+                                viewer?: {
+                                    state: "available";
+                                    kind: "insightful" | "laugh" | "like" | "love" | "sad" | null;
+                                } | {
+                                    state: "unavailable";
+                                };
+                                action: "allowed" | "denied" | "sign_in" | "unavailable";
+                            };
+                        };
+                        destination: {
+                            kind: "subject";
+                            id: string;
+                            title: string | null;
+                        };
+                    } | {
+                        id: string;
+                        occurredAt: string | null;
+                        source: "discovery";
+                        key: {
+                            owner: "accounts";
+                            kind: "account";
+                            route: number;
+                            id: string;
+                        };
+                        summary: import("../search/discovery-api.ts").AccountDiscoverySummary;
+                        destination: {
+                            kind: "account";
+                            id: string;
+                            title: string | null;
+                        };
+                    } | {
+                        id: string;
+                        occurredAt: string | null;
+                        source: "discovery";
+                        key: {
+                            owner: "commerce";
+                            kind: "collection";
+                            route: number;
+                            id: string;
+                        };
+                        summary: Readonly<{
+                            id: string;
+                            title: string;
+                            description: string | null;
+                            card: import("../library/collection-discovery-summaries.ts").PublicCollectionDiscoverySummary;
+                        }>;
+                        destination: {
+                            kind: "collection";
+                            id: string;
+                            title: string | null;
+                        };
+                    } | {
+                        id: string;
+                        occurredAt: string | null;
+                        source: "discovery";
+                        key: {
+                            owner: "content";
+                            kind: "review";
+                            route: number;
+                            id: string;
+                        };
+                        summary: Readonly<{
+                            id: string;
+                            kind: 'review';
+                            title: string | null;
+                            author?: Readonly<{
+                                displayName: string | null;
+                                handle: string | null;
+                            }>;
+                            excerpt?: string;
+                            subject?: Readonly<{
+                                id: string;
+                                title: string | null;
+                            }> | null;
+                            source?: import("../search/review-context.ts").ReviewContextSource;
+                            searchContext?: import("../search/review-context.ts").SearchReviewContext;
+                        }> & Pick<import("./feed-contract.ts").FeedContentSummary, "conversationActivity" | "reactionAdvice" | "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">;
+                        destination: {
+                            kind: "thread";
+                            id: string;
+                            title: string | null;
+                        };
+                    } | {
+                        id: string;
+                        occurredAt: string | null;
+                        source: "discovery";
+                        key: {
+                            owner: "content";
+                            kind: "space";
+                            route: number;
+                            id: string;
+                        };
+                        summary: Readonly<{
+                            id: string;
+                            title: string;
+                            address: string;
+                            summary?: string;
+                            realm?: Readonly<{
+                                id: string;
+                                title: string | null;
+                            }> | null;
+                            presentation?: import("../community/space-discovery-entry-contract.ts").SpaceEntryPresentation;
+                        }>;
+                        destination: {
+                            kind: "space";
+                            id: string;
+                            title: string | null;
+                            address: string;
+                        };
+                    } | {
+                        id: string;
+                        occurredAt: string | null;
+                        source: "continue";
+                        key: {
+                            owner: "semantic";
+                            kind: string;
+                            route: number;
+                            id: string;
+                        };
+                        summary: {
+                            id: string;
+                            type: string;
+                            types: string[];
+                            label: {
+                                value: string;
+                                language: string;
+                            } | null;
+                            creativeWork: boolean;
+                            cover: {
+                                media: string;
+                                width: number;
+                                height: number;
+                                placeholder: {
+                                    thumbhash: string;
+                                    color: string;
+                                };
+                                variants: {
+                                    format: "avif" | "webp";
+                                    width: number;
+                                }[];
+                                focalPoint: {
+                                    x: number;
+                                    y: number;
+                                } | null;
+                                credit: {
+                                    rightsHolder: string;
+                                    via: {
+                                        name: string;
+                                        url: string;
+                                    };
+                                    license: string;
+                                    obligations: string[];
+                                };
+                            } | null;
+                            subjectReactions?: {
+                                target: {
+                                    targetKind: "subject";
+                                    targetId: string;
+                                };
+                                counts: {
+                                    state: "available";
+                                    values: {
+                                        like?: number;
+                                        love?: number;
+                                        laugh?: number;
+                                        insightful?: number;
+                                        sad?: number;
+                                    };
+                                    asOf: Readonly<{
+                                        epoch: number;
+                                        position: string;
+                                    }> | null;
+                                } | {
+                                    state: "unavailable";
+                                };
+                                viewer?: {
+                                    state: "available";
+                                    kind: "insightful" | "laugh" | "like" | "love" | "sad" | null;
+                                } | {
+                                    state: "unavailable";
+                                };
+                                action: "allowed" | "denied" | "sign_in" | "unavailable";
+                            };
+                        };
+                        destination: {
+                            kind: "subject";
+                            id: string;
+                            title: string | null;
+                        };
+                        continue: {
+                            subjectId: string;
+                            state: string | null;
+                            lastActivityAt: string;
+                            activeProgressSession: {
+                                id: string;
+                                subjectId: string;
+                                versionSubjectId: string | null;
+                                mode: "completed_units" | "cursor_position" | "scalar_amount";
+                                unit: string;
+                                total: string | null;
+                                amount: string | null;
+                                locator: string | null;
+                                position: string | null;
+                                completedUnitCount: number;
+                                state: "abandoned" | "active" | "completed" | "retired";
+                                revision: number;
+                                startedAt: string;
+                                completedAt: string | null;
+                                measures?: {
+                                    unit: string;
+                                    amount: string | null;
+                                    total: string | null;
+                                    presentation?: Readonly<{
+                                        meaning: 'known' | 'unknown' | 'unavailable';
+                                        unitLabel?: string;
+                                        unitLabelLanguage?: string;
+                                        unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
+                                        dimension?: string;
+                                        structure: 'unverified';
+                                        recording: Readonly<{
+                                            state: 'supported';
+                                            inputRules: import("@rezics/progress").ProgressInputRules;
+                                        } | {
+                                            state: 'unsupported' | 'unavailable';
+                                        }>;
+                                    }>;
+                                }[];
+                            } | null;
+                            subject?: {
+                                id: string;
+                                type: string;
+                                types: string[];
+                                label: {
+                                    value: string;
+                                    language: string;
+                                } | null;
+                                creativeWork: boolean;
+                                cover: {
+                                    media: string;
+                                    width: number;
+                                    height: number;
+                                    placeholder: {
+                                        thumbhash: string;
+                                        color: string;
+                                    };
+                                    variants: {
+                                        format: "avif" | "webp";
+                                        width: number;
+                                    }[];
+                                    focalPoint: {
+                                        x: number;
+                                        y: number;
+                                    } | null;
+                                    credit: {
+                                        rightsHolder: string;
+                                        via: {
+                                            name: string;
+                                            url: string;
+                                        };
+                                        license: string;
+                                        obligations: string[];
+                                    };
+                                } | null;
+                            } | null;
+                        };
+                    } | {
+                        id: string;
+                        occurredAt: string | null;
+                        source: "following";
+                        key: {
+                            owner: "semantic";
+                            kind: string;
+                            route: number;
+                            id: string;
+                        };
+                        summary: {
+                            id: string;
+                            type: string;
+                            types: string[];
+                            label: {
+                                value: string;
+                                language: string;
+                            } | null;
+                            creativeWork: boolean;
+                            cover: {
+                                media: string;
+                                width: number;
+                                height: number;
+                                placeholder: {
+                                    thumbhash: string;
+                                    color: string;
+                                };
+                                variants: {
+                                    format: "avif" | "webp";
+                                    width: number;
+                                }[];
+                                focalPoint: {
+                                    x: number;
+                                    y: number;
+                                } | null;
+                                credit: {
+                                    rightsHolder: string;
+                                    via: {
+                                        name: string;
+                                        url: string;
+                                    };
+                                    license: string;
+                                    obligations: string[];
+                                };
+                            } | null;
+                            subjectReactions?: {
+                                target: {
+                                    targetKind: "subject";
+                                    targetId: string;
+                                };
+                                counts: {
+                                    state: "available";
+                                    values: {
+                                        like?: number;
+                                        love?: number;
+                                        laugh?: number;
+                                        insightful?: number;
+                                        sad?: number;
+                                    };
+                                    asOf: Readonly<{
+                                        epoch: number;
+                                        position: string;
+                                    }> | null;
+                                } | {
+                                    state: "unavailable";
+                                };
+                                viewer?: {
+                                    state: "available";
+                                    kind: "insightful" | "laugh" | "like" | "love" | "sad" | null;
+                                } | {
+                                    state: "unavailable";
+                                };
+                                action: "allowed" | "denied" | "sign_in" | "unavailable";
+                            };
+                        };
+                        destination: {
+                            kind: "subject";
+                            id: string;
+                            title: string | null;
+                        };
+                    } | {
+                        id: string;
+                        occurredAt: string | null;
+                        source: "following";
+                        key: {
+                            owner: "content";
+                            kind: "thread";
+                            route: number;
+                            id: string;
+                        };
+                        summary: Pick<import("./reads.ts").ThreadView, "createdAt" | "id" | "kind" | "title"> & import("./feed-contract.ts").FeedContentSummary;
+                        destination: {
+                            kind: "thread";
+                            id: string;
+                            title: string | null;
+                        };
+                    } | {
+                        id: string;
+                        occurredAt: string | null;
+                        source: "following";
+                        key: {
+                            owner: "content";
+                            kind: "post";
+                            route: number;
+                            id: string;
+                        };
+                        summary: Pick<import("./model.ts").ItemView, "createdAt" | "id" | "threadId"> & Pick<import("./reads.ts").ThreadView, "title"> & import("./feed-contract.ts").FeedContentSummary & {
+                            parentContext?: import("./model.ts").FeedParentContext;
+                        };
+                        destination: {
+                            kind: "post";
+                            id: string;
+                            title: string | null;
+                            threadId: string;
+                            postId: string;
+                        };
+                    } | {
+                        id: string;
+                        occurredAt: string | null;
+                        source: "following";
+                        key: {
+                            owner: "library";
+                            kind: "collection";
+                            route: number;
+                            id: string;
+                        };
+                        summary: Pick<import("../library/collection-reads.ts").CollectionResourceView, "description" | "id" | "title">;
+                        destination: {
+                            kind: "collection";
+                            id: string;
+                            title: string | null;
+                        };
+                    })[];
+                    viewerPersonalActions?: import("../library/viewer-personal-actions.ts").ViewerPersonalActionsPage;
+                    next: string | null;
+                    asOf: string;
+                    reactionsAsOf?: Readonly<{
+                        epoch: number;
+                        position: string;
+                    }> | null;
+                    sources: {
+                        discovery: "not_requested" | "preparing" | "ready" | "unavailable";
+                        following: "not_requested" | "preparing" | "ready" | "unavailable";
+                        continue: "not_requested" | "preparing" | "ready" | "unavailable";
+                    };
+                };
+                readonly 400: {
+                    type: unknown;
+                    title: unknown;
+                    status: number;
+                    code: unknown;
+                    retryable: unknown;
+                    effect_status: "not_applicable" | "not_applied";
+                    request_id: string;
+                    detail: unknown;
+                    errors: unknown;
+                };
+                readonly 401: {
+                    type: unknown;
+                    title: unknown;
+                    status: number;
+                    code: unknown;
+                    retryable: unknown;
+                    effect_status: "not_applicable" | "not_applied";
+                    request_id: string;
+                    detail: unknown;
+                    errors: unknown;
+                };
+                readonly 403: {
+                    type: unknown;
+                    title: unknown;
+                    status: number;
+                    code: unknown;
+                    retryable: unknown;
+                    effect_status: "not_applicable" | "not_applied";
+                    request_id: string;
+                    detail: unknown;
+                    errors: unknown;
+                };
+                readonly 404: {
+                    type: unknown;
+                    title: unknown;
+                    status: number;
+                    code: unknown;
+                    retryable: unknown;
+                    effect_status: "not_applicable" | "not_applied";
+                    request_id: string;
+                    detail: unknown;
+                    errors: unknown;
+                };
+                readonly 409: {
+                    type: unknown;
+                    title: unknown;
+                    status: number;
+                    code: unknown;
+                    retryable: unknown;
+                    effect_status: "not_applicable" | "not_applied";
+                    request_id: string;
+                    detail: unknown;
+                    errors: unknown;
+                };
+                readonly 422: {
+                    type: unknown;
+                    title: unknown;
+                    status: number;
+                    code: unknown;
+                    retryable: unknown;
+                    effect_status: "not_applicable" | "not_applied";
+                    request_id: string;
+                    detail: unknown;
+                    errors: unknown;
+                };
+                readonly 503: {
+                    type: unknown;
+                    title: unknown;
+                    status: number;
+                    code: unknown;
+                    retryable: unknown;
+                    effect_status: "not_applicable" | "not_applied";
+                    request_id: string;
+                    detail: unknown;
+                    errors: unknown;
+                };
+            };
+        }, {
+            decorator: {};
+            store: {};
+            derive: {};
+        }>) => import("elysia/types").MaybePromise<void>;
+        readonly path: string;
+        route?: string;
+        rid?: string;
+        request: Request;
+        store: {};
+        body: unknown;
+        query: {
+            [x: string]: unknown;
+            stream?: string;
+            limit?: string;
+            cursor?: string;
+            kind?: string;
+            spaceId?: string;
+            ratingQuestionId?: string;
+        };
+        params: {};
+        headers: Record<string, string | undefined>;
+        cookie: Record<string, import("elysia").Cookie<unknown>>;
+    }, "cookie"> & {
+        cookie: undefined;
+    }) => void;
 }>;

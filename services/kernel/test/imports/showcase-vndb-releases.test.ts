@@ -1,3 +1,4 @@
+import { openApiObserver } from './api-observer.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -20,7 +21,6 @@ import {
 import { seedShowcaseVndbReleases } from '../../../importer/src/showcase-vndb-releases.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { identitySupport } from './identity-fixture.ts';
-import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
 
 const globalContext = GLOBAL_CONTEXT;

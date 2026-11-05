@@ -13,7 +13,15 @@ export type Account = Omit<AccountRow, 'minimumAuthnEpoch'> & {
 };
 export type AccountKind = Account['kind'];
 export type AccountState = Account['state'];
+export type AccountCommandState = Readonly<{
+    kind: AccountKind;
+    state: AccountState;
+    fenced: boolean;
+    minimumAuthnEpoch: bigint;
+}>;
 export type OrganizationRole = NonNullable<Awaited<ReturnType<typeof organizationRoleRead.run>>>['role'];
+/** Minimal native Account projection for command and private-read authorization. */
+export declare function readAccountCommandState(client: Queryable, route: number, accountId: string, work?: AccessWorkAccounting): Promise<AccountCommandState | null>;
 export type PublicAccount = {
     accountId: string;
     kind: string;
@@ -43,6 +51,12 @@ export type PublicIdentityFields = {
     automated: boolean;
     operatorId: string | null;
 };
+/** One current public identity plus the native facts needed to reobserve its avatar disclosure. */
+export type PublicIdentityObservation = DeletedPublicIdentity | (PublicIdentityFields & {
+    avatarMediaId: string | null;
+    nativeState: 'active' | 'suspended';
+    authnFenced: boolean;
+});
 export type AccountLink = {
     label: string;
     url: string;
@@ -82,6 +96,11 @@ export declare function readAccount(client: Queryable, route: number, accountId:
 export declare function readPublicAccount(client: Queryable, route: number, accountId: string): Promise<PublicAccount | null>;
 /** Public, bounded batch projection; callers pass request-ordered route and account ID arrays. */
 export declare function readPublicIdentities(client: Queryable, routes: readonly number[], accountIds: readonly string[]): Promise<PublicIdentity[]>;
+/**
+ * Reads current public identities and only avatar references admitted by the active/unfenced predicate.
+ * Result entries follow request order and repeat for duplicate IDs; native seeks are deduplicated.
+ */
+export declare function readPublicIdentityObservations(client: Queryable, accountIds: readonly string[]): Promise<PublicIdentityObservation[]>;
 /** Reads a single member's role at the caller's authoritative request time on the organization anchor. */
 export declare function readOrganizationRole(client: Queryable, route: number, organizationId: string, memberAccountId: string, at: Date): Promise<OrganizationRole | null>;
 export type AgentPagesPage = {

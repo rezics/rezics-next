@@ -308,6 +308,27 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                 post: {
                     body: {
                         subjects: string[];
+                        expectedIdentity?: {
+                            endpoints: [{
+                                subject: string;
+                                revision: number;
+                                securityRevision: string;
+                                source: "bangumi" | "bangumi_cross_media" | "vndb" | "vndb_cross_media";
+                                externalId: string;
+                                claimTransactionId: string;
+                                property: "wdt:P3180" | "wdt:P6298";
+                                value: string;
+                            }, {
+                                subject: string;
+                                revision: number;
+                                securityRevision: string;
+                                source: "bangumi" | "bangumi_cross_media" | "vndb" | "vndb_cross_media";
+                                externalId: string;
+                                claimTransactionId: string;
+                                property: "wdt:P3180" | "wdt:P6298";
+                                value: string;
+                            }];
+                        };
                     };
                     params: {};
                     query: unknown;
@@ -316,9 +337,14 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                     };
                     response: {
                         200: {
-                            survivor: string;
-                            redirected: string;
-                            revision: number;
+                            operation: {
+                                id: string;
+                            };
+                        };
+                        202: {
+                            operation: {
+                                id: string;
+                            };
                         };
                         400: Response | {
                             type: unknown;
@@ -405,6 +431,86 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
     };
 } & {
     v1: {
+        subjectIdentityOperations: {
+            ":id": {
+                get: {
+                    body: unknown;
+                    params: {
+                        id: string;
+                    };
+                    query: unknown;
+                    headers: unknown;
+                    response: {
+                        200: {
+                            operation: {
+                                id: string;
+                                done: false;
+                            } | {
+                                id: string;
+                                done: true;
+                                result: {
+                                    survivor: string;
+                                    redirected: string;
+                                    revision: number;
+                                };
+                            };
+                        };
+                        401: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        404: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        422: Response | {
+                            type: 'validation';
+                            code: 'validation';
+                            title: 'Validation Error';
+                            status: 422;
+                            detail?: string;
+                            on: string;
+                            found?: unknown;
+                            property?: string;
+                            expected?: unknown;
+                            errors?: {
+                                message?: string;
+                                [key: string]: unknown;
+                            }[];
+                        };
+                        503: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                    };
+                    error: never;
+                };
+            };
+        };
+    };
+} & {
+    v1: {
         subjects: {
             ":id": {
                 get: {
@@ -415,6 +521,10 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                     query: {
                         context?: string;
                         language?: string;
+                        includeViewerActions?: boolean;
+                        includeDocuments?: boolean;
+                        reviewIdentitySource?: "bangumi" | "bangumi_cross_media" | "vndb" | "vndb_cross_media";
+                        reviewIdentityExternalId?: string;
                     };
                     headers: unknown;
                     response: {
@@ -491,6 +601,16 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                     attribution?: string;
                                 }[];
                             };
+                            reviewedIdentity?: {
+                                subject: string;
+                                revision: number;
+                                securityRevision: string;
+                                source: "bangumi" | "bangumi_cross_media" | "vndb" | "vndb_cross_media";
+                                externalId: string;
+                                claimTransactionId: string;
+                                property: "wdt:P3180" | "wdt:P6298";
+                                value: string;
+                            } | null;
                             account: {
                                 id: string;
                             } | null;
@@ -562,12 +682,33 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                     };
                                 } | null;
                             }>;
+                            documents?: Record<string, import("./document-public.ts").PublicDocumentView>;
+                            viewerActions?: {
+                                state: "available";
+                                actions: {
+                                    action: string;
+                                    operations: string[];
+                                }[];
+                            } | {
+                                state: "unavailable";
+                            };
                         };
                         308: {
                             redirect: {
                                 from: string;
                                 to: string;
                             };
+                        };
+                        400: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
                         };
                         401: Response | {
                             type: unknown;
@@ -1038,6 +1179,106 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                             };
                         };
                         error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        subjects: {
+            ":id": {
+                candidates: {
+                    ":candidate": {
+                        lifecycle: {
+                            get: {
+                                body: unknown;
+                                params: {
+                                    id: string;
+                                    candidate: string;
+                                };
+                                query: {
+                                    property: string;
+                                };
+                                headers: unknown;
+                                response: {
+                                    200: {
+                                        subject: string;
+                                        candidate: string;
+                                        property: string;
+                                        viewer: "account" | "anonymous";
+                                        state: "available" | "deleted";
+                                        selected: boolean;
+                                        actions: {
+                                            state: "available";
+                                            operations: ("delete" | "restore")[];
+                                        } | {
+                                            state: "unavailable";
+                                        };
+                                    };
+                                    400: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    401: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    404: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    422: Response | {
+                                        type: 'validation';
+                                        code: 'validation';
+                                        title: 'Validation Error';
+                                        status: 422;
+                                        detail?: string;
+                                        on: string;
+                                        found?: unknown;
+                                        property?: string;
+                                        expected?: unknown;
+                                        errors?: {
+                                            message?: string;
+                                            [key: string]: unknown;
+                                        }[];
+                                    };
+                                    503: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                };
+                                error: never;
+                            };
+                        };
                     };
                 };
             };
@@ -2660,6 +2901,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                             context?: string;
                             property?: string;
                             filter?: string;
+                            qualifier?: string;
                             type?: string;
                             language?: string;
                         };
@@ -2720,6 +2962,11 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                             release: string;
                                             revision: number;
                                         };
+                                    };
+                                    creditSlot?: {
+                                        property: string;
+                                        target: string;
+                                        key?: string;
                                     };
                                     related?: Record<string, {
                                         id: string;
@@ -2796,6 +3043,1316 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                         } | null;
                                     };
                                 }[];
+                                workReleaseCards?: {
+                                    state: "unavailable";
+                                } | {
+                                    state: "available";
+                                    cards: {
+                                        subject: string;
+                                        type: string;
+                                        summary: {
+                                            id: string;
+                                            type: string;
+                                            types: string[];
+                                            label: {
+                                                value: string;
+                                                language: string;
+                                            } | null;
+                                            creativeWork: boolean;
+                                            cover: {
+                                                media: string;
+                                                width: number;
+                                                height: number;
+                                                placeholder: {
+                                                    thumbhash: string;
+                                                    color: string;
+                                                };
+                                                variants: {
+                                                    format: "avif" | "webp";
+                                                    width: number;
+                                                }[];
+                                                focalPoint: {
+                                                    x: number;
+                                                    y: number;
+                                                } | null;
+                                                credit: {
+                                                    rightsHolder: string;
+                                                    via: {
+                                                        name: string;
+                                                        url: string;
+                                                    };
+                                                    license: string;
+                                                    obligations: string[];
+                                                };
+                                            } | null;
+                                        };
+                                        membership: {
+                                            id: string;
+                                            rank: "deprecated" | "normal" | "preferred";
+                                            property: {
+                                                id: string;
+                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                            };
+                                            value: {
+                                                type: "value";
+                                                content: any;
+                                            } | {
+                                                type: "somevalue";
+                                            } | {
+                                                type: "novalue";
+                                            };
+                                            qualifiers: {
+                                                property: {
+                                                    id: string;
+                                                    data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                };
+                                                value: {
+                                                    type: "value";
+                                                    content: any;
+                                                } | {
+                                                    type: "somevalue";
+                                                } | {
+                                                    type: "novalue";
+                                                };
+                                            }[];
+                                            references: {
+                                                parts: {
+                                                    property: {
+                                                        id: string;
+                                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                    };
+                                                    value: {
+                                                        type: "value";
+                                                        content: any;
+                                                    } | {
+                                                        type: "somevalue";
+                                                    } | {
+                                                        type: "novalue";
+                                                    };
+                                                }[];
+                                                hash: string;
+                                            }[];
+                                            rezics: {
+                                                release: string;
+                                                revision: number;
+                                            };
+                                        };
+                                        related: Record<string, {
+                                            id: string;
+                                            type: string;
+                                            types: string[];
+                                            label: {
+                                                value: string;
+                                                language: string;
+                                            } | null;
+                                            creativeWork: boolean;
+                                            cover: {
+                                                media: string;
+                                                width: number;
+                                                height: number;
+                                                placeholder: {
+                                                    thumbhash: string;
+                                                    color: string;
+                                                };
+                                                variants: {
+                                                    format: "avif" | "webp";
+                                                    width: number;
+                                                }[];
+                                                focalPoint: {
+                                                    x: number;
+                                                    y: number;
+                                                } | null;
+                                                credit: {
+                                                    rightsHolder: string;
+                                                    via: {
+                                                        name: string;
+                                                        url: string;
+                                                    };
+                                                    license: string;
+                                                    obligations: string[];
+                                                };
+                                            } | null;
+                                        }>;
+                                        fields: {
+                                            'schema:gamePlatform': {
+                                                state: "unsupported";
+                                            } | {
+                                                state: "withheld";
+                                            } | {
+                                                state: "missing";
+                                            } | {
+                                                state: "unavailable";
+                                            } | {
+                                                state: "available";
+                                                statements: {
+                                                    id: string;
+                                                    rank: "deprecated" | "normal" | "preferred";
+                                                    property: {
+                                                        id: string;
+                                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                    };
+                                                    value: {
+                                                        type: "value";
+                                                        content: any;
+                                                    } | {
+                                                        type: "somevalue";
+                                                    } | {
+                                                        type: "novalue";
+                                                    };
+                                                    qualifiers: {
+                                                        property: {
+                                                            id: string;
+                                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                        };
+                                                        value: {
+                                                            type: "value";
+                                                            content: any;
+                                                        } | {
+                                                            type: "somevalue";
+                                                        } | {
+                                                            type: "novalue";
+                                                        };
+                                                    }[];
+                                                    references: {
+                                                        parts: {
+                                                            property: {
+                                                                id: string;
+                                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                            };
+                                                            value: {
+                                                                type: "value";
+                                                                content: any;
+                                                            } | {
+                                                                type: "somevalue";
+                                                            } | {
+                                                                type: "novalue";
+                                                            };
+                                                        }[];
+                                                        hash: string;
+                                                    }[];
+                                                    rezics: {
+                                                        release: string;
+                                                        revision: number;
+                                                    };
+                                                }[];
+                                                related: Record<string, {
+                                                    id: string;
+                                                    type: string;
+                                                    types: string[];
+                                                    label: {
+                                                        value: string;
+                                                        language: string;
+                                                    } | null;
+                                                    creativeWork: boolean;
+                                                    cover: {
+                                                        media: string;
+                                                        width: number;
+                                                        height: number;
+                                                        placeholder: {
+                                                            thumbhash: string;
+                                                            color: string;
+                                                        };
+                                                        variants: {
+                                                            format: "avif" | "webp";
+                                                            width: number;
+                                                        }[];
+                                                        focalPoint: {
+                                                            x: number;
+                                                            y: number;
+                                                        } | null;
+                                                        credit: {
+                                                            rightsHolder: string;
+                                                            via: {
+                                                                name: string;
+                                                                url: string;
+                                                            };
+                                                            license: string;
+                                                            obligations: string[];
+                                                        };
+                                                    } | null;
+                                                }>;
+                                            };
+                                            'schema:inLanguage': {
+                                                state: "unsupported";
+                                            } | {
+                                                state: "withheld";
+                                            } | {
+                                                state: "missing";
+                                            } | {
+                                                state: "unavailable";
+                                            } | {
+                                                state: "available";
+                                                statements: {
+                                                    id: string;
+                                                    rank: "deprecated" | "normal" | "preferred";
+                                                    property: {
+                                                        id: string;
+                                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                    };
+                                                    value: {
+                                                        type: "value";
+                                                        content: any;
+                                                    } | {
+                                                        type: "somevalue";
+                                                    } | {
+                                                        type: "novalue";
+                                                    };
+                                                    qualifiers: {
+                                                        property: {
+                                                            id: string;
+                                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                        };
+                                                        value: {
+                                                            type: "value";
+                                                            content: any;
+                                                        } | {
+                                                            type: "somevalue";
+                                                        } | {
+                                                            type: "novalue";
+                                                        };
+                                                    }[];
+                                                    references: {
+                                                        parts: {
+                                                            property: {
+                                                                id: string;
+                                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                            };
+                                                            value: {
+                                                                type: "value";
+                                                                content: any;
+                                                            } | {
+                                                                type: "somevalue";
+                                                            } | {
+                                                                type: "novalue";
+                                                            };
+                                                        }[];
+                                                        hash: string;
+                                                    }[];
+                                                    rezics: {
+                                                        release: string;
+                                                        revision: number;
+                                                    };
+                                                }[];
+                                                related: Record<string, {
+                                                    id: string;
+                                                    type: string;
+                                                    types: string[];
+                                                    label: {
+                                                        value: string;
+                                                        language: string;
+                                                    } | null;
+                                                    creativeWork: boolean;
+                                                    cover: {
+                                                        media: string;
+                                                        width: number;
+                                                        height: number;
+                                                        placeholder: {
+                                                            thumbhash: string;
+                                                            color: string;
+                                                        };
+                                                        variants: {
+                                                            format: "avif" | "webp";
+                                                            width: number;
+                                                        }[];
+                                                        focalPoint: {
+                                                            x: number;
+                                                            y: number;
+                                                        } | null;
+                                                        credit: {
+                                                            rightsHolder: string;
+                                                            via: {
+                                                                name: string;
+                                                                url: string;
+                                                            };
+                                                            license: string;
+                                                            obligations: string[];
+                                                        };
+                                                    } | null;
+                                                }>;
+                                            };
+                                            'schema:datePublished': {
+                                                state: "unsupported";
+                                            } | {
+                                                state: "withheld";
+                                            } | {
+                                                state: "missing";
+                                            } | {
+                                                state: "unavailable";
+                                            } | {
+                                                state: "available";
+                                                statements: {
+                                                    id: string;
+                                                    rank: "deprecated" | "normal" | "preferred";
+                                                    property: {
+                                                        id: string;
+                                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                    };
+                                                    value: {
+                                                        type: "value";
+                                                        content: any;
+                                                    } | {
+                                                        type: "somevalue";
+                                                    } | {
+                                                        type: "novalue";
+                                                    };
+                                                    qualifiers: {
+                                                        property: {
+                                                            id: string;
+                                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                        };
+                                                        value: {
+                                                            type: "value";
+                                                            content: any;
+                                                        } | {
+                                                            type: "somevalue";
+                                                        } | {
+                                                            type: "novalue";
+                                                        };
+                                                    }[];
+                                                    references: {
+                                                        parts: {
+                                                            property: {
+                                                                id: string;
+                                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                            };
+                                                            value: {
+                                                                type: "value";
+                                                                content: any;
+                                                            } | {
+                                                                type: "somevalue";
+                                                            } | {
+                                                                type: "novalue";
+                                                            };
+                                                        }[];
+                                                        hash: string;
+                                                    }[];
+                                                    rezics: {
+                                                        release: string;
+                                                        revision: number;
+                                                    };
+                                                }[];
+                                                related: Record<string, {
+                                                    id: string;
+                                                    type: string;
+                                                    types: string[];
+                                                    label: {
+                                                        value: string;
+                                                        language: string;
+                                                    } | null;
+                                                    creativeWork: boolean;
+                                                    cover: {
+                                                        media: string;
+                                                        width: number;
+                                                        height: number;
+                                                        placeholder: {
+                                                            thumbhash: string;
+                                                            color: string;
+                                                        };
+                                                        variants: {
+                                                            format: "avif" | "webp";
+                                                            width: number;
+                                                        }[];
+                                                        focalPoint: {
+                                                            x: number;
+                                                            y: number;
+                                                        } | null;
+                                                        credit: {
+                                                            rightsHolder: string;
+                                                            via: {
+                                                                name: string;
+                                                                url: string;
+                                                            };
+                                                            license: string;
+                                                            obligations: string[];
+                                                        };
+                                                    } | null;
+                                                }>;
+                                            };
+                                            'schema:creativeWorkStatus': {
+                                                state: "unsupported";
+                                            } | {
+                                                state: "withheld";
+                                            } | {
+                                                state: "missing";
+                                            } | {
+                                                state: "unavailable";
+                                            } | {
+                                                state: "available";
+                                                statements: {
+                                                    id: string;
+                                                    rank: "deprecated" | "normal" | "preferred";
+                                                    property: {
+                                                        id: string;
+                                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                    };
+                                                    value: {
+                                                        type: "value";
+                                                        content: any;
+                                                    } | {
+                                                        type: "somevalue";
+                                                    } | {
+                                                        type: "novalue";
+                                                    };
+                                                    qualifiers: {
+                                                        property: {
+                                                            id: string;
+                                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                        };
+                                                        value: {
+                                                            type: "value";
+                                                            content: any;
+                                                        } | {
+                                                            type: "somevalue";
+                                                        } | {
+                                                            type: "novalue";
+                                                        };
+                                                    }[];
+                                                    references: {
+                                                        parts: {
+                                                            property: {
+                                                                id: string;
+                                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                            };
+                                                            value: {
+                                                                type: "value";
+                                                                content: any;
+                                                            } | {
+                                                                type: "somevalue";
+                                                            } | {
+                                                                type: "novalue";
+                                                            };
+                                                        }[];
+                                                        hash: string;
+                                                    }[];
+                                                    rezics: {
+                                                        release: string;
+                                                        revision: number;
+                                                    };
+                                                }[];
+                                                related: Record<string, {
+                                                    id: string;
+                                                    type: string;
+                                                    types: string[];
+                                                    label: {
+                                                        value: string;
+                                                        language: string;
+                                                    } | null;
+                                                    creativeWork: boolean;
+                                                    cover: {
+                                                        media: string;
+                                                        width: number;
+                                                        height: number;
+                                                        placeholder: {
+                                                            thumbhash: string;
+                                                            color: string;
+                                                        };
+                                                        variants: {
+                                                            format: "avif" | "webp";
+                                                            width: number;
+                                                        }[];
+                                                        focalPoint: {
+                                                            x: number;
+                                                            y: number;
+                                                        } | null;
+                                                        credit: {
+                                                            rightsHolder: string;
+                                                            via: {
+                                                                name: string;
+                                                                url: string;
+                                                            };
+                                                            license: string;
+                                                            obligations: string[];
+                                                        };
+                                                    } | null;
+                                                }>;
+                                            };
+                                            'wdt:P5804': {
+                                                state: "unsupported";
+                                            } | {
+                                                state: "withheld";
+                                            } | {
+                                                state: "missing";
+                                            } | {
+                                                state: "unavailable";
+                                            } | {
+                                                state: "available";
+                                                statements: {
+                                                    id: string;
+                                                    rank: "deprecated" | "normal" | "preferred";
+                                                    property: {
+                                                        id: string;
+                                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                    };
+                                                    value: {
+                                                        type: "value";
+                                                        content: any;
+                                                    } | {
+                                                        type: "somevalue";
+                                                    } | {
+                                                        type: "novalue";
+                                                    };
+                                                    qualifiers: {
+                                                        property: {
+                                                            id: string;
+                                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                        };
+                                                        value: {
+                                                            type: "value";
+                                                            content: any;
+                                                        } | {
+                                                            type: "somevalue";
+                                                        } | {
+                                                            type: "novalue";
+                                                        };
+                                                    }[];
+                                                    references: {
+                                                        parts: {
+                                                            property: {
+                                                                id: string;
+                                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                            };
+                                                            value: {
+                                                                type: "value";
+                                                                content: any;
+                                                            } | {
+                                                                type: "somevalue";
+                                                            } | {
+                                                                type: "novalue";
+                                                            };
+                                                        }[];
+                                                        hash: string;
+                                                    }[];
+                                                    rezics: {
+                                                        release: string;
+                                                        revision: number;
+                                                    };
+                                                }[];
+                                                related: Record<string, {
+                                                    id: string;
+                                                    type: string;
+                                                    types: string[];
+                                                    label: {
+                                                        value: string;
+                                                        language: string;
+                                                    } | null;
+                                                    creativeWork: boolean;
+                                                    cover: {
+                                                        media: string;
+                                                        width: number;
+                                                        height: number;
+                                                        placeholder: {
+                                                            thumbhash: string;
+                                                            color: string;
+                                                        };
+                                                        variants: {
+                                                            format: "avif" | "webp";
+                                                            width: number;
+                                                        }[];
+                                                        focalPoint: {
+                                                            x: number;
+                                                            y: number;
+                                                        } | null;
+                                                        credit: {
+                                                            rightsHolder: string;
+                                                            via: {
+                                                                name: string;
+                                                                url: string;
+                                                            };
+                                                            license: string;
+                                                            obligations: string[];
+                                                        };
+                                                    } | null;
+                                                }>;
+                                            };
+                                            'rezics:releaseStatus': {
+                                                state: "unsupported";
+                                            } | {
+                                                state: "withheld";
+                                            } | {
+                                                state: "missing";
+                                            } | {
+                                                state: "unavailable";
+                                            } | {
+                                                state: "available";
+                                                statements: {
+                                                    id: string;
+                                                    rank: "deprecated" | "normal" | "preferred";
+                                                    property: {
+                                                        id: string;
+                                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                    };
+                                                    value: {
+                                                        type: "value";
+                                                        content: any;
+                                                    } | {
+                                                        type: "somevalue";
+                                                    } | {
+                                                        type: "novalue";
+                                                    };
+                                                    qualifiers: {
+                                                        property: {
+                                                            id: string;
+                                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                        };
+                                                        value: {
+                                                            type: "value";
+                                                            content: any;
+                                                        } | {
+                                                            type: "somevalue";
+                                                        } | {
+                                                            type: "novalue";
+                                                        };
+                                                    }[];
+                                                    references: {
+                                                        parts: {
+                                                            property: {
+                                                                id: string;
+                                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                            };
+                                                            value: {
+                                                                type: "value";
+                                                                content: any;
+                                                            } | {
+                                                                type: "somevalue";
+                                                            } | {
+                                                                type: "novalue";
+                                                            };
+                                                        }[];
+                                                        hash: string;
+                                                    }[];
+                                                    rezics: {
+                                                        release: string;
+                                                        revision: number;
+                                                    };
+                                                }[];
+                                                related: Record<string, {
+                                                    id: string;
+                                                    type: string;
+                                                    types: string[];
+                                                    label: {
+                                                        value: string;
+                                                        language: string;
+                                                    } | null;
+                                                    creativeWork: boolean;
+                                                    cover: {
+                                                        media: string;
+                                                        width: number;
+                                                        height: number;
+                                                        placeholder: {
+                                                            thumbhash: string;
+                                                            color: string;
+                                                        };
+                                                        variants: {
+                                                            format: "avif" | "webp";
+                                                            width: number;
+                                                        }[];
+                                                        focalPoint: {
+                                                            x: number;
+                                                            y: number;
+                                                        } | null;
+                                                        credit: {
+                                                            rightsHolder: string;
+                                                            via: {
+                                                                name: string;
+                                                                url: string;
+                                                            };
+                                                            license: string;
+                                                            obligations: string[];
+                                                        };
+                                                    } | null;
+                                                }>;
+                                            };
+                                            'schema:contentRating': {
+                                                state: "unsupported";
+                                            } | {
+                                                state: "withheld";
+                                            } | {
+                                                state: "missing";
+                                            } | {
+                                                state: "unavailable";
+                                            } | {
+                                                state: "available";
+                                                statements: {
+                                                    id: string;
+                                                    rank: "deprecated" | "normal" | "preferred";
+                                                    property: {
+                                                        id: string;
+                                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                    };
+                                                    value: {
+                                                        type: "value";
+                                                        content: any;
+                                                    } | {
+                                                        type: "somevalue";
+                                                    } | {
+                                                        type: "novalue";
+                                                    };
+                                                    qualifiers: {
+                                                        property: {
+                                                            id: string;
+                                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                        };
+                                                        value: {
+                                                            type: "value";
+                                                            content: any;
+                                                        } | {
+                                                            type: "somevalue";
+                                                        } | {
+                                                            type: "novalue";
+                                                        };
+                                                    }[];
+                                                    references: {
+                                                        parts: {
+                                                            property: {
+                                                                id: string;
+                                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                            };
+                                                            value: {
+                                                                type: "value";
+                                                                content: any;
+                                                            } | {
+                                                                type: "somevalue";
+                                                            } | {
+                                                                type: "novalue";
+                                                            };
+                                                        }[];
+                                                        hash: string;
+                                                    }[];
+                                                    rezics: {
+                                                        release: string;
+                                                        revision: number;
+                                                    };
+                                                }[];
+                                                related: Record<string, {
+                                                    id: string;
+                                                    type: string;
+                                                    types: string[];
+                                                    label: {
+                                                        value: string;
+                                                        language: string;
+                                                    } | null;
+                                                    creativeWork: boolean;
+                                                    cover: {
+                                                        media: string;
+                                                        width: number;
+                                                        height: number;
+                                                        placeholder: {
+                                                            thumbhash: string;
+                                                            color: string;
+                                                        };
+                                                        variants: {
+                                                            format: "avif" | "webp";
+                                                            width: number;
+                                                        }[];
+                                                        focalPoint: {
+                                                            x: number;
+                                                            y: number;
+                                                        } | null;
+                                                        credit: {
+                                                            rightsHolder: string;
+                                                            via: {
+                                                                name: string;
+                                                                url: string;
+                                                            };
+                                                            license: string;
+                                                            obligations: string[];
+                                                        };
+                                                    } | null;
+                                                }>;
+                                            };
+                                            'schema:publisher': {
+                                                state: "unsupported";
+                                            } | {
+                                                state: "withheld";
+                                            } | {
+                                                state: "missing";
+                                            } | {
+                                                state: "unavailable";
+                                            } | {
+                                                state: "available";
+                                                statements: {
+                                                    id: string;
+                                                    rank: "deprecated" | "normal" | "preferred";
+                                                    property: {
+                                                        id: string;
+                                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                    };
+                                                    value: {
+                                                        type: "value";
+                                                        content: any;
+                                                    } | {
+                                                        type: "somevalue";
+                                                    } | {
+                                                        type: "novalue";
+                                                    };
+                                                    qualifiers: {
+                                                        property: {
+                                                            id: string;
+                                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                        };
+                                                        value: {
+                                                            type: "value";
+                                                            content: any;
+                                                        } | {
+                                                            type: "somevalue";
+                                                        } | {
+                                                            type: "novalue";
+                                                        };
+                                                    }[];
+                                                    references: {
+                                                        parts: {
+                                                            property: {
+                                                                id: string;
+                                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                            };
+                                                            value: {
+                                                                type: "value";
+                                                                content: any;
+                                                            } | {
+                                                                type: "somevalue";
+                                                            } | {
+                                                                type: "novalue";
+                                                            };
+                                                        }[];
+                                                        hash: string;
+                                                    }[];
+                                                    rezics: {
+                                                        release: string;
+                                                        revision: number;
+                                                    };
+                                                }[];
+                                                related: Record<string, {
+                                                    id: string;
+                                                    type: string;
+                                                    types: string[];
+                                                    label: {
+                                                        value: string;
+                                                        language: string;
+                                                    } | null;
+                                                    creativeWork: boolean;
+                                                    cover: {
+                                                        media: string;
+                                                        width: number;
+                                                        height: number;
+                                                        placeholder: {
+                                                            thumbhash: string;
+                                                            color: string;
+                                                        };
+                                                        variants: {
+                                                            format: "avif" | "webp";
+                                                            width: number;
+                                                        }[];
+                                                        focalPoint: {
+                                                            x: number;
+                                                            y: number;
+                                                        } | null;
+                                                        credit: {
+                                                            rightsHolder: string;
+                                                            via: {
+                                                                name: string;
+                                                                url: string;
+                                                            };
+                                                            license: string;
+                                                            obligations: string[];
+                                                        };
+                                                    } | null;
+                                                }>;
+                                            };
+                                            'schema:producer': {
+                                                state: "unsupported";
+                                            } | {
+                                                state: "withheld";
+                                            } | {
+                                                state: "missing";
+                                            } | {
+                                                state: "unavailable";
+                                            } | {
+                                                state: "available";
+                                                statements: {
+                                                    id: string;
+                                                    rank: "deprecated" | "normal" | "preferred";
+                                                    property: {
+                                                        id: string;
+                                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                    };
+                                                    value: {
+                                                        type: "value";
+                                                        content: any;
+                                                    } | {
+                                                        type: "somevalue";
+                                                    } | {
+                                                        type: "novalue";
+                                                    };
+                                                    qualifiers: {
+                                                        property: {
+                                                            id: string;
+                                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                        };
+                                                        value: {
+                                                            type: "value";
+                                                            content: any;
+                                                        } | {
+                                                            type: "somevalue";
+                                                        } | {
+                                                            type: "novalue";
+                                                        };
+                                                    }[];
+                                                    references: {
+                                                        parts: {
+                                                            property: {
+                                                                id: string;
+                                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                            };
+                                                            value: {
+                                                                type: "value";
+                                                                content: any;
+                                                            } | {
+                                                                type: "somevalue";
+                                                            } | {
+                                                                type: "novalue";
+                                                            };
+                                                        }[];
+                                                        hash: string;
+                                                    }[];
+                                                    rezics: {
+                                                        release: string;
+                                                        revision: number;
+                                                    };
+                                                }[];
+                                                related: Record<string, {
+                                                    id: string;
+                                                    type: string;
+                                                    types: string[];
+                                                    label: {
+                                                        value: string;
+                                                        language: string;
+                                                    } | null;
+                                                    creativeWork: boolean;
+                                                    cover: {
+                                                        media: string;
+                                                        width: number;
+                                                        height: number;
+                                                        placeholder: {
+                                                            thumbhash: string;
+                                                            color: string;
+                                                        };
+                                                        variants: {
+                                                            format: "avif" | "webp";
+                                                            width: number;
+                                                        }[];
+                                                        focalPoint: {
+                                                            x: number;
+                                                            y: number;
+                                                        } | null;
+                                                        credit: {
+                                                            rightsHolder: string;
+                                                            via: {
+                                                                name: string;
+                                                                url: string;
+                                                            };
+                                                            license: string;
+                                                            obligations: string[];
+                                                        };
+                                                    } | null;
+                                                }>;
+                                            };
+                                            'wdt:P178': {
+                                                state: "unsupported";
+                                            } | {
+                                                state: "withheld";
+                                            } | {
+                                                state: "missing";
+                                            } | {
+                                                state: "unavailable";
+                                            } | {
+                                                state: "available";
+                                                statements: {
+                                                    id: string;
+                                                    rank: "deprecated" | "normal" | "preferred";
+                                                    property: {
+                                                        id: string;
+                                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                    };
+                                                    value: {
+                                                        type: "value";
+                                                        content: any;
+                                                    } | {
+                                                        type: "somevalue";
+                                                    } | {
+                                                        type: "novalue";
+                                                    };
+                                                    qualifiers: {
+                                                        property: {
+                                                            id: string;
+                                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                        };
+                                                        value: {
+                                                            type: "value";
+                                                            content: any;
+                                                        } | {
+                                                            type: "somevalue";
+                                                        } | {
+                                                            type: "novalue";
+                                                        };
+                                                    }[];
+                                                    references: {
+                                                        parts: {
+                                                            property: {
+                                                                id: string;
+                                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                            };
+                                                            value: {
+                                                                type: "value";
+                                                                content: any;
+                                                            } | {
+                                                                type: "somevalue";
+                                                            } | {
+                                                                type: "novalue";
+                                                            };
+                                                        }[];
+                                                        hash: string;
+                                                    }[];
+                                                    rezics: {
+                                                        release: string;
+                                                        revision: number;
+                                                    };
+                                                }[];
+                                                related: Record<string, {
+                                                    id: string;
+                                                    type: string;
+                                                    types: string[];
+                                                    label: {
+                                                        value: string;
+                                                        language: string;
+                                                    } | null;
+                                                    creativeWork: boolean;
+                                                    cover: {
+                                                        media: string;
+                                                        width: number;
+                                                        height: number;
+                                                        placeholder: {
+                                                            thumbhash: string;
+                                                            color: string;
+                                                        };
+                                                        variants: {
+                                                            format: "avif" | "webp";
+                                                            width: number;
+                                                        }[];
+                                                        focalPoint: {
+                                                            x: number;
+                                                            y: number;
+                                                        } | null;
+                                                        credit: {
+                                                            rightsHolder: string;
+                                                            via: {
+                                                                name: string;
+                                                                url: string;
+                                                            };
+                                                            license: string;
+                                                            obligations: string[];
+                                                        };
+                                                    } | null;
+                                                }>;
+                                            };
+                                            'wdt:P162': {
+                                                state: "unsupported";
+                                            } | {
+                                                state: "withheld";
+                                            } | {
+                                                state: "missing";
+                                            } | {
+                                                state: "unavailable";
+                                            } | {
+                                                state: "available";
+                                                statements: {
+                                                    id: string;
+                                                    rank: "deprecated" | "normal" | "preferred";
+                                                    property: {
+                                                        id: string;
+                                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                    };
+                                                    value: {
+                                                        type: "value";
+                                                        content: any;
+                                                    } | {
+                                                        type: "somevalue";
+                                                    } | {
+                                                        type: "novalue";
+                                                    };
+                                                    qualifiers: {
+                                                        property: {
+                                                            id: string;
+                                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                        };
+                                                        value: {
+                                                            type: "value";
+                                                            content: any;
+                                                        } | {
+                                                            type: "somevalue";
+                                                        } | {
+                                                            type: "novalue";
+                                                        };
+                                                    }[];
+                                                    references: {
+                                                        parts: {
+                                                            property: {
+                                                                id: string;
+                                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                            };
+                                                            value: {
+                                                                type: "value";
+                                                                content: any;
+                                                            } | {
+                                                                type: "somevalue";
+                                                            } | {
+                                                                type: "novalue";
+                                                            };
+                                                        }[];
+                                                        hash: string;
+                                                    }[];
+                                                    rezics: {
+                                                        release: string;
+                                                        revision: number;
+                                                    };
+                                                }[];
+                                                related: Record<string, {
+                                                    id: string;
+                                                    type: string;
+                                                    types: string[];
+                                                    label: {
+                                                        value: string;
+                                                        language: string;
+                                                    } | null;
+                                                    creativeWork: boolean;
+                                                    cover: {
+                                                        media: string;
+                                                        width: number;
+                                                        height: number;
+                                                        placeholder: {
+                                                            thumbhash: string;
+                                                            color: string;
+                                                        };
+                                                        variants: {
+                                                            format: "avif" | "webp";
+                                                            width: number;
+                                                        }[];
+                                                        focalPoint: {
+                                                            x: number;
+                                                            y: number;
+                                                        } | null;
+                                                        credit: {
+                                                            rightsHolder: string;
+                                                            via: {
+                                                                name: string;
+                                                                url: string;
+                                                            };
+                                                            license: string;
+                                                            obligations: string[];
+                                                        };
+                                                    } | null;
+                                                }>;
+                                            };
+                                            'wdt:P2899': {
+                                                state: "unsupported";
+                                            } | {
+                                                state: "withheld";
+                                            } | {
+                                                state: "missing";
+                                            } | {
+                                                state: "unavailable";
+                                            } | {
+                                                state: "available";
+                                                statements: {
+                                                    id: string;
+                                                    rank: "deprecated" | "normal" | "preferred";
+                                                    property: {
+                                                        id: string;
+                                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                    };
+                                                    value: {
+                                                        type: "value";
+                                                        content: any;
+                                                    } | {
+                                                        type: "somevalue";
+                                                    } | {
+                                                        type: "novalue";
+                                                    };
+                                                    qualifiers: {
+                                                        property: {
+                                                            id: string;
+                                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                        };
+                                                        value: {
+                                                            type: "value";
+                                                            content: any;
+                                                        } | {
+                                                            type: "somevalue";
+                                                        } | {
+                                                            type: "novalue";
+                                                        };
+                                                    }[];
+                                                    references: {
+                                                        parts: {
+                                                            property: {
+                                                                id: string;
+                                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                            };
+                                                            value: {
+                                                                type: "value";
+                                                                content: any;
+                                                            } | {
+                                                                type: "somevalue";
+                                                            } | {
+                                                                type: "novalue";
+                                                            };
+                                                        }[];
+                                                        hash: string;
+                                                    }[];
+                                                    rezics: {
+                                                        release: string;
+                                                        revision: number;
+                                                    };
+                                                }[];
+                                                related: Record<string, {
+                                                    id: string;
+                                                    type: string;
+                                                    types: string[];
+                                                    label: {
+                                                        value: string;
+                                                        language: string;
+                                                    } | null;
+                                                    creativeWork: boolean;
+                                                    cover: {
+                                                        media: string;
+                                                        width: number;
+                                                        height: number;
+                                                        placeholder: {
+                                                            thumbhash: string;
+                                                            color: string;
+                                                        };
+                                                        variants: {
+                                                            format: "avif" | "webp";
+                                                            width: number;
+                                                        }[];
+                                                        focalPoint: {
+                                                            x: number;
+                                                            y: number;
+                                                        } | null;
+                                                        credit: {
+                                                            rightsHolder: string;
+                                                            via: {
+                                                                name: string;
+                                                                url: string;
+                                                            };
+                                                            license: string;
+                                                            obligations: string[];
+                                                        };
+                                                    } | null;
+                                                }>;
+                                            };
+                                        };
+                                    }[];
+                                };
                                 count?: {
                                     value: number;
                                     exact: boolean;
@@ -2805,6 +4362,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                     target_seconds: 10;
                                     caught_up: boolean;
                                 };
+                                partial?: boolean;
                                 next: string | null;
                             };
                             308: {
@@ -5897,38 +7455,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                     };
                     response: {
                         200: {
-                            document: Omit<Readonly<{
-                                id: string;
-                                subjectId: string;
-                                candidateId: string;
-                                revision: number;
-                                language: string;
-                                digest: string;
-                            }> & (Readonly<{
-                                origin: 'import';
-                                source: import("./imported-fields.ts").ImportedFieldView['source'];
-                                rights: import("./imported-fields.ts").ImportedFieldView['rights'];
-                            }> & (Readonly<{
-                                availability: 'available';
-                                body: import("@rezics/document").DocumentSnapshot;
-                            }> | Readonly<{
-                                availability: 'erased';
-                                body: null;
-                            }>)), "origin"> | (Readonly<{
-                                id: string;
-                                subjectId: string;
-                                candidateId: string;
-                                revision: number;
-                                language: string;
-                                digest: string;
-                            }> & Readonly<{
-                                origin: 'account';
-                                author: string;
-                                licence: string;
-                            }> & Readonly<{
-                                availability: 'available';
-                                body: import("@rezics/document").DocumentSnapshot;
-                            }>);
+                            document: import("./document-public.ts").PublicDocumentView;
                         };
                         400: Response | {
                             type: unknown;
@@ -6562,6 +8089,14 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                     response: {
                         200: {
                             report: import("./reports.ts").ReportReadView;
+                            inspection?: Readonly<{
+                                reportedRevision: import("./reports.ts").ReportTargetInspection;
+                                currentTarget: import("./reports.ts").ReportTargetInspection;
+                                viewer: Readonly<{
+                                    canDismiss: boolean;
+                                    canTakeDown: boolean;
+                                }>;
+                            }>;
                         };
                         400: Response | {
                             type: unknown;
@@ -7673,8 +9208,17 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                         statement: string | null;
                                         resolvedAt: string | null;
                                     } | null;
+                                    history: {
+                                        reasonState: "retained" | "retired";
+                                        decider: "retired" | "withheld";
+                                        receipt: "permitted" | "unavailable";
+                                        target: "unavailable";
+                                    };
                                 }[];
                                 nextCursor: string | null;
+                                viewer: {
+                                    kind: "board-moderator";
+                                };
                             };
                             400: Response | {
                                 type: unknown;
@@ -8766,6 +10310,12 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                         handle: string | null;
                                         displayName: string | null;
                                         automated: boolean;
+                                    } | {
+                                        state: "deleted";
+                                    } | {
+                                        state: "concealed";
+                                    } | {
+                                        state: "unavailable";
                                     };
                                     statement: string;
                                     createdAt: string;
@@ -8786,6 +10336,10 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                             id: string;
                                             boardId: string;
                                         };
+                                    } | {
+                                        state: "concealed";
+                                    } | {
+                                        state: "unavailable";
                                     };
                                     canResolve: boolean;
                                     resolutionCommand: {
@@ -8810,6 +10364,12 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                         handle: string | null;
                                         displayName: string | null;
                                         automated: boolean;
+                                    } | {
+                                        state: "deleted";
+                                    } | {
+                                        state: "concealed";
+                                    } | {
+                                        state: "unavailable";
                                     };
                                     statement: string;
                                     createdAt: string;
@@ -8830,6 +10390,10 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                             id: string;
                                             boardId: string;
                                         };
+                                    } | {
+                                        state: "concealed";
+                                    } | {
+                                        state: "unavailable";
                                     };
                                     canResolve: boolean;
                                     resolutionCommand: {
@@ -8859,6 +10423,14 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                         epoch: number;
                                         position: string;
                                     };
+                                    sourceObservations: {
+                                        appealId: string;
+                                        source: {
+                                            partition: number;
+                                            epoch: number;
+                                            position: string;
+                                        };
+                                    }[];
                                 };
                             };
                             400: Response | {
@@ -8944,13 +10516,6 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                             };
                         };
                         error: never;
-                    } & {
-                        '~handled': {
-                            error: Error;
-                            response: import("elysia/types").ExtractErrorFromHandle<Response> & {
-                                500: Response;
-                            };
-                        };
                     };
                 };
             };
@@ -8984,6 +10549,12 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                         handle: string | null;
                                         displayName: string | null;
                                         automated: boolean;
+                                    } | {
+                                        state: "deleted";
+                                    } | {
+                                        state: "concealed";
+                                    } | {
+                                        state: "unavailable";
                                     };
                                     statement: string;
                                     createdAt: string;
@@ -9004,6 +10575,10 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                             id: string;
                                             boardId: string;
                                         };
+                                    } | {
+                                        state: "concealed";
+                                    } | {
+                                        state: "unavailable";
                                     };
                                     canResolve: boolean;
                                     resolutionCommand: {
@@ -9028,6 +10603,12 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                         handle: string | null;
                                         displayName: string | null;
                                         automated: boolean;
+                                    } | {
+                                        state: "deleted";
+                                    } | {
+                                        state: "concealed";
+                                    } | {
+                                        state: "unavailable";
                                     };
                                     statement: string;
                                     createdAt: string;
@@ -9048,6 +10629,10 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                             id: string;
                                             boardId: string;
                                         };
+                                    } | {
+                                        state: "concealed";
+                                    } | {
+                                        state: "unavailable";
                                     };
                                     canResolve: boolean;
                                     resolutionCommand: {
@@ -9077,6 +10662,14 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                         epoch: number;
                                         position: string;
                                     };
+                                    sourceObservations: {
+                                        appealId: string;
+                                        source: {
+                                            partition: number;
+                                            epoch: number;
+                                            position: string;
+                                        };
+                                    }[];
                                 };
                             };
                             400: Response | {
@@ -9162,13 +10755,6 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                             };
                         };
                         error: never;
-                    } & {
-                        '~handled': {
-                            error: Error;
-                            response: import("elysia/types").ExtractErrorFromHandle<Response> & {
-                                500: Response;
-                            };
-                        };
                     };
                 };
             };
@@ -10019,6 +11605,144 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
         boards: {
             ":id": {
                 watch: {
+                    page: {
+                        get: {
+                            body: unknown;
+                            params: {
+                                id: string;
+                            };
+                            query: unknown;
+                            headers: unknown;
+                            response: {
+                                200: {
+                                    boardId: string;
+                                    accountId: string;
+                                    viewer: {
+                                        state: "current";
+                                        watching: boolean;
+                                        revision: number;
+                                    };
+                                    actions: {
+                                        watch: "available" | "denied" | "not-applicable";
+                                        unwatch: "available" | "denied" | "not-applicable";
+                                    };
+                                    source: {
+                                        epoch: number;
+                                        position: string;
+                                    };
+                                };
+                                400: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                401: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                403: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                404: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                409: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                422: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                429: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                500: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                503: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                            };
+                            error: never;
+                        };
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        boards: {
+            ":id": {
+                watch: {
                     get: {
                         body: unknown;
                         params: {
@@ -10283,6 +12007,13 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                         headers: unknown;
                         response: {
                             200: {
+                                viewer: {
+                                    state: "current";
+                                    accountId: string;
+                                };
+                                actions: {
+                                    remove: "available" | "denied";
+                                };
                                 items: ({
                                     id: string;
                                     kind: "board" | "thread";
@@ -10291,12 +12022,22 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                     state: "available";
                                     resourceId: string;
                                     title: string | null;
+                                    command: {
+                                        watchId: string;
+                                        kind: "board" | "thread";
+                                        expectedRevision: number;
+                                    };
                                 } | {
                                     id: string;
                                     kind: "board" | "thread";
                                     revision: number;
                                     createdAt: string;
                                     state: "unavailable";
+                                    command: {
+                                        watchId: string;
+                                        kind: "board" | "thread";
+                                        expectedRevision: number;
+                                    };
                                 })[];
                                 next: string | null;
                             };
@@ -10533,6 +12274,131 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                             error: never;
                         };
                     };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        me: {
+            "moderation-directory": {
+                get: {
+                    body: unknown;
+                    params: {};
+                    query: {
+                        cursor?: string;
+                        realmId?: string;
+                        limit?: string;
+                    };
+                    headers: unknown;
+                    response: {
+                        200: {
+                            state: "ready";
+                            items: ({
+                                scope: {
+                                    kind: "board";
+                                    id: string;
+                                };
+                                label: string;
+                                parent: {
+                                    id: string;
+                                    label: string;
+                                } | null;
+                                queues: ("appeals" | "reports" | "resolved")[];
+                                viewer: {
+                                    open: "denied" | "permitted" | "unavailable";
+                                };
+                            } | {
+                                scope: {
+                                    kind: "catalogue";
+                                };
+                                label: string;
+                                parent: null;
+                                queues: ("reports" | "resolved")[];
+                                viewer: {
+                                    open: "denied" | "permitted" | "unavailable";
+                                };
+                            })[];
+                            next: string | null;
+                            source: string;
+                            validUntil: string;
+                        } | {
+                            state: "denied" | "preparing" | "stale" | "unavailable";
+                            items: [];
+                            next: null;
+                        };
+                        400: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        401: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        404: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        422: Response | {
+                            type: 'validation';
+                            code: 'validation';
+                            title: 'Validation Error';
+                            status: 422;
+                            detail?: string;
+                            on: string;
+                            found?: unknown;
+                            property?: string;
+                            expected?: unknown;
+                            errors?: {
+                                message?: string;
+                                [key: string]: unknown;
+                            }[];
+                        };
+                        500: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        503: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                    };
+                    error: never;
                 };
             };
         };
@@ -11230,6 +13096,147 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                     availability: import("./model.ts").Availability;
                                     createdAt: string;
                                 }>[];
+                                next: string | null;
+                            };
+                            400: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            500: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        realms: {
+            ":realmId": {
+                "review-destinations": {
+                    get: {
+                        body: unknown;
+                        params: {
+                            realmId: string;
+                        };
+                        query: {
+                            subjectId: string;
+                            cursor?: string;
+                            boardId?: string;
+                        };
+                        headers: unknown;
+                        response: {
+                            200: {
+                                state: "choices" | "denied" | "exhausted" | "expired" | "no-destinations" | "sparse";
+                                viewer: {
+                                    state: "current" | "denied";
+                                };
+                                context: {
+                                    subject: {
+                                        id: string;
+                                        label: {
+                                            value: string;
+                                            language: string;
+                                        } | null;
+                                        source: {
+                                            partition: number;
+                                            epoch: number;
+                                            position: string;
+                                        };
+                                    };
+                                    realm: {
+                                        id: string;
+                                        title: string;
+                                        spaceId: string;
+                                        headRevisionId: string;
+                                    };
+                                } | null;
+                                items: {
+                                    id: string;
+                                    title: string | null;
+                                    purpose: "reviews";
+                                    actions: {
+                                        createReview: "allowed";
+                                    };
+                                    native: {
+                                        kind: "review";
+                                        boardId: string;
+                                        subjectIds: [string];
+                                        subjectSource: {
+                                            partition: number;
+                                            epoch: number;
+                                            position: string;
+                                        };
+                                        realmHeadRevisionId: string;
+                                        boardSecurityRevision: string;
+                                    };
+                                }[];
                                 next: string | null;
                             };
                             400: Response | {
@@ -12175,6 +14182,24 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                 } & Readonly<{
                                     reviewContext?: import("./model.ts").FeedReviewContext;
                                 }>;
+                                conversationActivity: {
+                                    state: "current";
+                                    cohort: "public";
+                                    count: {
+                                        kind: "exact" | "lower-bound";
+                                        value: number;
+                                    };
+                                    lastActivityAt: string | null;
+                                } | {
+                                    state: "withheld";
+                                } | {
+                                    state: "unavailable";
+                                    retryable: true;
+                                };
+                                documentMedia: Readonly<{
+                                    state: 'available' | 'unavailable' | 'overflow';
+                                    documents: readonly import("./reading-page-documents.ts").ReadingPageDocument[];
+                                }>;
                                 replies: {
                                     items: ({
                                         id: string;
@@ -12215,27 +14240,35 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                     retryable: boolean;
                                     items: {
                                         id: string;
-                                        displayName: string | null;
                                         handle: string | null;
-                                        avatar: {
-                                            media: string;
-                                            width: number;
-                                            height: number;
-                                            placeholder: {
-                                                thumbhash: string;
-                                                color: string;
-                                            };
-                                            variants: {
-                                                format: "avif" | "webp";
-                                                width: number;
-                                            }[];
-                                            focalPoint: {
-                                                x: number;
-                                                y: number;
-                                            } | null;
-                                            credit: null;
-                                        } | null;
+                                        displayName: string | null;
+                                        avatar: import("./avatar.ts").AvatarSummary | null;
                                     }[];
+                                };
+                                mentions?: {
+                                    state: "current" | "unavailable";
+                                    retryable: boolean;
+                                    overflow: boolean;
+                                    sources: {
+                                        postId: string;
+                                        threadId: string;
+                                        revisionId: string;
+                                        sha256: string;
+                                        pageIndex: number;
+                                        references: string[];
+                                        overflow: boolean;
+                                    }[];
+                                    identities: ({
+                                        id: string;
+                                        state: "active";
+                                        handle: string | null;
+                                    } | {
+                                        id: string;
+                                        state: "concealed";
+                                    } | {
+                                        id: string;
+                                        state: "erased";
+                                    })[];
                                 };
                                 actions: {
                                     state: "current" | "unavailable";
@@ -12290,6 +14323,46 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                     epoch: number;
                                     position: string;
                                 } | null;
+                                reviewContext?: {
+                                    source: {
+                                        threadId: string;
+                                        postId: string;
+                                        revisionId: string | null;
+                                    };
+                                    target: {
+                                        state: "available";
+                                        subject: {
+                                            id: string;
+                                            kind: string;
+                                            label: {
+                                                value: string;
+                                                language: string;
+                                            } | null;
+                                        };
+                                    } | {
+                                        state: "absent" | "withheld";
+                                    } | {
+                                        state: "unavailable";
+                                    };
+                                    citations: {
+                                        state: "current";
+                                        items: {
+                                            postId: string;
+                                            sourceRevisionId: string | null;
+                                            citation: {
+                                                state: "available";
+                                                questionId: string;
+                                                units: number;
+                                                voteRevision: number;
+                                                metadata: {
+                                                    state: "unavailable";
+                                                };
+                                            } | {
+                                                state: "absent" | "withheld";
+                                            };
+                                        }[];
+                                    };
+                                };
                                 authorErasure?: {
                                     authorId: string;
                                     mayErase: boolean;
@@ -12378,13 +14451,6 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                             };
                         };
                         error: never;
-                    } & {
-                        '~handled': {
-                            error: Error;
-                            response: import("elysia/types").ExtractErrorFromHandle<Response> & {
-                                500: Response;
-                            };
-                        };
                     };
                 };
             };
@@ -13193,13 +15259,6 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                             };
                         };
                         error: never;
-                    } & {
-                        '~handled': {
-                            error: Error;
-                            response: import("elysia/types").ExtractErrorFromHandle<Response> & {
-                                500: Response;
-                            };
-                        };
                     };
                 };
             };
@@ -13519,6 +15578,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                     availability: import("./model.ts").Availability;
                                     createdAt: string;
                                 }>;
+                                pinRevision: string;
                                 pinnedThreads: {
                                     thread: Omit<Readonly<{
                                         id: import("./model.ts").ThreadId;
@@ -14012,13 +16072,120 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                             };
                         };
                         error: never;
-                    } & {
-                        '~handled': {
-                            error: Error;
-                            response: import("elysia/types").ExtractErrorFromHandle<Response> & {
-                                500: Response;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        boards: {
+            ":id": {
+                "pin-advice": {
+                    post: {
+                        body: {
+                            selected: {
+                                threadId: string;
+                                placeId: string;
+                                sourceRevisionId: string;
+                            }[];
+                            pinRevision?: string;
+                        };
+                        params: {
+                            id: string;
+                        };
+                        query: unknown;
+                        headers: unknown;
+                        response: {
+                            200: {
+                                state: "stale";
+                            } | {
+                                state: "ready";
+                                viewer: {
+                                    kind: "account";
+                                    id: string;
+                                };
+                                boardId: string;
+                                pinRevision: string;
+                                management: "allowed" | "denied";
+                                threads: {
+                                    threadId: string;
+                                    pinned: boolean;
+                                    actions: ("pin" | "unpin")[];
+                                }[];
+                            };
+                            400: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            500: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
                             };
                         };
+                        error: never;
                     };
                 };
             };
@@ -14401,37 +16568,23 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                         headers: unknown;
                         response: {
                             200: {
-                                threads: (Omit<Readonly<{
-                                    id: import("./model.ts").ThreadId;
-                                    route: import("./model.ts").Route;
-                                    authorId: import("./model.ts").ContentId;
-                                    kind: 'discussion' | 'review';
-                                    title: string | null;
-                                    licence: string;
-                                    subjectIds: readonly import("./model.ts").ContentId[];
-                                    boardId: import("./model.ts").BoardId;
-                                    visibility: import("./model.ts").Visibility;
-                                    securityRevision: import("./model.ts").SecurityRevision;
-                                    availability: import("./model.ts").Availability;
-                                    createdAt: string;
-                                    firstPost: import("./model.ts").PostEntry;
-                                }>, "firstPost"> & Readonly<{
-                                    firstPost: PostEntry;
-                                }> & {
-                                    readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
-                                } & {
-                                    readonly reactions?: {
-                                        readonly downvote?: number;
-                                        readonly insightful?: number;
-                                        readonly laugh?: number;
-                                        readonly like?: number;
-                                        readonly love?: number;
-                                        readonly sad?: number;
-                                        readonly upvote?: number;
-                                    };
-                                } & Readonly<{
-                                    reviewContext?: import("./model.ts").FeedReviewContext;
-                                }>)[];
+                                actionSelection?: {
+                                    proof: string;
+                                    references: ({
+                                        type: "content.thread";
+                                        id: string;
+                                        placeId: string;
+                                        sourceRevisionId: string | null;
+                                    } | {
+                                        type: "content.post";
+                                        id: string;
+                                        threadId: string;
+                                        placeId: string;
+                                        threadRevisionId: string | null;
+                                        sourceRevisionId: string | null;
+                                    })[];
+                                };
+                                threads: import("./author-item-reads.ts").AuthorThreadEntry[];
                                 next: string | null;
                             };
                             400: Response | {
@@ -14528,8 +16681,213 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                         headers: unknown;
                         response: {
                             200: {
+                                actionSelection?: {
+                                    proof: string;
+                                    references: ({
+                                        type: "content.thread";
+                                        id: string;
+                                        placeId: string;
+                                        sourceRevisionId: string | null;
+                                    } | {
+                                        type: "content.post";
+                                        id: string;
+                                        threadId: string;
+                                        placeId: string;
+                                        threadRevisionId: string | null;
+                                        sourceRevisionId: string | null;
+                                    })[];
+                                };
                                 posts: import("./author-item-reads.ts").AuthorPostEntry[];
                                 next: string | null;
+                            };
+                            400: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            500: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        accounts: {
+            ":accountId": {
+                "contribution-actions": {
+                    post: {
+                        body: {
+                            proof: string;
+                            references: ({
+                                type: "content.thread";
+                                id: string;
+                                placeId: string;
+                                sourceRevisionId: string | null;
+                            } | {
+                                type: "content.post";
+                                id: string;
+                                threadId: string;
+                                placeId: string;
+                                threadRevisionId: string | null;
+                                sourceRevisionId: string | null;
+                            })[];
+                            view: "discussion" | "posts" | "reviews";
+                            cursor: string | null;
+                        };
+                        params: {
+                            accountId: string;
+                        };
+                        query: unknown;
+                        headers: unknown;
+                        response: {
+                            200: {
+                                viewer: {
+                                    kind: "anonymous";
+                                } | {
+                                    kind: "account";
+                                    id: string;
+                                };
+                                selected: {
+                                    reference: {
+                                        type: "content.thread";
+                                        id: string;
+                                        placeId: string;
+                                        sourceRevisionId: string | null;
+                                    } | {
+                                        type: "content.post";
+                                        id: string;
+                                        threadId: string;
+                                        placeId: string;
+                                        threadRevisionId: string | null;
+                                        sourceRevisionId: string | null;
+                                    };
+                                    state: "current" | "erased" | "withheld";
+                                    reply: {
+                                        state: "available" | "denied" | "sign_in_required" | "unavailable" | "withheld";
+                                    };
+                                }[];
+                                reactions: {
+                                    state: "current" | "unavailable";
+                                    retryable: boolean;
+                                    items: {
+                                        type: "content.post" | "content.thread";
+                                        id: string;
+                                        state: "current" | "not_applicable" | "unavailable";
+                                        counts?: {
+                                            upvote?: number;
+                                            downvote?: number;
+                                            like?: number;
+                                            love?: number;
+                                            laugh?: number;
+                                            insightful?: number;
+                                            sad?: number;
+                                        };
+                                        viewerSelection?: string | null;
+                                    }[];
+                                    reactionsAsOf: {
+                                        epoch: number;
+                                        position: string;
+                                    } | null;
+                                };
+                                actions: {
+                                    state: "current" | "unavailable";
+                                    retryable: boolean;
+                                    references: {
+                                        type: "content.post" | "content.thread";
+                                        id: string;
+                                        sourceRevisionId?: string;
+                                        state: "current" | "withheld";
+                                        operations: {
+                                            action: string;
+                                            operationId: string;
+                                            state: "available" | "denied" | "not_applicable" | "sign_in_required" | "unavailable" | "withheld";
+                                        }[];
+                                    }[];
+                                };
+                                watch: {
+                                    state: "current" | "sign_in_required" | "unavailable";
+                                    retryable: boolean;
+                                    items: {
+                                        threadId: string;
+                                        state: "current" | "sign_in_required" | "unavailable";
+                                        watching?: boolean;
+                                    }[];
+                                };
+                                currentness: {
+                                    source: "current";
+                                    place: "current";
+                                    reactions: "current" | "unavailable";
+                                    authors: "current" | "unavailable";
+                                    actions: "current" | "unavailable";
+                                    watch: "current" | "sign_in_required" | "unavailable";
+                                };
                             };
                             400: Response | {
                                 type: unknown;
@@ -14621,12 +16979,14 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                         query: {
                             place: string;
                             kind: "discussion" | "review";
+                            board?: string;
                             cursor?: string;
                             limit?: string | number;
                         };
                         headers: unknown;
                         response: {
                             200: {
+                                entry: import("./subject-entry.ts").SubjectThreadEntry;
                                 threads: import("./subject-threads-cards.ts").SubjectThreadCardEntry[];
                                 next: string | null;
                                 reactionsAsOf: {
@@ -15756,7 +18116,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         401: import("typebox").TObject<{
@@ -15770,7 +18130,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         404: import("typebox").TObject<{
@@ -15784,7 +18144,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         500: import("typebox").TObject<{
@@ -15798,7 +18158,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         503: import("typebox").TObject<{
@@ -15812,7 +18172,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         204: import("typebox").TVoid;
@@ -15969,7 +18329,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
             401: import("typebox").TObject<{
@@ -15983,7 +18343,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
             404: import("typebox").TObject<{
@@ -15997,7 +18357,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
             500: import("typebox").TObject<{
@@ -16011,7 +18371,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
             503: import("typebox").TObject<{
@@ -16025,7 +18385,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
             204: import("typebox").TVoid;
@@ -16101,7 +18461,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         401: import("typebox").TObject<{
@@ -16115,7 +18475,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         404: import("typebox").TObject<{
@@ -16129,7 +18489,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         500: import("typebox").TObject<{
@@ -16143,7 +18503,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         503: import("typebox").TObject<{
@@ -16157,7 +18517,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         204: import("typebox").TVoid;
@@ -16494,7 +18854,7 @@ export declare function subjectReactionRoutes(routes: ReturnType<typeof createAp
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         401: import("typebox").TObject<{
@@ -16508,7 +18868,7 @@ export declare function subjectReactionRoutes(routes: ReturnType<typeof createAp
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         404: import("typebox").TObject<{
@@ -16522,7 +18882,7 @@ export declare function subjectReactionRoutes(routes: ReturnType<typeof createAp
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         500: import("typebox").TObject<{
@@ -16536,7 +18896,7 @@ export declare function subjectReactionRoutes(routes: ReturnType<typeof createAp
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         503: import("typebox").TObject<{
@@ -16550,7 +18910,7 @@ export declare function subjectReactionRoutes(routes: ReturnType<typeof createAp
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         200: {
@@ -16768,7 +19128,7 @@ export declare function subjectReactionRoutes(routes: ReturnType<typeof createAp
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
             401: import("typebox").TObject<{
@@ -16782,7 +19142,7 @@ export declare function subjectReactionRoutes(routes: ReturnType<typeof createAp
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
             404: import("typebox").TObject<{
@@ -16796,7 +19156,7 @@ export declare function subjectReactionRoutes(routes: ReturnType<typeof createAp
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
             500: import("typebox").TObject<{
@@ -16810,7 +19170,7 @@ export declare function subjectReactionRoutes(routes: ReturnType<typeof createAp
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
             503: import("typebox").TObject<{
@@ -16824,7 +19184,7 @@ export declare function subjectReactionRoutes(routes: ReturnType<typeof createAp
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
             200: {
@@ -16954,7 +19314,7 @@ export declare function subjectReactionRoutes(routes: ReturnType<typeof createAp
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         401: import("typebox").TObject<{
@@ -16968,7 +19328,7 @@ export declare function subjectReactionRoutes(routes: ReturnType<typeof createAp
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         404: import("typebox").TObject<{
@@ -16982,7 +19342,7 @@ export declare function subjectReactionRoutes(routes: ReturnType<typeof createAp
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         500: import("typebox").TObject<{
@@ -16996,7 +19356,7 @@ export declare function subjectReactionRoutes(routes: ReturnType<typeof createAp
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         503: import("typebox").TObject<{
@@ -17010,7 +19370,7 @@ export declare function subjectReactionRoutes(routes: ReturnType<typeof createAp
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         200: {

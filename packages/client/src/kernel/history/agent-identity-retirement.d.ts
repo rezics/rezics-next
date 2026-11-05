@@ -36,7 +36,7 @@ export type AgentIdentityRetirementResult = Readonly<{
 export declare const AGENT_IDENTITY_SDK_RETIREMENT: Readonly<{
     readonly sdkVersion: '5.5.3-preview';
     readonly futureWriters: 'native-sdk-fence-requires-source-transfer';
-    readonly gap: "identity-source-terminal-transfer-unavailable";
+    readonly gap: 'identity-source-terminal-transfer-unavailable';
 }>;
 export declare const IDENTITY_SOURCE_MAINTENANCE_UNAVAILABLE = "identity-source-maintenance-funding-unavailable";
 export declare const IDENTITY_SOURCE_PREPAID_MAINTENANCE_UNAVAILABLE = "identity-source-prepaid-maintenance-not-installed";

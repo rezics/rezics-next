@@ -5,4 +5,6 @@ export type PublicSearchHit = SearchHit & {
     figure: PublicFigureView;
 };
 /** Project only kept hits, on the backend that owns their native anchor partitions. */
-export declare function publicHitFigures(pool: Pool, hits: readonly SearchHit[]): Promise<PublicSearchHit[]>;
+export declare function publicHitFigures<T extends SearchHit>(pool: Pool, hits: readonly T[]): Promise<(T & {
+    figure: PublicFigureView;
+})[]>;

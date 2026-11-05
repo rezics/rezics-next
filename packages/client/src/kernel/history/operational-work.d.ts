@@ -1,8 +1,9 @@
 import type { Pool, PoolClient } from 'pg';
 import { type OperationalTransaction } from '../command/operational.ts';
 import type { WorkClient, WorkIntent } from '../work/client.ts';
+import type { HistoryExecutionPort, WorkExecutionOriginal } from '../command/execution-contract.ts';
 import { type HistoryScope } from './locator.ts';
-import { type OperationalWorkOriginal, type OperationalWorkPhase, type OperationalWorkTransfer } from './operational-work-budget.ts';
+import { type OperationalWorkPhase, type OperationalWorkTransfer } from './operational-work-budget.ts';
 export { OPERATIONAL_WORK_LOCAL_DECLARATION, OPERATIONAL_WORK_REGISTRATION, OPERATIONAL_WORK_RECEIVING, OPERATIONAL_WORK_TRANSFER_COST, type OperationalWorkTransfer, } from './operational-work-budget.ts';
 export declare const OPERATIONAL_WORK_OWNER = "library.members-preparation";
 export declare const OPERATIONAL_WORK_WORKFLOW = "library.membersPreparation";
@@ -32,8 +33,8 @@ export type OperationalWorkRegistration = Readonly<{
     custodyId: string;
     readonly [registration]: true;
 }>;
-export declare function beginOperationalHistoryAttempt(tx: OperationalTransaction, original: OperationalWorkOriginal): void;
-/** A private, prepaid, one-shot child transfer. It activates ONLY after this actual executor's
+export declare function beginOperationalHistoryAttempt(tx: OperationalTransaction, original: WorkExecutionOriginal): void;
+/** A private one-shot child transfer. It activates ONLY after this actual executor's
  * successful COMMIT. Copies, failed attempts and escaped live handles cannot issue or spend it. */
 export declare function reserveOperationalWorkTransfer(tx: OperationalTransaction, phase: OperationalWorkPhase): OperationalWorkTransfer;
 /** Pure shape/digest verification. It does not attest that a Commerce reservation exists. The
@@ -98,7 +99,7 @@ export type CommittedOperationalWork = {
     readonly [committedOrigin]: true;
 };
 export declare function operationalWorkSource(pool: Pool, origin: CommittedOperationalWork): OperationalWorkSource;
-/** A separately prepaid same-home recheck. All native source fences stay held through this
+/** A one-shot same-home recheck. All native source fences stay held through this
  * commit; the result is LOCAL provenance only, not a Source-currentness or replay capability.
  * Call after releasing any receiving client, never inside a cross-home callback. */
 export declare function verifyCommittedOperationalWorkOrigin(pool: Pool, origin: CommittedOperationalWork, transfer: OperationalWorkTransfer): Promise<OperationalWorkStamp>;
@@ -107,3 +108,5 @@ export declare function verifyCommittedOperationalWorkOrigin(pool: Pool, origin:
 export declare function resolveCommittedOperationalWork(pool: Pool, locator: OperationalWorkRegistration, transfer: OperationalWorkTransfer): Promise<CommittedOperationalWork | null>;
 /** Release the source client before entering the independently fenced destination home. */
 export declare function receiveCommittedOperationalWork(pool: Pool, client: WorkClient, origin: CommittedOperationalWork, transfer: OperationalWorkTransfer): Promise<'registered-pending-source-currentness' | 'registered-pending-position' | 'uncaptured'>;
+/** History-owned persistence adapter selected by the Kernel composition roots. */
+export declare const historyExecutionPort: HistoryExecutionPort;

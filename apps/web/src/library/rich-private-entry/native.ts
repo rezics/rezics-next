@@ -35,9 +35,8 @@ export async function writePrivateAnnotations(
     authorization: string;
   },
 ): Promise<AnnotationWriteResult> {
-  const result = await client.libraryEntries({ subjectId: input.subjectId }).annotations.put(input.body, {
-    headers: { authorization: input.authorization, 'idempotency-key': idempotencyField(input.key) },
-  });
+  const headers = { authorization: input.authorization, 'idempotency-key': idempotencyField(input.key) };
+  const result = await client.libraryEntries({ subjectId: input.subjectId }).annotations.put(input.body, { headers });
   if (!result.error && result.data?.personalEntry?.subjectId === input.subjectId)
     return { kind: 'saved', entry: result.data.personalEntry };
   if (result.status === 409 || result.status === 422) return { kind: 'conflict' };
@@ -60,9 +59,10 @@ export async function admitPrivateSourceObservation(
     authorization: string;
   },
 ): Promise<SourceAdmissionResult> {
-  const result = await client.libraryEntries({ subjectId: input.subjectId }).sourceObservations.post(input.body, {
-    headers: { authorization: input.authorization, 'idempotency-key': idempotencyField(input.key) },
-  });
+  const headers = { authorization: input.authorization, 'idempotency-key': idempotencyField(input.key) };
+  const result = await client
+    .libraryEntries({ subjectId: input.subjectId })
+    .sourceObservations.post(input.body, { headers });
   if (!result.error && result.data?.sourceObservation?.recordId === input.body.recordId)
     return { kind: 'admitted', observation: result.data.sourceObservation };
   if (result.status === 409) return { kind: 'conflict' };
@@ -85,9 +85,10 @@ export async function correctPrivateSourceObservation(
     authorization: string;
   },
 ): Promise<SourceCorrectionResult> {
-  const result = await client.libraryEntries({ subjectId: input.subjectId }).sourceObservations.patch(input.body, {
-    headers: { authorization: input.authorization, 'idempotency-key': idempotencyField(input.key) },
-  });
+  const headers = { authorization: input.authorization, 'idempotency-key': idempotencyField(input.key) };
+  const result = await client
+    .libraryEntries({ subjectId: input.subjectId })
+    .sourceObservations.patch(input.body, { headers });
   if (!result.error && result.data?.sourceObservation?.recordId === input.body.recordId)
     return { kind: 'saved', observation: result.data.sourceObservation };
   if (result.status === 409) return { kind: 'conflict' };

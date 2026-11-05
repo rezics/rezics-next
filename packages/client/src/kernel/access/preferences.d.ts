@@ -1,6 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
 import type { Access, AccessContext, Actor } from '../request/access.ts';
-import { type Notifications, type NotificationsPatch } from './notification-kinds.ts';
+import { type NotificationKind, type Notifications, type NotificationsPatch } from './notification-kinds.ts';
 export declare const SHELF_LAYOUTS: readonly ['grid', 'list', 'table'];
 export declare const SHELF_TABS: readonly ['in_progress', 'planned', 'completed', 'paused', 'dropped', 'all'];
 export declare const SHELF_SORT_FIELDS: readonly ['last_activity', 'added', 'finished', 'title', 'rating', 'release_date', 'progress'];
@@ -33,6 +33,23 @@ export type ShelfPatch = {
     gridSize?: Shelf['gridSize'] | null;
     tableColumns?: Shelf['tableColumns'] | null;
 };
+export type PreferencePageKind = {
+    kind: NotificationKind;
+    optional: boolean;
+    default: boolean;
+    enabled: boolean;
+};
+export type PreferencePageActionName = 'edit' | 'reset';
+export type PreferencePageAction = {
+    name: PreferencePageActionName;
+    expectedVersion: number;
+};
+/** Bounded Settings projection: catalogue meaning, current values and admitted edit/reset actions. */
+export type PreferencePage = {
+    version: number;
+    kinds: PreferencePageKind[];
+    actions: PreferencePageAction[];
+};
 export type AccountPreferences = {
     spoilerLevel: 0 | 1 | 2;
     suitability: 'blur' | 'show';
@@ -41,6 +58,66 @@ export type AccountPreferences = {
     version: number;
 };
 export declare const DEFAULT_ACCOUNT_PREFERENCES: Readonly<AccountPreferences>;
+export declare const READING_SPOILER_LEVELS: readonly [0, 1, 2];
+export declare const READING_SUITABILITY: readonly ['blur', 'show'];
+export declare const READING_DEFAULTS: Readonly<{
+    readonly spoilerLevel: 0;
+    readonly suitability: 'blur';
+}>;
+export type PreferenceActionAdvice = {
+    readonly allowed: true;
+} | {
+    readonly allowed: false;
+    readonly reason: 'not_authorized';
+};
+export type PreferenceReadingAdvice = {
+    viewerState: 'current';
+    allowedActions: {
+        read: PreferenceActionAdvice;
+        update: PreferenceActionAdvice;
+    };
+    reading: {
+        supported: {
+            spoilerLevels: Array<0 | 1 | 2>;
+            suitability: Array<'blur' | 'show'>;
+        };
+        effective: {
+            spoilerLevel: 0 | 1 | 2;
+            suitability: 'blur' | 'show';
+        };
+        defaults: {
+            spoilerLevel: 0;
+            suitability: 'blur';
+        };
+    };
+};
+export declare const SHELF_ADVICE_DEFAULTS: Readonly<Shelf>;
+export type PreferenceShelfAdvice = {
+    supported: {
+        layouts: Array<(typeof SHELF_LAYOUTS)[number]>;
+        tabs: Array<(typeof SHELF_TABS)[number]>;
+        sortFields: Array<(typeof SHELF_SORT_FIELDS)[number]>;
+        sortDirections: Array<(typeof SHELF_SORT_DIRECTIONS)[number]>;
+        gridSizes: Array<(typeof SHELF_GRID_SIZES)[number]>;
+        tableColumns: Array<(typeof SHELF_TABLE_COLUMNS)[number]>;
+    };
+    limits: {
+        maxLayouts: typeof SHELF_MAX_LAYOUTS;
+        scopeMaxLength: typeof SHELF_SCOPE_MAX_LENGTH;
+        scopePattern: typeof SHELF_SCOPE_PATTERN;
+    };
+    effective: Shelf;
+    defaults: Shelf;
+};
+export type PreferencePageObservation = PreferenceReadingAdvice & {
+    shelfAdvice: PreferenceShelfAdvice;
+};
+/** Display guidance for Reading. Command authorization still runs at write time. */
+export declare function projectReadingAdvice(values: Pick<AccountPreferences, 'spoilerLevel' | 'suitability'>, input: {
+    writable: boolean;
+}): PreferenceReadingAdvice;
+/** Stored-value catalogues, empty native defaults, and the current shelf. Edit/reset use shared update advice. */
+export declare function projectShelfAdvice(shelf: Shelf): PreferenceShelfAdvice;
 export type PreferenceChange = {
     expectedVersion: number;
     spoilerLevel?: 0 | 1 | 2;
@@ -48,6 +125,21 @@ export type PreferenceChange = {
     shelf?: ShelfPatch | null;
     notifications?: NotificationsPatch | null;
 };
+/** In-memory catalogue projection. Edit and reset advice comes from the current update observation. */
+export declare function projectPreferencePage(preferences: Pick<AccountPreferences, 'notifications' | 'version'>, input: {
+    writable: boolean;
+}): PreferencePage;
+export declare function withPreferencePage<T extends Pick<AccountPreferences, 'notifications' | 'version'>>(preferences: T, input: {
+    writable: boolean;
+}): T & {
+    page: PreferencePage;
+};
+/** One 200 envelope: catalogue `page` plus Reading and shelf observation on the shared viewer/actions. */
+export declare function withReadingPreferencePage(preferences: AccountPreferences, input: {
+    writable: boolean;
+}): AccountPreferences & {
+    page: PreferencePage;
+} & PreferencePageObservation;
 /** One joined account/preference seek on the recipient's route, including suspended accounts. */
 export declare function notificationAllowed(client: Pick<Pool | PoolClient, 'query'>, input: {
     recipient: string;

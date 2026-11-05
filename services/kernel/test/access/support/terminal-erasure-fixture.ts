@@ -13,7 +13,7 @@ import { nativeFixture } from '../native-account-bindings-fixture.ts';
 import { routeOf } from '../../../src/route/route.ts';
 
 type NativeAuth = Awaited<ReturnType<typeof nativeFixture>>;
-type NativeWorker = Awaited<ReturnType<typeof createTerminalErasureWorker>>;
+type NativeWorker = Awaited<ReturnType<typeof startTerminalErasureWorker>>;
 
 /** Owns the isolated native Auth, Access, kernel and production worker resources for terminal erasure. */
 export async function createTerminalErasureFixture() {

@@ -149,7 +149,9 @@ export interface MembersPreparation {
     actor: Actor,
     collectionId: string,
     definitions: readonly PreparationDefinition[],
-    options?: { deadline?: number; history?: WorkExecutionOriginal; runtime?: boolean },
+    options?:
+      | { deadline?: number; history?: never; runtime?: boolean }
+      | { deadline: number; history: WorkExecutionOriginal; runtime?: boolean },
   ): Promise<
     Readonly<{
       episodes: readonly PreparingEpisode[];
@@ -403,6 +405,7 @@ export function createMembersPreparation(config: {
       if (options.runtime && !options.history) {
         options = {
           ...options,
+          deadline,
           history: openWorkExecutionOriginal(config.pool, deadline, config.workClient),
         };
       }

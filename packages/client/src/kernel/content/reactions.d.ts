@@ -18,14 +18,14 @@ export type ReactionTarget = Readonly<{
 export type SetReactionInput = ReactionTarget & Readonly<{
     kind: ReactionKind;
 }>;
-/** A changed slot returns its command outcome; an unchanged slot returns null. */
+/** Every accepted set or clear retains its original command receipt, including an unchanged slot. */
 export declare function setReaction(deps: ReactionDependencies, actor: Actor, input: SetReactionInput, context: RequestContext): Promise<import("../command/command.ts").CommandOutcome<{
     targetKind: "post" | "subject" | "thread";
     targetId: string;
     kind: "downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote" | null;
-}> | null>;
+}>>;
 export declare function clearReaction(deps: ReactionDependencies, actor: Actor, input: ReactionTarget, context: RequestContext): Promise<import("../command/command.ts").CommandOutcome<{
     targetKind: "post" | "subject" | "thread";
     targetId: string;
     kind: "downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote" | null;
-}> | null>;
+}>>;

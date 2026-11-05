@@ -4,6 +4,7 @@ import type { FacetDiscoveryScope } from './facet-discovery-contract.ts';
 import { ScopeWork } from './scope-execution.ts';
 import type { PreparedSearchScope } from './scope-source.ts';
 import type { createSearchScopeForService } from './service-scope.ts';
+import type { PreparedRealmScope } from './realm-scope.ts';
 type SearchResourceScope = FacetDiscoveryScope;
 /** Identity supplied by the scope admission owner. `source` names the actual native population,
  * `meaning` binds the admitted query, and the observations bind membership and current authorization.
@@ -94,6 +95,17 @@ export declare function serviceScopeFacetAdmission(input: Readonly<{
     resource: SearchResourceScope;
     scope: ReturnType<typeof createSearchScopeForService>;
     prepared: PreparedSearchScope;
+    work: ScopeWork;
+    principal: string;
+    meaning: unknown;
+}>): ScopedFacetAdmission;
+/** Adapt Content Realm population and the shared current Realm/Subject evaluator to retained facets. */
+export declare function createServiceRealmScopeFacetPorts(): ScopedFacetPorts;
+export declare function serviceRealmScopeFacetAdmission(input: Readonly<{
+    resource: SearchResourceScope;
+    scope: ReturnType<typeof createSearchScopeForService>;
+    prepared: PreparedRealmScope;
+    realms: readonly string[];
     work: ScopeWork;
     principal: string;
     meaning: unknown;

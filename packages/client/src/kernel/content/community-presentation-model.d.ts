@@ -1,5 +1,5 @@
 import type { DocumentSnapshot } from '@rezics/document';
-import { type RealmPresentationImage, type RealmPresentationOptional } from './realm-media.ts';
+import { type RealmPresentationImage, type RealmPresentationOptional } from './realm-presentation-image.ts';
 export type CommunityPresentation = Readonly<{
     realmId: string;
     spaceId: string;

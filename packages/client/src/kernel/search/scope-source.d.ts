@@ -109,7 +109,7 @@ export declare function createSearchScopeSource({ pool, client, prefix, source: 
 }): {
     realm: {
         realms(scope: PreparedRealmScope): readonly string[];
-        prepare(filter: import("@rezics/filter").DiscoveryFilterDocument, allowance: WorkAllowance): Promise<Readonly<{
+        prepare(filter: import("@rezics/filter").DiscoveryFilterDocument, allowance: WorkAllowance, expectedReleaseDigest?: string): Promise<Readonly<{
             scope: PreparedRealmScope;
             work: WorkReceipt;
         }>>;
@@ -183,6 +183,7 @@ export declare function createSearchScopeSource({ pool, client, prefix, source: 
     sourcePrefix(prepared: PreparedSearchScope, request: {
         afterSubjectId: string | null;
         allowance: WorkAllowance;
+        candidateLimit?: number;
     }): Promise<{
         basis: ScopeBasis;
         work: WorkReceipt;

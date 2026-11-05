@@ -1,3 +1,4 @@
+import type { AccessWorkAccounting } from '../access/work.ts';
 import type { Release } from '@rezics/definitions';
 import type { MediaImportRequest } from '@rezics/definitions/media-import';
 import type { Pool, PoolClient } from 'pg';
@@ -50,6 +51,7 @@ export type SummaryReaderDependencies = {
     access: Access;
     actor: Actor;
     deadline: number;
+    work?: AccessWorkAccounting;
     maySeeCover?: SummaryDependencies['maySeeCover'];
 };
 type SummaryAuthorize = SummaryDependencies['authorize'];
@@ -80,7 +82,8 @@ export declare function readSubjectSummaries(deps: SummaryDependencies | Summary
 /** Read the ordinary projection and retain its actual source homes for a
  * composing native reader. No owner connection survives the returned promise.
  */
-export declare function readSubjectSummaryObservation(deps: SummaryReaderDependencies, ids: readonly string[], { languages }?: {
+export declare function readSubjectSummaryObservation(deps: SummaryReaderDependencies, ids: readonly string[], { languages, displayFallback }?: {
     languages?: readonly string[];
+    displayFallback?: boolean;
 }): Promise<SubjectSummaryObservation>;
 export {};

@@ -48,6 +48,7 @@ export declare function createBuiltinRuntime(config: Omit<OwnerQueryDependencies
         members: DynamicMemberView[];
         next: string | null;
     }>;
+    sourceVersion: (actor: Actor, source: BuiltinCollectionView, deadline: number, allowAbsent?: boolean) => Promise<string>;
 };
 /** Internal native primitive for the real participant/retained plan integration. Never a successful member page. */
 export declare function readBuiltinOriginalInputs(pool: Pool, accountId: string, after: string | null, limit: number): Promise<{

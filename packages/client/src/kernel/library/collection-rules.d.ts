@@ -5,10 +5,15 @@ import { ProblemError } from '../http/problem.ts';
 import { type Access, type AccessCheck, type AccountActor } from '../request/access.ts';
 import type { CollectionDraft } from './collection-model.ts';
 import type { PreparationDefinition } from './members-preparation.ts';
+/** Source selection is stored beside the shared predicate, never inside its grammar. */
+export type CollectionRuleSource = Readonly<{
+    kind: 'owner' | 'catalogue';
+}>;
 /** Uses the actual common preparation order declaration; no caller-local sort language. */
 export type CollectionRule = Readonly<{
     filter: FilterDocument;
     sort: Extract<PreparationDefinition['sort'], 'id'>;
+    source: CollectionRuleSource;
 }>;
 export type AdmittedCollectionRule = CollectionRule & Readonly<{
     releaseDigest: string;

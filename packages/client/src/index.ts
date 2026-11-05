@@ -1,18 +1,11 @@
 import { treaty, type Treaty } from '@elysia/eden';
+import type { Static } from 'typebox';
+import type { PublicationPreparationSchema } from './kernel/community/publication-preparation.ts';
+import type { DecisionPageSchema } from './kernel/content/decision-page.ts';
 import type { DefaultMetadata, DefaultSingleton, Elysia } from 'elysia';
 import type { SESSION_HEADER as KernelSessionHeader } from './kernel/http/request.ts';
 import type { ClientKernel as KernelType } from './kernel/http/kernel.ts';
 import type { subjectRoutes } from './kernel/semantic/http/subjects.ts';
-import type { ModerationDecisionPage } from './kernel/content/decision-page.ts';
-import type { PostHistoryPage as NativePostHistoryPage } from './kernel/content/history-page.ts';
-import type { WatchManagementKind, WatchManagementPage } from './kernel/content/watch-management-contract';
-import type { LibraryExportFinalManifest, LibraryExportManifest } from './kernel/library/library-export-format.ts';
-import type { ExportRecord } from './kernel/library/library-export-source.ts';
-import type {
-  ReviewedPersonEndpoint,
-  ReviewedPersonAdmission,
-  ReviewedPersonOperation,
-} from './reviewed-person-identity.ts';
 
 export type { ClientKernel as Kernel } from './kernel/http/kernel.ts';
 export { zoneCollections } from './zones.ts';
@@ -47,10 +40,8 @@ export type {
   PersonalEntryTimestampInput,
 } from './kernel/library/entry-personal-model';
 export type {
-  EntryAnnotationCorrectionCancelResult,
-  EntryAnnotationCorrectionInput,
   EntryAnnotationCorrectionItem,
-  EntryAnnotationCorrectionOperation,
+  EntryAnnotationOperation as EntryAnnotationCorrectionOperation,
   EntryAnnotationCorrectionPage,
   EntryAnnotationCorrectionSelection,
 } from './kernel/library/entry-annotation-correction';
@@ -62,21 +53,27 @@ export type {
   WatchManagementKind,
   WatchManagementPage,
   WatchManagementViewer,
-} from './kernel/content/watch-management-contract';
-export type { PreferencePage, PreferencePageAction, PreferencePageKind } from './kernel/access/preference-page';
+} from './kernel/content/schemas';
+export type { PreferencePage, PreferencePageAction, PreferencePageKind } from './kernel/access/preferences';
 export type {
-  RealmClaimReviewApprovalAdvice,
-  RealmClaimReviewClaimant,
+  RealmClaimApprovalAdvice as RealmClaimReviewApprovalAdvice,
+  RealmClaimantPresentation as RealmClaimReviewClaimant,
   RealmClaimReviewInspection,
   RealmClaimReviewItem,
-  RealmClaimReviewOperation,
   RealmClaimReviewPage,
   RealmClaimReviewPresentation,
-  RealmClaimReviewQuery,
-} from './kernel/community/claim-review-page';
-export type { PublicationCommand, RealmPublicationPreparation } from './kernel/community/publication-preparation.ts';
+} from './kernel/community/realm-claim-review';
+export type RealmPublicationPreparation = Static<typeof PublicationPreparationSchema>;
+export type PublicationCommand = RealmPublicationPreparation['commands']['publish'];
+type AnnotationCorrectionRoute = Routes['libraryEntryAnnotationCorrections'];
+export type EntryAnnotationCorrectionInput = AnnotationCorrectionRoute['post']['body'];
+export type EntryAnnotationCorrectionCancelResult =
+  AnnotationCorrectionRoute[':reviewId']['cancel']['post']['response'][200];
 
+type NativePostHistoryPage = Routes['posts'][':id']['revisions']['get']['response'][200]['page'];
 type Routes = KernelType['~Routes']['v1'];
+export type RealmClaimReviewOperation = Routes['realms'][':realmId']['claimRequests']['get'];
+export type RealmClaimReviewQuery = RealmClaimReviewOperation['query'];
 export type RatingQuestionDirectoryQuery = Routes['rating-questions']['get']['query'];
 export type RatingQuestionDirectory = Routes['rating-questions']['get']['response'][200];
 export type RatingQuestion = RatingQuestionDirectory['ratingQuestions'][number];
@@ -92,55 +89,11 @@ type QuestionLabelHistoryResponse = Routes['rating-questions'][':questionId']['l
 
 export type QuestionLabel = QuestionLabelHistoryResponse['labels'][number];
 export type QuestionLabelHistory = QuestionLabelHistoryResponse;
-export type BanReviewPageQuery = { limit?: number; cursor?: string; selectedAccountId?: string };
-export type BanReviewIdentity =
-  | {
-      state: 'available';
-      accountId: string;
-      displayName: string | null;
-      handle: string | null;
-      label: string;
-      destination: string | null;
-    }
-  | { state: 'concealed'; accountId: string; label: 'Account'; destination: null };
-export type BanReviewPageItem = {
-  accountId: string;
-  reason: string;
-  actor: string | null;
-  at: string;
-  account: BanReviewIdentity;
-  moderator: BanReviewIdentity | null;
-  unban: {
-    state: 'permitted';
-    realmId: string;
-    accountId: string;
-    observedAt: string;
-    membershipRestored: false;
-  };
-  removal: { state: 'unavailable' };
-};
-export type BanReviewPage = {
-  items: BanReviewPageItem[];
-  next: string | null;
-  context: { state: 'available'; realmTitle: string; spaceId: string; spaceTitle: string } | { state: 'concealed' };
-  viewer: {
-    accountId: string;
-    clientId: string;
-    requestedBy: string | null;
-    authnEpoch: number;
-    unban: {
-      state: 'permitted';
-      operationId: 'realm.unban';
-      action: 'realm:ban';
-      resource: { route: number; id: string };
-      reauthorizes: true;
-    };
-  };
-  selected:
-    | { state: 'not-requested' }
-    | { state: 'current'; ban: BanReviewPageItem }
-    | { state: 'absent'; accountId: string; account: BanReviewIdentity };
-};
+type BanReviewRoute = Routes['realms'][':realmId']['bans']['get'];
+export type BanReviewPageQuery = BanReviewRoute['query'];
+export type BanReviewPage = BanReviewRoute['response'][200];
+export type BanReviewPageItem = BanReviewPage['items'][number];
+export type BanReviewIdentity = BanReviewPageItem['account'];
 
 /** Reuse each shared method's original declaration; retain every other mounted path and method. */
 type SharedRoutes<Mounted, Original> = Original extends { body: unknown; response: unknown }
@@ -156,45 +109,7 @@ type InstalledSubjectRoutes = SharedRoutes<
   Routes['subjects'],
   ReturnType<typeof subjectRoutes>['~Routes']['v1']['subjects']
 >;
-type InstalledSubjectGet = InstalledSubjectRoutes[':id']['get'];
-type InstalledMergePost = InstalledSubjectRoutes['$merge']['post'];
-// The native reviewed merge routes are released; declaration publication currently also
-// depends on unrelated Kernel modules. Keep this bounded wire seam until that output lands.
-type SubjectRoutes = Omit<InstalledSubjectRoutes, ':id' | '$merge'> & {
-  ':id': Omit<InstalledSubjectRoutes[':id'], 'get'> & {
-    get: Omit<InstalledSubjectGet, 'query' | 'response'> & {
-      query: InstalledSubjectGet['query'] & {
-        includeViewerActions?: boolean;
-        reviewIdentitySource?: ReviewedPersonEndpoint['source'];
-        reviewIdentityExternalId?: string;
-      };
-      response: Omit<InstalledSubjectGet['response'], 200> & {
-        200: InstalledSubjectGet['response'][200] & { reviewedIdentity?: ReviewedPersonEndpoint | null };
-      };
-    };
-  };
-  $merge: {
-    post: Omit<InstalledMergePost, 'body' | 'response'> & {
-      body: InstalledMergePost['body'] & {
-        expectedIdentity?: { endpoints: [ReviewedPersonEndpoint, ReviewedPersonEndpoint] };
-      };
-      response: Omit<InstalledMergePost['response'], 200> & { 202: ReviewedPersonAdmission };
-    };
-  };
-};
-type SubjectIdentityOperationRoutes = {
-  ':id': {
-    get: {
-      body: unknown;
-      params: { id: string };
-      query: unknown;
-      headers: unknown;
-      response: Pick<InstalledMergePost['response'], 401 | 404 | 503> & {
-        200: { operation: ReviewedPersonOperation };
-      };
-    };
-  };
-};
+type SubjectRoutes = InstalledSubjectRoutes;
 
 // Eden derives the wire client from `~Routes`; the remaining Elysia generics
 // describe server composition and are not part of the client's type surface.
@@ -206,76 +121,13 @@ type ClientApp = Elysia<
   DefaultMetadata,
   {
     [Prefix in keyof KernelType['~Routes']]: Prefix extends 'v1'
-      ? Omit<Routes, 'subjects' | 'subjectIdentityOperations'> & {
-          subjects: SubjectRoutes;
-          subjectIdentityOperations: SubjectIdentityOperationRoutes;
-        }
+      ? Omit<Routes, 'subjects'> & { subjects: SubjectRoutes }
       : KernelType['~Routes'][Prefix];
   }
 >;
 
 /** Each group is derived from the complete mounted kernel, including routes contributed by other modules. */
 type GeneratedKernelClient = ReturnType<typeof treaty<ClientApp>>['v1'];
-type GeneratedAccountPath = ReturnType<GeneratedKernelClient['accounts']>;
-type GeneratedAccountRead = GeneratedAccountPath['profile']['get'];
-type WatchRequestOptions = Omit<NonNullable<Parameters<GeneratedAccountRead>[0]>, 'query'>;
-type WatchListOptions = WatchRequestOptions & {
-  query: { kind: WatchManagementKind; limit?: number; cursor?: string };
-};
-type WatchManagementRead = PersonalEntryCall<WatchManagementPage>;
-type WatchRemovalPath = {
-  delete(
-    body: { expectedRevision: number },
-    options: WatchRequestOptions & {
-      query: { kind: WatchManagementKind };
-      headers: Record<string, string> & { 'idempotency-key': string };
-    },
-  ): PersonalEntryCall<{ removed: true }>;
-};
-type WatchManagementPath = ((params: { watchId: string }) => WatchRemovalPath) & {
-  get(options: WatchListOptions): WatchManagementRead;
-};
-type AccountsPath = Omit<GeneratedAccountPath, 'watches'> & { watches: WatchManagementPath };
-type AccountsClient = Omit<GeneratedKernelClient['accounts'], keyof Function> &
-  ((...args: Parameters<GeneratedKernelClient['accounts']>) => AccountsPath);
-type GeneratedBoardsPath = ReturnType<GeneratedKernelClient['boards']>;
-type BoardWatchState = { watching: boolean; revision: number };
-type BoardWatchPath = {
-  get(options?: WatchRequestOptions): PersonalEntryCall<BoardWatchState>;
-  put(
-    body: { watching: boolean; expectedRevision: number },
-    options: PersonalWriteOptions,
-  ): PersonalEntryCall<BoardWatchState>;
-};
-type BoardsPath = Omit<GeneratedBoardsPath, 'watch'> & { watch: BoardWatchPath };
-type BoardsClient = Omit<GeneratedKernelClient['boards'], keyof Function> &
-  ((...args: Parameters<GeneratedKernelClient['boards']>) => BoardsPath);
-type GeneratedBanReviewGet = ReturnType<GeneratedKernelClient['realms']>['bans']['get'];
-type GeneratedBanReviewRead = Awaited<ReturnType<GeneratedBanReviewGet>>;
-type BanReviewRead = Omit<GeneratedBanReviewRead, 'data'> & { data: BanReviewPage | null };
-type BanReviewGetOptions = Omit<NonNullable<Parameters<GeneratedBanReviewGet>[0]>, 'query'> & {
-  query?: BanReviewPageQuery;
-};
-type BanReviewEndpoints = Omit<ReturnType<GeneratedKernelClient['realms']>['bans'], 'get'> & {
-  get(options?: BanReviewGetOptions): Promise<BanReviewRead>;
-};
-type GeneratedRealmPath = ReturnType<GeneratedKernelClient['realms']>;
-type RealmPath = Omit<GeneratedRealmPath, 'bans'> & { bans: BanReviewEndpoints };
-type RealmsClient = Omit<GeneratedKernelClient['realms'], keyof Function> &
-  ((...args: Parameters<GeneratedKernelClient['realms']>) => RealmPath);
-type GeneratedPostPath = ReturnType<GeneratedKernelClient['posts']>;
-type GeneratedPostHistoryPath = GeneratedPostPath['revisions'];
-type GeneratedPostHistoryRead = Awaited<ReturnType<GeneratedPostHistoryPath['get']>>;
-type NativeHistoryData = NonNullable<GeneratedPostHistoryRead['data']> & { page: NativePostHistoryPage };
-type NativeHistoryRead = Omit<GeneratedPostHistoryRead, 'data'> & { data: NativeHistoryData | null };
-type PostHistoryPath = Omit<GeneratedPostHistoryPath, 'get'> &
-  ((...args: Parameters<GeneratedPostHistoryPath>) => ReturnType<GeneratedPostHistoryPath>) & {
-    get: (...args: Parameters<GeneratedPostHistoryPath['get']>) => Promise<NativeHistoryRead>;
-  };
-type PostPath = Omit<GeneratedPostPath, 'revisions'> & { revisions: PostHistoryPath };
-type PostsClient = Omit<GeneratedKernelClient['posts'], keyof Function> &
-  ((...args: Parameters<GeneratedKernelClient['posts']>) => PostPath);
-
 type ReadingPageCall = ReturnType<ReturnType<GeneratedKernelClient['threads']>['reading-page']['get']>;
 /** Response declared by the mounted thread reading route. */
 export type ReadingPageResponse = NonNullable<Awaited<ReadingPageCall>['data']>;
@@ -283,59 +135,6 @@ export type ReadingPageResponse = NonNullable<Awaited<ReadingPageCall>['data']>;
 type BoardPageCall = ReturnType<ReturnType<GeneratedKernelClient['boards']>['page']['get']>;
 /** Response declared by the mounted GET /v1/boards/:id/page route. */
 export type BoardPageResponse = NonNullable<Awaited<BoardPageCall>['data']>;
-type PersonalEntryPath = ReturnType<GeneratedKernelClient['libraryEntries']>;
-type DecisionPagePath = ReturnType<GeneratedKernelClient['moderation-decisions']>;
-type DecisionPageGet = DecisionPagePath['get'];
-type DecisionPageRead = Awaited<ReturnType<DecisionPageGet>>;
-type DecisionPageReadResult = Omit<DecisionPageRead, 'data'> & { data: ModerationDecisionPage | null };
-type DecisionAppealPost = DecisionPagePath['$appeal']['post'];
-type DecisionAppealOptions = Parameters<DecisionAppealPost>[1] & {
-  headers: { authorization?: string };
-};
-type DecisionPageEndpoints = Omit<DecisionPagePath, 'get' | '$appeal'> & {
-  get(...args: Parameters<DecisionPageGet>): Promise<DecisionPageReadResult>;
-  $appeal: Omit<DecisionPagePath['$appeal'], 'post'> & {
-    post(body: Parameters<DecisionAppealPost>[0], options: DecisionAppealOptions): ReturnType<DecisionAppealPost>;
-  };
-};
-type DecisionPages = Omit<GeneratedKernelClient['moderation-decisions'], keyof Function> &
-  ((...args: Parameters<GeneratedKernelClient['moderation-decisions']>) => DecisionPageEndpoints);
-type PersonalEntryCall<T> = Promise<{
-  data: T | null;
-  error: { value: unknown; status?: number } | null;
-  response: Response;
-  status: number;
-  headers: Headers;
-}>;
-type PersonalReadOptions = { headers?: Record<string, string>; fetch?: { signal?: AbortSignal } };
-type PersonalWriteOptions = { headers: Record<string, string> & { 'idempotency-key': string } };
-type PersonalEntryEndpoints = {
-  personal: {
-    get(
-      options?: PersonalReadOptions,
-    ): PersonalEntryCall<{ personalEntry: import('./kernel/library/entry-personal-model').PersonalEntry }>;
-  };
-  annotations: {
-    put(
-      body: import('./kernel/library/entry-personal-model').PersonalEntryAnnotationWrite,
-      options: PersonalWriteOptions,
-    ): PersonalEntryCall<{ personalEntry: import('./kernel/library/entry-personal-model').PersonalEntry }>;
-  };
-  sourceObservations: {
-    post(
-      body: import('./kernel/library/entry-personal-model').PersonalEntrySourceAdmission,
-      options: PersonalWriteOptions,
-    ): PersonalEntryCall<{
-      sourceObservation: import('./kernel/library/entry-personal-model').PersonalEntryObservation;
-    }>;
-    patch(
-      body: import('./kernel/library/entry-personal-model').PersonalEntrySourceCorrection,
-      options: PersonalWriteOptions,
-    ): PersonalEntryCall<{
-      sourceObservation: import('./kernel/library/entry-personal-model').PersonalEntryObservation;
-    }>;
-  };
-};
 export type {
   OwnCountedVoteAccountObservation,
   OwnCountedVoteIdentity,
@@ -352,42 +151,13 @@ export type {
   OwnCountedVoteRow,
   StandardRatingMeasurement,
 } from './kernel/rating/own-votes-counted';
-type PersonalLibraryEntries = Omit<GeneratedKernelClient['libraryEntries'], keyof Function> &
-  ((...args: Parameters<GeneratedKernelClient['libraryEntries']>) => PersonalEntryPath & PersonalEntryEndpoints);
-
-export type LibraryExportState = 'collecting' | 'ready' | 'stale' | 'cancelled' | 'expired' | 'limit';
-export type LibraryExportStatus = LibraryExportManifest & {
-  fullExport: false;
-  state: LibraryExportState;
-  first: string | null;
-};
-export type LibraryExportPage = {
-  exportId: string;
-  state: LibraryExportState;
-  records: ExportRecord[];
-  next: string | null;
-  manifest: LibraryExportFinalManifest | null;
-};
-type LibraryExportPath = {
-  get(options?: PersonalReadOptions): PersonalEntryCall<LibraryExportStatus>;
-  delete(options?: PersonalReadOptions): PersonalEntryCall<LibraryExportStatus>;
-  pages: {
-    get(options: { query: { cursor: string } } & PersonalReadOptions): PersonalEntryCall<LibraryExportPage>;
-  };
-};
-type LibraryExportsClient = ((params: { id: string }) => LibraryExportPath) & {
-  post(options: PersonalWriteOptions): PersonalEntryCall<LibraryExportStatus>;
-};
+type LibraryExportRoute = Routes['libraryExports'][':id'];
+export type LibraryExportStatus = LibraryExportRoute['get']['response'][200];
+export type LibraryExportState = LibraryExportStatus['state'];
+export type LibraryExportPage = LibraryExportRoute['pages']['get']['response'][200];
 
 type SubjectsClient = Treaty.Sign<{ subjects: SubjectRoutes }>['subjects'];
 type SubjectPath = ReturnType<SubjectsClient>;
-type ProvisionalClassificationsClient = import('./kernel/rating/source-classifications.ts').SourceClassificationsClient;
-// Preserve the existing consumer seam while publication is pending. Once installed, the mounted transport
-// supplies its complete mutation unions without intersection with the provisional narrowing.
-type ClassificationCompatibility<Path> = Path extends { 'source-classifications': unknown }
-  ? Path
-  : Path & { 'source-classifications': ProvisionalClassificationsClient };
-
 // These aliases become usable only when the mounted declaration publisher installs the actual methods.
 // No hand-maintained transport supplies a missing mounted route.
 type ClassificationMethod<Verb extends string> = SubjectRoutes extends {
@@ -406,83 +176,31 @@ export type SourceClassificationPutResult = MethodResult<ClassificationMethod<'$
 export type SourceClassificationClearInput = MethodBody<ClassificationMethod<'$clear'>>;
 export type SourceClassificationClearResult = MethodResult<ClassificationMethod<'$clear'>>;
 
-export type KernelClient = Omit<
-  GeneratedKernelClient,
-  | 'accounts'
-  | 'boards'
-  | 'posts'
-  | 'subjects'
-  | 'libraryEntries'
-  | 'libraryExports'
-  | 'libraryImports'
-  | 'moderation-decisions'
-  | 'realms'
-> & {
-  libraryImports: import('./personal-vndb-import.ts').PersonalVndbImports<GeneratedKernelClient['libraryImports']>;
-  posts: PostsClient;
-  libraryEntries: PersonalLibraryEntries;
-  libraryExports: LibraryExportsClient;
-  accounts: AccountsClient;
-  boards: BoardsClient;
-  subjects: KernelSubjectsClient;
-  'moderation-decisions': DecisionPages;
-  realms: RealmsClient;
-};
-export type { PostHistoryPage } from './kernel/content/history-page.ts';
-export type {
-  DecisionPageAppeal,
-  DecisionPageAppealAdvice,
-  DecisionPageTargetContext,
-  ModerationDecisionPage,
-} from './kernel/content/decision-page.ts';
+export type KernelClient = GeneratedKernelClient;
+export type PostHistoryPage = NativePostHistoryPage;
+export type ModerationDecisionPage = Static<ReturnType<typeof DecisionPageSchema>>;
+export type DecisionPageAppeal = NonNullable<ModerationDecisionPage['appeal']>;
+export type DecisionPageAppealAdvice = ModerationDecisionPage['viewer']['appeal'];
+export type DecisionPageTargetContext = ModerationDecisionPage['targetContext'];
 type NoticeInboxClient = ReturnType<KernelClient['accounts']>['notifications'];
 type NoticeInboxRead = Awaited<ReturnType<NoticeInboxClient['get']>>;
 type UnreadNoticeRead = Awaited<ReturnType<NoticeInboxClient['count']['get']>>;
 export type NoticeInboxPage = NonNullable<NoticeInboxRead['data']>;
 export type NoticeInboxItem = NoticeInboxPage['items'][number];
 export type UnreadNoticeSummary = NonNullable<UnreadNoticeRead['data']>;
-export type { InboxNoticeSelection } from './kernel/content/notice-inbox-selection.ts';
+export type { InboxSelection as InboxNoticeSelection } from './kernel/content/notice-inbox.ts';
 export type KernelSubjectsClient = Omit<SubjectsClient, keyof Function> &
-  ((...args: Parameters<SubjectsClient>) => ClassificationCompatibility<SubjectPath>);
+  ((...args: Parameters<SubjectsClient>) => SubjectPath);
 type MountedSubjectRead = SubjectRoutes[':id']['get']['response'][200];
-export type SubjectReadQuery = NonNullable<Parameters<SubjectPath['get']>[0]>['query'] & {
-  includeViewerActions?: boolean;
-};
-export type SubjectRead = MountedSubjectRead & {
-  viewerActions?:
-    | { state: 'unavailable' }
-    | { state: 'available'; actions: { action: string; operations: string[] }[] };
-};
-type MountedSubjectLinksResponse = NonNullable<Awaited<ReturnType<SubjectPath['links']['get']>>['data']>;
-export type SubjectLinksQuery = NonNullable<Parameters<SubjectPath['links']['get']>[0]>['query'];
-type WorkReleaseStatement = NonNullable<MountedSubjectLinksResponse['links'][number]['assertion']>;
-type WorkReleaseSummary = MountedSubjectLinksResponse['links'][number]['summary'];
-export type WorkReleaseCardProperty =
-  | 'schema:gamePlatform'
-  | 'schema:inLanguage'
-  | 'schema:datePublished'
-  | 'schema:creativeWorkStatus'
-  | 'wdt:P5804'
-  | 'rezics:releaseStatus'
-  | 'schema:contentRating'
-  | 'schema:publisher'
-  | 'schema:producer'
-  | 'wdt:P178'
-  | 'wdt:P162'
-  | 'wdt:P2899';
-export type WorkReleaseCardField =
-  | { state: 'unsupported' | 'withheld' | 'missing' | 'unavailable' }
-  | { state: 'available'; statements: WorkReleaseStatement[]; related: Record<string, WorkReleaseSummary> };
-export type WorkReleaseCard = {
-  subject: string;
-  type: string;
-  summary: WorkReleaseSummary;
-  membership: WorkReleaseStatement;
-  related: Record<string, WorkReleaseSummary>;
-  fields: Record<WorkReleaseCardProperty, WorkReleaseCardField>;
-};
-export type WorkReleaseCards = { state: 'unavailable' } | { state: 'available'; cards: WorkReleaseCard[] };
-export type SubjectLinksResponse = MountedSubjectLinksResponse & { workReleaseCards?: WorkReleaseCards };
+export type SubjectReadQuery = SubjectRoutes[':id']['get']['query'];
+export type SubjectRead = MountedSubjectRead;
+type MountedSubjectLinksResponse = SubjectRoutes[':id']['links']['get']['response'][200];
+export type SubjectLinksQuery = SubjectRoutes[':id']['links']['get']['query'];
+export type SubjectLinksResponse = MountedSubjectLinksResponse;
+export type WorkReleaseCards = NonNullable<SubjectLinksResponse['workReleaseCards']>;
+export type WorkReleaseCard = Extract<WorkReleaseCards, { state: 'available' }>['cards'][number];
+export type WorkReleaseCardProperty = keyof WorkReleaseCard['fields'];
+export type WorkReleaseCardField = WorkReleaseCard['fields'][WorkReleaseCardProperty];
 
 type SubjectSourceStatisticsRoute = Routes['subjects'][':id']['source-statistics'];
 export type SourceStatisticListResponse = SubjectSourceStatisticsRoute['get']['response'][200];
@@ -553,7 +271,7 @@ export function createKernelClient(origin: string, options: KernelClientOptions 
       }
     },
   };
-  return treaty<ClientApp>(origin, config).v1 as unknown as KernelClient;
+  return treaty<ClientApp>(origin, config).v1;
 }
 
 export type QuestionLabelInput = Routes['rating-questions'][':questionId']['label']['put']['body'];
@@ -576,4 +294,8 @@ export type {
   ReviewedPersonRead,
   ReviewedPersonMerge,
   ReviewedPersonAdmission,
+  ReviewedPersonOperation,
 } from './reviewed-person-identity.ts';
+
+export type OwnVotesPage = Routes['me']['rating-votes']['get']['response'][200];
+export type OwnVoteEntry = OwnVotesPage['votes'][number];

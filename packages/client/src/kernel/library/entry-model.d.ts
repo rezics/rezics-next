@@ -1,3 +1,4 @@
+import type { CopyConditionFacts } from './copy-condition.ts';
 export type EntryState = string;
 export type CopyStatus = string;
 /** Database projection for one account's entry on a subject. */
@@ -54,6 +55,7 @@ export type CopyRow = {
 export type Copy = Omit<CopyRow, 'route' | 'copyId' | 'status'> & {
     id: string;
     status: CopyStatus;
+    conditionFacts?: CopyConditionFacts;
 };
 export type CopyDraft = {
     id: string;
@@ -65,6 +67,7 @@ export type CopyDraft = {
     acquiredOn: string | null;
     disposedOn: string | null;
     note: string | null;
+    conditionFacts?: CopyConditionFacts;
 };
 export type CopyChanges = Omit<CopyDraft, 'id' | 'accountId' | 'subjectId'>;
 export type CopyPage = {

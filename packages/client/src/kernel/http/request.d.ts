@@ -1,7 +1,6 @@
 import { type CommandPrincipal } from '../command/command.ts';
 import type { ActionCatalogue, Actor } from '../request/access.ts';
-export declare const SESSION_HEADER = "rezics-session-token";
-export declare const IDEMPOTENCY_HEADER = "idempotency-key";
+export { SESSION_HEADER, IDEMPOTENCY_HEADER } from './headers.ts';
 export declare function idempotencyKeyOf(header: string | null | undefined, principal?: CommandPrincipal): string;
 export declare function requestDigest(operation: string, actor: Actor, body: unknown): Uint8Array;
 /** Stable tuple home under the server-owned route key; grants no authorization. */
@@ -49,4 +48,3 @@ export declare function actionLabelOfMountedRoute(route: MountedRoute | undefine
 export declare function actionOfMountedRoute(route: MountedRoute | undefined): string;
 /** Finds and validates Elysia's mounted route, never routing a parameterized URL again. */
 export declare function actionForRequest(app: RouteApp, request: Request, routePath?: string): string;
-export {};

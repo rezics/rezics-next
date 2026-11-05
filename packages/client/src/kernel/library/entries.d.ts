@@ -63,8 +63,24 @@ export declare function deleteLibraryEntryInTransaction(tx: CommandTransaction, 
 }>;
 /** Private account library entry writes and signed, account-scoped keyset reads. */
 export declare function createEntryCommands(config: Dependencies): {
+    receiptDigest: (actor: Actor, kind: string, input: unknown) => string;
+    readCommandReceipt: (actor: Actor, request: {
+        kind: string;
+        requestKey: string;
+        digest: string;
+        authorize: (tx: CommandTransaction) => Promise<void>;
+    }) => Promise<import("../command/command.ts").CommandOutcome<unknown> | null>;
     readPersonalEntry: (actor: Actor, subjectId: string) => Promise<import("./entry-personal-model.ts").PersonalEntry>;
-    saveAnnotations: (...args: Parameters<(actor: Actor, subjectId: string, input: unknown, requestKey: string) => Promise<import("../command/command.ts").CommandOutcome<Readonly<{
+    readSourceObservation: (...args: Parameters<(actor: Actor, subjectId: string, provider: string, recordId: string) => Promise<import("./entry-personal-model.ts").PersonalEntryObservation | null>>) => Promise<Readonly<{
+        provider: string;
+        recordId: string;
+        revision: number;
+        privacy: import("./entry-personal-model.ts").PrivacyFact;
+        sourceCreated: import("./entry-personal-model.ts").TimestampFact;
+        sourceUpdated: import("./entry-personal-model.ts").TimestampFact;
+        recordedAt: string;
+    }> | null>;
+    saveAnnotations: (...args: Parameters<(actor: Actor, subjectId: string, input: unknown, requestKey: string, admission?: import("./label-command-admission.ts").LabelCommandAdmission) => Promise<import("../command/command.ts").CommandOutcome<Readonly<{
         subjectId: string;
         annotationRevision: number;
         note: string | null;
@@ -79,7 +95,7 @@ export declare function createEntryCommands(config: Dependencies): {
         annotationUpdatedAt: string | null;
         sourceObservations: readonly import("./entry-personal-model.ts").PersonalEntryObservation[];
     }>>>;
-    admitSourceObservation: (...args: Parameters<(actor: Actor, subjectId: string, input: unknown, requestKey: string) => Promise<import("../command/command.ts").CommandOutcome<{
+    admitSourceObservation: (...args: Parameters<(actor: Actor, subjectId: string, input: unknown, requestKey: string, internalGuard?: unknown, admission?: import("./label-command-admission.ts").LabelCommandAdmission) => Promise<import("../command/command.ts").CommandOutcome<{
         sourceObservation: Readonly<{
             provider: string;
             recordId: string;
@@ -100,7 +116,7 @@ export declare function createEntryCommands(config: Dependencies): {
             recordedAt: string;
         }>;
     }>>;
-    correctSourceObservation: (...args: Parameters<(actor: Actor, subjectId: string, input: unknown, requestKey: string) => Promise<import("../command/command.ts").CommandOutcome<{
+    correctSourceObservation: (...args: Parameters<(actor: Actor, subjectId: string, input: unknown, requestKey: string, internalGuard?: unknown, admission?: import("./label-command-admission.ts").LabelCommandAdmission) => Promise<import("../command/command.ts").CommandOutcome<{
         sourceObservation: Readonly<{
             provider: string;
             recordId: string;

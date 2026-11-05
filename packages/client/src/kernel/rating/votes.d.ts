@@ -2,13 +2,13 @@ import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import type { SessionComponent } from '../tokens/session.ts';
 import type { Access, Actor } from '../request/access.ts';
+import { type OwnCountedVoteObservation } from './own-votes-counted.ts';
 import { type RatingQuestionScale } from './question-scale.ts';
 import { type VoteReviewGuard } from './own-votes-review.ts';
 export { STANDARD_QUESTION_ID } from './standard-question.ts';
-export { VoteReviewStaleError, VoteReviewUnavailableError } from './own-votes-review.ts';
+export { VOTE_SCOPE, VoteInvalidError, VoteReviewStaleError, VoteReviewUnavailableError } from './own-votes-review.ts';
 export type { VoteReviewGuard } from './own-votes-review.ts';
 import { type VoteObservation } from './vote-observation.ts';
-export declare const VOTE_SCOPE = "rating:vote";
 export type RatingQuestion = RatingQuestionScale & {
     id: string;
     ownerId: string | null;
@@ -40,10 +40,30 @@ export type PutVoteOutcome = {
     vote: Vote | null;
     component: SessionComponent | null;
 };
-export declare class VoteInvalidError extends Error {
-    readonly field: string;
-    constructor(field: string);
-}
+/** Trusted caller source operands join the receipt digest; admission runs only in a fresh native body. */
+export type VoteCommandAdmission = {
+    input: unknown;
+    prepare(): Promise<(tx: import('../command/command.ts').CommandTransaction) => Promise<void>>;
+};
+/** Bounded native linkage retained after the provider input has been scrubbed. */
+export type PutVoteReceipt = Readonly<{
+    requestKey: string;
+    digest: string;
+    questionId: string;
+    targetId: string;
+}>;
+export type PreparedPutVote = Readonly<{
+    input: PutVoteInput;
+    receipt: PutVoteReceipt;
+}>;
+export type VoteReviewCurrentVote = Exclude<OwnCountedVoteObservation, {
+    state: 'unavailable';
+}>;
+export type VoteReview = Readonly<{
+    question: RatingQuestion;
+    currentVote: VoteReviewCurrentVote;
+    guard: VoteReviewGuard;
+}>;
 export declare class RatingQuestionNotFoundError extends Error {
     constructor();
 }
@@ -67,8 +87,11 @@ export declare function prepareVoteTarget(config: Dependencies, actor: Actor, in
 }>;
 /** Writes and reads the signed-in person's current rating vote on the account's partition. */
 export declare function createVoteCommands(config: Dependencies): {
+    preparePutVote: (actor: Actor, input: PutVoteInput, idempotencyKey: string, admission?: VoteCommandAdmission) => PreparedPutVote;
+    reconcilePutVote: (actor: Actor, receipt: PutVoteReceipt) => Promise<PutVoteOutcome | null>;
     putVote: (actor: Actor, input: PutVoteInput, idempotencyKey: string) => Promise<Vote | null>;
-    putVoteOutcome: (actor: Actor, input: PutVoteInput, idempotencyKey: string) => Promise<PutVoteOutcome>;
+    putVoteOutcome: (actor: Actor, input: PutVoteInput, idempotencyKey: string, admission?: VoteCommandAdmission) => Promise<PutVoteOutcome>;
     readOwnVote: (actor: Actor, questionId: string, targetId: string) => Promise<Vote | null>;
     readRatingQuestion: (actor: Actor, questionId: string) => Promise<RatingQuestion>;
+    readVoteReview: (actor: Actor, questionId: string, targetId: string) => Promise<VoteReview>;
 };
