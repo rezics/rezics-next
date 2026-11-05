@@ -95,7 +95,7 @@ export function ContributionWindowControls({
     if (!snapshot.focusReady || !route) return;
     const target = consumeContributionWindowFocus({ owner, cursor, href, region: region.current });
     if (target) return;
-  }, [cursor, href, owner, region, snapshot.focusReady]);
+  }, [cursor, href, owner, region, route, snapshot.focusReady]);
 
   if (!route || !owner.published || failure === 'denied' || !showNavigation) return null;
 
@@ -110,6 +110,7 @@ export function ContributionWindowControls({
         <Link
           data-slot="previous-page"
           data-window-action="previous"
+          to={previousHref}
           href={previousHref}
           className={controlClass}
           onClick={(event) =>
@@ -123,6 +124,7 @@ export function ContributionWindowControls({
         <Link
           data-slot="first-page"
           data-window-action="first"
+          to={firstHref}
           href={firstHref}
           className={controlClass}
           onClick={(event) => linkAction('first', owner, cursor, href, null, firstHref, event.currentTarget, event)}
@@ -135,6 +137,7 @@ export function ContributionWindowControls({
           data-slot="continuation"
           data-window-action="next"
           rel="next"
+          to={nextHref}
           href={nextHref}
           className={controlClass}
           onClick={(event) => linkAction('next', owner, cursor, href, next, nextHref, event.currentTarget, event)}

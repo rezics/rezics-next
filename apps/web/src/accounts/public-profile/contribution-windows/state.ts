@@ -79,14 +79,14 @@ function setFocus(
   source: HTMLElement,
 ): void {
   releaseFocus(visit);
-  const focus = {
+  const focus: FocusIntent = {
     href,
     action,
     target,
     source,
     cancelled: false,
     onFocus: (_event: FocusEvent) => {},
-  } satisfies FocusIntent;
+  };
   focus.onFocus = (event) => {
     const node = event.target;
     if (node === source || node === source.ownerDocument.body || node === source.ownerDocument.documentElement) return;

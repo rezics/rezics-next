@@ -284,7 +284,7 @@ function AccountList({ props, spec }: { props: Record<string, unknown>; spec: Li
     windowRoute && actionView && actionProfile
       ? { accountId: actionProfile.id, view: actionView, locale: value.locale, published: true }
       : null;
-  const windowCursor = actionPage?.view === actionView ? actionPage.cursor : null;
+  const windowCursor = actionPage && actionPage.view === actionView ? actionPage.cursor : null;
   const windowControls = (
     outcome: ContributionWindowOutcome,
     next: string | null,

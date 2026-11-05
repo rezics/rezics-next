@@ -68,13 +68,14 @@ export const Route = createFileRoute('/@{$handle}_/$view')({
     if (page.kind === 'state') return page;
     if (view !== 'realms' && !agentViewAvailable(page.tabs, view) && !page.overview.views?.includes(view))
       throw redirect(canonicalRedirect(agentPath(locale, page.handle), location.searchStr, location.hash, 302));
-    const canonicalHandle = page.page.account?.handle;
-    if (!canonicalHandle) throw notFound();
+    const canonicalAccount = page.page.account;
+    const canonicalHandle = canonicalAccount?.handle;
+    if (!canonicalAccount || !canonicalHandle) throw notFound();
     if (canonicalHandle !== params.handle) {
       const target = canonicalRedirect(agentPath(locale, canonicalHandle, view), location.searchStr, location.hash, 308);
       if (typeof window !== 'undefined' && (view === 'posts' || view === 'reviews' || view === 'discussion'))
         forwardContributionWindow({
-          owner: { accountId: page.page.account.id, view, locale, published: true },
+          owner: { accountId: canonicalAccount.id, view, locale, published: true },
           cursor: deps.cursor ?? null,
           fromHref: `${location.pathname}${location.searchStr}${location.hash}`,
           toHref: target.href,
