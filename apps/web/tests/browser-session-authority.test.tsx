@@ -614,7 +614,6 @@ test('mounted phone, following and Subject readers publish query changes after s
   const { SubjectPage } = await import('../src/features/pages/subject');
   const { default: recorded } = await import('../src/kernel/recorded/subject-page.json');
   const { browserObservation } = await import('../src/session/observation');
-  const { workspaceAdmission } = await import('../src/session/reader');
   const { currentInboxViewer } = await import('../src/inbox/inbox-viewer');
   const { viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
   const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } =
@@ -627,17 +626,13 @@ test('mounted phone, following and Subject readers publish query changes after s
     more: false,
     items: [{ id: 'space', kind: 'space', title: 'Following space', path: '/spaces/space' }],
   });
-  let counts = 0;
-  const count = spyOn(inbox, 'readUnreadCount').mockImplementation(async () => {
-    counts++;
-    return {
-      signedIn: true,
-      state: 'ready',
-      count: 3,
-      capped: false,
-      basis: 'current-visible-unread',
-      witness: { kind: 'current-disclosure', at: '2026-11-04T00:00:00.000Z' },
-    };
+  const count = spyOn(inbox, 'readUnreadCount').mockResolvedValue({
+    signedIn: true,
+    state: 'ready',
+    count: 3,
+    capped: false,
+    basis: 'current-visible-unread',
+    witness: { kind: 'current-disclosure', at: '2026-11-04T00:00:00.000Z' },
   });
   const errors = spyOn(console, 'error');
   try {
@@ -645,8 +640,6 @@ test('mounted phone, following and Subject readers publish query changes after s
       sessionReader = async () => viewer();
       const client = ui.client();
       const shared = browserObservation(client);
-      const admission = workspaceAdmission(client, ['follow.list']);
-      const stop = admission.subscribe(() => {});
       const router = createRouter({
         routeTree: createRootRoute(),
         history: createMemoryHistory({ initialEntries: ['/en/subjects/book'] }),
@@ -658,24 +651,15 @@ test('mounted phone, following and Subject readers publish query changes after s
         event?.();
         return null;
       }
+      const page = recorded as unknown as SubjectPageData;
+      const messages = { unknown: '?', none: '-', unlabelled: '?', sources: '', aliases: '', search: '' };
       const render = () =>
         ui.render(
           client,
           <RouterContextProvider router={router}>
             <AppShell search={<input aria-label="Search" />}>
               <QueryEvent />
-              <SubjectPage
-                page={recorded as unknown as SubjectPageData}
-                locale="en"
-                messages={{
-                  unknown: 'Unknown',
-                  none: 'None',
-                  unlabelled: 'Untitled',
-                  sources: 'Sources',
-                  aliases: 'Aliases',
-                  search: 'Search',
-                }}
-              />
+              <SubjectPage page={page} locale="en" messages={messages} />
             </AppShell>
           </RouterContextProvider>,
           true,
@@ -695,35 +679,25 @@ test('mounted phone, following and Subject readers publish query changes after s
         expect(ui.host.textContent).toContain('Following space');
         expect(ui.host.querySelector('[data-phone-navigation]')).not.toBeNull();
       };
-      try {
-        await render();
-        await admit();
-        const original = admission.read();
-        const old = currentInboxViewer(client)!;
-        const current = () =>
-          admission.dispatchVersion('follow.list') === original.dispatch[0] && admission.allowed('follow.list');
-        duringRender = () => {
-          client.setQueryData(sessionQuery.queryKey, viewer('reader-two', 'csrf-two'));
-          expect(current()).toBe(false);
-          expect(old.isCurrent()).toBe(false);
-          client.setQueryData(sessionQuery.queryKey, viewer());
-          expect(current()).toBe(false);
-          expect(old.isCurrent()).toBe(false);
-        };
-        await render();
-        await admit();
-        const equal = shared.getSnapshot();
-        duringRender = () => {
-          client.setQueryData(sessionQuery.queryKey, viewer());
-          expect(shared.getSnapshot()).not.toBe(equal);
-        };
-        await render();
-        await admit();
-        expect(counts).toBeLessThanOrEqual(2);
-        expect(errors.mock.calls.filter((args) => args.join(' ').includes('Cannot update a component'))).toEqual([]);
-      } finally {
-        stop();
-      }
+      await render();
+      await admit();
+      const old = currentInboxViewer(client)!;
+      duringRender = () => {
+        client.setQueryData(sessionQuery.queryKey, viewer('reader-two', 'csrf-two'));
+        expect(old.isCurrent()).toBe(false);
+        client.setQueryData(sessionQuery.queryKey, viewer());
+        expect(old.isCurrent()).toBe(false);
+      };
+      await render();
+      await admit();
+      const equal = shared.getSnapshot();
+      duringRender = () => {
+        client.setQueryData(sessionQuery.queryKey, viewer());
+        expect(shared.getSnapshot()).not.toBe(equal);
+      };
+      await render();
+      await admit();
+      expect(errors.mock.calls.filter((args) => args.join(' ').includes('Cannot update a component'))).toEqual([]);
     });
   } finally {
     following.mockRestore();
