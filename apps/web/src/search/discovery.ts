@@ -719,7 +719,9 @@ export async function readDiscoveryMutationPage(
   return result.discovery;
 }
 
-export type DiscoveryKindsState = Failure | { status: 'ready'; kinds: DiscoveryKinds };
+export type DiscoveryKindsState =
+  | (Failure & { retryable?: boolean })
+  | { status: 'ready'; kinds: DiscoveryKinds; asOf: string };
 
 /** A kind cursor selects metadata only on the same operation, without hit cursor or count requests. */
 export async function readDiscoveryKinds(
@@ -737,8 +739,10 @@ export async function readDiscoveryKinds(
   } = request;
   try {
     const response = await send({ ...conditions, kindPage: { limit: 8, cursor } });
-    if (response.error || response.status !== 200)
-      return discoveryFailure(response.status, response.error ?? response.data);
+    if (response.error || response.status !== 200) {
+      const failure = discoveryFailure(response.status, response.error ?? response.data);
+      return failure.status === 'unavailable' ? { ...failure, retryable: true } : failure;
+    }
     const parsed = v.safeParse(kindPage, response.data);
     if (
       !parsed.success ||
@@ -746,7 +750,7 @@ export async function readDiscoveryKinds(
       parsed.output.kinds.next === cursor ||
       (parsed.success && parsed.output.kinds.next !== null && parsed.output.kinds.values.length === 0)
     )
-      return { status: 'unavailable' };
+      return { status: 'unavailable', retryable: false };
     return {
       status: 'ready',
       kinds: {
@@ -754,10 +758,13 @@ export async function readDiscoveryKinds(
         ...(parsed.output.kinds.omitted ? { omitted: parsed.output.kinds.omitted } : {}),
         next: parsed.output.kinds.next,
       },
+      asOf: parsed.output.as_of,
     };
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') throw error;
-    return { status: isPlatformClosedError(error) ? 'closed' : 'unavailable' };
+    if (isPlatformClosedError(error)) return { status: 'closed' };
+    if (error instanceof TypeError) return { status: 'unavailable', retryable: true };
+    throw error;
   }
 }
 

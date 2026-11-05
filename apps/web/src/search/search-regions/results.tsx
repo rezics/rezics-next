@@ -147,7 +147,6 @@ export function SearchResultsRegion({
             locale={locale}
             refreshHref={discoverySearchHref(locale, { ...(retryState ?? data.queryState), cursor: undefined })}
             onRefresh={retryWithoutWaiting}
-            refreshRef={retryFocus?.retryRef}
             onFocus={retryFocus?.captureRetryFocus}
           />
         )}

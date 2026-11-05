@@ -107,9 +107,11 @@ test('kind metadata continuation makes one bounded metadata-only call and distin
     },
   ]);
   expect(result.status).toBe('ready');
+  expect(result).toMatchObject({ asOf: discoveryExample.as_of });
   const html = renderToStaticMarkup(
     createElement(DiscoveryKinds, {
       initial: factualDiscoveryExample().kinds,
+      checkpoint: factualDiscoveryExample().as_of,
       selected: ['catalogue:Atlas'],
       locale: 'en',
       hydrated: true,

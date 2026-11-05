@@ -66,7 +66,12 @@ function page(recovery: SearchRecoveryState, discovery?: DiscoveryState, query =
 
 async function show(
   data: SearchPageData,
-  extra?: { query?: string; session?: string | null; onRetry?: () => PromiseLike<unknown> | void },
+  extra?: {
+    query?: string;
+    session?: string | null;
+    readerOwner?: string;
+    onRetry?: () => PromiseLike<unknown> | void;
+  },
 ) {
   root ??= createRoot(host);
   const query = extra?.query ?? data.queryState?.query ?? 'Mira';
@@ -82,6 +87,7 @@ async function show(
             data,
             onRetry: extra?.onRetry ?? (() => {}),
             session: extra?.session ?? null,
+            readerOwner: extra?.readerOwner,
           }),
         ),
       ),
@@ -190,7 +196,7 @@ test('native empty Retry focuses the current recovery action after its exact req
   expect(document.activeElement === retry()).toBe(false);
 });
 
-test('retired query, session and unmounted retries do not move focus', async () => {
+test('retired query, session, reader and unmounted retries do not move focus', async () => {
   setLocale('en', { reload: false });
   await show(page({ status: 'unavailable' }), { session: 'one' });
   await activate(retry()!);
@@ -202,6 +208,12 @@ test('retired query, session and unmounted retries do not move focus', async () 
   await activate(retry()!);
   await show(page({ status: 'loading' }), { session: 'one' });
   await show(page({ status: 'ready' }, readyDiscovery), { session: 'two' });
+  expect(document.activeElement === region()).toBe(false);
+
+  await show(page({ status: 'unavailable' }), { readerOwner: 'reader-one' });
+  await activate(retry()!);
+  await show(page({ status: 'loading' }), { readerOwner: 'reader-one' });
+  await show(page({ status: 'ready' }, readyDiscovery), { readerOwner: 'reader-two' });
   expect(document.activeElement === region()).toBe(false);
 
   await show(page({ status: 'unavailable' }));
@@ -224,6 +236,7 @@ test('a settled retry restores only the same owner while the reader stayed', () 
   expect(searchRetryFocusTarget({ ...args, current: { ...owner, session: 'two' } })).toBeNull();
   expect(searchRetryOwnerCurrent(owner, { ...owner, checkpoint: 'new-page' })).toBe(false);
   expect(searchRetryFocusTarget({ ...args, current: { ...owner, observation: {} } })).toBeNull();
+  expect(searchRetryFocusTarget({ ...args, current: { ...owner, reader: 'replacement-reader' } })).toBeNull();
   expect(searchRetryFocusTarget({ ...args, pending: { ...pending, moved: true } })).toBeNull();
   expect(searchRetryFocusTarget({ ...args, active: results })).toBeNull();
   retryButton.remove();

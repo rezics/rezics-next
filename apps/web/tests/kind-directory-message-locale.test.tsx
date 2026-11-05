@@ -44,14 +44,14 @@ function directory(next: string | null): Props['initial'] {
 }
 
 function props(locale: 'en' | 'zh-Hans', next: string | null, load: Props['load']): Props {
-  return { initial: directory(next), selected: [], locale, hydrated: true, load };
+  return { initial: directory(next), checkpoint: 'checkpoint', selected: [], locale, hydrated: true, load };
 }
 
 function markup(locale: 'en' | 'zh-Hans', next: string | null) {
   return renderToStaticMarkup(
     createElement(
       DiscoveryKinds,
-      props(locale, next, async () => ({ status: 'ready', kinds: directory(null) })),
+      props(locale, next, async () => ({ status: 'ready', kinds: directory(null), asOf: 'checkpoint' })),
     ),
   );
 }
@@ -104,11 +104,11 @@ test('type directory chrome follows each reader locale and keeps authored type l
         null,
         createElement(
           DiscoveryKinds,
-          props('en', null, async () => ({ status: 'ready', kinds: directory(null) })),
+          props('en', null, async () => ({ status: 'ready', kinds: directory(null), asOf: 'checkpoint' })),
         ),
         createElement(
           DiscoveryKinds,
-          props('zh-Hans', null, async () => ({ status: 'ready', kinds: directory(null) })),
+          props('zh-Hans', null, async () => ({ status: 'ready', kinds: directory(null), asOf: 'checkpoint' })),
         ),
       ),
     );
@@ -135,7 +135,10 @@ test('type directory failure and continuation progress follow each instance loca
     await act(async () =>
       root.render(
         <form onSubmit={(event) => event.preventDefault()}>
-          <DiscoveryKinds key="legacy-en" {...props('en', 'cursor-1', async () => ({ status: 'unavailable' }))} />
+          <DiscoveryKinds
+            key="legacy-en"
+            {...props('en', 'cursor-1', async () => ({ status: 'unavailable', retryable: false }))}
+          />
           <DiscoveryKinds
             key="legacy-zh"
             {...props('zh-Hans', 'cursor-1', async () => ({
@@ -152,12 +155,12 @@ test('type directory failure and continuation progress follow each instance loca
           .find((button) => button.textContent === m.discovery_more_kinds({}, options[locale]))!
           .click();
     });
-    expect(host.textContent).toContain(m.search_failed({}, options.en));
+    expect(host.textContent).toContain(m.result_kind_unavailable({}, options.en));
     expect(host.textContent).toContain(m.search_recovery_session({}, options['zh-Hans']));
-    expect(host.textContent).not.toContain(m.search_failed());
+    expect(host.textContent).not.toContain(m.result_kind_unavailable());
     expect(host.textContent).not.toContain(m.search_recovery_session());
 
-    const stalled = async () => ({ status: 'ready' as const, kinds: { values: [], next: 'x' } });
+    const stalled = async () => ({ status: 'ready' as const, kinds: { values: [], next: 'x' }, asOf: 'checkpoint' });
     await act(async () =>
       root.render(
         <form onSubmit={(event) => event.preventDefault()}>
@@ -177,6 +180,39 @@ test('type directory failure and continuation progress follow each instance loca
     expect(host.textContent).toContain(m.result_kind_window_restart({}, options.en));
     expect(host.textContent).toContain(m.result_kind_window_restart({}, options['zh-Hans']));
     expect(host.textContent).not.toContain(m.result_kind_window_progress());
+    expect(getLocale()).toBe('ja');
+  } finally {
+    setLocale(previous, { reload: false });
+  }
+});
+
+test('preparation and its explicit retry use each directory locale', async () => {
+  const previous = getLocale();
+  setLocale('ja', { reload: false });
+  try {
+    root = createRoot(host);
+    await act(async () =>
+      root.render(
+        <form onSubmit={(event) => event.preventDefault()}>
+          <DiscoveryKinds key="preparing-en" {...props('en', 'cursor-en', async () => ({ status: 'preparing' }))} />
+          <DiscoveryKinds
+            key="preparing-zh"
+            {...props('zh-Hans', 'cursor-zh', async () => ({ status: 'not-ready' }))}
+          />
+        </form>,
+      ),
+    );
+    await act(async () => {
+      for (const locale of ['en', 'zh-Hans'] as const)
+        [...host.querySelectorAll('button')]
+          .find((button) => button.textContent === m.discovery_more_kinds({}, options[locale]))!
+          .click();
+    });
+    for (const locale of ['en', 'zh-Hans'] as const) {
+      expect(host.textContent).toContain(m.result_kind_preparing({}, options[locale]));
+      expect(host.textContent).toContain(m.result_kind_retry({}, options[locale]));
+    }
+    expect(host.textContent).not.toContain(m.result_kind_preparing());
     expect(getLocale()).toBe('ja');
   } finally {
     setLocale(previous, { reload: false });
