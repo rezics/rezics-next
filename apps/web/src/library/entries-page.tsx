@@ -313,33 +313,52 @@ export function PersonalLibraryPage({
         <nav className="flex flex-wrap gap-3" aria-label={m.library_tracked_entries()}>
           {windowRetry}
           {windowControls?.previous !== undefined ? (
-            <a className={`${buttonVariants({ variant: 'outline' })} min-h-11 min-w-11`}
+            <a
+              className={`${buttonVariants({ variant: 'outline' })} min-h-11 min-w-11`}
               aria-disabled={windowControls.busy}
               href={windowControls.href(windowControls.previous)}
               onClick={(event) => {
                 if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
                 event.preventDefault();
                 if (!windowControls.busy) windowControls.move('previous', windowControls.previous!, event.detail === 0);
-              }}>{m.library_window_previous()}</a>
+              }}
+            >
+              {m.library_window_previous()}
+            </a>
           ) : null}
           {windowControls?.first ? (
-            <a className={`${buttonVariants({ variant: 'outline' })} min-h-11 min-w-11`}
-              aria-disabled={windowControls.busy} href={windowControls.href(null)}
+            <a
+              className={`${buttonVariants({ variant: 'outline' })} min-h-11 min-w-11`}
+              aria-disabled={windowControls.busy}
+              href={windowControls.href(null)}
               onClick={(event) => {
                 if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
                 event.preventDefault();
                 if (!windowControls.busy) windowControls.move('first', null, event.detail === 0);
-              }}>{m.library_window_first()}</a>
+              }}
+            >
+              {m.library_window_first()}
+            </a>
           ) : null}
           {page.next && !page.readState ? (
-            <a className={`${buttonVariants({ variant: 'outline' })} min-h-11 min-w-11`}
+            <a
+              className={`${buttonVariants({ variant: 'outline' })} min-h-11 min-w-11`}
               aria-disabled={windowControls?.busy}
-              href={windowControls ? windowControls.href(page.next) : shelfHref(locale, { ...firstPage, cursor: page.next })}
-              onClick={windowControls ? (event) => {
-                if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-                event.preventDefault();
-                if (!windowControls.busy) windowControls.move('next', page.next!, event.detail === 0);
-              } : undefined}>{m.library_next_page()}</a>
+              href={
+                windowControls ? windowControls.href(page.next) : shelfHref(locale, { ...firstPage, cursor: page.next })
+              }
+              onClick={
+                windowControls
+                  ? (event) => {
+                      if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                      event.preventDefault();
+                      if (!windowControls.busy) windowControls.move('next', page.next!, event.detail === 0);
+                    }
+                  : undefined
+              }
+            >
+              {m.library_next_page()}
+            </a>
           ) : null}
         </nav>
       </section>

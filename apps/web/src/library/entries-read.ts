@@ -262,7 +262,10 @@ export async function readEntryPage(
     if (status === 503)
       throw new ShelfPageUnavailableError(code === 'dependency_unavailable' ? 'preparing' : 'unavailable');
   }
-  return readLibraryResult(result);
+  const page = readLibraryResult(result);
+  if (page.next !== null && shelfAddressIssues({ cursor: page.next }).length)
+    throw new Error('Native Library cursor exceeds the shelf address bound');
+  return page;
 }
 
 function presentShelfEntries(rows: RawEntry[]): PersonalLibraryEntry[] {

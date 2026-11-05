@@ -8,6 +8,7 @@ export function entriesWindowSource({ cursor: _, ...source }: PersonalLibraryAdd
 
 /** Coordinates only. The current reader remains the sole page and admission owner. */
 export class EntriesWindowNavigation {
+  private client: object | undefined;
   private identity = '';
   private source = '';
   private predecessors: Cursor[] = [];
@@ -16,6 +17,10 @@ export class EntriesWindowNavigation {
   pending: Movement | undefined;
   private focusTarget: Cursor | undefined;
 
+  attach(client: object) {
+    if (this.client !== client) this.leave();
+    this.client = client;
+  }
   leave() {
     this.identity = '';
     this.source = '';
@@ -55,8 +60,7 @@ export class EntriesWindowNavigation {
       this.predecessors = [];
       this.pending = undefined;
     } else if (pending?.cursor === cursor) {
-      if (pending.kind === 'next' && this.admitted)
-        this.predecessors = [...this.predecessors, this.current].slice(-8);
+      if (pending.kind === 'next' && this.admitted) this.predecessors = [...this.predecessors, this.current].slice(-8);
       if (pending.kind === 'previous') this.predecessors.pop();
       if (pending.kind === 'first') this.predecessors = [];
       this.focusTarget = pending.focus ? target : undefined;
@@ -92,7 +96,13 @@ export function entriesWindowHref(href: string, cursor: Cursor) {
   const address = hashAt < 0 ? href : href.slice(0, hashAt);
   const queryAt = address.indexOf('?');
   const path = queryAt < 0 ? address : address.slice(0, queryAt);
-  const parts = queryAt < 0 ? [] : address.slice(queryAt + 1).split('&').filter((part) => !new URLSearchParams(part).has('cursor'));
+  const parts =
+    queryAt < 0
+      ? []
+      : address
+          .slice(queryAt + 1)
+          .split('&')
+          .filter((part) => !new URLSearchParams(part).has('cursor'));
   if (cursor !== null) parts.push(`cursor=${encodeURIComponent(cursor)}`);
   return path + (parts.length ? `?${parts.join('&')}` : '') + hash;
 }

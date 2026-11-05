@@ -61,9 +61,15 @@ export function PersonalLibraryCurrent({
   useOperation('library_label.assign');
   const [localWindows] = useState(() => new EntriesWindowNavigation());
   const windows = suppliedWindows ?? localWindows;
+  windows.attach(useQueryClient());
   const address = personalLibraryAddress(search, locale);
   const { observation, value } = usePersonalShelfObservation(address, windows);
-  useEffect(() => () => { if (!suppliedWindows) windows.leave(); }, [windows, suppliedWindows]);
+  useEffect(
+    () => () => {
+      if (!suppliedWindows) windows.leave();
+    },
+    [windows, suppliedWindows],
+  );
   const browser = useRef(hydrated);
   browser.current = hydrated;
   const subject = hydrated ? value.subject : initial.sessionSubject;
@@ -418,7 +424,8 @@ function PersonalLibraryRead({
         : ({ state: 'unavailable' } as const);
     };
   }, [origin, accepted, continueCurrent]);
-  const entriesAccepted = !!accepted && regionCurrent(accepted, 'entries') && accepted.value.page.signedIn && !accepted.value.page.readState;
+  const entriesAccepted =
+    !!accepted && regionCurrent(accepted, 'entries') && accepted.value.page.signedIn && !accepted.value.page.readState;
   const reset = !!accepted?.value.page.signedIn && !!accepted.value.page.cursorReset;
   useLayoutEffect(() => {
     if (!entriesAccepted || !isCurrent()) {
@@ -427,8 +434,7 @@ function PersonalLibraryRead({
     }
     windows.admit(address.cursor, reset);
     redraw((value) => value + 1);
-    if (windows.takeFocus(reset ? null : address.cursor))
-      document.getElementById('tracked-entries-heading')?.focus();
+    if (windows.takeFocus(reset ? null : address.cursor)) document.getElementById('tracked-entries-heading')?.focus();
   }, [accepted, entriesAccepted, reset, isCurrent, windows]);
   useEffect(() => {
     const cancel = () => windows.cancelFocus();
@@ -454,8 +460,14 @@ function PersonalLibraryRead({
     void query.refetch();
   };
   const retryControl = (
-    <button type="button" className={`${buttonVariants({ variant: 'outline' })} min-h-11 min-w-11`}
-      disabled={query.isFetching} onClick={retry}>{m.library_window_retry()}</button>
+    <button
+      type="button"
+      className={`${buttonVariants({ variant: 'outline' })} min-h-11 min-w-11`}
+      disabled={query.isFetching}
+      onClick={retry}
+    >
+      {m.library_window_retry()}
+    </button>
   );
   if (!accepted)
     return (
@@ -479,8 +491,13 @@ function PersonalLibraryRead({
       <PersonalShelfOrigin.Provider value={pageOrigin}>
         <PersonalLibraryPage
           key={readGeneration}
-          windowControls={{ href: windowHref, previous: windows.previous, first: !reset && address.cursor !== null,
-            busy: query.isFetching || !!windows.pending, move }}
+          windowControls={{
+            href: windowHref,
+            previous: windows.previous,
+            first: !reset && address.cursor !== null,
+            busy: query.isFetching || !!windows.pending,
+            move,
+          }}
           windowRetry={!entriesAccepted ? retryControl : undefined}
           summary={summary}
           page={accepted.value.page}

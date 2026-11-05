@@ -171,6 +171,10 @@ test('personal chronological reads send native sort and preserve the historical 
     fetch: { cache: 'no-store', redirect: 'manual' },
   });
   expect(libraryListQuery()).toEqual({ view: 'FULL', limit: 100 });
+  response = { status: 200, data: { libraryEntries: [], next: 'x'.repeat(2049) }, error: null };
+  await expect(readEntryPage(client, 'Bearer owner', undefined, undefined, 20, sort)).rejects.toThrow(
+    'Native Library cursor exceeds',
+  );
   response = { status: 400, error: { value: { code: 'invalid_cursor' } } };
   await expect(readEntryPage(client, 'Bearer owner', 'old', undefined, 20, sort)).rejects.toBeInstanceOf(
     StaleCursorError,
@@ -184,7 +188,6 @@ test('personal chronological reads send native sort and preserve the historical 
     state: 'preparing',
   });
 });
-
 
 test('tracked window coordinates cap predecessors, reset predicates, and preserve opaque address bytes', async () => {
   const { EntriesWindowNavigation, entriesWindowHref } = await import('../src/library/entries-window-navigation');
@@ -212,7 +215,8 @@ test('tracked window coordinates cap predecessors, reset predicates, and preserv
   windows.admit('later', false);
   windows.bind('viewer', { ...first, state: 'completed' });
   expect(windows.previous).toBeUndefined();
-  expect(entriesWindowHref('/en/library?x=a%20b&cursor=old&size=m#heading', 'raw+/=='))
-    .toBe('/en/library?x=a%20b&size=m&cursor=raw%2B%2F%3D%3D#heading');
+  expect(entriesWindowHref('/en/library?x=a%20b&cursor=old&size=m#heading', 'raw+/==')).toBe(
+    '/en/library?x=a%20b&size=m&cursor=raw%2B%2F%3D%3D#heading',
+  );
   expect(entriesWindowHref('/en/library?x=a%20b&cursor=old#heading', null)).toBe('/en/library?x=a%20b#heading');
 });
