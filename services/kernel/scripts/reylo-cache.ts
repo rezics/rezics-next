@@ -210,6 +210,10 @@ function publishCacheSnapshot(base: string, project: string, manifest: string): 
     const pointer = join(base, `.current-${randomUUID()}.tmp`);
     writeFileSync(pointer, `${digest}\n`);
     renameSync(pointer, join(base, 'current'));
+    // Once `current` moves, the older snapshots of this base are unreferenced. A reader that still holds one finds it
+    // invalid and analyses from scratch, as it would for any unreadable snapshot.
+    for (const name of readdirSync(snapshots))
+      if (name !== digest && !name.startsWith('.')) rmSync(join(snapshots, name), { recursive: true, force: true });
   } finally {
     rmSync(temporary, { recursive: true, force: true });
   }

@@ -69,9 +69,14 @@ test('native Reylo analysis stays warm without losing diagnostics or runtime res
   if (!inheritedConfig || !runtimeUrl) throw new Error('Run through the kernel check with explicit database projects');
   const projectLine = readFileSync(inheritedConfig, 'utf8').match(/^direct_url:\s*(.+)$/m)?.[1];
   if (!projectLine) throw new Error(`Reylo analysis project has no direct_url: ${inheritedConfig}`);
-  const analysisUrl = JSON.parse(projectLine) as string;
-  expect(new URL(analysisUrl).pathname).toBe('/kernel_analysis');
-  expect(new URL(runtimeUrl).pathname).not.toBe(new URL(analysisUrl).pathname);
+  // The host's warm analysis is offline (`direct_url: ""`) and holds only statements the check already analysed, so this
+  // test then describes its own statement against its own database. A cold check names the separate analysis database.
+  const checkUrl = JSON.parse(projectLine) as string;
+  const analysisUrl = checkUrl === '' ? runtimeUrl : checkUrl;
+  if (checkUrl !== '') {
+    expect(new URL(checkUrl).pathname).toBe('/kernel_analysis');
+    expect(new URL(runtimeUrl).pathname).not.toBe(new URL(checkUrl).pathname);
+  }
 
   const temporaryRoot = resolve(KERNEL_ROOT, '.temp');
   mkdirSync(temporaryRoot, { recursive: true });
