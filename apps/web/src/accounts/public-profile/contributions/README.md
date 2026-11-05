@@ -170,5 +170,7 @@ journey meanwhile.
 Decision: keep an admitted watch, reaction or reply owner on its original operation lease when current advice
 changes. Denial disables new commands; unresolved native commands retain deliberate exact retry or discard, and
 readback never acknowledges them. Watch baseline changes and reaction watermarks cannot retire unresolved commands.
+The advice wrapper keeps native children in the same React slot when a denial notice appears, so showing current
+advice cannot recreate an admitted command owner.
 Only the official installed row adapter may supply production advice; the public callable and anonymous selection
 must both be installed before replacing the unavailable wire.
