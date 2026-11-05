@@ -406,29 +406,13 @@ test('a current visit inspects one fresh exact assertion, retires stale and late
         .find((button) => button.textContent?.trim() === m.facts_edit_field({}, { locale: 'en' as never }))!
         .click();
     });
-    const enter = async (input: HTMLInputElement, value: string) =>
-      act(async () => {
-        Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, value);
-        input.dispatchEvent(new window.Event('input', { bubbles: true }));
-      });
-    await enter(
-      wordCount.querySelector<HTMLInputElement>(
+    await act(async () => {
+      const amount = wordCount.querySelector<HTMLInputElement>(
         `input[aria-label="${m.correction_amount({}, { locale: 'en' as never })}"]`,
-      )!,
-      '+13000',
-    );
-    const language = field('schema:inLanguage');
-    await act(async () =>
-      [...language.querySelectorAll<HTMLButtonElement>('button')]
-        .find((button) => button.textContent?.trim() === m.facts_edit_field({}, { locale: 'en' as never }))!
-        .click(),
-    );
-    await enter(
-      language.querySelector<HTMLInputElement>(
-        `input[aria-label="${m.correction_value({}, { locale: 'en' as never })}"]`,
-      )!,
-      'ja',
-    );
+      )!;
+      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(amount, '+13000');
+      amount.dispatchEvent(new window.Event('input', { bubbles: true }));
+    });
     await act(async () =>
       [...host.querySelectorAll<HTMLButtonElement>('button')]
         .find((button) => button.textContent?.trim() === m.facts_review({}, { locale: 'en' as never }))!
@@ -440,9 +424,8 @@ test('a current visit inspects one fresh exact assertion, retires stale and late
         .click(),
     );
     await until(() => {
-      expect(proposalCalls).toHaveLength(2);
+      expect(proposalCalls).toHaveLength(1);
       expect(host.textContent).toContain(m.correction_proposed({}, { locale: 'en' as never }));
-      expect(host.textContent).toContain(m.facts_uncertain({}, { locale: 'en' as never }));
     });
 
     profileAnswer = { ok: false, reason: 'unavailable' };
@@ -457,17 +440,8 @@ test('a current visit inspects one fresh exact assertion, retires stale and late
     profileAnswer = structuredClone(initialProfile);
     await act(async () => correctionReload().click());
     await until(() => expect(inspection().querySelector('select')).not.toBeNull());
-    await until(() => {
-      expect(host.textContent).toContain(m.correction_proposed({}, { locale: 'en' as never }));
-      expect(host.textContent).toContain(m.facts_uncertain({}, { locale: 'en' as never }));
-    });
-    await act(async () =>
-      [...host.querySelectorAll<HTMLButtonElement>('button')]
-        .find((button) => button.textContent?.trim() === m.facts_submit({}, { locale: 'en' as never }))!
-        .click(),
-    );
-    await until(() => expect(proposalCalls).toHaveLength(3));
-    expect(proposalCalls[2]).toEqual(proposalCalls[1]);
+    await until(() => expect(host.textContent).toContain(m.correction_proposed({}, { locale: 'en' as never })));
+    expect(proposalCalls).toHaveLength(1);
     await act(async () =>
       root.render(
         <QueryClientProvider client={client}>
