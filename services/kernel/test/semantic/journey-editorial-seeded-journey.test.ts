@@ -87,7 +87,7 @@ async function listCandidates(id: string, persona: Persona, limit = 20, cursor?:
 
 beforeAll(async () => {
   driver = await createSemanticDriver();
-  await driver.grant('editor', ['moderation:hide']);
+  await driver.grant('editor', ['moderation:hide'], driver.globalContext);
 }, 180_000);
 
 afterAll(async () => {
