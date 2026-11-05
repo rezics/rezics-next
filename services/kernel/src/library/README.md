@@ -29,12 +29,11 @@ cursor codec. Reads check current owner Access and account/authentication state;
 effective size, current partition epoch, maintenance epoch and active generation. FULL uses the existing subject batch.
 
 The maintenance producer implements `ShelfMaintenanceOps.initialize` and generation-keyed `shelf_count` storage.
-Native read activation still needs the same-RR gate/readiness/current-generation adapter (`ShelfReadGenerationReader`)
-and the summary/facet readers' binding to that storage. Those readers currently accept only a proven complete active
-nil generation. The consumer aliases the published maintenance types rather than inventing its gate table.
-Missing/incomplete evidence returns typed retryable
-`dependency_unavailable`, including for an apparently empty owner. It never becomes ready zero counts. No native
-readiness, source-currentness, full shelf outcome or growth proof is claimed by these callable readers or source typing.
+Native read activation uses the same-RR gate/readiness/current-generation adapter (`ShelfReadGenerationReader`)
+and the summary/facet readers' binding to that storage. A ready gate with an active generation serves that last-complete
+pointer even while `mode=rebuilding` for counter-only work. Field backfill clears `ready` at drain, so page, summary and
+facet reads return retryable `dependency_unavailable` until publication. Missing/incomplete evidence never becomes ready
+zero counts. The consumer aliases the published maintenance types rather than inventing its gate table.
 
 ## Bounded viewer facts
 

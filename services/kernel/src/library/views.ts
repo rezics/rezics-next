@@ -22,11 +22,7 @@ import { SubjectSummarySchema } from '../semantic/http/summaries.ts';
 import { readSubjectSummaryObservation, type SubjectSummary } from '../semantic/summaries.ts';
 import { currentCommandWorkAssociation } from '../command/work-context.ts';
 import { authoritativeTimeValue, mintReadTime } from '../command/command.ts';
-import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
-import { readSubject } from '../semantic/subject.ts';
-import { relatedReadEligibility, subjectReadEligibility } from '../semantic/eligibility.ts';
 import { resolveSubject } from './subject-anchor.ts';
-import { SubjectRedirectError } from '../semantic/merges.ts';
 import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { createCollectionReads } from './collection-reads.ts';
@@ -96,86 +92,55 @@ class ViewReader {
     readonly follow = false,
   ) {}
 
-  async subject(id: string): Promise<Summary | null> {
-    const { pool, access, routeKey } = this.deps;
-    const actor = this.actor;
-    if (this.follow) {
-      const resolved = await resolveSubject(this.deps, actor, id, undefined, {
-        pool,
-        deadline: this.deadline,
-        ...(currentCommandWorkAssociation() ? { work: currentCommandWorkAssociation()!.access } : {}),
-      });
-      if (!resolved) return null;
-      const observed = await readSubjectSummaryObservation(
-        {
-          ...this.deps,
-          actor,
-          deadline: this.deadline,
-          ...(currentCommandWorkAssociation() ? { work: currentCommandWorkAssociation()!.access } : {}),
-        },
-        [resolved.subjectId],
-        { displayFallback: true },
-      );
-      // An independently changed source cannot authorize disclosure of the older
-      // projection. This is the Semantic owner's native currentness observation.
-      const current = await resolveSubject(this.deps, actor, id, undefined, {
-        pool,
-        deadline: this.deadline,
-        ...(currentCommandWorkAssociation() ? { work: currentCommandWorkAssociation()!.access } : {}),
-      });
-      if (!(await observed.current()) || current?.subjectId !== resolved.subjectId)
-        throw new ProblemError('dependency_unavailable');
-      return observed.summaries.get(resolved.subjectId) ?? null;
-    }
-    const deadline = this.deadline;
-    async function readAnchor(anchorId: string) {
-      const route = routeOf(anchorId);
-      if (route === null) return null;
-      const resource = {
-        route,
-        id: anchorId,
-        eligibility: subjectReadEligibility({ route, id: anchorId }),
-      };
-      const check = await accessCheck(access, actor, 'subject:read', resource, {
-        pool,
-        deadline,
-      });
-      return readSubject(pool, anchorId, (client) => check(client), GLOBAL_CONTEXT, routeKey, {
-        prepareAuthorization: () =>
-          accessCheck(access, actor, 'subject:read', resource, {
-            pool,
-            deadline,
-          }),
-        async authorize(client, id, batch) {
-          const route = routeOf(id);
-          if (route === null) return false;
-          const check = await accessCheck(
-            access,
-            actor,
-            'subject:read',
-            { route, id, eligibility: relatedReadEligibility({ route, id }, batch) },
-            { pool, deadline },
-          );
-          return check(client);
-        },
-      });
-    }
+  observationDeps() {
+    return {
+      ...this.deps,
+      actor: this.actor,
+      deadline: this.deadline,
+      ...(currentCommandWorkAssociation() ? { work: currentCommandWorkAssociation()!.access } : {}),
+    };
+  }
 
-    let result: Awaited<ReturnType<typeof readSubject>>;
-    try {
-      result = await readAnchor(id);
-    } catch (error) {
-      if (!(error instanceof SubjectRedirectError)) throw error;
-      if (error.from !== id) return null;
-      try {
-        result = await readAnchor(error.to);
-      } catch (survivorError) {
-        if (survivorError instanceof SubjectRedirectError) return null;
-        throw survivorError;
-      }
-    }
-    if (!result) return null;
-    return result.summary;
+  resolve(id: string) {
+    return resolveSubject(this.deps, this.actor, id, undefined, {
+      pool: this.deps.pool,
+      deadline: this.deadline,
+      ...(currentCommandWorkAssociation() ? { work: currentCommandWorkAssociation()!.access } : {}),
+    });
+  }
+
+  /** Original/terminal authorization, identity/Source/cover fences and language/profile/type currentness
+   * come from Semantic's bounded summary/observation producer, not a full Subject home read.
+   */
+  async subject(id: string): Promise<Summary | null> {
+    const resolved = await this.resolve(id);
+    if (!resolved) return null;
+    const observed = await readSubjectSummaryObservation(this.observationDeps(), [resolved.subjectId], {
+      displayFallback: true,
+    });
+    const current = await this.resolve(id);
+    if (!(await observed.current()) || current?.subjectId !== resolved.subjectId)
+      throw new ProblemError('dependency_unavailable');
+    return observed.summaries.get(resolved.subjectId) ?? null;
+  }
+
+  async loadSubjects(ids: readonly string[]) {
+    const unique = [...new Set(ids)];
+    const resolved = new Map<string, string>();
+    await bounded(unique, async (id) => {
+      const value = await this.resolve(id);
+      if (value) resolved.set(id, value.subjectId);
+      else this.subjects.set(id, null);
+    });
+    const terminals = [...new Set(resolved.values())];
+    if (terminals.length === 0) return;
+    const observed = await readSubjectSummaryObservation(this.observationDeps(), terminals, { displayFallback: true });
+    if (!(await observed.current())) throw new ProblemError('dependency_unavailable');
+    await bounded([...resolved], async ([requested, terminal]) => {
+      const current = await this.resolve(requested);
+      if (current?.subjectId !== terminal) throw new ProblemError('dependency_unavailable');
+      this.subjects.set(requested, observed.summaries.get(terminal) ?? null);
+    });
   }
 
   async account(id: string): Promise<AccountSummary | null> {
@@ -268,9 +233,7 @@ export async function fullView<T>(
   const followingSpaces = options.followingSpaces
     ? await options.followingSpaces(actor, [...spaceTargetIds], options.deadline ?? deadlineFor(WORK_STEP_DEADLINE_MS))
     : new Map<string, FollowingSpaceProjection>();
-  await bounded([...subjectIds], async (id) => {
-    reader.subjects.set(id, await reader.subject(id));
-  });
+  await reader.loadSubjects([...subjectIds]);
   await bounded([...accountIds], async (id) => {
     reader.accounts.set(id, await reader.account(id));
   });

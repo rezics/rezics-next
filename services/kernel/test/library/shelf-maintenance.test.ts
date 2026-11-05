@@ -276,3 +276,62 @@ test('terminal native tombstone rejects fabricated envelopes and late writers; p
   const recovered = await ops().recover({ after: null, limit: 100 });
   expect(recovered.enqueued.some((b) => b.runId === requested.runId)).toBe(false);
 }, 30000);
+
+test('counter-only rebuild serves the last complete generation while field backfill withholds until publication', async () => {
+  const person = f.people.operator,
+    as = await actor(person),
+    account = owner(person.accountId);
+  const runner = createLibraryCommandRunner({ pool: f.db.pool });
+  await runner.ownAccount(
+    as,
+    { action: 'library_entry:update', kind: 'library.shelf.init.probe', requestKey: crypto.randomUUID(), input: {} },
+    async (tx) => noEffect(await ops().initialize(tx, account)),
+  );
+  const published = await finish(
+    await ops().requestRebuild(as, { owner: account, kind: 'backfill', requestKey: crypto.randomUUID() }),
+  );
+  expect(published.terminal).toBe(true);
+  expect((await f.request(person, 'GET', '/v1/libraryShelfSummary')).status).toBe(200);
+  const generation = (
+    await f.db.admin.query(
+      'SELECT active_generation FROM library.shelf_maintenance WHERE route=$1 AND account_id=$2',
+      [account.route, account.accountId],
+    )
+  ).rows[0]!.active_generation;
+  const counters = await ops().requestRebuild(as, {
+    owner: account,
+    kind: 'counters',
+    requestKey: crypto.randomUUID(),
+  });
+  const counting = await ops().page(counters);
+  expect(
+    (
+      await f.db.admin.query(
+        'SELECT mode,ready,active_generation FROM library.shelf_maintenance WHERE route=$1 AND account_id=$2',
+        [account.route, account.accountId],
+      )
+    ).rows[0],
+  ).toMatchObject({ mode: 'rebuilding', ready: true, active_generation: generation });
+  const lastComplete = await f.request(person, 'GET', '/v1/libraryShelfSummary');
+  expect(lastComplete.status).toBe(200);
+  expect((await lastComplete.json()).tabs.all).toEqual({ total: 0, shown: 0 });
+  if (!counting.terminal) await finish(counting.next!);
+  const backfill = await ops().requestRebuild(as, {
+    owner: account,
+    kind: 'backfill',
+    requestKey: crypto.randomUUID(),
+  });
+  const draining = await ops().page(backfill);
+  expect(
+    (
+      await f.db.admin.query(
+        'SELECT mode,ready FROM library.shelf_maintenance WHERE route=$1 AND account_id=$2',
+        [account.route, account.accountId],
+      )
+    ).rows[0],
+  ).toMatchObject({ mode: 'rebuilding', ready: false });
+  const withheld = await f.request(person, 'GET', '/v1/libraryShelfSummary');
+  expect(withheld.status).toBe(503);
+  expect(await withheld.json()).toMatchObject({ code: 'dependency_unavailable' });
+  if (!draining.terminal) await finish(draining.next!);
+}, 30000);

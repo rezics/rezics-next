@@ -1,7 +1,24 @@
-import { declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
+import { BOUND_AXES, declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
+import { RELEASE_LIMITS } from '@rezics/definitions';
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { currentCommandWorkAssociation } from '../command/work-context.ts';
+import { currentCommandWorkAssociation, currentLibraryOperationAccounting } from '../command/work-context.ts';
 import type { WorkDimensions } from './collection-source.ts';
+import accountShare from '../access/account-share.sql';
+import accountCommandState from '../access/account-command-state.sql';
+import timeRead from '../command/time.sql';
+import receiptRead from '../command/read-receipt.sql';
+import eventFence from '../command/fence.sql';
+import noEffectFence from '../command/no-effect-fence.sql';
+import partitionRead from '../partition/read.sql';
+import subjectReference from '../semantic/read-subject-reference.sql';
+import summariesRead from '../semantic/summaries-read.sql';
+import representativesRead from '../semantic/summaries-representative-editions.sql';
+import coverReferences from '../content/read-cover-reference.sql';
+import sourceFences from '../content/read-source-fences.sql';
+import mappingOwners from '../semantic/identity-epoch-read-owners.sql';
+import mappingSources from '../semantic/identity-epoch-read-sources.sql';
+import mappingPending from '../semantic/identity-epoch-read-pending.sql';
+import mappingCurrent from '../semantic/identity-terminal-closure-current.sql';
 import labelInsert from './label-store-insert.sql';
 import labelRead from './label-store-read.sql';
 import labelRename from './label-store-rename.sql';
@@ -240,7 +257,8 @@ export function labelSqlPlan<I>(
 
 /** Execute and consume the exact detached operands on the existing native request ledger. */
 export function executeLabelSql<I, T>(plan: LabelSqlPlan<I>, run: (input: Readonly<I>) => Promise<T>): Promise<T> {
-  if (activeLabelOperation.getStore()) return run(plan.input);
+  if (activeLabelOperation.getStore() || enclosingLabelAttempt.getStore() || currentLibraryOperationAccounting())
+    return run(plan.input);
   const association = currentCommandWorkAssociation();
   return association
     ? association.run(`library.${plan.kind}`, labelWorkDimensions(plan.bound), () => run(plan.input))
@@ -249,6 +267,7 @@ export function executeLabelSql<I, T>(plan: LabelSqlPlan<I>, run: (input: Readon
 
 export type LabelOperationComponent = Readonly<{ kind: string; bound: Bound }>;
 const activeLabelOperation = new AsyncLocalStorage<LabelOperationPlan>();
+const enclosingLabelAttempt = new AsyncLocalStorage<Bound>();
 
 export type LabelOperationPlan = Readonly<{
   kind: string;
@@ -287,9 +306,413 @@ function component(kind: string, bound: Bound): LabelOperationComponent {
   return Object.freeze({ kind, bound });
 }
 
+function alternative(...branches: readonly Bound[]): Bound {
+  const values = branches.length ? branches : [zero()];
+  return declareBound(
+    Object.fromEntries(BOUND_AXES.map((axis) => [axis, Math.max(...values.map((value) => value[axis]))])),
+  );
+}
+
+function controlSql(sql: string): Bound {
+  return work({ statements: 1, bytes: Buffer.byteLength(sql) });
+}
+
+/** Name a bound supplied by the owner that executes the corresponding branch. */
+export function labelOperationComponent(kind: string, bound: Bound): LabelOperationComponent {
+  return component(kind, declareBound(bound));
+}
+
+/** Compose owner declarations without changing the operation's immutable SQL operands. */
+export function composeLabelOperation(
+  base: LabelOperationPlan,
+  owners: readonly LabelOperationComponent[],
+  complete: boolean,
+): LabelOperationPlan {
+  const components = Object.freeze([...base.components, ...owners]);
+  return Object.freeze({
+    ...base,
+    components,
+    complete,
+    total: sumBounds(...components.map((item) => item.bound)),
+  });
+}
+
+/** One native command attempt: preparation, authorization, receipt, body, fence, rollback and serialization.
+ * Deadline-scoped retries are counted in request evidence; they are not a finite request envelope.
+ */
+export function labelCommandAttemptComponent(
+  kind: string,
+  input: unknown,
+  response: object,
+  receiptKeys = 1,
+): LabelOperationComponent {
+  const receipt = {
+    principal: { kind: 'account', id: uuid },
+    kind,
+    key: 'rk1.255.' + 'f'.repeat(43),
+    digest: 'f'.repeat(64),
+    response,
+  };
+  const accountInput = { route: 65_535, account_id: uuid };
+  const share = sqlBound(
+    accountShare.sql,
+    accountInput,
+    { candidateKeys: 1, nativeRows: 1, points: 1, emptySeeks: 1, output: { state: 'deleted', fenced: true }, outputRows: 1 },
+  );
+  const account = sqlBound(
+    accountCommandState.sql,
+    accountInput,
+    {
+      candidateKeys: 1,
+      nativeRows: 1,
+      points: 1,
+      emptySeeks: 1,
+      output: { kind: 'organization', state: 'deleted', fenced: true, minimumAuthnEpoch: '-9223372036854775808' },
+      outputRows: 1,
+    },
+  );
+  const time = sqlBound(
+    timeRead.sql,
+    { at: timestamp },
+    { candidateKeys: 1, nativeRows: 1, points: 1, emptySeeks: 0, output: { value: timestamp }, outputRows: 1 },
+  );
+  const keys = Array.from({ length: Math.max(1, receiptKeys) }, () => receipt.key);
+  const receiptBound = sqlBound(
+    receiptRead.sql,
+    {
+      partition_no: 4095,
+      principal_kind: 'account',
+      principal_id: uuid,
+      command_kind: kind,
+      idempotency_keys: keys,
+    },
+    {
+      candidateKeys: keys.length,
+      nativeRows: 1,
+      points: keys.length,
+      emptySeeks: keys.length,
+      output: {
+        requestDigest: 'f'.repeat(64),
+        epoch: 2_147_483_647,
+        position: '-9223372036854775808',
+        transactionId: uuid,
+        response: null,
+        payloadState: 'retained',
+      },
+      outputRows: 1,
+    },
+  );
+  const event = {
+    type: 'com.rezics.library.label.changed.v1',
+    subject: uuid,
+    id: uuid,
+    data: { labelId: uuid },
+  };
+  const fenceBound = sqlBound(
+    eventFence.sql,
+    {
+      partition_no: 4095,
+      transaction_id: uuid,
+      receipt,
+      basis: { principal: { kind: 'account', id: uuid }, clientId: uuid, requestedBy: uuid },
+      events: [event],
+    },
+    {
+      candidateKeys: 18,
+      nativeRows: 18,
+      points: 18,
+      emptySeeks: 1,
+      output: { epoch: 2_147_483_647, position: '-9223372036854775808' },
+      outputRows: 1,
+    },
+  );
+  const noEffect = sqlBound(
+    noEffectFence.sql,
+    { partition_no: 4095, transaction_id: uuid, receipt },
+    {
+      candidateKeys: 5,
+      nativeRows: 5,
+      points: 4,
+      emptySeeks: 1,
+      output: { epoch: 2_147_483_647, position: '-9223372036854775808' },
+      outputRows: 1,
+    },
+  );
+  const partition = sqlBound(
+    partitionRead.sql,
+    { partition_no: 4095 },
+    {
+      candidateKeys: 1,
+      nativeRows: 1,
+      points: 1,
+      emptySeeks: 1,
+      output: {
+        partitionNo: 4095,
+        node: '',
+        writeState: 'draining',
+        movedTo: '',
+        epoch: 2_147_483_647,
+        position: '-9223372036854775808',
+      },
+      outputRows: 1,
+    },
+  );
+  const transaction = sumBounds(
+    ...[
+      'BEGIN ISOLATION LEVEL SERIALIZABLE',
+      "SET LOCAL lock_timeout = '200ms'",
+      "SET LOCAL statement_timeout = '5000ms'",
+      "SET LOCAL statement_timeout = '5000ms'",
+    ].map(controlSql),
+  );
+  const readOnly = sumBounds(
+    ...[
+      'BEGIN ISOLATION LEVEL READ COMMITTED READ ONLY',
+      "SET LOCAL statement_timeout = '200ms'",
+      'COMMIT',
+      'ROLLBACK',
+    ].map(controlSql),
+  );
+  const terminal = alternative(controlSql('COMMIT'), sumBounds(controlSql('ROLLBACK'), partition));
+  const responseBytes = encoded(response);
+  return component(
+    'command.attempt',
+    sumBounds(
+      transaction,
+      readOnly,
+      time,
+      share,
+      account,
+      receiptBound,
+      alternative(sumBounds(fenceBound, bytes(responseBytes)), noEffect),
+      terminal,
+      bytes(encoded(input) + 2 * responseBytes),
+    ),
+  );
+}
+
+/** Read-snapshot owner work around a page's native storage leaves. */
+export function labelSnapshotComponent(kind: string, input: unknown, responseBytes: number): LabelOperationComponent {
+  const accountInput = { route: 65_535, account_id: uuid };
+  return component(
+    kind,
+    sumBounds(
+      controlSql('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY'),
+      controlSql('COMMIT'),
+      controlSql('ROLLBACK'),
+      sqlBound(
+        accountCommandState.sql,
+        accountInput,
+        {
+          candidateKeys: 1,
+          nativeRows: 1,
+          points: 1,
+          emptySeeks: 1,
+          output: { kind: 'organization', state: 'deleted', fenced: true, minimumAuthnEpoch: '-9223372036854775808' },
+          outputRows: 1,
+        },
+      ),
+      sqlBound(
+        partitionRead.sql,
+        { partition_no: 4095 },
+        {
+          candidateKeys: 1,
+          nativeRows: 1,
+          points: 1,
+          emptySeeks: 1,
+          output: {
+            partitionNo: 4095,
+            node: '',
+            writeState: 'active',
+            movedTo: '',
+            epoch: 2_147_483_647,
+            position: '-9223372036854775808',
+          },
+          outputRows: 1,
+        },
+      ),
+      bytes(encoded(input) + responseBytes),
+    ),
+  );
+}
+
+/** Inline owner queries that already execute on the operation's native client. */
+export function labelOwnerSqlComponent(
+  kind: string,
+  input: unknown,
+  output: object,
+  statements: number,
+  rows: number,
+): LabelOperationComponent {
+  return component(
+    kind,
+    work({
+      candidateKeys: rows,
+      nativeRows: rows,
+      emptySeeks: rows,
+      nativePoints: rows,
+      statements,
+      bytes: encoded(input) + encoded(output) + statements * 1024,
+    }),
+  );
+}
+
+/** Bounded Semantic summary/observation producer for at most `count` displayed Subjects. */
+export function labelSummaryObservationBound(count: number): Bound {
+  const n = Math.max(0, count);
+  if (n === 0) return zero();
+  const subjects = Array.from({ length: n }, () => uuid);
+  const reference = sqlBound(
+    subjectReference.sql,
+    { route: 65_535, subject_id: uuid },
+    {
+      candidateKeys: 1,
+      nativeRows: 1,
+      points: 1,
+      emptySeeks: 1,
+      output: { id: uuid, redirect: uuid },
+      outputRows: 1,
+    },
+  );
+  const mappingInput = subjects;
+  const owners = sqlBound(
+    mappingOwners.sql,
+    mappingInput,
+    {
+      candidateKeys: n,
+      nativeRows: 4 * n,
+      points: n,
+      emptySeeks: n,
+      output: { partition_no: 4095, terminal: uuid },
+      outputRows: n,
+    },
+    encoded(mappingInput) - encoded([]),
+  );
+  const sources = sqlBound(
+    mappingSources.sql,
+    mappingInput,
+    {
+      candidateKeys: n,
+      nativeRows: 8 * n,
+      points: n,
+      emptySeeks: n,
+      output: { partition_no: 4095, terminal: uuid, source_revision: '-9223372036854775808' },
+      outputRows: n,
+    },
+    encoded(mappingInput) - encoded([]),
+  );
+  const pending = sqlBound(
+    mappingPending.sql,
+    mappingInput,
+    {
+      candidateKeys: n,
+      nativeRows: 4 * n,
+      points: n,
+      emptySeeks: n,
+      output: { partition_no: 4095, terminal: uuid, pending_job: uuid, pending_epoch: '-9223372036854775808' },
+      outputRows: n,
+    },
+    encoded(mappingInput) - encoded([]),
+  );
+  const current = sqlBound(
+    mappingCurrent.sql,
+    mappingInput,
+    {
+      candidateKeys: n,
+      nativeRows: 16 * n,
+      points: 4 * n,
+      emptySeeks: 4 * n,
+      output: { partition_no: 4095, terminal: uuid, redirected: true },
+      outputRows: n,
+    },
+    encoded(mappingInput) - encoded([]),
+  );
+  const selected = 12 * n;
+  const representatives = sqlBound(
+    representativesRead.sql,
+    { partition_no: 4095, subjects: subjects.map((id) => ({ route: 65_535, id })) },
+    {
+      candidateKeys: selected,
+      nativeRows: (1 + 5 * 12) * n,
+      points: n,
+      emptySeeks: n,
+      output: { id: uuid, slot_id: uuid, ordinal: 12 },
+      outputRows: selected,
+    },
+  );
+  const slots = 2 * n + selected;
+  const candidates = 32 * slots;
+  const fallback = n;
+  const labels = 65 * n + fallback;
+  const summaries = sqlBound(
+    summariesRead.sql,
+    {
+      partition_no: 4095,
+      context_id: uuid,
+      subjects: subjects.map((id) => ({ route: 65_535, id, image: uuid, original: uuid })),
+      representatives: subjects.map((id) => ({ id, slot_id: uuid })),
+      label_languages: ['en'],
+      display_fallback: true,
+    },
+    {
+      candidateKeys: n + candidates + labels + fallback,
+      nativeRows: 5 * n + 6 * labels + 9 * slots + 12 * candidates + 3 * fallback,
+      points: n + labels + 3 * slots + 5 * candidates + fallback,
+      emptySeeks: n + labels + 3 * slots + 5 * candidates + fallback,
+      output: { id: uuid, type: '', labels: {}, original: '', choices: [] },
+      outputRows: n,
+    },
+    6 * RELEASE_LIMITS.bytes,
+  );
+  const covers = sqlBound(
+    coverReferences.sql,
+    { partition: 4095, routes: Array.from({ length: n }, () => 65_535), media_ids: subjects },
+    {
+      candidateKeys: 13 * n,
+      nativeRows: 23 * n,
+      points: 2 * n,
+      emptySeeks: 2 * n,
+      output: { mediaId: uuid, width: 2560, height: 2560 },
+      outputRows: n,
+    },
+  );
+  const fences = sqlBound(
+    sourceFences.sql,
+    {
+      partition: 4095,
+      tuples: subjects.map((id) => ({ route: 65_535, source: id, external_id: id, field_group: 'image' })),
+    },
+    {
+      candidateKeys: n,
+      nativeRows: 5 * n,
+      points: n,
+      emptySeeks: n,
+      output: { route: 65_535, source: '', takenDown: false },
+      outputRows: n,
+    },
+  );
+  return sumBounds(repeatBound(reference, 4 * n), owners, sources, pending, current, representatives, summaries, covers, fences);
+}
+
+/** Keep one attempt declaration across Core retries so nested SQL does not reserve again. */
+export function withLabelCommandAttempt<T>(total: Bound | undefined, dispatch: () => Promise<T>): Promise<T> {
+  if (!total || enclosingLabelAttempt.getStore()) return dispatch();
+  return enclosingLabelAttempt.run(total, dispatch);
+}
+
+/** Charge one complete attempt at native prepare. Reached retries are counted separately in request evidence. */
+export function consumeLabelCommandAttempt(plan: Readonly<{ operation: string; total: Bound }>): Promise<void> {
+  if (currentLibraryOperationAccounting()) return Promise.resolve();
+  const association = currentCommandWorkAssociation();
+  return association
+    ? association.run(plan.operation, labelWorkDimensions(plan.total), async () => undefined)
+    : Promise.resolve();
+}
+
 /** Reserve one closed operation once, then execute its leaves on the caller's existing native resources. */
 export async function executeLabelOperation<T>(plan: LabelOperationPlan, body: () => Promise<T>): Promise<T> {
-  if (activeLabelOperation.getStore()) return body();
+  if (activeLabelOperation.getStore() || enclosingLabelAttempt.getStore() || currentLibraryOperationAccounting())
+    return activeLabelOperation.getStore() ? body() : activeLabelOperation.run(plan, body);
   const association = currentCommandWorkAssociation();
   const reservation = association?.reserve(`library.${plan.kind}.${plan.branch}`, labelWorkDimensions(plan.total));
   let settled = false;
@@ -442,11 +865,16 @@ export function labelCataloguePlan(input: {
       outputRows: input.limit,
     },
   );
+  const continuation =
+    input.prefix !== undefined && input.afterLabelId !== '00000000-0000-0000-0000-000000000000'
+      ? [component('label.catalogue.continuation-name', labelPoint(input.route, input.accountId, input.afterLabelId).bound)]
+      : [];
   return operation(
     'label.catalogue',
     input.prefix === undefined ? 'page' : input.afterName ? 'next-prefix' : 'prefix',
     input,
     [leaf],
+    continuation,
   );
 }
 
@@ -773,15 +1201,14 @@ export function labelAssignmentPagePlan(input: {
       ),
     );
   }
-  // FULL's semantic summary owner has a separate multi-owner read contract. Keep
-  // this page declaration open until that exact disclosure plan is composed.
+  if (input.view === 'FULL' && byLabel)
+    extras.push(component('assignment.full.summary-observation', labelSummaryObservationBound(input.limit)));
   return operation(
     'assignment.page',
     `${input.view.toLowerCase()}-${byLabel ? 'label' : 'subject'}`,
     input,
     leaves,
     extras,
-    false,
   );
 }
 

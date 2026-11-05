@@ -156,7 +156,8 @@ async function readLabelShelfPage(
       ((result.status === 400 && code === 'invalid_cursor') || (result.status === 409 && code === 'stale_cursor'))
     )
       return finish({ state: 'cursor-rejected', labelId: input.labelId });
-    if (code === 'index_not_ready' || code === 'semantic_not_ready') return finish({ state: 'preparing' });
+    if (code === 'index_not_ready' || code === 'semantic_not_ready' || code === 'dependency_unavailable')
+      return finish({ state: 'preparing' });
     const page = readLibraryResult(result);
     if (!('label' in page) || page.label.id !== input.labelId)
       throw new Error('FULL label shelf omitted its label summary');

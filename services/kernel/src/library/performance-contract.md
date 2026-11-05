@@ -708,17 +708,17 @@ FULL by-label storage reads charge the bounded assignment page, current parent, 
 for at most 100 subject IDs. Their projection bounds follow the stored vocabulary ID ceiling, profile unit ID limit,
 numeric input grammar, locator limit, UUID/revision widths and PostgreSQL timestamp text. The active-session seek is
 the existing partial index on `(route, account_id, subject_id, last_changed_at DESC, session_id)`. FULL subject
-summaries remain Semantic-owned and the current `fullView` fanout is outside this local plan.
+summaries are Semantic-owned: `ViewReader.subject`/`loadSubjects` use `readSubjectSummaryObservation` with original
+and terminal authorization, identity/Source/cover fences and language/profile/type currentness. A withheld summary
+does not shrink the raw assignment frontier.
 
 The existing native prefix journey now takes a full 100-row prefix page and its five-row continuation. The FULL HTTP
 journey takes a 100-assignment raw page with one withheld Subject summary and verifies that continuation starts after
 the raw frontier without refill; existing assignment, lifecycle and catalogue journeys retain their replay, CAS,
 capacity and later-edit assertions.
 
-These declarations are not yet complete enclosing operations: each plan reports `complete: false`. The existing
-command root still owns access/action/group preparation, account floor/fence, source identity and parent currentness,
-receipt/replay, History/events/outbox, transaction controls, retries, rollback and serialized response bytes. The
-catalogue root also owns partition/cursor decoding and continuation-name rereads. AniList, MAL and custom import
-preparation/fence branches remain with their import callers. Semantic FULL disclosure and its repeated source/profile
-probes remain with the Semantic owner. Add those reached terms at those existing boundaries before calling the
-operation family complete; keep the current request deadline, attempts, receipt semantics and capacity unchanged.
+Decision: the finite priced unit is one native command attempt (preparation, authorization, receipt, body, fence,
+rollback and serialization), consumed again on each Core retry. Deadline-scoped retries are request evidence; they
+are not a 201-slot envelope and are not capped. Catalogue and assignment pages compose their snapshot, cursor and
+FULL observation terms with `complete: true`. Import fences and selected-provider preparation remain at their
+callers. Source CAS, reserved capacity, later edits and Shelf batch100 stay at those owners.

@@ -20,6 +20,7 @@ import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { routeOf, partitionOf } from '../route/route.ts';
 import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
+import { receiptKeysFor } from '../command/receipt-key.ts';
 import {
   createLibraryCommandRunner,
   LibraryNotFoundError,
@@ -39,11 +40,18 @@ import labelPage from './label-assignment-label-page.sql';
 import subjectPage from './label-assignment-subject-page.sql';
 import { assertMalLabelFence, prepareMalLabelFence, type MalLabelFence } from './list-import-mal-label-fence.ts';
 import {
+  composeLabelOperation,
   executeLabelOperation,
   executeLabelSql,
   LABEL_PAGE_DEFAULT,
   LABEL_PAGE_MAX,
+  labelAssignmentLifecyclePlan,
   labelAssignmentPagePlan,
+  labelAssignmentSetPlan,
+  labelCommandAttemptComponent,
+  labelOperationComponent,
+  labelOwnerSqlComponent,
+  labelSnapshotComponent,
 } from './label-operation-bounds.ts';
 
 type Client = Pick<PoolClient, 'query'>;
@@ -177,6 +185,70 @@ export function createLabelAssignmentCommands(deps: {
       },
       requestKey: key,
     };
+    const route = routeOf(account.accountId)!;
+    const operationPlan =
+      operation === 'assign'
+        ? labelAssignmentSetPlan({
+            route,
+            accountId: account.accountId,
+            subjectId: guard?.subjectId ?? malLabelFence?.subject ?? parsed.subjectId,
+            labelId,
+            ...(expectedSource === undefined ? {} : { expectedSource }),
+            time: '\u0000'.repeat(64),
+            transactionId: 'f'.repeat(36),
+          })
+        : labelAssignmentLifecyclePlan({
+            route,
+            accountId: account.accountId,
+            subjectId: parsed.subjectId,
+            labelId,
+            assignmentId: parsed.assignmentId!,
+            revision: parsed.revision!,
+            time: '\u0000'.repeat(64),
+            transactionId: 'f'.repeat(36),
+            ...(expectedLabelRevision === undefined ? {} : { expectedLabelRevision }),
+            ...(expectedTarget && 'labelId' in expectedTarget
+              ? {
+                  expectedTarget: {
+                    labelId: expectedTarget.labelId,
+                    assignmentId: expectedTarget.assignmentId,
+                    revision: expectedTarget.revision,
+                    labelRevision: expectedTarget.labelRevision,
+                  },
+                }
+              : {}),
+            ...(operation === 'restore' ? { restore: true } : {}),
+          });
+    const attempt = composeLabelOperation(
+      operationPlan,
+      [
+        labelCommandAttemptComponent(
+          request.kind,
+          request.input,
+          operation === 'unassign'
+            ? { deleted: true, revision: 2_147_483_647 }
+            : { assignment: { id: 'f'.repeat(36), revision: 2_147_483_647 } },
+          receiptKeysFor(pool).keys.size + 1,
+        ),
+        ...(guard
+          ? [labelOwnerSqlComponent('import.anilist.label-fence', guard, { payload: { source: {}, labelReview: {} } }, 2, 2)]
+          : []),
+        ...(malLabelFence
+          ? [
+              labelOwnerSqlComponent(
+                'import.mal.label-fence',
+                malLabelFence,
+                { row: {}, sourceDigest: 'f'.repeat(64), selectionDigest: 'f'.repeat(64) },
+                malLabelFence.label ? 2 : 1,
+                malLabelFence.label ? 2 : 1,
+              ),
+            ]
+          : []),
+        ...(admission?.work ? [labelOperationComponent('import.preparation-source-fence', admission.work)] : []),
+      ],
+      true,
+    );
+    const attemptPlan = { operation: `library.${attempt.kind}.${attempt.branch}`, total: attempt.total };
     const execute = async (
       tx: Client,
       command: { transactionId: string; time: AuthoritativeTime },
@@ -297,11 +369,12 @@ export function createLabelAssignmentCommands(deps: {
       }
     };
     if (operation === 'unassign' && expectedLabelRevision === undefined)
-      return runner.ownAccount(actor, request, (tx, command) => execute(tx, command, {}));
+      return runner.ownAccount(actor, { ...request, attemptPlan }, (tx, command) => execute(tx, command, {}));
     return (guard || malLabelFence ? createLibraryCommandRunner(deps) : runner).ownAccountPrepared(
       actor,
       {
         ...request,
+        attemptPlan,
         async prepare(attempt) {
           try {
             if (operation === 'unassign') {
@@ -479,6 +552,34 @@ export function createLabelAssignmentCommands(deps: {
       owner(account, 'library_entry:list');
       await admitShelfRead({ ...deps, clock }, account, deadline);
     }
+    const route = routeOf(account.accountId)!;
+    const hasCursor = parsed.cursor !== undefined;
+    const composed = composeLabelOperation(
+      labelAssignmentPagePlan({
+        route,
+        accountId: account.accountId,
+        ...(labelId
+          ? { labelId, after: hasCursor ? 'f'.repeat(36) : '00000000-0000-0000-0000-000000000000' }
+          : { subjectId: subjectId! }),
+        limit,
+        view: full ? 'FULL' : 'BASIC',
+      }),
+      [
+        labelSnapshotComponent(
+          'assignment.partition-cursor-serialization-snapshot',
+          {
+            owner: account.accountId,
+            labelId: labelId ?? null,
+            subjectId: subjectId ?? null,
+            cursor: parsed.cursor ?? null,
+            limit,
+            view: full ? 'FULL' : 'BASIC',
+          },
+          limit * 256 + (full && labelId ? 65_536 : 4_096),
+        ),
+      ],
+      true,
+    );
     let time: AuthoritativeTime | undefined;
     try {
       if (subjectId) {
@@ -486,7 +587,8 @@ export function createLabelAssignmentCommands(deps: {
         if (!(await withRequestDeadline(deadline, () => resolveSubject(deps, account, subjectId, time))))
           throw new LibraryNotFoundError();
       }
-      const result = await snapshot(account, deadline, async (client, route) => {
+      const result = await executeLabelOperation(composed, () =>
+        snapshot(account, deadline, async (client, route) => {
         const parent = labelId
           ? await readPersonalLabel(client, sameAccountRoute(account.accountId, labelId), account.accountId, labelId)
           : null;
@@ -580,7 +682,8 @@ export function createLabelAssignmentCommands(deps: {
                 : null,
           };
         });
-      });
+        }),
+      );
       if (subjectId && !(await withRequestDeadline(deadline, () => resolveSubject(deps, account, subjectId, time))))
         throw new LibraryNotFoundError();
       return result;

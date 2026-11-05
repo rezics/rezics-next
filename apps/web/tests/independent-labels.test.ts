@@ -210,10 +210,10 @@ test('literal prefix continuation preserves the signed cursor and an empty page 
 });
 
 test('catalogue and FULL shelf keep denied, preparation and unavailable responses separate from empty', async () => {
-  for (const [status, code, state] of [
-    [403, 'forbidden', 'denied'],
-    [503, 'index_not_ready', 'preparing'],
-    [503, 'dependency_unavailable', 'unavailable'],
+  for (const [status, code, catalogue, shelf] of [
+    [403, 'forbidden', 'denied', 'denied'],
+    [503, 'index_not_ready', 'preparing', 'preparing'],
+    [503, 'dependency_unavailable', 'unavailable', 'preparing'],
   ] as const) {
     const client = createKernelClient('https://kernel.example.test', {
       fetch: async (input) =>
@@ -221,8 +221,10 @@ test('catalogue and FULL shelf keep denied, preparation and unavailable response
           ? Response.json({ admitted: operations })
           : Response.json({ code }, { status }),
     });
-    expect(await loadLabelsPage(client, request(), env)).toMatchObject({ state });
-    expect(await loadLabelShelfPage(client, request(), env, { labelId: subjectId, limit: 100 })).toEqual({ state });
+    expect(await loadLabelsPage(client, request(), env)).toMatchObject({ state: catalogue });
+    expect(await loadLabelShelfPage(client, request(), env, { labelId: subjectId, limit: 100 })).toEqual({
+      state: shelf,
+    });
   }
 });
 

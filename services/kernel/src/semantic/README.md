@@ -1068,6 +1068,8 @@ Composed current-summary observations retain the actual source components, expos
 `concealed` cover outcomes, and load at most 64 requested/fallback label languages plus the Subject's original
 language. They use the same summary, media-reference and source-fence owners; callers keep these components through
 final disclosure. A caller may represent an unavailable optional presentation without serializing stale metadata.
+Library `ViewReader` FULL display uses this producer for original/terminal authorization, identity/Source/cover fences
+and language/profile/type currentness; it does not load a full Subject home.
 
 `summary-snapshot.test.ts` authors one mixed-partition mounted `createKernel` graph regression with native
 representative facts, re-encoded media, resource checks and tuple fences. A concurrent writer commits
