@@ -65,7 +65,7 @@ const address: ProgressDetailAddress = {
   logs: 'logs/opaque+==',
 };
 const stamp = '2026-04-02T15:04:05.000Z';
-const token = (owner: string) => `${owner}-csrf-token-1234567890`;
+const token = (owner: string) => `${owner}${'a'.repeat(21)}`;
 type Viewer = {
   state: 'signed-in' | 'signed-out' | 'unknown' | 'unavailable';
   subject?: string;
@@ -669,7 +669,7 @@ test('healthy exact native payload and key survive token rotation, ordinary refr
     expect(first.request.headers.get('authorization')).toBe('Bearer A');
     await settle(() => first.work.reject(new Error('unknown commit outcome')));
     await h.fill(m.library_progress_amount(), '8.5');
-    await h.show({ session: viewer('A', 'rotated-csrf-token-123456789'), page: detail('A', address, 12) });
+    await h.show({ session: viewer('A', token('R')), page: detail('A', address, 12) });
     await h.click(m.library_progress_record());
     expect(writes[1]!.body).toEqual(first.body);
     expect(writes[1]!.request.headers.get('idempotency-key')).toBe(first.request.headers.get('idempotency-key'));
@@ -720,7 +720,7 @@ test('publication retains its captured note and key through same-owner refresh a
     expect(first.body).toEqual({ sessionId: address.id, note: 'captured note' });
     await settle(() => first.work.reject(new Error('unknown publication')));
     await h.fill(m.library_logs_publish_note(), 'subsequently edited');
-    await h.show({ session: viewer('A', 'rotation-csrf-token-123456789'), page: detail('A', address, 8) });
+    await h.show({ session: viewer('A', token('S')), page: detail('A', address, 8) });
     await h.click(m.library_logs_publish());
     expect(writes[1]!.body).toEqual(first.body);
     expect(writes[1]!.request.headers.get('idempotency-key')).toBe(first.request.headers.get('idempotency-key'));
