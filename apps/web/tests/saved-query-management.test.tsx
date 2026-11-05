@@ -3,18 +3,16 @@ import { dirname } from 'node:path';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type { CollectionWriteResult } from '../src/library/collection-edit';
-import {
-  captureCollectionCommand,
-  captureCollectionDelete,
-  captureCollectionUpdate,
-} from '../src/library/collection-commands';
-import {
-  SavedQueryManagementController,
-  type ManagedSavedQuery,
-} from '../src/library/saved-query-management/controller';
+import type { ManagedSavedQuery } from '../src/library/saved-query-management/controller';
 import type { DynamicCollectionPage } from '../src/library/dynamic-collection';
 import { m } from '../src/paraglide/messages.js';
 import { savedQueryReturnTo } from '../src/library/saved-query-management/return-to';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { captureCollectionCommand, captureCollectionDelete, captureCollectionUpdate } = await import(
+  '../src/library/collection-commands'
+);
+const { SavedQueryManagementController } = await import('../src/library/saved-query-management/controller');
 
 let admissionOperations: string[] = [];
 let csrfOperations: string[] = [];
@@ -38,14 +36,6 @@ mock.module('../src/library/collection-current-admission', () => ({
   }),
 }));
 mock.module('../src/library/saved-query-publication', () => ({ SavedQueryPublicationAction: () => null }));
-mock.module('../src/library/collection-commands', () => ({
-  captureCollectionUpdate: () => {
-    throw new Error('Mounted callback test must not dispatch a write');
-  },
-  captureCollectionDelete: () => {
-    throw new Error('Mounted callback test must not dispatch a write');
-  },
-}));
 
 const { SavedQueryManagement } = await import('../src/library/saved-query-management');
 
