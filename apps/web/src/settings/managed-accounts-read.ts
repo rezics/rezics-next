@@ -11,7 +11,11 @@ const text = v.nullable(v.string());
 const cursor = v.nullable(v.pipe(v.string(), v.maxLength(4096)));
 const identity = v.strictObject({ id, kind: v.picklist(['actor', 'organization']), handle: text, displayName: text });
 export const managedNavigationSchema = v.strictObject({ state: v.picklist(['admitted', 'unavailable', 'concealed']) });
-const organization = v.strictObject({ account: identity, role: v.picklist(['owner', 'member']), navigation: managedNavigationSchema });
+const organization = v.strictObject({
+  account: identity,
+  role: v.picklist(['owner', 'member']),
+  navigation: managedNavigationSchema,
+});
 const responsibility = v.strictObject({
   reservationId: id,
   accountId: id,
@@ -116,7 +120,12 @@ export async function loadManagedAccounts(
     const parsed = v.safeParse(schema, result.data);
     if (!parsed.success) return managedAccountsFailure(result.status, undefined, result.headers);
     const page = parsed.output;
-    if (page.account.id !== viewerId || page.account.kind !== 'actor' || page.viewer.account.id !== viewerId || page.viewer.account.kind !== 'actor')
+    if (
+      page.account.id !== viewerId ||
+      page.account.kind !== 'actor' ||
+      page.viewer.account.id !== viewerId ||
+      page.viewer.account.kind !== 'actor'
+    )
       return { ...managedAccountsFailure(result.status, undefined, result.headers), kind: 'denied' };
     if (
       page.organizations.items.some((item) => item.account.kind !== 'organization') ||
@@ -141,8 +150,12 @@ type Navigation = { self: string; organizations: string[]; responsibilities: str
 function navigation(page: ManagedAccountsPage): Navigation {
   return {
     self: page.viewer.account.id,
-    organizations: pageItems(page.organizations.items, (item) => item.account.id).filter((item) => item.navigation.state === 'admitted').map((item) => item.account.id),
-    responsibilities: pageItems(page.responsibilities.items, (item) => item.reservationId).filter((item) => item.account && item.navigation.state === 'admitted').map((item) => item.reservationId),
+    organizations: pageItems(page.organizations.items, (item) => item.account.id)
+      .filter((item) => item.navigation.state === 'admitted')
+      .map((item) => item.account.id),
+    responsibilities: pageItems(page.responsibilities.items, (item) => item.reservationId)
+      .filter((item) => item.account && item.navigation.state === 'admitted')
+      .map((item) => item.reservationId),
   };
 }
 
@@ -370,7 +383,12 @@ export class ManagedAccountsInventory {
     }
     this.coordinates[feed] = target;
     delete this.failed[feed];
-    const current = { ...this.value, ...(observation === this.observation ? { account: result.page.account, navigation: navigation(result.page) } : {}) };
+    const current = {
+      ...this.value,
+      ...(observation === this.observation
+        ? { account: result.page.account, navigation: navigation(result.page) }
+        : {}),
+    };
     const movementState = { previous: target.prior.length > 0, restartable: target.cursor !== null };
     if (feed === 'organizations') {
       const next = result.page.organizations;

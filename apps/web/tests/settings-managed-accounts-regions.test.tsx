@@ -597,7 +597,9 @@ test('admitted row selection retains the directory and keyboard return focuses i
     const inventory = view.inventory();
     const org = region(inventory, m.managed_organizations_title());
     const link = within(org).getByRole('link', { name: 'Atlas Editors' }) as HTMLAnchorElement;
-    expect(link.getAttribute('href')).toBe(`/en/settings?panel=compact&managedAccount=${initial.organizations.items[0]!.account.id}#account`);
+    expect(link.getAttribute('href')).toBe(
+      `/en/settings?panel=compact&managedAccount=${initial.organizations.items[0]!.account.id}#account`,
+    );
     link.focus();
     await view.click(link);
     expect(link.closest('[hidden]')).not.toBeNull();
@@ -606,7 +608,8 @@ test('admitted row selection retains the directory and keyboard return focuses i
     expect(document.activeElement).toBe(link);
     expect(feed.calls).toEqual([{}]);
     const concealed = within(region(inventory, m.managed_operated_title()))
-      .getByRole('heading', { name: m.settings_managed_identity_unavailable() }).closest('li')!;
+      .getByRole('heading', { name: m.settings_managed_identity_unavailable() })
+      .closest('li')!;
     expect(concealed.querySelector('a')).toBeNull();
   } finally {
     await view.close();

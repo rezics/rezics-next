@@ -21,11 +21,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import { useSession } from '../session/query';
 import { initials } from '../threads/initials';
 import { readManagedAccountsInventory } from './actions';
-import {
-  useManagedReaderLifetime,
-  useManagedSessionReader,
-  type ManagedSessionReader,
-} from './managed-session-reader';
+import { useManagedReaderLifetime, useManagedSessionReader, type ManagedSessionReader } from './managed-session-reader';
 import { usePreferenceRetry } from './preference-failure-retry';
 import {
   managedAccountHref,
@@ -47,8 +43,18 @@ const identityRowClassName =
   'min-h-14 max-w-full wrap-anywhere [&_[data-content-item-slot=title]]:line-clamp-none [&_[data-slot=list-row-link]]:min-h-11';
 
 type RowFeed = 'self' | ManagedFeed;
-function IdentityRow({ account, children, href, feed, rowKey }: {
-  account: ManagedIdentity; children?: ReactNode; href?: string | undefined; feed: RowFeed; rowKey: string;
+function IdentityRow({
+  account,
+  children,
+  href,
+  feed,
+  rowKey,
+}: {
+  account: ManagedIdentity;
+  children?: ReactNode;
+  href?: string | undefined;
+  feed: RowFeed;
+  rowKey: string;
 }) {
   const name = account.displayName || (account.handle ? `@${account.handle}` : m.managed_unnamed());
   return (
@@ -69,10 +75,14 @@ function IdentityRow({ account, children, href, feed, rowKey }: {
           <p className="min-w-0 max-w-full wrap-anywhere text-sm text-muted-foreground">@{account.handle}</p>
         ) : null
       }
-      state={<>
-        {children}
-        {href === undefined ? <p className="text-sm text-muted-foreground">{m.settings_managed_navigation_unavailable()}</p> : null}
-      </>}
+      state={
+        <>
+          {children}
+          {href === undefined ? (
+            <p className="text-sm text-muted-foreground">{m.settings_managed_navigation_unavailable()}</p>
+          ) : null}
+        </>
+      }
     />
   );
 }
@@ -301,7 +311,9 @@ export function ManagedAccountsView({
   const container = useRef<HTMLDivElement>(null);
   const source = useRef<{ feed: RowFeed; key: string; keyboard: boolean } | null>(null);
   const wasActive = useRef(active);
-  useLayoutEffect(() => { source.current = null; }, [reader]);
+  useLayoutEffect(() => {
+    source.current = null;
+  }, [reader]);
   const admitted = (feed: RowFeed, key: string) => {
     const latest = navigation();
     return current() && (feed === 'self' ? latest?.self === key : latest?.[feed].includes(key) === true);
@@ -314,10 +326,16 @@ export function ManagedAccountsView({
     const row = anchor.closest<HTMLElement>('[data-managed-key]')!;
     const feed = row.dataset.managedFeed as RowFeed;
     const key = row.dataset.managedKey!;
-    if (!admitted(feed, key)) { event.preventDefault(); return; }
+    if (!admitted(feed, key)) {
+      event.preventDefault();
+      return;
+    }
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
     source.current = { feed, key, keyboard: event.detail === 0 && document.activeElement === anchor };
-    if (onVisit) { event.preventDefault(); onVisit(anchor.getAttribute('href')!); }
+    if (onVisit) {
+      event.preventDefault();
+      onVisit(anchor.getAttribute('href')!);
+    }
   };
   useLayoutEffect(() => {
     const returning = active && !wasActive.current;
@@ -325,11 +343,22 @@ export function ManagedAccountsView({
     if (!returning) return;
     const origin = source.current;
     source.current = null;
-    if (!origin?.keyboard || !current() || (document.activeElement !== document.body && !container.current?.contains(document.activeElement))) return;
-    const row = [...(container.current?.querySelectorAll<HTMLElement>('[data-managed-key]') ?? [])]
-      .find((node) => node.dataset.managedFeed === origin.feed && node.dataset.managedKey === origin.key);
+    if (
+      !origin?.keyboard ||
+      !current() ||
+      (document.activeElement !== document.body && !container.current?.contains(document.activeElement))
+    )
+      return;
+    const row = [...(container.current?.querySelectorAll<HTMLElement>('[data-managed-key]') ?? [])].find(
+      (node) => node.dataset.managedFeed === origin.feed && node.dataset.managedKey === origin.key,
+    );
     const link = admitted(origin.feed, origin.key) ? row?.querySelector<HTMLAnchorElement>('a') : null;
-    const heading = origin.feed === 'self' ? viewerHeadingId : origin.feed === 'organizations' ? organizationsHeadingId : responsibilitiesHeadingId;
+    const heading =
+      origin.feed === 'self'
+        ? viewerHeadingId
+        : origin.feed === 'organizations'
+          ? organizationsHeadingId
+          : responsibilitiesHeadingId;
     (link ?? document.getElementById(heading))?.focus();
   }, [active, current, navigation, viewerHeadingId, organizationsHeadingId, responsibilitiesHeadingId]);
   const previous = useRef(snapshot);
@@ -403,12 +432,19 @@ export function ManagedAccountsView({
           ) : null}
           {account ? (
             <ul className="min-w-0 max-w-full" aria-label={m.managed_your_account()}>
-              <IdentityRow account={account} feed="self" rowKey={account.id} href={destination('self', account.id, account)} />
+              <IdentityRow
+                account={account}
+                feed="self"
+                rowKey={account.id}
+                href={destination('self', account.id, account)}
+              />
             </ul>
           ) : null}
           {account ? (
             <div className="mt-3 space-y-3">
-              {!snapshot.navigation ? <p className="text-sm text-muted-foreground">{m.settings_managed_navigation_unavailable()}</p> : null}
+              {!snapshot.navigation ? (
+                <p className="text-sm text-muted-foreground">{m.settings_managed_navigation_unavailable()}</p>
+              ) : null}
               {waiting ? (
                 <p id={inventoryWaitId} role="status" aria-labelledby={viewerHeadingId}>
                   {m.settings_managed_inventory_retry_wait()}
@@ -452,7 +488,13 @@ export function ManagedAccountsView({
               ) : organizations.items.length ? (
                 <ul className="min-w-0 max-w-full" aria-label={m.managed_organizations_title()}>
                   {organizations.items.map(({ account, role }) => (
-                    <IdentityRow key={account.id} account={account} feed="organizations" rowKey={account.id} href={destination('organizations', account.id, account)}>
+                    <IdentityRow
+                      key={account.id}
+                      account={account}
+                      feed="organizations"
+                      rowKey={account.id}
+                      href={destination('organizations', account.id, account)}
+                    >
                       <Badge variant="secondary" className={stateClassName}>
                         {role === 'owner' ? m.managed_owner() : m.managed_member()}
                       </Badge>
@@ -497,7 +539,13 @@ export function ManagedAccountsView({
                 <ul className="min-w-0 max-w-full" aria-label={m.managed_operated_title()}>
                   {responsibilities.items.map((item) =>
                     item.account ? (
-                      <IdentityRow key={item.reservationId} account={item.account} feed="responsibilities" rowKey={item.reservationId} href={destination('responsibilities', item.reservationId, item.account)}>
+                      <IdentityRow
+                        key={item.reservationId}
+                        account={item.account}
+                        feed="responsibilities"
+                        rowKey={item.reservationId}
+                        href={destination('responsibilities', item.reservationId, item.account)}
+                      >
                         <Badge variant="secondary" className={stateClassName}>
                           {item.state === 'current' ? m.managed_current() : m.managed_reconciling()}
                         </Badge>
