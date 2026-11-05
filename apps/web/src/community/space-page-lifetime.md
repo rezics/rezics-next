@@ -134,3 +134,4 @@ focus and recovery. Membership completion stays on the header control. `RealmCom
 and presents native recent discussion prefixes when the home or board shelf admits them.
 
 Decision: an unavailable Realm shows its own state and never substitutes Global boards or publications.
+Decision: the VN Realm catalogue-to-community walk derives Subject identities from seed results and opens a public visual-novel Realm created through the documented Space/Realm/Board/publication commands when `seed:dev` still publishes only a Global Board.

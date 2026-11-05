@@ -1305,6 +1305,7 @@ language through the client's `accept-language`.
 
 Decision: when the Realm is unavailable, the page shows its own unavailable state and never substitutes Global boards or publications.
 Decision: `RealmCommunityBoards` is the one community shelf and shows native recent discussion prefixes when home or board-shelf admits them; membership completion restores the header control rather than a shelf heading.
+Decision: the VN Realm catalogue-to-community walk uses actual seeded work identities. `seed:dev` still publishes a Global Board, so the walk creates one public visual-novel Realm through the documented Space, Realm, Board, thread and publication commands, then discovers or opens that Realm. It never substitutes Global.
 
 ### Realm claim review
 
