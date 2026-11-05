@@ -27,7 +27,7 @@ import {
 
 type NativeResult = {
   data?: unknown;
-  error?: { value?: unknown };
+  error?: { value?: unknown } | null;
   status: number;
 };
 
@@ -145,10 +145,11 @@ export function kernelMalPort(
   originConfigured: boolean,
   originalAuthorization?: string,
 ): MalImportPort {
-  const headers = (authorization: string, key?: string) => ({
-    authorization,
-    ...(key ? { 'idempotency-key': JSON.stringify(key) } : {}),
-  });
+  function headers(authorization: string): { authorization: string };
+  function headers(authorization: string, key: string): { authorization: string; 'idempotency-key': string };
+  function headers(authorization: string, key?: string) {
+    return { authorization, ...(key === undefined ? {} : { 'idempotency-key': JSON.stringify(key) }) };
+  }
   async function call<T>(
     command: MalCommand,
     send: (mal: MalSurface, authorization: string) => Promise<NativeResult>,

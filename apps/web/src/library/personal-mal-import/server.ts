@@ -116,6 +116,22 @@ export const reviewMalImport = createServerFn({ method: 'POST' })
   })
   .handler(async ({ data }): Promise<MalReviewResult> => port().review(data));
 
+function requireCustody(input: unknown): NonNullable<Extract<MalCommand, { kind: 'apply' }>['custody']> {
+  if (
+    !input ||
+    typeof input !== 'object' ||
+    !('sender' in input) ||
+    typeof input.sender !== 'string' ||
+    !('csrf' in input) ||
+    typeof input.csrf !== 'string' ||
+    !('credential' in input) ||
+    typeof input.credential !== 'string' ||
+    input.credential.length > 3200
+  )
+    throw new Error('Invalid MAL custody');
+  return { sender: input.sender, csrf: input.csrf, credential: input.credential };
+}
+
 export const applyMalImport = createServerFn({ method: 'POST' })
   .validator((input: unknown): Extract<MalCommand, { kind: 'apply' }> => {
     if (!input || typeof input !== 'object' || !('id' in input) || !('body' in input))
@@ -127,7 +143,7 @@ export const applyMalImport = createServerFn({ method: 'POST' })
       kind: 'apply',
       id: requireId(input.id),
       body,
-      ...('custody' in input ? { custody: input.custody as Extract<MalCommand, { kind: 'apply' }>['custody'] } : {}),
+      ...('custody' in input ? { custody: requireCustody(input.custody) } : {}),
     };
   })
   .handler(async ({ data }): Promise<MalApplyResult> => {
