@@ -172,7 +172,7 @@ test.each([false, true])(
     const p = await setup(autofill);
     await p.enter();
     if (!autofill) await p.click('Sign in with a passkey');
-    await p.reply({ challenge: 'challenge' });
+    await p.reply(nativeSignInOptions());
     await flush(() => p.prompt.resolve({ id: 'assertion' }));
     await flush(() => {
       send(p.host);
@@ -191,7 +191,7 @@ test('an acknowledgement before pagehide stays historical and return never navig
   const p = await setup();
   await p.enter();
   await flush(() => send(p.host));
-  await p.reply({});
+  await p.reply(nativeSignInProof(p.calls.at(-1)!.body));
   expect(p.assign).toHaveBeenCalledTimes(1);
   await p.hide();
   await p.restore();

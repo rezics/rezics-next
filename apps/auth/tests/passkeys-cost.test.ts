@@ -161,6 +161,7 @@ async function open(path: string): Promise<{ page: Page }> {
   const port = await site();
   browser ??= await chromium.launch({
     args: [
+      '--no-proxy-server',
       '--host-resolver-rules=MAP rezics.com 127.0.0.1',
       `--unsafely-treat-insecure-origin-as-secure=http://rezics.com:${port}`,
     ],
@@ -216,6 +217,7 @@ beforeAll(async () => {
   const port = await site();
   browser = await chromium.launch({
     args: [
+      '--no-proxy-server',
       '--host-resolver-rules=MAP rezics.com 127.0.0.1',
       `--unsafely-treat-insecure-origin-as-secure=http://rezics.com:${port}`,
     ],
