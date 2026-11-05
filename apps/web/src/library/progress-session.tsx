@@ -738,7 +738,13 @@ function ProgressHistoryLink({
           const destination = { ...originating!.address, [target.section]: target.cursor };
           const cancel = navigation.stage(target, destination, event.detail === 0);
           void router
-            .navigate({ to: '/library/progress/$id', params: { id }, search, state: (previous) => previous, hash: (previous) => previous })
+            .navigate({
+              to: '/library/progress/$id',
+              params: { id },
+              search,
+              state: (previous) => previous,
+              hash: (previous) => previous,
+            })
             .then(cancel);
         }
       }}
@@ -774,15 +780,15 @@ function ProgressHistoryControls({
     delete destination[section];
     if (at !== undefined) destination[section] = at;
     return (
-    <ProgressHistoryLink
-      operation={section === 'changes' ? 'progress_session.changes' : 'progress_session.units'}
-      id={id}
-      originating={originating}
-      search={destination}
-      target={{ section, movement, cursor: at }}
-    >
-      {label}
-    </ProgressHistoryLink>
+      <ProgressHistoryLink
+        operation={section === 'changes' ? 'progress_session.changes' : 'progress_session.units'}
+        id={id}
+        originating={originating}
+        search={destination}
+        target={{ section, movement, cursor: at }}
+      >
+        {label}
+      </ProgressHistoryLink>
     );
   };
   return (

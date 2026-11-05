@@ -239,15 +239,25 @@ mock.module('../src/threads/composer', () => ({ csrfHeaders: () => ({ 'x-csrf-to
 const { readyVisit } = await import('../src/library/episode-checklist/controller');
 const { emptyChecklistWork } = await import('../src/library/episode-checklist/cost');
 mock.module('../src/library/episode-checklist/server', () => ({
-  loadCanonicalEpisodeChecklist: async ({ data }: { data: { viewer: string; locale: string; subjectId: string; sessionId: string; revision: number } }): Promise<EpisodeLoad> => ({
+  loadCanonicalEpisodeChecklist: async ({
+    data,
+  }: {
+    data: { viewer: string; locale: string; subjectId: string; sessionId: string; revision: number };
+  }): Promise<EpisodeLoad> => ({
     state: 'ready',
     work: emptyChecklistWork(),
     membership: { state: 'admitted', candidates: [], next: null, stream: 'inverse:schema:isPartOf' },
     visit: readyVisit(data, [], { membership: 'empty' }),
   }),
-  inspectCanonicalEpisodes: () => { throw new Error('History is not a canonical episode operand'); },
-  continueCanonicalEpisodes: () => { throw new Error('History is not a canonical episode operand'); },
-  recordCanonicalEpisodes: () => { throw new Error('History is not a canonical episode operand'); },
+  inspectCanonicalEpisodes: () => {
+    throw new Error('History is not a canonical episode operand');
+  },
+  continueCanonicalEpisodes: () => {
+    throw new Error('History is not a canonical episode operand');
+  },
+  recordCanonicalEpisodes: () => {
+    throw new Error('History is not a canonical episode operand');
+  },
 }));
 const detailModule = await import('../src/library/progress-detail-server');
 const actualDetail = detailModule.readProgressDetail;
@@ -412,11 +422,10 @@ async function mount(initial = detail(), hydrate = false, observed = viewer(init
         await user.click(body.getByRole('button', { name: m.library_progress_confirm_correction(), exact: true }));
     });
   const field = (label: string) => body.getByLabelText(label) as HTMLInputElement;
-  const fill = async (label: string, value: string) =>
-    {
-      await act(async () => user.clear(field(label)));
-      for (const character of value) await act(async () => user.type(field(label), character));
-    };
+  const fill = async (label: string, value: string) => {
+    await act(async () => user.clear(field(label)));
+    for (const character of value) await act(async () => user.type(field(label), character));
+  };
   const record = async (value = '4.75') => {
     await click(m.library_progress_update());
     await fill(m.library_progress_amount(), value);
@@ -961,7 +970,8 @@ test('Stay cancels history movement and cannot lend coordinates or focus to a la
     const before = h.reads.length;
     await act(async () => {
       within(h.body.getByRole('region', { name: m.library_progress_changes(), exact: true }))
-        .getByRole('link', { name: m.library_progress_more() }).focus();
+        .getByRole('link', { name: m.library_progress_more() })
+        .focus();
       await userEvent.setup({ document }).keyboard('{Enter}');
     });
     expect(h.body.getByRole('alertdialog')).toBeTruthy();
@@ -969,13 +979,15 @@ test('Stay cancels history movement and cannot lend coordinates or focus to a la
     expect(h.reads).toHaveLength(before);
     expect((h.body.getByLabelText(m.library_logs_publish_note()) as HTMLTextAreaElement).value).toBe('draft');
     await h.fill(m.library_logs_publish_note(), '');
-    await act(async () => h.router.navigate({
-      to: '/library/progress/$id',
-      params: { id: address.id },
-      search: { ...h.router.state.location.search, changes: 'next-changes' },
-      hash: (previous) => previous,
-      state: (previous) => previous,
-    }));
+    await act(async () =>
+      h.router.navigate({
+        to: '/library/progress/$id',
+        params: { id: address.id },
+        search: { ...h.router.state.location.search, changes: 'next-changes' },
+        hash: (previous) => previous,
+        state: (previous) => previous,
+      }),
+    );
     await h.resolveRead(detail('A', h.reads.at(-1)!.data));
     expect(h.body.queryByRole('link', { name: m.library_window_previous() })).toBeNull();
     expect(document.activeElement?.hasAttribute('data-progress-history-heading')).toBe(false);
@@ -1009,15 +1021,15 @@ test('equal route replacement retires a staged read and its predecessor coordina
   }
 });
 
-
 test('keyboard history movement focuses its admitted heading once and independent focus cancels late focus', async () => {
   const h = await mount(detail(), false, viewer(), true);
   try {
     const section = () => h.body.getByRole('region', { name: m.library_progress_changes(), exact: true });
-    const enter = async () => act(async () => {
-      within(section()).getByRole('link', { name: m.library_progress_more() }).focus();
-      await userEvent.setup({ document }).keyboard('{Enter}');
-    });
+    const enter = async () =>
+      act(async () => {
+        within(section()).getByRole('link', { name: m.library_progress_more() }).focus();
+        await userEvent.setup({ document }).keyboard('{Enter}');
+      });
     await enter();
     await h.resolveRead(detail('A', h.reads.at(-1)!.data));
     expect(document.activeElement?.getAttribute('data-progress-history-heading')).toBe('changes');

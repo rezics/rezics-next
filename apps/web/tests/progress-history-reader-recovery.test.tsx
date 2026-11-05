@@ -141,11 +141,13 @@ async function mount(initial: LoadedPage, originating?: ProgressDetailOrigin) {
   client.setQueryData(['session'], { state: 'signed-out', csrfToken: null });
   let shown = initial;
   let renderPage: () => void;
-  const route = createRootRoute({ component: function Page() {
-    const [, render] = useState(0);
-    renderPage = () => render((value) => value + 1);
-    return <ProgressSessionPage page={shown} logsCursor={cursors.logs} originating={originating} />;
-  } });
+  const route = createRootRoute({
+    component: function Page() {
+      const [, render] = useState(0);
+      renderPage = () => render((value) => value + 1);
+      return <ProgressSessionPage page={shown} logsCursor={cursors.logs} originating={originating} />;
+    },
+  });
   const detail = createRoute({
     getParentRoute: () => route,
     path: '/library/progress/$id',
@@ -157,10 +159,20 @@ async function mount(initial: LoadedPage, originating?: ProgressDetailOrigin) {
     rewrite: { input: ({ url }) => deLocalizeUrl(url).href, output: ({ url }) => localizeUrl(url).href },
   });
   await router.load();
-  await act(async () => root.render(
-    <StrictMode><QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider></StrictMode>,
-  ));
-  const show = (p = initial) => act(async () => { shown = p; renderPage(); });
+  await act(async () =>
+    root.render(
+      <StrictMode>
+        <QueryClientProvider client={client}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>
+      </StrictMode>,
+    ),
+  );
+  const show = (p = initial) =>
+    act(async () => {
+      shown = p;
+      renderPage();
+    });
   const view = within(host as unknown as HTMLElement);
   const region = (kind: 'changes' | 'units') =>
     view.getByRole('region', {
@@ -374,56 +386,59 @@ test('First/later empty pages are honest and each first/next link preserves the 
 
 test('Absent operations hide only their navigation and retired origin/capture/locale reject each recovery and continuation', async () => {
   for (const retirement of ['origin', 'capture', 'locale'] as const)
-  for (const index of [0, 1, 2, 3])
-  for (const type of ['click', 'auxclick']) {
-    let current = true;
-    const initial = {
-      ...page({ changesNext: 'next-changes', unitsNext: 'next-units' }),
-      changesCursor: cursors.changes,
-      unitsCursor: cursors.units,
-    };
-    const origin: ProgressDetailOrigin = {
-      viewer: 'owner',
-      address: { id: initial.session.id, ...cursors },
-      isCurrent: () => getLocale() === 'en' && (retirement === 'origin' ? current : true),
-      ...(retirement === 'capture' ? { capture: () => ({ isCurrent: () => current, headers: () => null }) } : {}),
-      refresh: unexpectedRequest,
-    };
-    const h = await mount(initial, origin);
-    try {
-      const links = [...h.region('changes').querySelectorAll('a'), ...h.region('units').querySelectorAll('a')];
-      expect(links).toHaveLength(4);
-      if (retirement === 'locale') {
-        window.history.replaceState({}, '', '/ja/library/progress');
-        setLocale('ja', { reload: false });
-        expect(getLocale()).toBe('ja');
+    for (const index of [0, 1, 2, 3])
+      for (const type of ['click', 'auxclick']) {
+        let current = true;
+        const initial = {
+          ...page({ changesNext: 'next-changes', unitsNext: 'next-units' }),
+          changesCursor: cursors.changes,
+          unitsCursor: cursors.units,
+        };
+        const origin: ProgressDetailOrigin = {
+          viewer: 'owner',
+          address: { id: initial.session.id, ...cursors },
+          isCurrent: () => getLocale() === 'en' && (retirement === 'origin' ? current : true),
+          ...(retirement === 'capture' ? { capture: () => ({ isCurrent: () => current, headers: () => null }) } : {}),
+          refresh: unexpectedRequest,
+        };
+        const h = await mount(initial, origin);
+        try {
+          const links = [...h.region('changes').querySelectorAll('a'), ...h.region('units').querySelectorAll('a')];
+          expect(links).toHaveLength(4);
+          if (retirement === 'locale') {
+            window.history.replaceState({}, '', '/ja/library/progress');
+            setLocale('ja', { reload: false });
+            expect(getLocale()).toBe('ja');
+          } else current = false;
+          await act(async () => {
+            // A dispatch may render new handlers; each stale callback gets its own retained render.
+            const event = new window.MouseEvent(type, {
+              bubbles: true,
+              cancelable: true,
+              button: type === 'click' ? 0 : 1,
+            });
+            links[index]!.dispatchEvent(event as unknown as MouseEvent);
+            expect({ retirement, type, prevented: event.defaultPrevented }).toEqual({
+              retirement,
+              type,
+              prevented: true,
+            });
+          });
+          expect(h.router.state.location.search).toEqual({});
+          expect(unexpectedRequest).not.toHaveBeenCalled();
+          setLocale('en', { reload: false });
+          current = true;
+          admitted.delete('progress_session.changes');
+          await h.show();
+          expect(h.region('changes').querySelectorAll('a')).toHaveLength(0);
+          expect(h.region('units').querySelectorAll('a')).toHaveLength(2);
+          admitted.delete('progress_session.units');
+          await h.show();
+          expect(h.region('units').querySelectorAll('a')).toHaveLength(0);
+        } finally {
+          await h.close();
+        }
       }
-      else current = false;
-      await act(async () => {
-        // A dispatch may render new handlers; each stale callback gets its own retained render.
-        const event = new window.MouseEvent(type, {
-          bubbles: true,
-          cancelable: true,
-          button: type === 'click' ? 0 : 1,
-        });
-        links[index]!.dispatchEvent(event as unknown as MouseEvent);
-        expect({ retirement, type, prevented: event.defaultPrevented }).toEqual({ retirement, type, prevented: true });
-      });
-      expect(h.router.state.location.search).toEqual({});
-      expect(unexpectedRequest).not.toHaveBeenCalled();
-      setLocale('en', { reload: false });
-      current = true;
-      admitted.delete('progress_session.changes');
-      await h.show();
-      expect(h.region('changes').querySelectorAll('a')).toHaveLength(0);
-      expect(h.region('units').querySelectorAll('a')).toHaveLength(2);
-      admitted.delete('progress_session.units');
-      await h.show();
-      expect(h.region('units').querySelectorAll('a')).toHaveLength(0);
-    } finally {
-      await h.close();
-    }
-  }
 });
 
 test('Admitted first-page recovery navigates independently for changes and units', async () => {

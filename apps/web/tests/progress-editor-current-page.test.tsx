@@ -169,11 +169,15 @@ async function mount(initial: LoadedPage, phone = false) {
   client.setQueryData(['session'], { state: 'signed-out', csrfToken: null });
   let shown: Page | null = initial;
   let renderPage: () => void;
-  const rootRoute = createRootRoute({ component: function Page() {
-    const [, render] = useState(0);
-    useLayoutEffect(() => { renderPage = () => render((value) => value + 1); });
-    return shown && <ProgressSessionPage page={shown} logsCursor="logs:independent/==" />;
-  } });
+  const rootRoute = createRootRoute({
+    component: function Page() {
+      const [, render] = useState(0);
+      useLayoutEffect(() => {
+        renderPage = () => render((value) => value + 1);
+      });
+      return shown && <ProgressSessionPage page={shown} logsCursor="logs:independent/==" />;
+    },
+  });
   const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/' });
   const destinationRoute = createRoute({ getParentRoute: () => rootRoute, path: '/destination' });
   window.history.replaceState({}, '', '/');
@@ -199,7 +203,11 @@ async function mount(initial: LoadedPage, phone = false) {
     </StrictMode>
   );
   await settle(() => root.render(tree()));
-  const show = async (p: Page | null) => settle(() => { shown = p; renderPage(); });
+  const show = async (p: Page | null) =>
+    settle(() => {
+      shown = p;
+      renderPage();
+    });
   const body = within(window.document.body as unknown as HTMLElement);
   const user = userEvent.setup({ document: window.document as unknown as Document });
   const click = async (label: string) =>

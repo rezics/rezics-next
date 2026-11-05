@@ -152,11 +152,13 @@ async function mount(
   client.setQueryData(['session'], { state: 'signed-out', csrfToken: null });
   let shown = initial;
   let renderPage: () => void;
-  const rootRoute = createRootRoute({ component: function Page() {
-    const [, render] = useState(0);
-    renderPage = () => render((value) => value + 1);
-    return <ProgressSessionPage page={shown} logsCursor="logs-current/+?== &公開" returnContext={returnContext} />;
-  } });
+  const rootRoute = createRootRoute({
+    component: function Page() {
+      const [, render] = useState(0);
+      renderPage = () => render((value) => value + 1);
+      return <ProgressSessionPage page={shown} logsCursor="logs-current/+?== &公開" returnContext={returnContext} />;
+    },
+  });
   const indexRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: '/library/progress',
@@ -168,10 +170,20 @@ async function mount(
     rewrite: { input: ({ url }) => deLocalizeUrl(url).href, output: ({ url }) => localizeUrl(url).href },
   });
   await router.load();
-  await act(async () => root.render(
-    <StrictMode><QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider></StrictMode>,
-  ));
-  const show = (p = initial) => act(async () => { shown = p; renderPage(); });
+  await act(async () =>
+    root.render(
+      <StrictMode>
+        <QueryClientProvider client={client}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>
+      </StrictMode>,
+    ),
+  );
+  const show = (p = initial) =>
+    act(async () => {
+      shown = p;
+      renderPage();
+    });
   const body = within(window.document.body as unknown as HTMLElement);
   const user = userEvent.setup({ document: window.document as unknown as Document });
   const history = () => body.getByRole('region', { name: m.library_progress_changes(), exact: true });
