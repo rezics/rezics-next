@@ -20,6 +20,10 @@ A failed source read is not a successful empty list. Continuation is component-l
 URL, history state, metadata or share output. Public Collection return uses canonical Collection and Subject links
 with the existing `subjectSlotReturnTo` selectors (locale, Realm, node, view, cursor, useful `slot=collections`).
 
+Previous reads only the retained previous cursor through the same native page reader. After page 1 → 2 → 3 →
+Previous 2, that returned visit has no older frontier; Restart rereads page one. Public navigation rejects retired
+callbacks before reading and allows one request at a time, independently of private chooser admission.
+
 ## Private chooser
 
 The Add to Collection chooser loads only when a signed-in reader opens it. It keeps the current viewer, exact
