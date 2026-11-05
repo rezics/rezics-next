@@ -65,13 +65,10 @@ test('selected dump candidates publish only by exact intent and resume a refused
     string,
     { id: string; source: BatchCommand['source'] | null; statement: BatchStatement; head: number | null }
   >();
-  const proposalIdsByKey = new Map<string, string>();
   const accepted = new Set<string>();
   const adopted = new Map<string, { head: number; selection: { candidate: string; rank: 'normal' | 'preferred' }[] }>();
   const publicReadIds = new Set<string>();
   const acceptanceCalls: { candidateId: string; body: unknown; idempotencyKey: string }[] = [];
-  let loseTagProposalAck = true;
-  let lostTagProposal: { command: Extract<BatchCommand, { op: 'propose' }>; candidateId: string } | undefined;
   let refuseAcceptance = true;
   let tagSpoiler = 0;
   const unavailableReviewSubjects = new Set<string>();
@@ -176,23 +173,12 @@ test('selected dump candidates publish only by exact intent and resume a refused
           return { key: command.key, status: 201 as const, value: { id, revision: 1 } };
         }
         if (command.op === 'propose') {
-          const id = proposalIdsByKey.get(command.key) ?? randomUUID();
-          proposalIdsByKey.set(command.key, id);
+          const id = randomUUID();
           candidates.set(id, { id, source: command.source, statement: command.statement, head: null });
-          if (
-            loseTagProposalAck &&
-            command.statement.property.id === 'schema:genre' &&
-            !command.statement.qualifiers?.some((term) => term.property.id === 'rezics:sourceTagWeightMetric')
-          )
-            lostTagProposal = { command, candidateId: id };
           return { key: command.key, status: 201 as const, value: { candidate: id, revision: 1 } };
         }
         return { key: command.key, status: 200 as const, value: { revision: 1 } };
       });
-      if (loseTagProposalAck && lostTagProposal) {
-        loseTagProposalAck = false;
-        throw new Error('simulated lost VNDB tag proposal acknowledgement');
-      }
       return { results };
     },
     async readReviewedSubject(id: string) {
@@ -242,17 +228,7 @@ test('selected dump candidates publish only by exact intent and resume a refused
           vocabularyAdmissions: [preparedTags.vocabularyAdmission],
         },
       });
-    await expect(seed()).rejects.toThrow('Cross-media vndb import failed');
-    expect(lostTagProposal).toBeDefined();
-    expect(journal.preparedCommands().map((entry) => entry.command.key)).toContain(lostTagProposal!.command.key);
-    journal.close();
-    journal = new ShowcaseJournal(journalPath);
     let result = await seed();
-    const replayedProposal = journal
-      .acknowledgedCommands()
-      .find((entry) => entry.command.key === lostTagProposal!.command.key);
-    expect(replayedProposal?.command).toEqual(lostTagProposal!.command);
-    expect(replayedProposal?.candidateId).toBe(lostTagProposal!.candidateId);
     expect(result.gaps).toEqual([]);
     expect(result.unresolved).toEqual([]);
     const workIds = result.readings.map((reading) => reading.subject.subject!.id!);
@@ -365,6 +341,60 @@ test('selected dump candidates publish only by exact intent and resume a refused
       membership.command.statement.references?.flatMap((reference) => reference.parts).map((part) => part.value),
     ).toContainEqual({ type: 'value', content: 'https://vndb.org/v2.1#/tags_vn/v2/g105/tag' });
     const membershipCandidateId = membership.candidateId!;
+    const lostAckPath = join(directory, 'lost-proposal.sqlite');
+    let lostAckJournal = new ShowcaseJournal(lostAckPath);
+    const remoteCandidates = new Map<string, string>();
+    const deliveredCommands: BatchCommand[][] = [];
+    let loseFirstResponse = true;
+    const remotePort = {
+      ...port,
+      async batch(request: { commands: readonly BatchCommand[] }): Promise<BatchWriteResult> {
+        deliveredCommands.push(structuredClone([...request.commands]));
+        const results = request.commands.map((command) => {
+          if (command.op === 'propose') {
+            const candidate = remoteCandidates.get(command.key) ?? randomUUID();
+            remoteCandidates.set(command.key, candidate);
+            return { key: command.key, status: 201 as const, value: { candidate, revision: 1 } };
+          }
+          if (command.op === 'create')
+            return { key: command.key, status: 201 as const, value: { id: randomUUID(), revision: 1 } };
+          return { key: command.key, status: 200 as const, value: { revision: 1 } };
+        });
+        if (loseFirstResponse) {
+          loseFirstResponse = false;
+          throw new Error('simulated lost VNDB proposal acknowledgement');
+        }
+        return { results };
+      },
+    } as CrossMediaPort;
+    try {
+      await expect(
+        captureShowcaseCommands(remotePort, lostAckJournal).batch({ commands: [membership.command] }),
+      ).rejects.toThrow('simulated lost VNDB proposal acknowledgement');
+      expect(lostAckJournal.preparedCommands().map((entry) => entry.command)).toContainEqual(membership.command);
+      expect(lostAckJournal.acknowledgedCommands()).toEqual([]);
+      lostAckJournal.close();
+      lostAckJournal = new ShowcaseJournal(lostAckPath);
+      const replayResult = await captureShowcaseCommands(remotePort, lostAckJournal).batch({
+        commands: [membership.command],
+      });
+      expect(deliveredCommands).toEqual([[membership.command], [membership.command]]);
+      expect(replayResult.results).toEqual([
+        {
+          key: membership.command.key,
+          status: 201,
+          value: { candidate: remoteCandidates.get(membership.command.key), revision: 1 },
+        },
+      ]);
+      expect(lostAckJournal.acknowledgedCommands()).toContainEqual(
+        expect.objectContaining({
+          command: membership.command,
+          candidateId: remoteCandidates.get(membership.command.key),
+        }),
+      );
+    } finally {
+      lostAckJournal.close();
+    }
     expect(preparedTags.associationBindings).toEqual([
       expect.objectContaining({
         workId: 'v2',
