@@ -125,7 +125,18 @@ test('generated Web label methods reopen actual admitted rows, preserve source d
   expect(current.data!.assignments.map((item) => item.id).sort()).toEqual(
     [items[0]!.assignment!.id, items[1]!.assignment!.id].sort(),
   );
-  const deepReview = await calls.review(id, { ...body, ordinal: 20 }, crypto.randomUUID());
+  const deepReview = await calls.review(
+    id,
+    {
+      ...body,
+      ordinal: 20,
+      selections: body.selections.map((selection, index) => ({
+        key: selection.key,
+        target: { labelId: items[index === 1 || index === 3 ? 1 : 0]!.label!.id },
+      })),
+    },
+    crypto.randomUUID(),
+  );
   const deepResult = await calls.apply(id, { confirmations: [{ ordinal: 20, reviewId: deepReview.data!.review.id }] });
   expect(deepResult.data!.outcomes[0]!.items.every((item) => item.status === 'unchanged')).toBe(true);
   expect(deepResult.data!.outcomes[0]!.items[0]!.assignment).toEqual(items[0]!.assignment);
