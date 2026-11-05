@@ -1,3 +1,4 @@
+import { selectedSynopsisFact, redactSynopsisFact, type SelectedSynopsisInput, type SelectedSynopsisResult } from './selected-synopsis.ts';
 import {
   observeReviewedPersonIdentity,
   type ReviewedPersonEndpoint,
@@ -533,6 +534,7 @@ export async function readSubject(
   routeKey: Uint8Array,
   summaries: {
     reviewIdentity?: ReviewedPersonSource;
+    selectedSynopsis?: { input: SelectedSynopsisInput; admit: () => Promise<boolean> };
     languages?: readonly string[];
     authorize?: SummaryDependencies['authorize'];
     seen?: readonly { partition: number; epoch: number; position: bigint }[];
@@ -542,6 +544,7 @@ export async function readSubject(
     readAs?: <T>(read: () => Promise<T>) => Promise<T>;
   } = {},
 ): Promise<{
+  selectedSynopsis?: SelectedSynopsisResult;
   reviewedIdentity?: ReviewedPersonEndpoint | null;
   subject: Item;
   account: { id: string } | null;
@@ -842,7 +845,30 @@ export async function readSubject(
     }
     requireAccessDeadline(deadline);
   }
+  let selectedSynopsis: SelectedSynopsisResult | undefined;
+  if (summaries.selectedSynopsis) {
+    const { input, admit } = summaries.selectedSynopsis;
+    selectedSynopsis = { kind: 'changed' };
+    if (context !== GLOBAL_CONTEXT || input.context !== GLOBAL_CONTEXT || input.realm) {
+      selectedSynopsis = { kind: 'unsupported' };
+    } else {
+      const fact = selectedSynopsisFact(subject, input);
+      if (fact && await admit()) {
+        // Content has released every home before this final authoritative Semantic pass.
+        const final = await readSnapshot(id);
+        const current = final && await disclosedTargets(pool, final.release, final.supported, summaries.authorize);
+        if (final && current && final.rows[0]!.revision === rows[0]!.revision &&
+            final.rows[0]!.security_revision === rows[0]!.security_revision &&
+            JSON.stringify(current) === JSON.stringify(supported)) {
+          selectedSynopsis = { kind: 'matched', fact: redactSynopsisFact(fact), context, release: subject.release };
+        }
+      } else if (fact) selectedSynopsis = { kind: 'missing' };
+    }
+    if (Buffer.byteLength(JSON.stringify({ input, selectedSynopsis }), 'utf8') > 262144)
+      selectedSynopsis = { kind: 'unavailable' };
+  }
   return {
+    ...(selectedSynopsis ? { selectedSynopsis } : {}),
     ...(summaries.reviewIdentity ? { reviewedIdentity: snapshot.reviewedIdentity } : {}),
     account: rows[0]!.account === null ? null : { id: rows[0]!.account },
     summary,
