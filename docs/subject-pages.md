@@ -1982,6 +1982,8 @@ are never averaged, blended or silently substituted. See [ratings](../services/k
 
 ### Independent reading and population comparison
 
+Decision: all remaining rating, reaction-count and personal reads carry their exact Query signal outside serialized input through BFF preparation to native GETs; Query observers own shared transport, while the existing admission registries retain reader and write fences. Population cache mutation events alone replace admission: observer-result notifications preceding success preserve the accepted directory, including terminal empty pages. Public count Retry is localized, manual and independent of private recovery; focused retry settles on its surviving action or current counts group, and reader movement or replacement retires focus intent.
+
 The [first-scope audit](research/first-scope-remaining-backlog.md) is adopted for this Subject journey. The old
 all-siblings-or-null read and first-three-memberships comparison are superseded. Question, published public figure,
 Global aggregate/distribution and imported source statistics have independently settled serializable outcomes and

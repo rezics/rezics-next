@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, StrictMode, useLayoutEffect, useState } from 'react';
 import * as start from '../.storybook/react-start';
+import { subjectReadServerFixture } from './subject-read-server-fixture';
 import type { ChangeReactionInput, ReactionFailure } from '../src/threads/reaction-request';
 import type { SubjectOwnReaction, SubjectReactionKind } from '../src/features/pages/subject-reactions';
 
@@ -61,10 +62,12 @@ const writes: (ReturnType<typeof deferred<WriteResult>> & {
 })[] = [];
 let preparedReader = 'reader-one';
 
-mock.module('@tanstack/react-start', () => start);
-mock.module('@tanstack/react-start/server', () => start);
+const server = subjectReadServerFixture();
+mock.module('@tanstack/react-start', () => ({ ...start, createServerFn: server.createServerFn }));
+mock.module('@tanstack/react-start/server', () => ({ ...start, getRequest: server.getRequest }));
 mock.module('cloudflare:workers', () => ({ env: {} }));
-mock.module('../src/kernel/client', () => ({ kernelClient: () => ({}) }));
+const kernel = await import('../src/kernel/client');
+mock.module('../src/kernel/client', () => ({ ...kernel, kernelClient: () => ({}) }));
 mock.module('../src/report/content-actions', () => ({ PostActions: () => null }));
 mock.module('../src/library/follow-target-control', () => ({ FollowTargetControl: () => null }));
 mock.module('../src/features/pages/subject-reactions', () => ({
@@ -85,7 +88,9 @@ mock.module('../src/features/pages/subject-reactions', () => ({
     return response.promise;
   },
 }));
+const reactions = await import('../src/threads/reactions');
 mock.module('../src/threads/reactions', () => ({
+  ...reactions,
   changeReaction: ({ data, headers }: { data: ChangeReactionInput; headers: HeadersInit }) => {
     const call = { ...deferred<WriteResult>(), data, headers: new Headers(headers) };
     writes.push(call);
@@ -236,7 +241,8 @@ function tree(
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 async function until(check: () => boolean) {
   const deadline = Date.now() + 5_000;
-  while (!check() && Date.now() < deadline) await tick();
+  await act(tick);
+  while (!check() && Date.now() < deadline) await act(tick);
   expect(check()).toBe(true);
 }
 async function paint(
@@ -264,29 +270,36 @@ function chip(kind: SubjectReactionKind) {
           : kind === 'insightful'
             ? m.reaction_insightful()
             : m.reaction_sad();
-  const found = chips().find((button) => button.textContent?.startsWith(label));
+  const found = chips().find((button) => button.getAttribute('aria-label')?.startsWith(label));
   expect(found).toBeDefined();
   return found!;
 }
 async function clickKind(kind: SubjectReactionKind) {
   await act(async () => {
-    if (kind === 'like' || kind === 'insightful') chip(kind).click();
-    else {
+    if (kind === 'like' || kind === 'insightful') {
+      chip(kind).click();
+      await tick();
+    } else {
       const trigger = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
         (button) => button.textContent?.trim() === m.reaction_react(),
       );
       expect(trigger).toBeDefined();
       trigger!.click();
-      const choice = [...window.document.querySelectorAll<HTMLButtonElement>('button')].find(
+      await tick();
+    }
+  });
+  if (kind !== 'like' && kind !== 'insightful')
+    await act(async () => {
+      const choice = [...window.document.querySelectorAll<HTMLButtonElement>('[data-slot="popover-content"] button')].find(
         (button) =>
-          button.textContent?.trim() ===
-          (kind === 'love' ? m.reaction_love() : kind === 'laugh' ? m.reaction_laugh() : m.reaction_sad()),
+          button.getAttribute('aria-label')?.startsWith(
+            kind === 'love' ? m.reaction_love() : kind === 'laugh' ? m.reaction_laugh() : m.reaction_sad(),
+          ),
       );
       expect(choice).toBeDefined();
       choice!.click();
-    }
-    await tick();
-  });
+      await tick();
+    });
 }
 function setPrivateRead(index: number, value: SubjectReactionKind | null) {
   privateReads[index]!.response.resolve({ reader: privateReads[index]!.preparedReader, value });
@@ -479,7 +492,7 @@ test('removing and recreating the session retires old private data and requires 
     await tick();
   });
   expect(chips().filter((button) => button.getAttribute('aria-pressed') === 'true')).toHaveLength(0);
-  expect(chips().every((button) => button.disabled)).toBe(true);
+  expect(chips().every((button) => button.disabled || button.getAttribute('role') === 'img')).toBe(true);
   await act(async () => {
     writes[0]!.resolve({ ok: true });
     client.setQueryData(sessionQuery.queryKey, viewer());

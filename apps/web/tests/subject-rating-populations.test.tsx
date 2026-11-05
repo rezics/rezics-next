@@ -357,6 +357,7 @@ beforeEach(() => {
   nativePopulations = ids.map((population) => ({ population, count: 1 }));
   directoryGate = aggregateGate = labelGate = undefined;
   cache = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  cache.setQueryDefaults(sessionQuery.queryKey, { gcTime: Infinity });
   cache.setQueryData(sessionQuery.queryKey, session());
   start.setStoryRequestContext({ visitor: 'Signed In', url: window.location.href });
   root = createRoot(host);
@@ -528,6 +529,21 @@ test('question/Global distribution and imported source survive headline failure;
   expect(html).not.toContain('No ratings yet');
   expect(data.global.kind).toBe('failed');
   expect(data.statistics.kind).toBe('ready');
+});
+
+test('terminal empty ready population directory settles once without replacing its accepted observer', async () => {
+  nativePopulations = [];
+  await paint();
+  await until(() => host.textContent!.includes(m.rating_population_empty_page()));
+  const reads = paths('/ratings/populations').length;
+  await act(async () => {
+    await tick();
+    await tick();
+  });
+  expect(paths('/ratings/populations')).toHaveLength(reads);
+  expect(reads).toBe(1);
+  expect(button(m.rating_population_next()).disabled).toBe(true);
+  expect(host.querySelector('[data-slot="rating-populations"]')?.getAttribute('aria-busy')).not.toBe('true');
 });
 
 test('Actual bounded population directory/selection/labels/aggregates and mounted reader lifetime closure', async () => {
@@ -908,6 +924,7 @@ test('independent QueryClients serialize private responses separately and requir
   const originalJson = JSON.stringify(original.state.data);
   preparedReader = 'reader-two';
   extraCache = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  extraCache.setQueryDefaults(sessionQuery.queryKey, { gcTime: Infinity });
   extraCache.setQueryData(sessionQuery.queryKey, session(preparedReader, null));
   await paint(subjectId, extraCache);
   await until(() => boxes().length === 20);

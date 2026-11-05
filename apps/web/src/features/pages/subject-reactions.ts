@@ -15,11 +15,20 @@ export type SubjectReactions = {
 
 export type SubjectOwnReaction = { reader: string; value: SubjectReactionKind | null };
 
-export async function readReactionCounts(client: KernelClient, id: string): Promise<SubjectReactions | null> {
+export async function readReactionCounts(
+  client: KernelClient,
+  id: string,
+  signal?: AbortSignal,
+): Promise<SubjectReactions | null> {
+  signal?.throwIfAborted();
   const counts = await client
     .subjects({ id })
-    .reactions.get()
-    .catch(() => null);
+    .reactions.get(signal ? { fetch: { signal } } : {})
+    .catch(() => {
+      signal?.throwIfAborted();
+      return null;
+    });
+  signal?.throwIfAborted();
   if (counts?.status !== 200 || !isNativeReactionCountPage(counts.data)) return null;
   const shown: SubjectReactions['counts'] = {};
   for (const { kind, count } of counts.data.counts) if (admitted.has(kind)) shown[kind as SubjectReactionKind] = count;
@@ -33,9 +42,12 @@ export async function readOwnReaction(
   id: string,
   expectedReader?: string | null,
 ): Promise<SubjectOwnReaction | null> {
+  const signal = request.signal;
+  signal.throwIfAborted();
   if (!expectedReader) return null;
   try {
     await prepareSession(request, sessionEnv);
+    signal.throwIfAborted();
     const authorization = viewerCredential(request);
     const reader = sessionSubject(request);
     if (!authorization || !reader || reader !== expectedReader) return null;
@@ -43,12 +55,15 @@ export async function readOwnReaction(
     const preparedReader = reader;
     const own = await (client.subjects({ id }) as unknown as OwnReactionRoute).reaction.get({
       headers: { authorization },
+      fetch: { signal },
     });
+    signal.throwIfAborted();
     if (own.status !== 200 || !isOwnReactionResponse(own.data)) return null;
     if (own.data.kind === null) return { reader: preparedReader, value: null };
     if (typeof own.data.kind !== 'string' || !admitted.has(own.data.kind)) return null;
     return { reader: preparedReader, value: own.data.kind as SubjectReactionKind };
   } catch {
+    signal.throwIfAborted();
     return null;
   }
 }
@@ -56,7 +71,10 @@ export async function readOwnReaction(
 /** `GET /v1/subjects/{id}/reaction`, which the generated client declarations do not carry yet. */
 type OwnReactionRoute = {
   reaction: {
-    get(options: { headers: { authorization: string } }): Promise<{ status: number; data?: unknown }>;
+    get(options: {
+      headers: { authorization: string };
+      fetch: { signal: AbortSignal };
+    }): Promise<{ status: number; data?: unknown }>;
   };
 };
 
@@ -132,7 +150,7 @@ export async function loadSubjectReactions(
   expectedReader?: string | null,
 ): Promise<SubjectReactions | null> {
   const [counts, own] = await Promise.all([
-    readReactionCounts(client, id),
+    readReactionCounts(client, id, request.signal),
     readOwnReaction(client, request, sessionEnv, id, expectedReader),
   ]);
   return counts ? { ...counts, value: own?.value ?? null, ...(own ? { reader: own.reader } : {}) } : null;

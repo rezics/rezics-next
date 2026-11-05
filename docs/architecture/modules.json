@@ -605,6 +605,15 @@
       "capabilities": []
     },
     {
+      "id": "public-reaction-recovery",
+      "kind": "UI/transport library",
+      "owner": "search",
+      "paths": ["apps/web/src/features/pages/public-reaction-recovery/**"],
+      "publicEntries": ["apps/web/src/features/pages/public-reaction-recovery/index.tsx"],
+      "allowedDependencies": [],
+      "capabilities": ["subject-public-reaction-recovery"]
+    },
+    {
       "id": "web-search",
       "kind": "UI/transport library",
       "owner": "search",
@@ -614,7 +623,8 @@
         "apps/web/src/features/pages/curation-opening-read/**",
         "apps/web/src/features/pages/subject-page-read-lifetime/**",
         "apps/web/src/features/pages/subject-canonical-lifetime/**",
-        "apps/web/src/features/pages/subject-catalogue-metadata/**"
+        "apps/web/src/features/pages/subject-catalogue-metadata/**",
+        "apps/web/src/features/pages/public-reaction-recovery/**"
       ],
       "publicEntries": [
         "apps/web/src/search/search.tsx",
@@ -641,7 +651,8 @@
         "search-personal-recovery",
         "curation-opening-read",
         "subject-page-read-lifetime",
-        "subject-catalogue-metadata"
+        "subject-catalogue-metadata",
+        "public-reaction-recovery"
       ],
       "capabilities": ["search-pages"]
     },
