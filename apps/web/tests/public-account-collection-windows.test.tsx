@@ -92,6 +92,7 @@ mock.module('../src/features/pages/agent-actions', () => ({
 }));
 const { Route } = await import('../src/routes/@{$handle}_.$view');
 const { createRoot } = await import('react-dom/client');
+const { m } = await import('../src/paraglide/messages.js');
 const { overwriteGetLocale } = await import('../src/paraglide/runtime.js');
 overwriteGetLocale(() => testLocale);
 
@@ -138,8 +139,21 @@ test('served named Collections route replaces sparse/empty windows, survives cur
     expect(requests).toHaveLength(1);
     fail = true;
     await click('continuation');
-    expect(link('retry')).not.toBeNull();
-    await click('retry');
+    const retry =
+      link('retry') ??
+      [...host.querySelectorAll('button')].find((button) => button.textContent?.trim() === m.public_account_retry());
+    expect(
+      retry,
+      JSON.stringify({
+        page: host.textContent,
+        calls: requests.map((url) => url.search),
+        href: router.state.location.href,
+      }),
+    ).toBeDefined();
+    await act(async () => {
+      retry!.click();
+      await settle();
+    });
     expect(requests.slice(-2).map((url) => url.searchParams.get('cursor'))).toEqual(['final', 'final']);
     expect(link('continuation')).toBeNull();
     expect(link('previous')).not.toBeNull();

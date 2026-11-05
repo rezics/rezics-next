@@ -299,7 +299,7 @@ function AccountList({ props, spec }: { props: Record<string, unknown>; spec: Li
   const rows = listed.filter(isRecord);
   if (spec.kind !== 'accountCollections' && rows.length > 20)
     return <Failed slot={spec.slot} id={id} title={title} locale={value.locale} />;
-  const items = rows.slice(0, spec.kind === 'accountCollections' ? Math.min(limit, 24) : limit);
+  const items = rows.slice(0, limit);
   const next = typeof section.body.next === 'string' && section.body.next ? section.body.next : null;
   const paged = props.paged === true;
   const list = (
