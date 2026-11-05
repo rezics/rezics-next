@@ -34,15 +34,29 @@ function accessDimensions(value: AccessWork): WorkDimensions {
 }
 
 function add(left: WorkDimensions, right: WorkDimensions): WorkDimensions {
-  return Object.fromEntries(
-    Object.keys(left).map((axis) => [axis, left[axis as keyof WorkDimensions] + right[axis as keyof WorkDimensions]]),
-  ) as WorkDimensions;
+  return {
+    candidateKeys: left.candidateKeys + right.candidateKeys,
+    nativeRows: left.nativeRows + right.nativeRows,
+    identityMetadataRows: left.identityMetadataRows + right.identityMetadataRows,
+    emptySeeks: left.emptySeeks + right.emptySeeks,
+    nativePoints: left.nativePoints + right.nativePoints,
+    witnessKeys: left.witnessKeys + right.witnessKeys,
+    statements: left.statements + right.statements,
+    bytes: left.bytes + right.bytes,
+  };
 }
 
 function subtract(left: WorkDimensions, right: WorkDimensions): WorkDimensions {
-  return Object.fromEntries(
-    Object.keys(left).map((axis) => [axis, left[axis as keyof WorkDimensions] - right[axis as keyof WorkDimensions]]),
-  ) as WorkDimensions;
+  return {
+    candidateKeys: left.candidateKeys - right.candidateKeys,
+    nativeRows: left.nativeRows - right.nativeRows,
+    identityMetadataRows: left.identityMetadataRows - right.identityMetadataRows,
+    emptySeeks: left.emptySeeks - right.emptySeeks,
+    nativePoints: left.nativePoints - right.nativePoints,
+    witnessKeys: left.witnessKeys - right.witnessKeys,
+    statements: left.statements - right.statements,
+    bytes: left.bytes - right.bytes,
+  };
 }
 
 function fits(value: WorkDimensions, limit: WorkDimensions): boolean {

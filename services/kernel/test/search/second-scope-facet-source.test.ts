@@ -225,6 +225,7 @@ test('Realm facet frontiers scan bounded sparse prefixes and evaluate the same a
   expect(sparse.subjects).toEqual([]);
   expect(prefixes).toBe(16);
   const decoded = JSON.parse(Buffer.from(sparse.frontier, 'base64url').toString('utf8')) as {
+    basis: string;
     anchor: number;
     after: string;
   };
