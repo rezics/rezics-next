@@ -2,7 +2,12 @@ import { expect, test } from 'bun:test';
 import { EventEmitter } from 'node:events';
 import type { Pool, PoolClient } from 'pg';
 import * as installed from '../../src/library/collection-source-work.ts';
-import { assembleLibraryIdentitySelectedBodies } from '../../src/library/identity-original-work.ts';
+import {
+  assembleLibraryIdentityOriginalComponents,
+  assembleLibraryIdentitySelectedBodies,
+  declareLibraryIdentityStatement,
+  LIBRARY_IDENTITY_CUSTODY_CAPTURE_STEP,
+} from '../../src/library/identity-original-work.ts';
 import {
   declareNativeIdentitySourceBasisStatements,
   libraryIdentitySelectedFootprint,
@@ -12,6 +17,33 @@ import { LIBRARY_IDENTITY_SELECTED_STATEMENTS } from '../../src/library/identity
 import { nativeSourceCustodyFootprint } from '../../src/library/native-source-custody.ts';
 import { libraryIdentityFootprint } from '../../src/library/identity-native-planner-work.ts';
 import { LIBRARY_IDENTITY_NATIVE_OPERATION_DECLARATIONS } from '../../src/library/identity-native-bounds.ts';
+
+function expectedSelectedTotal(body: ReturnType<typeof assembleLibraryIdentitySelectedBodies>) {
+  const page = LIBRARY_IDENTITY_SELECTED_STATEMENTS.page;
+  const pageStatement = declareLibraryIdentityStatement('planner', page.sql, page.values)!;
+  const basePage = assembleLibraryIdentityOriginalComponents([
+    { component: body.currentVerification, multiplicity: 1 },
+    { component: pageStatement, multiplicity: 1 },
+  ]);
+  const baseTotal = assembleLibraryIdentityOriginalComponents([
+    { component: basePage, multiplicity: 1 },
+    { component: body.currentVerification, multiplicity: 1 },
+    { component: body.exhaustedPageRecheck, multiplicity: 1 },
+  ]);
+  expect(baseTotal.work).toMatchObject({
+    candidateKeys: 1,
+    nativeRows: 785,
+    identityMetadataRows: 66,
+    nativePoints: 127,
+    witnessKeys: 0,
+    statements: 34,
+    emptySeeks: 70,
+  });
+  return assembleLibraryIdentityOriginalComponents([
+    { component: baseTotal, multiplicity: 1 },
+    { component: LIBRARY_IDENTITY_CUSTODY_CAPTURE_STEP, multiplicity: 1 },
+  ]);
+}
 
 test('installed selected Library declaration is own frozen data, covers the enforced schedule and excludes Source controls', () => {
   const field = Object.getOwnPropertyDescriptor(installed, 'IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION');
@@ -34,15 +66,7 @@ test('installed selected Library declaration is own frozen data, covers the enfo
   const body = assembleLibraryIdentitySelectedBodies();
   expect(declaration).toEqual({ work: body.total.work, engineRequests: 0 });
   expect(body.missing).toEqual([]);
-  expect(declaration.work).toMatchObject({
-    candidateKeys: 1,
-    nativeRows: 785,
-    identityMetadataRows: 66,
-    nativePoints: 127,
-    witnessKeys: 0,
-    statements: 34,
-    emptySeeks: 70,
-  });
+  expect(declaration.work).toEqual(expectedSelectedTotal(body).work);
 });
 
 test('installed pricing and actual dispatch share every selected literal and bounded current native projection', () => {

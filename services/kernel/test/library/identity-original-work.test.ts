@@ -1,12 +1,24 @@
 import { expect, test } from 'bun:test';
 import { EventEmitter } from 'node:events';
 import type { Pool } from 'pg';
+import { BOUND_AXES } from '@rezics/bounds';
 import {
   assembleLibraryIdentityOriginalComponents,
+  declareLibraryIdentityCustodyOperation,
   declareLibraryIdentityStatement,
+  LIBRARY_IDENTITY_CUSTODY_CAPTURE_STEP,
   LIBRARY_IDENTITY_CHECKOUT_WORK,
   LIBRARY_IDENTITY_ORIGINAL_MISSING_OPERANDS,
 } from '../../src/library/identity-original-work.ts';
+import {
+  NATIVE_SOURCE_CUSTODY_OPERATION_PLAN,
+  createNativeSourceCustodyOperationUse,
+  nativeSourceCustodyOperationAllows,
+  nativeSourceCustodyOperationBound,
+  nativeSourceCustodyQueries,
+  nativeSourceCustodyStatementBound,
+  nativeSourceCustodyWorkDimensions,
+} from '../../src/library/native-source-custody-bounds.ts';
 import { NativeCollectionWork } from '../../src/library/collection-source-work.ts';
 import {
   readLibraryScopeEffectsPageWithWork,
@@ -130,15 +142,71 @@ test('unknown statements, unadmitted job projections, invalid multiplicities and
   expect(Object.keys(declaration).sort()).toEqual(['engineRequests', 'work']);
   expect(Object.isFrozen(declaration)).toBe(true);
   expect(declaration.engineRequests).toBe(0);
-  expect(declaration.work).toMatchObject({
-    candidateKeys: 1,
-    nativeRows: 785,
-    identityMetadataRows: 66,
-    nativePoints: 127,
-    witnessKeys: 0,
-    statements: 34,
-    emptySeeks: 70,
-  });
+  const body = assembleLibraryIdentitySelectedBodies();
+  expect(declaration.work).toEqual(expectedSelectedTotal(body).work);
+});
+
+test('native custody statements share one closed nine-axis operation plan and reject wrong bindings', () => {
+  const query = nativeSourceCustodyQueries.raw.member;
+  const valid: Readonly<Record<string, unknown>> = {
+    route: 0,
+    account_route: 0,
+    partition_no: 0,
+    collection_id: id,
+    account_id: id,
+    incarnation: `${id}:0`,
+    generation: '1',
+    scope: 'curated',
+    owner_epoch: 1,
+    receiving_epoch: '1',
+    effect_key: 'effect',
+    output_generation: null,
+    publication_transaction_id: null,
+    publication_position: null,
+    capture_id: id,
+    driver: 'member',
+    after: '',
+    tie: id,
+    session_id: id,
+    scanned: '0',
+    limit: 1,
+    transaction_id: id,
+    hold_id: id,
+  };
+  const values = query.params.map((name) => valid[name]);
+  const bound = nativeSourceCustodyStatementBound(query.sql, values);
+  expect(bound).toBeDefined();
+  expect(Object.keys(bound!).sort()).toEqual([...BOUND_AXES].sort());
+  expect(bound!.engineRequests).toBe(0);
+  expect(nativeSourceCustodyStatementBound(query.sql, values.map((value, index) =>
+    query.params[index] === 'tie' ? 'wrong' : value,
+  ))).toBeUndefined();
+  expect(nativeSourceCustodyStatementBound(`${query.sql} SELECT 1`, values)).toBeUndefined();
+  expect(nativeSourceCustodyOperationAllows('capturePage', query)).toBe(true);
+  expect(nativeSourceCustodyOperationAllows('readAndHold', query)).toBe(false);
+  expect(Object.isFrozen(NATIVE_SOURCE_CUSTODY_OPERATION_PLAN)).toBe(true);
+  expect(Object.isFrozen(NATIVE_SOURCE_CUSTODY_OPERATION_PLAN.operations.capturePage.declaration.bindings)).toBe(true);
+  const capturePageUse = createNativeSourceCustodyOperationUse('capturePage');
+  expect(capturePageUse.checkout()).toBe(true);
+  expect(capturePageUse.checkout()).toBe(false);
+  expect(capturePageUse.statement(query)).toBe(true);
+  expect(capturePageUse.statement(query)).toBe(false);
+  const branchUse = createNativeSourceCustodyOperationUse('capturePage');
+  expect(branchUse.statement(nativeSourceCustodyQueries.start)).toBe(true);
+  expect(branchUse.statement(nativeSourceCustodyQueries.read)).toBe(false);
+
+  for (const operation of Object.keys(NATIVE_SOURCE_CUSTODY_OPERATION_PLAN.operations) as Array<
+    keyof typeof NATIVE_SOURCE_CUSTODY_OPERATION_PLAN.operations
+  >) {
+    const declaration = NATIVE_SOURCE_CUSTODY_OPERATION_PLAN.operations[operation];
+    expect(Object.keys(declaration.ceiling).sort()).toEqual([...BOUND_AXES].sort());
+    expect(declaration.ceiling.engineRequests).toBe(0);
+    expect(declaration.cost.requestBytes + declaration.cost.projectionBytes).toBe(declaration.ceiling.bytes);
+  }
+  const retained = declareLibraryIdentityCustodyOperation('revalidateHold');
+  expect(retained.work).toEqual(
+    nativeSourceCustodyWorkDimensions(nativeSourceCustodyOperationBound('revalidateHold')),
+  );
 });
 
 test('saved-job bytes require same-work size evidence and reject overflow instead of using a fixed estimate', () => {
@@ -298,6 +366,33 @@ import transform from '../../src/semantic/identity-epoch-store-library-transform
 import originals from '../../src/semantic/identity-epoch-store-select-original.sql';
 import { nativeCollectionPartitionMetadataSQL } from '../../src/library/collection-source-native.ts';
 
+function expectedSelectedTotal(body: ReturnType<typeof assembleLibraryIdentitySelectedBodies>) {
+  const page = LIBRARY_IDENTITY_SELECTED_STATEMENTS.page;
+  const pageStatement = declareLibraryIdentityStatement('planner', page.sql, page.values)!;
+  const basePage = assembleLibraryIdentityOriginalComponents([
+    { component: body.currentVerification, multiplicity: 1 },
+    { component: pageStatement, multiplicity: 1 },
+  ]);
+  const baseTotal = assembleLibraryIdentityOriginalComponents([
+    { component: basePage, multiplicity: 1 },
+    { component: body.currentVerification, multiplicity: 1 },
+    { component: body.exhaustedPageRecheck, multiplicity: 1 },
+  ]);
+  expect(baseTotal.work).toMatchObject({
+    candidateKeys: 1,
+    nativeRows: 785,
+    identityMetadataRows: 66,
+    nativePoints: 127,
+    witnessKeys: 0,
+    statements: 34,
+    emptySeeks: 70,
+  });
+  return assembleLibraryIdentityOriginalComponents([
+    { component: baseTotal, multiplicity: 1 },
+    { component: LIBRARY_IDENTITY_CUSTODY_CAPTURE_STEP, multiplicity: 1 },
+  ]);
+}
+
 test('selected Library bodies compose three current paths and one limit1 page, excluding disjoint Core controls', () => {
   const body = assembleLibraryIdentitySelectedBodies();
   expect(body.multiplicities).toEqual({
@@ -310,15 +405,7 @@ test('selected Library bodies compose three current paths and one limit1 page, e
   });
   expect(body.multiplicities).toBe(LIBRARY_IDENTITY_SELECTED_MULTIPLICITIES);
   expect(body.coreDispatch).toBe(COMMAND_DISPATCH_ALLOWANCE);
-  expect(body.total.work).toMatchObject({
-    candidateKeys: 1,
-    nativeRows: 785,
-    identityMetadataRows: 66,
-    nativePoints: 127,
-    witnessKeys: 0,
-    statements: 34,
-    emptySeeks: 70,
-  });
+  expect(body.total.work).toEqual(expectedSelectedTotal(body).work);
   expect(body.total.engineRequests).toBe(0);
   const recomposed = assembleLibraryIdentityOriginalComponents([
     { component: body.page, multiplicity: 1 },

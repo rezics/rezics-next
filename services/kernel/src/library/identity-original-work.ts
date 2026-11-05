@@ -3,7 +3,12 @@ import type { WorkDimensions } from './collection-source.ts';
 import type { NativeCollectionWork } from './collection-source-work.ts';
 import { libraryIdentityFootprint } from './identity-native-planner-work.ts';
 import { nativeCollectionFootprint } from './collection-source-native.ts';
-import { nativeSourceCustodyFootprint } from './native-source-custody.ts';
+import {
+  NATIVE_SOURCE_CUSTODY_CAPTURE_STEP_BOUND,
+  nativeSourceCustodyStatementBound,
+  type NativeSourceCustodyOperation,
+  nativeSourceCustodyOperationBound,
+} from './native-source-custody-bounds.ts';
 import { nativePublicOutputFootprint } from './native-public-output-work.ts';
 import {
   declareNativeIdentitySourceBasisStatements,
@@ -83,18 +88,30 @@ export function declareLibraryIdentityStatement(
   values: readonly unknown[],
   work?: NativeCollectionWork,
 ): LibraryIdentityOriginalComponent | undefined {
+  if (owner === 'native-custody') {
+    const bound = nativeSourceCustodyStatementBound(sql, values);
+    return bound ? declared(bound) : undefined;
+  }
   const bound =
     owner === 'planner'
       ? libraryIdentityFootprint(sql, values, work)
       : owner === 'native-collection'
         ? nativeCollectionFootprint(sql, values, work)
-        : owner === 'native-custody'
-          ? nativeSourceCustodyFootprint(sql, values)
-          : owner === 'native-public-output'
-            ? nativePublicOutputFootprint(sql, values, work)
-            : undefined;
+        : owner === 'native-public-output'
+          ? nativePublicOutputFootprint(sql, values, work)
+          : undefined;
   return bound ? declared(asBound(bound)) : undefined;
 }
+
+/** Operation-level custody term from the same declarations used by SQL dispatch. */
+export function declareLibraryIdentityCustodyOperation(
+  operation: NativeSourceCustodyOperation,
+): LibraryIdentityOriginalComponent {
+  return declared(nativeSourceCustodyOperationBound(operation));
+}
+
+/** The Source-selected page can dispatch one capture page or its terminal finish step. */
+export const LIBRARY_IDENTITY_CUSTODY_CAPTURE_STEP = declared(NATIVE_SOURCE_CUSTODY_CAPTURE_STEP_BOUND);
 
 /** Pool checkout itself has no SQL, result projection, candidate or witness. */
 export const LIBRARY_IDENTITY_CHECKOUT_WORK = declared(
@@ -210,6 +227,7 @@ export function assembleLibraryIdentitySelectedBodies() {
   const page = assembleLibraryIdentityOriginalComponents([
     { component: verification, multiplicity: 1 },
     { component: statement('page'), multiplicity: 1 },
+    { component: LIBRARY_IDENTITY_CUSTODY_CAPTURE_STEP, multiplicity: 1 },
   ]);
   const total = assembleLibraryIdentityOriginalComponents([
     { component: page, multiplicity: LIBRARY_IDENTITY_SELECTED_MULTIPLICITIES.effectPages },
