@@ -25,7 +25,7 @@ const review = (id: string, body: unknown) => json('POST', `${base}/${id}:review
 const apply = (id: string, rows: { ordinal: number; reviewId: string }[]) =>
   json('POST', `${base}/${id}:apply`, { rows });
 beforeAll(async () => {
-  f = await createProfileEntryFixture();
+  f = await createProfileEntryFixture({ gameUnits: ['minute', 'episode'] });
   const producer = await f.identity(['subject:batch_write', 'subject:create', 'subject:read']);
   await createGrantCommands({ pool: f.pool, access: f.access, managementAction: 'access:grant' }).create(
     { pool: f.pool, actor: f.steward.actor, deadline: deadlineFor(30000) },
@@ -115,6 +115,99 @@ test('own HTTP upload, admitted VN identifier, explicit unmatched resolution and
   expect(await json('GET', `${base}/${id}/source`)).toEqual({ xml: source });
   expect((await f.send('other', 'POST', `${base}/${id}:apply`, { rows: selection })).status).toBe(404);
   await json('DELETE', `${base}/${id}`);
+}, 120000);
+test('VNDB Progress requires its declared current-profile unit, applies selected zero and preserves occurrence state and other measures', async () => {
+  const sessions = createSessionCommands({ pool: f.pool, access: f.access, tokens: f.tokens });
+  const started = await sessions.startSession(
+    f.owner.actor,
+    {
+      subjectId: matched,
+      versionSubjectId: null,
+      mode: 'scalar_amount',
+      unit: 'minute',
+      total: null,
+      additionalMeasures: [{ unit: 'episode', total: null }],
+    },
+    entryKey(),
+  );
+  const minute = await sessions.recordProgress(
+    f.owner.actor,
+    started.value.id,
+    { revision: started.value.revision, measureId: 'minute', amount: '2' },
+    entryKey(),
+  );
+  const episode = await sessions.recordProgress(
+    f.owner.actor,
+    started.value.id,
+    { revision: minute.value.revision, measureId: 'episode', amount: '6' },
+    entryKey(),
+  );
+
+  const id = (await upload(xml(vn(vnId, '<label label="Playing"/><progress unit="minute">0</progress>')))).uploadId;
+  const reviewed = await review(id, {
+    ordinal: 0,
+    action: 'state',
+    targetId: matched,
+    state: 'completed',
+    replace: true,
+    progress: {
+      occurrence: { kind: 'existing', sessionId: started.value.id },
+      measures: [{ field: 'progress', action: 'adopt', replace: true }],
+    },
+  });
+  expect(reviewed.progress).toMatchObject({
+    complete: false,
+    measures: [{ field: 'progress', unit: 'minute', status: 'unattempted', sourceAmount: '0', currentAmount: '2' }],
+  });
+  const applied = await apply(id, [{ ordinal: 0, reviewId: reviewed.reviewId }]);
+  expect(applied.outcomes[0]).toMatchObject({
+    status: 'applied',
+    progress: {
+      complete: true,
+      measures: [{ field: 'progress', unit: 'minute', status: 'applied', sourceAmount: '0' }],
+      readback: {
+        sessionId: started.value.id,
+        state: 'active',
+        unit: 'minute',
+        amount: '0',
+        measures: [{ unit: 'episode', amount: '6' }],
+      },
+    },
+  });
+  expect((await f.commands.readEntry(f.owner.actor, matched)).state).toBe('completed');
+  const current = await json('GET', `/v1/progressSessions/${started.value.id}`);
+  expect(current.progressSession).toMatchObject({
+    id: started.value.id,
+    state: 'active',
+    unit: 'minute',
+    amount: '0',
+    revision: episode.value.revision + 1,
+    measures: [{ unit: 'episode', amount: '6' }],
+  });
+  expect(applied.outcomes[0].progress.readback.revision).toBe(current.progressSession.revision);
+
+  const unsupportedId = (await upload(xml(vn(vnId, '<progress unit="chapter">4</progress>')))).uploadId;
+  const unsupportedReview = await review(unsupportedId, {
+    ordinal: 0,
+    action: 'progress',
+    targetId: matched,
+    progress: {
+      occurrence: { kind: 'existing', sessionId: started.value.id },
+      measures: [{ field: 'progress', action: 'adopt' }],
+    },
+  });
+  expect(unsupportedReview.progress.measures[0]).toMatchObject({ status: 'unsupported', unit: 'chapter' });
+  const unsupported = await apply(unsupportedId, [{ ordinal: 0, reviewId: unsupportedReview.reviewId }]);
+  expect(unsupported.outcomes[0].progress.measures[0].status).toBe('unsupported');
+  expect((await json('GET', `/v1/progressSessions/${started.value.id}`)).progressSession).toMatchObject({
+    revision: current.progressSession.revision,
+    amount: '0',
+    measures: [{ unit: 'episode', amount: '6' }],
+  });
+  const retained = await json('GET', `${base}/${unsupportedId}`);
+  expect(retained.rows[0].fields.progress).toMatchObject({ kind: 'value', raw: '4', value: '4' });
+  await json('DELETE', `${base}/${id}`);
+  await json('DELETE', `${base}/${unsupportedId}`);
 }, 120000);
 test('a changed export updates the same matched Library entry and current readback without creating another entry', async () => {
   const before = await f.inspect();

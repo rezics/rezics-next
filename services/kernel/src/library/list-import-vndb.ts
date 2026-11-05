@@ -17,6 +17,15 @@ import type { LabelCommandAdmission } from './label-command-admission.ts';
 import { createSessionCommands, ProgressConflictError, type ProgressSessionJournalAdmission } from './sessions.ts';
 import type { Entry } from './entry-model.ts';
 import { readLibraryProfileSourceObservation } from './profile-source.ts';
+import {
+  executeProgressAdoption,
+  progressResults,
+  reviewProgressAdoption,
+  type ProgressAdoptionCheckpoint,
+  type ProgressAdoptionInput,
+  type ProgressAdoptionPlan,
+  type ProgressSourceValue,
+} from './list-import-progress-adoption.ts';
 import { vndbSourceFingerprint, type VndbEntryReview } from './list-import-vndb-admission.ts';
 import { parseVndb, VNDB_LIMITS, type SourceValue, type VndbRow } from './list-import-vndb-parser.ts';
 import {
@@ -59,7 +68,15 @@ const VNDB_DECISIONS_BYTES = 8_388_608;
 export type VndbScoreSelection = { kind: 'vote'; units: number } | { kind: 'clear' };
 export type VndbChoice =
   | { ordinal: number; action: 'skip' | 'retain'; targetId?: string }
-  | { ordinal: number; action: 'state'; targetId?: string; state: string; replace?: boolean }
+  | {
+      ordinal: number;
+      action: 'state';
+      targetId?: string;
+      state: string;
+      replace?: boolean;
+      progress?: ProgressAdoptionInput;
+    }
+  | { ordinal: number; action: 'progress'; targetId?: string; progress: ProgressAdoptionInput }
   | {
       ordinal: number;
       action: 'score';
@@ -113,7 +130,7 @@ export type VndbDateApplyInput = {
 type Decision = {
   reviewId: string;
   status: 'reviewed' | 'applying' | 'applied' | 'skipped' | 'unsupported' | 'stale' | 'failed';
-  stateAction?: 'state' | 'skip' | 'retain' | null;
+  stateAction?: 'state' | 'skip' | 'retain' | 'progress' | null;
   targetId: string | null;
   state: string | null;
   baseline: { state: string; revision: number; incarnationId: string | null } | null;
@@ -123,6 +140,11 @@ type Decision = {
   receipt?: { partition: number; epoch: number; position: string; transactionId: string };
   matchDigest?: string;
   metadata?: EntryImportMetadataReview[];
+  progress?: {
+    plan: ProgressAdoptionPlan;
+    checkpoint?: ProgressAdoptionCheckpoint;
+    sourceFingerprint: string;
+  };
   score?: ScoreDecision;
   consumptionDateReview?: ImportConsumptionDateReview;
   consumptionDateIntent?: ImportConsumptionDateIntent;
@@ -141,6 +163,17 @@ type VndbDateAdmissionIdentity = {
   occurrenceProfileBinding: unknown;
   clientId: string;
   requestedBy: string | null;
+};
+type VndbProgressReadback = {
+  sessionId: string;
+  startedAt: string;
+  transactionId: string;
+  revision: number;
+  state: string;
+  mode: string;
+  unit: string;
+  amount: string | null;
+  measures: { unit: string; amount: string | null }[];
 };
 
 type NativeScoreReviewResult =
@@ -223,7 +256,56 @@ function sourceScoreReason(source: SourceValue): { reason: string; exactUnits: n
       };
 }
 
-function stateActionOf(decision: Decision): 'state' | 'skip' | 'retain' | null {
+function vndbProgressSources(row: VndbRow): ProgressSourceValue[] {
+  const progress = row.fields.progress ?? { kind: 'missing' as const, raw: null };
+  const measure = row.fields.progressMeasure;
+  const unit =
+    measure?.kind === 'value' && typeof measure.value === 'string' && measure.value.length > 0
+      ? measure.value
+      : null;
+  const raw = progress.raw ?? (typeof progress.value === 'string' ? progress.value : null);
+  const lexeme = raw?.trim() ?? '';
+  let state: ProgressSourceValue['state'];
+  if (progress.kind === 'missing') state = 'missing';
+  else if (progress.kind === 'unknown' || (progress.kind === 'value' && (lexeme === '' || lexeme === 'unknown')))
+    state = 'unknown';
+  else if (progress.kind === 'invalid' || !/^\d+(?:\.\d+)?$/.test(lexeme) || !Number.isFinite(Number(lexeme)))
+    state = 'invalid';
+  else state = Number(lexeme) === 0 ? 'zero' : 'value';
+  return [
+    {
+      field: 'progress',
+      unit,
+      state,
+      ...(state === 'zero' || state === 'value' ? { amount: lexeme } : {}),
+    },
+  ];
+}
+
+function progressView(
+  plan: ProgressAdoptionPlan,
+  checkpoint: ProgressAdoptionCheckpoint | null | undefined,
+  readback: VndbProgressReadback | null = null,
+) {
+  const occurrence =
+    checkpoint?.occurrence ??
+    (plan.occurrence.kind === 'existing'
+      ? {
+          sessionId: plan.occurrence.sessionId,
+          startedAt: plan.occurrence.startedAt,
+          transactionId: plan.occurrence.transactionId,
+          revision: plan.occurrence.revision,
+        }
+      : null);
+  return {
+    occurrence,
+    complete: checkpoint?.complete ?? false,
+    measures: progressResults(plan, checkpoint),
+    readback,
+  };
+}
+
+function stateActionOf(decision: Decision): 'state' | 'skip' | 'retain' | 'progress' | null {
   if (decision.stateAction !== undefined) return decision.stateAction;
   if (decision.state !== null) return 'state';
   if (decision.status === 'skipped') return 'skip';
@@ -343,6 +425,10 @@ const pendingState = (decision: Decision | undefined) =>
 const pendingAdoption = (decision: Decision | undefined) =>
   !!(
     decision?.metadata?.some((item) => item.confirmation && !item.confirmation.outcome) ||
+    (decision?.progress?.checkpoint &&
+      !decision.progress.checkpoint.complete &&
+      (decision.progress.checkpoint.startAttempted ||
+        Object.values(decision.progress.checkpoint.steps).some((step) => step.attempted))) ||
     (decision?.consumptionDateIntent?.patch &&
       (!decision.consumptionDateIntent.outcome || decision.consumptionDateIntent.outcome.status === 'failed'))
   );
@@ -440,6 +526,23 @@ export function createVndbImport(config: Config) {
       async (tx) => ({ value: await body(tx, account), events: updated(account.accountId) }),
     );
   }
+  async function save(tx: import('../command/command.ts').CommandTransaction, account: AccountActor, id: string, ordinal: number, decision: Decision) {
+    const route = requireRoute(account.accountId);
+    const stored = await tx.query<{ decisions: Record<string, Decision> }>(
+      'SELECT decisions FROM library.vndb_import WHERE route=$1 AND account_id=$2 AND upload_id=$3 FOR UPDATE',
+      [route, account.accountId, id],
+    );
+    const current = stored.rows[0];
+    if (!current) throw new LibraryConflictError();
+    const decisions = { ...current.decisions, [String(ordinal)]: decision };
+    if (Buffer.byteLength(JSON.stringify(decisions)) > VNDB_DECISIONS_BYTES)
+      throw new ProblemError('content_too_large');
+    const updatedRow = await tx.query(
+      'UPDATE library.vndb_import SET decisions=$4::jsonb WHERE route=$1 AND account_id=$2 AND upload_id=$3',
+      [route, account.accountId, id, JSON.stringify(decisions)],
+    );
+    if (updatedRow.rowCount !== 1) throw new LibraryConflictError();
+  }
   async function current(actor: Actor, targetId: string, at?: AuthoritativeTime) {
     const observedAt = at ?? (await authorized(actor));
     const source = await readLibraryProfileSourceObservation(
@@ -458,6 +561,15 @@ export function createVndbImport(config: Config) {
       source: vndbSourceFingerprint(source),
       states: source.source.kind === 'supported' ? (source.source.profile.entryStateSet?.states ?? []) : [],
       profileSupported: source.source.kind === 'supported',
+      profile: source.source.kind === 'supported' ? source.source.profile : null,
+      profileBinding:
+        source.source.kind === 'supported'
+          ? {
+              pin: source.source.pin,
+              epoch: source.anchor.identityEpoch.toString(),
+              acceptingType: source.anchor.acceptingType,
+            }
+          : null,
       baseline: entry
         ? { state: entry.state, revision: entry.revision, incarnationId: entry.incarnationId ?? null }
         : null,
@@ -599,7 +711,13 @@ export function createVndbImport(config: Config) {
         ...row,
         match: matching,
         target: target ? { targetId: target.targetId, states: target.states, baseline: target.baseline } : null,
-        decision: decision && stateActionOf(decision) !== null ? publicDecision(decision) : null,
+        decision:
+          decision && stateActionOf(decision) !== null
+            ? {
+                ...publicDecision(decision),
+                progress: decision.progress ? await progressResponse(actor, decision.progress) : null,
+              }
+            : null,
         scoreDecision: decision?.score ? publicScoreDecision(decision.score) : null,
         nativeScore,
         consumptionDateReview: decision?.consumptionDateReview
@@ -626,7 +744,55 @@ export function createVndbImport(config: Config) {
   }
   function publicDecision(decision: Decision) {
     const { reviewId, status, targetId, state, baseline, replace } = decision;
-    return { reviewId, status, targetId, state, baseline, replace, action: stateActionOf(decision) };
+    return {
+      reviewId,
+      status,
+      targetId,
+      state,
+      baseline,
+      replace,
+      action: stateActionOf(decision),
+      progress: decision.progress ? progressView(decision.progress.plan, decision.progress.checkpoint) : null,
+    };
+  }
+  async function progressResponse(actor: Actor, progress: NonNullable<Decision['progress']>) {
+    const plan = progress.plan,
+      checkpoint = progress.checkpoint,
+      view = progressView(plan, checkpoint);
+    if (!view.occurrence) return view;
+    let readback: VndbProgressReadback | null = null;
+    try {
+      readback = await sessions.readPresentedSession(actor, view.occurrence.sessionId, async (session) => ({
+        sessionId: session.id,
+        startedAt: session.startedAt,
+        transactionId: session.transactionId,
+        revision: session.revision,
+        state: session.state,
+        mode: session.mode,
+        unit: session.unit,
+        amount: session.amount,
+        measures: (session.measures ?? []).map((measure) => ({ unit: measure.unit, amount: measure.amount ?? null })),
+      }));
+    } catch (error) {
+      if (
+        !(error instanceof LibraryNotFoundError) &&
+        !(error instanceof ProgressConflictError) &&
+        !(error instanceof ProblemError && ['not_found', 'conflict', 'unsupported_library_profile'].includes(error.code))
+      )
+        throw error;
+    }
+    const result = progressView(plan, checkpoint, readback);
+    return readback
+      ? {
+          ...result,
+          occurrence: {
+            sessionId: readback.sessionId,
+            startedAt: readback.startedAt,
+            transactionId: readback.transactionId,
+            revision: readback.revision,
+          },
+        }
+      : result;
   }
   function publicScoreDecision({
     reviewId,
@@ -758,11 +924,27 @@ export function createVndbImport(config: Config) {
     const matching = await match(actor, row);
     const targetId = choice.targetId ?? (matching.candidates.length === 1 ? matching.candidates[0] : undefined);
     const target = targetId ? await current(actor, targetId) : null;
-    if (
-      choice.action === 'state' &&
-      (row.kind !== 'vn' || !target || !choice.state || !target.states.some((s) => s.id === choice.state))
-    )
+    if (choice.action === 'state' && (row.kind !== 'vn' || !target || !choice.state || !target.states.some((s) => s.id === choice.state)))
       throw new ProblemError('invalid_request');
+    if ((choice.action === 'state' || choice.action === 'progress') && (!target || row.kind !== 'vn'))
+      throw new ProblemError('invalid_request');
+    const progressInput = choice.action === 'progress' || choice.action === 'state' ? choice.progress : undefined;
+    if (progressInput && (!target?.profile || !target.profileBinding))
+      throw new ProblemError('unsupported_library_profile');
+    const reviewId = randomUUID();
+    const progressPlan =
+      progressInput && target?.profile && target.profileBinding
+        ? await reviewProgressAdoption(
+            sessions,
+            actor,
+            target.targetId,
+            target.profile,
+            target.profileBinding,
+            vndbProgressSources(row),
+            progressInput,
+            `vndb-progress-start:${hash({ id, ordinal: choice.ordinal, reviewId })}`,
+          )
+        : undefined;
     return mutation(actor, 'review', key, { id, choice }, async (tx, account) => {
       const stored = await tx.query<Upload>(
         `SELECT * FROM library.vndb_import
@@ -773,7 +955,6 @@ export function createVndbImport(config: Config) {
       const before = stored.rows[0].decisions[choice.ordinal];
       if (before && ['applying', 'applied', 'failed'].includes(before.status)) throw new ProblemError('conflict');
       if (pendingAdoption(before)) throw new ProblemError('conflict');
-      const reviewId = randomUUID();
       const matchDigest = entryImportMetadataDigest(matching);
       const scoreCompatible =
         before?.score !== undefined &&
@@ -794,6 +975,9 @@ export function createVndbImport(config: Config) {
         guard: target ? { uploadId: id, ordinal: choice.ordinal, reviewId, source: target.source } : null,
         matchDigest,
         ...(scoreCompatible ? { score: before!.score } : {}),
+        ...(progressPlan
+          ? { progress: { plan: progressPlan, sourceFingerprint: hash(row) } }
+          : {}),
         // A refreshed source review has its own consent, even on the same target.
         // Old metadata tokens must not be transplanted into a corrected match.
         metadata: [],
@@ -1454,6 +1638,237 @@ export function createVndbImport(config: Config) {
       ...(recordCommand === undefined ? {} : { record: recordCommand }),
       ...(signal === undefined ? {} : { signal }),
     });
+  }
+
+  async function applyEntry(
+    actor: Actor,
+    id: string,
+    choice: { ordinal: number; reviewId: string },
+    initial: Decision | undefined,
+    record: (outcome: CommandOutcome<unknown>) => void,
+  ) {
+    const staleOutcome = { ordinal: choice.ordinal, reviewId: choice.reviewId, status: 'stale' };
+    if (!initial || initial.reviewId !== choice.reviewId || stateActionOf(initial) === null) return staleOutcome;
+    let decision = initial;
+    const action = stateActionOf(decision)!;
+    let status = decision.status;
+    const pendingEntry = decision.status === 'applying' || decision.status === 'failed';
+
+    if (action === 'skip') status = 'skipped';
+    else if (action === 'retain') status = 'unsupported';
+    else if (action === 'state' && decision.status !== 'applied' && !pendingEntry) {
+      const retained = await load(actor, id, true);
+      const row = retained.rows[choice.ordinal];
+      const matching = row ? await match(actor, row) : null;
+      const target = decision.targetId ? await current(actor, decision.targetId) : null;
+      if (
+        !row ||
+        hash(row) !== (decision.progress?.sourceFingerprint ?? hash(row)) ||
+        !target ||
+        !decision.guard ||
+        decision.guard.uploadId !== id ||
+        decision.guard.ordinal !== choice.ordinal ||
+        decision.guard.reviewId !== decision.reviewId ||
+        target.source !== decision.guard.source ||
+        !matching ||
+        entryImportMetadataDigest(matching) !== decision.matchDigest ||
+        !decision.state ||
+        !target.states.some((candidate) => candidate.id === decision.state) ||
+        (decision.baseline?.revision ?? null) !== (target.baseline?.revision ?? null) ||
+        (decision.baseline?.incarnationId ?? null) !== (target.baseline?.incarnationId ?? null)
+      ) {
+        status = 'stale';
+      } else if (target.baseline && !decision.replace) {
+        status = 'skipped';
+      } else {
+        const startKey = `vndb:${id}:${choice.ordinal}:${choice.reviewId}:entry:start`;
+        await mutation(actor, 'apply-entry-start', startKey, { id, ordinal: choice.ordinal, reviewId: choice.reviewId }, async (tx, account) => {
+          const locked = await tx.query<{ decision: Decision | null; active: boolean }>(
+            `SELECT decisions->$4::text AS decision,state='active' AND expires_at>clock_timestamp() AS active
+             FROM library.vndb_import WHERE route=$1 AND account_id=$2 AND upload_id=$3 FOR UPDATE`,
+            [requireRoute(account.accountId), account.accountId, id, String(choice.ordinal)],
+          );
+          const currentDecision = locked.rows[0]?.decision;
+          if (
+            !currentDecision ||
+            currentDecision.reviewId !== choice.reviewId ||
+            (!locked.rows[0]?.active && !pendingState(currentDecision))
+          )
+            throw new LibraryConflictError();
+          await save(tx, account, id, choice.ordinal, { ...currentDecision, status: 'applying' });
+        });
+        decision = { ...decision, status: 'applying' };
+        try {
+          const result = await entries.putEntry(
+            actor,
+            decision.targetId!,
+            {
+              state: decision.state,
+              ...(decision.baseline
+                ? { revision: decision.baseline.revision, incarnationId: decision.baseline.incarnationId }
+                : {}),
+            },
+            decision.commandKey,
+            decision.guard,
+          );
+          record(result);
+          status = 'applied';
+        } catch (error) {
+          if (error instanceof GrantDeniedError) throw new ProblemError('forbidden');
+          if (
+            error instanceof LibraryConflictError ||
+            error instanceof LibraryNotFoundError ||
+            error instanceof LibraryEntryInvalidError ||
+            (error instanceof ProblemError &&
+              ['conflict', 'not_found', 'unsupported_library_profile'].includes(error.code))
+          )
+            status = 'stale';
+          else throw error;
+        }
+      }
+    } else if (action === 'state' && pendingEntry) {
+      try {
+        const result = await entries.putEntry(
+          actor,
+          decision.targetId!,
+          {
+            state: decision.state!,
+            ...(decision.baseline
+              ? { revision: decision.baseline.revision, incarnationId: decision.baseline.incarnationId }
+              : {}),
+          },
+          decision.commandKey,
+          decision.guard!,
+        );
+        record(result);
+        status = 'applied';
+      } catch (error) {
+        if (error instanceof GrantDeniedError) throw new ProblemError('forbidden');
+        if (
+          error instanceof LibraryConflictError ||
+          error instanceof LibraryNotFoundError ||
+          error instanceof LibraryEntryInvalidError ||
+          (error instanceof ProblemError && ['conflict', 'not_found', 'unsupported_library_profile'].includes(error.code))
+        )
+          status = 'stale';
+        else throw error;
+      }
+    }
+
+    let progress: ReturnType<typeof progressView> | null = null;
+    if (decision.progress && decision.progress.sourceFingerprint === hash((await load(actor, id, true)).rows[choice.ordinal])) {
+      const reviewedProgress = decision.progress;
+      const checkpoint = await executeProgressAdoption(actor, sessions, reviewedProgress.plan, reviewedProgress.checkpoint, {
+        async canceled() {
+          try {
+            const upload = await load(actor, id, true);
+            return upload.state !== 'active' || upload.expires_at.getTime() <= Date.now();
+          } catch (error) {
+            if (error instanceof LibraryNotFoundError) return true;
+            throw error;
+          }
+        },
+        async binding() {
+          const upload = await load(actor, id, true);
+          const row = upload.rows[choice.ordinal];
+          const currentDecision = upload.decisions[choice.ordinal];
+          if (
+            upload.state !== 'active' ||
+            upload.expires_at.getTime() <= Date.now() ||
+            !row ||
+            hash(row) !== reviewedProgress.sourceFingerprint ||
+            !currentDecision ||
+            currentDecision.reviewId !== choice.reviewId ||
+            currentDecision.matchDigest !== decision.matchDigest
+          )
+            return null;
+          const matching = await match(actor, row);
+          const target = await current(actor, reviewedProgress.plan.subjectId);
+          if (
+            entryImportMetadataDigest(matching) !== currentDecision.matchDigest ||
+            !target ||
+            target.source !== currentDecision.guard?.source ||
+            !target.profileBinding
+          )
+            return null;
+          return target.profileBinding;
+        },
+        async save(next, admission = false) {
+          const digest = hash(next);
+          try {
+            const saved = await mutation(
+              actor,
+              admission ? 'progress-admission' : 'progress-checkpoint',
+              `vndb:${id}:${choice.ordinal}:${choice.reviewId}:progress:${admission ? 'admission' : 'checkpoint'}:${digest}`,
+              { id, ordinal: choice.ordinal, reviewId: choice.reviewId, admission, digest },
+              async (tx, account) => {
+                const locked = await tx.query<{ decision: Decision | null; active: boolean }>(
+                  `SELECT decisions->$4::text AS decision,state='active' AND expires_at>clock_timestamp() AS active
+                   FROM library.vndb_import WHERE route=$1 AND account_id=$2 AND upload_id=$3 FOR UPDATE`,
+                  [requireRoute(account.accountId), account.accountId, id, String(choice.ordinal)],
+                );
+                const currentDecision = locked.rows[0]?.decision;
+                if (
+                  !currentDecision ||
+                  currentDecision.reviewId !== choice.reviewId ||
+                  currentDecision.matchDigest !== decision.matchDigest ||
+                  currentDecision.progress?.sourceFingerprint !== reviewedProgress.sourceFingerprint ||
+                  hash(currentDecision.progress.plan) !== hash(reviewedProgress.plan)
+                )
+                  throw new LibraryConflictError();
+                const hadAttempt =
+                  currentDecision.progress.checkpoint?.startAttempted === true ||
+                  Object.values(currentDecision.progress.checkpoint?.steps ?? {}).some((step) => step.attempted);
+                if (admission && !locked.rows[0]?.active) return { admitted: false };
+                if (!locked.rows[0]?.active && !hadAttempt && admission) return { admitted: false };
+                currentDecision.progress.checkpoint = next;
+                if (admission) currentDecision.status = 'applying';
+                await save(tx, account, id, choice.ordinal, currentDecision);
+                return { admitted: true };
+              },
+            );
+            return saved.value.admitted;
+          } catch (error) {
+            if (
+              admission &&
+              (error instanceof LibraryConflictError ||
+                error instanceof LibraryNotFoundError ||
+                (error instanceof ProblemError && ['conflict', 'not_found'].includes(error.code)))
+            )
+              return false;
+            throw error;
+          }
+        },
+      });
+      decision = { ...decision, progress: { ...reviewedProgress, checkpoint } };
+      const statuses = progressResults(reviewedProgress.plan, checkpoint).map((measure) => measure.status);
+      if (statuses.includes('stale')) status = 'stale';
+      else if (statuses.includes('failed')) status = 'failed';
+      else if (statuses.includes('applied') || statuses.includes('cleared')) status = 'applied';
+      else if (action === 'progress' && statuses.every((value) => value === 'unsupported' || value === 'invalid' || value === 'missing' || value === 'unknown'))
+        status = 'unsupported';
+      else if (action === 'progress' && status === 'reviewed') status = 'skipped';
+      progress = await progressResponse(actor, decision.progress);
+    }
+
+    const nextDecision = { ...decision, status };
+    await mutation(
+      actor,
+      'apply-entry-result',
+      `vndb:${id}:${choice.ordinal}:${choice.reviewId}:result:${hash({ status, progress: nextDecision.progress?.checkpoint ?? null })}`,
+      { id, ordinal: choice.ordinal, reviewId: choice.reviewId, status, progress: nextDecision.progress?.checkpoint ?? null },
+      async (tx, account) => {
+        const locked = await tx.query<{ decision: Decision | null }>(
+          'SELECT decisions->$4::text AS decision FROM library.vndb_import WHERE route=$1 AND account_id=$2 AND upload_id=$3 FOR UPDATE',
+          [requireRoute(account.accountId), account.accountId, id, String(choice.ordinal)],
+        );
+        const currentDecision = locked.rows[0]?.decision;
+        if (!currentDecision || currentDecision.reviewId !== choice.reviewId) throw new LibraryConflictError();
+        await save(tx, account, id, choice.ordinal, { ...currentDecision, ...nextDecision });
+        return { ordinal: choice.ordinal, reviewId: choice.reviewId, status };
+      },
+    );
+    return { ordinal: choice.ordinal, reviewId: choice.reviewId, status, progress };
   }
 
   /** A reviewed import vote stays unavailable until Content's guarded writer can admit it atomically. */

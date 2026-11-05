@@ -90,3 +90,14 @@ Both provider methods use the native `GET /v1/progressSessions?subjectId=...` bo
 `POST /v1/progressSessions/:sessionId:record` one-measure writes. Native start and record receipts remain the effect
 authority; provider confirmation and result paging remain in the provider's existing store. Neither upload format
 accepts a user-supplied account, profile pin, native command key or arbitrary source-to-unit conversion.
+
+VNDB composes this helper from its existing `POST /v1/libraryImports/vndb/:uploadId:review` and `:apply` journey.
+The review accepts either `{action: "state", ..., progress: {occurrence, measures}}` or
+`{action: "progress", targetId, progress: {occurrence, measures}}`. `occurrence` is an explicit existing session ID
+or `{kind: "start", primaryUnit}`; each selected measure names the retained source field and `adopt` or explicit
+`clear`, with optional `replace` for an existing amount. VNDB exposes only its retained `progress` value and the
+literal declared `progressMeasure`; it never derives a unit from the VN type or title. The native profile reader must
+admit the exact unit before adoption. The response returns the helper's per-measure outcome and a separate current
+session readback from `readPresentedSession`, including occurrence identity and revision. A source fixture pairs
+`<progress unit="minute">0</progress>` with the compiled current test profile's scalar `minute` unit. Other or
+missing units remain unsupported evidence unless the actual current profile admits them.
