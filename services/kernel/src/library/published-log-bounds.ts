@@ -367,34 +367,15 @@ function readPartitionBound(partitionNo: number): Bound {
   return leaf(partitionRead.sql, { partition_no: partitionNo }, 1, 1, 1, partitionRow, 1);
 }
 function readAccountStateBound(route: number, accountId: string): Bound {
-  return leaf(
-    accountCommandState.sql,
-    { route, account_id: accountId },
-    1,
-    1,
-    1,
-    accountStateRow,
-    1,
-  );
+  return leaf(accountCommandState.sql, { route, account_id: accountId }, 1, 1, 1, accountStateRow, 1);
 }
 function accountShareBound(route: number, accountId: string): Bound {
-  return leaf(
-    accountShare.sql,
-    { route, account_id: accountId },
-    1,
-    1,
-    1,
-    { state: 'deleted', fenced: true },
-    1,
-  );
+  return leaf(accountShare.sql, { route, account_id: accountId }, 1, 1, 1, { state: 'deleted', fenced: true }, 1);
 }
 function timeReadBound(): Bound {
   return leaf(timeRead.sql, { at: timestamp }, 0, 1, 1, { value: timestamp }, 1);
 }
-function readTransactionBound(
-  isolation: 'REPEATABLE READ' | 'READ COMMITTED',
-  statementTimeoutMs?: number,
-): Bound {
+function readTransactionBound(isolation: 'REPEATABLE READ' | 'READ COMMITTED', statementTimeoutMs?: number): Bound {
   return sumBounds(
     sqlOnly(`BEGIN ISOLATION LEVEL ${isolation} READ ONLY`),
     ...(statementTimeoutMs === undefined ? [] : [sqlOnly(`SET LOCAL statement_timeout = '${statementTimeoutMs}ms'`)]),
@@ -414,9 +395,7 @@ function commandControls(prepared: boolean, durationMs: number): Bound {
   );
   return sumBounds(
     transaction,
-    ...(prepared
-      ? [sumBounds(readTransactionBound('READ COMMITTED', Math.min(200, timeoutMs)), timeReadBound())]
-      : []),
+    ...(prepared ? [sumBounds(readTransactionBound('READ COMMITTED', Math.min(200, timeoutMs)), timeReadBound())] : []),
   );
 }
 
@@ -472,11 +451,13 @@ function eventFenceBound(input: {
   const basis = input.withBasis
     ? { principal: { kind: 'account', id: input.accountId }, clientId: uuid, requestedBy: uuid }
     : null;
-  const outboxAndFence = input.withBasis ? { candidateKeys: 18, nativeRows: 12, seeks: 12 } : {
-    candidateKeys: 14,
-    nativeRows: 9,
-    seeks: 9,
-  };
+  const outboxAndFence = input.withBasis
+    ? { candidateKeys: 18, nativeRows: 12, seeks: 12 }
+    : {
+        candidateKeys: 14,
+        nativeRows: 9,
+        seeks: 9,
+      };
   return leaf(
     fence.sql,
     {
@@ -509,15 +490,7 @@ function noEffectFenceBound(accountId: string, commandKind: string, response: un
     digest: 'f'.repeat(44),
     response,
   };
-  return leaf(
-    noEffectFence.sql,
-    { partition_no: 4095, transaction_id: uuid, receipt },
-    5,
-    5,
-    4,
-    fenceRow,
-    1,
-  );
+  return leaf(noEffectFence.sql, { partition_no: 4095, transaction_id: uuid, receipt }, 5, 5, 4, fenceRow, 1);
 }
 
 function writableRecoveryBound(partitionNo: number, durationMs: number): Bound {
@@ -571,10 +544,7 @@ function ownAccountCommandPlan(input: {
   // lookup. Only a fresh receipt runs the body, fence/outbox and response path.
   const perAttempt = sumBounds(
     commonAttempt,
-    alternative(
-      zero,
-      sumBounds(input.body, eventAndReceipt, jsonBytes(input.response)),
-    ),
+    alternative(zero, sumBounds(input.body, eventAndReceipt, jsonBytes(input.response))),
   );
   const partitionNo = Math.floor(route / 16);
   const recovery = repeatBound(writableRecoveryBound(partitionNo, durationMs), Math.ceil(durationMs / 25));
@@ -654,7 +624,8 @@ export function publishedLogRetractOperationPlan(input: {
     kind: 'published-log.retract',
     commandKind: 'published_log.delete',
     accountId: input.accountId,
-    requestInput: input.revision === undefined ? { logId: input.logId } : { logId: input.logId, revision: input.revision },
+    requestInput:
+      input.revision === undefined ? { logId: input.logId } : { logId: input.logId, revision: input.revision },
     receiptKeyCount: input.receiptKeyCount,
     prepared: zero,
     body: sumBounds(lockBound.total, removeBound.total),
@@ -700,10 +671,7 @@ export function publishedLogRestoreOperationPlan(input: {
   });
 }
 
-export function publishedLogPointReadOperationPlan(input: {
-  route: number;
-  logId: string;
-}): PublishedLogOperationPlan {
+export function publishedLogPointReadOperationPlan(input: { route: number; logId: string }): PublishedLogOperationPlan {
   const logRead = publishedLogReadPlan({ route: input.route, log_id: input.logId }).total;
   const ownerState = readAccountStateBound(input.route, uuid);
   const publicOutput = jsonBytes({ publishedLog: publicLog, revision: 2_147_483_646 });
@@ -737,15 +705,19 @@ export function publishedLogPageReadOperationPlan(input: {
     publishedLogs: Array.from({ length: input.limit }, () => publicLog),
     next: 'x'.repeat(maximumCursorBytes),
   });
-  return operationPlan('published-log.page-read', {
-    readTransaction: readTransactionBound('REPEATABLE READ'),
-    partitionEpoch: sessionPartitionWork(Math.floor(input.route / 16)),
-    ownerStateAndFloor: readAccountStateBound(input.route, input.accountId),
-    firstAndNextPageStreams: alternative(zero, pageBound.total),
-    originalAndTerminalDisclosure: repeatBound(sessionSourceWork(uuid, false), input.limit),
-    signedCursorInput: byteBound(input.hasCursor ? maximumCursorBytes : 0),
-    serializedResponse: serialized,
-  }, { rawLimit, disclosureMaximum: input.limit, pageSentinel: 1 });
+  return operationPlan(
+    'published-log.page-read',
+    {
+      readTransaction: readTransactionBound('REPEATABLE READ'),
+      partitionEpoch: sessionPartitionWork(Math.floor(input.route / 16)),
+      ownerStateAndFloor: readAccountStateBound(input.route, input.accountId),
+      firstAndNextPageStreams: alternative(zero, pageBound.total),
+      originalAndTerminalDisclosure: repeatBound(sessionSourceWork(uuid, false), input.limit),
+      signedCursorInput: byteBound(input.hasCursor ? maximumCursorBytes : 0),
+      serializedResponse: serialized,
+    },
+    { rawLimit, disclosureMaximum: input.limit, pageSentinel: 1 },
+  );
 }
 
 export function publishedLogRetentionPurgeOperationPlan(
@@ -905,11 +877,11 @@ export function publishedLogRetentionSegmentOperationPlan(input: {
   };
   const continuation = sumBounds(
     jsonBytes({
-    workflowName: 'library.publishedLogRetentionSegment',
-    queueName: 'maintenance',
-    workflowID: `library.publishedLogRetention:${input.root}:${input.sequence + 1}`,
-    workflowIDReusePolicy: 'return-existing',
-    input: next,
+      workflowName: 'library.publishedLogRetentionSegment',
+      queueName: 'maintenance',
+      workflowID: `library.publishedLogRetention:${input.root}:${input.sequence + 1}`,
+      workflowIDReusePolicy: 'return-existing',
+      input: next,
     }),
     declareBound({ ...zero, engineRequests: 1 }),
   );

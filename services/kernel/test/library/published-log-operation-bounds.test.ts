@@ -3,10 +3,7 @@ import { declareBound, sumBounds, type Bound } from '@rezics/bounds';
 import { COMMAND_STEP_RETRIES } from '../../src/work/retries.ts';
 import type { AccessWorkAccounting } from '../../src/access/work.ts';
 import type { WorkReceipt } from '../../src/library/collection-source.ts';
-import {
-  registerCommandWorkAssociation,
-  type CommandWorkAssociation,
-} from '../../src/command/work-context.ts';
+import { registerCommandWorkAssociation, type CommandWorkAssociation } from '../../src/command/work-context.ts';
 import { withCommandWorkAssociation } from '../../src/command/work.ts';
 import {
   PUBLISHED_LOG_RETENTION_PAGE_BOUND,
@@ -48,9 +45,22 @@ test('Published Log command, read and retention operations compose their full lo
   const receiptKeyCount = 3;
   const durationMs = 5_000;
   const operations = [
-    publishedLogPublishOperationPlan({ accountId, sessionId, note: '\0'.repeat(1000), requestKey: 'publish', receiptKeyCount }),
+    publishedLogPublishOperationPlan({
+      accountId,
+      sessionId,
+      note: '\0'.repeat(1000),
+      requestKey: 'publish',
+      receiptKeyCount,
+    }),
     publishedLogRetractOperationPlan({ accountId, logId, requestKey: 'retract', revision: 7, receiptKeyCount }),
-    publishedLogRestoreOperationPlan({ accountId, logId, deletionId, revision: 7, requestKey: 'restore', receiptKeyCount }),
+    publishedLogRestoreOperationPlan({
+      accountId,
+      logId,
+      deletionId,
+      revision: 7,
+      requestKey: 'restore',
+      receiptKeyCount,
+    }),
     publishedLogPointReadOperationPlan({ route: locator.route, logId }),
     publishedLogPageReadOperationPlan({ route: locator.route, accountId, limit: 100, hasCursor: true }),
     publishedLogRetentionPurgeOperationPlan(locator, receiptKeyCount, durationMs),
@@ -119,14 +129,10 @@ test('a composed operation reserves once and its SQL leaves run on that reservat
       reservations.push({ operation, bound: work as unknown as Record<string, number> });
       return { settle: () => settlements++ };
     },
-    async run<T>(
-      _operation: string,
-      _work: Parameters<CommandWorkAssociation['run']>[1],
-      dispatch: () => Promise<T>,
-    ) {
+    async run<T>(_operation: string, _work: Parameters<CommandWorkAssociation['run']>[1], dispatch: () => Promise<T>) {
       return dispatch();
     },
-    receipt: () => ({} as WorkReceipt),
+    receipt: () => ({}) as WorkReceipt,
     close: () => undefined,
   } as CommandWorkAssociation;
   registerCommandWorkAssociation(association);
