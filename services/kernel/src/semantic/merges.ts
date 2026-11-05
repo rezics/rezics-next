@@ -162,8 +162,8 @@ export async function admitMergeSubjects(
         requestedBy: options.actor.requestedBy,
       },
       authorization: options.authorization,
-      deadline: options.deadline,
-      clock: options.clock,
+      ...(options.deadline === undefined ? {} : { deadline: options.deadline }),
+      ...(options.clock === undefined ? {} : { clock: options.clock }),
     },
     {
       intent: { kind: 'merge', survivor, redirected, release: options.release.digest },
@@ -191,7 +191,7 @@ export async function admitMergeSubjects(
         requestedBy: options.actor.requestedBy,
       },
       authorization: options.authorization,
-      clock: options.clock,
+      ...(options.clock === undefined ? {} : { clock: options.clock }),
     },
     async (tx, { transactionId }) => {
       if (options.expectedIdentity)
