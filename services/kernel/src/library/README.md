@@ -3464,10 +3464,11 @@ cursor projection bytes include maximum JSON escaping of the schema's <=512-byte
 tie. Each current-basis statement prices its actual closed projection. Shared queries use the genuine transaction's deadline/query
 surface and perform no checkout. Independent custody retains its own bounded timeout.
 
-The composed Library SQL term has candidateKeys=1, nativeRows=785, identityMetadataRows=66,
-nativePoints=127, witnessKeys=0, statements=34 and emptySeeks=70. Bytes are the sum of the literal SQL,
-owner-derived maximum original serialized binds and each bounded native projection; the callable assembly
-returns the exact value. No configured allowance or population estimate enters this derivation. Core controls
+The base selected identity SQL term has candidateKeys=1, nativeRows=785, identityMetadataRows=66,
+nativePoints=127, witnessKeys=0, statements=34 and emptySeeks=70. The selected page now composes one finite
+native custody capture-step ceiling with that term; the installed selected declaration is the resulting sum.
+Bytes are the sum of literal SQL, owner-derived maximum serialized binds and each bounded native projection;
+the callable assembly returns the exact value. No configured allowance or population estimate enters this derivation. Core controls
 are returned separately by reference to the installed `COMMAND_DISPATCH_ALLOWANCE`, with total
 `0/2/0/1/0/8/169/1` and zero engine requests; they are not included in this Library SQL term. Core's enforced
 `single-no-effect` profile prevents the unbounded ordinary partition error read from being reached. Its
@@ -3482,7 +3483,7 @@ discovery or planner steps on that selected frame refuses before IO. A later ori
 unbuilt plans. Failure, rollback, callback reentry and restart cannot reopen a claim.
 
 `IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION` is an own frozen data export with exactly `{work,
-engineRequests: 0}`. Its eight-axis work is the selected Library SQL term above. Static selected pricing imports
+engineRequests: 0}`. Its eight-axis work is the selected identity term plus one custody capture-step ceiling above. Static selected pricing imports
 only literals/schema-derived bounds; the executable planner and native custody use those same declarations.
 This avoids making installed data depend on the initialization order of executable owner modules. The unrestricted
 ordinary discovery/planner diagnostics remain separate; their full job/error projections and future workflow
@@ -3506,17 +3507,71 @@ child admission. Neither a bounded Library declaration nor an EOF establishes ph
 - Touches: the installed Source/History private receiver, before-IO one-shot scheduler, same Library ledger,
   native page/current basis, and genuine Core command profiles. Independent Library planning APIs retain their
   ordinary contracts.
-- Bound: selected schedule `0/0/1/1/1/0`, page limit1, three inclusive native current paths, and the exact 34-statement
-  Library component sum. Source controls/body terms remain independently reserved; no second ledger or allowance.
+- Bound: selected schedule `0/0/1/1/1/0`, page limit1, three inclusive native current paths, the base 34-statement
+  identity term and one closed custody capture-step ceiling. Source controls/body terms remain independently reserved;
+  no second ledger or allowance.
 - Growth check: authored selected-original positive/zero page/current cases and strict literal/data/observer
   accounting cases. Native/full/growth acceptance remains UNRUN; compiler typing is not private grant or native proof.
 
 `test/library/identity-original-work.test.ts` verifies that the installed selected declaration is present as frozen
-own data with the exact eight-axis Library term, while the unrestricted declaration still reports its genuine
+own data with the composed eight-axis Library term, while the unrestricted declaration still reports its genuine
 missing invocation schedule and projection operands. Selected admission's receiving operands are delivered and its
 missing list is empty. This bounded Library term does not make the whole Source/History original available: the
 Source declaration, binding-consumer coverage and positive receiving-hold operands remain absent, so authentic
 transfer continues to refuse before I/O.
+
+### Native Collection Source capture and custody execution bounds
+
+Decision: one immutable Library-owned custody operation plan is authoritative for capture, finish, hold, retained
+revalidation and release; it is shared by the native adapter and original-work composition, with request SQL/binds
+and schema-derived serialized projections priced separately and explicit translation to eight-axis native receipts
+(`engineRequests=0`).
+
+`native-source-custody-bounds.ts` owns the finite SQL declarations and capture projections. It uses the public pure
+`@rezics/bounds` declaration, sum, repeat and ceiling API. A statement bound is the literal SQL byte count plus
+the maximum JSON-serialized legal bind vector plus its supported serialized projection. Request and projection
+bytes are retained separately in the operation plan. Native SQL has `engineRequests=0`; the eight-axis receipt
+adapter asserts that value before dropping only that axis.
+
+The operation ceilings bind exact statements and finite multiplicities:
+
+- `capturePage` = one pool checkout + BEGIN/COMMIT/ROLLBACK + current partition, account, Collection, optional
+  activated output provenance, optional capture start or resumed capture read, ensure, both writer fences, one
+  advance, and one maximum raw driver. The raw alternative is one of member, entry, entry_deleted, label,
+  assignment, session, unit, change, copy, output or active explicit output. Native limits are 1..100, with the
+  session parent fixed at one. Capture-step composition uses the larger of this and `finishCapture`.
+- `finishCapture` = one pool checkout + transaction controls + current partition/account/Collection and optional
+  activated output provenance + both fences + capture read + either prior proof or final finish/receipt.
+- `readAndHold` = the same-command current partition/account/Collection and output provenance when applicable,
+  both fences, capture read, committed proof and hold lookup/create.
+- `revalidateHold` = the retained-owner binding, fences, exact capture read, committed proof, retained hold lookup,
+  and terminal-owner check when required. It cannot create a hold or use fresh-read authority.
+- `releaseHold` = the retained-owner binding, fences, exact capture read, committed proof, hold lookup, release
+  update when unreleased, and terminal-owner check when required. Repeated release remains idempotent.
+
+The same declaration supplies the runtime adapter's per-statement limits. It permits at most one start or resumed
+read, one proof or finish, one raw driver page, one checkout for capture/finish, and the stated fixed, optional and
+transaction-control statements. A query cannot be repeated just because its smaller bind values fit the aggregate
+operation ceiling.
+
+Capture record projection sizing uses the schema limits: escaped incarnation 128 bytes, effect key 256, cursor
+`after` 512, tie 64, UUID fields 36, signed bigint decimal counters up to 19 digits, and native integer epoch/version
+up to 2147483647. Raw dependencies use the bounded output fields, and receipt, hold and terminal-owner projections
+have their own serialized maxima. SQL and bind bytes are not folded into these projection figures. Bound addition
+and multiplication use safe-integer checked `sumBounds` and `repeatBound`, so overflow refuses before dispatch.
+
+The adapter applies each operation ceiling to the same live `NativeCollectionWork` pointer before reaching SQL,
+and each dispatch must match that operation's closed statement binding. Dispatched query bounds remain charged if
+the query fails; COMMIT and ROLLBACK keep separate reserved slots. The plan does not create Source authority or
+rebuild capture/custody evidence from JSON. Account scope still refuses `public_output`; active explicit output
+requires the committed activated output identity and its final member-count fence. Existing retirement statements
+retain their compatibility observer and native retirement predicate/lock gate.
+
+`test/library/native-source-custody.test.ts` retains the committed multi-driver frontier, writer/output-fence,
+retained-hold and idempotent-release behavior. `test/library/identity-original-work.test.ts` verifies operation
+binding and nine-axis composition. Native database execution, the integrated production journey and all Search
+receiving assertions remain deferred to the controller verifier; static ceilings and adapter observations do not
+claim native measurement or receiving closure.
 
 The additional focused `test/library/identity-original-work.test.ts` cases cover strict literal/component assembly,
 cumulative repeat/terminal prices and live owner/Pool/deadline/copy/escape refusal before IO, selected

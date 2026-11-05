@@ -1,8 +1,3 @@
-import {
-  nativeIdentityPartitionQuery,
-  isNativeIdentitySourceBasisSQL,
-  nativeIdentitySourceBasisFootprint,
-} from './identity-native-planner-selected-pricing.ts';
 import type { Pool, QueryResultRow } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import {
@@ -23,7 +18,54 @@ import {
   revalidateBoundLibraryIdentityWork,
   withLibraryIdentityWork,
 } from './identity-native-planner-work.ts';
-import type { WorkAllowance, WorkDimensions, WorkReceipt } from './collection-source.ts';
+import type { WorkAllowance, WorkReceipt } from './collection-source.ts';
+import {
+  nativeSourceCustodyExecutionBound,
+  nativeSourceCustodyFootprint,
+  nativeSourceCustodyOperationBound,
+  nativeSourceCustodyQueries,
+  nativeSourceCustodyWorkDimensions,
+  createNativeSourceCustodyOperationUse,
+  type NativeSourceCustodyOperationUse,
+  type NativeSourceCustodyOperation,
+} from './native-source-custody-bounds.ts';
+
+export { nativeSourceCustodyFootprint };
+export { declareNativeIdentitySourceBasisStatements } from './identity-native-planner-selected-pricing.ts';
+
+const {
+  partition: identityPartitionQuery,
+  source: sourceQuery,
+  account: accountQuery,
+  output: outputQuery,
+  ensure: ensureQuery,
+  fences: fencesQuery,
+  read: readQuery,
+  start: startQuery,
+  advance: advanceQuery,
+  identityCapture,
+  proof: proofQuery,
+  finish: finishQuery,
+  hold: holdQuery,
+  held: heldQuery,
+  retained: retainedQuery,
+  release: releaseQuery,
+  terminalScope,
+  raw: rawQueries,
+  rawExplicitOutput,
+  retirement: {
+    partition: partitionQuery,
+    source: retireSource,
+    receipt: retireReceipt,
+    active: retireActive,
+    holds: retireHolds,
+    children: retireChildren,
+    proof: retireProof,
+    capture: retireCapture,
+    identityRetention,
+    nextCapture,
+  },
+} = nativeSourceCustodyQueries;
 
 import type { NativePublicOutputIdentity } from './native-source-output-types.ts';
 export type { NativeOutputActivation, NativePublicOutputIdentity } from './native-source-output-types.ts';
@@ -171,62 +213,9 @@ export interface NativeLibrarySourceCustody {
   ): Promise<Unavailable | { status: 'released'; work: WorkReceipt }>;
 }
 
-import partitionQuery from './native-source-custody-partition.sql';
-import sourceQuery from './native-source-custody-source.sql';
-import accountQuery from './native-source-custody-account.sql';
-import ensureQuery from './native-source-custody-ensure.sql';
-import fencesQuery from './native-source-custody-fences.sql';
-import readQuery from './native-source-custody-read.sql';
-import startQuery from './native-source-custody-start.sql';
-import advanceQuery from './native-source-custody-advance.sql';
-import finishQuery from './native-source-custody-finish.sql';
-import proofQuery from './native-source-custody-proof.sql';
-import holdQuery from './native-source-custody-hold.sql';
-import heldQuery from './native-source-custody-held.sql';
-import retainedQuery from './native-source-custody-retained.sql';
-import releaseQuery from './native-source-custody-release.sql';
-import retireSource from './native-source-custody-retire-source.sql';
-import retireReceipt from './native-source-custody-retire-receipt.sql';
-import retireActive from './native-source-custody-retire-active.sql';
-import retireHolds from './native-source-custody-retire-holds.sql';
-import retireChildren from './native-source-custody-retire-children.sql';
-import retireProof from './native-source-custody-retire-proof.sql';
-import retireCapture from './native-source-custody-retire-capture.sql';
-import nextCapture from './native-source-custody-next.sql';
-import identityCapture from './identity-native-planner-source.sql';
-import identityRetention from './identity-native-planner-retention.sql';
-import terminalScope from './erasure-scope.sql';
-import rawMember from './native-source-custody-raw-member.sql';
-import rawEntry from './native-source-custody-raw-entry.sql';
-import rawEntryDeleted from './native-source-custody-raw-entry_deleted.sql';
-import rawLabel from './native-source-custody-raw-label.sql';
-import rawAssignment from './native-source-custody-raw-assignment.sql';
-import rawSession from './native-source-custody-raw-session.sql';
-import rawUnit from './native-source-custody-raw-unit.sql';
-import rawChange from './native-source-custody-raw-change.sql';
-import rawCopy from './native-source-custody-raw-copy.sql';
-import rawOutput from './native-source-custody-raw-output.sql';
-import rawExplicitOutput from './native-source-custody-raw-explicit-output.sql';
-import outputQuery from './native-source-custody-output.sql';
-
-const rawQueries = {
-  member: rawMember,
-  entry: rawEntry,
-  entry_deleted: rawEntryDeleted,
-  label: rawLabel,
-  assignment: rawAssignment,
-  session: rawSession,
-  unit: rawUnit,
-  change: rawChange,
-  copy: rawCopy,
-  output: rawOutput,
-};
 const zeroId = '00000000-0000-0000-0000-000000000000';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 type Query = { sql: string; params: readonly string[] };
-// Identity capture only consumes the move target's nullness. Keep that native fact
-// under the same row lock without projecting an unbounded node address.
-const identityPartitionQuery = nativeIdentityPartitionQuery;
 type Parameters = Record<string, unknown>;
 type State = NativeSourceIdentity &
   NativeSourceFrontier & { collectionFence: string; accountFence: string; complete: boolean };
@@ -321,135 +310,26 @@ function parameters(identity: NativeSourceIdentity): Parameters {
     publication_position: identity.publicationPosition ?? null,
   };
 }
-/** Fixed projections and primary-key/route-leading range plans only; no observed row-count cost classifier. */
-function footprint(text: string, values: unknown[], rows: number, points: number, keys = 0, metadata = 0) {
-  return {
-    nativeRows: rows,
-    nativePoints: points,
-    candidateKeys: keys,
-    identityMetadataRows: metadata,
-    witnessKeys: 0,
-    statements: 1,
-    bytes:
-      Buffer.byteLength(text) + Buffer.byteLength(JSON.stringify(values)) + (rows || points ? 4096 : 0) + keys * 1024,
-    // Native point probes can miss even without a returned raw key. Keep these
-    // admitted slots inclusive; a positive outer join result cannot measure inner misses.
-    emptySeeks: keys ? 1 : points,
-  };
-}
-const sameSQL = (sql: string) =>
-  sql
-    .replace(/--[^\n]*/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/;$/, '');
-const boundId = 'f'.repeat(36),
-  boundDecimal = '9'.repeat(20),
-  boundText = String.fromCharCode(1);
-const captureProjectionBytes = Buffer.byteLength(
-  JSON.stringify({
-    route: 65535,
-    captureId: boundId,
-    collectionId: boundId,
-    accountId: boundId,
-    incarnation: boundText.repeat(128),
-    generation: boundDecimal,
-    scope: 'active_explicit_output',
-    ownerEpoch: 2147483647,
-    receivingEpoch: boundDecimal,
-    effectKey: boundText.repeat(256),
-    outputGeneration: boundId,
-    publicationTransactionId: boundId,
-    publicationPosition: boundDecimal,
-    collectionFence: boundDecimal,
-    accountFence: boundDecimal,
-    driver: 'entry_deleted',
-    after: boundText.repeat(512),
-    tie: boundText.repeat(64),
-    sessionId: boundId,
-    scanned: boundDecimal,
-    version: 2147483647,
-    complete: false,
-  }),
-);
-/** Literal reached capture/basis declarations; no table-prefix or arbitrary observer callback. */
-export function nativeSourceCustodyFootprint(sql: string, values: readonly unknown[]): WorkDimensions | undefined {
-  const text = sameSQL(sql);
-  if (isNativeIdentitySourceBasisSQL(sql)) return nativeIdentitySourceBasisFootprint(sql, values);
-  if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(text)) return footprint(sql, [...values], 0, 0);
-  for (const [query, rows, points, metadata, keys = 0] of [
-    [identityPartitionQuery, 16, 1, 1],
-    [accountQuery, 16, 1, 0],
-    [sourceQuery, 16, 1, 0],
-    [outputQuery, 56, 7, 1],
-    [ensureQuery, 32, 2, 0],
-    [fencesQuery, 32, 2, 0],
-    [readQuery, 16, 1, 0],
-    [startQuery, 32, 1, 0],
-    [advanceQuery, 32, 1, 0],
-    [identityCapture, 32, 1, 0],
-    [proofQuery, 64, 3, 1],
-    [finishQuery, 80, 3, 1],
-    [holdQuery, 48, 1, 0],
-    [heldQuery, 16, 1, 0],
-    [retainedQuery, 16, 1, 0],
-    [releaseQuery, 32, 1, 0],
-    [retireSource, 16, 1, 0],
-    [retireReceipt, 16, 1, 0],
-    [terminalScope, 48, 3, 0],
-    [identityRetention, 2, 1, 0, 1],
-    [retireActive, 16, 1, 0, 1],
-    [retireHolds, 16 * 80 + 32, 1, 0, 80],
-    [retireChildren, 16 * 80, 80, 0],
-    [retireProof, 32, 2, 0],
-    [retireCapture, 32, 2, 0],
-    [nextCapture, 32, 2, 0, 1],
-  ] as const) {
-    if (sameSQL(query.sql) === text && query.params.length === values.length) {
-      if (query === retireChildren) {
-        const ids = values[query.params.indexOf('hold_ids')];
-        if (!Array.isArray(ids) || ids.length > 80 || ids.some((id) => typeof id !== 'string' || !uuid.test(id)))
-          return undefined;
-      }
-      const work = footprint(sql, [...values], rows, points, keys, metadata);
-      const projection = query === readQuery ? captureProjectionBytes : undefined;
-      if (projection !== undefined) work.bytes += projection - 4096;
-      return work;
-    }
-  }
-  for (const query of [...Object.values(rawQueries), rawExplicitOutput]) {
-    if (sameSQL(query.sql) !== text || query.params.length !== values.length) continue;
-    const n = query === rawSession ? 1 : values[query.params.indexOf('limit')];
-    if (typeof n !== 'number' || !Number.isSafeInteger(n) || n < 1 || n > 100) return undefined;
-    return footprint(sql, [...values], 16 * n + 32, 1, n);
-  }
-  return undefined;
-}
-
-export { declareNativeIdentitySourceBasisStatements } from './identity-native-planner-selected-pricing.ts';
-function executor(client: CommandTransaction, work: NativeCollectionWork, deadline: number, strict = false) {
+function executor(
+  client: CommandTransaction,
+  work: NativeCollectionWork,
+  deadline: number,
+  strict = false,
+  operationUse?: NativeSourceCustodyOperationUse,
+) {
   return async <R extends QueryResultRow = QueryResultRow>(
     query: Query,
     values: Parameters,
-    rows = 16,
-    points = 1,
-    keys = 0,
   ): Promise<R[]> => {
     revalidateBoundLibraryIdentityWork(work);
     if (Date.now() >= deadline) throw new Refused('allowance');
+    if (operationUse && !operationUse.statement(query)) throw new Refused('allowance');
     if (query === partitionQuery) query = identityPartitionQuery;
     const args = query.params.map((name) => values[name]);
-    const metadata =
-      query === identityPartitionQuery || query === finishQuery || query === proofQuery || query === outputQuery
-        ? 1
-        : 0;
-    // Shared original descendants can only dispatch the owner's recognized literals.
-    // The explicit reservation suppresses duplicate observation, never unknown SQL.
-    const declared = nativeSourceCustodyFootprint(query.sql, args);
-    const requested = footprint(query.sql, args, rows, points, keys, metadata);
-    const admitted = work.reserve(
-      strict || !declared ? declared : { ...declared, bytes: Math.max(declared.bytes, requested.bytes) },
-    );
+    // Both original composition and dispatch consume the same closed statement plan.
+    const declared = nativeSourceCustodyExecutionBound(query, args);
+    if (!declared) throw new Refused('allowance');
+    const admitted = work.reserve(nativeSourceCustodyWorkDimensions(declared));
     admitted.dispatch();
     try {
       const config = {
@@ -477,8 +357,6 @@ async function terminalOwner(run: Execute, values: Parameters): Promise<boolean>
       ...values,
       route: values.account_route,
     },
-    48,
-    3,
   );
   return scope?.version === 1 && scope.outcome === null;
 }
@@ -526,7 +404,7 @@ async function bindOwner(
     if (source.kind !== 'dynamic' || source.builtin !== null) throw new Refused('output_authority');
     if (!retained) {
       if (source.visibility === 'private') throw new Refused('output_authority');
-      const [output] = await run<{ members: string }>(outputQuery, values, 56, 7);
+      const [output] = await run<{ members: string }>(outputQuery, values);
       if (!output) throw new Refused('output_authority');
       outputMembers = output.members;
     }
@@ -542,8 +420,8 @@ async function bindOwner(
     (identity.scope === 'private_builtin' && source.kind !== 'dynamic')
   )
     throw new Refused('binding');
-  if (ensure) await run(ensureQuery, values, 32, 2);
-  const heads = await run<{ kind: string; generation: string }>(fencesQuery, values, 32, 2);
+  if (ensure) await run(ensureQuery, values);
+  const heads = await run<{ kind: string; generation: string }>(fencesQuery, values);
   const collectionFence = heads.find((row) => row.kind === 'collection')?.generation;
   const accountFence = heads.find((row) => row.kind === 'account')?.generation;
   if (collectionFence === undefined || accountFence === undefined) throw new Refused('binding');
@@ -586,12 +464,25 @@ function nativeLibrarySourceCustody(
 ): NativeLibrarySourceCustody {
   async function account<T>(
     input: NativeSourceCaptureWork,
-    operation: (work: NativeCollectionWork) => Promise<T>,
+    operation: (work: NativeCollectionWork, operationUse?: NativeSourceCustodyOperationUse) => Promise<T>,
+    operationKind?: NativeSourceCustodyOperation,
   ): Promise<T | Unavailable> {
     const work = sharedWork ?? new NativeCollectionWork(input.allowance, input.deadline);
+    const operationUse = operationKind ? createNativeSourceCustodyOperationUse(operationKind) : undefined;
     try {
       if (sharedWork) assertLibraryIdentityResources(pool, work, input.deadline);
-      return sharedWork ? await withLibraryIdentityWork(pool, work, () => operation(work)) : await operation(work);
+      const invoke = () =>
+        sharedWork
+          ? withLibraryIdentityWork(pool, work, () => operation(work, operationUse))
+          : operation(work, operationUse);
+      if (!operationKind) return await invoke();
+      const allowance: WorkAllowance = {
+        reservationId: work.receipt().reservationId,
+        remaining: nativeSourceCustodyWorkDimensions(nativeSourceCustodyOperationBound(operationKind)),
+      };
+      // This static ceiling scopes the same ledger and is checked against its current original.
+      // It transfers no child, creates no credit and does not settle from returned row counts.
+      return await work.withinAllowance(allowance, invoke);
     } catch (error) {
       if (error instanceof Refused) return { status: 'unavailable', reason: error.reason, work: work.receipt() };
       if (error instanceof ProblemError && error.code === 'dependency_unavailable')
@@ -604,13 +495,14 @@ function nativeLibrarySourceCustody(
   async function transaction<T>(
     input: NativeSourceCaptureWork,
     work: NativeCollectionWork,
+    operationUse: NativeSourceCustodyOperationUse,
     operation: (run: Execute) => Promise<T>,
   ): Promise<T> {
     // Both terminal slots precede checkout. A rejected COMMIT never consumes rollback's slot.
-    const commit = work.reserve(footprint('COMMIT', [], 0, 0), true);
+    const commit = work.reserve(nativeSourceCustodyFootprint('COMMIT', []), true);
     let rollback: ReturnType<NativeCollectionWork['reserve']>;
     try {
-      rollback = work.reserve(footprint('ROLLBACK', [], 0, 0), true);
+      rollback = work.reserve(nativeSourceCustodyFootprint('ROLLBACK', []), true);
     } catch (error) {
       commit.cancel();
       throw error;
@@ -627,11 +519,12 @@ function nativeLibrarySourceCustody(
         },
         () =>
           withConnection(pool, async (client) => {
+            if (!operationUse.checkout()) throw new Refused('allowance');
             revalidateBoundLibraryIdentityWork(work);
-            const run = executor(client, work, input.deadline, sharedWork !== undefined);
+            const run = executor(client, work, input.deadline, sharedWork !== undefined, operationUse);
             let begun = false;
             try {
-              await run({ sql: 'BEGIN', params: [] }, {}, 0, 0);
+              await run({ sql: 'BEGIN', params: [] }, {});
               begun = true;
               const result = await operation(run);
               revalidateBoundLibraryIdentityWork(work);
@@ -639,6 +532,7 @@ function nativeLibrarySourceCustody(
               commit.dispatch();
               committed = true;
               try {
+                if (!operationUse.statement({ sql: 'COMMIT', params: [] })) throw new Refused('allowance');
                 const request = { text: 'COMMIT', query_timeout: Math.max(1, input.deadline - Date.now()) };
                 await commit.query(() => client.query(request));
               } finally {
@@ -650,6 +544,7 @@ function nativeLibrarySourceCustody(
             } catch (error) {
               if (begun) {
                 try {
+                  if (!operationUse.statement({ sql: 'ROLLBACK', params: [] })) throw new Refused('allowance');
                   rollback.dispatch();
                   rolledBack = true;
                   await rollback.query(() => client.query('ROLLBACK'));
@@ -761,7 +656,7 @@ function nativeLibrarySourceCustody(
           deadlineMatches: boolean | null;
           due: boolean | null;
           publicCustody: boolean;
-        }>(retireSource, values, 32, 2);
+        }>(retireSource, values);
         if (
           !source ||
           source.accountId !== input.identity.accountId ||
@@ -788,47 +683,44 @@ function nativeLibrarySourceCustody(
             !source.due)
         )
           return blocked('source');
-        const controls = await run(fencesQuery, values, 32, 2);
+        const controls = await run(fencesQuery, values);
         if (controls.length !== 2) throw new Refused('binding');
         const [state] = await run<State>(readQuery, values);
         if (!state) return { status: 'retired', removed: 0, work: work.receipt() };
         if (!sameIdentity(state, input.identity)) throw new Refused('binding');
         const [receipt] = await run<{ transactionId: string }>(retireReceipt, values);
         if (state.complete) {
-          const [proof] = await run<{ transactionId: string }>(proofQuery, values, 64, 3);
+          const [proof] = await run<{ transactionId: string }>(proofQuery, values);
           if (!receipt || !proof || receipt.transactionId !== proof.transactionId) throw new Refused('binding');
         } else if (receipt) throw new Refused('binding');
         // Never partially delete receipts/holds below native plan evidence. The FK is also a
         // concurrent-registration barrier; missing handoff is a retained source, not erased data.
-        if ((await run(identityRetention, values, 2, 1, 1)).length) return blocked('source');
-        if ((await run(retireActive, values, 16, 1, 1)).length) return blocked('live_hold');
+        if ((await run(identityRetention, values)).length) return blocked('source');
+        if ((await run(retireActive, values)).length) return blocked('live_hold');
         const children = await run<{ id: string; transactionId: string; released: boolean; committed: boolean }>(
           retireHolds,
           values,
-          16 * 80 + 32,
-          1,
-          80,
         );
         if (children.some((child) => !child.released)) return blocked('live_hold');
         if (children.some((child) => child.transactionId !== receipt?.transactionId)) throw new Refused('binding');
         if (children.some((child) => !child.committed)) return blocked('release_uncommitted');
         let removed = 0;
         if (children.length) {
-          removed = (await run(retireChildren, { ...values, hold_ids: children.map((child) => child.id) }, 16 * 80, 80))
+          removed = (await run(retireChildren, { ...values, hold_ids: children.map((child) => child.id) }))
             .length;
           if (removed !== children.length) throw new Refused('binding');
         }
         // Leave the two parent keys for another attempt when this raw page is full.
         if (children.length === 80) return { status: 'progress', removed, work: work.receipt() };
-        removed += (await run(retireProof, values, 32, 2)).length;
-        if ((await run(retireCapture, values, 32, 2)).length !== 1) throw new Refused('binding');
+        removed += (await run(retireProof, values)).length;
+        if ((await run(retireCapture, values)).length !== 1) throw new Refused('binding');
         return { status: 'retired', removed: removed + 1, work: work.receipt() };
       });
     },
     capturePage(input) {
-      return account(input, async (work) => {
+      return account(input, async (work, operationUse) => {
         if (!Number.isSafeInteger(input.limit) || input.limit < 1 || input.limit > 100) throw new Refused('binding');
-        const result = await transaction(input, work, async (run) => {
+        const result = await transaction(input, work, operationUse!, async (run) => {
           const fences = await bindOwner(run, input.identity, true);
           let state: State;
           if (input.frontier === null) {
@@ -842,7 +734,6 @@ function nativeLibrarySourceCustody(
                 account_fence: fences.accountFence,
                 driver: input.identity.scope === 'active_explicit_output' ? 'output' : 'member',
               },
-              32,
             );
             state = {
               ...input.identity,
@@ -877,9 +768,6 @@ function nativeLibrarySourceCustody(
                 session_id: state.sessionId,
                 limit,
               },
-              16 * limit + 32,
-              1,
-              limit,
             );
             rows = raw.map((row) => Object.freeze({ ...row, driver }));
             state = { ...state, scanned: (BigInt(state.scanned) + BigInt(raw.length)).toString() };
@@ -921,18 +809,17 @@ function nativeLibrarySourceCustody(
                 session_id: state.sessionId,
                 scanned: state.scanned,
               },
-              32,
             );
             state = { ...state, version: state.version + 1 };
           }
           return { status: 'pending' as const, frontier: frontier(state), rows };
         });
         return { ...result, work: work.receipt() };
-      });
+      }, 'capturePage');
     },
     finishCapture(input) {
-      return account(input, async (work) => {
-        const result = await transaction(input, work, async (run) => {
+      return account(input, async (work, operationUse) => {
+        const result = await transaction(input, work, operationUse!, async (run) => {
           const fences = await bindOwner(run, input.identity, false);
           const state = await readState(run, input.identity, input.frontier.captureId);
           if (!sameFrontier(state, input.frontier) || state.driver !== 'done') throw new Refused('binding');
@@ -940,12 +827,10 @@ function nativeLibrarySourceCustody(
           compareOutputCount(state, fences);
           const values = { ...parameters(input.identity), capture_id: state.captureId };
           const [receipt] = state.complete
-            ? await run<{ transactionId: string; position: string }>(proofQuery, values, 64, 3)
+            ? await run<{ transactionId: string; position: string }>(proofQuery, values)
             : await run<{ transactionId: string; position: string }>(
                 finishQuery,
                 { ...values, transaction_id: crypto.randomUUID() },
-                80,
-                3,
               );
           if (!receipt) throw new Refused('binding');
           validate(input.identity);
@@ -962,24 +847,23 @@ function nativeLibrarySourceCustody(
           };
         });
         return { ...result, work: work.receipt() };
-      });
+      }, 'finishCapture');
     },
     readAndHold(input) {
-      return account(input, async (work) => {
+      return account(input, async (work, operationUse) => {
         live(input);
         if (!uuid.test(input.holdId)) throw new Refused('binding');
-        const run = executor(input.client, work, input.deadline);
+        const run = executor(input.client, work, input.deadline, false, operationUse!);
         const fences = await bindOwner(run, input.identity, false);
         const state = await readState(run, input.identity, input.captureId);
         compareFences(state, fences);
         compareOutputCount(state, fences);
         const values = { ...parameters(input.identity), capture_id: input.captureId, hold_id: input.holdId };
-        const [receipt] = await run<{ transactionId: string }>(proofQuery, values, 64, 3);
+        const [receipt] = await run<{ transactionId: string }>(proofQuery, values);
         if (!receipt) throw new Refused('binding');
         const [held] = await run<{ transactionId: string; released: boolean }>(
           holdQuery,
           { ...values, transaction_id: receipt.transactionId },
-          48,
         );
         if (!held || held.released || held.transactionId !== receipt.transactionId) throw new Refused('binding');
         return {
@@ -993,19 +877,19 @@ function nativeLibrarySourceCustody(
           }),
           work: work.receipt(),
         };
-      });
+      }, 'readAndHold');
     },
     revalidateHold(input) {
-      return account(input, async (work) => {
+      return account(input, async (work, operationUse) => {
         live(input);
         if (!uuid.test(input.holdId)) throw new Refused('binding');
-        const run = executor(input.client, work, input.deadline);
+        const run = executor(input.client, work, input.deadline, false, operationUse!);
         // Current lifecycle/ownership fences still apply. Writer generations describe fresh reads,
         // not the lifetime of an exact retained obligation from an earlier committed capture.
         await bindOwner(run, input.identity, false, true);
         await readState(run, input.identity, input.captureId);
         const values = { ...parameters(input.identity), capture_id: input.captureId, hold_id: input.holdId };
-        const [receipt] = await run<{ transactionId: string }>(proofQuery, values, 64, 3);
+        const [receipt] = await run<{ transactionId: string }>(proofQuery, values);
         if (!receipt) throw new Refused('binding');
         const [held] = await run<{ transactionId: string }>(retainedQuery, values);
         if (!held || held.transactionId !== receipt.transactionId) throw new Refused('binding');
@@ -1020,24 +904,24 @@ function nativeLibrarySourceCustody(
           }),
           work: work.receipt(),
         };
-      });
+      }, 'revalidateHold');
     },
     releaseHold(input) {
-      return account(input, async (work) => {
+      return account(input, async (work, operationUse) => {
         live(input);
         if (!uuid.test(input.holdId)) throw new Refused('binding');
-        const run = executor(input.client, work, input.deadline);
+        const run = executor(input.client, work, input.deadline, false, operationUse!);
         // Release checks exact native binding and current owner/account fences, but never requires unchanged facts.
         // A stale fact generation cannot strand an existing hold or authorize deleting its business source.
         await bindOwner(run, input.identity, false, true);
         await readState(run, input.identity, input.captureId);
         const values = { ...parameters(input.identity), capture_id: input.captureId, hold_id: input.holdId };
-        const [receipt] = await run<{ transactionId: string }>(proofQuery, values, 64, 3);
+        const [receipt] = await run<{ transactionId: string }>(proofQuery, values);
         const [held] = await run<{ transactionId: string; released: boolean }>(heldQuery, values);
         if (!receipt || !held || held.transactionId !== receipt.transactionId) throw new Refused('binding');
-        if (!held.released) await run(releaseQuery, values, 32);
+        if (!held.released) await run(releaseQuery, values);
         return { status: 'released' as const, work: work.receipt() };
-      });
+      }, 'releaseHold');
     },
   };
 }
@@ -1127,8 +1011,6 @@ export async function readNativeIdentitySourceBasis(
         collection_fence: fences.collectionFence,
         account_fence: fences.accountFence,
       },
-      32,
-      1,
     );
     if (!capture) throw new Refused('binding');
     if (capture.complete) {
@@ -1138,8 +1020,6 @@ export async function readNativeIdentitySourceBasis(
           ...parameters(identity),
           capture_id: capture.captureId,
         },
-        64,
-        3,
       );
       if (!proof || capture.driver !== 'done') throw new Refused('binding');
     }
