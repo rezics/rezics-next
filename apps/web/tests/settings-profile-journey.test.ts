@@ -547,7 +547,6 @@ test('organization-only speaker listing and native avatar references use the ord
     ...initial(),
     kind: 'organization' as const,
     speakersListed: false,
-    editing: editing(initial().accountId, 'organization'),
   };
   await saveProfileRecord(
     createKernelClient('https://kernel.example.test', {
