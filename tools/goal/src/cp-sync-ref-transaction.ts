@@ -125,6 +125,8 @@ export function publishCpSyncRefs(
     context.run(['diff', '--quiet', 'HEAD', '--', ...paths]).status !== 0 ||
     context.run(['diff', '--cached', '--quiet', 'HEAD', '--', ...paths]).status !== 0
   )
-    print(`cp-sync: WARNING: the main checkout does not match ${context.short(next)} under ${paths.join(', ')}; inspect it.`);
+    print(
+      `cp-sync: WARNING: the main checkout does not match ${context.short(next)} under ${paths.join(', ')}; inspect it.`,
+    );
   return published;
 }
