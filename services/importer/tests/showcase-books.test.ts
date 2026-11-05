@@ -541,7 +541,11 @@ test('Kara no Kyoukai creator, publisher and anime identities survive exact jour
       statements: Record<string, { value?: { content?: unknown } }[]>;
     };
     expect(publisherRead.type).toBe('schema:Organization');
-    expect(publisherRead.statements['schema:name']?.some((row) => row.value?.content === '講談社')).toBe(true);
+    expect(
+      publisherRead.statements['schema:name']?.some(
+        (row) => JSON.stringify(row.value?.content) === JSON.stringify({ language: 'und', text: '講談社' }),
+      ),
+    ).toBe(true);
     const publisherRole = first.creditRoles!.find((role) => role.code === '2004')!;
     expect(publisherRole.property).toBe('schema:publisher');
     const publisherClaims = [...world.receipts.values()]
