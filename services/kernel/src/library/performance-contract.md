@@ -86,8 +86,8 @@ captures one deadline outside the registered step and retains it across the fixe
 `work/durable-step-bounds.ts` owns native SDK result lookup, cancellation/owner points, checkpoint PK/conflict and
 writer/FK triggers, transaction controls and input/output encoding. The page wrapper is outside the registered
 body, so replay still prices its lookup. A segment prices workflow result work and performs at most 100 pages,
-then enqueues the original root/sequence/cutoff/frontier using return-existing identity. The reached enqueue adds
-one engine request separately from its native SQL; native-only terms translate with zero engine requests.
+then enqueues the original root/sequence/cutoff/frontier using return-existing identity. The reached enqueue reuses
+Work's native SDK producer. This journey reaches no Search Engine calls, so `engineRequests` remains zero.
 The continuation wrapper also prices its registered step lookup and checkpoint. Native identity-basis projection
 and work lookup use normalized SQL keys, preserving the declarations after their query objects are copied.
 Page/segment discovery and SDK declarations compose independently; reached purge attempts add their command

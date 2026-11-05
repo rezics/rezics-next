@@ -32,6 +32,6 @@ export function durableSegmentPlan(input: unknown) {
 }
 export function durableEnqueuePlan(input: unknown, options: unknown) {
   const native = sumBounds(SELECTED_COST.enqueue, cost(0, 0, 0, bytes([input, options])));
-  // The one actual WorkClient.enqueue is separate from its native SQL and buffers.
-  return Object.freeze({ native, total: sumBounds(native, declareBound({ ...cost(0, 0, 0, 0), engineRequests: 1 })) });
+  // Work's SDK enqueue reaches native SQL, not a Search Engine request.
+  return Object.freeze({ native, total: native });
 }
