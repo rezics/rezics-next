@@ -349,11 +349,11 @@ discussions, never a substitute ABI. Web mounts `RealmCommunityBoards` in its or
 Board/thread links, native cursors, existing navigation and outer membership/publication completion/focus hosts.
 Client publication, browser retirement and rendered journey acceptance remain required; native source is insufficient.
 
-Decision: supplying Board links use the existing localized Board address and retain the exact Realm/shelf return;
-native shelf-reader injection keeps the original publication command host. Only an acknowledged command followed
-directly by its admitted membership result can complete; intervening source replacement retires its completion,
-and unrelated membership reads retain an uncertain command for exact retry or discard. The original Home/shelf
-root-derived types remain in place until the existing publisher installs recent discussions and Board visibility.
+Decision: the supplied-discussion visit renders each original Board's admitted recent prefix, keeps independent
+localized Board and thread links, and returns through the exact Realm/supplying-shelf cursor; existing outer hosts
+retain membership/publication completion and focus. Only an acknowledged command followed directly by its admitted
+membership result can complete; intervening source replacement retires its completion, and unrelated membership
+reads retain an uncertain command for exact retry or discard.
 
 ### Cost
 
