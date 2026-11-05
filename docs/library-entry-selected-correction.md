@@ -88,7 +88,8 @@ Review pages contain four comparisons and exact intended values. Acknowledged co
 bounded Entries page at its original address; it does not locally reorder priority or replace source/filter/order.
 Reopening a page reads at most four personal Entries separately from native outcomes. A new native page clears earlier readback immediately, so an unavailable row cannot retain a prior private note while other current reads finish. Returning refreshes the same bounded source before another deliberate review. An uncertain confirmation
 retains its original body, epoch, position, logical key and encrypted original authorization. Cancellation reconciles
-that command before native cancellation fences further work. A lost create response cannot have confirmed any item;
+that command before native cancellation fences further work. The native cancellation acknowledgement is retained
+separately if reopening fails; Web never fabricates a replacement review DTO. A lost create response cannot have confirmed any item;
 it may be left to expire, without replaying admission as acknowledgement.
 
 Composed per-page cost adds at most four addressed personal reads to the native four-row review read. Confirmation

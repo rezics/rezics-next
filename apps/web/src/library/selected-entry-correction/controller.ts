@@ -1,9 +1,14 @@
-import type { EntryAnnotationCorrectionPage, EntryAnnotationCorrectionSelection } from '@rezics/client';
+import type {
+  EntryAnnotationCorrectionPage,
+  EntryAnnotationCorrectionSelection,
+  EntryAnnotationCorrectionCancelResult,
+} from '@rezics/client';
 import type { CorrectionCommand, CorrectionPort } from './native';
 import type { PrivateEntryRead } from '../rich-private-entry/native';
 
 export type CorrectionState = {
   page: EntryAnnotationCorrectionPage | null;
+  cancellation: EntryAnnotationCorrectionCancelResult | null;
   command: CorrectionCommand | null;
   busy: boolean;
   uncertain: boolean;
@@ -15,6 +20,7 @@ export type CorrectionState = {
 export class SelectedCorrection {
   private state: CorrectionState = {
     page: null,
+    cancellation: null,
     command: null,
     busy: false,
     uncertain: false,
@@ -45,7 +51,15 @@ export class SelectedCorrection {
   }
   retire = () => {
     this.active = false;
-    this.state = { page: null, command: null, busy: false, uncertain: false, rejected: null, current: {} };
+    this.state = {
+      page: null,
+      cancellation: null,
+      command: null,
+      busy: false,
+      uncertain: false,
+      rejected: null,
+      current: {},
+    };
     this.listeners.forEach((listener) => listener());
   };
   async create(items: EntryAnnotationCorrectionSelection[]) {
@@ -54,7 +68,15 @@ export class SelectedCorrection {
   }
   async confirm(position: number) {
     const page = this.state.page;
-    if (!this.current() || this.state.command || this.state.busy || !page || page.state !== 'open') return;
+    if (
+      !this.current() ||
+      this.state.command ||
+      this.state.busy ||
+      !page ||
+      page.state !== 'open' ||
+      this.state.cancellation !== null
+    )
+      return;
     await this.dispatch({
       kind: 'confirm',
       reviewId: page.reviewId,
@@ -121,15 +143,18 @@ export class SelectedCorrection {
       this.update({ command: null });
       if ('items' in result.value) {
         this.update({ page: result.value, current: {} });
-        await this.readCurrent(result.value);
-        if (command.kind === 'confirm') await this.refreshEntries();
+        await Promise.all([
+          this.readCurrent(result.value),
+          ...(command.kind === 'confirm' ? [this.refreshEntries()] : []),
+        ]);
       } else {
+        this.update({ cancellation: result.value });
         const page = this.state.page!;
         const reopened = await this.port.read(page.reviewId, page.page);
         if (reopened.kind === 'ready') {
           this.update({ page: reopened.value, current: {} });
           await this.readCurrent(reopened.value);
-        } else this.update({ page: { ...page, state: result.value.state } });
+        }
       }
     } finally {
       this.update({ busy: false });

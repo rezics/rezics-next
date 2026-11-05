@@ -139,6 +139,40 @@ test('an unavailable native row retires earlier readback while another row is st
   expect(visit.snapshot().current[selected.subjectId]).toEqual({ kind: 'unavailable' });
 });
 
+test('accepted native cancellation survives failed reopening without synthesizing a review page', async () => {
+  const nativePage = page();
+  const commands: CorrectionCommand[] = [];
+  const visit = new SelectedCorrection(
+    {
+      send: async (command) => {
+        commands.push(command);
+        return {
+          kind: 'ready',
+          value:
+            command.kind === 'cancel'
+              ? {
+                  reviewId: nativePage.reviewId,
+                  epoch: nativePage.epoch,
+                  expiresAt: nativePage.expiresAt,
+                  state: 'cancelled',
+                }
+              : nativePage,
+        };
+      },
+      read: async () => ({ kind: 'uncertain' }),
+      personal: async () => ({ kind: 'ready', entry: personal }),
+    },
+    () => true,
+    async () => {},
+  );
+  await visit.create([{ ...selected, note: { op: 'preserve' }, priority: { op: 'preserve' } }]);
+  await visit.cancel();
+  expect(visit.snapshot().cancellation?.state).toBe('cancelled');
+  expect(visit.snapshot().page).toBe(nativePage);
+  await visit.confirm(0);
+  expect(commands.map((command) => command.kind)).toEqual(['create', 'cancel']);
+});
+
 for (const width of [390, 1280])
   test(`production selected review, return and departure at ${width}px preserve the source address`, async () => {
     const { Window } = await import(

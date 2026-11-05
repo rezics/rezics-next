@@ -318,6 +318,11 @@ export function CorrectionReview({ controller, lease }: { controller: SelectedCo
       </h4>
       {state.uncertain ? <p role="alert">{m.library_annotation_unresolved_departure()}</p> : null}
       {state.rejected ? <p role="alert">{m.library_selected_correction_rejected()}</p> : null}
+      {state.cancellation ? (
+        <p role="status">
+          {m.library_selected_correction_cancel()} · {state.cancellation.state}
+        </p>
+      ) : null}
       {state.command && state.command.kind !== 'create' ? (
         <button className={button} disabled={state.busy} onClick={() => void run(() => controller.retry())}>
           {m.library_selected_correction_retry()}
@@ -338,7 +343,7 @@ export function CorrectionReview({ controller, lease }: { controller: SelectedCo
               page={page}
               index={index}
               current={state.current[item.selected.subjectId]}
-              disabled={state.busy || !!state.command}
+              disabled={state.busy || !!state.command || !!state.cancellation}
               confirm={() => void run(() => controller.confirm(page.page * 4 + index))}
             />
           ))}
@@ -361,7 +366,7 @@ export function CorrectionReview({ controller, lease }: { controller: SelectedCo
             </button>
             <button
               className={button}
-              disabled={state.busy || page.state !== 'open'}
+              disabled={state.busy || page.state !== 'open' || !!state.cancellation}
               onClick={() => void run(() => controller.cancel())}
             >
               {m.library_selected_correction_cancel()}
