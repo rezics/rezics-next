@@ -535,7 +535,7 @@ test('one connected review-entry preparation and chooser admits only same-prepar
   await settle();
   expect(navigations).toHaveLength(1);
   expect(surface.host.textContent ?? '').not.toContain('Obsolete single choice');
-  expect(surface.host.textContent ?? '').toContain(m.thread_review_boards_loading());
+  expect(surface.host.textContent ?? '').toContain(m.thread_review_preparing());
 
   newTargetGate.resolve(destinationPage(realmA, subjectB, [
     destinationItem(boardB, 'Current target board', subjectB),
