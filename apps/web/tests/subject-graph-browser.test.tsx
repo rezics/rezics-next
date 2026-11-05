@@ -170,51 +170,80 @@ function graphClient(mode: 'cycle' | 'truncated' | 'hidden' | 'unavailable' | 'e
   return { client, calls, limited };
 }
 
-test.each([0, 1, 2, 3, 4, 5, 6])('retirement at native stage %i stops later stages even when fetch ignores abort', async (stage) => {
-  const controller = new AbortController();
-  const calls: Request[] = [];
-  let resume!: () => void;
-  let entered!: () => void;
-  const paused = new Promise<void>((resolve) => { entered = resolve; });
-  const gate = new Promise<void>((resolve) => { resume = resolve; });
-  const client = createKernelClient('https://graph.test', { fetch: (async (input, init) => {
-    const request = input instanceof Request ? input : new Request(String(input), init);
-    const index = calls.push(request) - 1;
-    if (index === stage) { entered(); await gate; }
-    const path = new URL(request.url).pathname;
-    const body = path.endsWith('/active') ? { digest: definitions.digest }
-      : path.includes('/releases/') ? definitions
-      : path.endsWith('/counts') ? { content: null, properties: { 'wdt:P737': { out: 2 } } }
-      : path.endsWith('/graph') ? graphClient('truncated').limited
-      : path.endsWith('/relations') || path.endsWith('/links') ? { relations: [], links: [], next: null }
-      : subject(path.split('/').at(-1)!, 'Current');
-    return Response.json(body, { headers: { 'rezics-session-token': 'current-native-session' } });
-  }) as typeof fetch });
-  const read = async () => {
-    await fetchGuideRelease(client, undefined, { authorization: 'Bearer reader' }, controller.signal);
-    return readSubjectGraphPage(client, 'Bearer reader', release(), anchor, 'en', {
-      property: 'wdt:P737', selection: { kind: 'node', id: neighbour },
-      expansion: { node: neighbour, property: 'wdt:P737', direction: stage % 2 ? 'in' : 'out', cursor: 'native-next' },
-      session: 'prepared-session', signal: controller.signal,
+test.each([0, 1, 2, 3, 4, 5, 6])(
+  'retirement at native stage %i stops later stages even when fetch ignores abort',
+  async (stage) => {
+    const controller = new AbortController();
+    const calls: Request[] = [];
+    let resume!: () => void;
+    let entered!: () => void;
+    const paused = new Promise<void>((resolve) => {
+      entered = resolve;
     });
-  };
-  const pending = read();
-  await paused;
-  controller.abort();
-  resume();
-  await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
-  expect(calls).toHaveLength(stage + 1);
-  expect(calls.every((call) => call.signal.aborted && call.headers.get('authorization') === 'Bearer reader')).toBe(true);
-  const fresh = new AbortController();
-  // This call must start from the current graph rather than reuse any retired stage.
-  const recovered = await readSubjectGraphPage(client, 'Bearer reader', release(), anchor, 'en', {
-    property: 'wdt:P737', selection: { kind: 'node', id: neighbour }, session: 'fresh-session', signal: fresh.signal,
-  });
-  expect(recovered.ok && recovered.detail?.subject.subject.id).toBe(neighbour);
-  expect(recovered.ok && recovered.session).toBe('current-native-session');
-  expect(calls[stage + 1]?.headers.get('rezics-session-token')).toBe('fresh-session');
-  expect(calls.at(-1)?.headers.get('rezics-session-token')).toBe('current-native-session');
-});
+    const gate = new Promise<void>((resolve) => {
+      resume = resolve;
+    });
+    const client = createKernelClient('https://graph.test', {
+      fetch: (async (input, init) => {
+        const request = input instanceof Request ? input : new Request(String(input), init);
+        const index = calls.push(request) - 1;
+        if (index === stage) {
+          entered();
+          await gate;
+        }
+        const path = new URL(request.url).pathname;
+        const body = path.endsWith('/active')
+          ? { digest: definitions.digest }
+          : path.includes('/releases/')
+            ? definitions
+            : path.endsWith('/counts')
+              ? { content: null, properties: { 'wdt:P737': { out: 2 } } }
+              : path.endsWith('/graph')
+                ? graphClient('truncated').limited
+                : path.endsWith('/relations') || path.endsWith('/links')
+                  ? { relations: [], links: [], next: null }
+                  : subject(path.split('/').at(-1)!, 'Current');
+        return Response.json(body, { headers: { 'rezics-session-token': 'current-native-session' } });
+      }) as typeof fetch,
+    });
+    const read = async () => {
+      await fetchGuideRelease(client, undefined, { authorization: 'Bearer reader' }, controller.signal);
+      return readSubjectGraphPage(client, 'Bearer reader', release(), anchor, 'en', {
+        property: 'wdt:P737',
+        selection: { kind: 'node', id: neighbour },
+        expansion: {
+          node: neighbour,
+          property: 'wdt:P737',
+          direction: stage % 2 ? 'in' : 'out',
+          cursor: 'native-next',
+        },
+        session: 'prepared-session',
+        signal: controller.signal,
+      });
+    };
+    const pending = read();
+    await paused;
+    controller.abort();
+    resume();
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    expect(calls).toHaveLength(stage + 1);
+    expect(calls.every((call) => call.signal.aborted && call.headers.get('authorization') === 'Bearer reader')).toBe(
+      true,
+    );
+    const fresh = new AbortController();
+    // This call must start from the current graph rather than reuse any retired stage.
+    const recovered = await readSubjectGraphPage(client, 'Bearer reader', release(), anchor, 'en', {
+      property: 'wdt:P737',
+      selection: { kind: 'node', id: neighbour },
+      session: 'fresh-session',
+      signal: fresh.signal,
+    });
+    expect(recovered.ok && recovered.detail?.subject.subject.id).toBe(neighbour);
+    expect(recovered.ok && recovered.session).toBe('current-native-session');
+    expect(calls[stage + 1]?.headers.get('rezics-session-token')).toBe('fresh-session');
+    expect(calls.at(-1)?.headers.get('rezics-session-token')).toBe('current-native-session');
+  },
+);
 
 test('graph explorer keeps cycles and both directions, continues a truncated branch, and hides unavailable endpoints', async () => {
   const current = graphClient('cycle');
