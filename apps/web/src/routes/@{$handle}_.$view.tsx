@@ -1,8 +1,9 @@
 import { readAgentPage } from '../features/pages/agent-actions';
 import { PublicRealmsRoute } from '../accounts/public-profile/realm-windows/route';
 import { PublicAccountState } from '../accounts/public-profile/view';
-import { useSuspenseQuery } from '@tanstack/react-query';
-import { createFileRoute, notFound, redirect, useLocation, useRouter } from '@tanstack/react-router';
+import { useEffect } from 'react';
+import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
+import { createFileRoute, notFound, redirect, useRouter } from '@tanstack/react-router';
 import { createIsomorphicFn } from '@tanstack/react-start';
 import { env } from 'cloudflare:workers';
 import { agentPageHead, agentPagePaths, agentPathView, agentViewAvailable } from '../features/pages/agent-page';
@@ -11,6 +12,7 @@ import { agentPath } from '../features/pages/agent';
 import { agentViewQuery } from '../features/pages/agent-queries';
 import { useProfileReading } from '../accounts/public-profile/reader-presentation/adapter';
 import { SubjectLink, subjectPageMessages, viewTabLabels } from '../features/pages/route-support';
+import { CollectionWindowsContext, useCollectionWindows } from '../accounts/public-profile/collection-windows/host';
 import { PublicProfilePage } from '../accounts/public-profile/page';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
@@ -44,7 +46,9 @@ const viewLabel = {
 export const Route = createFileRoute('/@{$handle}_/$view')({
   staticData: { publicCache: true },
   gcTime: 0,
-  remountDeps: ({ params, search }) => (params.view === 'realms' ? search.cursor : undefined),
+  // Collections retains its visit above cursor-keyed pages; Realms owns its separate remount host.
+  remountDeps: ({ params, search }) =>
+    params.view === 'collections' ? null : params.view === 'realms' ? search.cursor : undefined,
   shouldReload: ({ params }) => (params.view === 'realms' ? true : undefined),
   validateSearch: (search: Record<string, unknown>): { cursor?: string } => ({
     ...(typeof search.cursor === 'string' && search.cursor.length <= 4096 ? { cursor: search.cursor } : {}),
@@ -73,7 +77,7 @@ export const Route = createFileRoute('/@{$handle}_/$view')({
         headers: { 'Cache-Control': 'private, no-store' },
       });
     }
-    if (page.kind === 'state') return page;
+    if (page.kind === 'state') return { ...page, querySearch: location.searchStr, address: location.publicHref };
     if (view !== 'realms' && !agentViewAvailable(page.tabs, view) && !page.overview.views?.includes(view))
       throw redirect(canonicalRedirect(agentPath(locale, page.handle), search, hash, 302));
     const canonicalHandle = page.page.account?.handle;
@@ -83,6 +87,8 @@ export const Route = createFileRoute('/@{$handle}_/$view')({
     }
     return {
       ...page,
+      querySearch: location.searchStr,
+      address: location.publicHref,
       shareCard: page.overview.subject
         ? projectShareCardPage({ kind: 'page', page: page.overview }, { id: page.overview.subject, locale })
         : undefined,
@@ -123,8 +129,25 @@ function NamedAccountViewRoute({
   const { cursor } = Route.useSearch();
   const locale = getLocale();
   const router = useRouter();
-  const { searchStr } = useLocation();
-  const { data } = useSuspenseQuery(agentViewQuery(handle, locale, view, cursor, searchStr));
+  const loaded = Route.useLoaderData();
+  const address = new URL(loaded.address, 'https://rezics.invalid');
+  const searchStr = loaded.querySearch;
+  const queryClient = useQueryClient();
+  const query = agentViewQuery(handle, locale, view, cursor, searchStr);
+  const { data, dataUpdatedAt } = useSuspenseQuery({
+    ...query,
+    ...(view === 'collections'
+      ? { refetchOnMount: false, refetchOnWindowFocus: false, refetchOnReconnect: false }
+      : {}),
+  });
+  const queryIdentity = JSON.stringify(query.queryKey);
+  useEffect(() => {
+    if (view !== 'collections') return;
+    // Cursor coordinates survive; predecessor response bodies do not become a second page cache.
+    return () => {
+      queryClient.removeQueries({ queryKey: JSON.parse(queryIdentity), exact: true });
+    };
+  }, [queryClient, queryIdentity, view]);
   const reading = useProfileReading({
     handle,
     locale,
@@ -132,32 +155,52 @@ function NamedAccountViewRoute({
     enabled: data.kind === 'page',
     owner: data,
   });
+  const windows = useCollectionWindows({
+    ...(data.kind === 'page' ? { page: data.page } : {}),
+    failure: data.kind === 'state' ? data.state : undefined,
+    owner: handle,
+    revision: dataUpdatedAt,
+    view,
+    locale,
+    cursor: cursor ?? null,
+    search: address.search,
+    hash: address.hash,
+    navigate: (href) => {
+      router.history.push(`${address.pathname}${href}`);
+    },
+    retry: () => {
+      void router.invalidate();
+    },
+  });
   if (data.kind === 'redirect') {
     throw redirect({ href: data.redirectTo, statusCode: 302, headers: { 'Cache-Control': 'private, no-store' } });
   }
   if (data.kind === 'state')
     return <PublicAccountState page state={data.state} retry={() => void router.invalidate()} />;
   return (
-    <PublicProfilePage
-      page={data.page}
-      cursor={data.cursor ?? null}
-      locale={locale}
-      messages={subjectPageMessages()}
-      reading={reading}
-      relations={data.relations}
-      {...(data.operator ? { operator: data.operator } : {})}
-      link={SubjectLink}
-      view={view}
-      tabs={data.tabs}
-      tabLabels={viewTabLabels()}
-      base={`/${encodeURIComponent(locale)}/@${encodeURIComponent(handle)}`}
-      heading={{
-        title: data.title,
-        label: viewLabel[view](),
-        href: `/${encodeURIComponent(locale)}/@${encodeURIComponent(handle)}`,
-      }}
-      publicRealms={data.publicRealms}
-      renderJsonLd={false}
-    />
+    <CollectionWindowsContext.Provider value={windows}>
+      <PublicProfilePage
+        key={cursor ?? 'first'}
+        page={data.page}
+        cursor={data.cursor ?? null}
+        locale={locale}
+        messages={subjectPageMessages()}
+        reading={reading}
+        relations={data.relations}
+        {...(data.operator ? { operator: data.operator } : {})}
+        link={SubjectLink}
+        view={view}
+        tabs={data.tabs}
+        tabLabels={viewTabLabels()}
+        base={`/${encodeURIComponent(locale)}/@${encodeURIComponent(handle)}`}
+        heading={{
+          title: data.title,
+          label: viewLabel[view](),
+          href: `/${encodeURIComponent(locale)}/@${encodeURIComponent(handle)}`,
+        }}
+        publicRealms={data.publicRealms}
+        renderJsonLd={false}
+      />
+    </CollectionWindowsContext.Provider>
   );
 }

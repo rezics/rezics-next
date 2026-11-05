@@ -1,6 +1,7 @@
 import { expect, mock, test } from 'bun:test';
 import type { CompositionNode } from '@rezics/composition';
-import { continueAgentList } from '../src/features/pages/agent';
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { continueAgentList } = await import('../src/features/pages/agent');
 
 const node = (id: string, type = 'AccountPosts', props: Record<string, unknown> = { limit: 3 }): CompositionNode => ({
   type,
@@ -47,4 +48,15 @@ test('one shared list descriptor continues once and preserves the other page rea
   const result = await continueAgentList({ accounts } as never, original, 'opaque');
   expect(get.mock.calls).toEqual([[{ query: { cursor: 'opaque', limit: 3 } }]]);
   expect(result).toEqual({ ...original, reads: { ...original.reads, r1: { status: 200, body: outcome.data } } });
+});
+
+test('Collections forwards the exact opaque cursor and planned BASIC limit without changing its descriptor', async () => {
+  const original = page([node('collections', 'AccountCollections', { limit: 24, paged: true })]);
+  const get = mock(async (_request: unknown) => ({ status: 200, data: { collections: [], next: null } }));
+  const accounts = mock((_input: unknown) => ({ collections: { get } }));
+  const descriptor = structuredClone(original.document);
+  await continueAgentList({ accounts } as never, original, 'opaque+/=%&cursor');
+  expect(accounts.mock.calls).toEqual([[{ accountId: 'account-id' }]]);
+  expect(get.mock.calls).toEqual([[{ query: { cursor: 'opaque+/=%&cursor', limit: 24, view: 'BASIC' } }]]);
+  expect(original.document).toEqual(descriptor);
 });
