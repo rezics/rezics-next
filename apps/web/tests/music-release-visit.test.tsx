@@ -99,7 +99,7 @@ test('recording visit returns to its exact current stream, Context and row; Prev
     expect(returned.searchParams.get('musicReturnStatement')).toBeTruthy();
     await ui.click(m.work_parts_more());
     await ui.click(m.album_tracks_previous());
-    expect(addresses.at(-1)).toMatchObject({ expectedRevision: 1, stream: 'forward:schema:track' });
+    expect(addresses.at(-1)).toEqual({ ...musicAddress, stream: 'forward:schema:track' });
     expect(ui.host.querySelectorAll('[data-slot="music-release-row"]').length).toBe(2);
 
     await ui.render(null);
