@@ -204,6 +204,12 @@
       "hourlyReportMaxTimeoutMs": 120000
     },
     "flowHistoryMs": 2592000000,
+    "chain": {
+      "maximumContextTokens": 150000,
+      "maximumTasks": 4,
+      "contextTailBytes": 1048576,
+      "offerWindowMs": 3600000
+    },
     "worker": {
       "capacityPauseMs": 10000,
       "usageLimitRetryPauseMs": 180000,

@@ -258,6 +258,7 @@ test(
     expect(empty.sweeps[0]).toEqual({
       dispatched: [],
       continued: [],
+      chained: [],
       refused: [],
       returned: [],
       expired: [],

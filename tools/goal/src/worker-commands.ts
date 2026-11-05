@@ -294,9 +294,22 @@ export async function runWorkerCommand(
       if (flow) {
         const now = new Date();
         const metrics = lifecycleMetrics(store.db, now, settings.policy);
+        const records = store.records();
+        // Landed lines come from the latest passing attempt of each task, the one that integrated it.
+        const landed = new Map<string, { attempt: number; lines: number }>();
+        for (const record of records) {
+          if (record.outcome !== 'passed' || record.diffLines === null) continue;
+          const seen = landed.get(record.taskId);
+          if (!seen || record.attempt > seen.attempt)
+            landed.set(record.taskId, { attempt: record.attempt, lines: record.diffLines });
+        }
+        const tasks = readFlowTasks(store.db).map((task) => ({
+          ...task,
+          diffLines: landed.get(task.id)?.lines ?? null,
+        }));
         const result = {
-          ...flowReport(readFlow(store.db, since), readFlowTasks(store.db), now.getTime()),
-          guards: guardLedger(store.records(), store.attempts(), now.getTime()),
+          ...flowReport(readFlow(store.db, since), tasks, now.getTime()),
+          guards: guardLedger(records, store.attempts(), now.getTime()),
           lifecycle: metrics,
         };
         if (json) print(JSON.stringify(result, null, 2));
@@ -307,6 +320,7 @@ export async function runWorkerCommand(
               `Bottleneck: ${result.bottleneck ?? 'unknown'}`,
               `Over-budget launches by layer: ${JSON.stringify(result.overBudgetLaunchesByLayer)}`,
               `Attempts per integrated task: ${result.attemptsPerIntegrated ?? 'unknown'}`,
+              `Chained: ${result.chain.chained.tasks} tasks, ${result.chain.chained.integrated} integrated, ${result.chain.chained.linesPerWorkerHour === null ? 'unknown' : result.chain.chained.linesPerWorkerHour.toFixed(1)} lines per worker-hour; unchained: ${result.chain.unchained.tasks} tasks, ${result.chain.unchained.integrated} integrated, ${result.chain.unchained.linesPerWorkerHour === null ? 'unknown' : result.chain.unchained.linesPerWorkerHour.toFixed(1)} lines per worker-hour; offers ${result.chain.offered}, declined ${JSON.stringify(result.chain.declined)}`,
               `Dev landing transpile: ${result.devTranspile.successfulChecks} passed, ${result.devTranspile.repairHandbacks} repair handbacks, ${result.devTranspile.unavailable} unavailable; ${result.devTranspile.measuredChecks} measured checks, ${result.devTranspile.totalMs === null ? 'cost unavailable' : `${result.devTranspile.totalMs}ms total`}.`,
               `Dev landing Kernel import: ${result.devKernelImport.successfulChecks} passed, ${result.devKernelImport.repairHandbacks} repair handbacks, ${result.devKernelImport.unavailable} unavailable; ${result.devKernelImport.measuredChecks} measured checks, setup ${result.devKernelImport.setupMs === null ? 'unavailable' : `${result.devKernelImport.setupMs}ms`}, import ${result.devKernelImport.importMs === null ? 'unavailable' : `${result.devKernelImport.importMs}ms`}, cleanup ${result.devKernelImport.cleanupMs === null ? 'unavailable' : `${result.devKernelImport.cleanupMs}ms`}, ${result.devKernelImport.totalMs === null ? 'cost unavailable' : `${result.devKernelImport.totalMs}ms total`}.`,
               `Urgent: ${result.urgent.tasks.length} tasks; ${result.urgent.integrated} integrated (${result.urgent.tasks.join(', ') || 'none'}); excluded from throughput.`,

@@ -22,6 +22,7 @@ import type {
   AttemptRef,
 } from './contracts.ts';
 import { recordFlow } from './flow.ts';
+import { recordChainOffer } from './chain.ts';
 import {
   liveGroups,
   processGroupCpuTicks,
@@ -1989,6 +1990,7 @@ export class WorkerJob implements GateOutcomeSink {
             }
           });
           if (plan) store.clearIntegrationPlan(outcome);
+          recordChainOffer(store.db, task, store.attempt(outcome), new Date().toISOString(), this.policy.records);
           released = this.releaseMetDependents();
           if (outcome.frozenAcceptanceChanges?.length) {
             const paths = canonicalConflictPaths(outcome.frozenAcceptanceChanges);

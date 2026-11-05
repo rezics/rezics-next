@@ -25,6 +25,16 @@ import {
   type BriefSizeSnapshot,
   type RiskOwnership,
 } from './briefs.ts';
+import {
+  chainLinkFor,
+  chainOverlaps,
+  chainStopReason,
+  chainableBrief,
+  pendingChainOffers,
+  recordChainDecision,
+  type ChainOffer,
+  type ChainRuntime,
+} from './chain.ts';
 import type { Brief, BriefContinuation, Pool, PoolReading, Profile, TaskClass } from './types.ts';
 import { findAllowedPool, poolBurnStatus } from './allowance.ts';
 import { nearCeilingSweepAdmissions, readRetainedPoolReadings } from './pacing.ts';
@@ -105,6 +115,8 @@ export type BacklogRuntime = {
   continueTask(goal: string, continuation: BriefContinuation, briefFile: string): Promise<void>;
   /** The `goal cancel` path. */
   cancel(taskId: string): Promise<void>;
+  /** Chained dispatch of landed sessions; omitted runtimes never chain. */
+  chain?: ChainRuntime;
   now?: () => number;
   policy?: ControlPolicy | undefined;
   /** Active-task cap; defaults to `maxWorkers` in `<state>/capacity.json`, else 32. */
@@ -125,6 +137,8 @@ export type BacklogSweep = {
   skipped?: true;
   dispatched: { goal: string; taskId: string; brief: string; lintWarnings?: string[] }[];
   continued: { goal: string; taskId: string; attempt: number; brief: string }[];
+  /** Briefs that continue a landed task's warm session as a new task. */
+  chained: { goal: string; taskId: string; from: { taskId: string; attempt: number }; brief: string }[];
   refused: { goal: string; brief: string; reason: string }[];
   returned: { goal: string; brief: string; reason: string }[];
   expired: { goal: string; taskId: string }[];
@@ -590,10 +604,102 @@ function pickBriefs(
   ];
 }
 
+/** Claim the oldest settled brief of the offer's Goal that overlaps its paths. The rename is the claim. */
+function claimChainBrief(
+  runtime: BacklogRuntime,
+  chain: ChainRuntime,
+  offer: ChainOffer,
+  settledBefore: number,
+): { claimed: string; file: string; written: number; brief: Brief } | undefined {
+  const goalDirectory = backlogDirectory(runtime.stateDirectory, offer.goal);
+  const claimDirectory = join(goalDirectory, CLAIM_DIRECTORY);
+  for (const file of briefs(goalDirectory, settledBefore)) {
+    let markdown: string;
+    try {
+      markdown = readFileSync(file, 'utf8');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
+      throw error;
+    }
+    const brief = chain.inspect(markdown);
+    if (
+      !brief ||
+      !chainableBrief(brief) ||
+      brief.goal !== offer.goal ||
+      brief.after.length ||
+      (brief.target ?? null) !== offer.target ||
+      !chainOverlaps(offer.paths, brief.paths, runtime.policy?.brief)
+    )
+      continue;
+    mkdirSync(claimDirectory, { recursive: true });
+    const claimed = join(claimDirectory, basename(file));
+    try {
+      const written = statSync(file).mtimeMs;
+      renameSync(file, claimed);
+      return { claimed, file, written, brief };
+    } catch (error) {
+      // A manager may move a brief away between the listing and the claim.
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Chain each landed session into the next overlapping brief of its Goal, ahead of the ordinary sweep so the warm
+ * session takes the brief first. Every offer gets exactly one answer, recorded as a flow event.
+ */
+async function chainLanded(
+  runtime: BacklogRuntime,
+  now: number,
+  budget: number,
+  refuse: (goal: string, brief: string, reason: string) => void,
+): Promise<NonNullable<BacklogSweep['chained']>> {
+  const chained: NonNullable<BacklogSweep['chained']> = [];
+  const chain = runtime.chain;
+  if (!chain) return chained;
+  const policy = runtime.policy ?? defaultPolicy;
+  let remaining = budget;
+  for (const offer of pendingChainOffers(runtime.db, new Date(now - policy.chain.offerWindowMs).toISOString())) {
+    if (remaining <= 0) break;
+    const answer = (action: 'chained' | 'declined', detail: Record<string, unknown>) =>
+      recordChainDecision(runtime.db, offer, action, new Date().toISOString(), detail);
+    const stop = chainStopReason(offer.depth, () => chain.contextTokens(offer), policy.chain);
+    if (stop) {
+      answer('declined', { reason: stop });
+      continue;
+    }
+    const claim = claimChainBrief(runtime, chain, offer, now - policy.backlog.settleMs);
+    if (!claim) {
+      answer('declined', { reason: 'no-overlapping-brief' });
+      continue;
+    }
+    const goalDirectory = backlogDirectory(runtime.stateDirectory, offer.goal);
+    let taskId: string;
+    try {
+      taskId = (await chain.dispatch(claim.claimed, chainLinkFor(offer))).taskId;
+    } catch (error) {
+      const reason = errorText(error);
+      refuse(offer.goal, fail(goalDirectory, claim.claimed, reason), reason);
+      answer('declined', { reason: 'dispatch-refused' });
+      continue;
+    }
+    const name = basename(claim.file);
+    const target = join(goalDirectory, DISPATCHED_DIRECTORY);
+    mkdirSync(target, { recursive: true });
+    renameSync(claim.claimed, join(target, `${taskId}-${name}`));
+    recordGoalDispatch(runtime, offer.goal, claim.written);
+    answer('chained', { taskId, brief: name });
+    chained.push({ goal: offer.goal, taskId, from: { taskId: offer.taskId, attempt: offer.attempt }, brief: name });
+    remaining -= 1;
+  }
+  return chained;
+}
+
 async function dispatchReady(
   runtime: BacklogRuntime,
   now: number,
-): Promise<Pick<BacklogSweep, 'dispatched' | 'continued' | 'refused' | 'returned'>> {
+): Promise<Pick<BacklogSweep, 'dispatched' | 'continued' | 'refused' | 'returned' | 'chained'>> {
   const root = backlogDirectory(runtime.stateDirectory);
   const goals = directories(root);
   const dispatched: BacklogSweep['dispatched'] = [];
@@ -632,6 +738,9 @@ async function dispatchReady(
   }
   const returned = returnProductBriefs(runtime, goals, now);
 
+  const chained = await chainLanded(runtime, now, available, refuse);
+  available -= chained.length;
+  sweepLeft -= chained.length;
   const waiterNeed = Math.max(0, Math.min(sweepLeft, waiterSlots));
   let waiterLeft = waiterNeed;
   for (const pick of pickBriefs(runtime, goals, available, waiterNeed, now)) {
@@ -757,7 +866,7 @@ async function dispatchReady(
       });
   }
   for (const [goal, entries] of refusedByGoal) notifyRefusals(runtime, goal, entries);
-  return { dispatched, continued, refused, returned };
+  return { dispatched, continued, refused, returned, chained };
 }
 
 type StoppedRow = { id: string; current_attempt: number; body: string };
@@ -954,8 +1063,8 @@ function wakeLowBacklogs(runtime: BacklogRuntime, now: number): string[] {
 
 /**
  * One controller run, in a child process the manager host starts each minute: cancel stopped tasks past their
- * limit, dispatch briefs that have an allowed pool now (then others) round-robin across Goals while active tasks are
- * below the cap, and wake managers with a low backlog.
+ * limit, chain landed sessions into overlapping briefs, dispatch briefs that have an allowed pool now (then others)
+ * round-robin across Goals while active tasks are below the cap, and wake managers with a low backlog.
  */
 export async function sweepBacklog(runtime: BacklogRuntime): Promise<BacklogSweep> {
   // One run at a time, across host restarts too: claim recovery assumes no other run holds a claim.
@@ -964,17 +1073,26 @@ export async function sweepBacklog(runtime: BacklogRuntime): Promise<BacklogSwee
     lease = acquireDirectoryLease(join(runtime.stateDirectory, 'leases', 'backlog'), runtime.policy?.leases);
   } catch (error) {
     if (error instanceof LeaseHeldError)
-      return { skipped: true, dispatched: [], continued: [], refused: [], returned: [], expired: [], woken: [] };
+      return {
+        skipped: true,
+        dispatched: [],
+        continued: [],
+        chained: [],
+        refused: [],
+        returned: [],
+        expired: [],
+        woken: [],
+      };
     throw error;
   }
   try {
     migrate(runtime.db, backlogMigrations);
     const now = (runtime.now ?? Date.now)();
     const expired = await expireStoppedTasks(runtime, now);
-    const { dispatched, continued, refused, returned } = await dispatchReady(runtime, now);
+    const { dispatched, continued, refused, returned, chained } = await dispatchReady(runtime, now);
     deliverResearchCompletions(runtime, now);
     const woken = wakeLowBacklogs(runtime, now);
-    return { dispatched, continued, refused, returned, expired, woken };
+    return { dispatched, continued, chained, refused, returned, expired, woken };
   } finally {
     lease.release();
   }
