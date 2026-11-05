@@ -387,6 +387,10 @@ Readback is a separate current observation and cannot acknowledge an uncertain c
 must retire forms and original intents on private-visit replacement, and retain the original cursor on failed
 continuation. This source alone does not establish that browser behavior or recorded presentation.
 
+Decision: each mounted management read and command keeps a retiring lease over its original browser session
+observation, exact route address and source object; acknowledged mutations keep forms read-only until the next exact
+readback, and only an uninterrupted explicit selection or acknowledged action may hand focus to the connected heading.
+
 The exhaustive mounted-route assertion in `test/kernel.test.ts` must include this additive GET; updating that
 entry changes no shared writer or authorization contract.
 

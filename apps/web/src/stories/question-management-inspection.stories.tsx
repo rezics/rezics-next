@@ -157,6 +157,10 @@ export const CaptionHistory: Story = { args: { history: captionHistory } };
 
 export const StaleConflict: Story = {
   args: { commandStates: { caption: 'stale' }, requireFreshInspection: true },
+  play: async ({ canvasElement }) => {
+    const statuses = within(canvasElement).getAllByRole('status');
+    await expect(statuses.some((status) => status.textContent === m.realm_question_action_conflict())).toBe(true);
+  },
 };
 
 export const StaleHistoryCursor: Story = {
@@ -168,9 +172,28 @@ export const UnavailableAdvice: Story = { args: { page: unavailablePage } };
 export const Phone390: Story = {
   args: { page: activePage, address: { selectedQuestionId: activeId, cursor: null }, history: captionHistory },
   globals: { viewport: { value: 'phone390', isRotated: false } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const edit = canvas.getByRole('button', { name: m.realm_question_caption_edit() });
+    edit.focus();
+    await userEvent.keyboard('{Enter}');
+    await expect(canvas.getByRole('heading', { name: m.realm_question_caption_edit() })).toHaveFocus();
+    const caption = canvas.getByLabelText(m.home_question_label());
+    await userEvent.clear(caption);
+    await userEvent.type(caption, 'A long replacement caption that stays readable at narrow widths.');
+    await userEvent.click(canvas.getByRole('button', { name: m.realm_question_review_definition() }));
+    await expect(canvas.getByText('A long replacement caption that stays readable at narrow widths.')).toBeVisible();
+  },
 };
 
 export const Desktop1280: Story = {
   args: { page, history: captionHistory },
   globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const restore = canvas.getByRole('button', { name: m.realm_question_restore() });
+    restore.focus();
+    await userEvent.keyboard('{Enter}');
+    await expect(canvas.getByRole('button', { name: m.container_lifecycle_confirm() })).toBeVisible();
+  },
 };

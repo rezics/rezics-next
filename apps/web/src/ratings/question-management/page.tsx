@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { getLocale } from '../../paraglide/runtime.js';
 import { m } from '../../paraglide/messages.js';
 import { useSession } from '../../session/query';
+import type { BrowserObservationSnapshot } from '../../session/observation';
 import {
   executeQuestionManagementIntent,
   readQuestionManagementForViewer,
@@ -22,6 +24,7 @@ import type {
   QuestionManagementAddress,
   QuestionManagementCommandResult,
   QuestionManagementHistoryRead,
+  QuestionManagementFocusTicket,
   QuestionManagementIntent,
   QuestionManagementPageData,
   QuestionManagementRead,
@@ -29,6 +32,26 @@ import type {
 } from './types';
 
 type PageAddress = Omit<QuestionManagementAddress, 'realmId'>;
+
+type QuestionVisitLease = {
+  active: boolean;
+  mounted: boolean;
+  initial: QuestionManagementVisit;
+  addressKey: string;
+  locale: string;
+  observation: BrowserObservationSnapshot;
+  sessionState: string;
+  subject: string | null | undefined;
+  csrfToken: string | null;
+  controllers: Set<AbortController>;
+};
+
+function retireQuestionVisit(visit: QuestionVisitLease | null) {
+  if (!visit?.active) return;
+  visit.active = false;
+  for (const controller of visit.controllers) controller.abort();
+  visit.controllers.clear();
+}
 
 async function digest(value: string): Promise<string> {
   const bytes = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)));
@@ -175,7 +198,10 @@ export function QuestionManagementContent({
     });
   const createDirty = createOpen && (definition.meaning.length > 0 || definition.label.length > 0);
   const captionDirty = captionOpen && caption !== (page.selected?.question.label ?? '');
-  const dirty = createDirty || captionDirty || lifecycleConfirm !== null;
+  const dirty =
+    (createState === 'idle' && createDirty) ||
+    (captionState === 'idle' && captionDirty) ||
+    (lifecycleConfirm !== null && lifecycleState === 'idle');
 
   useEffect(() => {
     if (createOpen) createHeading.current?.focus();
@@ -685,11 +711,31 @@ export function QuestionManagementPage({
   address,
   locale,
   navigate,
+  onSelectQuestion,
+  sessionObservation,
+  isSessionObservationCurrent,
+  addressKey,
+  isAddressCurrent,
+  focusTicket,
+  isFocusTicketCurrent,
+  consumeFocusTicket,
+  captureFocusEpoch,
+  acknowledgeFocus,
 }: {
   initial: QuestionManagementVisit;
   address: PageAddress | null;
   locale: string;
   navigate: (search: { selectedQuestionId?: string; cursor?: string }) => void;
+  onSelectQuestion: (questionId: string) => void;
+  sessionObservation: BrowserObservationSnapshot;
+  isSessionObservationCurrent: () => boolean;
+  addressKey: string;
+  isAddressCurrent: () => boolean;
+  focusTicket: QuestionManagementFocusTicket | null;
+  isFocusTicketCurrent: (ticket: QuestionManagementFocusTicket) => boolean;
+  consumeFocusTicket: (ticket: QuestionManagementFocusTicket) => boolean;
+  captureFocusEpoch: () => number;
+  acknowledgeFocus: (questionId: string | null, focusEpoch: number, afterRead: number) => void;
 }) {
   const session = useSession();
   const [read, setRead] = useState<QuestionManagementRead | null>(null);
@@ -705,47 +751,110 @@ export function QuestionManagementPage({
   >({});
   const [dirty, setDirty] = useState(false);
   const [requiresFreshInspection, setRequiresFreshInspection] = useState(false);
+  const [postAcknowledgementRead, setPostAcknowledgementRead] = useState(false);
+  const [inspectionKey, setInspectionKey] = useState(0);
   const generation = useRef(0);
+  const admittedReadGeneration = useRef(0);
   const selectedHeading = useRef<HTMLHeadingElement>(null);
   const commandControllers = useRef(new Map<QuestionManagementAction, AbortController>());
-  const visitGeneration = useRef(0);
-  const visitKey = JSON.stringify([initial, address, locale, session.state, session.subject, session.csrfToken]);
-  const visitKeyRef = useRef(visitKey);
-  visitKeyRef.current = visitKey;
+  const visitRef = useRef<QuestionVisitLease | null>(null);
+  let visit = visitRef.current;
+  if (
+    !visit ||
+    visit.initial !== initial ||
+    visit.addressKey !== addressKey ||
+    visit.locale !== locale ||
+    visit.observation !== sessionObservation ||
+    visit.sessionState !== session.state ||
+    visit.subject !== session.subject ||
+    visit.csrfToken !== session.csrfToken
+  ) {
+    retireQuestionVisit(visit);
+    visit = {
+      active: true,
+      mounted: false,
+      initial,
+      addressKey,
+      locale,
+      observation: sessionObservation,
+      sessionState: session.state,
+      subject: session.subject,
+      csrfToken: session.csrfToken,
+      controllers: new Set(),
+    };
+    visitRef.current = visit;
+  }
+  const owner = visit;
+  const isVisitCurrent = (candidate: QuestionVisitLease = owner) => {
+    const current =
+      candidate.active &&
+      candidate.mounted &&
+      visitRef.current === candidate &&
+      candidate.initial === initial &&
+      candidate.addressKey === addressKey &&
+      candidate.locale === locale &&
+      candidate.observation === sessionObservation &&
+      candidate.observation.state === 'signed-in' &&
+      candidate.observation.observation.subject === session.subject &&
+      candidate.sessionState === 'signed-in' &&
+      candidate.subject === session.subject &&
+      candidate.csrfToken === session.csrfToken &&
+      isSessionObservationCurrent() &&
+      isAddressCurrent() &&
+      getLocale() === candidate.locale;
+    if (!current) retireQuestionVisit(candidate);
+    return current;
+  };
+  const isVisitAdmitted = (candidate: QuestionVisitLease = owner) => {
+    const current =
+      candidate.active &&
+      visitRef.current === candidate &&
+      candidate.initial === initial &&
+      candidate.addressKey === addressKey &&
+      candidate.locale === locale &&
+      candidate.observation === sessionObservation &&
+      candidate.observation.state === 'signed-in' &&
+      candidate.observation.observation.subject === session.subject &&
+      candidate.sessionState === 'signed-in' &&
+      candidate.subject === session.subject &&
+      candidate.csrfToken === session.csrfToken &&
+      isSessionObservationCurrent() &&
+      isAddressCurrent() &&
+      getLocale() === candidate.locale;
+    if (!current) retireQuestionVisit(candidate);
+    return current;
+  };
+
+  useLayoutEffect(() => {
+    if (owner.active) owner.mounted = true;
+    return () => retireQuestionVisit(owner);
+  }, [owner]);
   const intentRef = useRef(intents);
   const stateRef = useRef(commandStates);
   intentRef.current = intents;
   stateRef.current = commandStates;
 
   useEffect(() => {
-    visitGeneration.current++;
-    for (const controller of commandControllers.current.values()) controller.abort();
-    commandControllers.current.clear();
-    setIntents({});
-    setCommandStates({});
-    setHistory(undefined);
-    setHistoryCursor(null);
-    setRequiresFreshInspection(false);
-    return () => {
-      visitGeneration.current++;
-      for (const controller of commandControllers.current.values()) controller.abort();
-      commandControllers.current.clear();
-    };
-  }, [visitKey]);
-
-  useEffect(() => {
     let alive = true;
+    const candidate = owner;
     setSessionCurrent(null);
-    if (session.state !== 'signed-in' || !session.subject || !session.csrfToken || !initial.csrfEpisode) {
+    if (
+      session.state !== 'signed-in' ||
+      !session.subject ||
+      !session.csrfToken ||
+      !initial.csrfEpisode ||
+      sessionObservation.state !== 'signed-in'
+    ) {
       setSessionCurrent(false);
       return () => {
         alive = false;
       };
     }
     void digest(session.csrfToken).then((episode) => {
-      if (alive)
+      if (alive && isVisitCurrent(candidate))
         setSessionCurrent(
           session.subject === initial.viewer &&
+            session.subject === sessionObservation.observation.subject &&
             episode === initial.csrfEpisode &&
             initial.locale === locale &&
             initial.state === 'preparing',
@@ -754,14 +863,18 @@ export function QuestionManagementPage({
     return () => {
       alive = false;
     };
-  }, [initial, locale, session.csrfToken, session.state, session.subject]);
+  }, [initial, locale, owner, session.csrfToken, session.state, session.subject, sessionObservation]);
 
   useEffect(() => {
+    const candidate = owner;
     const readGeneration = ++generation.current;
     const controller = new AbortController();
-    if (!address || initial.state !== 'preparing' || sessionCurrent !== true) {
+    candidate.controllers.add(controller);
+    if (!isVisitCurrent(candidate) || !address || initial.state !== 'preparing' || sessionCurrent !== true) {
       setRead(null);
       setBusy(false);
+      controller.abort();
+      candidate.controllers.delete(controller);
       return () => {
         controller.abort();
       };
@@ -786,16 +899,29 @@ export function QuestionManagementPage({
       signal: controller.signal,
     })
       .then((result) => {
-        if (controller.signal.aborted || generation.current !== readGeneration) return;
+        if (
+          controller.signal.aborted ||
+          generation.current !== readGeneration ||
+          !isVisitCurrent(candidate)
+        )
+          return;
+        admittedReadGeneration.current = readGeneration;
         if (result.state === 'ready' && result.page.viewer.accountId !== result.viewer) {
           setRead({ ...result, state: 'retired' });
           return;
         }
         setRead(result);
-        if (result.state === 'ready' && requiresFreshInspection) setRequiresFreshInspection(false);
+        if (result.state === 'ready') {
+          if (requiresFreshInspection) setRequiresFreshInspection(false);
+          if (postAcknowledgementRead) {
+            setDirty(false);
+            setInspectionKey((value) => value + 1);
+            setPostAcknowledgementRead(false);
+          }
+        }
       })
       .catch(() => {
-        if (!controller.signal.aborted && generation.current === readGeneration)
+        if (!controller.signal.aborted && generation.current === readGeneration && isVisitCurrent(candidate))
           setRead({
             realmId: initial.realmId,
             selectedQuestionId: initial.selectedQuestionId,
@@ -806,29 +932,42 @@ export function QuestionManagementPage({
           });
       })
       .finally(() => {
-        if (!controller.signal.aborted && generation.current === readGeneration) setBusy(false);
+        candidate.controllers.delete(controller);
+        if (!controller.signal.aborted && generation.current === readGeneration && isVisitCurrent(candidate))
+          setBusy(false);
       });
     return () => {
-      generation.current++;
       controller.abort();
+      candidate.controllers.delete(controller);
     };
-  }, [address, initial, locale, retry, sessionCurrent]);
+  }, [address, initial, locale, owner, retry, sessionCurrent]);
 
   useEffect(() => {
-    if (read?.state === 'ready' && address?.selectedQuestionId) selectedHeading.current?.focus();
-  }, [address?.selectedQuestionId, read]);
+    if (
+      focusTicket &&
+      address?.selectedQuestionId === focusTicket.questionId &&
+      read?.state === 'ready' &&
+      admittedReadGeneration.current >= focusTicket.afterRead &&
+      isVisitCurrent(owner) &&
+      isFocusTicketCurrent(focusTicket) &&
+      selectedHeading.current?.isConnected
+    ) {
+      if (consumeFocusTicket(focusTicket)) selectedHeading.current.focus();
+    }
+  }, [address?.selectedQuestionId, focusTicket, read, consumeFocusTicket, isFocusTicketCurrent, owner]);
 
   const select = (questionId: string) => {
-    navigate({ selectedQuestionId: questionId });
+    if (isVisitCurrent()) onSelectQuestion(questionId);
   };
   const restart = () => {
-    navigate(address?.selectedQuestionId ? { selectedQuestionId: address.selectedQuestionId } : {});
+    if (isVisitCurrent()) navigate(address?.selectedQuestionId ? { selectedQuestionId: address.selectedQuestionId } : {});
   };
   const next = (cursor: string) => {
-    navigate({
-      ...(address?.selectedQuestionId ? { selectedQuestionId: address.selectedQuestionId } : {}),
-      cursor,
-    });
+    if (isVisitCurrent())
+      navigate({
+        ...(address?.selectedQuestionId ? { selectedQuestionId: address.selectedQuestionId } : {}),
+        cursor,
+      });
   };
 
   const setActionState = (action: QuestionManagementAction, state: QuestionManagementActionState) =>
@@ -845,14 +984,29 @@ export function QuestionManagementPage({
     body: QuestionDefinitionInput | QuestionCaptionInput | QuestionLifecycleInput,
     retryOriginal = false,
   ) => {
-    if (sessionCurrent !== true || requiresFreshInspection || !address) return;
+    const candidate = owner;
+    if (
+      !isVisitCurrent(candidate) ||
+      sessionCurrent !== true ||
+      requiresFreshInspection ||
+      postAcknowledgementRead ||
+      !address
+    )
+      return;
     const currentRead = read;
     if (!currentRead || currentRead.state !== 'ready') return;
+    const readGeneration = generation.current;
     if (stateRef.current[action] === 'sending') return;
     let intent = retryOriginal ? intentRef.current[action] : undefined;
     if (retryOriginal && (!intent || stateRef.current[action] !== 'uncertain')) return;
+    if (!intent && intentRef.current[action]) return;
+    const focusEpoch = captureFocusEpoch();
+    const controller = new AbortController();
+    commandControllers.current.get(action)?.abort();
+    commandControllers.current.set(action, controller);
+    candidate.controllers.add(controller);
+    setActionState(action, 'sending');
     if (!intent) {
-      if (intentRef.current[action]) return;
       try {
         intent = await captureQuestionManagementIntent({
           action,
@@ -862,28 +1016,41 @@ export function QuestionManagementPage({
           csrfToken: session.csrfToken!,
           body,
         });
-      } catch {
-        setActionState(action, 'stale');
-        setRequiresFreshInspection(true);
-        setRetry((value) => value + 1);
-        return;
+      } catch (error) {
+        candidate.controllers.delete(controller);
+        if (commandControllers.current.get(action) === controller) commandControllers.current.delete(action);
+        if (error instanceof TypeError && !controller.signal.aborted && isVisitCurrent(candidate)) {
+          setActionState(action, 'stale');
+          setRequiresFreshInspection(true);
+          setRetry((value) => value + 1);
+          return;
+        }
+        throw error;
       }
     }
+    if (
+      controller.signal.aborted ||
+      commandControllers.current.get(action) !== controller ||
+      generation.current !== readGeneration ||
+      !isVisitCurrent(candidate)
+    ) {
+      candidate.controllers.delete(controller);
+      if (commandControllers.current.get(action) === controller) commandControllers.current.delete(action);
+      if (!controller.signal.aborted && isVisitCurrent(candidate)) {
+        setActionState(action, 'stale');
+        setRequiresFreshInspection(true);
+      }
+      return;
+    }
     if (!questionManagementIntentMatchesPage(intent, currentRead.page)) {
+      candidate.controllers.delete(controller);
+      commandControllers.current.delete(action);
       setActionState(action, 'stale');
       setRequiresFreshInspection(true);
       setRetry((value) => value + 1);
       return;
     }
-
-    if (visitKeyRef.current !== visitKey) return;
-    const episode = visitGeneration.current;
-    const commandVisitKey = visitKey;
-    const controller = new AbortController();
-    commandControllers.current.get(action)?.abort();
-    commandControllers.current.set(action, controller);
     if (!retryOriginal) setIntents((current) => ({ ...current, [action]: intent! }));
-    setActionState(action, 'sending');
     let result: QuestionManagementCommandResult;
     try {
       result = await executeQuestionManagementIntent({
@@ -896,20 +1063,31 @@ export function QuestionManagementPage({
     }
     if (
       controller.signal.aborted ||
-      visitGeneration.current !== episode ||
-      visitKeyRef.current !== commandVisitKey ||
-      commandControllers.current.get(action) !== controller
-    )
+      generation.current !== readGeneration ||
+      commandControllers.current.get(action) !== controller ||
+      !isVisitCurrent(candidate)
+    ) {
+      candidate.controllers.delete(controller);
+      if (commandControllers.current.get(action) === controller) commandControllers.current.delete(action);
+      if (!controller.signal.aborted && isVisitCurrent(candidate)) {
+        setActionState(action, 'stale');
+        setRequiresFreshInspection(true);
+      }
       return;
+    }
     commandControllers.current.delete(action);
+    candidate.controllers.delete(controller);
 
     if (result.kind === 'acknowledged') {
       removeIntent(action);
       setActionState(action, 'idle');
+      setPostAcknowledgementRead(true);
       setHistoryCursor(null);
       if (action === 'create' && result.questionId) {
+        acknowledgeFocus(result.questionId, focusEpoch, 1);
         navigate({ selectedQuestionId: result.questionId });
       } else {
+        acknowledgeFocus(address.selectedQuestionId, focusEpoch, generation.current + 1);
         setRetry((value) => value + 1);
       }
       return;
@@ -937,16 +1115,21 @@ export function QuestionManagementPage({
 
   const selectedHistoryId = address?.selectedQuestionId ?? null;
   useEffect(() => {
+    const candidate = owner;
+    const source = read;
     const historyGeneration = generation.current;
     const controller = new AbortController();
+    candidate.controllers.add(controller);
     if (
       !selectedHistoryId ||
       sessionCurrent !== true ||
-      !read ||
-      read.state !== 'ready' ||
-      read.selectedQuestionId !== selectedHistoryId
+      !source ||
+      source.state !== 'ready' ||
+      source.selectedQuestionId !== selectedHistoryId ||
+      !isVisitCurrent(candidate)
     ) {
       setHistory(undefined);
+      candidate.controllers.delete(controller);
       return () => controller.abort();
     }
     const cursor = historyCursor;
@@ -956,23 +1139,40 @@ export function QuestionManagementPage({
       signal: controller.signal,
     })
       .then((result) => {
-        if (!controller.signal.aborted && generation.current === historyGeneration) setHistory(result);
+        if (
+          !controller.signal.aborted &&
+          generation.current === historyGeneration &&
+          isVisitCurrent(candidate)
+        )
+          setHistory(result);
       })
       .catch(() => {
-        if (!controller.signal.aborted && generation.current === historyGeneration)
+        if (
+          !controller.signal.aborted &&
+          generation.current === historyGeneration &&
+          isVisitCurrent(candidate)
+        )
           setHistory({ state: 'unavailable', questionId: selectedHistoryId, cursor });
+      })
+      .finally(() => {
+        candidate.controllers.delete(controller);
       });
-    return () => controller.abort();
-  }, [historyCursor, historyRetry, initial, read, selectedHistoryId, sessionCurrent]);
+    return () => {
+      controller.abort();
+      candidate.controllers.delete(controller);
+    };
+  }, [historyCursor, historyRetry, initial, locale, owner, read, selectedHistoryId, sessionCurrent]);
 
   const reportDirty = useCallback((value: boolean) => setDirty(value), []);
 
   if (!address || initial.state === 'invalid-address') return <p role="alert">{m.home_questions_invalid()}</p>;
   if (session.state === 'signed-out' || read?.state === 'signed-out' || initial.state === 'signed-out')
     return <p role="status">{m.own_classifications_signed_out()}</p>;
+  if (session.state === 'unknown' || sessionObservation.state === 'unknown')
+    return <p role="status">{m.home_questions_loading()}</p>;
+  if (!isVisitAdmitted()) return <p role="status">{m.own_classifications_stale()}</p>;
   const keepDuringRequiredInspection = requiresFreshInspection && read?.state === 'ready';
   if (
-    session.state === 'unknown' ||
     sessionCurrent === null ||
     (busy && !keepDuringRequiredInspection) ||
     (initial.state === 'preparing' && !read)
@@ -1001,7 +1201,7 @@ export function QuestionManagementPage({
             <button
               type="button"
               className="rounded-md border px-4 py-2"
-              onClick={() => setRetry((value) => value + 1)}
+              onClick={() => isVisitCurrent() && setRetry((value) => value + 1)}
             >
               {m.home_questions_retry()}
             </button>
@@ -1020,6 +1220,7 @@ export function QuestionManagementPage({
         </p>
       ) : null}
       <QuestionManagementContent
+        key={inspectionKey}
         page={page}
         address={address}
         onSelect={select}
@@ -1040,15 +1241,15 @@ export function QuestionManagementPage({
           setHistoryCursor(null);
           setHistoryRetry((value) => value + 1);
         }}
-        requireFreshInspection={requiresFreshInspection}
+        requireFreshInspection={requiresFreshInspection || postAcknowledgementRead}
       />
       <OwnVotesDeparture
-        dirty={dirty}
+        dirty={dirty && !postAcknowledgementRead}
         locked={
-          Object.values(commandStates).some((state) => state === 'sending' || state === 'uncertain') ||
-          requiresFreshInspection
+          Object.values(commandStates).some((state) => state === 'sending' || state === 'uncertain')
         }
-        isCurrent={() => sessionCurrent === true && initial.state === 'preparing'}
+        isCurrent={() => sessionCurrent === true && initial.state === 'preparing' && isVisitCurrent()}
+        onLeave={() => retireQuestionVisit(owner)}
       />
     </>
   );

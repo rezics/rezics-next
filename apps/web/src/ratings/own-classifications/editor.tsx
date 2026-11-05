@@ -12,10 +12,11 @@ import type {
 
 export type ClassificationCommands = {
   read: Extract<OwnClassificationsRead, { state: 'ready' }>;
+  retire?: () => void;
   csrfToken: () => string | null;
   send: (intent: ClassificationIntent, signal: AbortSignal) => Promise<ClassificationCommandResult>;
   review: (intent: ClassificationIntent, signal: AbortSignal) => Promise<ClassificationReview>;
-  departure?: (dirty: boolean, locked: boolean, current: () => boolean) => ReactNode;
+  departure?: (dirty: boolean, locked: boolean, current: () => boolean, retire: () => void) => ReactNode;
 };
 
 /** One selected exact slot owns its draft, immutable request and independent current readback. */
@@ -45,8 +46,14 @@ export function ClassificationEditor({
   const pending = useRef(false);
   const mounted = useRef(false);
   const abort = useRef(new AbortController());
-  const current = () => mounted.current && !abort.current.signal.aborted && isCurrent();
-  const dirty = assessment !== row.own.assessment || falsePositive !== row.own.falsePositive;
+  const current = () => {
+    if (!mounted.current || abort.current.signal.aborted || !isCurrent()) {
+      abort.current.abort();
+      return false;
+    }
+    return true;
+  };
+  const dirty = feedback === null && (assessment !== row.own.assessment || falsePositive !== row.own.falsePositive);
   const locked = busy || original.current !== null;
   useEffect(() => {
     mounted.current = true;
@@ -58,8 +65,8 @@ export function ClassificationEditor({
     };
   }, []);
   useEffect(() => {
-    onProtection(dirty || locked);
-  }, [dirty, locked]);
+    onProtection(dirty || busy || feedback === 'uncertain');
+  }, [dirty, busy, feedback]);
   const setAllowed = classificationActionAllowed(row, 'PUT');
   const clearAllowed = classificationActionAllowed(row, 'DELETE');
 
@@ -119,7 +126,10 @@ export function ClassificationEditor({
 
   return (
     <div className="min-w-0 space-y-3">
-      {commands.departure?.(dirty, busy || feedback === 'uncertain', current)}
+      {commands.departure?.(dirty, busy || feedback === 'uncertain', current, () => {
+        abort.current.abort();
+        commands.retire?.();
+      })}
       {setAllowed ? (
         <fieldset disabled={locked || !isCurrent()} className="space-y-3">
           <legend>{m.subject_classification_assessment_select({}, options)}</legend>

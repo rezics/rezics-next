@@ -104,3 +104,10 @@ export type QuestionManagementActionState =
   | 'denied'
   | 'invalid'
   | 'unavailable';
+
+export type QuestionManagementFocusTicket = Readonly<{
+  id: number;
+  questionId: string;
+  focusEpoch: number;
+  afterRead: number;
+}>;
