@@ -2,11 +2,12 @@ import { contextSubjectAddress } from '../../features/pages/context-subject';
 import { PendingPage } from '../../shell/pending';
 import { subjectReaderPartition, useSubjectReaderRefresh } from '../../features/pages/context-reader';
 import { useSubjectPersonalReader } from '../../features/pages/subject-personal-reader';
-import { isView, type View } from '@rezics/composition';
+import { isView, type PageContinuation, type View } from '@rezics/composition';
 import { createFileRoute, notFound, redirect, useLocation, useRouter } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { SubjectLink, subjectPageMessages, viewTabLabels } from '../../features/pages/route-support';
-import { subjectPageType } from '../../features/pages/subject';
+import { pageRelationProperties, subjectPageType } from '../../features/pages/subject';
+import { WorkFranchiseReading } from '../../features/pages/showcase-work';
 import { SubjectFrame, subjectFrame, SubjectViewPage } from '../../features/pages/subject-frame';
 import { SubjectLibraryLeaf } from '../../features/pages/subject-library-leaf';
 import { subjectTabs } from '../../features/pages/views';
@@ -22,6 +23,7 @@ import {
   subjectUrlForView,
   subjectViewPaths,
   subjectViewPagesQuery,
+  subjectRelationsQuery,
 } from '../../features/pages/subject-queries';
 import { useSession } from '../../session/query';
 import { validateViewCursor, validatePageRealm, validatePageNode } from '../../features/pages/view-cursor';
@@ -222,10 +224,22 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
       throw redirect(canonicalRedirect(subjectUrlForView(survivor.value), location.searchStr, location.hash, 302));
     }
     const type = subjectPageType(loaded.overview);
-    const typeData = type ? await context.queryClient.ensureQueryData(subjectFrameQuery(type, getLocale())) : {};
+    const [typeData, relations] = await Promise.all([
+      type ? context.queryClient.ensureQueryData(subjectFrameQuery(type, getLocale())) : Promise.resolve({}),
+      deps.streamProperty
+        ? context.queryClient.ensureQueryData(subjectRelationsQuery(pageRelationProperties(loaded.page), getLocale()))
+        : Promise.resolve(undefined),
+    ]);
     const nextHref =
       loaded.next !== undefined
-        ? `${canonical.href}/${encodeURIComponent(params.view)}?${loaded.node ? `node=${encodeURIComponent(loaded.node)}&` : ''}cursor=${encodeURIComponent(loaded.next)}${deps.realm ? `&realm=${encodeURIComponent(deps.realm)}` : ''}${deps.via ? `&via=${encodeURIComponent(deps.via)}` : ''}`
+        ? `${canonical.href}/${encodeURIComponent(params.view)}?${new URLSearchParams({
+            ...(loaded.node ? { node: loaded.node } : {}),
+            cursor: loaded.next,
+            ...(deps.realm ? { realm: deps.realm } : {}),
+            ...(deps.streamProperty ? { streamProperty: deps.streamProperty } : {}),
+            ...(deps.streamDirection ? { streamDirection: deps.streamDirection } : {}),
+            ...(deps.via ? { via: deps.via } : {}),
+          })}`
         : undefined;
     return {
       ...canonical,
@@ -243,6 +257,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
       node: deps.node,
       streamProperty: deps.streamProperty,
       streamDirection: deps.streamDirection,
+      relations,
     };
   },
   head: ({ loaderData, match }) =>
@@ -275,6 +290,7 @@ function SubjectViewRoute() {
     node,
     streamProperty,
     streamDirection,
+    relations,
     reader: initialReader,
     page,
     verification,
@@ -294,8 +310,16 @@ function SubjectViewRoute() {
   const reader = personal.reader;
   const reviewSession = session === 'unknown' ? 'unavailable' : session;
   const currentHref = useLocation().publicHref;
+  const navigate = Route.useNavigate();
   const nonce = useRouter().options.ssr?.nonce;
   const locale = getLocale();
+  const onWorkContinue = (continuation: PageContinuation) => {
+    void navigate({
+      search: (previous) => ({ ...previous, node: continuation.node, cursor: continuation.cursor }),
+      hash: '#work-franchise',
+      resetScroll: false,
+    });
+  };
   if (!currentReader) return <PendingPage />;
   return (
     <SubjectViewPage
@@ -305,6 +329,10 @@ function SubjectViewRoute() {
       selectedNode={node}
       selectedStreamProperty={streamProperty}
       selectedStreamDirection={streamDirection}
+      selectedCursor={cursor}
+      onWorkContinue={onWorkContinue}
+      finiteWorkRegionReader={WorkFranchiseReading}
+      {...(relations ? { relations } : {})}
       {...(search.via ? { returnTo: search.via } : {})}
       subjectLabel={frame.title.text}
       curation={

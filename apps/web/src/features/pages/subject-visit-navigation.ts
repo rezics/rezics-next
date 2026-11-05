@@ -919,6 +919,19 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
     )
       return;
     const fragment = url.hash === '' ? '#connections' : url.hash;
+    const franchiseReturn = workFranchiseReturn(fragment);
+    const finiteWorkRegion = Boolean(
+      subject?.[2] &&
+        subject[2] !== 'overview' &&
+        isView(subject[2]) &&
+        node !== null &&
+        streamProperty !== null &&
+        streamDirection !== null &&
+        (property === null || property === streamProperty) &&
+        (fragment === '#work-franchise' ||
+          (franchiseReturn?.node === node &&
+            franchiseReturn.stream === `${streamDirection === 'inverse' ? 'in' : 'out'}:${streamProperty}`)),
+    );
     const organizationReturn = organizationHistoryVisitReturn(fragment);
     if (
       organizationReturn &&
@@ -933,6 +946,7 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
       !(subject?.[2] === 'works' && creditReturn(fragment)) &&
       fragment !== '#literary-reader' &&
       !(subject && !subject[2] && (fragment === '#work-franchise' || workFranchiseReturn(fragment))) &&
+      !(subject?.[2] && (fragment === '#work-franchise' || franchiseReturn !== undefined) && finiteWorkRegion) &&
       !(subject && !subject[2] && organizationHistoryVisitReturn(fragment)) &&
       fragment !== '#connections' &&
       !(subject && !subject[2] && fragment === '#supplied-names') &&
