@@ -160,6 +160,31 @@ function bindReyloUnixSocket(databaseUrl: string): void {
   process.env.PGHOST = socket;
   process.env.PGUSER = decodeURIComponent(url.username);
   process.env.PGPASSWORD = decodeURIComponent(url.password);
+  // node-pg's owner pool in createSemanticDriver has no connectionTimeoutMillis.
+  process.env.PGCONNECT_TIMEOUT ??= '5';
+}
+
+/** CREATE DATABASE TEMPLATE waits while any other session is on the migrated database. */
+async function disconnectTemplateSessions(databaseUrl: string): Promise<void> {
+  const source = new URL(databaseUrl);
+  const template = decodeURIComponent(source.pathname.slice(1));
+  if (!/^[A-Za-z0-9_]+$/.test(template)) throw new Error('Unsafe template database name');
+  const adminUrl = new URL(source);
+  adminUrl.pathname = '/postgres';
+  const admin = new Pool({
+    connectionString: adminUrl.href,
+    max: 1,
+    connectionTimeoutMillis: 1500,
+    statement_timeout: 5000,
+  });
+  try {
+    await admin.query(
+      `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()`,
+      [template],
+    );
+  } finally {
+    await admin.end();
+  }
 }
 
 async function postgresConnectionWorks(url: string): Promise<Error | undefined> {
@@ -541,6 +566,7 @@ async function startStack(): Promise<
     PGHOST: process.env.PGHOST,
     PGUSER: process.env.PGUSER,
     PGPASSWORD: process.env.PGPASSWORD,
+    PGCONNECT_TIMEOUT: process.env.PGCONNECT_TIMEOUT,
   };
   let stopped: Promise<void> | undefined;
   let peakMemory = process.memoryUsage().rss;
@@ -672,7 +698,7 @@ async function startStack(): Promise<
       }
       if (originalDatabaseUrl === undefined) delete process.env.DATABASE_URL;
       else process.env.DATABASE_URL = originalDatabaseUrl;
-      for (const name of ['PGHOST', 'PGUSER', 'PGPASSWORD'] as const) {
+      for (const name of ['PGHOST', 'PGUSER', 'PGPASSWORD', 'PGCONNECT_TIMEOUT'] as const) {
         const original = originalPostgresEnv[name];
         if (original === undefined) delete process.env[name];
         else process.env[name] = original;
@@ -881,9 +907,12 @@ async function startStack(): Promise<
       return Object.assign(base, overrides);
     };
     let kernel: ReturnType<typeof createKernel> | undefined;
+    reportStackProgress('Native web stack startup: disconnecting template sessions');
+    await disconnectTemplateSessions(process.env.DATABASE_URL!);
     reportStackProgress('Native web stack startup: creating native kernel and Auth fixtures');
     driver = await createSemanticDriver(
       (dependencies) => {
+        reportStackProgress('Native web stack startup: composing native kernel');
         if (search && !dependencies.tokens) throw new Error('Native kernel did not supply session keys');
         if (commerce) {
           const databaseUrl = dependencies.pool.options.connectionString;
