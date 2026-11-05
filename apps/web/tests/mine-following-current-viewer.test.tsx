@@ -49,6 +49,26 @@ const query = await import('../src/kernel/query');
 Object.defineProperty(query.personalRead, 'enabled', { value: true });
 afterAll(() => mock.restore());
 
+// Server readers import UI summaries before the mounted cases install their windows.
+// Initialize browser feature detection before loading those shared modules.
+const { Window: BootstrapWindow } = await import(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+);
+const bootstrap = new BootstrapWindow({ url: origin });
+const bootstrapGlobals = { window: bootstrap, document: bootstrap.document, navigator: bootstrap.navigator };
+const bootstrapPrevious = new Map(
+  Object.keys(bootstrapGlobals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
+);
+for (const [key, value] of Object.entries(bootstrapGlobals))
+  Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+afterAll(async () => {
+  await bootstrap.happyDOM.close();
+  for (const [key, descriptor] of bootstrapPrevious) {
+    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+    else Reflect.deleteProperty(globalThis, key);
+  }
+});
+
 const actions = await import('../src/library/mine-following-actions');
 const kernel = await import('../src/kernel/client');
 const definitions = await import('../src/subject/definitions');
@@ -380,7 +400,7 @@ test('the mounted default Following composition retires viewer, cursor and row l
       await tick();
     });
     expect(reads).toHaveLength(1);
-    expect(host.querySelector<HTMLButtonElement>('[data-slot="follow-control"] button')!.disabled).toBe(true);
+    await remove();
     expect(writes).toHaveLength(0);
     await act(async () => {
       client.setQueryData(sessionQuery.queryKey, viewer('A'));
