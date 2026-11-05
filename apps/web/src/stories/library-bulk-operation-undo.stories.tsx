@@ -26,6 +26,7 @@ function operation(action: BulkOperation['action'] = 'remove_from_library', targ
     state: null,
     collectionId: null,
     selectionKind: 'explicit',
+    selectionSource: null,
     phase: 'completed',
     selectionComplete: true,
     occurrencesComplete: true,
