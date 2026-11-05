@@ -25,7 +25,12 @@ mock.module('@tanstack/react-start/server', () => ({
 mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('../src/kernel/client', () => ({ kernelClient: () => nativeClient }));
 mock.module('../src/library/subject-slot', () => ({
-  readSubjectSlotSession: async () => ({ state: 'signed-in', subject: 'owner', csrfToken: 'csrf', authorization: 'Bearer current' }),
+  readSubjectSlotSession: async () => ({
+    state: 'signed-in',
+    subject: 'owner',
+    csrfToken: 'csrf',
+    authorization: 'Bearer current',
+  }),
 }));
 const { readPrivateDiary } = await import('../src/library/private-diary/server');
 const { Window } = await import(
@@ -209,30 +214,46 @@ test('prepared Diary composition preserves native refusals, retirement, stale pa
     [503, { code: 'platform_closed' }, 'unavailable'],
     [409, { code: 'stale' }, 'unavailable'],
   ] as const;
-  for (const wrapped of [false, true]) for (const [status, body, kind] of cases) {
-    const requests: Request[] = [];
-    const client = createKernelClient('https://kernel.test', { fetch: async (input, init) => {
-      requests.push(new Request(input, init));
-      return Response.json(body, { status });
-    } });
-    nativeClient = wrapped ? withPlatformClosedRecognition(client) : client;
-    for (const address of [{}, { year: 2020 }]) {
-      const result = await readPrivateDiary({ data: address });
-      expect(result).toMatchObject({ kind: 'ready', viewer: 'owner', csrfToken: 'csrf', address,
-        diary: { kind: status === 409 ? 'stale' : kind },
-        summary: { kind: 'year' in address ? 'not-selected' : kind },
-        reportedYear: 'year' in address ? { kind } : null });
+  for (const wrapped of [false, true])
+    for (const [status, body, kind] of cases) {
+      const requests: Request[] = [];
+      const client = createKernelClient('https://kernel.test', {
+        fetch: async (input, init) => {
+          requests.push(new Request(input, init));
+          return Response.json(body, { status });
+        },
+      });
+      nativeClient = wrapped ? withPlatformClosedRecognition(client) : client;
+      for (const address of [{}, { year: 2020 }]) {
+        const result = await readPrivateDiary({ data: address });
+        expect(result).toMatchObject({
+          kind: 'ready',
+          viewer: 'owner',
+          csrfToken: 'csrf',
+          address,
+          diary: { kind: status === 409 ? 'stale' : kind },
+          summary: { kind: 'year' in address ? 'not-selected' : kind },
+          reportedYear: 'year' in address ? { kind } : null,
+        });
+      }
+      expect(requests).toHaveLength(4);
+      expect(requests.every((request) => request.headers.get('authorization') === 'Bearer current')).toBe(true);
     }
-    expect(requests).toHaveLength(4);
-    expect(requests.every((request) => request.headers.get('authorization') === 'Bearer current')).toBe(true);
-  }
   for (const [error, kind] of [
-    [new PlatformClosedError(403, {}), 'closed'], [{ name: 'PlatformClosedError' }, 'closed'],
-    [{ message: 'rezics-platform-closed' }, 'closed'], [new Error('forbidden'), 'unavailable'],
+    [new PlatformClosedError(403, {}), 'closed'],
+    [{ name: 'PlatformClosedError' }, 'closed'],
+    [{ message: 'rezics-platform-closed' }, 'closed'],
+    [new Error('forbidden'), 'unavailable'],
     [{ code: 'platform_closed' }, 'unavailable'],
   ] as const) {
     // Throw at the installed-client boundary; its fetch layer normalizes transport exceptions.
-    nativeClient = new Proxy(nativeClient, { get: () => ({ get: async () => { throw error; } }) });
+    nativeClient = new Proxy(nativeClient, {
+      get: () => ({
+        get: async () => {
+          throw error;
+        },
+      }),
+    });
     expect(await readPrivateDiary({ data: {} })).toMatchObject({ diary: { kind }, summary: { kind } });
     expect(await readPrivateDiary({ data: { year: 2020 } })).toMatchObject({ diary: { kind }, reportedYear: { kind } });
   }
