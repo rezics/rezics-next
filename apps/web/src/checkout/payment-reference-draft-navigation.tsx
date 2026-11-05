@@ -1,9 +1,9 @@
 import { useBlocker, useRouter, type ShouldBlockFn } from '@tanstack/react-router';
+import { flushSync } from 'react-dom';
 import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useLayoutEffect,
   useRef,
   useState,
@@ -129,7 +129,7 @@ export function PaymentReferenceDraftNavigation({
     if (pending.current) return Promise.resolve(false);
     returnFocus.current = live.current.focus();
     discarded.current = false;
-    setOpen(true);
+    flushSync(() => setOpen(true));
     return new Promise((resolve) => {
       pending.current = resolve;
     });
@@ -148,7 +148,7 @@ export function PaymentReferenceDraftNavigation({
     [],
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const beforeUnload = (event: BeforeUnloadEvent) => {
       if (approvedDocumentDeparture.current) {
         approvedDocumentDeparture.current = false;
@@ -200,27 +200,25 @@ export function PaymentReferenceDraftNavigation({
         <RouterDraftBoundary protectedNow={protectedNow} confirm={() => confirmRef.current()} departure={departure} />
       ) : null}
       <AlertDialog open={open && protectedNow()} onOpenChange={(value) => !value && pending.current && choose(false)}>
-        {open && protectedNow() ? (
-          <AlertDialogContent
-            initialFocus={stayButton}
-            finalFocus={() =>
-              !discarded.current && protectedNow() && returnFocus.current?.isConnected ? returnFocus.current : false
-            }
-          >
-            <AlertDialogHeader>
-              <AlertDialogTitle>{m.payment_reference_draft_navigation_title()}</AlertDialogTitle>
-              <AlertDialogDescription>{m.payment_reference_draft_navigation_description()}</AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel ref={stayButton} type="button" onClick={() => choose(false)}>
-                {m.payment_reference_draft_navigation_stay()}
-              </AlertDialogCancel>
-              <AlertDialogAction type="button" variant="destructive" onClick={() => choose(true)}>
-                {m.payment_reference_draft_navigation_discard()}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        ) : null}
+        <AlertDialogContent
+          initialFocus={stayButton}
+          finalFocus={() =>
+            !discarded.current && protectedNow() && returnFocus.current?.isConnected ? returnFocus.current : false
+          }
+        >
+          <AlertDialogHeader>
+            <AlertDialogTitle>{m.payment_reference_draft_navigation_title()}</AlertDialogTitle>
+            <AlertDialogDescription>{m.payment_reference_draft_navigation_description()}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel ref={stayButton} type="button" onClick={() => choose(false)}>
+              {m.payment_reference_draft_navigation_stay()}
+            </AlertDialogCancel>
+            <AlertDialogAction type="button" variant="destructive" onClick={() => choose(true)}>
+              {m.payment_reference_draft_navigation_discard()}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
       </AlertDialog>
     </>
   );

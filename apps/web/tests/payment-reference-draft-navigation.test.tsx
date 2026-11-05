@@ -203,8 +203,10 @@ test('unsent references warn on departure, Stay preserves text and focus, and di
     await act(async () => root.unmount());
     window.happyDOM.abort();
     for (const [key, descriptor] of previous) {
+      if (key === 'scrollTo') continue;
       if (descriptor) Object.defineProperty(globalThis, key, descriptor);
       else Reflect.deleteProperty(globalThis, key);
     }
+    if (typeof globalThis.scrollTo !== 'function') globalThis.scrollTo = () => {};
   }
 });

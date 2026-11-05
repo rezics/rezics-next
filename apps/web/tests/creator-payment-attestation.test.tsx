@@ -234,9 +234,11 @@ afterAll(async () => {
   mock.restore();
   await window.happyDOM.close();
   for (const [key, descriptor] of previous) {
+    if (key === 'scrollTo') continue;
     if (descriptor) Object.defineProperty(globalThis, key, descriptor);
     else Reflect.deleteProperty(globalThis, key);
   }
+  if (typeof globalThis.scrollTo !== 'function') globalThis.scrollTo = () => {};
 });
 
 test('the actual form retries captured evidence after a paid read, confirms only the command response, then refreshes once', async () => {
