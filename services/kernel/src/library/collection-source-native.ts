@@ -82,6 +82,7 @@ type Header = Ref & {
   stateId: string | null;
   ruleRevision?: string | null;
   ruleReleaseDigest?: string | null;
+  ruleSource?: 'owner' | 'catalogue' | null;
   ruleReady?: boolean;
 };
 /** Private observation only. Possession grants no source or subject access. */
@@ -515,11 +516,14 @@ async function observe(client: QueryClient, ref: Ref): Promise<NativeCollectionM
         ).rows[0] ?? null)
       : null;
   const outputGeneration = outputPublication?.generation ?? null;
+  // A catalogue save has no Library owner population: its members come from Search, never the owner capture.
   const authority =
     row.membershipKind === 'curated'
       ? 'curated'
       : row.visibility === 'private'
-        ? 'private_builtin'
+        ? row.ruleSource === 'catalogue'
+          ? 'unavailable_output'
+          : 'private_builtin'
         : outputGeneration
           ? 'activated_output'
           : 'unavailable_output';
@@ -546,6 +550,8 @@ async function observe(client: QueryClient, ref: Ref): Promise<NativeCollectionM
 async function observeWorking(client: QueryClient, ref: Ref) {
   const metadata = await observe(client, ref);
   if (!metadata || metadata.membershipKind !== 'dynamic' || metadata.visibility === 'private') return metadata;
+  // A catalogue save has no owner working population to publish; its complete output needs the catalogue producer.
+  if (metadata.ruleSource === 'catalogue') return null;
   if (
     !metadata.curatorAccountId ||
     !(metadata.ruleReady || (metadata.builtinKind !== null && metadata.releaseDigest !== null))

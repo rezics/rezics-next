@@ -201,6 +201,8 @@ export function membersExecution(
     admission: {
       filter: definition.filter,
       sort: 'id',
+      // Curated and private working populations are owner-only: publication refuses catalogue leaves.
+      source: 'owner',
       plan,
       releaseDigest: definition.release.digest,
       release,
