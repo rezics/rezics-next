@@ -741,6 +741,7 @@
         "apps/web/src/features/zones/**",
         "apps/web/src/features/contexts/**",
         "apps/web/src/zones/**",
+        "apps/web/src/subject/display-definition-cache/**",
         "apps/web/src/routes/**"
       ],
       "publicEntries": [
@@ -767,9 +768,19 @@
         "web-library",
         "web-performance",
         "web-search",
-        "web-semantic"
+        "web-semantic",
+        "web-display-definition-cache"
       ],
       "capabilities": ["web-interface"]
+    },
+    {
+      "id": "web-display-definition-cache",
+      "kind": "adapter",
+      "owner": "web",
+      "paths": ["apps/web/src/subject/display-definition-cache/**"],
+      "publicEntries": ["apps/web/src/subject/display-definition-cache/index.ts"],
+      "allowedDependencies": [],
+      "capabilities": ["display-definition-cache"]
     },
     {
       "id": "auth-pages",
