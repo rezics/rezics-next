@@ -1,5 +1,4 @@
 import { bundledDigest } from '@rezics/definitions/bundled';
-import { GLOBAL_CONTEXT } from '../../../../services/kernel/src/semantic/definitions.ts';
 import { subjectHref } from '../../src/subject/subject-href.ts';
 import { startAuthStack, type AuthJourney, type NativeAuthStack } from './auth-stack.ts';
 import { startNativeWebStack, type NativeWebStack } from './stack.ts';
@@ -18,6 +17,7 @@ export type NativeClassificationFixture = {
   close(): Promise<void>;
 };
 
+const GLOBAL_CONTEXT = '00000000-0000-8000-8000-000000000000';
 const writeRateOverrides = JSON.stringify({
   'new-account': { write: { maximum: 1000, seconds: 60 } },
   member: { write: { maximum: 1000, seconds: 60 } },
