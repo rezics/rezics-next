@@ -28,17 +28,17 @@ Paths below are relative to `services/kernel/src/` unless otherwise qualified; n
 
 ## Reuse and transport
 
-| Surface | Reuse | Necessary GET difference / limit |
-| --- | --- | --- |
-| Native route | Existing route metadata/action conventions, ordinary admission and session handling | Mount `GET /v1/zones/:id/subjects`, action `zone:read`, anonymous floor; closed query, integer 1..100/default20. |
-| Current Zone | `createZoneReads().page(...,null,...)` | Conceal Zone before source-gate detail; empty admitted union can be final empty GET, unlike POST direct-target 404. |
-| Sources | `createZoneMembership`, `zoneWork(deadline)`, `order:'id'` | No TypeList filter, ordered-slot reservation, copied SQL, local membership interpreter or public Search result paging. |
-| Enumeration | `advanceZoneUnion` / `revalidateZoneUnion` | One list position; retain unresolved discovery and page locators across preparation, publish only P current summaries or EOF. |
-| Summaries | Native `SubjectSummary` and existing search-row projection `{id,type,labels,summary}` in page-runtime | Use `readSubjectSummaryObservation` for the selected IDs, record its components and require `current()` before publication. No cached DTOs. |
-| State | Existing `zones.page_preparation` exact-key read/CAS and invalidation trigger | Factor transport/profile policy from `zonePageWork`; GET must not inherit POST fresh-start-on-any-token-error behavior. |
-| Success | Existing owner envelope | 200 `{subjects,next}` only; `next:null` requires complete exhausted union, never an unavailable Source or missing summary. |
-| Preparation | POST demonstrates 202 `{next}`, private/no-store; 503 Problem + Retry-After without cursor | Recommend analogous GET 202 with **default** token, but GET status/body/schema and client handling require adoption. POST declarations do not authorize it. |
-| Invalidity | Existing Problems | 400 invalid_request/invalid_cursor for invalid shape/tampering/rebinding; 422 unsupported_query for admitted-shape unsupported plan; dependency/readiness 503; concealed target 404. |
+| Surface      | Reuse                                                                                                 | Necessary GET difference / limit                                                                                                                                                     |
+| ------------ | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Native route | Existing route metadata/action conventions, ordinary admission and session handling                   | Mount `GET /v1/zones/:id/subjects`, action `zone:read`, anonymous floor; closed query, integer 1..100/default20.                                                                     |
+| Current Zone | `createZoneReads().page(...,null,...)`                                                                | Conceal Zone before source-gate detail; empty admitted union can be final empty GET, unlike POST direct-target 404.                                                                  |
+| Sources      | `createZoneMembership`, `zoneWork(deadline)`, `order:'id'`                                            | No TypeList filter, ordered-slot reservation, copied SQL, local membership interpreter or public Search result paging.                                                               |
+| Enumeration  | `advanceZoneUnion` / `revalidateZoneUnion`                                                            | One list position; retain unresolved discovery and page locators across preparation, publish only P current summaries or EOF.                                                        |
+| Summaries    | Native `SubjectSummary` and existing search-row projection `{id,type,labels,summary}` in page-runtime | Use `readSubjectSummaryObservation` for the selected IDs, record its components and require `current()` before publication. No cached DTOs.                                          |
+| State        | Existing `zones.page_preparation` exact-key read/CAS and invalidation trigger                         | Factor transport/profile policy from `zonePageWork`; GET must not inherit POST fresh-start-on-any-token-error behavior.                                                              |
+| Success      | Existing owner envelope                                                                               | 200 `{subjects,next}` only; `next:null` requires complete exhausted union, never an unavailable Source or missing summary.                                                           |
+| Preparation  | POST demonstrates 202 `{next}`, private/no-store; 503 Problem + Retry-After without cursor            | Recommend analogous GET 202 with **default** token, but GET status/body/schema and client handling require adoption. POST declarations do not authorize it.                          |
+| Invalidity   | Existing Problems                                                                                     | 400 invalid_request/invalid_cursor for invalid shape/tampering/rebinding; 422 unsupported_query for admitted-shape unsupported plan; dependency/readiness 503; concealed target 404. |
 
 Use `private, no-store` for success and preparation; no public cache or ETag permits replaying old inclusion or absence. Carry native request/session
 components, not public source positions or configuration. Preserve supplied session behavior rather than inventing a new minimum-position protocol.
@@ -49,16 +49,16 @@ defensive account denial and insufficient-scope errors; do not reinterpret older
 
 Use `tokens/list-cursor.ts:encodeListCursor` and `decodeListCursor` with omitted/default profile. The following is a proposed binding layout for adoption, not an implemented GET ABI.
 
-| Field | Proposed value and purpose |
-| --- | --- |
-| `binding.route` | Stable `GET /v1/zones/:id/subjects`; distinct method/operation from POST and all other lists. |
-| `binding.viewer` | Actual lowercase account UUID or null. Current bearer/account/scope checks still run on every use. |
-| `binding.query` | `{zone: id, limit: normalizedP}`; no cursor itself, hidden mount IDs, mutable revision, or arbitrary client operation name. Fixed UUID order is part of this route's meaning. |
-| `position.epoch` | Internal positive layout version, e.g. 1, not a claim that native identity or authorization is current. |
-| `after[0]` | 64-byte digest committing current Zone/source configuration+lifecycle revision, release pins, union producer bases and complete identity/meaning observation. A hash cannot supply missing observation. |
-| `after[1]` | Existing server generation UUID: retained-state locator only. |
-| `after[2]` | Decimal retained CAS revision: exact coordinate, not source truth. |
-| Additional keys | None. Page start/floor, pending group and discovery locators stay server-side. No owner token vector, permissions, facts or summary payload. |
+| Field            | Proposed value and purpose                                                                                                                                                                              |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `binding.route`  | Stable `GET /v1/zones/:id/subjects`; distinct method/operation from POST and all other lists.                                                                                                           |
+| `binding.viewer` | Actual lowercase account UUID or null. Current bearer/account/scope checks still run on every use.                                                                                                      |
+| `binding.query`  | `{zone: id, limit: normalizedP}`; no cursor itself, hidden mount IDs, mutable revision, or arbitrary client operation name. Fixed UUID order is part of this route's meaning.                           |
+| `position.epoch` | Internal positive layout version, e.g. 1, not a claim that native identity or authorization is current.                                                                                                 |
+| `after[0]`       | 64-byte digest committing current Zone/source configuration+lifecycle revision, release pins, union producer bases and complete identity/meaning observation. A hash cannot supply missing observation. |
+| `after[1]`       | Existing server generation UUID: retained-state locator only.                                                                                                                                           |
+| `after[2]`       | Decimal retained CAS revision: exact coordinate, not source truth.                                                                                                                                      |
+| Additional keys  | None. Page start/floor, pending group and discovery locators stay server-side. No owner token vector, permissions, facts or summary payload.                                                            |
 
 Three keys use `64 + 36 + d` ASCII bytes, where d is the database bigint revision's decimal length, at most 19: 119 bytes. Each fits 256 bytes,
 versus eight keys/2,048 aggregate key bytes; route ≤256 and canonical query ≤2,048 bytes also remain independently enforced.
@@ -133,16 +133,16 @@ Consequently current helper ceilings do not establish an admitted P=100 implemen
 
 For admission/capture use the owning [filtered-list cost tables](../filtered-lists.md#cost) in addition to the structural cap. For one direct read let c≤min(256,600,6P+3), charged across every Source; for a ready-result read c≤min(256,2P+2). No per-source multiplication of the allowance is permitted.
 
-| Unit | One admitted GET page / preparation request |
-| --- | --- |
-| Output / candidates | ≤P≤100 output; structural aggregate≤256 including all rereads; direct/ready plan candidate ceiling additionally applies. |
-| Source/index calls | Direct catalogue≤6 engine searches / owner≤3 seeks, ≤3 refill rounds; ready result≤2 index reads. Excess union fanout is preparation, not 32 independent budgets. |
-| Points / rows / blocks | ≤16+8c points; ≤64+16c examined including removed rows; blocks≤6×budgeted examined rows. At c=256: 2,064 points, 4,160 rows, 24,960 blocks. |
-| Statements / connections | One-read page≤12 statements per PostgreSQL backend, one connection per backend. Zone/source/safety/summaries/control are included, not added outside the page. |
-| Bytes | Response PostgreSQL+engine≤16 KiB+4 KiB×c; request≤64 KiB+1 KiB×c. At c=256: 1,064,960 response and 327,680 request bytes. Public encoded response needs measured schema-width accounting too. |
-| Durable preparation | ≤1,000 input keys and result writes, one frontier write, 8 points/input, 64+16×input rows, 16 statements/backend, 4 engine searches, one connection/backend and 4 MiB response. GET still retains its 256 structural-key cap. |
-| Privacy subset | Shared ≤2 statements, ≤64+2×(behind homes+changed homes) rows, included in whole-page totals; no two 4,096-head sweeps or active-XID/history scan hidden in a digest. |
-| State / cursor | ≤1 MiB/slot, 32 slots/Zone/viewer; default token≤4,096 chars, eight keys, 256 bytes/key, 2,048 aggregate key bytes; summary batch≤256 IDs. |
+| Unit                     | One admitted GET page / preparation request                                                                                                                                                                                   |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Output / candidates      | ≤P≤100 output; structural aggregate≤256 including all rereads; direct/ready plan candidate ceiling additionally applies.                                                                                                      |
+| Source/index calls       | Direct catalogue≤6 engine searches / owner≤3 seeks, ≤3 refill rounds; ready result≤2 index reads. Excess union fanout is preparation, not 32 independent budgets.                                                             |
+| Points / rows / blocks   | ≤16+8c points; ≤64+16c examined including removed rows; blocks≤6×budgeted examined rows. At c=256: 2,064 points, 4,160 rows, 24,960 blocks.                                                                                   |
+| Statements / connections | One-read page≤12 statements per PostgreSQL backend, one connection per backend. Zone/source/safety/summaries/control are included, not added outside the page.                                                                |
+| Bytes                    | Response PostgreSQL+engine≤16 KiB+4 KiB×c; request≤64 KiB+1 KiB×c. At c=256: 1,064,960 response and 327,680 request bytes. Public encoded response needs measured schema-width accounting too.                                |
+| Durable preparation      | ≤1,000 input keys and result writes, one frontier write, 8 points/input, 64+16×input rows, 16 statements/backend, 4 engine searches, one connection/backend and 4 MiB response. GET still retains its 256 structural-key cap. |
+| Privacy subset           | Shared ≤2 statements, ≤64+2×(behind homes+changed homes) rows, included in whole-page totals; no two 4,096-head sweeps or active-XID/history scan hidden in a digest.                                                         |
+| State / cursor           | ≤1 MiB/slot, 32 slots/Zone/viewer; default token≤4,096 chars, eight keys, 256 bytes/key, 2,048 aggregate key bytes; summary batch≤256 IDs.                                                                                    |
 
 For default P=20 the direct c ceiling is 123 (1,000 points, 2,032 rows); P=100 still caps structural c at256, not ordered600. These are ceilings requiring a feasible native plan, not claimed measured producer costs. A direct candidate limit does not bound OpenSearch iterator work.
 Native summaries may address representative editions/media and independently routed fences; count those rows, statements, bytes and source components too. Existing root receipts do not instrument all summary/gate/Zone work; a new GET must include actual shared captures, not report those omissions as zero.
@@ -170,11 +170,11 @@ The following is one complete implementation brief for adoption, not permission 
 
 External evidence supports stable ordering and explicit incomplete work; it does not establish REZICS authority or privacy feasibility. No reference code is proposed for copying, installed, built or executed.
 
-| Primary source | Retrieved path / URL / licence | Design implication |
-| --- | --- | --- |
-| PostgreSQL | Reused `.reference/library-shelf-maintenance/postgres`, commit `700b422af7e26cf310caf3fb76d78f4c8ca39c1f`; `doc/src/sgml/ref/select.sgml`, LIMIT/OFFSET; [source](https://github.com/postgres/postgres/blob/700b422af7e26cf310caf3fb76d78f4c8ca39c1f/doc/src/sgml/ref/select.sgml), PostgreSQL License (`COPYRIGHT`). | LIMIT without unique order is unpredictable. Keep native canonical keyset order, not raw occurrence pages followed by normalization. |
-| OpenSearch documentation | Reused `.reference/search-rating-populations/documentation-website`, commit `9bf360dee6e0930aa0bd66ba91e992b9ee2828bf`; `_search-plugins/searching-data/paginate.md`; [official pagination](https://docs.opensearch.org/latest/search-plugins/searching-data/paginate/), Apache-2.0 (`LICENSE`, `NOTICE`). | Deep offset work grows; sort ties require a unique key and independent requests can drift. Native indexed/prepared observation remains necessary; a PIT alone grants no disclosure rights. |
-| HTTP semantics | [RFC 9110 §15.3.3](https://www.rfc-editor.org/rfc/rfc9110.html#name-202-accepted), IETF Trust/BCP78. | 202 denotes incomplete processing, supporting a distinct preparation outcome. It supplies neither the GET response body nor authorization to change this repository's transport. |
+| Primary source           | Retrieved path / URL / licence                                                                                                                                                                                                                                                                                        | Design implication                                                                                                                                                                         |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| PostgreSQL               | Reused `.reference/library-shelf-maintenance/postgres`, commit `700b422af7e26cf310caf3fb76d78f4c8ca39c1f`; `doc/src/sgml/ref/select.sgml`, LIMIT/OFFSET; [source](https://github.com/postgres/postgres/blob/700b422af7e26cf310caf3fb76d78f4c8ca39c1f/doc/src/sgml/ref/select.sgml), PostgreSQL License (`COPYRIGHT`). | LIMIT without unique order is unpredictable. Keep native canonical keyset order, not raw occurrence pages followed by normalization.                                                       |
+| OpenSearch documentation | Reused `.reference/search-rating-populations/documentation-website`, commit `9bf360dee6e0930aa0bd66ba91e992b9ee2828bf`; `_search-plugins/searching-data/paginate.md`; [official pagination](https://docs.opensearch.org/latest/search-plugins/searching-data/paginate/), Apache-2.0 (`LICENSE`, `NOTICE`).            | Deep offset work grows; sort ties require a unique key and independent requests can drift. Native indexed/prepared observation remains necessary; a PIT alone grants no disclosure rights. |
+| HTTP semantics           | [RFC 9110 §15.3.3](https://www.rfc-editor.org/rfc/rfc9110.html#name-202-accepted), IETF Trust/BCP78.                                                                                                                                                                                                                  | 202 denotes incomplete processing, supporting a distinct preparation outcome. It supplies neither the GET response body nor authorization to change this repository's transport.           |
 
 Reference paths above are under `/home/edge/projects/rezics/rezics-next/`; their reuse is indexed in that checkout's `.reference/INDEX.md`. Repository code/doc links are the primary evidence for every REZICS-specific claim.
 Change the recommendation if native capture demonstrates the existing bounded store cannot support adopted replay semantics, or actual owner plans cannot deliver P=100/current full-page checks within the existing budgets. Resolve that in the owning preparation/transport design; do not replace it with a parallel enumeration engine or privacy exemption.
