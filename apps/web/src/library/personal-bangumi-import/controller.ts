@@ -435,7 +435,9 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
       }
       if (!live()) return false;
       if (response.kind === 'unknown') {
-        unknown = response.command;
+        const retryCommand = response.command as Extract<BangumiCommand, { kind: 'admit-source' }>;
+        admitQueue[0] = retryCommand;
+        unknown = retryCommand;
         notice = response;
         retain();
         return false;

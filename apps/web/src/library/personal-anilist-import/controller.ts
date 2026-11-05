@@ -708,7 +708,9 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
       if (!live()) return false;
       busy = false;
       if (response.kind === 'unknown') {
-        unknown = response.command;
+        const retryCommand = response.command as Extract<AniListCommand, { kind: 'admit-source' }>;
+        admitQueue[0] = retryCommand;
+        unknown = retryCommand;
         notice = response;
         retain();
         return false;

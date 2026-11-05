@@ -2,12 +2,12 @@ import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
-import type { AniListImportPort, AniListRow } from '../src/library/personal-anilist-import/contract';
+import type { AniListCommand, AniListImportPort, AniListRow } from '../src/library/personal-anilist-import/contract';
 import { createAniListJourney } from '../src/library/personal-anilist-import/controller';
 import { aniListCallTotal, expectedAniListCalls } from '../src/library/personal-anilist-import/cost';
 import { aniListSourcePreview } from '../src/library/personal-anilist-import/source';
 import type { AniListVisit } from '../src/library/personal-anilist-import/visit';
-import type { BangumiImportPort, BangumiRow } from '../src/library/personal-bangumi-import/contract';
+import type { BangumiCommand, BangumiImportPort, BangumiRow } from '../src/library/personal-bangumi-import/contract';
 import { createBangumiJourney } from '../src/library/personal-bangumi-import/controller';
 import { bangumiCallTotal, expectedBangumiCalls } from '../src/library/personal-bangumi-import/cost';
 import { bangumiSourcePreview } from '../src/library/personal-bangumi-import/source';
@@ -18,6 +18,36 @@ import type { MalVisit } from '../src/library/personal-mal-import/visit';
 import { sourceAdmissionBody } from '../src/library/rich-private-entry/admission';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
+
+type CapturedAdmissionCommand = Extract<AniListCommand | BangumiCommand, { kind: 'admit-source' }>;
+const sourceAdmissionHarness: {
+  reads: string[];
+  calls: Array<{ data: Record<string, unknown>; headers: Record<string, unknown> }>;
+  results: Array<{ kind: 'uncertain' | 'admitted' | 'conflict' }>;
+} = { reads: [], calls: [], results: [] };
+
+mock.module('../src/library/rich-private-entry/server', () => ({
+  async readPrivateEntryForSubject({ data }: { data: { subjectId: string } }) {
+    const number = sourceAdmissionHarness.reads.push(data.subjectId);
+    return {
+      kind: 'ready',
+      viewer: `captured-viewer-${number}`,
+      csrfToken: `captured-csrf-${number}`,
+      credential: `captured-credential-${number}`,
+      entry: {},
+    };
+  },
+  async admitPrivateSourceForSubject({
+    data,
+    headers,
+  }: {
+    data: Record<string, unknown>;
+    headers: Record<string, unknown>;
+  }) {
+    sourceAdmissionHarness.calls.push(JSON.parse(JSON.stringify({ data, headers })));
+    return sourceAdmissionHarness.results.shift()!;
+  },
+}));
 
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -47,13 +77,79 @@ const { act } = await import('react');
 const { createRoot } = await import('react-dom/client');
 type Root = ReturnType<typeof createRoot>;
 const { m } = await import('../src/paraglide/messages.js');
+const { useAniListImportPort } = await import('../src/library/personal-anilist-import/port');
+const { useBangumiImportPort } = await import('../src/library/personal-bangumi-import/port');
 const { MalImportPortContext } = await import('../src/library/personal-mal-import/port');
 const { PersonalMalImportPage } = await import('../src/library/personal-mal-import/page');
 
 const id = '0192f3a0-6c1e-7b2a-9d4e-00000000aaaa';
 const subject = '0192f3a0-6c1e-7b2a-9d4e-00000000bbbb';
+const secondSubject = '0192f3a0-6c1e-7b2a-9d4e-00000000dddd';
 const reviewId = '0192f3a0-6c1e-7b2a-9d4e-00000000cccc';
 const token = '0192f3a0-6c1e-7b2a-9d4e-00000000dddd';
+
+let capturedAniListPort: AniListImportPort | null = null;
+let capturedBangumiPort: BangumiImportPort | null = null;
+
+function CaptureProductionImportPorts() {
+  capturedAniListPort = useAniListImportPort();
+  capturedBangumiPort = useBangumiImportPort();
+  return null;
+}
+
+function resetSourceAdmissionHarness(...results: ('uncertain' | 'admitted' | 'conflict')[]) {
+  sourceAdmissionHarness.reads.length = 0;
+  sourceAdmissionHarness.calls.length = 0;
+  sourceAdmissionHarness.results.splice(0, sourceAdmissionHarness.results.length, ...results.map((kind) => ({ kind })));
+}
+
+function copy<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function expectCustodyQueue(
+  commands: CapturedAdmissionCommand[],
+  provider: string,
+  firstTarget: string,
+  firstRecordId: string,
+  secondTarget: string,
+  secondRecordId: string,
+) {
+  expect(commands).toHaveLength(4);
+  const first = commands[0]!;
+  const second = commands[3]!;
+  expect(first).toMatchObject({ kind: 'admit-source', subjectId: firstTarget, ordinal: 0, body: { provider, recordId: firstRecordId } });
+  expect(first.custody).toBeUndefined();
+  const firstCustody = { viewer: 'captured-viewer-1', csrfToken: 'captured-csrf-1', credential: 'captured-credential-1' };
+  const firstRetry = { ...first, custody: firstCustody };
+  expect(commands.slice(1, 3)).toEqual([firstRetry, firstRetry]);
+  expect(second).toMatchObject({
+    kind: 'admit-source',
+    subjectId: secondTarget,
+    ordinal: 1,
+    body: { provider, recordId: secondRecordId },
+    custody: { viewer: 'captured-viewer-2', csrfToken: 'captured-csrf-2', credential: 'captured-credential-2' },
+  });
+  expect(second.key).not.toBe(first.key);
+  expect(sourceAdmissionHarness.reads).toEqual([firstTarget, secondTarget]);
+  const firstData = {
+    subjectId: firstTarget,
+    key: first.key,
+    ...first.body,
+    viewer: firstCustody.viewer,
+    csrfToken: firstCustody.csrfToken,
+    credential: firstCustody.credential,
+  };
+  const secondData = {
+    subjectId: secondTarget,
+    key: second.key,
+    ...second.body,
+    viewer: 'captured-viewer-2',
+    csrfToken: 'captured-csrf-2',
+    credential: 'captured-credential-2',
+  };
+  expect(sourceAdmissionHarness.calls.map(({ data }) => data)).toEqual([firstData, firstData, firstData, secondData]);
+}
 
 function visit(): AniListVisit & BangumiVisit & MalVisit {
   const controller = new AbortController();
@@ -176,74 +272,77 @@ test('AniList, Bangumi and MAL keep independent identities and honest timestamp 
   });
 });
 
-test('AniList and Bangumi admit after apply, retry the original admission, and skip import cost', async () => {
-  const admits: unknown[] = [];
-  let admitAttempts = 0;
+test('AniList and Bangumi retry captured production source admissions and advance their original queues', async () => {
+  await act(async () => root.render(<CaptureProductionImportPorts />));
+  const actualAniPort = capturedAniListPort!;
+  const actualBangumiPort = capturedBangumiPort!;
+  resetSourceAdmissionHarness('uncertain', 'uncertain', 'admitted', 'admitted');
+  const aniAdmits: CapturedAdmissionCommand[] = [];
   const aniPort: AniListImportPort = {
+    ...actualAniPort,
     async preview() {
-      return { kind: 'previewed', importId: id, count: 1 };
+      return { kind: 'previewed', importId: id, count: 2 };
     },
     async page() {
       return {
         kind: 'page',
         page: {
           importId: id,
-          header: { document: null, rawUpload: '', scoreFormat: 'POINT_10', count: 1, cancelled: false },
+          header: { document: null, rawUpload: '', scoreFormat: 'POINT_10', count: 2, cancelled: false },
           completeness: { wrapper: 'array', hasNextChunk: false, listedGroups: 0 },
-          rows: [
-            {
-              ordinal: 0,
-              source: {
-                evidence: { id: 11, private: true, createdAt: 1_700_000_000 },
-                group: null,
-                identifiers: [{ source: 'anilist', externalId: '1' }],
-                fields: [],
-              },
-              match: { state: 'unmatched', candidates: [], fingerprint: 'fp' },
-              proposal: null,
-              review: null,
-              started: false,
-              outcome: null,
+          rows: [0, 1].map((ordinal) => ({
+            ordinal,
+            source: {
+              evidence: { id: 11 + ordinal, private: ordinal === 0, createdAt: 1_700_000_000 + ordinal },
+              group: null,
+              identifiers: [{ source: 'anilist', externalId: String(ordinal + 1) }],
+              fields: [],
             },
-          ],
+            match: { state: 'unmatched' as const, candidates: [], fingerprint: `fp-${ordinal}` },
+            proposal: null,
+            review: null,
+            started: false,
+            outcome: null,
+          })),
           next: null,
         },
       };
     },
     async review(command) {
+      const target = command.subjectId!;
       return {
         kind: 'reviewed',
-        ordinal: 0,
+        ordinal: command.ordinal,
         review: {
-          id: reviewId,
+          id: `${reviewId}-${command.ordinal}`,
           commandKey: command.key,
           clientId: 'client-1',
           requestedBy: null,
-          match: { state: 'unmatched', candidates: [], fingerprint: 'fp' },
+          match: { state: 'unmatched', candidates: [], fingerprint: `fp-${command.ordinal}` },
           observation: {
-            subjectId: subject,
+            subjectId: target,
             epoch: '1',
             pin: null,
             proposedState: 'active',
             current: null,
             states: [{ id: 'active', role: 'active' }],
           },
-          input: { fields: ['status'], replace: false, subjectId: subject },
+          input: { fields: ['status'], replace: false, subjectId: target },
         },
       };
     },
-    async apply() {
+    async apply(command) {
       return {
         kind: 'applied',
-        result: { outcomes: [{ ordinal: 0, status: 'applied', retained: [] }], complete: true },
+        result: {
+          outcomes: command.body.confirmations.map(({ ordinal }) => ({ ordinal, status: 'applied' as const, retained: [] })),
+          complete: true,
+        },
       };
     },
     async admitSource(command) {
-      admits.push(JSON.parse(JSON.stringify(command)));
-      admitAttempts += 1;
-      if (admitAttempts === 1) return { kind: 'unknown', command };
-      if (admitAttempts === 2) return { kind: 'conflict' };
-      return { kind: 'admitted' };
+      aniAdmits.push(copy(command));
+      return actualAniPort.admitSource(command);
     },
     async cancel() {
       return { kind: 'cancelled', removed: true };
@@ -256,17 +355,18 @@ test('AniList and Bangumi admit after apply, retry the original admission, and s
   const ani = createAniListJourney({ port: aniPort, visit: aniVisit });
   await ani.preview('[]', 'POINT_10');
   await ani.review(0, subject);
+  await ani.review(1, secondSubject);
   ani.openConfirm();
   ani.confirmSource({ privacy: true, timestamps: true });
   let snap = await ani.confirm();
   expect(snap.notice).toMatchObject({ kind: 'unknown' });
-  expect(admits).toHaveLength(1);
-  const first = admits[0] as { key: string; body: { recordId: string } };
-  expect(first.body.recordId).toBe('11');
+  expect(aniAdmits).toHaveLength(1);
   snap = await ani.retryUnknown();
-  expect(admits).toHaveLength(2);
-  expect((admits[1] as { key: string }).key).toBe(first.key);
-  expect(snap.meta[0]?.sourceAdmission).toEqual({ status: 'conflict' });
+  expect(snap.notice).toMatchObject({ kind: 'unknown' });
+  snap = await ani.retryUnknown();
+  expectCustodyQueue(aniAdmits, 'anilist', subject, '11', secondSubject, '12');
+  expect(snap.meta[0]?.sourceAdmission).toEqual({ status: 'admitted' });
+  expect(snap.meta[1]?.sourceAdmission).toEqual({ status: 'admitted' });
   expect(aniListCallTotal(snap.cost)).toBe(
     expectedAniListCalls({
       pages: snap.cost.pagesVisited,
@@ -278,10 +378,12 @@ test('AniList and Bangumi admit after apply, retry the original admission, and s
   );
   aniVisit.retire();
   await ani.retryUnknown();
-  expect(admits).toHaveLength(2);
+  expect(aniAdmits).toHaveLength(4);
 
-  const bangumiAdmits: unknown[] = [];
+  resetSourceAdmissionHarness('uncertain', 'uncertain', 'admitted', 'admitted');
+  const bangumiAdmits: CapturedAdmissionCommand[] = [];
   const bangumiPort: BangumiImportPort = {
+    ...actualBangumiPort,
     async preview() {
       return { kind: 'previewed', uploadId: id, count: 2 };
     },
@@ -306,7 +408,7 @@ test('AniList and Bangumi admit after apply, retry the original admission, and s
             {
               ordinal: 1,
               evidence: {
-                source: { subject_id: 43, created_at: '2024-02-30' },
+                source: { subject_id: 43, private: false, created_at: '2024-02-28', updated_at: '2024-03-01' },
                 fields: [],
                 medium: 'anime',
                 stateRole: 'active',
@@ -327,7 +429,7 @@ test('AniList and Bangumi admit after apply, retry the original admission, and s
           token: `${token.slice(0, -1)}${command.ordinal}`,
           match: 'chosen',
           candidates: [],
-          target: subject,
+          target: command.target!,
           guard: null,
           proposedState: 'active',
           current: null,
@@ -351,8 +453,8 @@ test('AniList and Bangumi admit after apply, retry the original admission, and s
       };
     },
     async admitSource(command) {
-      bangumiAdmits.push(JSON.parse(JSON.stringify(command)));
-      return { kind: 'admitted' };
+      bangumiAdmits.push(copy(command));
+      return actualBangumiPort.admitSource(command);
     },
     async cancel() {
       return { kind: 'cancelled', uploadId: id };
@@ -361,16 +463,21 @@ test('AniList and Bangumi admit after apply, retry the original admission, and s
       return { kind: 'deleted' };
     },
   };
-  const bangumi = createBangumiJourney({ port: bangumiPort, visit: visit() });
+  const bangumiVisit = visit();
+  const bangumi = createBangumiJourney({ port: bangumiPort, visit: bangumiVisit });
   await bangumi.preview('{"format":"rezics.bangumi-collection.v1","collections":[]}');
   await bangumi.review(0, subject);
-  await bangumi.review(1, subject);
+  await bangumi.review(1, secondSubject);
   bangumi.openConfirm();
   bangumi.confirmSource({ privacy: true, timestamps: true });
-  const bangumiSnap = await bangumi.confirm();
-  expect(bangumiAdmits).toHaveLength(1);
-  expect((bangumiAdmits[0] as { body: { recordId: string } }).body.recordId).toBe('42');
-  expect(bangumiSnap.meta[1]?.sourceAdmission?.status).toBe('unsupported');
+  let bangumiSnap = await bangumi.confirm();
+  expect(bangumiSnap.notice).toMatchObject({ kind: 'unknown' });
+  bangumiSnap = await bangumi.retryUnknown();
+  expect(bangumiSnap.notice).toMatchObject({ kind: 'unknown' });
+  bangumiSnap = await bangumi.retryUnknown();
+  expectCustodyQueue(bangumiAdmits, 'bangumi', subject, '42', secondSubject, '43');
+  expect(bangumiSnap.meta[0]?.sourceAdmission).toEqual({ status: 'admitted' });
+  expect(bangumiSnap.meta[1]?.sourceAdmission).toEqual({ status: 'admitted' });
   expect(bangumiCallTotal(bangumiSnap.cost)).toBe(
     expectedBangumiCalls({
       pages: bangumiSnap.cost.pagesVisited,
@@ -380,6 +487,9 @@ test('AniList and Bangumi admit after apply, retry the original admission, and s
       retries: bangumiSnap.cost.retries,
     }),
   );
+  bangumiVisit.retire();
+  await bangumi.retryUnknown();
+  expect(bangumiAdmits).toHaveLength(4);
 });
 
 let host: HTMLDivElement;
