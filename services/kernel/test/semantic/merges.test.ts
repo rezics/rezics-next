@@ -7,7 +7,8 @@ import { startRelays } from '../../src/events/relays.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import { createRealAccess } from './real-access.ts';
-import { newId, routeOf } from '../../src/route/route.ts';
+import { newId, routeOf, partitionOf } from '../../src/route/route.ts';
+import { tupleRoute } from '../../src/content/imported-contract.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
@@ -30,6 +31,7 @@ const accounts = {
 };
 const actions = [
   'subject:create',
+  'subject:batch_write',
   'subject:read',
   'statement:propose',
   'context:accept',
@@ -39,6 +41,7 @@ const actions = [
 const realAccess = await createRealAccess(admin, accounts, actions);
 beforeAll(async () => {
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'subject:create');
+  await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'subject:batch_write');
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'statement:propose');
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'acceptor', 'context:accept');
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'acceptor', 'context:adopt');
@@ -348,4 +351,81 @@ test('the kernel contract documents merges and redirects', () => {
   for (const path of ['/v1/subjects/{id}', '/v1/subjects/{id}/links']) {
     expect([path, Object.keys(paths[path]!.get!.responses!)]).toEqual([path, expect.arrayContaining(['308'])]);
   }
+});
+
+
+test('reviewed original Person GET and native merge preserve ordered evidence, stale refusal and authorized replay', async () => {
+  const routeKey = new Uint8Array(32).fill(4);
+  const number = String(Date.now());
+  const sources = [{ source: 'bangumi', externalId: `person:${number}` }, { source: 'vndb', externalId: '' }];
+  const partition = partitionOf(tupleRoute(routeKey, sources[0]!.source, sources[0]!.externalId));
+  // Derive actual co-resident tuple homes with the installed route key; never fabricate claims/routes.
+  for (let i = 1; i <= 100000; i++) {
+    const externalId = `s${number}${i}`;
+    if (partitionOf(tupleRoute(routeKey, 'vndb', externalId)) === partition) {
+      sources[1]!.externalId = externalId;
+      break;
+    }
+  }
+  expect(sources[1]!.externalId).not.toBe('');
+  const properties = ['wdt:P6298', 'wdt:P3180'];
+  const values = [number, sources[1]!.externalId];
+  const batch = await call('POST', '/v1/subjects:batchWrite', { as: 'editor', body: {
+    commands: sources.map((source, index) => ({
+      op: 'create', key: randomUUID(),
+      source: { source: source.source, external_id: source.externalId, record_revision: '1',
+        digest: 'c'.repeat(64), converter_revision: 'review@1', field_group: 'facts' },
+      subject: { type: 'schema:Person', labels: { en: 'Reviewed Person' },
+        statements: { [properties[index]!]: [statement(properties[index]!, values[index])] } },
+    })),
+  } });
+  expect(batch.response.status).toBe(200);
+  expect(batch.body.results.map((result: any) => result.status)).toEqual([201, 201]);
+  const subjects = batch.body.results.map((result: any) => result.value.id) as [string, string];
+  const query = (index: number) => new URLSearchParams({
+    reviewIdentitySource: sources[index]!.source, reviewIdentityExternalId: sources[index]!.externalId,
+    includeViewerActions: 'true',
+  });
+  const reads = await Promise.all(subjects.map((id, index) => call('GET', `/v1/subjects/${id}?${query(index)}`)));
+  for (const [index, read] of reads.entries()) {
+    expect(read.response.status).toBe(200);
+    expect(read.response.headers.get('cache-control')).toBe('private, no-store');
+    expect(read.body.reviewedIdentity).toEqual({ subject: subjects[index], revision: 1,
+      securityRevision: expect.stringMatching(/^[1-9][0-9]*$/), ...sources[index],
+      property: properties[index], value: values[index], claimTransactionId: expect.any(String) });
+  }
+  for (const suffix of ['reviewIdentitySource=bangumi', 'reviewIdentityExternalId=person:1',
+    'reviewIdentitySource=bangumi&reviewIdentityExternalId=person:01'])
+    expect((await call('GET', `/v1/subjects/${subjects[0]}?${suffix}`)).response.status).toBe(400);
+  const missing = await call('GET', `/v1/subjects/${subjects[0]}?reviewIdentitySource=bangumi&reviewIdentityExternalId=person:1`);
+  expect(missing.body.reviewedIdentity).toBeNull();
+  const body = { subjects, expectedIdentity: { endpoints: reads.map((read) => read.body.reviewedIdentity) } };
+  const before = await Promise.all(subjects.map(revisions));
+  for (const field of ['revision', 'securityRevision', 'claimTransactionId'] as const) {
+    const stale = structuredClone(body);
+    stale.expectedIdentity.endpoints[0][field] = field === 'revision' ? 2 : field === 'securityRevision' ? '9999999999999999999' : randomUUID();
+    expect((await merge(stale)).response.status).toBe(409);
+  }
+  const swapped = structuredClone(body);
+  swapped.expectedIdentity.endpoints.reverse();
+  expect((await merge(swapped)).response.status).toBe(400);
+  const extra = structuredClone(body);
+  extra.expectedIdentity.endpoints[0].grant = true;
+  expect((await merge(extra)).response.status).toBe(400);
+  expect(await Promise.all(subjects.map(revisions))).toEqual(before);
+  const token = key();
+  const result = await merge(body, { key: token });
+  expect(result.response.status).toBe(200); // Retained first-effect runtime; no publication assertion.
+  expect((await merge(body, { key: token })).body).toEqual(result.body);
+  expect((await merge({ subjects }, { key: token })).response.status).toBe(422);
+  const changed = structuredClone(body);
+  changed.expectedIdentity.endpoints[0].revision++;
+  expect((await merge(changed, { key: token })).response.status).toBe(422);
+  const redirectedIndex = subjects.indexOf(result.body.redirected);
+  const redirected = await call('GET', `/v1/subjects/${subjects[redirectedIndex]}?${query(redirectedIndex)}`);
+  expect(redirected.response.status).toBe(308);
+  expect(redirected.body.reviewedIdentity).toBeUndefined();
+  await realAccess.revoke({ route: 0, id: GLOBAL_CONTEXT }, 'acceptor', 'subject:merge');
+  try { expect((await merge(body, { key: token })).response.status).toBe(403); }
+  finally { await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'acceptor', 'subject:merge'); }
 });

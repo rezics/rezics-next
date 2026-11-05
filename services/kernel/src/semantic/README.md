@@ -742,11 +742,10 @@ full positive undo/publication, generation minimization/erasure and inclusive na
 pending at the boundaries documented in the [identity contract](identity-epoch-contract.md#mapping-execution-boundary).
 
 Subject IDs permanently name catalogue records and are never reused. Creation requires Global `subject:create`
-(and import batch authority where applicable), writes revision 1 and is independent of Search. Compact fact storage
-is an optimization, not a separate compact-revision creation target. Merging requires `subject:merge` and asserts
-duplicate identity only. Distinct editions, translations and formats remain separate subjects linked by relations.
-Native revision-1 creation installs the self mapping in its source transaction. Full asynchronous merge-command
-completion still requires the mapping and fixed participant producers below.
+(and import batch authority where applicable), writes revision 1 and is independent of Search. Compact facts do not create a separate revision target. Merging requires `subject:merge` and asserts
+duplicate identity only; [reviewed Person evidence](identity-epoch-contract.md#reviewed-person-identity-precondition)
+adds an optional atomic precondition. Distinct editions, translations and formats remain separate subjects linked by relations.
+Native revision-1 creation installs the self mapping in its source transaction. Asynchronous merge completion requires mapping and both fixed participants.
 
 ### Durable publication and caller contract
 
@@ -760,9 +759,7 @@ unavailable. Later drift after durable preparation retains recovery, never effec
 Ordinary `POST /v1/subjects:merge` keeps its native body, Global authorization and quoted Idempotency-Key.
 Only actual admission returns `202 {operation: {id}}` with `Location: /v1/subjectIdentityOperations/{id}`.
 Current-authority replay finds that same operation. The existing GET poll pending/completed DTOs and concealed
-unknown/denied behavior remain; a redirect/revision alone cannot complete it. Native held pre-suspension tokens
-return `401 invalid_credentials` with Bearer `invalid_token`; Auth suspended sign-in returns its actual 403.
-Kernel suspended-account 403 is defensive, not a reachable valid-suspended-bearer fixture.
+unknown/denied behavior remain; a redirect/revision alone cannot complete it. Suspension follows the [native bearer contract](identity-epoch-contract.md#ordinary-http-asynchronous-identity-operation).
 
 Verification/reversal retain their successful subject/component DTO and same receipt. The SAME Accounts workflow
 uses bounded admission/delivery steps, bounded indexed native publication probes and durable sleep OUTSIDE a step,
