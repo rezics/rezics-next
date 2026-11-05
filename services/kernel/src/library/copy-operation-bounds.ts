@@ -1066,6 +1066,7 @@ export function copyMutationOperationPlan(
       sourceSubjectId: subject,
     },
     [...branchComponents, component('command.outcome-branch', alternatives)],
+    branches,
   );
 }
 
