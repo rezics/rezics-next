@@ -31,6 +31,7 @@ export function CollectionFollowControl({
   reviewed: boolean;
   refresh: (suppress: boolean) => Promise<void>;
 }) {
+  const [uncertain, setUncertain] = useState(false);
   const [denied, setDenied] = useState(false);
   const options = { locale: locales.find((value) => value === locale) ?? 'en' };
   return (
@@ -56,13 +57,18 @@ export function CollectionFollowControl({
         isCurrent={() => current()}
         write={async (input) => {
           if (!current()) return { ok: false, reason: 'unavailable' };
-          const result = await write({ ...input, ...binding });
+          const result = await write({ ...input, ...binding }).catch((): FollowWriteResult => ({
+            ok: false,
+            reason: 'unavailable',
+          }));
           if (!current()) return { ok: false, reason: 'unavailable' };
+          setUncertain(!result.ok && result.reason === 'unavailable');
           // Only a definitive denial closes admission. Transport uncertainty belongs to native intent.
           if (!result.ok && result.reason !== 'unavailable' && result.reason !== 'conflict') setDenied(true);
           return result;
         }}
       />
+      {uncertain ? <p role="status">{m.discovery_collection_follow_uncertain({}, options)}</p> : null}
       {!row.actions.follow && !row.actions.unfollow ? (
         <p role="status">{m.library_follow_forbidden({}, options)}</p>
       ) : null}

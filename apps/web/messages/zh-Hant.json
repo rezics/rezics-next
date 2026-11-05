@@ -1108,6 +1108,7 @@
   "library_entry_review_retry": "重試狀態更新",
   "library_entry_review_save": "儲存狀態",
   "library_entry_review_subject": "條目",
+  "discovery_collection_follow_uncertain": "無法確認傳送結果。重試此操作會傳送同一個原始請求。",
   "library_follow": "關注",
   "library_follow_more_actions": "{title}的更多操作",
   "library_follow_reason_library": "從你的書架新增",

@@ -1108,6 +1108,7 @@
   "library_entry_review_retry": "状態の更新を再試行",
   "library_entry_review_save": "状態を保存",
   "library_entry_review_subject": "Subject",
+  "discovery_collection_follow_uncertain": "送信結果を確認できません。この操作を再試行すると、元と同じリクエストを送信します。",
   "library_follow": "フォロー",
   "library_follow_more_actions": "{title}のその他の操作",
   "library_follow_reason_library": "ライブラリから追加",

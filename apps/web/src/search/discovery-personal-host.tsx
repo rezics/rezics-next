@@ -343,6 +343,8 @@ export function useDiscoveryPersonalResults(input: {
             fresh = { state: { status: 'unavailable' }, capabilities: null };
           }
           if (!owns() || current !== installed) return;
+          // Failed deliberate review keeps the native conflict locked and permits another review.
+          if (rowKey && !suppress && fresh.state.status === 'unavailable') return;
           if (fresh.state.status === 'unavailable' && installed.state.status === 'ready') {
             const { spaceEntries: _, ...publicPage } = installed.state.page;
             fresh = { state: { status: 'ready', page: { ...publicPage, viewerFacts: null } }, capabilities: null };
