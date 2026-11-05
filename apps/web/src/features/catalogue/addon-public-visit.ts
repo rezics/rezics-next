@@ -96,7 +96,12 @@ export function parseAddonPublicVisit(
   locale: string,
   canonicalPath: string,
 ): AddonPublicVisit | undefined {
-  if (!addonPublicIntentFits(`${canonicalPath}${search}`)) return { kind: 'invalid' };
+  const address = new URL(`${canonicalPath}${search}`, 'https://rezics.invalid');
+  if (
+    !addonPublicIntentFits(`${canonicalPath}${search}`) ||
+    !addonPublicIntentFits(`${address.pathname}${address.search}${address.hash}`)
+  )
+    return { kind: 'invalid' };
   const params = new URLSearchParams(search);
   const keys = [...params.keys()];
   if (

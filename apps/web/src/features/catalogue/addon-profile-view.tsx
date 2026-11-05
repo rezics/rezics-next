@@ -132,18 +132,19 @@ function AddonProfileLive({
   });
   const retained = useRef<{ address: string; read: Extract<AddonRead, { ok: true }> } | undefined>(undefined);
   const address = JSON.stringify([id, work, locale]);
-  if (query.data?.ok) retained.current = { address, read: query.data };
-  const read = retained.current?.address === address ? retained.current.read : undefined;
-  const definition = useMemo(() => (read ? releaseDigest(read.release) : undefined), [read?.release]);
+  const current = query.data?.ok ? query.data : undefined;
+  const definition = useMemo(() => (current ? releaseDigest(current.release) : undefined), [current?.release]);
   const origin = visit?.kind === 'origin' ? visit.origin : undefined;
   const originChanged =
     !!origin &&
-    !!read &&
-    (read.public?.subject.id !== origin.subject ||
-      read.public.subject.type !== origin.type ||
-      read.public.subject.context !== origin.context ||
-      read.public.subject.release !== origin.definition ||
+    !!current &&
+    (current.public?.subject.id !== origin.subject ||
+      current.public.subject.type !== origin.type ||
+      current.public.subject.context !== origin.context ||
+      current.public.subject.release !== origin.definition ||
       definition !== origin.definition);
+  if (current && !originChanged) retained.current = { address, read: current };
+  const read = retained.current?.address === address ? retained.current.read : undefined;
   // An incompatible observation cannot replace a mounted private holder or revive it on A/B/A.
   const originRetired = useRef(false);
   if (originChanged) originRetired.current = true;
