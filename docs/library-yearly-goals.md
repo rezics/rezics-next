@@ -1,6 +1,7 @@
 # Yearly completion goals
 
 Decision: count completed consumption occurrences in the reported Gregorian year; each repeated completion is another occurrence.
+Decision: target editing follows the native owner actions independently of progress availability; uncertain commands retain their exact reviewed body, revision and idempotency key for retry.
 
 ## Native contract
 
@@ -90,33 +91,20 @@ entries, create another summary projection, invent finish dates, or change Entry
 include the goal row in the existing bounded Library graph cleanup; the shared command receipt lifecycle remains in
 Library command plumbing.
 
-## Current delivery
+## Web page
 
-The native table, owner commands, mounted Kernel GET/PUT routes, erasure integration and focused native cases are
-delivered. `/library/goals` has a localized unavailable page, Library navigation, a bounded year selector and year/history
-links. It explains the occurrence metric and unknown coverage in all eight locales, observes the shared current session,
-and never displays a guessed target or zero progress. The installed `packages/client/src/kernel/http/kernel.d.ts` does
-not yet include the yearly-goal route declarations, although the native `services/kernel/src/http/kernel.ts` mounts
-`yearlyCompletionGoalRoutes` and includes it in its source composition. The root client derives its callable surface
-from the emitted composition; source mounting alone does not supply an installed callable.
+The selected Gregorian year is the unit of navigation and the exact year sent to the native read. The owner page
+presents the target revision separately from reported-year progress, shows all twelve monthly buckets and the
+unallocated bucket, and links those buckets to the existing History destination. Decimal-string counts and revisions
+remain strings in presentation. A missing summary does not hide an editable target.
 
-Decision: keep year/history navigation available while targets and progress are explicitly unavailable until the matching
-generated client is published.
+The page shows edit and clear actions only when the current native viewer actions allow them. A stale command keeps its
+proposed target until the owner explicitly refreshes and reviews the current revision. An uncertain command retains its
+original body and idempotency key for exact retry; receipt resolution precedes current-state readback. Replacing the
+selected year or current viewer retires callbacks and private page state.
 
-The API-driven set/edit/clear journey, exact progress/revision presentation, retained uncertain commands, conflict
-review, dialog focus restoration and remaining non-happy stories/page cases remain in
-`.temp/continuation/yearly-goal-client-page.md`. Web must use Content's matching generated KernelClient route types;
-no local client declaration or raw-fetch substitute is part of this contract. The unavailable shell is not successful
-delivery of the API-driven page. Focused shell tests and authored stories do not prove mounted calls or rendered review.
-
-## Checks run
-
-- `bun run --cwd services/kernel typecheck` — exited 2 with workspace Kernel/client diagnostics, including the missing
-  generated module `packages/client/src/kernel/rating/own-votes-counted` and unrelated route/discovery type errors.
-- `bun run --cwd services/kernel check test/library/yearly-goal.test.ts` — a run on the prior base passed all 6 tests and
-  87 expectations. After rebasing onto the current base, fixture setup failed before the yearly-goal cases while
-  constructing Kernel: `error: POST /v1/boards/:id/pin-advice: board:read is declared with different security`.
-  The conflicting Content route declarations are unchanged by this branch. The command also exited 1 during remote
-  output collection with `error: remote-check: returned empty directory differs from its manifest: services/kernel/.temp/schema-diagnostics/schema-3aQitT`.
-
-No frozen acceptance, browser, root-level or worker-check suite was run; those remain with the controller.
+The mounted Kernel GET/PUT routes and shared receipt lifecycle are delivered. The installed `@rezics/client` Kernel
+surface does not yet expose the yearly-goal route binding. Keep year and History navigation available while the target
+and progress states remain unavailable until Content's shared client publisher emits that binding. Web consumes the
+published `KernelClient` types; no local client declaration, raw-fetch substitute or second generator is part of this
+contract.

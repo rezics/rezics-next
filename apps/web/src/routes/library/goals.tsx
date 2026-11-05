@@ -22,6 +22,6 @@ export const Route = createFileRoute('/library/goals')({
     const search = Route.useSearch();
     const session = useSession();
     const year = search.year === 'invalid' ? undefined : (search.year ?? new Date().getUTCFullYear());
-    return <YearlyGoalPage year={year} sessionState={session.state} />;
+    return <YearlyGoalPage year={year} sessionState={session.state} viewerSubject={session.subject ?? null} />;
   },
 });
