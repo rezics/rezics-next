@@ -11193,6 +11193,7 @@
   "library_mal_question_unavailable": "現在のネイティブ評価質問を利用できません。",
   "library_mal_read_question": "現在のネイティブ評価質問を読み込む",
   "library_mal_reading_question": "現在の質問を読み込み中…",
+  "library_mal_native_score_question": "ネイティブスコアの質問",
   "library_mal_question_details": "{label}、リビジョン {revision}、粒度: {grain}。{meaning} ネイティブ単位 {min}～{max}、刻み幅 {step}。",
   "library_mal_current_vote_label": "現在の自分の投票: {value}",
   "library_mal_vote_present": "ネイティブ単位 {units}、質問リビジョン {revision}、記録日時 {at}",

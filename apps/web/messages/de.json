@@ -11099,6 +11099,7 @@
   "library_mal_question_unavailable": "Die aktuelle native Bewertungsfrage ist nicht verfügbar.",
   "library_mal_read_question": "Aktuelle native Bewertungsfrage lesen",
   "library_mal_reading_question": "Aktuelle Frage wird gelesen…",
+  "library_mal_native_score_question": "Native Bewertungsfrage",
   "library_mal_question_details": "{label}, Revision {revision}, Ebene: {grain}. {meaning} Native Einheiten {min} bis {max}, Schritt {step}.",
   "library_mal_current_vote_label": "Aktuelle eigene Stimme: {value}",
   "library_mal_vote_present": "{units} native Einheiten, Fragenrevision {revision}, erfasst {at}",

@@ -11099,6 +11099,7 @@
   "library_mal_question_unavailable": "La question de score native actuelle est indisponible.",
   "library_mal_read_question": "Lire la question de score native actuelle",
   "library_mal_reading_question": "Lecture de la question actuelle…",
+  "library_mal_native_score_question": "Question de notation native",
   "library_mal_question_details": "{label}, révision {revision}, niveau : {grain}. {meaning} Unités natives de {min} à {max}, pas de {step}.",
   "library_mal_current_vote_label": "Vote personnel actuel : {value}",
   "library_mal_vote_present": "{units} unités natives, révision de question {revision}, enregistré le {at}",
