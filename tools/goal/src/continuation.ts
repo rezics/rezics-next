@@ -87,7 +87,15 @@ export type ContinuationAdmissionProjection = {
 };
 
 const CONTINUATION_OVERLAP_DIRECTORIES = ['', 'held', '.dispatching'];
-const CONTINUATION_REVIEW_DIRECTORIES = ['', 'proposed', 'dispatched', 'continued', 'failed', 'retired', '.dispatching'];
+const CONTINUATION_REVIEW_DIRECTORIES = [
+  '',
+  'proposed',
+  'dispatched',
+  'continued',
+  'failed',
+  'retired',
+  '.dispatching',
+];
 
 function isContinuationFile(file: string): boolean {
   return /(?:^|-)continuation-/.test(basename(file));
@@ -287,7 +295,7 @@ export function continuationOverlap(
     const entries = projection.overlapDirectories.get(directory);
     if (!entries) continue;
     for (const { file, markdown: otherMarkdown, scope: other } of [...entries.values()].sort((a, b) =>
-      (a.file < b.file ? -1 : a.file > b.file ? 1 : 0),
+      a.file < b.file ? -1 : a.file > b.file ? 1 : 0,
     )) {
       if (ignoredFiles.includes(file) && otherMarkdown === markdown) continue;
       if (prefix && basename(file).startsWith(prefix)) continue;
