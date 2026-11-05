@@ -851,5 +851,18 @@
   "auth_members_page_count": "Konten auf dieser Seite: {count}",
   "auth_members_previous_boundary": "Am ältesten gespeicherten Ziel ist Zurück nicht verfügbar. Sie können bewusst zur ersten Seite zurückkehren.",
   "auth_members_previous_page": "Vorherige Seite",
-  "auth_members_reload_current": "Aktuelle Seite neu laden"
+  "auth_members_reload_current": "Aktuelle Seite neu laden",
+  "auth_security_passkey_rename": "Umbenennen",
+  "auth_security_passkey_rename_label": "Passkey-Name",
+  "auth_security_passkey_rename_save": "Namen speichern",
+  "auth_security_passkey_rename_cancel": "Umbenennen abbrechen",
+  "auth_security_passkey_rename_invalid": "Gib einen Namen mit 1–128 Zeichen ein.",
+  "auth_security_passkey_rename_saved": "Passkey-Name gespeichert.",
+  "auth_security_passkey_rename_step_up": "Melde dich erneut an, um diesen Passkey umzubenennen.",
+  "auth_security_passkey_rename_failed": "Der Name wurde nicht geändert. Prüfe deine Sitzung, bevor du es erneut versuchst.",
+  "auth_security_passkey_rename_unknown": "Die Umbenennung wurde nicht bestätigt. Prüfe den aktuellen Namen vor einer weiteren Entscheidung.",
+  "auth_security_passkey_rename_review": "Aktuellen Namen prüfen",
+  "auth_security_passkey_rename_review_failed": "Der aktuelle Name ist nicht verfügbar. Die frühere Umbenennung bleibt unbestätigt.",
+  "auth_security_passkey_rename_observed": "Aktueller Name: {name}. Dies bestätigt die frühere Umbenennung nicht.",
+  "auth_security_passkey_rename_history": "Eine frühere Umbenennung könnte abgeschlossen sein. Das Prüfen des aktuellen Namens bestätigt sie nicht."
 }

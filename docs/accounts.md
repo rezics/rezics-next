@@ -238,6 +238,11 @@ human's own account, and [better-auth.ts][better-auth] installs no TOTP/backup-c
 `rp.id = rezics.com` with verified user presence/verification; operational details are in
 [Passkeys and credential freshness][auth-passkeys].
 
+Passkey label rename binds the reviewed human account and exact credential ID, changes only the label, and preserves
+sessions and the authentication floor. Its bounded acknowledgement confirms only the submitted label; a deliberate
+current-label read after an uncertain response cannot settle the earlier operation. Human credential retirement must
+retain a password or passkey; an account-owned signing key is not an interactive replacement.
+
 Sensitive operations require fresh authentication from verified session evidence, never caller-provided time.
 The standard step-up contract is `x-step-up` beside `x-action`, with maximum authentication age and acceptable
 methods; failure is HTTP 401 with a Bearer `insufficient_user_authentication` challenge and `max_age`.

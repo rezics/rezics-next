@@ -110,8 +110,8 @@ export function parsePasskeyEnrollmentOptions(value: unknown): PasskeyEnrollment
     value.challenge.length !== l.challenge ||
     !record(rp) ||
     !closed(rp, ['id', 'name']) ||
-    !text(rp.id, 10) ||
-    !text(rp.name, 6) ||
+    rp.id !== 'rezics.com' ||
+    rp.name !== 'REZICS' ||
     !record(user) ||
     !closed(user, ['id', 'name', 'displayName']) ||
     !encoded(user.id, l.userHandle) ||

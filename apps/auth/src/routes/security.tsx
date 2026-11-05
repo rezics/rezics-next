@@ -1,3 +1,4 @@
+import { PasskeyRenameView, type PasskeyRenameLease } from '../passkey-rename-view';
 import { createFileRoute, useBlocker, useRouter } from '@tanstack/react-router';
 import { Badge } from '@rezics/ui/shadcn/badge';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
@@ -87,6 +88,7 @@ type SecurityOperation =
   | PasswordChangeOperation
   | { kind: 'passkey-add'; attemptId?: number }
   | { kind: 'consent' }
+  | { kind: 'passkey-rename' }
   | {
       kind: 'registration-review';
       accountId: string;
@@ -195,6 +197,7 @@ function SecurityPageView({
   const [passkeyName, setPasskeyName] = useState('');
   const [passkeyNotice, setPasskeyNotice] = useState('');
   const [passkeyError, setPasskeyError] = useState('');
+  const [renameUnknown, setRenameUnknown] = useState(false);
   const [enrollment, setEnrollment] = useState<PasskeyEnrollmentSnapshot | null>(null);
   const enrollmentController = useRef(new PasskeyEnrollmentController());
   const [enrollmentHistory, setEnrollmentHistory] = useState<PasskeyEnrollmentHistory | null>(
@@ -512,6 +515,25 @@ function SecurityPageView({
     if (attempt !== consentHistoryAttempt.current) return;
     if (history === 'unknown') firstUnknownConsent.current = true;
     setConsentHistoryValue(history);
+  }
+
+  function beginPasskeyRename(): PasskeyRenameLease | null {
+    if (activeOperation.current || !activeAccount.current) return null;
+    const previousUnknown = renameUnknown;
+    const held: SecurityOperation = { kind: 'passkey-rename' };
+    const generation = authorityGeneration.current;
+    updateOperation(held);
+    const isCurrent = () => authorityGeneration.current === generation && activeOperation.current === held;
+    return {
+      signal: lifetime.current.signal,
+      isCurrent,
+      record: (unknown) => {
+        if (isCurrent()) setRenameUnknown(unknown || previousUnknown);
+      },
+      finish: () => {
+        if (isCurrent()) updateOperation(null);
+      },
+    };
   }
 
   function beginConsentReview(): ConsentReviewOperation | null {
@@ -1125,6 +1147,7 @@ function SecurityPageView({
             />
           ) : null}
           {passwordReturnView}
+          {renameUnknown ? <p role="status">{m.auth_security_passkey_rename_history()}</p> : null}
           <p>{m.auth_security_sign_in_required()}</p>
           {signedOutNotice && !passwordReturnHistory?.applicationConfirmed ? (
             <p ref={signedOutStatus} tabIndex={-1} role="status">
@@ -1167,6 +1190,7 @@ function SecurityPageView({
             />
           ) : null}
           {passwordReturnView}
+          {renameUnknown ? <p role="status">{m.auth_security_passkey_rename_history()}</p> : null}
           <ErrorAlert>{loadMessage}</ErrorAlert>
           <ConnectedApplicationHistory
             history={consentHistory}
@@ -1228,6 +1252,7 @@ function SecurityPageView({
           aria-busy={loadState === 'loading' || (operationBlocked && operation?.kind !== 'review')}
         >
           {passwordReturnView}
+          {renameUnknown ? <p role="status">{m.auth_security_passkey_rename_history()}</p> : null}
           <ConnectedApplicationHistory
             history={consentHistory}
             priorUnknown={firstUnknownConsent.current}
@@ -1353,6 +1378,15 @@ function SecurityPageView({
                                   </ItemDescription>
                                 </ItemContent>
                                 <ItemActions className="max-w-full flex-col items-start">
+                                  <PasskeyRenameView
+                                    accountId={accountId}
+                                    passkey={passkey}
+                                    disabled={operationBlocked}
+                                    begin={beginPasskeyRename}
+                                    observe={(id, name) =>
+                                      setPasskeys((rows) => rows.map((row) => (row.id === id ? { ...row, name } : row)))
+                                    }
+                                  />
                                   <Button
                                     type="button"
                                     variant="outline"

@@ -851,5 +851,18 @@
   "auth_members_page_count": "本頁帳號數：{count}",
   "auth_members_previous_boundary": "已到達保留紀錄中最早的位置，無法再返回上一頁。你可以主動返回第一頁。",
   "auth_members_previous_page": "上一頁",
-  "auth_members_reload_current": "重新載入目前頁面"
+  "auth_members_reload_current": "重新載入目前頁面",
+  "auth_security_passkey_rename": "重新命名",
+  "auth_security_passkey_rename_label": "通行金鑰名稱",
+  "auth_security_passkey_rename_save": "儲存名稱",
+  "auth_security_passkey_rename_cancel": "取消重新命名",
+  "auth_security_passkey_rename_invalid": "請輸入 1–128 個字元的名稱。",
+  "auth_security_passkey_rename_saved": "已儲存通行金鑰名稱。",
+  "auth_security_passkey_rename_step_up": "請重新登入後再重新命名此通行金鑰。",
+  "auth_security_passkey_rename_failed": "名稱未變更。請檢查工作階段後再試。",
+  "auth_security_passkey_rename_unknown": "尚未確認重新命名結果。請先查看目前名稱，再決定下一步操作。",
+  "auth_security_passkey_rename_review": "查看目前名稱",
+  "auth_security_passkey_rename_review_failed": "無法取得目前名稱。先前的重新命名仍未確認。",
+  "auth_security_passkey_rename_observed": "目前名稱：{name}。這並不確認先前的重新命名。",
+  "auth_security_passkey_rename_history": "先前的重新命名可能已完成。查看目前名稱並不能確認該次操作。"
 }
