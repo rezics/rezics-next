@@ -80,12 +80,27 @@ export type IdentityAdmissionInput = Readonly<{
     release: Release;
   }>;
 }>;
+/** The caller's authority. Every store command runs on one native partition, so the caller supplies an
+ * authorization prepared for exactly that partition; an admission can touch several partitions. */
 export type IdentityAdmissionAuthority = Readonly<{
   basis?: CommandBasis;
-  authorization?: CommandAuthorization;
+  authorizationFor?: (partition: number) => Promise<CommandAuthorization>;
   deadline?: number;
   clock?: () => Date;
 }>;
+
+/** Command options for one store command on `partition`, with the caller's authorization prepared for it. */
+export async function commandAuthorityAt(authority: IdentityAdmissionAuthority, partition: number) {
+  return {
+    partition,
+    ...(authority.basis === undefined ? {} : { basis: authority.basis }),
+    ...(authority.deadline === undefined ? {} : { deadline: authority.deadline }),
+    ...(authority.clock === undefined ? {} : { clock: authority.clock }),
+    ...(authority.authorizationFor === undefined
+      ? {}
+      : { authorization: await authority.authorizationFor(partition) }),
+  };
+}
 export type IdentityEpochStore = Readonly<{
   /** Bootstrap topology home. Job control homes are encoded in native job IDs. */
   controlPartition: number;

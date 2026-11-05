@@ -36,7 +36,7 @@ import {
   serializeIdentityValue as json,
   IdentityEpochStoreError,
 } from './index.ts';
-import type { IdentityAdmissionAuthority, IdentityAdmissionInput, IdentityJobRef } from './identity-epoch-contract.ts';
+import { commandAuthorityAt, type IdentityAdmissionAuthority, type IdentityAdmissionInput, type IdentityJobRef } from './identity-epoch-contract.ts';
 import selectClaim from '../identity-epoch-binding-select.sql';
 import insertClaim from '../identity-epoch-binding-insert.sql';
 import acceptClaim from '../identity-epoch-binding-accept.sql';
@@ -232,7 +232,7 @@ export async function lookupIdentityBinding(
   input: IdentityAdmissionInput,
 ) {
   let row = (
-    await runCommand(pool, { ...authority, partition: identityReceiptPartition(input.receipt) }, async (tx) =>
+    await runCommand(pool, await commandAuthorityAt(authority, identityReceiptPartition(input.receipt)), async (tx) =>
       noEffect(await read(tx, input)),
     )
   ).value;
@@ -250,7 +250,7 @@ export async function lookupIdentityBinding(
         'identity_epoch_unavailable',
         'Migrated receipt has no current native job proof',
       );
-    await runCommand(pool, { ...authority, partition: row.partition_no }, async (tx) => {
+    await runCommand(pool, await commandAuthorityAt(authority, row.partition_no), async (tx) => {
       const current = await read(tx, input);
       if (!current) throw new TypeError('Missing migrated receipt');
       if (current.binding_transaction_id) return noEffect(null);
@@ -272,7 +272,7 @@ export async function lookupIdentityBinding(
       };
     });
     row = (
-      await runCommand(pool, { ...authority, partition: row.partition_no }, async (tx) =>
+      await runCommand(pool, await commandAuthorityAt(authority, row.partition_no), async (tx) =>
         noEffect(await read(tx, input)),
       )
     ).value;
@@ -287,7 +287,7 @@ export async function claimIdentityBinding(
   prepared: { home: number; epoch: bigint; scope: string; sources: readonly IdentityAdmissionSource[] },
 ) {
   const partition = identityReceiptPartition(input.receipt);
-  await runCommand(pool, { ...authority, partition }, async (tx) => {
+  await runCommand(pool, await commandAuthorityAt(authority, partition), async (tx) => {
     const existing = await read(tx, input);
     if (existing && existing.state !== 'not-applied') return noEffect(null);
     const source = transactionSources.get(tx);
@@ -360,7 +360,7 @@ export async function acceptIdentityBinding(
       'identity_epoch_unavailable',
       'Binding acceptance requires the committed first reservation',
     );
-  await runCommand(pool, { ...authority, partition: data.partition }, async (tx) => {
+  await runCommand(pool, await commandAuthorityAt(authority, data.partition), async (tx) => {
     const current = await readIdentityBinding(tx, input);
     if (!current || identityBindingData(current).generation !== data.generation)
       throw new TypeError('Obsolete binding generation');

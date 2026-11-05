@@ -83,7 +83,7 @@ import type {
 } from './identity-epoch-contract.ts';
 
 export type { IdentityAdmissionInput, IdentityAdmissionAuthority } from './identity-epoch-contract.ts';
-import type { IdentityAdmissionInput, IdentityAdmissionAuthority } from './identity-epoch-contract.ts';
+import { commandAuthorityAt, type IdentityAdmissionInput, type IdentityAdmissionAuthority } from './identity-epoch-contract.ts';
 import { guardReviewedPersonIdentity } from './reviewed-person-identity.ts';
 export type IdentityAdmissionProgress = Readonly<{
   job: IdentityJobRef;
@@ -335,7 +335,7 @@ async function closeUnreservedBinding(
       position: BigInt(received.native_position),
     });
   }
-  await runCommand(pool, { ...authority, partition: data.partition }, async (tx) => {
+  await runCommand(pool, await commandAuthorityAt(authority, data.partition), async (tx) => {
     const current = await lookupLocalBinding(tx, input, binding);
     if (current.state !== 'pending' && current.state !== 'accepted') return noEffect(null);
     for (const r of receipts)
@@ -543,7 +543,7 @@ async function prepareIdentityEpochAdmissionWithinDeadline(
   const binding = await bindIdentityEpochReceipt(pool, authority, input),
     data = identityBindingData(binding);
   if (data.state === 'accepted') return data.job;
-  const admitted = await runCommand(pool, { ...authority, partition: data.home }, (tx) =>
+  const admitted = await runCommand(pool, await commandAuthorityAt(authority, data.home), (tx) =>
     admitBoundIdentityEpoch(tx, { ...input, binding }),
   );
   await acceptIdentityBinding(pool, authority, input, binding);
