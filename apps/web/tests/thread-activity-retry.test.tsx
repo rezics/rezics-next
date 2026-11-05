@@ -109,6 +109,7 @@ test('mounted activity retry keeps the reader request and retires late UI on rep
     expect(host.textContent).toContain(m.board_thread_activity_unavailable());
     await act(async () => {
       button.click();
+      button.click();
     });
     expect(button.disabled).toBe(true);
     expect(requests).toEqual([original, original]);
