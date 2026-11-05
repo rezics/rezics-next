@@ -427,6 +427,12 @@ test('mounted keyboard appeal return restores the activator only after exact que
 
   async function renderVisit(raw: WorkbenchRead, search: typeof queueSearch, visitId: string) {
     const prepared = await prepareWorkbenchRead(cache!, search, async () => raw, new AbortController().signal);
+    const { createPrivateReaderLifetime } = await import('../src/moderation/private-reader-lifetime');
+    const readerProbe = createPrivateReaderLifetime(cache!, prepared, workbenchReadKey(search), {
+      isCurrent: () => true,
+      subscribe: () => () => {},
+    });
+    console.log('appeal reader probe', visitId, readerProbe.healthy(), readerProbe.available());
     current = { visitId, search, page: prepared };
     await act(async () =>
       root!.render(
