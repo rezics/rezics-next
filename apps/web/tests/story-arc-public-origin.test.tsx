@@ -222,6 +222,13 @@ test('the mounted Subject, canonical route, correction session and existing read
     const publicDom = within(window.document.body);
     const trigger = host.querySelector<HTMLButtonElement>('[data-slot="subject-contribute"] button')!;
     await act(async () => userEvent.click(trigger));
+    console.info('StoryArc action menu diagnostic', {
+      width: window.innerWidth,
+      compact: window.matchMedia('(max-width: 767px)').matches,
+      dialog: publicDom.queryByRole('dialog', { name: m.contribute_title() })?.outerHTML.slice(0, 300),
+      menu: publicDom.queryByRole('menu')?.outerHTML.slice(0, 300),
+      trigger: trigger.outerHTML,
+    });
     await waitForMenu(() =>
       expect(
         publicDom.queryByRole('dialog', { name: m.contribute_title() }) ?? publicDom.queryByRole('menu'),
