@@ -82,7 +82,7 @@ function scoredRow(): VndbRow {
     currentVote: { state: 'set', units: 8, revision: 4, at: '2026-11-04T00:00:00Z' },
     sourceReason: 'exact VNDB score candidate',
     exactUnits: 14,
-    admission: { status: 'unavailable', reason: 'conditional-admission-unavailable' },
+    admission: { status: 'conditional', reason: null },
   };
   return scored;
 }
@@ -191,7 +191,7 @@ test('keeps score and state reviews independent and retries exact score outcomes
                 currentVote: scored.nativeScore.currentVote,
                 consent: 'adopt-native-vote',
                 sourceReason: 'exact source candidate',
-                nativeAdmission: 'unavailable',
+                nativeAdmission: 'conditional',
               },
             }
           : {
@@ -288,7 +288,7 @@ test('rejects a score review whose returned current-vote basis changed and keeps
           currentVote: changedVote,
           consent: 'adopt-native-vote',
           sourceReason: 'exact source candidate',
-          nativeAdmission: 'unavailable',
+          nativeAdmission: 'conditional',
         },
       }),
     }),

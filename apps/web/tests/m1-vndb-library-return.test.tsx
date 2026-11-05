@@ -83,7 +83,7 @@ const source: VndbRow = {
     currentVote,
     sourceReason: 'private source',
     exactUnits: 14,
-    admission: { status: 'unavailable', reason: 'conditional-admission-unavailable' },
+    admission: { status: 'conditional', reason: null },
   },
   fieldsTreatment: { state: 'review', score: 'private source', other: 'retain' },
 };
@@ -168,7 +168,7 @@ test('XML → exact target/state review → explicit selected apply → a separa
             currentVote,
             consent: 'adopt-native-vote',
             sourceReason: 'exact source units',
-            nativeAdmission: 'unavailable',
+            nativeAdmission: 'conditional',
           });
         if (path.endsWith(':review'))
           return Response.json({
