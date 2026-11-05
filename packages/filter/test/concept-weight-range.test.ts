@@ -19,7 +19,7 @@ test('released weight, source metric and spoiler remain qualifiers of one descen
         },
       },
     ],
-  };
+  } as const;
   const parsed = parseFilter(input);
   const admitted = admitFilter(parsed, bundledRelease, { spoilerThreshold: 1 });
   expect(admitted).toEqual({
