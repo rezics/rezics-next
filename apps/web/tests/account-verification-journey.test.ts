@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { readAttempt, saveAttempt } from '../src/account-verification/attempt';
 import {
@@ -217,6 +217,8 @@ test('all remaining operations use the declared account/request methods with no 
 });
 
 test('an applicant reads current status, keeps original operands through uncertainty, and withdraws only the current native request', async () => {
+  let now = Date.parse('2026-10-31T00:00:00Z');
+  const clock = spyOn(Date, 'now').mockImplementation(() => now);
   const draft = {
     subject: subjectId,
     statement: request.statement,
@@ -265,37 +267,47 @@ test('an applicant reads current status, keeps original operands through uncerta
     withdraw: async (currentAccountId, input) =>
       withdrawVerification(client, currentAccountId, 'Bearer applicant', input.idempotencyKey),
   });
-  await controller.reload();
-  expect(canRequestVerification(controller.snapshot().current)).toBe(true);
-  await controller.submit(draft);
-  const original = controller.snapshot().attempt;
-  expect(controller.snapshot()).toMatchObject({
-    phase: 'uncertain',
-    readStatus: 'error',
-    attempt: { receipt: request, input: original?.input },
-    failure: { status: 503, code: 'overloaded', retryable: true, requestId: 'status-1', retryAfter: '5' },
-  });
-  expect(canRetryVerification(controller.snapshot().attempt, controller.snapshot().current)).toBe(false);
-  draft.statement = 'Later draft';
-  await controller.retry();
-  expect(sent).toHaveLength(1);
-  expect(sent[0]).toBe(original?.input);
-  expect(JSON.stringify(original?.input)).toContain(request.statement);
-  await controller.reload();
-  expect(controller.snapshot()).toMatchObject({ phase: 'review', attempt: null, current: { verificationRequest: request } });
-  expect(canWithdrawVerification(controller.snapshot().current)).toBe(true);
-  const confirmation = verificationWithdrawalObservation(controller.snapshot().current);
-  await controller.withdraw(false);
-  expect(controller.snapshot().attempt).toBeNull();
-  await controller.withdraw(true);
-  expect(controller.snapshot().current?.verificationRequest?.state).toBe('withdrawn');
-  expect(verificationWithdrawalObservation(controller.snapshot().current)).not.toBe(confirmation);
-  expect(calls).toEqual([
-    `GET /v1/accounts/${accountId}/verification`,
-    `POST /v1/accounts/${accountId}:requestVerification`,
-    `GET /v1/accounts/${accountId}/verification`,
-    `GET /v1/accounts/${accountId}/verification`,
-    `POST /v1/accounts/${accountId}:withdrawVerification`,
-    `GET /v1/accounts/${accountId}/verification`,
-  ]);
+  try {
+    await controller.reload();
+    expect(canRequestVerification(controller.snapshot().current)).toBe(true);
+    await controller.submit(draft);
+    const original = controller.snapshot().attempt;
+    expect(controller.snapshot()).toMatchObject({
+      phase: 'uncertain',
+      readStatus: 'error',
+      attempt: { receipt: request, input: original?.input },
+      failure: { status: 503, code: 'overloaded', retryable: true, requestId: 'status-1', retryAfter: '5' },
+    });
+    expect(canRetryVerification(controller.snapshot().attempt, controller.snapshot().current)).toBe(false);
+    draft.statement = 'Later draft';
+    await controller.retry();
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toBe(original?.input);
+    expect(JSON.stringify(original?.input)).toContain(request.statement);
+    now += 5000;
+    await controller.reload();
+    expect(controller.snapshot()).toMatchObject({
+      phase: 'review',
+      attempt: null,
+      current: { verificationRequest: request },
+    });
+    expect(canWithdrawVerification(controller.snapshot().current)).toBe(true);
+    const confirmation = verificationWithdrawalObservation(controller.snapshot().current);
+    await controller.withdraw(false);
+    expect(controller.snapshot().attempt).toBeNull();
+    await controller.withdraw(true);
+    expect(controller.snapshot().current?.verificationRequest?.state).toBe('withdrawn');
+    expect(verificationWithdrawalObservation(controller.snapshot().current)).not.toBe(confirmation);
+    expect(calls).toEqual([
+      `GET /v1/accounts/${accountId}/verification`,
+      `POST /v1/accounts/${accountId}:requestVerification`,
+      `GET /v1/accounts/${accountId}/verification`,
+      `GET /v1/accounts/${accountId}/verification`,
+      `POST /v1/accounts/${accountId}:withdrawVerification`,
+      `GET /v1/accounts/${accountId}/verification`,
+    ]);
+  } finally {
+    clock.mockRestore();
+    controller.deactivate();
+  }
 });

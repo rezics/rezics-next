@@ -117,14 +117,14 @@ test('review and lost submission recover explicitly with exact input, identity a
     const sent: VerificationInput[] = [];
     const controller = new VerificationRecovery('alice', {
       read: async () => {
-        if (++reads === 1 || reads === 4) return never();
+        if (++reads === 1 || reads === 5) return never();
         return {
           accountId: 'alice',
-          verificationRequest: reads === 2 ? null : request,
+          verificationRequest: reads === 3 || reads === 6 ? request : null,
           viewerActions:
-            reads === 2
-              ? [{ action: 'account:update', operations: ['account.request_verification'] }]
-              : [{ action: 'account:update', operations: ['account.withdraw_verification'] }],
+            reads === 3 || reads === 6
+              ? [{ action: 'account:update', operations: ['account.withdraw_verification'] }]
+              : [{ action: 'account:update', operations: ['account.request_verification'] }],
           subjectTitle: null,
         };
       },
@@ -145,6 +145,10 @@ test('review and lost submission recover explicitly with exact input, identity a
     await controller.reload(); // A matching payload alone cannot identify the original command.
     expect(controller.snapshot().attempt).toBe(attempt);
     expect(writes).toBe(1);
+    await controller.retry();
+    expect(sent).toEqual([attempt!.input]);
+    await controller.reload();
+    expect(controller.snapshot().attempt).toBe(attempt);
     await controller.retry();
     expect(controller.snapshot()).toMatchObject({ phase: 'uncertain', readStatus: 'error' });
     expect(sent).toEqual([attempt!.input, attempt!.input]);
