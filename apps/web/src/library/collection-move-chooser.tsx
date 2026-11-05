@@ -16,13 +16,9 @@ import {
   previousPageVisit,
   type BoundedPageVisit,
 } from './collection-placement-journey/model';
+import type { CollectionMoveAnchor, CollectionMoveChoice } from './collection-placement-journey/destination';
 
-export type CollectionMoveAnchor = Readonly<{ id: string; title: string; page: number; position: number }>;
-export type CollectionMoveChoice = Readonly<{
-  destination: CollectionDestination;
-  after: string | null;
-  anchor: CollectionMoveAnchor | null;
-}>;
+export type { CollectionMoveAnchor, CollectionMoveChoice };
 
 const controlClass =
   'min-h-11 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] text-left focus-visible:outline-2 focus-visible:outline-offset-2';

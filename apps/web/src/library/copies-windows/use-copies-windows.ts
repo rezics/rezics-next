@@ -55,7 +55,15 @@ export function useCopiesWindows({
   return {
     current: visible.current,
     previous: visible.predecessors.at(-1),
+    pending: visible.pending !== null,
     move,
     admit,
   };
 }
+
+export type CopiesWindowsControls = {
+  current: string | null | undefined;
+  previous: string | null | undefined;
+  pending?: boolean;
+  move: ReturnType<typeof useCopiesWindows>['move'];
+};

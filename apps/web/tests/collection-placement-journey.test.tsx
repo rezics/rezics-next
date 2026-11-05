@@ -6,6 +6,7 @@ import {
   nextPageVisit,
   previousPageVisit,
 } from '../src/library/collection-placement-journey/model';
+import { collectionTransferReadback } from '../src/library/collection-placement-journey/transfer';
 
 test('Collection browsing keeps one previous cursor, explicit restart, and the installed cursor bound', () => {
   const page1 = firstPageVisit();
@@ -37,4 +38,12 @@ test('read failures stay distinct for access, expired cursors, changed destinati
   expect(moveReadFailure(new Error('stale_cursor'))).toBe('expired');
   expect(moveReadFailure(new Error('Move destination changed'))).toBe('changed');
   expect(moveReadFailure(new Error('network unavailable'))).toBe('unavailable');
+});
+
+test('retry keeps the captured visit; independent source and destination misses stay unavailable', () => {
+  const page2 = nextPageVisit(firstPageVisit(), 'opaque-page-2');
+  expect(nextPageVisit(page2, 'opaque-page-3').cursor).toBe('opaque-page-3');
+  expect(previousPageVisit(page2)).toEqual(firstPageVisit());
+  expect(collectionTransferReadback('source', 'dest', { id: 'source' }, { id: 'other' })).toBe('unavailable');
+  expect(collectionTransferReadback('source', 'dest', { id: 'source' }, { id: 'dest' })).toBe('ready');
 });

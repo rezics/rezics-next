@@ -98,7 +98,7 @@ export function stageCopiesWindowMove(
   target: string | null,
   focus: boolean,
 ): CopiesWindowsState {
-  if (state.current === undefined || state.base !== base(address) || address.issue) return state;
+  if (state.pending || state.current === undefined || state.base !== base(address) || address.issue) return state;
   if (move === 'previous' && state.predecessors.at(-1) !== target) return state;
   if (move === 'first' && (target !== null || state.current === null)) return state;
   if (move === 'more' && (typeof target !== 'string' || !target)) return state;
@@ -129,14 +129,11 @@ export function admitCopiesWindowRead(
   viewer: number,
   page: CopiesPageData,
 ): { state: CopiesWindowsState; focus: boolean } {
-  if (
-    page.signedIn !== true ||
-    page.inventoryState === 'forbidden' ||
-    page.inventoryState === 'unavailable' ||
-    state.base !== base(address) ||
-    state.routeCursor !== address.cursor
-  ) {
+  if (state.base !== base(address) || state.routeCursor !== address.cursor) {
     return { state: blank(address, reader, viewer), focus: false };
+  }
+  if (page.signedIn !== true || page.inventoryState === 'forbidden' || page.inventoryState === 'unavailable') {
+    return { state, focus: false };
   }
 
   if (page.cursorRestarted) {
