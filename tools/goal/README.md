@@ -101,6 +101,7 @@ call with a yield of at least 300 seconds. A supplied acceptance command defines
 dev product brief without one, the worker chooses focused validation and reports its exact command and actual result;
 the missing command never counts as a pass.
 Decision: ordinary worker-check filesystem/record interpretation (result/run precedence, nested envelopes, exit aliases, local-runner liveness, owned terminal-log evidence) lives in `worker-check-observation.ts`. `WorkerJob` consumes its pending-or-terminal observation and resume text, and retains proof observation, final-report recovery, waiting/resume transitions and process launch. Tests pin identity/security and wake/resume journeys at the public check-wake and resume-check-protocol entries; the observation entry has one disposable-file witness.
+Decision: an owner decision that does not fit the prompt points to a worktree file; check logs are named by check id and copied whole into the worktree; worker temporary directories are short `/tmp` paths that settlement removes.
 
 A task whose paths touch `apps/web` or `packages/ui`, or an interface task without either, works against Storybook
 served from its own worktree (`storybook.ts`). Each catalogue gets a loopback port derived from the worktree path, so
@@ -1979,8 +1980,9 @@ and decisions from earlier attempts cannot supersede a later current-attempt dec
 start or replace an attempt; delivery waits for the next normal prompt boundary.
 The event command does not sweep or resume workers. Acceptance and delivery events cannot be submitted directly.
 The decision shares the existing 20,000-character total prompt limit and process input byte limit with the ordinary
-prompt. References that do not fit remain pending; if the summary itself cannot fit, launch refuses the oversized
-prompt without recording delivery. Only a successful launch records delivery against the accepted event sequence.
+prompt. References that do not fit remain pending. A summary that does not fit is replaced by a pointer to a worktree file
+holding the whole decision; the pointer is appended even past the limits, so no decision refuses a launch. Only a
+successful launch records delivery against the accepted event sequence.
 Projection decision: each prompt parses decisions and deliveries in one event traversal, keeps the earliest sequence
 per decision identity, selects by controller timestamp then event sequence, and reads each referenced path once.
 No projection cache is persisted, and the delivery protocol is unchanged.

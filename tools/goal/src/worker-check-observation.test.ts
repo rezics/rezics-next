@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { join } from 'node:path';
 import { defaultPolicy } from './policy.ts';
@@ -68,4 +68,30 @@ test('ordinary observation stays pending for live local, remote, queued and sibl
   expect(resumeText).toContain(
     `check ${vanishedId}: run vanished or check host failed before writing a result; exit status unavailable; log path unavailable`,
   );
+});
+
+test('a finished check names its whole log, copied into the worktree past the excerpt bound', () => {
+  const worktree = tempDirectory();
+  const id = randomUUID();
+  // The runner names a physical run's log after its check id, then its start time and a random suffix.
+  const log = `.temp/goal/checks/worker-check-${id}-2026-11-05T19-00-00.000Z-0a1b2c3d.log`;
+  const output = `${'compiling module\n'.repeat(600)}FAIL apps/web/tests/example.test.ts:12: expected 2\n`;
+  mkdirSync(join(worktree, '.temp/goal/checks'), { recursive: true });
+  writeFileSync(join(worktree, log), output);
+  writeRecord(worktree, id, {
+    id,
+    cwd: worktree,
+    argv: ['bun', 'test'],
+    status: 'finished',
+    exitCode: 1,
+    log,
+    runnerPid: process.pid,
+    runnerHost: hostname(),
+  });
+  const observed = observeWorkerChecks({ worktree }, [id], defaultPolicy.worker);
+  expect(observed.status).toBe('terminal');
+  const resumeText = observed.status === 'terminal' ? observed.resumeText : '';
+  expect(resumeText).toContain(`full log .temp/check-logs/${id}.log`);
+  expect(resumeText).toContain('fix the cause, and rerun the check');
+  expect(readFileSync(join(worktree, '.temp/check-logs', `${id}.log`), 'utf8')).toBe(output);
 });
