@@ -18,7 +18,12 @@ import {
   savePersonalLibraryEntry,
 } from './entries-actions';
 import { useAuthoringDeparture } from '../threads/authoring-departure';
-import type { LibraryRestoreInput, LibraryRestoreResult, PersonalLibraryEntry } from './entries-read';
+import type {
+  LibraryRemoveInput,
+  LibraryRestoreInput,
+  LibraryRestoreResult,
+  PersonalLibraryEntry,
+} from './entries-read';
 import {
   commonShelfStates,
   matchesShelfIntent,
@@ -56,13 +61,14 @@ export type ShelfMutationLease = { current: boolean; owner?: symbol; listeners: 
 export const shelfMutationLease = (): ShelfMutationLease => ({ current: false, listeners: new Set() });
 
 export type ShelfFailure = 'closed' | 'denied' | 'unavailable' | 'signed-out' | 'unsupported_library_profile';
+type ShelfRemoveCommand = { data: LibraryRemoveInput; headers: Headers; viewer: string | null | undefined };
 /** One entry as the shelf holds it: what the kernel last said, and what happened to the last write. */
 export type ShelfRow = {
   entry: PersonalLibraryEntry;
   conflict: boolean;
   failure: ShelfFailure | null;
   unknownIntent?: ShelfStateIntent;
-  unknownRemove?: boolean;
+  unknownRemove?: ShelfRemoveCommand;
   unknownLabelIntent?: ShelfLabelIntent;
 };
 
@@ -125,6 +131,7 @@ export function useShelfRows(
   const shelfOrigin = useContext(PersonalShelfOrigin);
   const summaryAcknowledged = useContext(ShelfSummaryAcknowledgement);
   const session = useSession();
+  const currentViewer = shelfOrigin ? shelfOrigin.viewer() : session.subject;
   const [rows, setRows] = useState<ShelfRow[]>(() =>
     initial.map((entry) => ({ entry, conflict: false, failure: null })),
   );
@@ -340,7 +347,9 @@ export function useShelfRows(
   if (previousInitial.current !== initial) {
     previousInitial.current = initial;
     const unresolved = currentRows.current.filter(
-      (row) => row.unknownIntent || row.unknownLabelIntent || row.unknownRemove || busy.current,
+      (row) =>
+        (!row.unknownRemove || row.unknownRemove.viewer === currentViewer) &&
+        (row.unknownIntent || row.unknownLabelIntent || row.unknownRemove || busy.current),
     );
     const next = initial.map((entry) => {
       const retained = unresolved.find((row) => row.entry.subjectId === entry.subjectId);
@@ -927,21 +936,28 @@ export function useShelfRows(
     const subjectId = removing;
     const row = currentRows.current.find((item) => item.entry.subjectId === subjectId);
     if (!isCurrent() || !removeCurrent() || !subjectId || !row || row.unknownIntent || row.unknownLabelIntent) return;
-    const requestHeaders = captureMutationHeaders();
+    const existing = row.unknownRemove;
+    if (existing && existing.viewer !== currentViewer) return;
+    const requestHeaders = existing?.headers ?? captureMutationHeaders();
     if (!requestHeaders) return;
     const release = lock(removeCurrent);
     if (!release) return;
+    const { entry } = row;
+    const command: ShelfRemoveCommand = existing ?? {
+      data: {
+        subjectId,
+        revision: entry.revision,
+        ...(entry.incarnationId === undefined ? {} : { incarnationId: entry.incarnationId }),
+        idempotencyKey: entry.removeKey,
+      },
+      headers: new Headers(requestHeaders),
+      viewer: currentViewer,
+    };
     try {
-      const { entry } = row;
-      patch(subjectId, (current) => ({ ...current, unknownRemove: true }));
+      patch(subjectId, (current) => ({ ...current, unknownRemove: command }));
       const result = await deletePersonalLibraryEntry({
-        data: {
-          subjectId,
-          revision: entry.revision,
-          ...(entry.incarnationId === undefined ? {} : { incarnationId: entry.incarnationId }),
-          idempotencyKey: entry.removeKey,
-        },
-        headers: new Headers(requestHeaders),
+        data: { ...command.data },
+        headers: new Headers(command.headers),
       });
       if (!isCurrent() || !removeCurrent()) return;
       if (result.ok) summaryAcknowledged?.();
@@ -990,15 +1006,17 @@ export function useShelfRows(
           };
         });
       } else {
+        const uncertain = !!existing || result.reason === 'unavailable';
         patch(subjectId, (current) => ({
           ...current,
+          entry: uncertain ? current.entry : { ...current.entry, removeKey: crypto.randomUUID() },
           failure: failureOf(result.reason),
-          unknownRemove: result.reason === 'unavailable',
+          unknownRemove: uncertain ? command : undefined,
         }));
       }
     } catch {
       if (isCurrent() && removeCurrent())
-        patch(subjectId, (current) => ({ ...current, failure: 'unavailable', unknownRemove: true }));
+        patch(subjectId, (current) => ({ ...current, failure: 'unavailable', unknownRemove: command }));
     } finally {
       release();
       if (removeCurrent()) setRemoving(null);

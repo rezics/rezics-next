@@ -27,6 +27,7 @@ const viewer = (subject: string, csrfToken: string | null = `csrf-${subject}`) =
 const groups = [
   'personal_library',
   'reading_progress',
+  'library_entry.delete',
   'library_entry.restore',
   'library_label.list',
   'library_label.assign',
@@ -547,6 +548,60 @@ test('Per-operation retirement keeps healthy reads, exact uncertain keys and par
     });
     expect(ui.writes).toHaveLength(recoveredWrites + 1);
     await ui.settle(ui.writes.at(-1)!.work, saved(1));
+  } finally {
+    await ui.close();
+  }
+});
+
+test('Shelf keeps a definite refusal visible and retains an uncertain DELETE across refusal and operation retirement', async () => {
+  const ui = await mount();
+  try {
+    await ui.settle(ui.reads[0]!, response('A'));
+    ui.remove.mockResolvedValueOnce({ ok: false, reason: 'denied' });
+    await ui.run(() => ui.controls.askRemove(id(1)));
+    await ui.run(() => void ui.controls.remove());
+    const refused = ui.remove.mock.calls[0]![0];
+    expect(ui.controls.rows[0]!.entry.subjectId).toBe(id(1));
+    expect(ui.controls.rows[0]!.failure).toBe('denied');
+    expect(ui.controls.rows[0]!.unknownRemove).toBeUndefined();
+    expect(ui.host.textContent).toContain(ui.m.library_sort_denied());
+    expect(ui.undos).toHaveLength(0);
+
+    ui.remove.mockResolvedValueOnce({ ok: false, reason: 'unavailable' });
+    await ui.run(() => ui.controls.askRemove(id(1)));
+    await ui.run(() => void ui.controls.remove());
+    const original = ui.remove.mock.calls[1]![0];
+    expect(original.data.idempotencyKey).not.toBe(refused.data.idempotencyKey);
+    await ui.run(() => ui.session('A', 'rotated'));
+    await ui.refresh();
+    const newer = response('A');
+    if (newer.page.signedIn) newer.page.entries[0]!.revision = 99;
+    await ui.settle(ui.reads.at(-1)!, newer);
+
+    ui.remove.mockResolvedValueOnce({ ok: false, reason: 'denied' });
+    await ui.run(() => ui.controls.askRemove(id(1)));
+    await ui.run(() => void ui.controls.remove());
+    expect(ui.remove.mock.calls[2]![0].data).toEqual(original.data);
+    expect(new Headers(ui.remove.mock.calls[2]![0].headers).get('X-CSRF-Token')).toBe('csrf-A');
+    expect(ui.controls.rows[0]!.unknownRemove).toMatchObject({ data: original.data });
+
+    await ui.run(() => ui.admission(groups.filter((group) => group !== 'library_entry.delete')));
+    await ui.run(() => ui.admission());
+    await ui.run(() => ui.controls.askRemove(id(1)));
+    await ui.run(() => void ui.controls.remove());
+    expect(ui.remove.mock.calls[3]![0].data).toEqual(original.data);
+    expect(new Headers(ui.remove.mock.calls[3]![0].headers).get('X-CSRF-Token')).toBe('csrf-A');
+
+    await ui.run(() => ui.session('B'));
+    await ui.refresh();
+    await ui.settle(ui.reads.at(-1)!, response('B'));
+    expect(ui.controls.rows[0]!.entry.subject?.label).toBe('Private B 1');
+    expect(ui.controls.rows[0]!.unknownRemove).toBeUndefined();
+    ui.remove.mockResolvedValueOnce({ ok: false, reason: 'denied' });
+    await ui.run(() => ui.controls.askRemove(id(1)));
+    await ui.run(() => void ui.controls.remove());
+    expect(ui.remove.mock.calls[4]![0].data.idempotencyKey).not.toBe(original.data.idempotencyKey);
+    expect(new Headers(ui.remove.mock.calls[4]![0].headers).get('X-CSRF-Token')).toBe('csrf-B');
   } finally {
     await ui.close();
   }

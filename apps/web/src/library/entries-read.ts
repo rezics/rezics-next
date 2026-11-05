@@ -197,6 +197,19 @@ function codeOf(error: unknown): string | undefined {
   return typeof code === 'string' ? code : undefined;
 }
 
+type LibraryRefusal = 'closed' | 'denied' | 'signed-out';
+
+function refusalReason(status: number | undefined, error: unknown): LibraryRefusal | undefined {
+  if (status === 401) return 'signed-out';
+  if (status === 403) return codeOf(error) === 'platform_closed' ? 'closed' : 'denied';
+}
+
+function thrownRefusalReason(error: unknown): LibraryRefusal | undefined {
+  if (isPlatformClosedError(error)) return 'closed';
+  if (error instanceof MediaProblem && error.problem.status === 403) return 'denied';
+  if (error instanceof MediaProblem && error.problem.status === 401) return 'signed-out';
+}
+
 function writeHeaders(authorization: string, idempotencyKey: string) {
   return { authorization, 'idempotency-key': idempotencyKey };
 }
@@ -459,16 +472,14 @@ export async function changePersonalLibraryEntry(
     const conflict = await explainConflict(client, authorization, input.subjectId, result);
     if (conflict) return conflict;
     if (statusOf(result) === 404) return { ok: false, reason: 'missing' };
-    if (statusOf(result) === 401) return { ok: false, reason: 'signed-out' };
-    if (statusOf(result) === 403)
-      return { ok: false, reason: codeOf(result.error) === 'platform_closed' ? 'closed' : 'denied' };
+    const refusal = refusalReason(statusOf(result), result.error);
+    if (refusal) return { ok: false, reason: refusal };
     if (statusOf(result) === 422 && codeOf(result.error) === 'unsupported_library_profile')
       return { ok: false, reason: 'unsupported_library_profile' };
     return { ok: false, reason: 'unavailable' };
   } catch (error) {
-    if (isPlatformClosedError(error)) return { ok: false, reason: 'closed' };
-    if (error instanceof MediaProblem && error.problem.status === 403) return { ok: false, reason: 'denied' };
-    if (error instanceof MediaProblem && error.problem.status === 401) return { ok: false, reason: 'signed-out' };
+    const refusal = thrownRefusalReason(error);
+    if (refusal) return { ok: false, reason: refusal };
     return { ok: false, reason: 'unavailable' };
   }
 }
@@ -508,9 +519,12 @@ export async function removePersonalLibraryEntry(
     const conflict = await explainConflict(client, authorization, input.subjectId, result);
     if (conflict) return conflict;
     if (status === 404) return { ok: false, reason: 'missing' };
+    const refusal = refusalReason(status, result.error);
+    if (refusal) return { ok: false, reason: refusal };
     return { ok: false, reason: 'unavailable' };
   } catch (error) {
-    if (isPlatformClosedError(error)) return { ok: false, reason: 'closed' };
+    const refusal = thrownRefusalReason(error);
+    if (refusal) return { ok: false, reason: refusal };
     return { ok: false, reason: 'unavailable' };
   }
 }
