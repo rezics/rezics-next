@@ -248,6 +248,9 @@ hosts a and b.
 
 Decision: walk stacks are a bounded, queued replacement for the local-container refusal, granted only to workers whose
 brief lists native or browser acceptance.
+Admission skips slots whose application or infrastructure ports are already listening, including containers left by
+another interrupted task after its lease was released. It leaves those processes and containers running and queues
+when no slot has free ports; port collisions do not authorize stopping another task's stack.
 
 ## Cross-media dump cache
 
