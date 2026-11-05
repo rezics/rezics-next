@@ -1,3 +1,4 @@
+import { statementBytes } from '../sql/statement-bytes.ts';
 /** Native request composition. Captures and locators are structural evidence, never permission. */
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
@@ -329,7 +330,7 @@ export function ownerFilterQuery<R extends QueryResultRow>(
     statements: 1,
     emptySeeks: 1,
     ...cost,
-    bytes: Buffer.byteLength(query.sql) + Buffer.byteLength(JSON.stringify(input)) + (cost.bytes ?? 1024),
+    bytes: statementBytes(query) + Buffer.byteLength(JSON.stringify(input)) + (cost.bytes ?? 1024),
   });
   reserved.dispatch();
   return (async () => {

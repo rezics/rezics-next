@@ -1,3 +1,4 @@
+import { statementBytes } from '../sql/statement-bytes.ts';
 import type { Pool, QueryResultRow } from 'pg';
 import {
   runCommand,
@@ -60,7 +61,7 @@ function commandBound(): WorkDimensions {
     add(
       {
         ...op.bound,
-        bytes: op.bound.bytes + Buffer.byteLength(op.sql) + op.parameterMaxima.reduce((n, v) => n + v + 6, 0),
+        bytes: op.bound.bytes + statementBytes(op) + op.parameterMaxima.reduce((n, v) => n + v + 6, 0),
       },
       repetitions[id as CataloguePublisherOperation] ?? 1,
     );
@@ -74,7 +75,7 @@ function commandBound(): WorkDimensions {
     add(
       {
         ...op.bound,
-        bytes: op.bound.bytes + Buffer.byteLength(op.sql) + op.parameterMaxima.reduce((n, v) => n + v + 6, 0),
+        bytes: op.bound.bytes + statementBytes(op) + op.parameterMaxima.reduce((n, v) => n + v + 6, 0),
       },
       2,
     );

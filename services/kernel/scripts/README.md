@@ -46,3 +46,13 @@ Cache-aware admission (`3afee00d49` / `b1841e43808feae3d6f1c1f8617bc8ffdde2512f`
 - Touches: one phase-file append per start/end, one optional cgroup `memory.stat` and `io.pressure` read, one `git rev-parse`.
 - Bound: constant in the number of Kernel phases (six outer pairs plus at most five nested compiler pairs).
 - Growth check: `test/scripts/command-phases.test.ts` pins pairing, nested compiler order, failed-`tsc` pairing, observation keys, one-run volume/slice args and a single throwaway database for compiler work.
+
+## Reylo native engine
+
+Use Reylo 0.7.0 with its optional platform engine installed; the removed per-database engine packages are unnecessary.
+The lockfile and Reylo's native engine launcher participate in SQL-analysis cache identity.
+
+Decision: SQL-derived work bounds include sqlcommenter bytes even though `.sql` omits the comment. Query modules use
+encoded source metadata; detached SQL declarations reserve a 512-byte comment envelope. Raw `.sql` dispatch may
+therefore consume less than its conservative declaration. Keep inferred cardinalities and nullability at call sites.
+The statement-byte regression test pins the envelope against all Kernel SQL paths and the actual Reylo transport.

@@ -1,3 +1,4 @@
+import { statementBytes } from '../sql/statement-bytes.ts';
 import { declareBound, sumBounds, type Bound } from '@rezics/bounds';
 import { RELEASE_LIMITS } from '@rezics/definitions';
 import accountRead from '../access/account-read.sql';
@@ -100,7 +101,7 @@ export function pinStoreStatementBound(statement: PinStoreStatement): Bound {
   });
   return sumBounds(
     leaf,
-    byteCost(Buffer.byteLength(statement.sql) + serializedBytes(values) + serializedBytes(output)),
+    byteCost(statementBytes(statement) + serializedBytes(values) + serializedBytes(output)),
     triggerBound(route, accountId, triggerWrites),
   );
 }
@@ -151,8 +152,8 @@ export function pinOwnerObservationBound(input: { route: number; accountId: stri
     bytes: 0,
   });
   const sqlBytes =
-    Buffer.byteLength(accountRead.sql) +
-    Buffer.byteLength(readTime.sql) +
+    statementBytes(accountRead) +
+    statementBytes(readTime) +
     controls.reduce((n, sql) => n + Buffer.byteLength(sql), 0);
   const inputBytes =
     serializedBytes([input.route, input.accountId]) + serializedBytes({ at: '' }) + serializedBytes(input.cursor ?? '');
@@ -255,7 +256,7 @@ export function pinTargetGateBound(input: {
     statements: 8,
     bytes: 0,
   });
-  const sqlBytes = Buffer.byteLength(openingRead.sql) + Buffer.byteLength(partitionRead.sql);
+  const sqlBytes = statementBytes(openingRead) + statementBytes(partitionRead);
   const group = input.group ?? 'collections';
   const action = input.clientAction ?? 'collection:read';
   const operands =
@@ -311,7 +312,7 @@ export function pinCommandAdmissionBound(input: { route: number; accountId: stri
       bytes: 0,
     }),
     byteCost(
-      Buffer.byteLength(accountRead.sql) +
+      statementBytes(accountRead) +
         serializedBytes([input.route, input.accountId]) +
         serializedBytes(projection),
     ),

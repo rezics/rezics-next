@@ -1,3 +1,4 @@
+import { statementBytes } from '../sql/statement-bytes.ts';
 /** Finite Kind raw-original input. Values describe work only and never grant Type or catalogue admission. */
 import { declareBound, repeatBound, sumBounds, withinCeiling, type Bound } from '@rezics/bounds';
 import { ProblemError } from '../http/problem.ts';
@@ -87,7 +88,7 @@ const admissionEpisode = statement(admitEpisode.sql, 8, 8, 9, 0, { escaped: 2 * 
 const admissionSource = statement(readSource.sql, 3, 3, 3, 10240, { escaped: 0 });
 const custody = sumBounds(
   work(0, 208, 10, 0, 7),
-  ...custodySql.map((query) => bytes(Buffer.byteLength(query.sql) + ENVELOPE + ENVELOPE)),
+  ...custodySql.map((query) => bytes(statementBytes(query) + ENVELOPE + ENVELOPE)),
 );
 const state = statement(readState.sql, 3, 3, 3, ESCAPED_BODY);
 const read = statement(readInput.sql, 2, 2, 1, 2 * (ESCAPED_BODY + 512));

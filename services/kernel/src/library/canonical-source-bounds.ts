@@ -1,3 +1,4 @@
+import { statementBytes } from '../sql/statement-bytes.ts';
 /** Closed Library-owned plan for canonical Collection generation repair, publication and completed-pointer readback.
  * Declarations constrain dispatch; they never fund a ledger or mint native authority.
  */
@@ -64,7 +65,7 @@ const sqlBound = (value: Omit<Bound, 'engineRequests'>): CanonicalSourceSqlBound
 
 const jsonBytes = (value: unknown) => Buffer.byteLength(JSON.stringify(value));
 const textBytes = (value: string) => Buffer.byteLength(value);
-const bytesOf = (sql: string, values: unknown, resultBytes: number) => textBytes(sql) + jsonBytes(values) + resultBytes;
+const bytesOf = (sql: string, values: unknown, resultBytes: number) => statementBytes(sql) + jsonBytes(values) + resultBytes;
 
 const maxIdentityObject = JSON.parse(`{"k":"${'a'.repeat(identityJsonCeiling - 8)}"}`);
 const maxScopeRow = jsonBytes([
@@ -581,7 +582,7 @@ const ownerFactsCeiling = Math.max(
 export function canonicalSourceOwnerFactBound(limit: number): CanonicalSourceSqlBound {
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > CANONICAL_SOURCE_RAW_KEY_LIMIT)
     throw new RangeError('Owner fact limit must be 1..100');
-  const sqlBytes = Math.max(textBytes(ownerFactsSql.sql), textBytes(labelOriginalsSql.sql));
+  const sqlBytes = Math.max(statementBytes(ownerFactsSql), statementBytes(labelOriginalsSql));
   const requestBytes = sqlBytes + jsonBytes(maxOwnerFactValues);
   const resultBytes = maxOwnerFactRow * limit;
   return sqlBound({
@@ -783,7 +784,7 @@ export function assertCanonicalSourceStatement(
   statement: CanonicalSourceStatement,
   values: readonly unknown[],
 ): CanonicalSourceSqlBound {
-  const requestBytes = textBytes(statement.sql) + jsonBytes(values);
+  const requestBytes = statementBytes(statement) + jsonBytes(values);
   if (requestBytes > statement.requestBytes)
     throw new TypeError('Canonical Source statement exceeds its request bound');
   if (statement.bound.engineRequests !== 0)

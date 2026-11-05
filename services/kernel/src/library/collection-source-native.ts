@@ -1,3 +1,4 @@
+import { statementBytes } from '../sql/statement-bytes.ts';
 // Loaded first: nativeCollectionOrdinalPageBound runs during module initialization of an import cycle
 // (search/service-scope-order.ts), before later imports of this file are evaluated.
 import ordinalPage from './collection-source-native-ordinal.sql';
@@ -145,7 +146,7 @@ export function nativeCollectionOrdinalPageBound(limit: number): NativeCollectio
     throw new RangeError('Native source limit must be 1..100');
   const maxUuid = 'ffffffff-ffff-ffff-ffff-ffffffffffff';
   const requestValues = [65535, maxUuid, '~'.repeat(48), maxUuid, limit];
-  const requestBytes = Buffer.byteLength(ordinalPage.sql) + Buffer.byteLength(JSON.stringify(requestValues));
+  const requestBytes = statementBytes(ordinalPage) + Buffer.byteLength(JSON.stringify(requestValues));
   const resultBytes = 512 * limit;
   const projection = Object.freeze({
     candidateKeys: limit,

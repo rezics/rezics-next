@@ -1,3 +1,4 @@
+import { statementBytes } from '../sql/statement-bytes.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
 import { RELEASE_LIMITS } from '@rezics/definitions';
@@ -267,7 +268,7 @@ export function copyStatementPlan<Client, Input extends object, Result>(
   );
   const bound = sumBounds(
     completeWork(shape),
-    bytes(Buffer.byteLength(query.sql)),
+    bytes(statementBytes(query)),
     bytes(Buffer.byteLength(JSON.stringify(operands))),
     resultEnvelope,
   );
