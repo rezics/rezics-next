@@ -17,7 +17,7 @@ const realmContext = '0ac7c5d7-1f67-4d02-8a72-0676044ecb19';
 const realm = 'b7d92525-081e-42e1-9cb8-ef72b1492a25';
 const candidate = '9f4c6b04-7496-4e14-89bc-41abf931e662';
 
-test('the installed editorial link retains the selected public reading and the public return keeps its Realm selector', () => {
+test('the mounted editorial entry and visit address retain the selected public reading', () => {
   const expected = identifierVisitHref(subject, 'en', { context: realmContext, realm });
   const html = renderToStaticMarkup(
     createElement(EditorialEntry, {
@@ -29,7 +29,9 @@ test('the installed editorial link retains the selected public reading and the p
       realm,
     }),
   );
-  expect(html).toContain(`href="${expected.replaceAll('&', '&amp;')}"`);
+  expect(html).toContain('data-slot="subject-contribute"');
+  expect(html).not.toContain('originContext=');
+  expect(expected).toContain(`originContext=${realmContext}&originRealm=${realm}`);
   expect(parseIdentifierCurrentVisit(new URL(expected, 'https://rezics.test').search)).toMatchObject({
     origin: { context: realmContext, realm, kind: 'realm' },
   });
