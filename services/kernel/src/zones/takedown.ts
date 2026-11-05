@@ -48,8 +48,7 @@ function sameJson(a: unknown, b: unknown): boolean {
     keys.length === Object.keys(b).length &&
     keys.every(
       (key) =>
-        Object.hasOwn(b, key) &&
-        sameJson((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]),
+        Object.hasOwn(b, key) && sameJson((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]),
     )
   );
 }

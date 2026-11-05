@@ -136,13 +136,7 @@ test('takedown is platform-only, names existing fields, and stale or repeated de
   const taken = await f.call('operator', 'POST', `${path}:takedown`, body, f.conditional(zone.revision));
   expect(taken.status).toBe(200);
   expect((await f.read(zone.id)).status).toBe(404);
-  const repeated = await f.call(
-    'operator',
-    'POST',
-    `${path}:takedown`,
-    body,
-    f.conditional(taken.body.zone.revision),
-  );
+  const repeated = await f.call('operator', 'POST', `${path}:takedown`, body, f.conditional(taken.body.zone.revision));
   expect(repeated.status).toBe(409);
   const unknownRelease = await f.call(
     'operator',
@@ -194,7 +188,10 @@ test('configuration cannot change a withheld value, unrelated fields still save,
     'PUT',
     `${path}/configuration`,
     {
-      configuration: { ...current, pages: [current.pages[0], { ...current.pages[1], document: page(`Replaced ${randomUUID()}`) }] },
+      configuration: {
+        ...current,
+        pages: [current.pages[0], { ...current.pages[1], document: page(`Replaced ${randomUUID()}`) }],
+      },
       mounts: [],
     },
     f.conditional(taken.body.zone.revision),
