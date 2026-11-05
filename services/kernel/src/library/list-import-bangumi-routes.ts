@@ -154,7 +154,7 @@ export function bangumiImportRoutes(
         params,
         headers,
         body: t.Object({ ordinal, target: t.Optional(id), score: t.Optional(scoreSelection) }, closed),
-        response: { 200: result<{ ordinal: number; review: BangumiReview }>(), ...failures },
+        response: { 200: result<{ ordinal: number; review: BangumiReview | null }>(), ...failures },
         detail: detail('library_bangumi.review'),
       },
       ({ actor, params, body, headers, admission, job, set }) => {

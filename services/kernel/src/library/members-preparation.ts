@@ -405,6 +405,7 @@ export function createMembersPreparation(config: {
       if (options.runtime && !options.history) {
         options = {
           ...options,
+          deadline,
           history: openWorkExecutionOriginal(config.pool, deadline, config.workClient),
         };
       }
