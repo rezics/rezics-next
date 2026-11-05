@@ -232,12 +232,12 @@ test('the mounted music-context reader selects, pages, retries and returns throu
     expect(host.textContent).toContain('Fresh Previous page');
 
     const related = [...host.querySelectorAll<HTMLAnchorElement>('a')].find((link) =>
-      link.textContent?.includes('Second page endpoint'),
+      link.textContent?.includes('Fresh Previous page'),
     );
     if (!related) throw new Error('The disclosed endpoint did not become a Subject link');
     const visit = new URL(related.href);
     const via = visit.searchParams.get('via');
-    expect(via).toBe(`/en/subjects/${anchor}/harbor-stage/music-context?stream=schema%3Alocation&cursor=next-1`);
+    expect(via).toBe(`/en/subjects/${anchor}/harbor-stage/music-context?stream=schema%3Alocation`);
     expect(subjectVisitReturn(via, 'en')).toBe(via);
     const correction = [...host.querySelectorAll<HTMLAnchorElement>('a')].find((link) =>
       link.textContent?.includes('Propose a correction'),
@@ -245,7 +245,7 @@ test('the mounted music-context reader selects, pages, retries and returns throu
     if (!correction) throw new Error('The existing facts correction destination was not rendered');
     const correctionReturn = new URL(correction.href).searchParams.get('returnTo');
     expect(correctionReturn).toBe(via);
-    expect(musicContextRouteSearch({ returnTo: correctionReturn }, 'en')?.returnTo).toBe(via);
+    expect(subjectVisitReturn(correctionReturn, 'en')).toBe(via);
   } finally {
     await act(async () => root.unmount());
     for (const [key, descriptor] of previous)
@@ -255,7 +255,7 @@ test('the mounted music-context reader selects, pages, retries and returns throu
 });
 
 test('music-context addresses reject external, encoded and nested return intent', () => {
-  const valid = `/en/subjects/${anchor}/harbor-stage/music-context?stream=schema%3Alocation&cursor=next-1`;
+  const valid = `/en/subjects/${anchor}/harbor-stage`;
   expect(musicContextRouteSearch({ stream: 'schema:location', cursor: 'next-1', returnTo: valid }, 'en')).toEqual({
     stream: 'schema:location',
     cursor: 'next-1',

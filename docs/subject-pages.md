@@ -276,6 +276,7 @@ Music-context addresses retain only Context, the selected stream and its native 
 public return or visit. The full encoded path and query stay within 32,768 UTF-8 bytes. Stream and cursor limits remain
 128 and 8,192 characters. Native session tokens and response bodies stay in the in-memory reader lifetime. The existing
 eight-entry Previous history stores cursors only and reacquires the selected Context on every visit.
+A `returnTo` cannot point back to another music-context route; the single `via` visit carries only its immediate source.
 
 A disclosed related Subject can open this reader with the same Context only when its current released Type is admitted.
 Other targets are labeled as general Subject visits; if their destination cannot carry the selected Context, the reader

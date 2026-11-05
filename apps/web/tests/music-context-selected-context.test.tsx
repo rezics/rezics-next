@@ -34,7 +34,11 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('../src/features/pages/graph-browser/actions', () => ({
   exploreContext: async () => ({ client: nativeClient, authorization: undefined }),
 }));
-mock.module('../src/features/catalogue/definition-guide', () => ({ fetchGuideRelease: async () => release }));
+const originalDefinitionGuide = await import('../src/features/catalogue/definition-guide');
+mock.module('../src/features/catalogue/definition-guide', () => ({
+  ...originalDefinitionGuide,
+  fetchGuideRelease: async () => release,
+}));
 mock.module('../src/threads/composer', () => ({ csrfHeaders: () => ({}) }));
 mock.module('../src/shell/feature-slots', () => ({ useFeatureSlots: () => ({}) }));
 
