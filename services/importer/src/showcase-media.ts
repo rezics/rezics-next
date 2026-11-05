@@ -98,7 +98,7 @@ async function readResponse(response: Response, signal: AbortSignal): Promise<Ui
         aborted = () => reject(signal.reason);
         signal.addEventListener('abort', aborted, { once: true });
       });
-      let chunk: ReadableStreamReadResult<Uint8Array>;
+      let chunk: Awaited<ReturnType<typeof reader.read>>;
       try {
         chunk = await Promise.race([reader.read(), interrupted]);
       } finally {

@@ -1788,7 +1788,10 @@ function convert(
       const imageReference: BatchReference = {
         parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: sourceUrl } }],
       };
-      const coverProvenance = sourceEnvelope({ ...metadata, digest: coverDigest }, 'cover');
+      const coverProvenance = {
+        ...sourceEnvelope({ ...metadata, digest: coverDigest }, 'cover'),
+        field_group: 'cover' as const,
+      };
       const asset: Omit<MediaImportRequest, 'containerId'> = {
         sourceUrl,
         credit: {
