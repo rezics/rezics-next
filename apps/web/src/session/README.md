@@ -29,6 +29,15 @@ An uncertain command retains the original operands, credential, method and key u
 lease only refuses stale dispatch/completion; it never reconstructs, upgrades or automatically retries that intent.
 Native authorization, disclosure and prepared authenticated requests retain their existing owners.
 
+Decision: cache observers reconcile authority synchronously, while React notifications coalesce through the shared
+browser observer's microtask publication. Snapshot reads never publish or evict another query. Captured guards
+inspect current authority immediately, including every intervening cache transition; publication reads the latest
+snapshot and cannot restore an old incarnation. Retired exposure keys become inadmissible immediately and are
+physically removed during publication, outside render. Raw cache subscriptions remain synchronous for response
+epochs and command retirement. React-facing session, exposure, workspace admission, response provenance and Inbox
+subscriptions publish after the current stack and ignore released listeners. Inbox retains its account viewer epoch
+and independent credential fencing for original uncertain commands; phone and desktop share its existing count query.
+
 Decision: outage recovery retains only a bounded, query-free local return path in a short-lived HttpOnly login cookie; callback credentials and private query state are never replayed.
 
 ## Public module entry

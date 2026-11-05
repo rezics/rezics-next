@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { sessionQuery, useSession } from '../session/query';
+import { browserObservation } from '../session/observation';
 
 type InboxSession = { state: string; subject?: string | null };
 
@@ -22,6 +23,10 @@ function createViewerStore(client: QueryClient) {
   let current: InboxViewer | null = null;
   const listeners = new Set<() => void>();
   let release: (() => void) | undefined;
+  const observation = browserObservation(client);
+  const publish = () => {
+    for (const changed of listeners) changed();
+  };
   const disconnect = () => {
     release?.();
     release = undefined;
@@ -52,13 +57,16 @@ function createViewerStore(client: QueryClient) {
     if (release) return;
     // One cache observation outlives UI subscriptions while an imperative viewer is live.
     // A guard cannot infer an intervening loss from the final retained data alone.
-    release = client.getQueryCache().subscribe((event) => {
+    release = observation.subscribeCache((event) => {
       if (event.query.queryKey.length !== 1 || event.query.queryKey[0] !== sessionQuery.queryKey[0]) return;
       reconcile();
-      for (const changed of listeners) changed();
+      observation.publish(publish);
     });
   };
   return {
+    // React render only reads an already installed observation. Imperative callers below
+    // explicitly acquire their observation through snapshot(), including without a mounted UI.
+    getSnapshot: () => current,
     snapshot: () => {
       connect();
       return reconcile();
@@ -118,7 +126,7 @@ export function useInboxViewer() {
   const session = useSession();
   const client = useQueryClient();
   const store = inboxViewerStore(client);
-  const current = useSyncExternalStore(store.subscribe, store.snapshot, serverViewer);
+  const current = useSyncExternalStore(store.subscribe, store.getSnapshot, serverViewer);
   // Read-only observation: useSession remains the sole owner of the initial browser read.
   const sessionRead = useSyncExternalStore(
     store.subscribe,

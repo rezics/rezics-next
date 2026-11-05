@@ -156,7 +156,7 @@ export function useOperation(operation: ExposureOperation): boolean {
   // Keep the established session observer and its imperative CSRF transport initialization.
   useSession();
   const lifetime = viewerExposureLifetime(client);
-  const admission = useSyncExternalStore(lifetime.subscribe, lifetime.getSnapshot, lifetime.getServerSnapshot);
+  const admission = useSyncExternalStore(lifetime.subscribeSnapshot, lifetime.getSnapshot, lifetime.getServerSnapshot);
   const { data: publicGroups } = useQuery(
     { ...anonymousQuery, enabled: hydrated && admission.state === 'signed-out' },
     client,

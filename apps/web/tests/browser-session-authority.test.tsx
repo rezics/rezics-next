@@ -605,7 +605,9 @@ test('StrictMode setup and cleanup preserve the mounted owner and release its ca
 });
 
 test('mounted phone, following and Subject readers publish query changes after sibling render and retain immediate fences', async () => {
-  mock.module('@fontsource-variable/manrope/files/manrope-latin-wght-normal.woff2?url', () => ({ default: '/font.woff2' }));
+  mock.module('@fontsource-variable/manrope/files/manrope-latin-wght-normal.woff2?url', () => ({
+    default: '/font.woff2',
+  }));
   const { AppShell } = await import('../src/shell/app-shell');
   const { SubjectPage } = await import('../src/features/pages/subject');
   const { default: recorded } = await import('../src/kernel/recorded/subject-page.json');
@@ -613,18 +615,27 @@ test('mounted phone, following and Subject readers publish query changes after s
   const { workspaceAdmission } = await import('../src/session/reader');
   const { currentInboxViewer } = await import('../src/inbox/inbox-viewer');
   const { viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
-  const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } = await import('@tanstack/react-router');
+  const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } =
+    await import('@tanstack/react-router');
   const communities = await import('../src/shell/community-navigation-actions');
   const inbox = await import('../src/inbox/inbox-read');
   const following = spyOn(communities, 'readShellCommunities').mockResolvedValue({
-    subject: 'reader-one', locale: 'en', more: false,
+    subject: 'reader-one',
+    locale: 'en',
+    more: false,
     items: [{ id: 'space', kind: 'space', title: 'Following space', path: '/spaces/space' }],
   });
   let counts = 0;
   const count = spyOn(inbox, 'readUnreadCount').mockImplementation(async () => {
     counts++;
-    return { signedIn: true, state: 'ready', count: 3, capped: false, basis: 'current-visible-unread',
-      witness: { kind: 'current-disclosure', at: '2026-11-04T00:00:00.000Z' } };
+    return {
+      signedIn: true,
+      state: 'ready',
+      count: 3,
+      capped: false,
+      basis: 'current-visible-unread',
+      witness: { kind: 'current-disclosure', at: '2026-11-04T00:00:00.000Z' },
+    };
   });
   const errors = spyOn(console, 'error');
   try {
@@ -634,19 +645,50 @@ test('mounted phone, following and Subject readers publish query changes after s
       const shared = browserObservation(client);
       const admission = workspaceAdmission(client, ['follow.list']);
       const stop = admission.subscribe(() => {});
-      const router = createRouter({ routeTree: createRootRoute(), history: createMemoryHistory({ initialEntries: ['/en/subjects/book'] }) });
+      const router = createRouter({
+        routeTree: createRootRoute(),
+        history: createMemoryHistory({ initialEntries: ['/en/subjects/book'] }),
+      });
       let duringRender: (() => void) | undefined;
-      function QueryEvent() { const event = duringRender; duringRender = undefined; event?.(); return null; }
-      const render = () => ui.render(client, <RouterContextProvider router={router}><AppShell search={<input aria-label="Search" />}>
-        <QueryEvent /><SubjectPage page={recorded} locale="en" messages={{ unknown: 'Unknown', none: 'None', unlabelled: 'Untitled', sources: 'Sources', aliases: 'Aliases', search: 'Search' }} />
-      </AppShell></RouterContextProvider>, true);
+      function QueryEvent() {
+        const event = duringRender;
+        duringRender = undefined;
+        event?.();
+        return null;
+      }
+      const render = () =>
+        ui.render(
+          client,
+          <RouterContextProvider router={router}>
+            <AppShell search={<input aria-label="Search" />}>
+              <QueryEvent />
+              <SubjectPage
+                page={recorded}
+                locale="en"
+                messages={{
+                  unknown: 'Unknown',
+                  none: 'None',
+                  unlabelled: 'Untitled',
+                  sources: 'Sources',
+                  aliases: 'Aliases',
+                  search: 'Search',
+                }}
+              />
+            </AppShell>
+          </RouterContextProvider>,
+          true,
+        );
       const admit = async () => {
         await ui.flush();
         const snapshot = shared.getSnapshot();
         expect(snapshot.state).toBe('signed-in');
         if (snapshot.state !== 'signed-in') throw new Error('Expected current reader');
-        await act(async () => client.setQueryData(viewerExposureQuery(snapshot.observation).queryKey,
-          { subject: 'reader-one', admitted: ['personal_library', 'collections'] }));
+        await act(async () =>
+          client.setQueryData(viewerExposureQuery(snapshot.observation).queryKey, {
+            subject: 'reader-one',
+            admitted: ['personal_library', 'collections'],
+          }),
+        );
         await ui.flush();
         expect(ui.host.textContent).toContain('Following space');
         expect(ui.host.querySelector('[data-phone-navigation]')).not.toBeNull();
@@ -656,7 +698,8 @@ test('mounted phone, following and Subject readers publish query changes after s
         await admit();
         const original = admission.read();
         const old = currentInboxViewer(client)!;
-        const current = () => admission.dispatchVersion('follow.list') === original.dispatch[0] && admission.allowed('follow.list');
+        const current = () =>
+          admission.dispatchVersion('follow.list') === original.dispatch[0] && admission.allowed('follow.list');
         duringRender = () => {
           client.setQueryData(sessionQuery.queryKey, viewer('reader-two', 'csrf-two'));
           expect(current()).toBe(false);
@@ -680,9 +723,15 @@ test('mounted phone, following and Subject readers publish query changes after s
         await render();
         expect(counts).toBeLessThanOrEqual(2);
         expect(errors.mock.calls.filter((args) => args.join(' ').includes('Cannot update a component'))).toEqual([]);
-      } finally { stop(); }
+      } finally {
+        stop();
+      }
     });
-  } finally { following.mockRestore(); count.mockRestore(); errors.mockRestore(); }
+  } finally {
+    following.mockRestore();
+    count.mockRestore();
+    errors.mockRestore();
+  }
 });
 
 afterAll(async () => {

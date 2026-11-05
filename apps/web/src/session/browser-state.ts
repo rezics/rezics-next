@@ -102,8 +102,13 @@ export function subscribeBrowserSession(
     entry.authoritativeReferences += 1;
     if (entry.authoritativeReferences === 1) {
       owners.push(entry);
-      entry.unsubscribeCache = browserObservation(client).subscribeCache(() => {
+      const observation = browserObservation(client);
+      const publish = () => {
         for (const subscriber of [...entry.listeners]) subscriber();
+      };
+      entry.unsubscribeCache = observation.subscribeCache((event) => {
+        if (event.query.queryKey.length === 1 && event.query.queryKey[0] === sessionQueryKey[0])
+          observation.publish(publish);
       });
     }
   }

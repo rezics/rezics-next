@@ -107,10 +107,11 @@ export function workspaceAdmission(client: QueryClient | undefined, operations: 
     exposureObject = query;
     return snapshot;
   };
+  const publish = () => listeners.forEach((notify) => notify());
   const changed = () => {
     const before = snapshot;
     read();
-    if (before !== snapshot) listeners.forEach((notify) => notify());
+    if (before !== snapshot) lifetime?.publish(publish);
   };
   return {
     read,
