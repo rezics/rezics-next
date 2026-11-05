@@ -469,7 +469,12 @@ export function OrganizationDeleteContent({
       }
       key ??= continuation.value.operationKey;
     }
-    key ??= operationKeyFor({ kind: 'delete', accountId: selected }, humanAccountId);
+    const keyResult = operationKeyFor({ kind: 'delete', accountId: selected }, humanAccountId, key);
+    if (keyResult.kind === 'refused') {
+      setMessage(m.auth_account_operation_unavailable());
+      return;
+    }
+    key = keyResult.key;
     current.operationKey = key;
     if (!storeOrganizationDeleteStepUp({ humanAccountId, organizationId: selected, operationKey: key })) {
       setMessage(m.auth_account_operation_unavailable());
@@ -533,7 +538,16 @@ export function OrganizationDeleteContent({
       }
       key ??= continuation.value.operationKey;
     }
-    key ??= operationKeyFor({ kind: 'delete', accountId: selected }, target.humanAccountId);
+    const keyResult = operationKeyFor(
+      { kind: 'delete', accountId: selected },
+      target.humanAccountId,
+      key,
+    );
+    if (keyResult.kind === 'refused') {
+      setMessage(m.auth_account_operation_unavailable());
+      return;
+    }
+    key = keyResult.key;
     current.operationKey = key;
     const attemptId = returns.beginAttempt(current);
     if (attemptId === null) return;
@@ -554,7 +568,7 @@ export function OrganizationDeleteContent({
       if (result.ok) {
         returns.resolveAttempt(attemptId, 'acknowledged');
         focusIntent.current = 'history';
-        forgetOperationKey(operation, target.humanAccountId);
+        forgetOperationKey(operation, target.humanAccountId, key);
         clearReviewContinuationFor(target.humanAccountId, target.organizationId, key);
         if (
           attempt.current?.identity.operationKey === key &&

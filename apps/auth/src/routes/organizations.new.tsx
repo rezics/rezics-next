@@ -357,11 +357,6 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
     }
     setHandleError('');
     const priorUncertainty = returnState.history === 'unconfirmed';
-    recordReturn({ type: 'begin' });
-    submitting.current = true;
-    setPending(true);
-    setMessage('');
-    setShowRetry(false);
     const operation = { kind: 'organization' as const, handle: normalizedHandle };
     const pendingState = pendingAccountOperationStepUpState();
     const pendingOperation = pendingState.kind === 'pending' ? pendingState.value : null;
@@ -382,16 +377,22 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
       retirePrivate('failure', { type: 'unresumable' }, true, m.auth_account_operation_failure());
       return;
     }
-    const operationKey =
-      pendingOperation?.operationKey ??
-      unresolvedAttempt.current?.operationKey ??
-      operationKeyFor(operation, accountId);
-    let keyStorage: string | null = null;
-    try {
-      keyStorage = window.sessionStorage.getItem('rezics.account-operation.pending');
-    } catch {
-      // Storage may be disabled; the mounted acknowledgement still closes this send.
+    const keyResult = operationKeyFor(
+      operation,
+      accountId,
+      pendingOperation?.operationKey ?? unresolvedAttempt.current?.operationKey,
+    );
+    if (keyResult.kind === 'refused') {
+      setMessage(m.auth_account_operation_unavailable());
+      setShowRetry(false);
+      return;
     }
+    const operationKey = pendingOperation?.operationKey ?? unresolvedAttempt.current?.operationKey ?? keyResult.key;
+    recordReturn({ type: 'begin' });
+    submitting.current = true;
+    setPending(true);
+    setMessage('');
+    setShowRetry(false);
     const current = lifetime.current;
     let continuation = JSON.stringify(pendingState);
     let draft = readPendingOrganizationHandle();
@@ -462,16 +463,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
       // Adopt only generic evidence while the exact callback/descriptor still owns the send.
       // Cleanup is synchronous and cannot consume a later replacement during the final read.
       acknowledged.current = true;
-      try {
-        if (
-          keyStorage &&
-          JSON.parse(keyStorage).key === operationKey &&
-          window.sessionStorage.getItem('rezics.account-operation.pending') === keyStorage
-        )
-          forgetOperationKey(operation, accountId);
-      } catch {
-        // Leave an unreadable key untouched rather than erasing another owner.
-      }
+      forgetOperationKey(operation, accountId, operationKey);
       if (readPendingOrganizationHandle() === draft) storePendingOrganizationHandle('');
       clearPendingAccountOperationStepUp();
       continuation = JSON.stringify(pendingAccountOperationStepUpState());

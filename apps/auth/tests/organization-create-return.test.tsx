@@ -16,6 +16,7 @@ import {
   readPendingAccountOperationStepUp,
   storePendingAccountOperationStepUp,
 } from '../src/account-operation-step-up';
+import { m } from '../src/paraglide/messages.js';
 creationFixture();
 const initial = session('organization');
 const body = { account_id: initial.accountId, client_id: initial.clientId, scope: initial.scopes };
@@ -54,6 +55,25 @@ test('read Retry is separate from same-key command retry and a later refusal kee
   expect(page.host.textContent).not.toContain('creation result is still unknown');
   expect(page.host.textContent).toContain('Creation was refused');
   expect(readPendingAccountOperationStepUp()?.operationKey).toBe(original.operationKey);
+});
+
+test('refused generic key storage keeps the exact unknown creation descriptor and dispatches no retry', async () => {
+  const page = await open(<NewOrganizationPage initial={initial} />, body);
+  await flush(() => fill(page.host.querySelector('input')!, 'team-alpha'));
+  await flush(() => send(page.host));
+  await flush(() => page.calls[0]!.resolve(approval()));
+  await flush(() => page.calls[1]!.resolve(Response.json({ error: 'unavailable' }, { status: 503 })));
+  const descriptor = readPendingAccountOperationStepUp();
+  const refusedBytes = '{';
+  window.sessionStorage.setItem('rezics.account-operation.pending', refusedBytes);
+  await flush(() => button(page.host, 'Check current advice')!.click());
+  await flush(() => button(page.host, 'Retry this creation')!.click());
+
+  expect(page.calls).toHaveLength(2);
+  expect(readPendingAccountOperationStepUp()).toEqual(descriptor);
+  expect(window.sessionStorage.getItem('rezics.account-operation.pending')).toBe(refusedBytes);
+  expect(page.host.textContent).toContain(m.auth_account_operation_unavailable());
+  expect(page.host.textContent).toContain('creation result is still unknown');
 });
 
 async function beginUnknownReturn() {

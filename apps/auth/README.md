@@ -56,6 +56,21 @@ supported descriptor/attempt lifetime; generic history cannot reconstruct them. 
 language mechanism below, with no navigation or command replacement. Focus, dismissal and historical display add
 zero I/O. Each page's finite advice, preflight and readback costs remain additional below.
 
+Decision: bound generic operation-key custody to 58,184 UTF-16 code units using existing actor, target, handle and native key limits; refused visible storage blocks command dispatch and remains byte-for-byte intact.
+
+The canonical writer stores `{signature,key}`, where `signature` is JSON for `[actor,operation]` and the 16-byte
+generated key is 32 lowercase hexadecimal characters. Actor and delete-target IDs keep their existing 4,096-code-unit
+admission bound; organization handles keep the normalized 3–64 ASCII-character contract. The native workflow accepts
+opaque operation keys from 1 to 128 code units, so restoration also admits older nonempty keys through 128 without
+requiring the generated 32-character spelling. For deletion, an empty-operand envelope contributes 72 code units;
+each of the two maximum IDs contributes at most seven after nested JSON string escaping (six inner escaped code units
+plus the outer signature-string backslash), and a retained key contributes at most six per code unit. The exact cap
+is `72 + 7 × (4,096 + 4,096) + 6 × 128 = 58,184`. The organization envelope with its 64-character handle is
+`139 + 7 × 4,096 + 6 × 128 = 29,579`, so deletion sets the shared limit. Both generic storage readers check this raw
+UTF-16 length before JSON parsing. A malformed, oversized or unsupported record is unresolved, preserved exactly,
+and cannot fall through to a new key or command. A valid retained descriptor keeps its exact key; storage absence or
+actual browser-storage unavailability follows the existing mounted memory fallback.
+
 ## Account home
 
 The Auth brand and `/` open the localized account home. It uses one existing private `POST /account-identity` read to

@@ -127,7 +127,9 @@ export function AuthStory({
         returning === 'delete'
           ? { kind: 'delete' as const, accountId: storyAccount }
           : { kind: 'organization' as const, handle: 'reading-group' };
-      const operationKey = operationKeyFor(operation, storyAccount);
+      const keyResult = operationKeyFor(operation, storyAccount);
+      if (keyResult.kind === 'refused') throw new Error('Story operation-key storage is unavailable.');
+      const operationKey = keyResult.key;
       storePendingAccountOperationStepUp({
         kind: returning,
         accountId: storyAccount,

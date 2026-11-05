@@ -447,11 +447,25 @@ export function DeleteAccountContent({
     const currentAttempt = attemptRef.current;
     const retainedAttempt = currentAttempt?.operation.accountId === accountId ? currentAttempt : null;
     const operation: AccountOperation = retainedAttempt?.operation ?? { kind: 'delete', accountId };
-    const operationKey = retainedAttempt?.operationKey ?? operationKeyFor(operation, accountId);
-    if (
-      pendingState.kind === 'invalid' ||
-      (pendingOperation && !pendingAccountOperationMatches(pendingOperation, accountId, operationKey, operation))
-    ) {
+    if (pendingState.kind === 'invalid') {
+      setMessage(m.auth_account_operation_failure());
+      submitting.current = false;
+      setPending(false);
+      return;
+    }
+    const keyResult = operationKeyFor(
+      operation,
+      accountId,
+      retainedAttempt?.operationKey ?? pendingOperation?.operationKey,
+    );
+    if (keyResult.kind === 'refused') {
+      setMessage(m.auth_account_operation_unavailable());
+      submitting.current = false;
+      setPending(false);
+      return;
+    }
+    const operationKey = retainedAttempt?.operationKey ?? keyResult.key;
+    if (pendingOperation && !pendingAccountOperationMatches(pendingOperation, accountId, operationKey, operation)) {
       setMessage(m.auth_account_operation_failure());
       submitting.current = false;
       setPending(false);
@@ -517,7 +531,7 @@ export function DeleteAccountContent({
     publishAttempt(completedAttempt);
     if (result.ok) {
       accepted.current = true;
-      forgetOperationKey(operation, accountId);
+      forgetOperationKey(operation, accountId, operationKey);
       clearPendingAccountOperationStepUp();
       publishAttempt(null);
       clearAuthority('signed-out');
@@ -582,11 +596,16 @@ export function DeleteAccountContent({
       clearAuthority('denied');
       return;
     }
-    const operationKey = retainedAttempt
-      ? retainedAttempt.operationKey
-      : state.kind === 'pending'
-        ? state.value.operationKey
-        : operationKeyFor(operation, accountId);
+    const keyResult = operationKeyFor(
+      operation,
+      accountId,
+      retainedAttempt?.operationKey ?? (state.kind === 'pending' ? state.value.operationKey : undefined),
+    );
+    if (keyResult.kind === 'refused') {
+      setMessage(m.auth_account_operation_unavailable());
+      return;
+    }
+    const operationKey = retainedAttempt?.operationKey ?? keyResult.key;
     const submitted = retainedAttempt
       ? retainedAttempt.submitted
       : state.kind === 'pending'

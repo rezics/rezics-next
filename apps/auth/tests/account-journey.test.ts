@@ -1,11 +1,23 @@
-import { afterEach, expect, test } from 'bun:test';
-import { forgetOperationKey, operationKeyFor, runAccountOperation } from '../src/account-operations';
+import { afterEach, expect, spyOn, test } from 'bun:test';
+import {
+  ACCOUNT_OPERATION_KEY_STORAGE_LIMIT,
+  forgetOperationKey,
+  operationKeyFor,
+  runAccountOperation,
+  type OperationKeyResult,
+} from '../src/account-operations';
 import { parseInventoryPage, removeConsent, type GrantedConsent } from '../src/security-inventory';
 
 const originalFetch = globalThis.fetch;
 afterEach(() => {
   globalThis.fetch = originalFetch;
+  window.sessionStorage.removeItem('rezics.account-operation.pending');
 });
+
+function keyOf(result: OperationKeyResult): string {
+  if (result.kind !== 'ready') throw new Error('Expected an operation key.');
+  return result.key;
+}
 
 type Call = { path: string; init: RequestInit; body: Record<string, unknown> };
 function respond(reply: (call: Call, index: number) => Response | Promise<Response>) {
@@ -157,13 +169,85 @@ test('malformed approval and a mismatched deletion result never claim completion
 
 test('operation keys stay stable for a retry and are bound to the initiating account and exact organization handle', () => {
   const operation = { kind: 'organization' as const, handle: 'reading-group' };
-  const first = operationKeyFor(operation, 'first-account');
-  expect(operationKeyFor(operation, 'first-account')).toBe(first);
-  const second = operationKeyFor(operation, 'second-account');
+  const first = keyOf(operationKeyFor(operation, 'first-account'));
+  expect(keyOf(operationKeyFor(operation, 'first-account'))).toBe(first);
+  const second = keyOf(operationKeyFor(operation, 'second-account'));
   expect(second).not.toBe(first);
   const differentHandle = { kind: 'organization' as const, handle: 'other-group' };
-  expect(operationKeyFor(differentHandle, 'second-account')).not.toBe(second);
-  forgetOperationKey(differentHandle, 'second-account');
+  const differentKey = keyOf(operationKeyFor(differentHandle, 'second-account'));
+  expect(differentKey).not.toBe(second);
+  forgetOperationKey(differentHandle, 'second-account', differentKey);
+  expect(window.sessionStorage.getItem('rezics.account-operation.pending')).toBeNull();
+});
+
+test('maximally escaped IDs stay within the derived envelope and exact-boundary legacy keys restore unchanged', () => {
+  const actor = '\u0001'.repeat(4096);
+  const operation = { kind: 'delete' as const, accountId: '\u0001'.repeat(4096) };
+  const generated = keyOf(operationKeyFor(operation, actor));
+  expect(generated).toMatch(/^[a-f0-9]{32}$/);
+  expect(window.sessionStorage.getItem('rezics.account-operation.pending')!.length).toBeLessThan(
+    ACCOUNT_OPERATION_KEY_STORAGE_LIMIT,
+  );
+  const organizationKey = keyOf(operationKeyFor({ kind: 'organization', handle: 'a'.repeat(64) }, actor));
+  expect(organizationKey).toMatch(/^[a-f0-9]{32}$/);
+  expect(window.sessionStorage.getItem('rezics.account-operation.pending')!.length).toBeLessThan(
+    ACCOUNT_OPERATION_KEY_STORAGE_LIMIT,
+  );
+
+  const retainedKey = '\u0001'.repeat(128);
+  const signature = JSON.stringify([actor, operation]);
+  const boundary = JSON.stringify({ signature, key: retainedKey });
+  expect(boundary.length).toBe(ACCOUNT_OPERATION_KEY_STORAGE_LIMIT);
+  window.sessionStorage.setItem('rezics.account-operation.pending', boundary);
+  expect(operationKeyFor(operation, actor)).toEqual({ kind: 'ready', key: retainedKey });
+
+  const oversized = `${boundary} `;
+  window.sessionStorage.setItem('rezics.account-operation.pending', oversized);
+  const parse = spyOn(JSON, 'parse');
+  try {
+    expect(operationKeyFor(operation, actor)).toEqual({ kind: 'refused' });
+    forgetOperationKey(operation, actor, retainedKey);
+    expect(parse).not.toHaveBeenCalled();
+    expect(window.sessionStorage.getItem('rezics.account-operation.pending')).toBe(oversized);
+  } finally {
+    parse.mockRestore();
+  }
+});
+
+test('malformed oversized bytes refuse acquisition and completion cleanup without parsing or replacing them', () => {
+  const operation = { kind: 'organization' as const, handle: 'reading-group' };
+  const malformed = '{'.padEnd(ACCOUNT_OPERATION_KEY_STORAGE_LIMIT + 1, 'x');
+  window.sessionStorage.setItem('rezics.account-operation.pending', malformed);
+  const parse = spyOn(JSON, 'parse');
+  try {
+    expect(operationKeyFor(operation, 'actor')).toEqual({ kind: 'refused' });
+    forgetOperationKey(operation, 'actor', 'a'.repeat(32));
+    expect(parse).not.toHaveBeenCalled();
+    expect(window.sessionStorage.getItem('rezics.account-operation.pending')).toBe(malformed);
+  } finally {
+    parse.mockRestore();
+  }
+});
+
+test('matching signatures retain legacy native-valid keys while different signatures may acquire a fresh key', () => {
+  const operation = { kind: 'organization' as const, handle: 'reading-group' };
+  const signature = JSON.stringify(['actor', operation]);
+  const legacyKey = 'old/native-key/é';
+  window.sessionStorage.setItem(
+    'rezics.account-operation.pending',
+    JSON.stringify({ signature, key: legacyKey }),
+  );
+  expect(operationKeyFor(operation, 'actor')).toEqual({ kind: 'ready', key: legacyKey });
+
+  const differentActor = keyOf(operationKeyFor(operation, 'other-actor'));
+  expect(differentActor).not.toBe(legacyKey);
+  const differentOperation = { kind: 'organization' as const, handle: 'other-group' };
+  const differentKey = keyOf(operationKeyFor(differentOperation, 'other-actor'));
+  expect(differentKey).not.toBe(differentActor);
+  forgetOperationKey(differentOperation, 'other-actor', 'wrong-key');
+  expect(window.sessionStorage.getItem('rezics.account-operation.pending')).not.toBeNull();
+  forgetOperationKey(differentOperation, 'other-actor', differentKey);
+  expect(window.sessionStorage.getItem('rezics.account-operation.pending')).toBeNull();
 });
 
 test('consent reduction posts only the selected third-party grant and never treats a lost write as success', async () => {

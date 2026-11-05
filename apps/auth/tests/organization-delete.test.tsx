@@ -1,7 +1,12 @@
 import { expect, spyOn, test } from 'bun:test';
 import { creationFixture, approval, button, fill, flush, leave, open, send, session } from './creation-page-fixture';
 import { OrganizationDeleteContent } from '../src/routes/organizations.delete';
-import { readOrganizationDeleteUnknown } from '../src/organization-delete-step-up';
+import { m } from '../src/paraglide/messages.js';
+import {
+  readOrganizationDeleteStepUp,
+  readOrganizationDeleteUnknown,
+  storeOrganizationDeleteStepUp,
+} from '../src/organization-delete-step-up';
 import type { OrganizationDeletionRead, OrganizationDeletionReader } from '../src/organization-deletion';
 creationFixture();
 const human = '10000000-0000-0000-0000-000000000000';
@@ -150,6 +155,8 @@ test('ordinary direct navigation authenticates without private facts, then renew
   const { readOrganizationDeleteStepUp, selectOrganizationDeleteStepUp } =
     await import('../src/organization-delete-step-up');
   const { operationKeyFor } = await import('../src/account-operations');
+  const keyResult = operationKeyFor({ kind: 'delete', accountId: first }, human);
+  if (keyResult.kind === 'refused') throw new Error('Expected an operation key.');
   const read: OrganizationDeletionReader = async () => ({
     kind: 'authentication-required',
     humanAccountId: human,
@@ -169,7 +176,7 @@ test('ordinary direct navigation authenticates without private facts, then renew
       value: {
         humanAccountId: human,
         organizationId: first,
-        operationKey: operationKeyFor({ kind: 'delete', accountId: first }, human),
+        operationKey: keyResult.key,
       },
     });
     expect(selectOrganizationDeleteStepUp(new URL(assign.mock.calls[0]![0], 'https://auth.test').search).kind).toBe(
@@ -212,4 +219,27 @@ test('current native refusal has no authentication loop or destructive control',
   expect(button(page.host, 'Authenticate to review')).toBeUndefined();
   expect(page.host.textContent).toContain('cannot currently manage');
   expect(page.calls).toHaveLength(0);
+});
+
+test('refused generic key storage preserves the exact deletion continuation without navigation or commands', async () => {
+  const operationKey = 'a'.repeat(32);
+  expect(storeOrganizationDeleteStepUp({ humanAccountId: human, organizationId: first, operationKey })).toBe(true);
+  const continuation = readOrganizationDeleteStepUp();
+  const refusedBytes = '{';
+  window.sessionStorage.setItem('rezics.account-operation.pending', refusedBytes);
+  const page = await open(
+    content(first, async () => ({ kind: 'authentication-required', humanAccountId: human, action: 'authenticate' })),
+    body,
+  );
+  const assign = spyOn(window.location, 'assign').mockImplementation(() => {});
+  try {
+    await flush(() => button(page.host, 'Authenticate to review')!.click());
+    expect(assign).not.toHaveBeenCalled();
+    expect(page.calls).toHaveLength(0);
+    expect(readOrganizationDeleteStepUp()).toEqual(continuation);
+    expect(window.sessionStorage.getItem('rezics.account-operation.pending')).toBe(refusedBytes);
+    expect(page.host.textContent).toContain(m.auth_account_operation_unavailable());
+  } finally {
+    assign.mockRestore();
+  }
 });

@@ -21,6 +21,11 @@ const review = {
 };
 const props = { privacyContact: 'mailto:privacy@example.test', inventorySource: emptyInventory };
 
+function keyOf(result: ReturnType<typeof operationKeyFor>): string {
+  if (result.kind !== 'ready') throw new Error('Expected an operation key.');
+  return result.key;
+}
+
 async function unknownPage(source: (signal: AbortSignal) => Promise<AccountDeletionPage> = async () => review) {
   const page = await open(<DeleteAccountContent {...props} initial={review} source={source} />, review);
   await flush(() => {
@@ -125,7 +130,7 @@ for (const [name, nextAdvice] of [
 
 test('a returned submitted hint stays uncertain without dispatching on mount', async () => {
   const operation = { kind: 'delete' as const, accountId: review.accountId };
-  const operationKey = operationKeyFor(operation, review.accountId);
+  const operationKey = keyOf(operationKeyFor(operation, review.accountId));
   storePendingAccountOperationStepUp({
     kind: 'delete',
     accountId: review.accountId,
@@ -145,4 +150,21 @@ test('a returned submitted hint stays uncertain without dispatching on mount', a
     send(page.host);
   });
   expect(page.calls[0]!.body).toEqual({ operationKey, operation });
+});
+
+test('refused generic key storage preserves the exact unresolved delete descriptor without dispatch', async () => {
+  const page = await unknownPage();
+  const descriptor = readPendingAccountOperationStepUp();
+  const refusedBytes = '{';
+  window.sessionStorage.setItem('rezics.account-operation.pending', refusedBytes);
+  await flush(() => button(page.host, m.auth_account_delete_recovery_refresh())!.click());
+  const input = page.host.querySelector<HTMLInputElement>('#account-delete-input')!;
+  await flush(() => {
+    fill(input, m.auth_account_delete_confirmation_phrase());
+    send(page.host);
+  });
+  expect(page.calls).toHaveLength(2);
+  expect(readPendingAccountOperationStepUp()).toEqual(descriptor);
+  expect(window.sessionStorage.getItem('rezics.account-operation.pending')).toBe(refusedBytes);
+  expect(page.host.textContent).toContain(m.auth_account_operation_unavailable());
 });
