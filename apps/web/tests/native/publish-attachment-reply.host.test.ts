@@ -51,15 +51,14 @@ let stack: NativeWebStack;
 let auth: NativeAuthStack;
 let board: PublishAttachmentWorkBoard;
 
-function unavailableProblem() {
+function kernelProblem(status: number, code: string, title: string, extra: Record<string, unknown> = {}) {
   return JSON.stringify({
-    type: 'https://rezics.com/problems/dependency_unavailable',
-    title: 'dependency_unavailable',
-    status: 503,
-    code: 'dependency_unavailable',
-    retryable: true,
-    effect_status: 'not_applied',
+    type: `https://rezics.com/problems/${code}`,
+    title,
+    status,
+    code,
     request_id: crypto.randomUUID(),
+    ...extra,
   });
 }
 
@@ -138,11 +137,28 @@ async function signUpMember(returnTo: string): Promise<{
 }
 
 async function insertImage(page: Page, name: string, alt: string, buffer: Buffer, mimeType: string) {
-  await page.getByRole('button', { name: 'Image', exact: true }).click();
+  const image = page.getByRole('button', { name: 'Image', exact: true });
+  await expectVisible(image);
+  await image.click();
   const dialog = page.getByRole('dialog', { name: 'Image' });
+  await expectVisible(dialog);
   await dialog.getByLabel('Choose image file', { exact: true }).setInputFiles({ name, mimeType, buffer });
   await dialog.getByLabel('Alt text', { exact: true }).fill(alt);
   await dialog.getByRole('button', { name: 'Insert image', exact: true }).click();
+}
+
+async function send(page: Page) {
+  const button = page.getByRole('button', { name: 'Send', exact: true });
+  await expectVisible(button);
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    if (!(await button.isDisabled())) {
+      await button.click();
+      return;
+    }
+    await Bun.sleep(100);
+  }
+  throw new Error('Send stayed disabled');
 }
 
 function documentHas(value: unknown, needle: string): boolean {
@@ -185,7 +201,10 @@ test('ordinary members publish a Work Board post with an attachment, reply, reco
     method: 'POST',
     path: '/v1/media',
     status: 503,
-    body: unavailableProblem(),
+    body: kernelProblem(503, 'dependency_unavailable', 'dependency_unavailable', {
+      retryable: true,
+      effect_status: 'not_applied',
+    }),
   });
   const failedReserve = authorPage.waitForResponse(
     (response) => new URL(response.url()).pathname === '/media' && response.request().method() === 'POST',
@@ -213,7 +232,7 @@ test('ordinary members publish a Work Board post with an attachment, reply, reco
   await expectVisible(authorPage.getByRole('img', { name: 'Opening chart' }));
   sequence.push(`author-media:${mediaId}`);
 
-  await authorPage.getByRole('button', { name: 'Send', exact: true }).click();
+  await send(authorPage);
   await authorPage.waitForURL((url) => /\/threads\/[0-9a-f-]{36}/i.test(url.pathname), { timeout: 30_000 });
   const threadId = new URL(authorPage.url()).pathname.match(/\/threads\/([0-9a-f-]{36})/i)?.[1];
   expect(threadId).toBeTruthy();
@@ -269,13 +288,17 @@ test('ordinary members publish a Work Board post with an attachment, reply, reco
   const replyEditor = await editor(replyPage);
   await replyEditor.fill('A second reading of the same chart.');
 
-  await insertImage(
-    replyPage,
-    'chart.svg',
-    'Reply chart',
-    Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>'),
-    'image/svg+xml',
+  await stack.injectKernelFailureOnce({
+    method: 'POST',
+    path: '/v1/media',
+    status: 415,
+    body: kernelProblem(415, 'invalid_request', 'Invalid Request'),
+  });
+  const refusedReserve = replyPage.waitForResponse(
+    (response) => new URL(response.url()).pathname === '/media' && response.request().method() === 'POST',
   );
+  await insertImage(replyPage, 'chart.png', 'Reply chart', png, 'image/png');
+  expect((await refusedReserve).status()).toBe(415);
   const replaceRow = replyPage.getByRole('group').filter({ hasText: 'Reply chart' });
   await expectVisible(replaceRow.getByText('not accepted', { exact: false }));
   await expectVisible(replaceRow.getByRole('button', { name: 'Replace image', exact: true }));
@@ -303,11 +326,12 @@ test('ordinary members publish a Work Board post with an attachment, reply, reco
   const departure = replyPage.getByRole('alertdialog');
   await expectVisible(departure.getByRole('button', { name: 'Stay', exact: true }));
   await departure.getByRole('button', { name: 'Stay', exact: true }).click();
+  await departure.waitFor({ state: 'hidden', timeout: 15_000 });
   expect(new URL(replyPage.url()).pathname).toContain(`/threads/${threadId}`);
   await expectVisible(replyPage.getByRole('img', { name: 'Reply chart' }));
   sequence.push('dirty-departure-stay');
 
-  await replyPage.getByRole('button', { name: 'Send', exact: true }).click();
+  await send(replyPage);
   await expectVisible(replyPage.getByRole('img', { name: 'Reply chart' }).last());
 
   const postsResponse = await stack.kernel(`/v1/threads/${threadId}/posts`);
