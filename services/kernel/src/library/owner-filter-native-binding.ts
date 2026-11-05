@@ -26,6 +26,7 @@ import { freeze } from '../semantic/definitions.ts';
 import { nativeSourceFence, type CanonicalAllowance, type CanonicalWork } from './canonical-source-store.ts';
 import {
   createCollectionSource,
+  createOrdinaryCollectionPageSource,
   type CollectionSourceObservation,
   type WorkAllowance,
   type WorkDimensions,
@@ -49,6 +50,7 @@ import type { PublicFilterSourceBinding } from '../semantic/public-filter-source
 import type { PublicFilterSource, PublicFilterCost } from '../semantic/public-filter-source-contract.ts';
 import type { FilterDocument } from '@rezics/filter';
 import { resolveSubject } from './subject-anchor.ts';
+import type { OrdinaryCollectionPagePlan } from './ordinary-read-bounds.ts';
 
 type Dependencies = {
   pool: Pool;
@@ -90,6 +92,7 @@ export type NativeOwnerFilterBinding = Readonly<{
   ownsTime: boolean;
   ownerFence: string | null;
   query?: OwnerFilterQueryRead;
+  pagePlan?: OrdinaryCollectionPagePlan;
   originals: Map<string, string>;
 }>;
 const bindings = new WeakMap<OwnerFilterReadBinding, NativeOwnerFilterBinding>();
@@ -105,6 +108,14 @@ export function nativeOwnerFilterBinding(binding: OwnerFilterReadBinding): Nativ
   authoritativeTimeValue(binding.input.at);
   requireAccessDeadline(binding.input.deadline);
   return bindings.get(binding);
+}
+
+export function nativeOwnerFilterPagePlan(binding: OwnerFilterReadBinding): OrdinaryCollectionPagePlan | undefined {
+  return nativeOwnerFilterBinding(binding)?.pagePlan;
+}
+
+function collectionSource(dependencies: Dependencies, pagePlan?: OrdinaryCollectionPagePlan) {
+  return pagePlan ? createOrdinaryCollectionPageSource(dependencies) : createCollectionSource(dependencies);
 }
 
 /** Every declared consumer reenters with its actual immutable binding and transferred ledger. */
@@ -449,7 +460,7 @@ async function revalidateWorkingOwnerFilter(
   )
     throw ownerFilterUnavailable();
   const prepared = await work.compose((allowance) =>
-    createCollectionSource(dependencies).prepare({ ...binding.input, allowance }),
+    collectionSource(dependencies, saved.pagePlan).prepare({ ...binding.input, allowance }),
   );
   if (!sameOwnerFilterSource(prepared.source.observation, saved.observation)) throw ownerFilterUnavailable();
   await ownerFilterBounded(work, { nativeRows: 32, nativePoints: 2, statements: 6, bytes: 16384 }, async () => {
@@ -472,6 +483,7 @@ export async function bindNativeOwnerFilterRead(
   admission: CollectionMemberAdmission,
   deadline: number,
   attempt?: CommandAttempt,
+  pagePlan?: OrdinaryCollectionPagePlan,
 ) {
   requireAccessDeadline(deadline);
   const route = routeOf(collectionId);
@@ -548,7 +560,7 @@ export async function bindNativeOwnerFilterRead(
           return { status: 'unavailable' } as const;
         await privateAuthority(dependencies, actor, admission, at, deadline, work, attempt);
         const source = await work.compose((allowance) =>
-          createCollectionSource(dependencies).prepare({ actor, at, deadline, collectionId, allowance }),
+          collectionSource(dependencies, pagePlan).prepare({ actor, at, deadline, collectionId, allowance }),
         );
         const [row] = await withConnection(dependencies.pool, (client) =>
           ownerFilterQuery<{
@@ -611,6 +623,7 @@ export async function bindNativeOwnerFilterRead(
           observation: source.source.observation,
           ownsTime: ownTime,
           ownerFence,
+          ...(pagePlan ? { pagePlan } : {}),
           originals: new Map(),
           ...(inherited?.query ? { query: inherited.query } : {}),
           ...(attempt ? { attempt } : {}),

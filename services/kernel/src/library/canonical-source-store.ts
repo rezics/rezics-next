@@ -3,8 +3,10 @@ import type { Pool } from 'pg';
 
 import type { ListingStamp } from './listing-freshness-contract.ts';
 
+export const CANONICAL_SOURCE_RAW_KEY_LIMIT = 100;
+
 /**
- * Reserved by the caller BEFORE dispatch; raw keys hard <=100, shared Zone aggregate <=256 including final use.
+ * Reserved by the caller BEFORE dispatch; raw keys hard <=CANONICAL_SOURCE_RAW_KEY_LIMIT, shared Zone aggregate <=256 including final use.
  * `nativeRows` maps directly to the shared Source `rows` allowance and is charged from plan-proved operation bounds.
  */
 export interface CanonicalAllowance {
@@ -312,7 +314,12 @@ function scopeKey(identity: NativeSourceIdentity): IdentityScopeKey {
 }
 function ledger(input: CanonicalCall): CollectionSourceLedger {
   const a = input.allowance;
-  if (routeOf(input.collectionId) !== input.route || !Number.isInteger(a.rawKeys) || a.rawKeys < 0 || a.rawKeys > 100)
+  if (
+    routeOf(input.collectionId) !== input.route ||
+    !Number.isInteger(a.rawKeys) ||
+    a.rawKeys < 0 ||
+    a.rawKeys > CANONICAL_SOURCE_RAW_KEY_LIMIT
+  )
     throw new TypeError('Invalid canonical Source reservation');
   return new CollectionSourceLedger(
     {
@@ -606,7 +613,7 @@ export async function readCanonicalSourceGroup(
     const generation = await readGeneration(pool, input, p.generation, l);
     if (!generation || generation.state !== 'complete' || !same(generation.basis, input.basis))
       return notReady(l, 'unbuilt');
-    const limit = Math.min(100, l.allowance().remaining.candidateKeys);
+    const limit = Math.min(CANONICAL_SOURCE_RAW_KEY_LIMIT, l.allowance().remaining.candidateKeys);
     if (!limit) return notReady(l, 'allowance');
     const rows = await withConnection(pool, (client) =>
       query<{ original: string; driver: number; fact: string }>(

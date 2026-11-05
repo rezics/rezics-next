@@ -229,6 +229,7 @@ import {
   readCanonicalSourceGroup,
   seekCanonicalSourceGroup,
   nativeSourceFence,
+  CANONICAL_SOURCE_RAW_KEY_LIMIT,
   type CanonicalAllowance,
   type CanonicalBasis,
   type CanonicalWork,
@@ -237,6 +238,7 @@ import {
 import { resolveSubject } from './subject-anchor.ts';
 
 const sourceDrivers = ['member', 'entry', 'label', 'session', 'copy', 'output'] as const;
+export const COLLECTION_SOURCE_DRIVER_COUNT = sourceDrivers.length;
 type Prepared = {
   metadata: NativeCollectionMetadata;
   basis: CanonicalBasis;
@@ -244,10 +246,10 @@ type Prepared = {
   /** Mechanical handles cannot be reused through a different episode or the ordinary reader branch. */
   workBinding?: Readonly<{ kind: ScopeWorkContext['kind']; locator: ScopeWorkContext['locator'] }>;
 };
-function canonicalAllowance(a: WorkAllowance, rawLimit = 100): CanonicalAllowance {
+function canonicalAllowance(a: WorkAllowance, rawLimit = CANONICAL_SOURCE_RAW_KEY_LIMIT, fixed = false): CanonicalAllowance {
   return {
     reservationId: a.reservationId,
-    rawKeys: Math.min(rawLimit, a.remaining.candidateKeys),
+    rawKeys: fixed ? rawLimit : Math.min(rawLimit, a.remaining.candidateKeys),
     nativeRows: a.remaining.nativeRows,
     nativePoints: a.remaining.nativePoints,
     emptySeeks: a.remaining.emptySeeks,
@@ -319,6 +321,22 @@ export function createCollectionSource(dependencies: {
   access: Access;
   clock?: KernelClock;
 }): CollectionSource {
+  return createCollectionSourceRuntime(dependencies, false);
+}
+
+/** Local bridge for one ordinary page: fixed structural limits drive Source work, receipts still admit it. */
+export function createOrdinaryCollectionPageSource(dependencies: {
+  pool: Pool;
+  access: Access;
+  clock?: KernelClock;
+}): CollectionSource {
+  return createCollectionSourceRuntime(dependencies, true);
+}
+
+function createCollectionSourceRuntime(
+  dependencies: { pool: Pool; access: Access; clock?: KernelClock },
+  fixedPageWork: boolean,
+): CollectionSource {
   const prepared = new WeakMap<PreparedCollectionSource, Prepared>();
   async function authorize(
     input: Extract<CollectionSourceContext, { actor: Actor }>,
@@ -343,7 +361,7 @@ export function createCollectionSource(dependencies: {
         route: metadata.route,
         collectionId: metadata.collectionId,
         deadline: input.deadline,
-        allowance: canonicalAllowance(l.allowance()),
+        allowance: canonicalAllowance(l.allowance(), 100, fixedPageWork),
       }),
     );
     if (result.state !== 'ready') throw new ProblemError('dependency_unavailable');
@@ -442,6 +460,9 @@ export function createCollectionSource(dependencies: {
       work: l.receipt(),
     });
     const raw =
+      fixedPageWork
+        ? COLLECTION_SOURCE_WORK_GROUP_LIMIT
+        :
       input.work && current
         ? COLLECTION_SOURCE_WORK_GROUP_LIMIT
         : Math.min(COLLECTION_SOURCE_WORK_GROUP_LIMIT, Math.floor(l.allowance().remaining.candidateKeys / 4));
@@ -456,7 +477,7 @@ export function createCollectionSource(dependencies: {
               route: obs.route,
               collectionId: obs.collectionId,
               deadline: input.deadline,
-              allowance: canonicalAllowance(l.allowance(), raw),
+              allowance: canonicalAllowance(l.allowance(), raw, fixedPageWork),
               basis: saved.basis,
               progress: { pendingSubjectId: input.subjectId, after, generation: saved.generation, basis: saved.basis },
             }),
@@ -565,7 +586,9 @@ export function createCollectionSource(dependencies: {
     prefix(input: CollectionSourceCall & { afterSubjectId: string | null; candidateLimit?: number }) {
       if (
         input.candidateLimit !== undefined &&
-        (!Number.isSafeInteger(input.candidateLimit) || input.candidateLimit < 1 || input.candidateLimit > 100)
+        (!Number.isSafeInteger(input.candidateLimit) ||
+          input.candidateLimit < 1 ||
+          input.candidateLimit > COLLECTION_SOURCE_WORK_GROUP_LIMIT)
       )
         throw new RangeError('Invalid Collection Source candidate limit');
       if (input.work && input.candidateLimit === undefined)
@@ -579,10 +602,12 @@ export function createCollectionSource(dependencies: {
         let coveredThrough = input.afterSubjectId,
           exhausted = false,
           groups = 0;
-        const selectedLimit = input.work ? input.candidateLimit! : 100;
+        if (fixedPageWork && input.candidateLimit === undefined)
+          throw new RangeError('Ordinary Collection page candidate limit required');
+        const selectedLimit = fixedPageWork ? input.candidateLimit! : input.work ? input.candidateLimit! : 100;
         while (
-          (input.work ? groups < selectedLimit : l.allowance().remaining.candidateKeys > 0) &&
-          candidates.length < 100
+          (input.work || fixedPageWork ? groups < selectedLimit : l.allowance().remaining.candidateKeys > 0) &&
+          candidates.length < COLLECTION_SOURCE_WORK_GROUP_LIMIT
         ) {
           const seek =
             input.work && current
@@ -597,7 +622,7 @@ export function createCollectionSource(dependencies: {
                     generation: saved.generation,
                     afterSubjectId: coveredThrough,
                     deadline: input.deadline,
-                    allowance: canonicalAllowance(l.allowance(), 1),
+                    allowance: canonicalAllowance(l.allowance(), 1, fixedPageWork),
                   }),
                 );
           if (!('subjectId' in seek)) throw new ProblemError('dependency_unavailable');
@@ -608,7 +633,7 @@ export function createCollectionSource(dependencies: {
           groups++;
           // Keep the last settled frontier when the seek leaves too little for a native group proof.
           // An empty Source can still prove exhaustion with the single seek key above.
-          if (!input.work && l.allowance().remaining.candidateKeys < 4) break;
+          if (!input.work && !fixedPageWork && l.allowance().remaining.candidateKeys < 4) break;
           const result = await membership({ ...input, subjectId: seek.subjectId }, saved, l, current);
           if (result.result === 'not_proven') throw new ProblemError('dependency_unavailable');
           coveredThrough = seek.subjectId;
@@ -641,7 +666,12 @@ export function createCollectionSource(dependencies: {
               : saved.metadata.builtinKind === 'state'
                 ? ['entry']
                 : ['entry', 'label', 'session', 'copy'];
-        while (l.allowance().remaining.candidateKeys >= drivers.length && ids.length < 100) {
+        while (
+          (fixedPageWork
+            ? ids.length < COLLECTION_SOURCE_WORK_GROUP_LIMIT
+            : l.allowance().remaining.candidateKeys >= drivers.length) &&
+          ids.length < COLLECTION_SOURCE_WORK_GROUP_LIMIT
+        ) {
           const heads: string[] = [];
           for (const driver of drivers) {
             const page = await l.run((allowance) =>

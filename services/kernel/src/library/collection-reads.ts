@@ -59,6 +59,7 @@ import {
   type CollectionMemberQuery,
 } from './owner-filter.ts';
 import type { SearchService } from '../search/service-scope.ts';
+import { ordinaryCollectionPagePlan } from './ordinary-read-bounds.ts';
 import { releaseNativeOwnerFilterRead } from './owner-filter-native-binding.ts';
 import { bindOwnerFilterRead, readBoundOwnerFilterPage, readOwnerFilterPage } from './owner-filter-plan.ts';
 import { readCollectionSourceMembers } from './owner-index-members.ts';
@@ -1029,7 +1030,11 @@ export function createCollectionReads(
     if (saved.collectionRevision !== collection.revision || saved.sourceGeneration !== collection.sourceGeneration)
       throw new ProblemError('stale_cursor');
     const admission = await admitSavedCollectionMemberQuery(dependencies, viewer, saved, options, deadline);
-    const bound = await bindOwnerFilterRead(dependencies, viewer, collectionId, admission, deadline);
+    const pagePlan = ordinaryCollectionPagePlan(
+      options.limit ?? DEFAULT_PAGE_SIZE,
+      options.view === 'FULL' ? 'FULL' : 'BASIC',
+    );
+    const bound = await bindOwnerFilterRead(dependencies, viewer, collectionId, admission, deadline, undefined, pagePlan);
     if (bound.status !== 'bound') throw new ProblemError('dependency_unavailable');
     const { binding } = bound;
     try {

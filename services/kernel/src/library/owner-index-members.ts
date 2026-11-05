@@ -13,6 +13,7 @@ import type { KeyRing } from '../tokens/seal.ts';
 import type { CollectionSourceObservation, WorkReceipt } from './collection-source.ts';
 import type { DynamicMemberView } from './builtin-runtime.ts';
 import { attachCollectionListFacts } from './collection-list-facts.ts';
+import { ordinaryCollectionPagePlan, ordinaryPageWorkDimensions } from './ordinary-read-bounds.ts';
 
 /** Structural/source compatibility is not disclosure. Each positive is checked by the native Source again. */
 function sameSource(left: CollectionSourceObservation, right: CollectionSourceObservation) {
@@ -75,15 +76,17 @@ export async function readCollectionSourceMembers(
       routeOf(String(position.after[3])) === null)
   )
     throw new ProblemError('invalid_cursor');
-  const ledger = ownerQueryWork(input.limit);
+  const pagePlan = ordinaryCollectionPagePlan(input.limit, input.view ?? 'BASIC');
+  const ledger = ownerQueryWork(input.limit, input.view ?? 'BASIC');
+  const pageDimensions = ordinaryPageWorkDimensions(pagePlan.sourceBound);
+  const reservationId = ledger.receipt().reservationId;
   const work = {
-    allowance: (keys = ledger.remaining().remaining.candidateKeys) => {
-      const a = ledger.remaining();
+    allowance: (keys = pagePlan.candidateLimit) => {
       return {
-        ...a,
+        reservationId,
         remaining: {
-          ...a.remaining,
-          candidateKeys: Math.min(keys, a.remaining.candidateKeys),
+          ...pageDimensions,
+          candidateKeys: Math.min(keys, pagePlan.candidateLimit),
         },
       };
     },
@@ -139,7 +142,7 @@ export async function readCollectionSourceMembers(
     const members: DynamicMemberView[] = [];
     let exhausted = false;
     for (let round = 0; round < 3 && members.length <= input.limit && !exhausted; round++) {
-      const quota = Math.min(600, 2 * (input.limit - members.length) + 1);
+      const quota = Math.min(pagePlan.prefixGroupLimit, 2 * (input.limit - members.length) + 1);
       const prefix = filtered
         ? await filtered.scope.sourcePrefix(filtered.prepared, {
             afterSubjectId: after,
@@ -150,6 +153,7 @@ export async function readCollectionSourceMembers(
             source: prepared,
             allowance: work.allowance(quota),
             afterSubjectId: after,
+            candidateLimit: quota,
           });
       work.settle(prefix.work);
       if (prefix.candidates.length > quota) throw new ProblemError('dependency_unavailable');
@@ -170,17 +174,16 @@ export async function readCollectionSourceMembers(
         after = candidate.subjectId;
         if (membership.result) {
           if (filtered) {
-            const a = ledger.remaining();
             const result = await filtered.scope.evaluate(filtered.prepared, [candidate.subjectId], {
-              rawKeys: Math.min(256, a.remaining.candidateKeys),
+              rawKeys: Math.min(256, pagePlan.candidateLimit),
               native: {
-                points: a.remaining.nativePoints,
-                witnesses: a.remaining.witnessKeys,
-                rows: a.remaining.nativeRows,
-                bytes: a.remaining.bytes,
-                emptySeeks: a.remaining.emptySeeks,
+                points: pageDimensions.nativePoints,
+                witnesses: pageDimensions.witnessKeys,
+                rows: pageDimensions.nativeRows,
+                bytes: pageDimensions.bytes,
+                emptySeeks: pageDimensions.emptySeeks,
               },
-              allowance: a,
+              allowance: work.allowance(),
             });
             ledger.native(filtered.scope.work(result));
             if (result.values[0] === 'not_proven') throw new ProblemError('dependency_unavailable');
@@ -234,20 +237,19 @@ export async function readCollectionSourceMembers(
             throw new ProblemError('semantic_not_ready');
         }
         if (finalFilter) {
-          const a = ledger.remaining();
           const checked = await finalFilter.scope.evaluate(
             finalFilter.prepared,
             shown.map((member) => member.subjectId),
             {
-              rawKeys: Math.min(256, a.remaining.candidateKeys),
+              rawKeys: Math.min(256, pagePlan.candidateLimit),
               native: {
-                points: a.remaining.nativePoints,
-                witnesses: a.remaining.witnessKeys,
-                rows: a.remaining.nativeRows,
-                bytes: a.remaining.bytes,
-                emptySeeks: a.remaining.emptySeeks,
+                points: pageDimensions.nativePoints,
+                witnesses: pageDimensions.witnessKeys,
+                rows: pageDimensions.nativeRows,
+                bytes: pageDimensions.bytes,
+                emptySeeks: pageDimensions.emptySeeks,
               },
-              allowance: a,
+              allowance: work.allowance(),
             },
           );
           ledger.native(finalFilter.scope.work(checked));

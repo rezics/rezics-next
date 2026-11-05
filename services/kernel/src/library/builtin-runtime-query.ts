@@ -11,11 +11,17 @@ import { createSearchScopeForService, type SearchService } from '../search/servi
 import { readCanonicalSourceGroup, readCanonicalSourceState, type CanonicalWork } from './canonical-source-store.ts';
 import {
   createCollectionSource,
+  createOrdinaryCollectionPageSource,
   type WorkAllowance,
   type WorkReceipt,
   type WorkDimensions,
 } from './collection-source.ts';
 import { readNativeCollectionScopeIdentity } from './collection-source-native.ts';
+import {
+  ordinaryCollectionPagePlan,
+  ordinaryPageWorkDimensions,
+  type OrdinaryCollectionPagePlan,
+} from './ordinary-read-bounds.ts';
 
 export type OwnerQueryDependencies = {
   pool: Pool;
@@ -26,6 +32,16 @@ export type OwnerQueryDependencies = {
 };
 
 class OwnerQueryWork extends ScopeWork {
+  constructor(readonly plan: OrdinaryCollectionPagePlan) {
+    super(
+      scopeAllowance(
+        plan.candidateLimit,
+        crypto.randomUUID(),
+        ordinaryPageWorkDimensions(plan.total),
+      ),
+    );
+  }
+
   override consume(used: WorkDimensions): void {
     try {
       super.consume(used);
@@ -40,27 +56,15 @@ class OwnerQueryWork extends ScopeWork {
 }
 
 /** Canonical and Search work settle into the same request reservation, including failed dispatches. */
-export function ownerQueryWork(limit: number) {
-  const candidates = Math.min(600, 6 * limit + 3);
-  return new OwnerQueryWork(
-    scopeAllowance(candidates, crypto.randomUUID(), {
-      candidateKeys: candidates,
-      nativeRows: 64 + 16 * candidates,
-      nativePoints: 16 + 8 * candidates,
-      witnessKeys: 16 + 8 * candidates,
-      statements: 12,
-      bytes: 80 * 1024 + 5120 * candidates,
-      emptySeeks: 3,
-      identityMetadataRows: 0,
-    }),
-  );
+export function ownerQueryWork(limit: number, view: 'BASIC' | 'FULL' = 'BASIC') {
+  return new OwnerQueryWork(ordinaryCollectionPagePlan(limit, view));
 }
 
 function canonicalAllowance(allowance: WorkAllowance) {
   const remaining = allowance.remaining;
   return {
     reservationId: allowance.reservationId,
-    rawKeys: Math.min(100, remaining.candidateKeys),
+    rawKeys: 100,
     nativeRows: remaining.nativeRows,
     nativePoints: remaining.nativePoints,
     emptySeeks: remaining.emptySeeks,
@@ -103,15 +107,22 @@ export async function openOwnerQuery(
   const close = () => {
     if (input.at === undefined) releaseOperationalTime(at);
   };
-  const native = createCollectionSource(deps);
+  const planned = input.work instanceof OwnerQueryWork ? input.work.plan : undefined;
+  const native = planned ? createOrdinaryCollectionPageSource(deps) : createCollectionSource(deps);
   const context = { actor: input.actor, at, deadline: input.deadline };
+  const sourceAllowance = (): WorkAllowance => ({
+    reservationId: input.work.receipt().reservationId,
+    remaining: planned
+      ? ordinaryPageWorkDimensions(planned.sourceBound)
+      : input.work.remaining().remaining,
+  });
   try {
     let prepared;
     try {
       prepared = await native.prepare({
         ...context,
         collectionId: input.collectionId,
-        allowance: input.work.remaining(),
+        allowance: sourceAllowance(),
       });
     } catch (error) {
       // The logical descriptor was admitted independently. A missing native producer is not a missing Collection.
@@ -137,7 +148,7 @@ export async function openOwnerQuery(
           route,
           collectionId: input.collectionId,
           deadline: input.deadline,
-          allowance: canonicalAllowance(input.work.remaining()),
+          allowance: canonicalAllowance(sourceAllowance()),
         });
         input.work.native(canonicalReceipt(state.work));
         if (state.state !== 'ready' || state.basis.digest !== source.observation.basis.digest)
@@ -146,7 +157,7 @@ export async function openOwnerQuery(
           route,
           collectionId: input.collectionId,
           deadline: input.deadline,
-          allowance: canonicalAllowance(input.work.remaining()),
+          allowance: canonicalAllowance(sourceAllowance()),
           basis: state.basis,
           progress: {
             pendingSubjectId: subjectId,
@@ -168,7 +179,7 @@ export async function openOwnerQuery(
           route: source.observation.route,
           collectionId: input.collectionId,
           deadline: input.deadline,
-          allowance: input.work.remaining(),
+          allowance: sourceAllowance(),
         });
         input.work.native(identity.work);
         if (!identity.identity || identity.identity.incarnation !== source.observation.incarnation)
@@ -183,7 +194,7 @@ export async function openOwnerQuery(
         const prepared = await scope.prepare(filter, {
           releaseDigest,
           order: { kind: 'id', source: identity.identity },
-          allowance: input.work.remaining(),
+          allowance: sourceAllowance(),
           readOnly: true,
         });
         input.work.native(scope.work(prepared));
