@@ -122,8 +122,7 @@ test.each(['password', 'passkey'])(
     await p.navigate();
     await p.choose('Leave');
     await flush(() => {
-      if (method === 'password')
-        p.calls[0]!.resolve(Response.json(nativeSignInProof(p.calls[0]!.body)));
+      if (method === 'password') p.calls[0]!.resolve(Response.json(nativeSignInProof(p.calls[0]!.body)));
       else p.ceremony.resolve({ ok: true });
     });
     expect(p.assign).not.toHaveBeenCalled();

@@ -211,9 +211,7 @@ test('step-up restoration does not disclose or unlock the saved source command b
     page.host.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
   });
   const signIn = page.calls.find(({ path }) => path === '/signin')!;
-  await settle(() =>
-    signIn.resolve(Response.json(nativeSignInProof(signIn.body, 'pwd', session.accountId))),
-  );
+  await settle(() => signIn.resolve(Response.json(nativeSignInProof(signIn.body, 'pwd', session.accountId))));
   const refreshedReadiness = page.calls.filter(({ path }) => path === OPERATOR_TRANSFER_PAGE_PATH).at(-1)!;
   await settle(() => refreshedReadiness.resolve(response({ kind: 'readiness' })));
   expect(page.host.textContent).toContain(m.auth_transfer_recovery_source_unknown());

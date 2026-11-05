@@ -107,8 +107,7 @@ test.each(['password', 'passkey'])(
     expect(p.reads).toHaveLength(1);
     expect(p.calls).toHaveLength(method === 'password' ? 1 : 0);
     await flush(() => {
-      if (method === 'password')
-        p.calls[0]!.resolve(Response.json(nativeSignInProof(p.calls[0]!.body)));
+      if (method === 'password') p.calls[0]!.resolve(Response.json(nativeSignInProof(p.calls[0]!.body)));
       else p.ceremony.resolve({ ok: true });
     });
     expect(p.assign).toHaveBeenCalledTimes(1);

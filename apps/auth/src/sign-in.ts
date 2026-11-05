@@ -20,11 +20,15 @@ export async function signIn(email: string, password: string, onPhase?: LoginPha
   observeLogin(onPhase, 'dispatched');
   const profile = { client_id: SIGN_IN_CLIENT_ID, scope: SIGN_IN_SCOPE };
   const result = signInResult(
-    await submitSignIn('/signin', {
-      email,
-      password,
-      ...profile,
-    }, profile),
+    await submitSignIn(
+      '/signin',
+      {
+        email,
+        password,
+        ...profile,
+      },
+      profile,
+    ),
   );
   observeLogin(onPhase, loginResultPhase(result));
   return result;

@@ -1013,7 +1013,7 @@ for (const stage of ['creation', 'sign-in'])
                     : nativeSignInProof(signInBody!)
                   : { error: 'unavailable' },
                 {
-                status: stage === 'creation' && status === 200 ? 201 : status,
+                  status: stage === 'creation' && status === 200 ? 201 : status,
                 },
               ),
             ),

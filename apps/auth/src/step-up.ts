@@ -159,11 +159,7 @@ function observeResult(
   observer?: StepUpAttemptObserver,
 ): void {
   if (result.ok) notify(observer?.onAcknowledged);
-  else if (
-    result.reason === 'credentials' ||
-    result.reason === 'suspended' ||
-    result.reason === 'rate-limited'
-  )
+  else if (result.reason === 'credentials' || result.reason === 'suspended' || result.reason === 'rate-limited')
     notify(observer?.onRefused);
 }
 

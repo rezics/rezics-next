@@ -62,7 +62,10 @@ test('native throttle, suspension and denial envelopes remain bounded; ambiguous
     expect(await submitSignIn('/signin', {}, ordinary)).toMatchObject({ ok: false, code });
   }
   globalThis.fetch = (async () =>
-    Response.json({ error: 'authentication_denied' }, { status: 429, headers: { 'retry-after': '37' } })) as typeof fetch;
+    Response.json(
+      { error: 'authentication_denied' },
+      { status: 429, headers: { 'retry-after': '37' } },
+    )) as typeof fetch;
   expect(await submitSignIn('/signin', {}, ordinary)).toMatchObject({
     ok: false,
     status: 429,
