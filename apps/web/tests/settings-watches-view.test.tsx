@@ -1,6 +1,6 @@
 import { afterAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, useState } from 'react';
+import { act, useState, type ReactNode } from 'react';
 import * as start from '../.storybook/react-start';
 import type { ManagedWatch, WatchManagementIO, WatchRead } from '../src/settings/watch-native';
 
@@ -465,6 +465,80 @@ test('uncertain removal stays with the original viewer; replacement clears it be
     await act(async () => root.unmount());
     host.remove();
     client.clear();
+  }
+});
+
+test('definite removal refusal keeps its wait visible and disables current rows after read and view remount', async () => {
+  const realNow = Date.now;
+  Date.now = () => Date.parse('2026-11-05T10:00:00.000Z');
+  const client = new QueryClient();
+  client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'alice', csrfToken: 'csrf' });
+  const owner = new SettingsSessionOwner(client, 'csrf', 'alice');
+  const releaseOwner = owner.mount();
+  const host = window.document.createElement('div');
+  window.document.body.append(host);
+  const root = createRoot(host as unknown as HTMLElement);
+  const response: WatchRead = {
+    kind: 'page',
+    page: {
+      viewer: { state: 'current', accountId: 'alice' },
+      actions: { remove: 'available' },
+      next: null,
+      watches: [
+        {
+          subscriptionId: 'current-watch',
+          kind: 'thread',
+          revision: 7,
+          createdAt: '2026-11-03T10:00:00.000Z',
+          command: { watchId: 'current-watch', kind: 'thread', expectedRevision: 7 },
+          remove: 'available',
+          target: { title: 'Current thread', href: '/threads/current' },
+        },
+      ],
+    },
+  };
+  let writes = 0;
+  const io: WatchManagementIO = {
+    read: async () => response,
+    stop: async () => {
+      writes++;
+      return { kind: 'rejected', problem: { status: 429, code: 'rate_limited', retryAfter: '30' } };
+    },
+  };
+  const tree = (content: ReactNode = <WatchesSection io={io} />) => (
+    <QueryClientProvider client={client}>
+      <SettingsSessionContext.Provider value={owner}>{content}</SettingsSessionContext.Provider>
+    </QueryClientProvider>
+  );
+  const button = (label: string) =>
+    [...host.querySelectorAll('button')].find((item) => item.textContent === label);
+  const click = async (label: string) => {
+    const target = button(label);
+    expect(target).toBeDefined();
+    await act(async () => target!.click());
+  };
+  try {
+    await act(async () => root.render(tree()));
+    await click(m.settings_watches_stop());
+    expect(writes).toBe(1);
+    expect(host.textContent).toContain(m.settings_retry_wait());
+    expect(button(m.settings_watches_stop())?.disabled).toBe(true);
+
+    await click(m.settings_watches_refresh());
+    expect(host.textContent).toContain(m.settings_retry_wait());
+    expect(button(m.settings_watches_stop())?.disabled).toBe(true);
+
+    await act(async () => root.render(tree(null)));
+    await act(async () => root.render(tree()));
+    expect(host.textContent).toContain(m.settings_retry_wait());
+    expect(button(m.settings_watches_stop())?.disabled).toBe(true);
+    expect(writes).toBe(1);
+  } finally {
+    await act(async () => root.unmount());
+    releaseOwner();
+    host.remove();
+    client.clear();
+    Date.now = realNow;
   }
 });
 
