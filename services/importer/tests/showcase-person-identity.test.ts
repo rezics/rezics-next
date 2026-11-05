@@ -187,6 +187,7 @@ test('VNDB Person credits stay unresolved when the current exact provider identi
         subject: external_id === 'v1' ? currentPersonId : '00000000-0000-4000-8000-000000000007',
       }),
       nativeType: (externalId) => (externalId === 's7' ? 'schema:Person' : 'wd:Q20631656'),
+      currentRelationEndpoint: async () => 'current',
       async currentPersonIdentity() {
         const identity = personIdentityForSource('vndb', 's7', 'schema:Person')!;
         const withdrawn = read({ id: currentPersonId, type: 'schema:Person', statements: {} });

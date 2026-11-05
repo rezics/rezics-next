@@ -3,7 +3,7 @@ import { Database } from 'bun:sqlite';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { BatchCommand } from '@rezics/definitions/bulk';
+import type { BatchCommand, BatchWriteResult } from '@rezics/definitions/bulk';
 import { CrossMediaGraph, graphEdgeKey, type GraphEdgeDraft } from '../src/cross-media-bindings.ts';
 import { planCrossMediaSeed, type CrossMediaTables } from '../src/cross-media-seed.ts';
 
@@ -120,6 +120,7 @@ test('production graph journals immutable relation commands and retries without 
     activeGraph.deliver({
       claim,
       nativeType: () => 'schema:TVSeries',
+      currentRelationEndpoint: async () => 'current',
       fence: async () => ({ fenced: false, securityRevision: null }),
       batch: async (request) => {
         sent.push(request);
@@ -222,6 +223,7 @@ test('production graph journals immutable relation commands and retries without 
   const refused = await reopened.deliver({
     claim,
     nativeType: () => 'schema:TVSeries',
+    currentRelationEndpoint: async () => 'current',
     fence: async () => ({ fenced: true, securityRevision: 'security-revision' }),
     batch: async () => {
       throw new Error('Fenced relation reached the write transport');
@@ -245,6 +247,7 @@ test('production graph journals immutable relation commands and retries without 
   const missing = await reopened.deliver({
     claim: ({ external_id }) => (external_id === '999' ? { state: 'pending' } : claim({ external_id })),
     nativeType: () => 'schema:TVSeries',
+    currentRelationEndpoint: async () => 'current',
     fence: async ({ externalId }) => ({ fenced: externalId === '12' || externalId === '13', securityRevision: null }),
     batch: async () => {
       throw new Error('Missing endpoint reached the write transport');
@@ -255,4 +258,113 @@ test('production graph journals immutable relation commands and retries without 
   );
   reopenedDatabase.close();
   await rm(directory, { recursive: true, force: true });
+});
+
+test('current endpoints and facts fences gate relation writes and exact retirement replay', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'bangumi-relation-currentness-'));
+  const path = join(directory, 'state.sqlite');
+  let database = new Database(path, { create: true, strict: true });
+  let graph = new CrossMediaGraph(database);
+  const uuid = (value: number) => `00000000-0000-4000-8000-${String(value).padStart(12, '0')}`;
+  const draft: GraphEdgeDraft = {
+    source: 'bangumi',
+    alias: 'bangumi_cross_media',
+    table: 'subject-relations',
+    holder: '10',
+    target: '11',
+    property: 'rezics:sideStoryOf',
+    url: 'https://bgm.tv/subject/10',
+    membership: 'family',
+    record: { subject_id: 10, related_subject_id: 11, relation_type: 12 },
+    fields: ['subject-relations.relation_type', 'subject-relations.related_subject_id'],
+    relation: {
+      family: 2,
+      code: 12,
+      reciprocalCode: 6,
+      path: '/subject-relations/10/11',
+      sourceSubject: '10',
+      sourceEndpoint: '11',
+      mappingRevision: 'bangumi-relation-2@2:12:6',
+      evidence: [
+        { path: '/subject-relations/10/11', code: 12, sourceSubject: '10', sourceEndpoint: '11', digest: 'a'.repeat(64) },
+        { path: '/subject-relations/11/10', code: 6, sourceSubject: '11', sourceEndpoint: '10', digest: 'b'.repeat(64) },
+      ],
+    },
+  };
+  const sent: BatchCommand[][] = [];
+  const journal = {
+    prepare(command: BatchCommand) {
+      return { bytes: JSON.stringify({ commands: [command] }) };
+    },
+    acknowledge() {},
+  };
+  const run = (options: {
+    snapshot: { currentKeys: string[]; scope: string[]; digest: string; complete: boolean };
+    fenced?: string;
+    staleEndpoint?: string;
+    batch?: (request: { commands: BatchCommand[] }) => Promise<BatchWriteResult>;
+  }) =>
+    graph.deliver({
+      claim: ({ external_id }) => ({ state: 'bound', subject: uuid(Number(external_id)) }),
+      nativeType: () => 'schema:TVSeries',
+      currentRelationEndpoint: async (externalId) =>
+        externalId === options.staleEndpoint ? 'identity_mismatch' : 'current',
+      fence: async ({ externalId }) => ({ fenced: externalId === options.fenced, securityRevision: null }),
+      batch: async (request) => {
+        sent.push(request.commands);
+        return options.batch
+          ? options.batch(request)
+          : {
+              results: request.commands.map((command) => ({
+                key: command.key,
+                status: 201 as const,
+                value: command.op === 'propose' ? { candidate: uuid(700), revision: 1 } : { revision: 1 },
+              })),
+            };
+      },
+      journal,
+      relationSnapshot: options.snapshot,
+    });
+  try {
+    graph.remember([draft]);
+    const active = { currentKeys: [graphEdgeKey(draft)], scope: ['10', '11'], digest: 'c'.repeat(64), complete: true };
+    const stale = await run({ snapshot: active, staleEndpoint: '11' });
+    expect(stale.unresolved.map(({ reason }) => reason)).toEqual(['current_relation_endpoint_identity_mismatch:11']);
+    expect(sent).toHaveLength(0);
+
+    const proposed = await run({ snapshot: active });
+    expect(proposed.proposed).toHaveLength(1);
+    const withdrawn = { currentKeys: [], scope: ['10'], digest: 'd'.repeat(64), complete: true };
+    const fenced = await run({ snapshot: withdrawn, fenced: '11' });
+    expect(fenced.unresolved.map(({ reason }) => reason)).toEqual(['fenced_relation_holder']);
+    expect(sent).toHaveLength(1);
+
+    let lost: BatchCommand[] | undefined;
+    await expect(
+      run({
+        snapshot: withdrawn,
+        batch: async ({ commands }) => {
+          lost = commands;
+          throw new Error('response lost');
+        },
+      }),
+    ).rejects.toThrow('response lost');
+    expect(lost?.[0]?.op).toBe('retract');
+
+    database.close();
+    database = new Database(path, { strict: true });
+    graph = new CrossMediaGraph(database);
+    const reopened = await run({
+      snapshot: { currentKeys: [], scope: [], digest: 'e'.repeat(64), complete: false },
+    });
+    expect(reopened.unresolved).toEqual([]);
+    expect(sent.at(-1)).toEqual(lost);
+    expect(sent.at(-1)?.[0]?.key).toBe(lost?.[0]?.key);
+    expect(database
+      .query('SELECT status FROM cross_media_graph WHERE edge_key=?')
+      .get(graphEdgeKey(draft))).toEqual({ status: 'retracted' });
+  } finally {
+    database.close();
+    await rm(directory, { recursive: true, force: true });
+  }
 });

@@ -139,6 +139,7 @@ test('selected VNDB relation handoff keeps mapped direction, cited source and ex
     const delivered = await graph.deliver({
       claim: ({ external_id }) => ({ state: 'bound', subject: external_id === 'v7983' ? holderId : targetId }),
       nativeType: () => 'wd:Q689445',
+      currentRelationEndpoint: async () => 'current',
       fence: async ({ externalId }) => {
         fencedTuples.push(externalId);
         return { fenced: externalId === 'v4', securityRevision: '1' };

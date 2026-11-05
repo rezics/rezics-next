@@ -89,6 +89,7 @@ export type ReleaseEndpointCurrentness =
   | 'wrong_type'
   | 'identity_mismatch'
   | 'unavailable';
+export type RelationEndpointCurrentness = ReleaseEndpointCurrentness;
 export type GraphMappingGap = SourceVocabularyGap & {
   sourceSubject: string;
   sourceEndpoint: string;
@@ -321,6 +322,11 @@ export class CrossMediaGraph {
   async deliver(input: {
     claim(owner: { source: string; external_id: string }): Claim | null;
     nativeType(externalId: string, alias?: string): string | undefined;
+    currentRelationEndpoint(
+      externalId: string,
+      nativeSubjectId: string,
+      expectedType: string | undefined,
+    ): Promise<RelationEndpointCurrentness>;
     currentReleaseEndpoint?: (externalId: string, nativeSubjectId: string) => Promise<ReleaseEndpointCurrentness>;
     /** Current provider identity gates Person endpoints without changing their sealed source binding. */
     currentPersonIdentity?: (alias: string, externalId: string, nativeSubjectId: string) => Promise<boolean>;
@@ -359,6 +365,15 @@ export class CrossMediaGraph {
       bytes: string;
     }[] = [];
     const sourceFactFences = new Map<string, Promise<{ fenced: boolean; securityRevision: string | null }>>();
+    const currentFactFence = (source: string, externalId: string) => {
+      const key = `${source}\0${externalId}`;
+      let fence = sourceFactFences.get(key);
+      if (!fence) {
+        fence = input.fence({ source, externalId, fieldGroup: 'facts' });
+        sourceFactFences.set(key, fence);
+      }
+      return fence;
+    };
     for (const draft of drafts) {
       const releaseSupersession = isVndbReleaseSupersession(draft);
       const holder = input.claim({ source: draft.alias, external_id: draft.holder });
@@ -426,35 +441,46 @@ export class CrossMediaGraph {
             ? draft.holder
             : undefined;
       if (sourceFactOwner !== undefined) {
-        const fenceKey = `${draft.alias}\0${sourceFactOwner}`;
-        let fence = sourceFactFences.get(fenceKey);
-        if (!fence) {
-          fence = input.fence({ source: draft.alias, externalId: sourceFactOwner, fieldGroup: 'facts' });
-          sourceFactFences.set(fenceKey, fence);
-        }
-        if ((await fence).fenced) {
+        if ((await currentFactFence(draft.alias, sourceFactOwner)).fenced) {
           unresolved.push({ ...draft, reason: 'fenced_source_facts' });
           mark.run('unresolved', null, graphEdgeKey(draft));
           continue;
         }
       }
       if (draft.relation) {
-        let fenced = false;
-        for (const externalId of new Set([draft.relation.sourceSubject, draft.relation.sourceEndpoint])) {
-          const fence = await input.fence({ source: draft.alias, externalId, fieldGroup: 'facts' });
-          if (fence.fenced) fenced = true;
+        const sourceClaim = input.claim({ source: draft.alias, external_id: draft.relation.sourceSubject });
+        const endpointClaim = input.claim({ source: draft.alias, external_id: draft.relation.sourceEndpoint });
+        const sourceType = input.nativeType(draft.relation.sourceSubject, draft.alias);
+        const endpointType = input.nativeType(draft.relation.sourceEndpoint, draft.alias);
+        if (sourceClaim?.state !== 'bound' || endpointClaim?.state !== 'bound' || !sourceType || !endpointType) {
+          unresolved.push({ ...draft, reason: 'missing_native_endpoint_profile' });
+          mark.run('unresolved', null, graphEdgeKey(draft));
+          continue;
         }
-        if (fenced) {
+        const endpoints = [
+          { externalId: draft.relation.sourceSubject, claim: sourceClaim, nativeType: sourceType },
+          { externalId: draft.relation.sourceEndpoint, claim: endpointClaim, nativeType: endpointType },
+        ];
+        const [endpointReads, endpointFences] = await Promise.all([
+          Promise.all(
+            endpoints.map(({ externalId, claim, nativeType }) =>
+              input.currentRelationEndpoint(externalId, claim.subject, nativeType),
+            ),
+          ),
+          Promise.all(endpoints.map(({ externalId }) => currentFactFence(draft.alias, externalId))),
+        ]);
+        if (endpointFences.some((fence) => fence.fenced)) {
           unresolved.push({ ...draft, reason: 'fenced_relation_holder' });
           mark.run('unresolved', null, graphEdgeKey(draft));
           continue;
         }
-        const sourceClaim = input.claim({ source: draft.alias, external_id: draft.relation.sourceSubject });
-        const endpointClaim = input.claim({ source: draft.alias, external_id: draft.relation.sourceEndpoint });
-        const sourceType = input.nativeType(draft.relation.sourceSubject);
-        const endpointType = input.nativeType(draft.relation.sourceEndpoint);
-        if (sourceClaim?.state !== 'bound' || endpointClaim?.state !== 'bound' || !sourceType || !endpointType) {
-          unresolved.push({ ...draft, reason: 'missing_native_endpoint_profile' });
+        const staleEndpointIndex = endpointReads.findIndex((status) => status !== 'current');
+        if (staleEndpointIndex !== -1) {
+          const endpoint = endpoints[staleEndpointIndex]!;
+          unresolved.push({
+            ...draft,
+            reason: `current_relation_endpoint_${endpointReads[staleEndpointIndex]}:${endpoint.externalId}`,
+          });
           mark.run('unresolved', null, graphEdgeKey(draft));
           continue;
         }
@@ -561,7 +587,7 @@ export class CrossMediaGraph {
       if (draft.producerParent) {
         let fenced = false;
         for (const externalId of new Set([draft.producerParent.sourceSubject, draft.producerParent.sourceEndpoint])) {
-          const fence = await input.fence({ source: draft.alias, externalId, fieldGroup: 'facts' });
+          const fence = await currentFactFence(draft.alias, externalId);
           if (fence.fenced) fenced = true;
         }
         if (fenced) {
@@ -848,7 +874,19 @@ export class CrossMediaGraph {
       }
     }
     if (input.relationSnapshot) {
-      await this.retractMissingRelations(input, input.relationSnapshot);
+      unresolved.push(
+        ...(await this.retractMissingRelations(
+          {
+            batch: input.batch,
+            claim: input.claim,
+            nativeType: input.nativeType,
+            currentRelationEndpoint: input.currentRelationEndpoint,
+            currentFactFence,
+            journal: input.journal,
+          },
+          input.relationSnapshot,
+        )),
+      );
     }
     return { proposed, unresolved, gaps, unchanged };
   }
@@ -856,13 +894,22 @@ export class CrossMediaGraph {
   private async retractMissingRelations(
     input: {
       batch(request: { commands: BatchCommand[] }): Promise<BatchWriteResult>;
+      claim(owner: { source: string; external_id: string }): Claim | null;
+      nativeType(externalId: string, alias?: string): string | undefined;
+      currentRelationEndpoint(
+        externalId: string,
+        nativeSubjectId: string,
+        expectedType: string | undefined,
+      ): Promise<RelationEndpointCurrentness>;
+      currentFactFence(source: string, externalId: string): Promise<{ fenced: boolean; securityRevision: string | null }>;
       journal?: {
         prepare(command: BatchCommand): { bytes: string };
         acknowledge(command: BatchCommand, result: BatchWriteResult['results'][number]): void;
       };
     },
     snapshot: { currentKeys: readonly string[]; scope: readonly string[]; digest: string; complete: boolean },
-  ): Promise<void> {
+  ): Promise<UnresolvedEdge[]> {
+    const unresolved: UnresolvedEdge[] = [];
     const currentKeys = new Set(snapshot.currentKeys);
     const scope = new Set(snapshot.scope);
     const prior = this.database
@@ -888,6 +935,56 @@ export class CrossMediaGraph {
         continue;
       const original = (JSON.parse(row.command_payload) as { commands: BatchCommand[] }).commands[0];
       if (!original || original.op !== 'propose') continue;
+      const relation = draft.relation;
+      const endpoints = [relation.sourceSubject, relation.sourceEndpoint];
+      const claims = endpoints.map((externalId) => ({
+        externalId,
+        claim: input.claim({ source: draft.alias, external_id: externalId }),
+      }));
+      const subjects = claims.map(({ claim }) => (claim?.state === 'bound' ? claim.subject : null));
+      const missingIndex = subjects.findIndex((subject) => subject === null);
+      if (missingIndex !== -1) {
+        const missing = claims[missingIndex]!;
+        const reason =
+          missing.claim?.state === 'pending'
+            ? `endpoint_unknown:${missing.externalId}`
+            : missing.claim?.state === 'taken-down'
+              ? `endpoint_refused:${missing.externalId}`
+              : `missing_endpoint:${missing.externalId}`;
+        unresolved.push({ ...draft, reason });
+        continue;
+      }
+      const current = await Promise.all(
+        claims.map(({ externalId }, index) =>
+          input.currentRelationEndpoint(externalId, subjects[index]!, input.nativeType(externalId, draft.alias)),
+        ),
+      );
+      const currentFailure = current.findIndex((status) => status !== 'current');
+      if (currentFailure !== -1) {
+        unresolved.push({
+          ...draft,
+          reason: `current_relation_endpoint_${current[currentFailure]}:${endpoints[currentFailure]}`,
+        });
+        continue;
+      }
+      const fences = await Promise.all(endpoints.map((externalId) => input.currentFactFence(draft.alias, externalId)));
+      if (fences.some((fence) => fence.fenced)) {
+        unresolved.push({ ...draft, reason: 'fenced_relation_holder' });
+        continue;
+      }
+      const sourceIndex = endpoints.indexOf(original.source.external_id);
+      const targetIndex = sourceIndex === 0 ? 1 : sourceIndex === 1 ? 0 : -1;
+      const targetValue = original.statement.value;
+      if (
+        original.source.source !== draft.alias ||
+        sourceIndex === -1 ||
+        original.subject !== subjects[sourceIndex] ||
+        targetValue.type !== 'value' ||
+        targetValue.content !== subjects[targetIndex]
+      ) {
+        unresolved.push({ ...draft, reason: 'journaled_native_identity_changed' });
+        continue;
+      }
       const command: BatchCommand = {
         op: 'retract',
         key: commandKey([
@@ -952,6 +1049,7 @@ export class CrossMediaGraph {
           .immediate();
       }
     }
+    return unresolved;
   }
 }
 

@@ -40,6 +40,7 @@ import {
   graphEdgeKey,
   type GraphEdgeEvidence,
   type ReleaseEndpointCurrentness,
+  type RelationEndpointCurrentness,
   type GraphEdgeDraft,
   type UnresolvedEdge,
 } from './cross-media-bindings.ts';
@@ -2226,6 +2227,37 @@ function currentReleaseEndpoint(
     : 'identity_mismatch';
 }
 
+function currentBangumiRelationEndpoint(
+  read: ReviewedSubjectRead | null,
+  externalId: string,
+  nativeSubjectId: string,
+  expectedType: string | undefined,
+  failure?: unknown,
+): RelationEndpointCurrentness {
+  if (!read) return failure === undefined ? 'unavailable' : currentReleaseReadFailure(failure);
+  const subject = (
+    read as {
+      subject?: {
+        id?: unknown;
+        type?: unknown;
+        statements?: Record<string, readonly { value?: { type?: unknown; content?: unknown } }[] | undefined>;
+      };
+    }
+  ).subject;
+  if (!subject) return 'unknown';
+  if (subject.id !== nativeSubjectId) return 'identity_mismatch';
+  if (expectedType === undefined || subject.type !== expectedType) return 'wrong_type';
+  const identity = bangumiSourceIdentity(externalId, expectedType);
+  if (!identity) return 'wrong_type';
+  const statements = subject.statements?.[identity.property];
+  if (!Array.isArray(statements)) return 'unknown';
+  return statements.some(
+    (statement) => statement.value?.type === 'value' && statement.value.content === identity.value,
+  )
+    ? 'current'
+    : 'identity_mismatch';
+}
+
 export type CrossMediaSeedExtras = {
   vocabularyAdmission?: ImporterOptions['vocabularyAdmission'];
   vocabularyAdmissions?: readonly NonNullable<ImporterOptions['vocabularyAdmission']>[];
@@ -2676,6 +2708,16 @@ export async function seedCrossMedia(
           externalId,
           nativeSubjectId,
           nativeTypes.get(`${crossMediaAliases.vndb}\u0000${externalId}`),
+          currentReadFailures.get(nativeSubjectId),
+        );
+      },
+      async currentRelationEndpoint(externalId, nativeSubjectId, expectedType) {
+        const read = await readCurrent(nativeSubjectId);
+        return currentBangumiRelationEndpoint(
+          read,
+          externalId,
+          nativeSubjectId,
+          expectedType,
           currentReadFailures.get(nativeSubjectId),
         );
       },

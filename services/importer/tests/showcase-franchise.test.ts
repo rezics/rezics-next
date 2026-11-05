@@ -102,6 +102,7 @@ test('current graph results gate publication on exact reopen, changed source and
       graph.deliver({
         claim: ({ external_id }) => ({ state: 'bound', subject: id(Number(external_id)) }),
         nativeType,
+        currentRelationEndpoint: async () => 'current',
         fence: async () => ({ fenced: false, securityRevision: null }),
         batch: async ({ commands }) => {
           sends++;
