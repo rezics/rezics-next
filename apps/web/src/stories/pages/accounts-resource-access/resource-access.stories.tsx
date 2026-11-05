@@ -38,6 +38,7 @@ function Example({
 }) {
   const [setup] = useState(() => {
     let page = structuredClone(scenario === 'permission-review' ? permissionSnapshot : snapshot);
+    if (scenario === 'current') page.next = 'story-next-window';
     // Illustrative supplied summaries; no directory or per-row identity requests.
     if (scenario === 'delegated') page.authority.principalId = '0192f3a0-6c1e-7b2a-a001-000200000099';
     if (scenario === 'generic') page.resource.type = 'illustrative.unrecognized_resource_type_' + 'exact_'.repeat(20);
@@ -196,6 +197,12 @@ export const CurrentAccess: Story = {
     await userEvent.click(canvas.getByRole('button', { name: m.access_review_confirm() }));
     await expect(canvas.getByRole('status')).toHaveTextContent(m.access_saved());
     await expect(canvas.getByText(m.access_active_accounts())).toBeVisible();
+    const next = canvas.getByRole('button', { name: m.access_next_page() });
+    await expect(next).toBeVisible();
+    await expect(next.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    await userEvent.click(next);
+    await expect(canvas.getByRole('button', { name: m.access_previous_page() })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: m.access_first_page() })).toBeVisible();
   },
 };
 export const PermissionSelectionReview: Story = {
@@ -400,7 +407,7 @@ export const ReloadUnavailable: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(canvas.getByText(m.access_unavailable())).toBeVisible();
-    await userEvent.click(canvas.getByRole('button', { name: m.access_reload() }));
+    await userEvent.click(canvas.getByRole('button', { name: m.access_retry_page() }));
     await expect(canvas.getByRole('heading', { level: 3, name: 'Aki' })).toBeVisible();
   },
 };

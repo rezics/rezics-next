@@ -53,12 +53,15 @@ test.each(['reload', 'readback'] as const)(
   async (source) => {
     const deferred = Promise.withResolvers<AccessState>();
     let reads = 0;
-    const controller = new AccessRecovery(ready, {
+    const first = structuredClone(snapshot);
+    first.next = 'next-page';
+    const initial = source === 'reload' ? { status: 'ready' as const, page: first } : ready;
+    const controller = new AccessRecovery(initial, {
       read: () => (++reads === 1 ? deferred.promise : Promise.reject(new Error('Unavailable'))),
       save: async () => ({ status: 'saved' }),
       lookup: async () => null,
     });
-    const reading = source === 'reload' ? controller.reload('next-page') : controller.submit(change);
+    const reading = source === 'reload' ? controller.next() : controller.submit(change);
     await Promise.resolve();
     controller.dispose();
     controller.activate();
@@ -68,3 +71,31 @@ test.each(['reload', 'readback'] as const)(
     expect(controller.snapshot().phase).toBe(source === 'readback' ? 'saved' : 'idle');
   },
 );
+
+test('an admitted command readback starts at First and cannot restore a pre-command window', async () => {
+  const reads: (string | undefined)[] = [];
+  const first = structuredClone(snapshot);
+  first.next = 'before-write';
+  const controller = new AccessRecovery(
+    { status: 'ready', page: first },
+    {
+      read: async (cursor) => {
+        reads.push(cursor);
+        const page = structuredClone(snapshot);
+        page.next = cursor === 'before-write' ? 'stale-next' : 'after-write';
+        return { status: 'ready', page };
+      },
+      save: async () => ({ status: 'saved' }),
+      lookup: async () => null,
+    },
+  );
+
+  await controller.next();
+  expect(controller.snapshot().canPrevious).toBe(true);
+  await controller.submit(change);
+  expect(reads).toEqual(['before-write', undefined]);
+  expect(controller.snapshot()).toMatchObject({ phase: 'saved', pending: null, canPrevious: false, canFirst: false });
+  expect(await controller.previous()).toBe(false);
+  await controller.next();
+  expect(reads).toEqual(['before-write', undefined, 'after-write']);
+});

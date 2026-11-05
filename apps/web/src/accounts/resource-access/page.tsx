@@ -528,6 +528,17 @@ export function ResourceAccessPage({ initial, io }: { initial: AccessState; io: 
 function ResourceAccessEditor({ initial, io }: { initial: AccessState; io: AccessIO }) {
   const [controller] = useState(() => new AccessRecovery(initial, io));
   useLayoutEffect(controller.activate, [controller]);
+  const currentHeading = useRef<HTMLHeadingElement>(null);
+  const focusHandoff = useRef(0);
+  const releaseFocusWatch = useRef<(() => void) | null>(null);
+  useLayoutEffect(
+    () => () => {
+      focusHandoff.current++;
+      releaseFocusWatch.current?.();
+      releaseFocusWatch.current = null;
+    },
+    [controller],
+  );
   const state = useSyncExternalStore(controller.subscribe, controller.snapshot, controller.snapshot);
   const [form, setForm] = useState<Grant | 'new' | null>(null);
   const [revoke, setRevoke] = useState<{ grant: Grant; advice: string } | null>(null);
@@ -555,7 +566,45 @@ function ResourceAccessEditor({ initial, io }: { initial: AccessState; io: Acces
       retire={controller.retire}
       abandon={controller.abandon}
     >
-      {(move) => (
+      {(move) => {
+        const requestPageMove = (
+          keyboard: boolean,
+          initiatingControl: HTMLElement,
+          read: () => Promise<boolean>,
+        ) => {
+          releaseFocusWatch.current?.();
+          releaseFocusWatch.current = null;
+          const ticket = ++focusHandoff.current;
+          move(
+            () => {
+              if (!controller.isCurrentLifetime()) return;
+              setForm(null);
+              setRevoke(null);
+              setTransfer(null);
+              let eligible = keyboard;
+              const onFocusIn = (event: FocusEvent) => {
+                if (event.target !== document.body && event.target !== initiatingControl) eligible = false;
+              };
+              const release = () => {
+                document.removeEventListener('focusin', onFocusIn);
+                if (releaseFocusWatch.current === release) releaseFocusWatch.current = null;
+              };
+              if (keyboard) {
+                document.addEventListener('focusin', onFocusIn);
+                releaseFocusWatch.current = release;
+              }
+              void read().then((admitted) => {
+                if (!eligible || !admitted || focusHandoff.current !== ticket || !controller.isCurrentLifetime())
+                  return;
+                const active = document.activeElement;
+                if (active === initiatingControl || active === document.body || !initiatingControl.isConnected)
+                  currentHeading.current?.focus();
+              }).finally(release);
+            },
+            { abandon: false, admit: controller.isCurrentLifetime },
+          );
+        };
+        return (
         <main className="mx-auto w-full max-w-4xl space-y-6 px-4 py-6 sm:px-8 sm:py-10">
           <header className="space-y-2">
             <PageHeading>{m.access_heading()}</PageHeading>
@@ -574,6 +623,9 @@ function ResourceAccessEditor({ initial, io }: { initial: AccessState; io: Acces
               </Button>
             </div>
           ) : null}
+          <h2 ref={currentHeading} id="access-current-grants-heading" tabIndex={-1} className="text-xl font-semibold">
+            {m.access_current_grants()}
+          </h2>
           {!page ? (
             <section aria-busy={state.busy || state.page.status === 'loading'} className="space-y-4">
               <p role={state.page.status === 'unavailable' ? 'alert' : 'status'}>
@@ -586,8 +638,14 @@ function ResourceAccessEditor({ initial, io }: { initial: AccessState; io: Acces
                       : m.access_unavailable()}
               </p>
               {state.page.status !== 'loading' ? (
-                <Button type="button" variant="outline" disabled={state.busy} onClick={() => void controller.reload()}>
-                  {m.access_reload()}
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal px-3 py-2 text-center"
+                  disabled={state.busy}
+                  onClick={() => void controller.retryPage()}
+                >
+                  {m.access_retry_page()}
                 </Button>
               ) : null}
             </section>
@@ -625,20 +683,23 @@ function ResourceAccessEditor({ initial, io }: { initial: AccessState; io: Acces
                   {m.access_realm_guard()}
                 </p>
               ) : null}
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 className="text-xl font-semibold">{m.access_current_grants()}</h2>
+              <div className="flex flex-wrap items-center justify-end gap-3">
                 <div className="flex gap-2">
                   <Button
                     type="button"
                     variant="outline"
                     disabled={state.busy}
                     onClick={() =>
-                      move(() => {
-                        setForm(null);
-                        setRevoke(null);
-                        setTransfer(null);
-                        void controller.reload();
-                      })
+                      move(
+                        () => {
+                          if (!controller.isCurrentLifetime()) return;
+                          setForm(null);
+                          setRevoke(null);
+                          setTransfer(null);
+                          void controller.reload();
+                        },
+                        { abandon: false, admit: controller.isCurrentLifetime },
+                      )
                     }
                   >
                     {m.access_reload()}
@@ -817,23 +878,59 @@ function ResourceAccessEditor({ initial, io }: { initial: AccessState; io: Acces
                   })}
                 </ul>
               )}
-              {page.next ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={state.busy || !!state.pending}
-                  onClick={() =>
-                    move(() => {
-                      setForm(null);
-                      setRevoke(null);
-                      setTransfer(null);
-                      void controller.reload(page.next!);
-                    })
-                  }
-                >
-                  {m.access_next_page()}
-                </Button>
-              ) : null}
+              <nav aria-label={m.access_page_navigation()} className="flex flex-wrap gap-2">
+                {state.canPrevious ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal px-3 py-2 text-center"
+                    disabled={state.busy || !!state.pending}
+                    onClick={(event) =>
+                      requestPageMove(
+                        event.detail === 0 && document.activeElement === event.currentTarget,
+                        event.currentTarget,
+                        () => controller.previous(),
+                      )
+                    }
+                  >
+                    {m.access_previous_page()}
+                  </Button>
+                ) : null}
+                {state.canFirst ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal px-3 py-2 text-center"
+                    disabled={state.busy || !!state.pending}
+                    onClick={(event) =>
+                      requestPageMove(
+                        event.detail === 0 && document.activeElement === event.currentTarget,
+                        event.currentTarget,
+                        () => controller.first(),
+                      )
+                    }
+                  >
+                    {m.access_first_page()}
+                  </Button>
+                ) : null}
+                {page.next != null ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal px-3 py-2 text-center"
+                    disabled={state.busy || !!state.pending}
+                    onClick={(event) =>
+                      requestPageMove(
+                        event.detail === 0 && document.activeElement === event.currentTarget,
+                        event.currentTarget,
+                        () => controller.next(),
+                      )
+                    }
+                  >
+                    {m.access_next_page()}
+                  </Button>
+                ) : null}
+              </nav>
             </>
           )}
           <AlertDialog
@@ -892,7 +989,8 @@ function ResourceAccessEditor({ initial, io }: { initial: AccessState; io: Acces
             </AlertDialogContent>
           </AlertDialog>
         </main>
-      )}
+        );
+      }}
     </AccessDeparture>
   );
 }

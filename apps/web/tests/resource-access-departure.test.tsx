@@ -153,7 +153,9 @@ test('changed grant draft survives Stay; paging and deliberate Leave retire it t
 });
 
 test('Stay retains the exact unresolved command; Leave never cancels or replays it and ignores its late result', async () => {
-  const io = ioFor();
+  const page = structuredClone(snapshot);
+  page.next = 'next-grants';
+  const io = ioFor(page);
   const commands: Change[] = [];
   let finish!: (value: { status: 'saved' }) => void;
   let signal: AbortSignal | undefined;
@@ -176,6 +178,8 @@ test('Stay retains the exact unresolved command; Leave never cancels or replays 
   await click(link);
   await stay();
   expect(commands).toHaveLength(1);
+  const pager = button(m.access_next_page(), host);
+  expect(pager.disabled).toBe(true);
   await click(button(m.access_retry_operation()));
   expect(commands[1]).toEqual(commands[0]);
   await click(link);
@@ -235,4 +239,82 @@ test('owner transfer confirmation survives Stay, then completes and leaves norma
   await act(async () => root.render(<ResourceAccessPage initial={{ status: 'denied' }} io={replacement} />));
   expect(blocked()).toBe(false);
   expect(host.querySelector('#access-handle')).toBeNull();
+});
+
+test('an equal source replacement while Leave is open retires the pending pager action and draft', async () => {
+  const page = structuredClone(snapshot);
+  page.next = 'next-grants';
+  const io = ioFor(page);
+  await act(async () => root.render(<ResourceAccessPage initial={{ status: 'ready', page }} io={io} />));
+  await click(button(m.access_add_grant()));
+  await type(within(host).getByLabelText(m.access_handle()), 'private draft');
+  await click(button(m.access_next_page()));
+  expect(decision()).toBeTruthy();
+
+  const replacementPage = structuredClone(page);
+  const replacement = ioFor(replacementPage);
+  await act(async () =>
+    root.render(<ResourceAccessPage initial={{ status: 'ready', page: replacementPage }} io={replacement} />),
+  );
+  expect(within(document.body).queryByRole('alertdialog')).toBeNull();
+  expect(within(host).queryByLabelText(m.access_handle())).toBeNull();
+  expect(io.read).toHaveBeenCalledTimes(0);
+  expect(replacement.read).toHaveBeenCalledTimes(0);
+
+  const pageB = structuredClone(page);
+  pageB.authority.clientId = 'replacement-client';
+  const sourceB = ioFor(pageB);
+  await act(async () => root.render(<ResourceAccessPage initial={{ status: 'ready', page: pageB }} io={sourceB} />));
+  const pageA = structuredClone(page);
+  const sourceA = ioFor(pageA);
+  await act(async () => root.render(<ResourceAccessPage initial={{ status: 'ready', page: pageA }} io={sourceA} />));
+  expect(host.textContent).not.toContain('private draft');
+  expect(sourceA.read).toHaveBeenCalledTimes(0);
+});
+
+test('a retired read cannot publish rows or return keyboard focus to a replaced window', async () => {
+  const page = structuredClone(snapshot);
+  page.next = 'slow-window';
+  const deferred = Promise.withResolvers<AccessState>();
+  const io = ioFor(page);
+  io.read = mock(() => deferred.promise);
+  await act(async () => root.render(<ResourceAccessPage initial={{ status: 'ready', page }} io={io} />));
+  const next = button(m.access_next_page(), host);
+  next.focus();
+  const oldHeading = within(host).getByRole('heading', { name: m.access_current_grants() });
+  await act(async () => user.keyboard('{Enter}'));
+  expect(io.read).toHaveBeenCalledWith('slow-window', expect.any(AbortSignal));
+
+  const replacementPage = structuredClone(snapshot);
+  replacementPage.next = 'replacement-window';
+  const replacement = ioFor(replacementPage);
+  await act(async () =>
+    root.render(<ResourceAccessPage initial={{ status: 'ready', page: replacementPage }} io={replacement} />),
+  );
+  const late = structuredClone(page);
+  late.identities[1]!.displayName = 'Late window';
+  deferred.resolve({ status: 'ready', page: late });
+  await act(async () => Promise.resolve());
+
+  expect(host.textContent).toContain('Aki');
+  expect(host.textContent).not.toContain('Late window');
+  expect(oldHeading.isConnected).toBe(false);
+  expect(document.activeElement).not.toBe(within(host).getByRole('heading', { name: m.access_current_grants() }));
+  expect(replacement.read).toHaveBeenCalledTimes(0);
+});
+
+test('a ready keyboard page movement returns focus to the current grants heading', async () => {
+  const page = structuredClone(snapshot);
+  page.next = 'keyboard-window';
+  const io = ioFor(page);
+  await mount({ status: 'ready', page }, io);
+  const next = button(m.access_next_page(), host);
+  next.focus();
+
+  await act(async () => {
+    await user.keyboard('{Enter}');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
+  expect(document.activeElement).toBe(within(host).getByRole('heading', { name: m.access_current_grants() }));
 });
