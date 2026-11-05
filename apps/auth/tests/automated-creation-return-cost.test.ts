@@ -1,8 +1,8 @@
 import { expect, test } from 'bun:test';
 import { act, createElement } from 'react';
 import { creationFixture, dom, flush, button, fill, send } from './creation-page-fixture';
-import { AutomatedAccountCreatePage } from '../src/routes/automated.new';
 creationFixture();
+const { AutomatedAccountCreatePage } = await import('../src/routes/automated.new');
 const { createRoot } = await import('react-dom/client');
 
 const human = '11111111-1111-4111-8111-111111111111';

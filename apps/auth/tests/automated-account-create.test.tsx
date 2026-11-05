@@ -10,19 +10,19 @@ import {
   open,
   send,
 } from './creation-page-fixture';
-import { AutomatedAccountCreatePage } from '../src/routes/automated.new';
 import {
   automatedAccountOperationRequestByteBudgets,
   automatedAccountOperationResponseByteBudgets,
 } from '@rezics/auth-contract';
-import {
+creationFixture();
+const { AutomatedAccountCreatePage } = await import('../src/routes/automated.new');
+const {
   AUTOMATED_PROFILE,
   AUTOMATED_ATTEMPT_MAX_SERIALIZED_UTF16,
   createAutomatedAttempt,
   restoreAutomatedAttempt,
   saveAutomatedAttempt,
-} from '../src/automated-account-create';
-creationFixture();
+} = await import('../src/automated-account-create');
 const human = '11111111-1111-4111-8111-111111111111';
 const operator = {
   id: '22222222-2222-4222-8222-222222222222',

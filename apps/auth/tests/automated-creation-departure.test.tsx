@@ -10,11 +10,11 @@ import {
   open,
   send,
 } from './creation-page-fixture';
-import { AutomatedAccountCreatePage } from '../src/routes/automated.new';
-import { AUTOMATED_PROFILE, restoreAutomatedAttempt } from '../src/automated-account-create';
+creationFixture();
+const { AutomatedAccountCreatePage } = await import('../src/routes/automated.new');
+const { AUTOMATED_PROFILE, restoreAutomatedAttempt } = await import('../src/automated-account-create');
 const { createBrowserHistory, createRootRoute, createRoute, createRouter, RouterProvider } =
   await import('@tanstack/react-router');
-creationFixture();
 const previousScroll = Object.getOwnPropertyDescriptor(globalThis, 'scrollTo');
 beforeAll(() => Object.defineProperty(globalThis, 'scrollTo', { configurable: true, value: dom.scrollTo.bind(dom) }));
 afterAll(() => {
