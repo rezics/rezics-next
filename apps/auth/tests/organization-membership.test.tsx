@@ -271,17 +271,30 @@ test('determinate refusals preserve review; reauthentication requires confirmati
     path.endsWith('/approve') ? Response.json({ code: 'step_up_required' }, { status: 401 }) : normal(path);
   await confirm();
   await click(m.auth_members_submit());
+  expect(host.querySelector('#membership-confirmation')).not.toBeNull();
+  expect(membership.readMembershipCommand()).toEqual(command);
   await flush(() => {
     input('membership-email', 'owner@example.test');
     input('membership-password', 'secret-password');
   });
-  reply = () => Response.json({}, { status: 401 });
+  reply = (path) => (path === '/signin' ? Response.json({}, { status: 401 }) : normal(path));
+  const beforeRefusal = calls.length;
   await click(m.auth_members_reauthenticate());
+  expect(calls.slice(beforeRefusal).map(({ path }) => path)).toEqual(['/signin', '/session']);
   expect(host.querySelector('#membership-confirmation')).not.toBeNull();
   expect(host.textContent).toContain(memberAccountId);
+  expect(membership.readMembershipCommand()).toEqual(command);
+  expect(calls.some(({ path }) => path.endsWith('/execute'))).toBe(false);
+  expect(host.querySelector<HTMLInputElement>('#membership-password')!.value).toBe('');
   await flush(() => input('membership-password', 'secret-password'));
   reply = normal;
+  const beforeAuthentication = calls.length;
+  const pagesBeforeAuthentication = list.mock.calls.length;
   await click(m.auth_members_reauthenticate());
+  expect(calls.slice(beforeAuthentication).map(({ path }) => path)).toEqual(['/signin', '/session']);
+  expect(list.mock.calls).toHaveLength(pagesBeforeAuthentication + 1);
+  expect(list.mock.calls.at(-1)).toEqual([organizationId, accountId, undefined, expect.any(AbortSignal)]);
+  expect(membership.readMembershipCommand()).toEqual(command);
   expect(button(m.auth_members_submit()).disabled).toBe(true);
   expect(calls.some(({ path }) => path.endsWith('/execute'))).toBe(false);
   reply = (path) => (path.endsWith('/execute') ? Response.json({}, { status: 503 }) : normal(path));
@@ -289,6 +302,8 @@ test('determinate refusals preserve review; reauthentication requires confirmati
   await click(m.auth_members_submit());
   const unresolved = membership.readMembershipCommand() as membership.MembershipCommand;
   expect(unresolved.operationKey).toBe(command.operationKey);
+  expect(unresolved.operation).toEqual(command.operation);
+  expect(unresolved.reference).toBe('native-approval');
   expect(unresolved.unresolved).toBe(true);
   expect(button(m.auth_inventory_cancel()).disabled).toBe(true);
   const approvals = calls.filter(({ path }) => path.endsWith('/approve')).length;
@@ -308,6 +323,49 @@ test('determinate refusals preserve review; reauthentication requires confirmati
   await click(m.auth_members_close());
   expect(membership.readMembershipCommand()).toBeNull();
 });
+
+test.each(['signed-out', 'actor', 'profile', 'roster', 'reservation'])(
+  'an unsent step-up review retires on changed %s authority',
+  async (boundary) => {
+    await mount();
+    await click(m.auth_members_change_role());
+    const normal = reply;
+    let selectedReads = 0;
+    reply = (path) =>
+      path.endsWith('/approve')
+        ? Response.json({ code: 'step_up_required' }, { status: 401 })
+        : boundary === 'reservation' && path.endsWith('/member') && ++selectedReads === 2
+          ? Response.json({ organizationId, memberAccountId, membership: { role: 'member', reservationId: other } })
+          : normal(path);
+    await confirm();
+    await click(m.auth_members_submit());
+    if (boundary !== 'reservation') {
+      await flush(() => {
+        input('membership-email', 'owner@example.test');
+        input('membership-password', 'secret-password');
+      });
+      reply = (path) =>
+        path === '/session'
+          ? boundary === 'signed-out'
+            ? Response.json({}, { status: 401 })
+            : Response.json({
+                account_id: boundary === 'actor' ? other : accountId,
+                client_id: boundary === 'profile' ? 'login' : profile.client_id,
+                scope: profile.scope,
+              })
+          : path === '/signin' && boundary === 'signed-out'
+            ? Response.json({}, { status: 401 })
+            : normal(path);
+      if (boundary === 'roster') list.mockResolvedValueOnce({ kind: 'denied' });
+      await click(m.auth_members_reauthenticate());
+    }
+    expect(host.querySelector('#membership-confirmation')).toBeNull();
+    expect(host.querySelector('#membership-password')).toBeNull();
+    expect(host.textContent).not.toContain(memberAccountId);
+    expect(membership.readMembershipCommand()).toBeNull();
+    expect(calls.some(({ path }) => path.endsWith('/execute'))).toBe(false);
+  },
+);
 
 test('a lost acknowledgement stays generic after page return and native refusal', async () => {
   await mount();

@@ -705,18 +705,18 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
       }
       const observedResult = result === 'acknowledged' && membershipReadback(command, current);
       setObserved(observedResult);
-      if (!observedResult && command.unresolved && !membershipReservationMatches(command, current)) {
+      if (!observedResult && !membershipReservationMatches(command, current)) {
         retirePrivateAuthority('conflict');
         setPage({ kind: 'conflict' });
         return;
       }
       const resultPage = await loadMembershipPage(organizationId, accountId, roster.current.state.cursor, readSignal);
       if (isActive()) {
-        if (!observedResult && command.unresolved && !membershipPageAllowsCommand(resultPage, command)) {
+        if (!observedResult && !membershipPageAllowsCommand(resultPage, command)) {
           retirePrivateAuthority('denied');
           setPage({ kind: resultPage.kind === 'ready' ? 'denied' : resultPage.kind });
         } else {
-          setReviewCurrent(!observedResult && command.unresolved);
+          setReviewCurrent(!observedResult);
           installPage(resultPage);
         }
       }
@@ -745,10 +745,21 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
           setNotice('unknown');
           setRevoked(true);
           setReviewCurrent(false);
-        } else setNotice('unavailable');
+        } else {
+          // A refused credential is not session loss. Observe the original
+          // actor/profile before retaining its unsent private review.
+          const session = await loadAccountSession(readSignal);
+          if (!isActive()) return;
+          if (!membershipSessionMatches(session, accountId)) {
+            installPage({
+              kind: session.kind === 'signed-out' ? 'signed-out' : session.kind === 'ready' ? 'denied' : 'unavailable',
+            });
+          } else setNotice('unavailable');
+        }
         return;
       }
       setReauth(false);
+      setEmail('');
       setNeedsProfile(false);
       setConfirmed(false);
       if (command && isUnresolvedMembership(command, observed)) {
@@ -761,7 +772,11 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
         setNotice('step-up');
         setPage(null);
         const result = await loadMembershipPage(organizationId, accountId, roster.current.state.cursor, readSignal);
-        if (isActive()) installPage(result);
+        if (isActive()) {
+          if (command && result.kind === 'ready' && !membershipPageAllowsCommand(result, command)) {
+            installPage({ kind: 'denied' });
+          } else installPage(result);
+        }
       }
     } finally {
       if (isActive()) {

@@ -759,8 +759,14 @@ becomes an empty roster.
 
 Leaving or changing organizations ends pending browser continuations before they can install a review or start
 another request. An already dispatched change continues independently; its stored command, exact operands and
-original key remain available for explicit confirmation and native reconciliation. Failed identity confirmation
-keeps the current review usable.
+original key remain available for explicit confirmation and native reconciliation.
+
+A determinate refusal retains an unsent exact review only while refreshed roster advice and the selected reservation
+still admit it. A refused credential attempt does not establish a session: the route rereads the current session and
+keeps that review only for its original actor and management profile. Session loss or replacement, refused roster
+admission and private retirement hide it. Successful same-actor reauthentication clears credentials, resets confirmation
+and reloads roster advice under the installed lifetime; confirmation and submit remain deliberate. It never executes
+or replaces an unresolved command.
 
 Membership departure, all page navigation and reload offer Stay/Leave for changed input or unresolved work; Stay preserves the exact review and focus, Leave discards unsent input while retaining dispatched command identity, and authority loss retires private details while keeping the generic unknown and its guard. Restore exact details only after the initiating account explicitly rereads current page advice and the selected reservation. One read-only recovery review is capped at four native requests (session, page session, page, selected member); exact retry rechecks session and selected member before one execute. Reauthentication remains in-page and secrets remain ephemeral.
 
@@ -784,8 +790,9 @@ allows clearing it. One explicit recovery review still uses at most four native 
 page preparation session, bounded page and selected membership. Selection adds one selected-member point read.
 A fresh submit uses session, selected-member preparation, approval and execute (four), then selected readback and
 page preparation/session plus page (three); exact retry uses session, selected-member preparation and execute
-(three), then those same three observation requests. Reauthentication uses sign-in and session (two), followed by
-the existing explicit review. Local history, retirement, dismissal and focus add zero calls; there is no scan,
+(three), then those same three observation requests. Successful reauthentication uses sign-in and session (two), followed by
+the existing explicit review. Failed unsent reauthentication adds one current-session observation to distinguish a
+refused credential from lost authority (at most three requests). Local history, retirement, dismissal and focus add zero calls; there is no scan,
 refill, polling, per-row authorization or automatic command on restoration, Retry or locale change.
 
 ## Operator transfer
