@@ -34,93 +34,61 @@ const commands = [1, 2, 3, 4].map((n) => ({
   subject: { type: 'schema:Book', labels: { en: 'Book' } },
 }));
 for (const status of [429, 503]) {
-  test(`bulk transport retries only explicit ${status} overloads with original commands`, async () => {
-    const requests: unknown[] = [];
-    const transport = createImportTransport({
-      origin: 'https://api.importer.test',
-      tokenProvider: async () => 'test-token',
-      maxAttempts: 1,
-      sleep: async () => {},
-      fetch: (async (request: Request) => {
-        const body = (await request.json()) as { commands: typeof commands };
-        requests.push(body);
-        return Response.json({
-          results: body.commands.map((command) =>
-            command.key === commands[2]!.key
-              ? {
-                  key: command.key,
-                  status: 403,
-                  problem: {
-                    type: 'about:blank',
-                    title: 'Forbidden',
-                    status: 403,
-                    code: 'forbidden',
-                    retryable: false,
-                  },
-                }
-              : command.key === commands[1]!.key && requests.length === 1
+  for (const limits of [{}, { maxWaitMs: 0 }, { maxTotalWaitMs: 0 }, { deadlineMs: 100 }]) {
+    test(`bulk transport retains original commands and bounds explicit ${status} overloads: ${JSON.stringify(limits)}`, async () => {
+      const requests: unknown[] = [];
+      const transport = createImportTransport({
+        origin: 'https://api.importer.test',
+        tokenProvider: async () => 'test-token',
+        maxAttempts: 1,
+        ...limits,
+        sleep: async () => {},
+        fetch: (async (request: Request) => {
+          const body = (await request.json()) as { commands: typeof commands };
+          requests.push(body);
+          return Response.json({
+            results: body.commands.map((command) =>
+              command.key === commands[2]!.key
                 ? {
                     key: command.key,
-                    status,
+                    status: 403,
                     problem: {
                       type: 'about:blank',
-                      title: 'Overloaded',
-                      status,
-                      code: 'overloaded',
-                      retryable: true,
+                      title: 'Forbidden',
+                      status: 403,
+                      code: 'forbidden',
+                      retryable: false,
                     },
                   }
-                : command.key === commands[3]!.key
+                : command.key === commands[1]!.key && requests.length === 1
                   ? {
                       key: command.key,
                       status,
-                      problem: { type: 'about:blank', title: 'Refused', status, retryable: false },
+                      problem: {
+                        type: 'about:blank',
+                        title: 'Overloaded',
+                        status,
+                        code: 'overloaded',
+                        retryable: true,
+                      },
                     }
-                  : { key: command.key, status: 201, value: { id: subjectId, revision: 1 } },
-          ),
-        });
-      }) as typeof fetch,
+                  : command.key === commands[3]!.key
+                    ? {
+                        key: command.key,
+                        status,
+                        problem: { type: 'about:blank', title: 'Refused', status, retryable: false },
+                      }
+                    : { key: command.key, status: 201, value: { id: subjectId, revision: 1 } },
+            ),
+          });
+        }) as typeof fetch,
+      });
+      const result = await transport.batch({ commands });
+      const retries = Object.keys(limits).length === 0;
+      expect(requests).toEqual(retries ? [{ commands }, { commands: [commands[1]] }] : [{ commands }]);
+      expect(result.results.map((r) => r.status)).toEqual([201, retries ? 201 : status, 403, status]);
     });
-    const result = await transport.batch({ commands });
-    expect(requests).toEqual([{ commands }, { commands: [commands[1]] }]);
-    expect(result.results.map((r) => r.status)).toEqual([201, 201, 403, status]);
-  });
-}
-
-for (const [options, expectedSends] of [
-  [{}, 3],
-  [{ maxWaitMs: 0 }, 1],
-  [{ maxTotalWaitMs: 100 }, 2],
-  [{ deadlineMs: 100 }, 1],
-] as const) {
-  test(`member overload retry bounds retain the last responses: ${JSON.stringify(options)}`, async () => {
-    let sends = 0;
-    let clock = 0;
-    const transport = createImportTransport({
-      origin: 'https://api.importer.test',
-      tokenProvider: async () => 'test-token',
-      ...options,
-      now: () => clock,
-      sleep: async (ms) => {
-        clock += ms;
-      },
-      fetch: (async (_request: Request) => {
-        sends++;
-        return Response.json({
-          results: [
-            {
-              key: commands[0]!.key,
-              status: 429,
-              problem: { type: 'about:blank', title: 'Overloaded', status: 429, retryable: true },
-            },
-          ],
-        });
-      }) as typeof fetch,
-    });
-    const result = await transport.batch({ commands: [commands[0]!] });
-    expect(sends).toBe(expectedSends);
-    expect(result.results[0]!.status).toBe(429);
-  });
+  }
 }
 
 test('one batch deadline cancels a pending member retry and releases its timer', async () => {
