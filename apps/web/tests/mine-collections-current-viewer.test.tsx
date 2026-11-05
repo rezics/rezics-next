@@ -44,15 +44,13 @@ const startWithServerFunctions = {
   ...start,
   createIsomorphicFn: () => {
     let server: (...args: never[]) => unknown = () => undefined;
-    let client: (...args: never[]) => unknown = () => undefined;
     const chain = {
       server(handler: typeof server) {
         server = handler;
         return chain;
       },
-      client(handler: typeof client) {
-        client = handler;
-        return (...args: never[]) => (typeof window === 'undefined' ? server : client)(...args);
+      client(_handler: (...args: never[]) => unknown) {
+        return (...args: never[]) => server(...args);
       },
     };
     return chain;
