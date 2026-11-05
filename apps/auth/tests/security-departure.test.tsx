@@ -307,7 +307,7 @@ test('Stay preserves a passkey prompt phase and focus; Leave retires it without 
   void staying;
 });
 
-test('pagehide and replacement restore preexisting inert and scroll without taking replacement focus', async () => {
+test.each([false, true])('replacement restores inert, scroll and focus (pagehide: %s)', async (pagehide) => {
   const retained = document.body.appendChild(document.createElement('aside'));
   retained.setAttribute('inert', 'retained');
   document.body.style.setProperty('overflow', 'scroll', 'important');
@@ -315,11 +315,11 @@ test('pagehide and replacement restore preexisting inert and scroll without taki
   await setPassword(ui.host, 'private password');
   await startNavigation(ui.router, '/next');
   expect(document.body.style.overflow).toBe('hidden');
-  await flush(() => window.dispatchEvent(new dom.Event('pagehide')));
+  if (pagehide) await flush(() => window.dispatchEvent(new dom.Event('pagehide')));
+  await ui.render(<button autoFocus>Replacement</button>);
   expect(document.body.style.getPropertyValue('overflow')).toBe('scroll');
   expect(document.body.style.getPropertyPriority('overflow')).toBe('important');
   expect(retained.getAttribute('inert')).toBe('retained');
-  await ui.render(<button autoFocus>Replacement</button>);
   expect(document.activeElement?.textContent).toBe('Replacement');
   expect(ui.host.querySelector('[inert]')).toBeNull();
   document.body.style.removeProperty('overflow');
