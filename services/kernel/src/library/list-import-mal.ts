@@ -92,7 +92,9 @@ export type MalScoreReview = {
       | 'source-score-absent';
   };
   conversion: 'owner-selected-not-exact';
-  question: Pick<RatingQuestion, 'id' | 'revision' | 'label' | 'meaning' | 'grain' | 'scale' | 'lifecycleState'>;
+  question: Pick<RatingQuestion, 'id' | 'revision' | 'label' | 'meaning' | 'grain' | 'lifecycleState'> & {
+    scale: Pick<RatingQuestion, 'minimumUnits' | 'maximumUnits' | 'stepUnits'>;
+  };
   units: number | null;
   replaceCurrent: boolean;
   support: { status: 'supported' | 'unsupported'; reason: string | null };
@@ -426,7 +428,7 @@ export function malMetadataProposals(row: MalRow): EntryImportMetadataProposals 
           };
   const privacyRaw = row.fields.my_privacy;
   const privacyToken = privacyRaw?.trim().toLowerCase();
-  const privacyMeaning =
+  const privacyMeaning: 'private' | 'source_visible' | null =
     privacyToken === 'private' || privacyToken === 'true'
       ? 'private'
       : privacyToken === 'public' || privacyToken === 'false'
@@ -765,9 +767,9 @@ export function createMalImport(deps: Dependencies) {
       meaning: question.meaning,
       grain: question.grain,
       scale: {
-        minimumUnits: question.scale.minimumUnits,
-        maximumUnits: question.scale.maximumUnits,
-        stepUnits: question.scale.stepUnits,
+        minimumUnits: question.minimumUnits,
+        maximumUnits: question.maximumUnits,
+        stepUnits: question.stepUnits,
       },
       lifecycleState: question.lifecycleState,
     };
