@@ -53,7 +53,7 @@ function row(n = 10, voice = false) {
       ...snak(stream(voice).property, voice ? id(4) : id(1)),
       id: id(n),
       rank: 'normal',
-      qualifiers: [snak(voice ? 'schema:character' : 'wdt:P3831', voice ? id(1) : id(3))],
+      qualifiers: [snak(voice ? 'wdt:P453' : 'wdt:P3831', voice ? id(1) : id(3))],
       references: [{ parts: [snak('schema:url', `https://source.test/assertion-${n}`, 'url')] }],
       rezics: { release: release.digest, revision: 1 },
     },
@@ -152,6 +152,7 @@ async function mounted(
       unlabelled: 'Unlabelled',
       spoilerShow: 'Reveal',
       relations: {},
+      relationNodes: [{ id: 'voice-credits', props: { property: 'wdt:P725' } }],
       sections: {},
       ...(context ? { context: { id: context, population: { kind: 'global' } } } : {}),
     } as any;
@@ -207,7 +208,7 @@ test('mounted anonymous Character keeps assertions separate, retries only credit
     await act(async () => retry.click());
     expect(calls.at(-1)?.only).toBe('credits');
     expect(host.textContent).toContain('Disclosed performer');
-    const more = Array.from(host.querySelectorAll('button')).find((b) => b.textContent?.includes('More'))!;
+    const more = Array.from(host.querySelectorAll('button')).find((b) => b.textContent?.includes('Next page'))!;
     await act(async () => more.click());
     expect(calls.at(-1)?.selection?.characters?.cursor).toBe('native-next');
     const target = host.querySelector<HTMLAnchorElement>(

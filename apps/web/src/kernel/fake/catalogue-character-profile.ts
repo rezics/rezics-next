@@ -137,6 +137,18 @@ export function characterProfileFixture(scenario: CharacterScenario = 'ready', l
       if (path.startsWith('/v1/definitions/releases/'))
         return json({ digest: scenario === 'stale' ? 'sha256:stale' : digest, release });
       if (path === `/v1/subjects/${work.id}`) return json(work.publicRead);
+      if (request.method === 'POST' && path === '/v1/viewerActions')
+        return json({
+          resources: (body as { resources: { type: string; id: string }[] }).resources.map(({ type, id }) => ({
+            type,
+            id,
+            viewerActions: [
+              { action: 'context:accept', operations: ['subject.accept_candidate', 'subject.reject_candidate'] },
+              { action: 'context:adopt', operations: ['subject.adopt'] },
+              { action: 'statement:propose', operations: ['subject.propose'] },
+            ],
+          })),
+        });
       if (path === `/v1/subjects/${characterProfileId}` && request.method === 'GET')
         return scenario === 'denied' ? json({}, 403) : json(character);
       if (path === `/v1/subjects/${characterCreatedId}` && request.method === 'GET')

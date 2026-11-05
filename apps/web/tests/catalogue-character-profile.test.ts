@@ -191,7 +191,9 @@ test('Character identity and credit editor uses actual released metadata native 
     key: crypto.randomUUID(),
   });
   expect(proposed.ok).toBe(true);
-  const creditWrite = fixture.work.calls.find((call) => call.method === 'POST');
+  const creditWrite = fixture.work.calls.find(
+    (call) => call.method === 'POST' && call.path.endsWith('/candidates'),
+  );
   expect(creditWrite?.path).toBe(`/v1/subjects/${fixture.work.id}/candidates`);
   expect(creditWrite?.body).toMatchObject({
     statement: {
@@ -218,6 +220,9 @@ test('character correction and uncertain creation retain native facts, keys and 
     type: 'value',
     content: { amount: '+171', unit: 'http://www.wikidata.org/entity/Q174728' },
   };
+  staged.statement.references = [
+    { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://source.test/height' } }] },
+  ];
   const sealed = sealFacts(characterProfileId, read.release, [staged]);
   let candidate: string | undefined;
   await sendFacts(sealed, fixture.props.facts(characterProfileId).propose, (_property, result) => {
