@@ -52,6 +52,12 @@ export type NativeHistoryPageDependencies = ContentReadDependencies &
 
 type AccountSummaryMap = Awaited<ReturnType<typeof readAccountDiscoverySummaries>>;
 type OptionalState = 'current' | 'unavailable';
+type HistorySubjects = Readonly<{
+  state: OptionalState;
+  retryable: boolean;
+  limit: typeof HISTORY_SUBJECT_LIMIT;
+  items: ReturnType<typeof subjectViews>;
+}>;
 
 function responseBytes(value: unknown): number {
   return new TextEncoder().encode(JSON.stringify(value)).byteLength;
@@ -561,6 +567,12 @@ export async function readContentHistoryPage(
   const mentionItems = identityState === 'current' ? mentionViews(mentions, identitySummaries) : [];
   const subjectItems =
     subjectState === 'current' && subjectObservation ? subjectViews(subjects, subjectObservation.summaries) : [];
+  const subjectContext: HistorySubjects = {
+    state: subjectState,
+    retryable: subjectState === 'unavailable',
+    limit: HISTORY_SUBJECT_LIMIT,
+    items: subjectItems,
+  };
   const imageItems = mediaState === 'current' ? mediaViews(media, mediaImages) : [];
   const unavailable =
     identityState === 'unavailable' ||
@@ -597,12 +609,7 @@ export async function readContentHistoryPage(
       retryable: identityState === 'unavailable',
       items: mentionItems,
     },
-    subjects: {
-      state: subjectState,
-      retryable: subjectState === 'unavailable',
-      limit: HISTORY_SUBJECT_LIMIT,
-      items: subjectItems,
-    },
+    subjects: subjectContext,
     reviewScores: review,
     media: {
       state: mediaState,

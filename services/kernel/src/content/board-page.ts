@@ -65,7 +65,9 @@ export type BoardOpeningCard = Readonly<{
     counts:
       | Readonly<{ state: 'as-of'; values: Readonly<Partial<Record<string, number>>>; source: ReactionCountFreshness }>
       | Readonly<{ state: 'unavailable' }>;
-    viewer: Readonly<{ state: 'current'; reaction: string | null }> | Readonly<{ state: 'not-applicable' }>;
+    viewer:
+      | Readonly<{ state: 'current'; reaction: ViewerReactionKind | null }>
+      | Readonly<{ state: 'not-applicable' }>;
   }>;
   comments: CommunityComments;
   actions: Readonly<{ reply: BoardAdvice; react: BoardAdvice; share: 'available' }>;

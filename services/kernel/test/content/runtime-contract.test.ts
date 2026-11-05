@@ -2,6 +2,7 @@ import { expect, expectTypeOf, mock, spyOn, test } from 'bun:test';
 import type { CurrentConsentReader } from '../../src/access/auth-consent.ts';
 import type { MediaImportFetchConfig } from '../../src/content/media-import.ts';
 import type { NativeAuthorErasureWorkflows } from '../../src/content/operation-contract.ts';
+import type { ContentBoardDependencies } from '../../src/content/boards.ts';
 import * as routes from '../../src/content/routes.ts';
 import type { ContentRuntime } from '../../src/content/runtime.ts';
 import type { TurnstileVerifier } from '../../src/content/turnstile.ts';
@@ -9,11 +10,11 @@ import { createPool } from '../../src/database/pool.ts';
 import { createKernel, type KernelDependencies } from '../../src/http/kernel.ts';
 import type { ContentShelfTitleInputs } from '../../src/library/shelf-title-content-source.ts';
 
-type KernelContent = ContentRuntime & {
-  cursorNow?: () => number;
-  readConsent?: CurrentConsentReader;
-  shelfTitleInputs?: ContentShelfTitleInputs;
-};
+type KernelContent = ContentRuntime &
+  Pick<ContentBoardDependencies, 'cursorNow'> & {
+    readConsent?: CurrentConsentReader;
+    shelfTitleInputs?: ContentShelfTitleInputs;
+  };
 test('trusted optional content runtime types retain exactly the three native ports', () => {
   expectTypeOf<ContentRuntime>().toEqualTypeOf<
     Readonly<{
