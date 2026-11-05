@@ -29,3 +29,11 @@ No outside checkout or undeclared risk files were opened. Commerce was sent the 
    canonical destination return and ordinary membership/privacy publication changes on retained stack.
 
 This is unfinished product work, not a blocker or completed Path 13 acceptance.
+
+Worker validation: `bun run --cwd apps/web typecheck` exited 1 with 466 TypeScript diagnostic lines. The same
+command on the clean aff08a643851773ed9d1e8c61965c895afb6db5e snapshot under .temp/collection-directory-base also
+exited 1 with the identical 466 diagnostics after normalizing remote run-directory paths (zero added/removed).
+Examples: community/realm-bans.ts BanReviewEndpoints call signatures; generated Kernel SQL module declarations.
+No changed file has a diagnostic. Full local logs: .temp/collection-directory-{base-,}typecheck.log.
+The focused address file passed all three tests; the existing directory test could not import cloudflare:workers
+from src/kernel/client.ts before assertions. Broader native/browser/root acceptance is deferred to integration.
