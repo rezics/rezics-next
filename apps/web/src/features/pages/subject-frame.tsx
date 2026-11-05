@@ -292,10 +292,11 @@ export function SubjectFrame({
         <div className="min-w-0 flex-1 space-y-0.5">
           <p className="flex min-w-0 flex-wrap items-baseline gap-x-3">
             <span
+              id="subject-heading"
+              tabIndex={-1}
               className={`${linkClass} ${frame.title.text ? linkColor : 'text-muted-foreground'} min-w-0 max-w-full font-sans text-lg font-semibold wrap-anywhere`}
             >
               <Link
-                id="subject-heading"
                 href={contextHref(withSubjectVisitReturn(base, returnTo ?? '', locale), realm)}
                 className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm whitespace-normal wrap-anywhere focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
                 {...(frame.title.lang ? { lang: frame.title.lang } : {})}
