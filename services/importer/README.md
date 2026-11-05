@@ -62,11 +62,11 @@ Only admitted source-site rows with a parsed public Bangumi /subject/N URL yield
 
 COPY conversion retains exact table origins and native keys. Null, empty and missing optional Latin cells remain distinct in the digest: exactly empty omits only the Romanized alias; whitespace, missing and wrong-type values remain errors. Selected release names do not rank from translation flags. Dates retain year/month/day precision; TBA, unknown and absent remain distinct. Producer parent/subsidiary directions and release supersession use only their admitted outgoing source rows; no reciprocal or chronology-based edge is invented. Completeness remains a qualifier gap where no released status property exists.
 
-Decision: selected tag plans return `sourceParents` with exact child/parent keys, category, path and preferred-parent flag. Cyclic, missing or cross-category ancestry withholds dependent edges. Source closure admits neither native hierarchy writes nor cross-provider equivalence.
+Decision: selected tag plans return `sourceParents` with exact child/parent keys, category, path and preferred-parent flag. Invalid ancestry (cycles, missing endpoints, category crossings) withholds edges. Source closure admits neither native hierarchy writes nor cross-provider equivalence.
 
 Public tags need selected COPY rows and current reviewed Scheme/Concept bindings. Kana weights need an exact current /vn response for the selected work/tag, retaining decimal rating, response digest and endpoint. Exclude user IDs, notes and votes; COPY votes are never weights, confidence or ratings. Changed or missing bindings withhold only their association.
 
-The selected-family seed reads selected releases/works and current reviewed development-status, platform and medium groups. Vocabulary reseeds reuse the current seed result and latest verified groups, including released-state groups and exact keys. Changed bindings reseed the same plan; missing/retracted classification withholds only its association with an addressable gap. Independent dates, names and editorial choices survive. TBA/unknown never means unreleased.
+Selected-family release seeds read only selected works/releases and current reviewed development-status/platform/medium groups. Reseeds reuse the current seed result, latest verified groups, released states and exact keys. Changed bindings reseed the same plan; missing/retracted classification gaps withhold only that association. Dates, names and editorial choices survive; TBA/unknown never means unreleased.
 
 ### Wikidata exact values
 
