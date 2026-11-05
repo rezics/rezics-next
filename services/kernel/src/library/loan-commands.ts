@@ -523,7 +523,10 @@ export function createLoanCommands(config: Dependencies) {
     const operationDeadline = deadline ?? deadlineFor(WORK_STEP_DEADLINE_MS);
     return withRequestDeadline(operationDeadline, () =>
       readOnly(pool, owner, async (client) => {
-        const generationRow = await executeLoanNative(client, loanGenerationPlan({ route, accountId: owner.accountId }));
+        const generationRow = await executeLoanNative(
+          client,
+          loanGenerationPlan({ route, accountId: owner.accountId }),
+        );
         const generation = Number(generationRow.rows[0]?.generation ?? 1);
         let after = cursor ? cursorAfter(tokens, binding, cursor, generation, filter) : null;
         if (after?.undated === null) {
