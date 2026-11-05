@@ -15,7 +15,9 @@ export function createSubjectTextRetryController<Target extends object>() {
     begin(target: Target): SubjectTextRetryToken<Target> | null {
       if (selected !== target || pending) return null;
       const controller = new AbortController();
-      return (pending = { target, signal: controller.signal, controller });
+      const token = { target, signal: controller.signal, controller };
+      pending = token;
+      return token;
     },
     isCurrent(token: SubjectTextRetryToken<Target>) {
       return selected === token.target && pending === token && !token.signal.aborted;
