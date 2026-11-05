@@ -454,6 +454,7 @@ export class RecordBindings {
 
   /** Bind only a matching successful public command result; exact acknowledgements are replayable. */
   acknowledge(input: Owner, key: string, result: BatchWriteResult): void {
+    console.error(`DIAG batch result ${key}: ${JSON.stringify(result).slice(0, 3000)}`);
     const o = ownerInput(input);
     requestKey(o, key);
     const { value, bytes } = snapshot(result);
