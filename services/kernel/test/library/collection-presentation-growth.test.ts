@@ -324,7 +324,7 @@ test('native fixed selection branches and first/deep keyset reads stay bounded o
       let cursor: string | null = null;
       do {
         deep = cursor;
-        const page = await reads.listCollections(actor, {
+        const page: { next: string | null } = await reads.listCollections(actor, {
           curatorAccountId: f.owner.accountId,
           limit: 8,
           ...(cursor ? { cursor } : {}),
