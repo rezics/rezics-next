@@ -56,10 +56,15 @@ test.each(['reload', 'readback'] as const)(
     const first = structuredClone(snapshot);
     first.next = 'next-page';
     const initial = source === 'reload' ? { status: 'ready' as const, page: first } : ready;
+    const restarted = Promise.withResolvers<void>();
     const controller = new AccessRecovery(initial, {
       read: () => (++reads === 1 ? deferred.promise : Promise.reject(new Error('Unavailable'))),
       save: async () => ({ status: 'saved' }),
       lookup: async () => null,
+    });
+    const unsubscribe = controller.subscribe(() => {
+      const state = controller.snapshot();
+      if (state.page.status === 'unavailable' && !state.busy) restarted.resolve();
     });
     const reading = source === 'reload' ? controller.next() : controller.submit(change);
     await Promise.resolve();
@@ -67,6 +72,8 @@ test.each(['reload', 'readback'] as const)(
     controller.activate();
     deferred.resolve(ready);
     await reading;
+    await restarted.promise;
+    unsubscribe();
     expect(controller.snapshot()).toMatchObject({ page: { status: 'unavailable' }, busy: false, pending: null });
     expect(controller.snapshot().phase).toBe(source === 'readback' ? 'saved' : 'idle');
   },
