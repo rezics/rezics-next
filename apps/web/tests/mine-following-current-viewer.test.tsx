@@ -73,6 +73,7 @@ test('the actual Following server exports refuse stale preparation without priva
       subject: null,
       cursor: 'private/address+',
       locale: 'en',
+      kind: 'all',
       page,
     });
     expect(current.preparations - before).toBe(1);
@@ -89,6 +90,7 @@ test('the actual Following server exports refuse stale preparation without priva
       subject: null,
       cursor: '',
       locale: 'en',
+      kind: 'all',
       page,
     });
     expect(privateCalls).toBe(0);
@@ -146,8 +148,8 @@ test('the actual envelope names returned targets and carries the reader-prepared
     expect(named[0]).toBe(target);
     expect(named[1]).toBeNull();
     expect(calls.map((call) => Object.fromEntries(new URL(call.url).searchParams))).toEqual([
-      { view: 'FULL', limit: '100', cursor: address },
-      { view: 'FULL', limit: '100' },
+      { view: 'FULL', limit: '20', cursor: address },
+      { view: 'FULL', limit: '20' },
     ]);
     expect(calls.every((call) => call.headers.get('authorization') === 'Bearer opaque-not-a-decoded-identity')).toBe(
       true,
@@ -296,12 +298,14 @@ test('the mounted default Following composition retires viewer, cursor and row l
       call.resolve(result);
       await tick();
     });
-  const key = (cursor: string | null) => mineFollowingQuery('B', cursor, getLocale()).queryKey;
-  const refetch = (cursor: string | null) =>
+  const key = (subject: string, cursor: string | null) =>
+    mineFollowingQuery(subject, cursor, getLocale()).queryKey;
+  const refetchFor = (subject: string, cursor: string | null) =>
     act(async () => {
-      void client.refetchQueries({ queryKey: key(cursor) });
+      void client.refetchQueries({ queryKey: key(subject, cursor) });
       await tick();
     });
+  const refetch = (cursor: string | null) => refetchFor('B', cursor);
   const remove = async () => {
     await act(async () => {
       host.querySelector<HTMLButtonElement>('[data-slot="follow-control"] button')!.click();
@@ -331,6 +335,7 @@ test('the mounted default Following composition retires viewer, cursor and row l
       await tick();
     });
     expect(host.textContent).toContain('A private title');
+    await refetchFor('A', null); // Loader data seeds this visit; explicitly read to exercise late-viewer retirement.
     expect(reads).toHaveLength(1);
     await remove();
     expect(writes).toHaveLength(0);
@@ -482,6 +487,7 @@ test('the actual Following reset envelope preserves the originating prepared vie
       subject: 'reset-owner',
       cursor: 'expired/original+address=',
       locale: 'en',
+      kind: 'all',
       page: { signedIn: true, follows: [], next: null, cursorReset: true },
     });
     expect(current.preparations - before).toBe(1);
@@ -647,6 +653,7 @@ test('Following recovery stays page-local through terminal pages, last-row remov
       );
       await tick();
     });
+    await refetch('A', 'terminal/page+'); // Loader data seeds direct visits without an automatic reread.
     expect(reads).toHaveLength(1);
     await settle(reads[0]!, initial);
     expect(host.textContent).toContain('Last visible row');
