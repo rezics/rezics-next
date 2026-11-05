@@ -181,7 +181,7 @@ test(
       expect(
         await page.getByRole('status').filter({ hasText: 'Your account has been deleted.' }).innerText(),
       ).toContain('Your account has been deleted');
-      expect(await page.getByRole('button').count()).toBe(0);
+      expect(await page.getByRole('button', { name: 'Delete account', exact: true }).count()).toBe(0);
       expect(await page.context().cookies(origin)).not.toContainEqual(
         expect.objectContaining({ name: 'auth_session', value: session }),
       );

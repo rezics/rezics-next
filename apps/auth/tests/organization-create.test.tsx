@@ -101,3 +101,21 @@ test('malformed execution preserves submitted original operands and requires a d
   await flush(() => button(page.host, 'Retry this creation')!.click());
   expect(page.calls[2]!.body).toEqual({ operationKey: original.operationKey, operation: original.operation });
 });
+
+test('refusing the submitted marker preserves the original descriptor and sends no execution', async () => {
+  const page = await open(<NewOrganizationPage initial={initial} />, body);
+  await flush(() => fill(page.host.querySelector('input')!, 'team-alpha'));
+  await flush(() => send(page.host));
+  const original = readPendingAccountOperationStepUp()!;
+  const write = spyOn(window.sessionStorage, 'setItem').mockImplementation(() => {
+    throw new Error('storage refused');
+  });
+  try {
+    await flush(() => page.calls[0]!.resolve(approval()));
+    expect(page.calls).toHaveLength(1);
+    expect(readPendingAccountOperationStepUp()).toEqual(original);
+    expect(page.host.textContent).not.toContain('was created');
+  } finally {
+    write.mockRestore();
+  }
+});
