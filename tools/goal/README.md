@@ -1360,6 +1360,20 @@ The tracked repository gate is `bun tools/goal/scripts/gate.ts`. It runs `bun in
 independent verifier runs them after integration; a failure is reported with the command and first failure and does
 not hold the landing train. Main promotion retains its task acceptance gates. Integration rebases onto the integration
 branch, checks declared paths, formats changes and fast-forwards that branch without moving `main`.
+Decision: Each final dev candidate runs Bun's unbundled transpile over its changed executable TypeScript files before publication; compiler diagnostics return through the same worker session without a failed attempt outcome.
+The train compares the exact target base with the recomposed candidate after replay and formatting, and applies this check to
+direct, combined, resolver-replayed and untargeted control-plane dev landings. It passes existing `.ts`, `.tsx`, `.mts` and
+`.cts` files as argv-safe entry points to Bun `build --no-bundle`; deleted files, declarations and other extensions are
+skipped. A compiler error keeps its absolute log and first file/line diagnostic, then resumes the original worker session
+through the existing retry continuation. The repaired source follows normal landing preparation and must pass a fresh
+candidate transpile. Successful checks and nonterminal repairs appear in the existing flow report.
+
+This check establishes only that Bun can transpile each changed source entry. It does not validate imports or dependencies,
+import cycles, TypeScript types, application boot, native checks or acceptance. The root typecheck, optional boot check,
+independent verifier and main promotion retain their existing policies. The target cost is below one second for a typical
+landing; the observed disposable-fixture command cost is recorded with the `dev-landing-transpile` guard below.
+The measured fixture was 7ms for 7 changed paths, 4 executable TypeScript entries and 180 source bytes; this is one
+sample against the target, not a claim that all landings meet it.
 Promotion gates on correctness only: the root gate and the promoted tasks' own acceptance. Capability completion
 (`docs/goals/<goal>.capabilities.md`) is reported by the completion checker on `main` and never blocks a promotion,
 so `main` receives finished work while other In rows are still open.

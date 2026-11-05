@@ -384,7 +384,7 @@ function usageSummary(db: Database, bucket: UtcHour): string {
 }
 
 function guardEndingLine(db: Database, bucket: UtcHour): string {
-  if (!hasTable(db, 'worker_records')) return 'Guard endings in bucket: unknown (attempt history unavailable).';
+  if (!hasTable(db, 'worker_records')) return 'Guard firings in bucket: unknown (attempt history unavailable).';
   migrate(db, [workerRecordEndedAtMigration]);
   const records = db
     .query(
@@ -395,8 +395,8 @@ function guardEndingLine(db: Database, bucket: UtcHour): string {
     .map((row) => JSON.parse((row as { body: string }).body) as AttemptRecord);
   const counts = guardEndingCounts(records, bucket.start, bucket.end);
   return counts.length
-    ? `Guard endings in bucket: ${counts.map(({ guardId, firings }) => `${guardId} ${firings}`).join('; ')}.`
-    : 'Guard endings in bucket: none recorded.';
+    ? `Guard firings in bucket: ${counts.map(({ guardId, firings }) => `${guardId} ${firings}`).join('; ')}.`
+    : 'Guard firings in bucket: none recorded.';
 }
 
 function promotionSummary(db: Database, metrics: ReturnType<typeof lifecycleMetrics> | null): string {

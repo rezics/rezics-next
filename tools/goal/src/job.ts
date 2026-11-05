@@ -13,7 +13,15 @@ import { existsSync, mkdirSync, lstatSync, readdirSync, readFileSync, statSync, 
 import { watchOrPoll, type Watching } from './watch-or-poll.ts';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { observeWorkerChecks } from './worker-check-observation.ts';
-import type { GateOutcome, GateOutcomeSink, LandingQueue, ManagerInbox, AttemptRef } from './contracts.ts';
+import type {
+  DevLandingTranspileHandoff,
+  GateOutcome,
+  GateOutcomeSink,
+  LandingQueue,
+  ManagerInbox,
+  AttemptRef,
+} from './contracts.ts';
+import { recordFlow } from './flow.ts';
 import {
   liveGroups,
   processGroupCpuTicks,
@@ -30,7 +38,7 @@ import { assessUsageLimitRefusal, markExhausted } from './usage.ts';
 import { StaleAttemptError } from './contracts.ts';
 import { acquireDirectoryLease, acquireDirectoryLeaseWaiting, LeaseHeldError, type DirectoryLease } from './lease.ts';
 import { classifyFailure, estimateOverrun } from './failures.ts';
-import { ensureGateOutcomeRefusal, guardIdsForFailure } from './guards.ts';
+import { ensureGateOutcomeRefusal, guardIdsForFailure, type GuardId } from './guards.ts';
 import { controlPlaneReleaseBrief, devProductBrief, matchesPath } from './briefs.ts';
 import { blockerFingerprint, noProgressTwice, toolRetryDelay } from './attempt-progress.ts';
 import { checkHostsInOutage } from './watchdog.ts';
@@ -1796,6 +1804,66 @@ export class WorkerJob implements GateOutcomeSink {
     }
     return options;
   }
+  onDevLandingTranspileHandoff(handoff: DevLandingTranspileHandoff): void {
+    const store = this.tasks.store;
+    const ref = { taskId: handoff.taskId, attempt: handoff.attempt };
+    store.assertCurrent(ref);
+    const task = store.task(ref.taskId);
+    const record = store.record(ref);
+    if (!record) throw new Error('dev landing compiler handback requires a settled worker record');
+    const diagnostic = [
+      `Bun rejected dev candidate ${handoff.candidate} based on ${handoff.base}.`,
+      `Original source commit: ${handoff.sourceCommit}. Task ${handoff.taskId} attempt ${handoff.attempt}.`,
+      `Compiler error: ${handoff.diagnostic.file ?? handoff.typescriptFiles[0]}${handoff.diagnostic.line ? `:${handoff.diagnostic.line}` : ''}${handoff.diagnostic.column ? `:${handoff.diagnostic.column}` : ''}: ${handoff.diagnostic.message}`,
+      `Retained compiler log: ${handoff.logPath}`,
+      `Changed TypeScript files: ${handoff.typescriptFiles.join(', ')}`,
+      'Repair this source in place, then return through normal landing preparation in this same task session.',
+    ].join('\n');
+    let schedule = false;
+    store.write(ref, () => {
+      if (store.events(ref.taskId, ref.attempt).some((event) => event.kind === 'dev-landing-transpile-returned')) return;
+      record.guardIds = [...new Set<GuardId>([...(record.guardIds ?? []), 'dev-landing-transpile'])];
+      store.putRecord(record);
+      store.event(ref, 'dev-landing-transpile-returned', {
+        entryId: handoff.entryId,
+        sourceCommit: handoff.sourceCommit,
+        candidate: handoff.candidate,
+        base: handoff.base,
+        diagnostic,
+        compilerDiagnostic: handoff.diagnostic,
+        logPath: handoff.logPath,
+      });
+      recordFlow(store.db, {
+        ...ref,
+        stage: 'landing',
+        action: 'dev-transpile',
+        at: new Date().toISOString(),
+        detail: JSON.stringify({
+          outcome: 'repair-handback',
+          base: handoff.base,
+          candidate: handoff.candidate,
+          changedFileCount: handoff.changedFiles.length,
+          typescriptFileCount: handoff.typescriptFiles.length,
+          elapsedMs: handoff.elapsedMs,
+          logPath: handoff.logPath,
+          diagnostic: handoff.diagnostic,
+          sourceCommit: handoff.sourceCommit,
+        }),
+      });
+      if (task.state === 'landing') store.updateTask(ref, (current) => (current.state = 'ready'));
+      const existing = store.retryIntent(ref);
+      if (existing) {
+        if (existing.status !== 'pending') throw new Error('dev landing repair handback found a non-pending retry intent');
+        store.updateRetryIntent(ref, (intent) => {
+          intent.options.landingDiagnostic = diagnostic;
+        });
+      } else {
+        store.saveRetryIntent(ref, { landingDiagnostic: diagnostic });
+      }
+      schedule = true;
+    });
+    if (schedule) this.track(this.runRetryIntent(ref));
+  }
   onGateOutcome(outcome: GateOutcome): void {
     const store = this.tasks.store;
     ensureGateOutcomeRefusal(outcome);
@@ -1820,6 +1888,17 @@ export class WorkerJob implements GateOutcomeSink {
         return;
       }
       store.event(outcome, 'gate-outcome', outcome);
+      if (outcome.devTranspile && !store.events(outcome.taskId, outcome.attempt).some((event) => event.kind === 'dev-landing-transpile-recorded')) {
+        store.event(outcome, 'dev-landing-transpile-recorded', outcome.devTranspile);
+        recordFlow(store.db, {
+          taskId: outcome.taskId,
+          attempt: outcome.attempt,
+          stage: 'landing',
+          action: 'dev-transpile',
+          at: new Date().toISOString(),
+          detail: JSON.stringify(outcome.devTranspile),
+        });
+      }
       record.diffLines = outcome.diffLines;
       record.changedFiles = [...outcome.changedFiles];
       // Declared paths say where the work is expected, not a fence: the record keeps every file changed outside them.
@@ -1836,7 +1915,7 @@ export class WorkerJob implements GateOutcomeSink {
       record.firstFailure = outcome.firstFailure?.fingerprint ?? null;
       record.outcome = outcome.passed ? 'passed' : 'gate-failed';
       if (outcome.passed) {
-        delete record.guardIds;
+        if (!record.guardIds?.includes('dev-landing-transpile')) delete record.guardIds;
         if (outcome.mergedCommit) {
           const plan = store.integrationPlan(outcome);
           let alreadyOnMain = false;
@@ -2064,7 +2143,12 @@ export class WorkerJob implements GateOutcomeSink {
         this.hasCommit(outcome),
         this.policy.brief,
       );
-      record.guardIds = guardIdsForFailure(failureClass, outcome.refusal);
+      record.guardIds = [
+        ...new Set([
+          ...guardIdsForFailure(failureClass, outcome.refusal),
+          ...(record.guardIds?.includes('dev-landing-transpile') ? ['dev-landing-transpile' as const] : []),
+        ]),
+      ];
       record.escalation = failureClass;
       record.earlyStop = !attempt.blocker || /RESULT:\s*success/i.test(attempt.result);
       store.updateAttempt(outcome, (a) => {

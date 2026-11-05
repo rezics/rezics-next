@@ -81,6 +81,12 @@ export const GUARDS = {
     since: '2026-11-05',
     repair: 'Keep the protected file unchanged or declare its owning risk area.',
   },
+  'dev-landing-transpile': {
+    defect: 'A changed dev TypeScript file contains a compile error, including the observed boot-breaking const reassignment.',
+    owner: 'control-plane',
+    since: '2026-11-05',
+    repair: 'Return the first Bun diagnostic and retained log to the original worker session; repair in place and transpile the recomposed candidate before landing. Cost target: <1000ms per typical landing. Measured disposable fixture: 7ms for 7 changed files, 4 executable TypeScript entries and 180 source bytes.',
+  },
   'round-limit': {
     defect: 'The attempt reached its configured repair round limit.',
     owner: 'manager',

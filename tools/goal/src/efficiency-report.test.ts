@@ -83,7 +83,7 @@ test('hourly report uses timestamped outcomes and leaves missing lifecycle evide
     expect(report).toContain('Landing identities: landed#2 at 2026-10-31T01:10:00.000Z (dev).');
     expect(report).toContain('Last useful landing: landed#2 at 2026-10-31T01:10:00.000Z.');
     expect(report).toContain('Worker starts / finishes in bucket: 2 starts (including resumes) / 1 finished attempts.');
-    expect(report).toContain('Guard endings in bucket: new-failure 1; environment 1.');
+    expect(report).toContain('Guard firings in bucket: new-failure 1; environment 1.');
     expect(report).toContain('Current landing queue age: 1 queued attempts; oldest 2700000 ms.');
     expect(report).toContain('queued#1');
     expect(report).toContain('Orphaned landings: 1 (orphan).');
@@ -103,7 +103,7 @@ test('hourly report uses timestamped outcomes and leaves missing lifecycle evide
     expect(report).toContain('Last useful landing: unknown');
     expect(report).toContain('Current waits: unknown (current task state unavailable).');
     expect(report).toContain('Promotion: unknown (promotion state unavailable).');
-    expect(report).toContain('Guard endings in bucket: unknown (attempt history unavailable).');
+    expect(report).toContain('Guard firings in bucket: unknown (attempt history unavailable).');
     expect(report).toContain('Recorded usage: unknown (attempt history unavailable)');
   } finally {
     db.close();
@@ -214,7 +214,7 @@ test('guard endings use the record timestamp and an indexed bucket despite growi
       )
       .all(bucket, end) as { detail: string }[];
     expect(after).toBe(before);
-    expect(after).toContain('Guard endings in bucket: environment 1.');
+    expect(after).toContain('Guard firings in bucket: environment 1.');
     expect(plan.map(({ detail }) => detail).join(' ')).toContain(
       'SEARCH worker_records USING INDEX worker_records_ended_at',
     );

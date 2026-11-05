@@ -211,6 +211,8 @@ export type RetryOptions = {
   freshSession?: boolean;
   /** The page-data controller may resume one integrated task when its retained provider session is available. */
   pageDataRepairKey?: string;
+  /** Exact compiler feedback returned from a dev landing, delivered through the retained worker session. */
+  landingDiagnostic?: string;
 };
 /** Metadata-only first/future proof registration, including stopped/exited runs with historical reservations. */
 export type ProofStartOptions = {
@@ -1719,6 +1721,7 @@ export class WorkerTasks {
               renderWorkerPrompt({
                 task,
                 evidence: options.evidence,
+                landingDiagnostic: options.landingDiagnostic,
                 resolutionFiles: [],
                 mainCheckout: this.settings.mainCheckout,
                 launchContext: context,
@@ -1772,6 +1775,7 @@ export class WorkerTasks {
                 task,
                 evidence: options.evidence,
                 consultation: options.consultation,
+                landingDiagnostic: options.landingDiagnostic,
                 resolutionFiles: [],
                 mainCheckout: this.settings.mainCheckout,
                 launchContext: context,
@@ -1874,6 +1878,7 @@ export class WorkerTasks {
             task,
             evidence: options.evidence,
             consultation: options.consultation,
+            landingDiagnostic: options.landingDiagnostic,
             resolutionFiles: files,
             mainCheckout: this.settings.mainCheckout,
             launchContext: context,

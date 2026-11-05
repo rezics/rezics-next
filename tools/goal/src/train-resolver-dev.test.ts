@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { agentAdapter, withAgentAdapter } from './agents.ts';
 import { MergeTrain } from './merge-train.ts';
@@ -10,6 +10,7 @@ import { integrationHarness } from './test-support.ts';
 import { lifecycleMetrics } from './lifecycle-metrics.ts';
 import { formatLifecycleMetrics } from './report.ts';
 import { codexAdapter } from './agents/codex.ts';
+import { flowReport, readFlow, readFlowTasks } from './flow.ts';
 
 const file = 'packages/fixture/value.ts';
 const base = 'export const value = "base";\n';
@@ -48,6 +49,9 @@ function train(h: ReturnType<typeof integrationHarness>): MergeTrain {
       onGateOutcome(outcome) {
         h.outcomes.push(outcome);
         h.job.onGateOutcome(outcome);
+      },
+      onDevLandingTranspileHandoff(handoff) {
+        h.job.onDevLandingTranspileHandoff(handoff);
       },
     },
     trainResolver: new TrainResolver(h.store, h.tasks),
@@ -439,3 +443,178 @@ test('a failed resolver returns the conflict to the same worker attempt session'
     h.dispose();
   }
 }, 30_000);
+
+test('a dev compile defect returns to the original worker session, repairs in place and lands only after a fresh transpile', async () => {
+  const h = integrationHarness();
+  const file = 'packages/fixture/const-reassignment.ts';
+  let resumedSession: string | undefined;
+  let repairPrompt = '';
+  const script = `
+    const fs = require('node:fs');
+    const path = require('node:path');
+    const { spawnSync } = require('node:child_process');
+    const file = ${JSON.stringify(file)};
+    const content = process.env.GOAL_ATTEMPT === '1'
+      ? 'const count = 1;\\ncount = 2;\\nexport { count };\\n'
+      : 'export const count = 2;\\n';
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, content);
+    const committed = spawnSync('git', ['add', '--', file], { stdio: 'ignore' });
+    if (committed.status !== 0 || spawnSync('git', ['commit', '-qm', 'Worker fixture source']).status !== 0) process.exit(2);
+    console.log(JSON.stringify({ type: 'thread.started', thread_id: 'compiler-repair-session' }));
+    console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'RESULT: success' } }));
+    console.log(JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 10, output_tokens: 2 } }));
+  `;
+  const adapter = {
+    ...codexAdapter,
+    start() {
+      return [process.execPath, ['-e', script]] as [string, string[]];
+    },
+    resume(options: Parameters<NonNullable<typeof codexAdapter.resume>>[0]) {
+      resumedSession = options.session;
+      repairPrompt = options.prompt;
+      return [process.execPath, ['-e', script]] as [string, string[]];
+    },
+  };
+  try {
+    h.settings.integration.devLandingChecks = false;
+    h.ensureDev();
+    const task = h.dispatch(file);
+    await withAgentAdapter(adapter, async () => {
+      await h.start(task);
+      const brokenSource = git(task.worktree, 'rev-parse', 'HEAD');
+      await h.train();
+      expect(resumedSession).toBe('compiler-repair-session');
+      expect(repairPrompt).toContain('Bun rejected dev candidate');
+      expect(repairPrompt).toContain('const-reassignment.ts:2:');
+      expect(repairPrompt).toContain('Retained compiler log:');
+      const retry = h.store.task(task.id);
+      expect(retry.currentAttempt).toBe(2);
+      expect(git(task.worktree, 'rev-parse', 'HEAD')).not.toBe(brokenSource);
+      await h.train();
+    });
+    const diagnosticEvent = h.store.events(task.id, 1).find((event) => event.kind === 'dev-landing-transpile-returned');
+    const diagnostic = JSON.parse(diagnosticEvent!.body) as {
+      sourceCommit: string;
+      candidate: string;
+      logPath: string;
+      diagnostic: string;
+      compilerDiagnostic: { file: string; line: number; column: number; message: string };
+    };
+    expect(diagnostic.sourceCommit).toBe(git(task.worktree, 'rev-parse', 'HEAD~1'));
+    expect(diagnostic.candidate).toMatch(/^[0-9a-f]{40}$/);
+    expect(diagnostic.logPath.startsWith('/')).toBe(true);
+    expect(existsSync(diagnostic.logPath)).toBe(true);
+    expect(existsSync(diagnostic.compilerDiagnostic.file)).toBe(true);
+    expect(diagnostic.compilerDiagnostic).toMatchObject({ file: join(task.worktree, file), line: 2 });
+    expect(readFileSync(diagnostic.logPath, 'utf8')).toContain('Dev landing transpile diagnostic:');
+    expect(diagnostic.diagnostic).toContain('constant');
+    expect(h.store.record({ taskId: task.id, attempt: 1 })?.outcome).toBe('superseded');
+    expect(h.store.attempt({ taskId: task.id, attempt: 1 }).state).toBe('superseded');
+    expect(h.store.events(task.id, 1).filter((event) => event.kind === 'gate-outcome')).toHaveLength(0);
+    expect(h.store.record({ taskId: task.id, attempt: 1 })?.guardIds).toContain('dev-landing-transpile');
+    expect(h.store.task(task.id).state).toBe('integrated');
+    const landed = git(h.root, 'show', `dev:${file}`);
+    expect(landed).toBe('export const count = 2;');
+    const outcome = h.outcomes.find((item) => item.taskId === task.id && item.passed)!;
+    expect(git(h.root, 'rev-parse', 'dev')).toBe(outcome.devTranspile!.candidate);
+    expect(outcome.devTranspile).toMatchObject({ outcome: 'passed', typescriptFileCount: 1 });
+    const price = flowReport(readFlow(h.store.db), readFlowTasks(h.store.db));
+    expect(price.devTranspile).toMatchObject({ successfulChecks: 1, repairHandbacks: 1, unavailable: 0, measuredChecks: 2 });
+    expect(price.devTranspile.totalMs).toBeGreaterThanOrEqual(0);
+  } finally {
+    h.dispose();
+  }
+}, 60_000);
+
+test('the combined dev candidate is transpiled once with all changed TypeScript entries', async () => {
+  const h = integrationHarness();
+  try {
+    h.settings.integration.devLandingChecks = false;
+    h.settings.integration.batchSize = 2;
+    h.ensureDev();
+    const entries = ['packages/fixture/combined-a.ts', 'packages/fixture/combined-b.ts'];
+    const tasks = entries.map((path) => h.dispatch(path));
+    for (const [index, task] of tasks.entries()) {
+      const path = entries[index]!;
+      writeFileSync(
+        join(task.worktree, '.temp/worker-plan.json'),
+        JSON.stringify({ file: path, content: `export const value${index} = ${index};\n` }),
+      );
+      await h.start(task);
+    }
+    await h.train();
+    const combined = h.outcomes.find((outcome) => outcome.devTranspile);
+    expect(combined?.devTranspile).toMatchObject({ outcome: 'passed', changedFileCount: 2, typescriptFileCount: 2 });
+    for (const path of entries) expect(git(h.root, 'show', `dev:${path}`)).toContain('export const value');
+    const events = readFlow(h.store.db).filter((event) => event.action === 'dev-transpile');
+    expect(events).toHaveLength(1);
+    expect(flowReport(events, readFlowTasks(h.store.db)).devTranspile.successfulChecks).toBe(1);
+  } finally {
+    h.dispose();
+  }
+}, 60_000);
+
+test('control-plane source that lands on dev receives the same changed-file transpile', async () => {
+  const h = integrationHarness();
+  try {
+    h.settings.integration.devLandingChecks = false;
+    h.ensureDev();
+    const path = 'tools/goal/src/control-plane-fixture.ts';
+    const task = h.dispatch(path, [], ['true'], 'control-plane');
+    writeFileSync(
+      join(task.worktree, '.temp/worker-plan.json'),
+      JSON.stringify({ file: path, content: 'export const controlPlaneFixture = true;\n' }),
+    );
+    await h.start(task);
+    await h.train();
+    const outcome = h.outcomes.find((item) => item.taskId === task.id && item.passed)!;
+    expect(outcome.devTranspile).toMatchObject({ outcome: 'passed', changedFileCount: 1, typescriptFileCount: 1 });
+    expect(git(h.root, 'show', `dev:${path}`)).toBe('export const controlPlaneFixture = true;');
+  } finally {
+    h.dispose();
+  }
+}, 60_000);
+
+test('a moving dev head replays the candidate and publishes only the freshly transpiled result', async () => {
+  const h = integrationHarness();
+  try {
+    h.settings.integration.devLandingChecks = false;
+    h.ensureDev();
+    const path = 'packages/fixture/replay.ts';
+    const task = h.dispatch(path);
+    writeFileSync(
+      join(task.worktree, '.temp/worker-plan.json'),
+      JSON.stringify({ file: path, content: 'export const replayed = true;\n' }),
+    );
+    await h.start(task);
+    let moved = false;
+    const train = new MergeTrain({
+      ...h.settings,
+      queue: h.queue,
+      fence: h.store,
+      sink: {
+        onGateOutcome(outcome) {
+          h.outcomes.push(outcome);
+          h.job.onGateOutcome(outcome);
+        },
+      },
+      beforeIntegrationAdvance() {
+        if (moved) return;
+        moved = true;
+        h.advanceDev('packages/fixture/replay-peer.ts', 'export const peer = true;\n');
+      },
+    });
+    await train.run();
+    await h.job.drain();
+    expect(moved).toBe(true);
+    expect(git(h.root, 'show', `dev:${path}`)).toBe('export const replayed = true;');
+    expect(git(h.root, 'show', 'dev:packages/fixture/replay-peer.ts')).toBe('export const peer = true;');
+    const outcome = h.outcomes.find((item) => item.taskId === task.id && item.passed)!;
+    expect(git(h.root, 'rev-parse', 'dev')).toBe(outcome.devTranspile!.candidate);
+    const report = flowReport(readFlow(h.store.db), readFlowTasks(h.store.db));
+    expect(report.devTranspile).toMatchObject({ successfulChecks: 1, repairHandbacks: 0, measuredChecks: 1 });
+  } finally {
+    h.dispose();
+  }
+}, 60_000);
