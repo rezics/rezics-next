@@ -37,13 +37,19 @@ test('retry allows one read per visit and rejects a late result after the visit 
   const nextVisit = { visit: 2 };
   retry.select(firstVisit);
   const first = retry.begin(firstVisit)!;
+  expect(first.signal.aborted).toBe(false);
   expect(retry.begin(firstVisit)).toBeNull();
   retry.select(nextVisit);
+  retry.retire(firstVisit);
+  expect(first.signal.aborted).toBe(true);
   const next = retry.begin(nextVisit)!;
+  expect(next.signal).not.toBe(first.signal);
   expect(retry.isCurrent(first)).toBe(false);
   expect(retry.isCurrent(next)).toBe(true);
   retry.finish(first);
   expect(retry.isCurrent(next)).toBe(true);
+  retry.retire(nextVisit);
+  expect(next.signal.aborted).toBe(true);
 });
 
 test('failed text keeps a real document navigation fallback', () => {

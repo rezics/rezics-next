@@ -1212,8 +1212,13 @@ type SummaryRetryController = {
   begin(target: SummaryRetryTarget): SubjectTextRetryToken<SummaryRetryTarget> | null;
   isCurrent(token: SubjectTextRetryToken<SummaryRetryTarget>): boolean;
   finish(token: SubjectTextRetryToken<SummaryRetryTarget>): void;
+  retire(target?: SummaryRetryTarget): void;
 };
-type SummaryRetryState = { target: SummaryRetryTarget; status: 'pending' | 'failed' | 'read' };
+type SummaryRetryState = {
+  target: SummaryRetryTarget;
+  attempt: SubjectTextRetryToken<SummaryRetryTarget>;
+  status: 'pending' | 'failed' | 'read';
+};
 
 function summaryRetryReference(
   candidate: Pick<SynopsisChoice, 'statement' | 'language'> | SummaryCandidate | undefined,
@@ -1389,6 +1394,7 @@ function SummaryContent({
       session.subject,
       read.subject.id,
       read.subject.context,
+      sourceKey,
       revision,
       selectedChoice?.statement.id,
       reference?.statementId,
@@ -1400,8 +1406,13 @@ function SummaryContent({
   const controller = useRef<SummaryRetryController | null>(null);
   if (!controller.current) controller.current = createSubjectTextRetryController<SummaryRetryTarget>();
   controller.current.select(target);
+  useEffect(() => () => controller.current?.retire(target ?? undefined), [target]);
   const [retryState, setRetryState] = useState<SummaryRetryState | null>(null);
-  const retryDocument = useRef<{ target: SummaryRetryTarget; document: unknown } | null>(null);
+  const retryDocument = useRef<{
+    target: SummaryRetryTarget;
+    attempt: SubjectTextRetryToken<SummaryRetryTarget>;
+    document: unknown;
+  } | null>(null);
   if (retryDocument.current?.target !== target) retryDocument.current = null;
   useEffect(() => {
     setRetryState((current) => (current && current.target !== target ? null : current));
@@ -1410,6 +1421,7 @@ function SummaryContent({
   const freshBody =
     activeRetry?.status === 'read' &&
     retryDocument.current?.target === target &&
+    retryDocument.current?.attempt === activeRetry.attempt &&
     target &&
     selectedChoice &&
     summaryDocumentMatches(retryDocument.current.document, target)
@@ -1429,7 +1441,7 @@ function SummaryContent({
         event.preventDefault();
         const attempt = controller.current?.begin(target);
         if (!attempt) return;
-        setRetryState({ target, status: 'pending' });
+        setRetryState({ target, attempt, status: 'pending' });
         void readPublicSubjectDocument({
           data: {
             documentId: target.documentId,
@@ -1437,26 +1449,30 @@ function SummaryContent({
             realm: value.realm,
             reader: value.cacheReader ?? null,
           },
+          signal: attempt.signal,
         })
           .then((result) => {
             if (!controller.current?.isCurrent(attempt)) return;
-            setRetryState(
-              result.ok && summaryDocumentMatches(result.document, target)
-                ? (() => {
-                    retryDocument.current = { target, document: result.document };
-                    return { target, status: 'read' as const };
-                  })()
-                : { target, status: 'failed' },
-            );
+            let admitted = false;
+            if (result.ok && summaryDocumentMatches(result.document, target)) {
+              retryDocument.current = { target, attempt, document: result.document };
+              admitted = true;
+            }
+            const next: SummaryRetryState = {
+              target,
+              attempt,
+              status: admitted ? 'read' : 'failed',
+            };
+            setRetryState((current) => (current?.attempt === attempt ? next : current));
           })
           .catch(() => {
-            if (controller.current?.isCurrent(attempt)) setRetryState({ target, status: 'failed' });
+            if (controller.current?.isCurrent(attempt))
+              setRetryState((current) =>
+                current?.attempt === attempt ? { target, attempt, status: 'failed' } : current,
+              );
           })
           .finally(() => {
             controller.current?.finish(attempt);
-            setRetryState((current) =>
-              current?.target === target && current.status === 'pending' ? { target, status: 'failed' } : current,
-            );
           });
       }
     : undefined;

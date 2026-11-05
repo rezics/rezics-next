@@ -13,7 +13,8 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 type PublicTextResult = { ok: false } | { ok: true; document: Record<string, unknown> };
-const readPublicSubjectDocument = mock(async (_input: unknown): Promise<PublicTextResult> => ({ ok: false }));
+type PublicTextInvocation = { data: unknown; signal?: AbortSignal };
+const readPublicSubjectDocument = mock(async (_input: PublicTextInvocation): Promise<PublicTextResult> => ({ ok: false }));
 mock.module('../src/features/pages/subject-queries.ts', () => ({ readPublicSubjectDocument }));
 const { Summary, OverviewContext } = await import('../src/features/pages/overview');
 
@@ -180,9 +181,44 @@ test('an explicit missing synopsis reports failed retry and accepts only its exa
       availability: 'available',
       body: fromPlainText('Recovered exact synopsis.'),
     };
-    readPublicSubjectDocument.mockResolvedValueOnce({ ok: true, document: exact });
+    let finishRetired!: (result: PublicTextResult) => void;
+    let finishCurrent!: (result: PublicTextResult) => void;
+    let retiredSignal: AbortSignal | undefined;
+    let currentSignal: AbortSignal | undefined;
+    readPublicSubjectDocument.mockImplementationOnce((input) => {
+      retiredSignal = input.signal;
+      return new Promise((resolve) => (finishRetired = resolve));
+    });
     await act(async () => {
       (host.querySelector('[data-slot="subject-text-unavailable"] a') as HTMLAnchorElement).click();
+      await Promise.resolve();
+    });
+    select.value = other.id;
+    await act(async () => select.dispatchEvent(new window.Event('change', { bubbles: true })));
+    expect(retiredSignal?.aborted).toBe(true);
+    select.value = missing.id;
+    await act(async () => select.dispatchEvent(new window.Event('change', { bubbles: true })));
+    readPublicSubjectDocument.mockImplementationOnce((input) => {
+      currentSignal = input.signal;
+      return new Promise((resolve) => (finishCurrent = resolve));
+    });
+    await act(async () => {
+      (host.querySelector('[data-slot="subject-text-unavailable"] a') as HTMLAnchorElement).click();
+      await Promise.resolve();
+    });
+    expect(currentSignal).not.toBe(retiredSignal);
+    expect(currentSignal?.aborted).toBe(false);
+    const currentRetry = host.querySelector('[data-slot="subject-text-unavailable"] a') as HTMLAnchorElement;
+    currentRetry.focus();
+    await act(async () => {
+      finishRetired({ ok: true, document: { ...exact, body: fromPlainText('Retired synopsis.') } });
+      await Promise.resolve();
+    });
+    expect(host.textContent).not.toContain('Retired synopsis.');
+    expect(currentRetry.getAttribute('aria-busy')).toBe('true');
+    expect(document.activeElement).toBe(currentRetry);
+    await act(async () => {
+      finishCurrent({ ok: true, document: exact });
       await Promise.resolve();
     });
     expect(host.textContent).toContain('Recovered exact synopsis.');
