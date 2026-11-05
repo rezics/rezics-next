@@ -8,7 +8,7 @@ import {
 } from './contract';
 
 /** Machine-independent work at the Bangumi loader/controller boundary. */
-export type BangumiCallKind = 'preview' | 'page' | 'review' | 'apply' | 'cancel' | 'delete';
+export type BangumiCallKind = 'preview' | 'page' | 'review' | 'apply' | 'entry-read' | 'vote-read' | 'cancel' | 'delete';
 
 export type BangumiCostSnapshot = {
   calls: Record<BangumiCallKind, number>;
@@ -30,7 +30,7 @@ export type BangumiCostSnapshot = {
 
 export function emptyBangumiCost(): BangumiCostSnapshot {
   return {
-    calls: { preview: 0, page: 0, review: 0, apply: 0, cancel: 0, delete: 0 },
+    calls: { preview: 0, page: 0, review: 0, apply: 0, 'entry-read': 0, 'vote-read': 0, cancel: 0, delete: 0 },
     retries: 0,
     pagesVisited: 0,
     reviewed: 0,
@@ -50,7 +50,9 @@ export function emptyBangumiCost(): BangumiCostSnapshot {
 
 export function bangumiCallTotal(cost: BangumiCostSnapshot): number {
   const calls = cost.calls;
-  return calls.preview + calls.page + calls.review + calls.apply + calls.cancel + calls.delete;
+  return (
+    calls.preview + calls.page + calls.review + calls.apply + calls['entry-read'] + calls['vote-read'] + calls.cancel + calls.delete
+  );
 }
 
 /**
@@ -64,8 +66,19 @@ export function expectedBangumiCalls(input: {
   lifecycle: number;
   retries: number;
   preview?: number;
+  entryReads?: number;
+  voteReads?: number;
 }): number {
-  return (input.preview ?? 1) + input.pages + input.reviews + input.applyBatches + input.lifecycle + input.retries;
+  return (
+    (input.preview ?? 1) +
+    input.pages +
+    input.reviews +
+    input.applyBatches +
+    (input.entryReads ?? 0) +
+    (input.voteReads ?? 0) +
+    input.lifecycle +
+    input.retries
+  );
 }
 
 export function bangumiRetainedBound(input: {

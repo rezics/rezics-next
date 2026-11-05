@@ -4,16 +4,25 @@ import { ImportSourceOutcome } from '../rich-private-entry/source-confirm';
 import type { BangumiOutcome, BangumiRowMeta } from './contract';
 import { BangumiAction } from './controls';
 import { bangumiOutcomeLabel } from './meaning';
+import { BangumiCurrentFacts, BangumiScoreOutcomeView } from './score';
 
 function Outcome({
   outcome,
   titles,
+  row,
+  busy,
+  onInspect,
   admission,
 }: {
   outcome: BangumiOutcome;
   titles: Map<number, string>;
+  row: BangumiRowMeta | undefined;
+  busy: boolean;
+  onInspect: (ordinal: number) => void;
   admission: BangumiRowMeta['sourceAdmission'];
 }) {
+  const acknowledged = outcome.status === 'applied' || outcome.score?.status === 'applied';
+  const inspected = !!row?.entryReadback || !!row?.voteReadback;
   return (
     <li className="rounded-md border p-3" data-bangumi-outcome={outcome.status} data-bangumi-row={outcome.ordinal}>
       <p className="font-medium [overflow-wrap:anywhere]">{titles.get(outcome.ordinal) ?? `#${outcome.ordinal + 1}`}</p>
@@ -29,8 +38,17 @@ function Outcome({
           </p>
         </details>
       ) : null}
+      {outcome.score ? <BangumiScoreOutcomeView outcome={outcome.score} /> : null}
       {outcome.status === 'stale' ? (
         <p className="text-sm text-muted-foreground">{m.library_bangumi_stale_help()}</p>
+      ) : null}
+      {acknowledged && row?.target ? (
+        <div className="mt-3 space-y-2">
+          <BangumiAction type="button" variant="outline" disabled={busy} onClick={() => onInspect(outcome.ordinal)}>
+            {inspected ? m.library_bangumi_refresh_current() : m.library_bangumi_inspect_current()}
+          </BangumiAction>
+          <BangumiCurrentFacts entry={row.entryReadback} vote={row.voteReadback} />
+        </div>
       ) : null}
       <ImportSourceOutcome outcome={admission} />
     </li>
@@ -47,6 +65,7 @@ export function BangumiResultPage({
   onRetry,
   onReview,
   onRefresh,
+  onInspect,
 }: {
   outcomes: BangumiOutcome[];
   remaining: number[];
@@ -57,8 +76,10 @@ export function BangumiResultPage({
   onRetry: () => void;
   onReview: () => void;
   onRefresh: () => void;
+  onInspect: (ordinal: number) => void;
 }) {
   const titles = new Map(meta.map((row) => [row.ordinal, row.title]));
+  const rowsByOrdinal = new Map(meta.map((row) => [row.ordinal, row]));
   const admissions = new Map(meta.map((row) => [row.ordinal, row.sourceAdmission]));
   const locale = getLocale();
   return (
@@ -75,6 +96,9 @@ export function BangumiResultPage({
             key={outcome.ordinal}
             outcome={outcome}
             titles={titles}
+            row={rowsByOrdinal.get(outcome.ordinal)}
+            busy={busy}
+            onInspect={onInspect}
             admission={admissions.get(outcome.ordinal) ?? null}
           />
         ))}

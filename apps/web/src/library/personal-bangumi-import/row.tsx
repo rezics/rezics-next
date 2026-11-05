@@ -12,8 +12,20 @@ import {
   bangumiTitle,
 } from './meaning';
 import { BangumiTargetSearch } from './target';
+import {
+  BangumiScoreReviewPanel,
+  scoreDraftFrom,
+  scoreSelectionFromDraft,
+  type BangumiScoreDraft,
+} from './score';
 
-export type RowDraft = { ordinal: number; target: string | null; state: BangumiApplyState; skip: boolean };
+export type RowDraft = {
+  ordinal: number;
+  target: string | null;
+  state: BangumiApplyState;
+  skip: boolean;
+  score: BangumiScoreDraft;
+};
 
 export function draftFromMeta(row: BangumiRow, meta?: BangumiRowMeta): RowDraft {
   return {
@@ -21,6 +33,7 @@ export function draftFromMeta(row: BangumiRow, meta?: BangumiRowMeta): RowDraft 
     target: meta?.target ?? row.review?.target ?? null,
     state: meta?.choice.state ?? 'preserve',
     skip: meta?.choice.skip ?? false,
+    score: scoreDraftFrom(row.review?.score ?? meta?.scoreReview),
   };
 }
 
@@ -38,14 +51,22 @@ export function BangumiRowReview({
   onChoose: (draft: RowDraft) => void;
 }) {
   const base = useId();
-  const [draft, setDraft] = useState<RowDraft>(() => draftFromMeta(row, meta));
-  const match = row.review?.match ?? meta?.match ?? null;
-  const canTarget = bangumiCanChooseTarget(match) && !draft.skip;
-  const title = bangumiTitle(row.evidence.source, m.library_bangumi_untitled());
+  const reviewToken = row.review?.token ?? meta?.reviewToken ?? null;
+  const [savedDraft, setSavedDraft] = useState(() => ({ reviewToken, value: draftFromMeta(row, meta) }));
+  const draft = savedDraft.reviewToken === reviewToken ? savedDraft.value : draftFromMeta(row, meta);
   const reviewed = !!(row.review || meta?.reviewToken);
+  const match = row.review?.match ?? meta?.match ?? null;
+  const canTarget = (bangumiCanChooseTarget(match) || (reviewed && match === 'chosen')) && !draft.skip;
+  const title = bangumiTitle(row.evidence.source, m.library_bangumi_untitled());
+  const scoreReview = row.review?.score ?? meta?.scoreReview ?? null;
+  const reviewedTarget = row.review?.target ?? meta?.target ?? null;
+  const scoreTargetReady = !!draft.target && draft.target === reviewedTarget;
+  const scoreSelection = scoreTargetReady
+    ? scoreSelectionFromDraft(draft.score, scoreReview, true)
+    : { action: 'preserve' as const };
   const replaceable = bangumiNeedsReplace(row) || meta?.match === 'already_matched' || meta?.conflict;
   function update(next: RowDraft) {
-    setDraft(next);
+    setSavedDraft({ reviewToken, value: next });
     onChoose(next);
   }
   return (
@@ -67,6 +88,16 @@ export function BangumiRowReview({
         ) : null}
       </header>
       <BangumiEvidencePanel row={row} />
+      {scoreReview ? (
+        <BangumiScoreReviewPanel
+          review={scoreReview}
+          hasTarget={scoreTargetReady}
+          draft={draft.score}
+          base={base}
+          disabled={busy || !reviewed}
+          onChange={(score) => update({ ...draft, score })}
+        />
+      ) : null}
       {row.review?.current || meta?.current ? (
         <p>
           {m.library_bangumi_current({
@@ -115,7 +146,7 @@ export function BangumiRowReview({
           onToggle={(on) => update({ ...draft, state: on ? 'omit' : 'preserve' })}
         />
       ) : null}
-      <BangumiAction type="button" disabled={busy} onClick={() => onSave(draft)}>
+      <BangumiAction type="button" disabled={busy || !scoreSelection} onClick={() => onSave(draft)}>
         {m.library_bangumi_save_review()}
       </BangumiAction>
     </article>

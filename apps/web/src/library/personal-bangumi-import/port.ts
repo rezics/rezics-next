@@ -49,6 +49,10 @@ const productionPort: BangumiImportPort = {
     });
     return mapSourceAdmissionPort(result, retryCommand);
   },
+  async inspect(command) {
+    const { inspectBangumiCurrentFacts } = await import('./server');
+    return inspectBangumiCurrentFacts({ data: command });
+  },
   async cancel(command) {
     const { cancelBangumiImport } = await import('./server');
     return cancelBangumiImport({ data: command, headers: { 'X-CSRF-Token': sessionCsrfToken() ?? '' } });

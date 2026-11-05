@@ -10,9 +10,12 @@ import {
   type BangumiPage,
   type BangumiReview,
   type BangumiRow,
+  type BangumiScoreReview,
+  type BangumiScoreSelection,
 } from '../src/library/personal-bangumi-import/contract';
 import { bangumiCallTotal, expectedBangumiCalls } from '../src/library/personal-bangumi-import/cost';
 import { createBangumiJourney } from '../src/library/personal-bangumi-import/controller';
+import { scoreSelectionFromDraft } from '../src/library/personal-bangumi-import/score';
 import { libraryNavigation } from '../src/library/navigation';
 import type { BangumiVisit } from '../src/library/personal-bangumi-import/visit';
 
@@ -51,12 +54,16 @@ const { PersonalBangumiImportPage } = await import('../src/library/personal-bang
 
 const id = '0192f3a0-6c1e-7b2a-9d4e-00000000aaaa';
 const subject = '0192f3a0-6c1e-7b2a-9d4e-00000000bbbb';
+const secondSubject = '0192f3a0-6c1e-7b2a-9d4e-00000000dddd';
 const token = '0192f3a0-6c1e-7b2a-9d4e-00000000cccc';
+const questionId = '0192f3a0-6c1e-7b2a-9d4e-00000000eeee';
+let nextVisitIdentity = 0;
 
 const visit = (viewer = 'alice', csrf = 'csrf-1'): BangumiVisit => {
   const controller = new AbortController();
   let retired = false;
   return {
+    identity: ++nextVisitIdentity,
     subject: viewer,
     csrfToken: csrf,
     controller,
@@ -144,7 +151,37 @@ function reviewed(index: number, changes: Partial<BangumiReview> = {}): BangumiR
     proposedState: 'active',
     current: null,
     conflict: false,
+    score: scoreReview({ action: 'preserve' }, index),
     ...changes,
+  };
+}
+
+function scoreReview(
+  selection: BangumiScoreSelection = { action: 'preserve' },
+  index = 0,
+): BangumiScoreReview {
+  return {
+    source: {
+      state: index === 0 ? 'unrated' : 'score',
+      value: index === 0 ? 0 : 8,
+      scale: { minimum: 1, maximum: 10 },
+      reason: index === 0 ? 'Bangumi rate 0 means unrated' : 'Bangumi source score on its original scale',
+    },
+    native: {
+      questionId,
+      question: {
+        id: questionId,
+        revision: 7,
+        meaning: 'Community rating',
+        label: 'Quality',
+        grain: 'work',
+        lifecycleState: 'active',
+        scale: { minimum: 0, maximum: 20, step: 2 },
+      },
+      currentVote: { state: 'set', units: 0, revision: 3, at: '2026-10-10T12:00:00Z' },
+      selection,
+      admission: { status: 'reviewed', reason: 'native_review_observed' },
+    },
   };
 }
 
@@ -160,10 +197,14 @@ function recordingPort(
   previews: string[];
   applies: unknown[];
   reviews: unknown[];
+  inspections: unknown[];
+  deletions: unknown[];
 } {
   const previews: string[] = [];
   const applies: unknown[] = [];
   const reviews: unknown[] = [];
+  const inspections: unknown[] = [];
+  const deletions: unknown[] = [];
   const tokens = new Map<number, string>();
   let applyAttempts = 0;
   const stored = Array.from({ length: total }, (_, index) => row(index));
@@ -184,12 +225,13 @@ function recordingPort(
       reviews.push(JSON.parse(JSON.stringify(command)));
       const current = stored[command.ordinal]!;
       const review = reviewed(command.ordinal, {
-        token: `${token.slice(0, -1)}${command.ordinal % 10}`,
+        token: `${token.slice(0, -1)}${(reviews.length - 1) % 10}`,
         match: command.target ? 'chosen' : 'unmatched',
         target: command.target ?? null,
         current: options.replace ? { state: 'planned', revision: 4 } : null,
         conflict: !!options.replace,
         proposedState: 'active',
+        score: scoreReview(command.score ?? { action: 'preserve' }, command.ordinal),
       });
       tokens.set(command.ordinal, review.token);
       stored[command.ordinal] = { ...current, review };
@@ -209,6 +251,10 @@ function recordingPort(
             status: index === command.body.rows.length - 1 && command.body.rows.length > 1 ? 'failed' : 'applied',
             applied: item.skip ? [] : ['type'],
             retained: ['rate', 'ep_status', 'extra_unknown', 'comment'],
+            score:
+              item.score?.action === 'set' || item.score?.action === 'clear'
+                ? { action: item.score.action, status: 'unavailable', reason: 'conditional_admission_unavailable' }
+                : { action: 'preserve', status: 'skipped' },
           })),
         },
       };
@@ -216,14 +262,27 @@ function recordingPort(
     async admitSource() {
       return { kind: 'admitted' as const };
     },
+    async inspect(command) {
+      inspections.push(JSON.parse(JSON.stringify(command)));
+      return {
+        entry: { status: 'present', state: 'active', revision: 8 },
+        vote: command.questionId
+          ? {
+              status: 'current',
+              vote: { state: 'set', units: 0, revision: 4, at: '2026-10-11T12:00:00Z' },
+            }
+          : null,
+      };
+    },
     async cancel() {
       return { kind: 'cancelled', uploadId: id };
     },
     async delete() {
+      deletions.push(id);
       return { kind: 'deleted' };
     },
   };
-  return { port, previews, applies, reviews };
+  return { port, previews, applies, reviews, inspections, deletions };
 }
 
 let host: HTMLDivElement;
@@ -295,6 +354,10 @@ afterEach(async () => {
 test('navigation, unrated score and unknown fields stay distinct from applied state', () => {
   expect(libraryNavigation.some((entry) => entry.id === 'library.import-bangumi')).toBe(true);
   expect(libraryNavigation.some((entry) => entry.id === 'library.import-mal')).toBe(true);
+  const review = scoreReview();
+  expect(scoreSelectionFromDraft({ action: 'set', units: '' }, review)).toBeNull();
+  expect(scoreSelectionFromDraft({ action: 'set', units: '0' }, review)).toEqual({ action: 'set', units: 0 });
+  expect(scoreSelectionFromDraft({ action: 'set', units: '8' }, review, false)).toBeNull();
 });
 
 test('preview does not apply, explicit target replacement and exact uncertain retry keep operands', async () => {
@@ -322,6 +385,27 @@ test('preview does not apply, explicit target replacement and exact uncertain re
   });
   await click(m.library_bangumi_save_review());
   expect(reviews[0]).toMatchObject({ ordinal: 0, target: subject });
+  expect(host.textContent).toContain(m.library_bangumi_score_current_set({ units: 0, revision: 3, at: '2026-10-10T12:00:00Z' }));
+  expect(host.textContent).toContain('native_review_observed');
+  const replacement = host.querySelector('[data-bangumi-target]') as HTMLInputElement;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(replacement, secondSubject);
+    replacement.dispatchEvent(new window.Event('input', { bubbles: true }));
+    await Promise.resolve();
+  });
+  expect(host.textContent).not.toContain('native_review_observed');
+  await click(m.library_bangumi_save_review());
+  expect(reviews[1]).toMatchObject({ ordinal: 0, target: secondSubject, score: { action: 'preserve' } });
+  expect(host.textContent).toContain('native_review_observed');
+  await clickLabel(m.library_bangumi_score_set());
+  const units = host.querySelector('input[type="number"]') as HTMLInputElement;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(units, '8');
+    units.dispatchEvent(new window.Event('input', { bubbles: true }));
+    await Promise.resolve();
+  });
+  await click(m.library_bangumi_save_review());
+  expect(reviews[2]).toMatchObject({ ordinal: 0, target: secondSubject, score: { action: 'set', units: 8 } });
   const replace = [...host.querySelectorAll('label')].find((item) => item.textContent === m.library_bangumi_replace());
   expect(replace).toBeDefined();
   await act(async () => {
@@ -329,20 +413,180 @@ test('preview does not apply, explicit target replacement and exact uncertain re
     await Promise.resolve();
   });
   await click(m.library_bangumi_continue_confirm());
-  expect(host.textContent).toContain(subject);
+  expect(host.textContent).toContain(secondSubject);
+  expect(host.textContent).toContain(m.library_bangumi_score_confirm_set({ units: 8, question: questionId, revision: 7 }));
   await clickLabel(m.library_import_source_privacy_confirm());
   await clickLabel(m.library_import_source_timestamps_confirm());
+  await click(m.library_bangumi_confirm());
+  expect(applies).toHaveLength(0);
+  await clickLabel(m.library_bangumi_score_consent_set({ units: 8, question: questionId }));
   await click(m.library_bangumi_confirm());
   expect(host.textContent).toContain(m.library_bangumi_uncertain());
   await click(m.library_bangumi_retry_command());
   expect(applies).toHaveLength(2);
   expect(applies[0]).toEqual(applies[1]);
   expect(applies[1]).toMatchObject({
-    body: { rows: [{ ordinal: 0, state: 'replace', skip: false }] },
+    body: { rows: [{ ordinal: 0, state: 'replace', skip: false, score: { action: 'set', units: 8, consent: true } }] },
   });
   expect(host.textContent).toContain(m.library_bangumi_result_applied());
   expect(host.textContent).toContain('type');
   expect(host.textContent).toContain('extra_unknown');
+});
+
+test('score set and clear require row consent, retry exact choices, and keep point reads separate', async () => {
+  const { port, applies, reviews, inspections } = recordingPort(2, { failApplyOnce: true });
+  const journey = createBangumiJourney({ port, visit: visit() });
+  await journey.preview(envelope(2));
+  let snap = await journey.review(0, subject, { action: 'set', units: 8 });
+  snap = await journey.review(1, secondSubject, { action: 'clear' });
+  expect(reviews[0]).toMatchObject({
+    target: subject,
+    score: { action: 'set', units: 8 },
+  });
+  expect(reviews[1]).toMatchObject({ target: secondSubject, score: { action: 'clear' } });
+  expect(snap.meta[0]?.scoreReview?.source).toMatchObject({ state: 'unrated', value: 0, scale: { minimum: 1, maximum: 10 } });
+  expect(snap.meta[0]?.scoreReview?.native.currentVote).toMatchObject({ state: 'set', units: 0 });
+
+  journey.openConfirm();
+  journey.confirmSource({ privacy: true, timestamps: true });
+  snap = await journey.confirm();
+  expect(snap.stage).toBe('confirm');
+  expect(applies).toHaveLength(0);
+  journey.confirmScore(0, true);
+  journey.backToReview();
+  snap = await journey.review(0, secondSubject, { action: 'set', units: 8 });
+  expect(snap.meta[0]?.target).toBe(secondSubject);
+  expect(snap.meta[0]?.scoreConsent).toBe(false);
+  journey.openConfirm();
+  journey.confirmSource({ privacy: true, timestamps: true });
+  snap = await journey.confirm();
+  expect(snap.stage).toBe('confirm');
+  expect(applies).toHaveLength(0);
+  journey.confirmScore(0, true);
+  journey.confirmScore(1, true);
+  snap = await journey.confirm();
+  expect(snap.notice?.kind).toBe('unknown');
+  expect(applies).toHaveLength(1);
+  const expected = {
+    body: {
+      rows: [
+        { ordinal: 0, reviewToken: `${token.slice(0, -1)}2`, state: 'preserve', skip: false, score: { action: 'set', units: 8, consent: true } },
+        { ordinal: 1, reviewToken: `${token.slice(0, -1)}1`, state: 'preserve', skip: false, score: { action: 'clear', consent: true } },
+      ],
+    },
+  };
+  expect(applies[0]).toMatchObject(expected);
+  await journey.review(0, secondSubject, { action: 'set', units: 10 });
+  expect(applies).toHaveLength(1);
+  expect(journey.snapshot().notice?.kind).toBe('unknown');
+  await journey.retryUnknown();
+  expect(applies[0]).toEqual(applies[1]);
+  snap = journey.snapshot();
+  expect(snap.stage).toBe('results');
+  expect(snap.outcomes[0]?.status).toBe('applied');
+  expect(snap.outcomes[0]?.score).toMatchObject({ action: 'set', status: 'unavailable', reason: 'conditional_admission_unavailable' });
+  expect(snap.outcomes[1]).toMatchObject({ status: 'failed', score: { action: 'clear', status: 'unavailable' } });
+  expect(inspections).toHaveLength(0);
+  snap = await journey.inspectCurrent(0);
+  expect(inspections).toEqual([{ subjectId: secondSubject, questionId }]);
+  expect(snap.meta[0]?.entryReadback).toMatchObject({ status: 'present', state: 'active', revision: 8 });
+  expect(snap.meta[0]?.voteReadback).toMatchObject({ status: 'current', vote: { state: 'set', units: 0 } });
+  expect(snap.cost.calls['entry-read']).toBe(1);
+  expect(snap.cost.calls['vote-read']).toBe(1);
+  await journey.inspectCurrent(0);
+  expect(inspections).toHaveLength(2);
+  expect(bangumiCallTotal(journey.snapshot().cost)).toBe(
+    expectedBangumiCalls({
+      pages: 1,
+      reviews: 3,
+      applyBatches: 1,
+      lifecycle: 0,
+      retries: 1,
+      entryReads: 2,
+      voteReads: 2,
+    }),
+  );
+});
+
+test('an acknowledged own-vote result is reused while the affected Entry is read once', async () => {
+  const base = recordingPort(1);
+  const inspections: { subjectId: string; questionId: string | null }[] = [];
+  const port: BangumiImportPort = {
+    ...base.port,
+    async apply(command) {
+      base.applies.push(JSON.parse(JSON.stringify(command)));
+      return {
+        kind: 'applied',
+        result: {
+          uploadId: id,
+          remaining: [],
+          outcomes: [
+            {
+              ordinal: 0,
+              status: 'applied',
+              applied: ['type'],
+              retained: ['rate'],
+              score: {
+                action: 'set',
+                status: 'applied',
+                vote: { units: 8, revision: 9, at: '2026-10-11T12:00:00Z' },
+              },
+            },
+          ],
+        },
+      };
+    },
+    async inspect(command) {
+      inspections.push(command);
+      return { entry: { status: 'present', state: 'active', revision: 9 }, vote: null };
+    },
+  };
+  const journey = createBangumiJourney({ port, visit: visit() });
+  await journey.preview(envelope(1));
+  await journey.review(0, subject, { action: 'set', units: 8 });
+  journey.openConfirm();
+  journey.confirmScore(0, true);
+  const applied = await journey.confirm();
+  expect(applied.outcomes[0]?.score?.status).toBe('applied');
+  const inspected = await journey.inspectCurrent(0);
+  expect(inspections).toEqual([{ subjectId: subject, questionId: null }]);
+  expect(inspected.meta[0]?.entryReadback).toMatchObject({ status: 'present', revision: 9 });
+  expect(inspected.meta[0]?.voteReadback).toMatchObject({ status: 'current', vote: { state: 'set', units: 8, revision: 9 } });
+  expect(inspected.cost.calls['entry-read']).toBe(1);
+  expect(inspected.cost.calls['vote-read']).toBe(0);
+});
+
+test('expired evidence retires score controls and replacement upload deletes the former private document', async () => {
+  const base = recordingPort(1);
+  let pages = 0;
+  let previews = 0;
+  const replacement = '0192f3a0-6c1e-7b2a-9d4e-00000000ffff';
+  const port: BangumiImportPort = {
+    ...base.port,
+    async preview(command) {
+      previews += 1;
+      base.previews.push(command.upload);
+      return { kind: 'previewed', uploadId: previews === 1 ? id : replacement, count: 1 };
+    },
+    async page(command) {
+      pages += 1;
+      if (pages === 2) return { kind: 'not-found' };
+      if (command.uploadId === replacement)
+        return { kind: 'page', page: pageOf([row(0, { evidence: { ...evidence(0), source: { subject_id: 1, subject: { name: 'Replacement' } } } })]) };
+      return base.port.page(command);
+    },
+  };
+  const journey = createBangumiJourney({ port, visit: visit() });
+  await journey.preview(envelope(1));
+  await journey.review(0, subject, { action: 'set', units: 8 });
+  const removed = await journey.refresh();
+  expect(removed.stage).toBe('removed');
+  expect(removed.page).toEqual([]);
+  expect(removed.meta).toEqual([]);
+  const next = await journey.preview(envelope(1));
+  expect(base.deletions).toEqual([id]);
+  expect(next.meta[0]?.title).toBe('Replacement');
+  expect(next.meta[0]?.scoreReview).toBeNull();
 });
 
 test('a changed account retires the upload and former-account callbacks', async () => {
