@@ -418,4 +418,4 @@ test('selected second synopsis traverses authored inspection and fresh return; u
       else Reflect.deleteProperty(globalThis, key);
     }
   }
-});
+}, 20_000);

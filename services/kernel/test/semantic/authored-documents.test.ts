@@ -310,7 +310,7 @@ test('native exact Sources admits the second same-language document and loses it
           },
         }),
       );
-      expect(erased.status).toBe(204);
+      expect(erased.status, await erased.text()).toBe(204);
     } finally {
       hold.release();
     }

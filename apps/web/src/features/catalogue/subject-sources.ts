@@ -154,7 +154,7 @@ export function explainSubjectSources(
       }
     : read.subject;
   const actions = actionState({ ...read, account: read.account ?? null });
-  const original = originalLanguage(subject);
+  const original = originalLanguage(read.subject);
   const title = pageText(subject.labels, locale, original);
   const identity = { id: subject.id, label: title.text };
   const exactIds =

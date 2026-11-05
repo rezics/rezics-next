@@ -91,6 +91,7 @@ test('actual Sources retry returns focus locally and retires focus across reader
         expect(document.activeElement).toBe(outside);
         const opener = host.querySelector('button')!;
         expect(opener.textContent).toBe(m.sources_retry());
+        expect(calls, mode).toHaveLength(1);
         let release!: (value: SourcesResult) => void;
         const held = new Promise<SourcesResult>((resolve) => {
           release = resolve;
@@ -108,7 +109,7 @@ test('actual Sources retry returns focus locally and retires focus across reader
         });
         expect(calls).toHaveLength(2);
         expect(calls[1]).toEqual({ id: page.id, locale: 'en', realm, reader: 'alice' });
-        expect(host.querySelector('article')?.getAttribute('aria-busy')).toBe('true');
+        expect(host.querySelector('article')?.getAttribute('aria-busy'), mode).toBe('true');
         if (mode === 'moved') outside.focus();
         if (mode === 'tab') document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
         if (mode === 'blur') window.dispatchEvent(new window.Event('blur'));
