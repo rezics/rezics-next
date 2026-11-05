@@ -570,6 +570,15 @@ read Retry, with the five-second private-read deadline and no automatic retry. O
 navigation. Review retirement aborts its lifetime and invalidates both inventory results. There is no separate
 session GET, approval or execution on return or Retry.
 
+Decision: the response uses `readJsonBounded` with the existing five-second `privateAuthRead` signal and a 2,375-byte
+UTF-8 limit. Its largest compact native review costs `93 + (128 × 6) + (252 × 6 + 2) = 2,375` bytes: 93 fixed
+syntax/value bytes, at most six JSON bytes per UTF-16 code unit for the account id, and at most six bytes for each
+of the email's 252 non-separator units plus its one-byte `@` and `.`. The accepted `accountId` maximum remains 128
+UTF-16 code units; email remains nullable and capped at 254 code units by its existing pattern. Authentication-required
+and null-email envelopes remain accepted. Native identities outside the existing browser `accountId` contract remain
+an explicit qualification for the separate identity producer/consumer review; this read does not alter native identity
+storage.
+
 Each mounted attempt retains its original account, key and exact approval/execution payload. Before dispatch,
 authentication keeps an unsent continuation; execution dispatch sets its submitted marker. Older descriptors
 without a marker are conservatively submitted hints. Step-up returns to fresh native review, clears confirmation

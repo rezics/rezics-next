@@ -1,4 +1,5 @@
 import { privateAuthRead } from './private-auth-read';
+import { readJsonBounded } from './private-auth-json';
 
 export type AccountDeletionPage =
   | { kind: 'authentication-required'; accountId: string }
@@ -12,6 +13,8 @@ export type AccountDeletionPage =
   | { kind: 'signed-out' | 'refused' | 'changed' | 'unavailable' };
 export type AccountDeletionPageSource = (signal: AbortSignal) => Promise<AccountDeletionPage>;
 const unavailable: AccountDeletionPage = { kind: 'unavailable' };
+// Compact native review: 93 + 128 * 6 + (252 * 6 + 2) UTF-8 bytes.
+const ACCOUNT_DELETION_PAGE_MAX_BYTES = 2375;
 
 export const loadAccountDeletionPage: AccountDeletionPageSource = async (signal) => {
   try {
@@ -26,7 +29,7 @@ export const loadAccountDeletionPage: AccountDeletionPageSource = async (signal)
         signal: readSignal,
       });
       if (response.status !== 200) return unavailable;
-      const value: unknown = await response.json();
+      const value: unknown = await readJsonBounded(response, ACCOUNT_DELETION_PAGE_MAX_BYTES, readSignal);
       if (!value || typeof value !== 'object' || Array.isArray(value)) return unavailable;
       const row = value as Record<string, unknown>;
       const keys = Object.keys(row).sort().join(',');
