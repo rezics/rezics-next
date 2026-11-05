@@ -21,7 +21,8 @@ Deleted lines are ignored and never offset output, so deleting bad code (duplica
 is encouraged.
 
 Size each brief as one complete user journey of about 2,000–3,000 lines, backend and interface together, which a
-worker finishes in under an hour. With 32 workers, that gives 30,000–40,000 lines an hour. Split a journey only
+worker finishes in under an hour. The controller returns a product brief estimating under 1,200 lines or with a body
+over 4,000 characters (`brief.minimumEstimateLines` / `brief.maximumBodyCharacters`) instead of dispatching it. With 32 workers, that gives 30,000–40,000 lines an hour. Split a journey only
 where a real dependency forces it. A worker writes a continuation only for what remains after it has built most of
 the brief. Small slices, measurement-only tasks and proof-only tasks spend more attempts, setup and landings than
 they deliver.

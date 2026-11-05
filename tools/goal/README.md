@@ -505,7 +505,7 @@ explicit helper output bounds retain precedence. All path-matching consumers for
 Launch smoke forwards its startup policy snapshot to its inner process. Its UUID shapes, two provider invocations,
 fixture command delays, evidence traversal accounting, JSON syntax costs and UTF-8 shrink factor are fixed protocol
 or fixture constants. Owner-decision IDs retain their fixed 128-character persisted identity format; input and
-manager-message limits use the caller policy. Brief estimate defaults remain guidance, without estimate caps.
+manager-message limits use the caller policy. Brief estimate defaults remain guidance.
 Merge helpers append an optional command policy after existing brief arguments; pool-selection options carry the
 provider policy through fallbacks. Pool-local freshness and explicit routing still take precedence. Completed Git
 output that exceeds the byte bound fails instead of becoming successful partial evidence or ancestry.
@@ -598,6 +598,8 @@ protocol or representation meaning; they are not operator limits.
 | `policy.brief.pathCharacters`                         | `65536`                              | Maximum declared path pattern characters.                                                                                                                                                   |
 | `policy.brief.pathMatchStates`                        | `1000000`                            | Maximum visited cells per path-pattern intersection.                                                                                                                                        |
 | `policy.brief.sharedPaths`                            | README, docs, generated              | Declared paths ignored by continuation overlap; landing already resolves these files.                                                                                                       |
+| `policy.brief.minimumEstimateLines`                   | `1200`                               | Estimate floor at backlog dispatch.                                                                                                                                                         |
+| `policy.brief.maximumBodyCharacters`                  | `4000`                               | Body ceiling at backlog dispatch.                                                                                                                                                           |
 | `policy.workerPrompt.characters`                      | `20000`                              | Total worker prompt characters when delivering an owner decision.                                                                                                                           |
 | `policy.workerPrompt.gitBufferBytes`                  | `16777216`                           | Worker prompt changed-path Git output buffer (bytes).                                                                                                                                       |
 | `policy.history.attemptPageSize`                      | `100`                                | Maximum attempt or attempt-record page size.                                                                                                                                                |
@@ -2210,6 +2212,12 @@ host's socket. The host skips the minute while the previous child is still runni
   beside `failed/<name>.reason`, and the event names the archived brief. Decision: keep the first failed name and use
   the next numeric suffix for later collisions; write the reason first and resume it only when its brief fingerprint
   matches.
+  A product brief below `brief.minimumEstimateLines` or over `brief.maximumBodyCharacters` moves to `returned/` with a
+  reason; urgent, research, mechanical, specification and continuation briefs are exempt. One manager instruction
+  lists path-prefix merge candidates; status and hourly reports count them.
+  Decision: omitted estimates on ordinary product briefs count as 1,500 lines, matching parseBrief. Interface, claim and
+  bulk-text are product. Merge candidates are the closest same-Goal ready or returned briefs by declared-path prefix
+  overlap, at most three. Invalid YAML in a backlog file is untrusted input and is not a size return.
   A brief
   left in `.dispatching/` by a host that stopped after creating the task is archived once as
   `dispatched/<task-id>-<name>.md` when exactly one unarchived task in that Goal has the same brief text; with no such
@@ -2244,7 +2252,7 @@ host's socket. The host skips the minute while the previous child is still runni
   one event an hour asking it to keep at least eight. Only non-hidden `*.md` files directly in the Goal's backlog
   directory count as ready; at eight or more, no low-backlog event is sent.
 
-`goal backlog status [--json]` prints ready, dispatched and failed brief counts per Goal. It reads only the
+`goal backlog status [--json]` prints ready, dispatched, failed and returned brief counts per Goal. It reads only the
 directories. The run's one-line JSON results are appended to `<state>/backlog-runner.log`.
 
 #### Cost: backlog run

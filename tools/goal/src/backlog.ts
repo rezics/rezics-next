@@ -1,5 +1,6 @@
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import type { Database } from 'bun:sqlite';
+import { Buffer } from 'node:buffer';
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import type { ManagerEvent, ManagerInbox } from './contracts.ts';
@@ -13,19 +14,32 @@ import {
   proposeContinuation,
   withContinuationAfter,
 } from './continuation.ts';
-import { parseBrief, readBriefContinuation, readResearchFanout, type RiskOwnership } from './briefs.ts';
+import {
+  briefPathCloseness,
+  parseBrief,
+  productBriefSizeReturnReason,
+  productBriefSizeViolation,
+  readBriefContinuation,
+  readBriefSizeSnapshot,
+  readResearchFanout,
+  type BriefSizeSnapshot,
+  type RiskOwnership,
+} from './briefs.ts';
 import type { Brief, BriefContinuation, Pool, PoolReading, Profile, TaskClass } from './types.ts';
 import { findAllowedPool, poolBurnStatus } from './allowance.ts';
 import { nearCeilingSweepAdmissions, readRetainedPoolReadings } from './pacing.ts';
 import { admissionProfiles, type RoutingTable } from './routing.ts';
+import { recordFlow } from './flow.ts';
 import {
   BACKLOG_DISPATCHED_DIRECTORY as DISPATCHED_DIRECTORY,
   BACKLOG_DISPATCHING_DIRECTORY as CLAIM_DIRECTORY,
   BACKLOG_FAILED_DIRECTORY as FAILED_DIRECTORY,
+  BACKLOG_RETURNED_DIRECTORY as RETURNED_DIRECTORY,
   backlogDirectory,
   briefs,
   dispatchResult,
   errorText,
+  stem,
   tableExists,
   taskLintWarnings,
   type BacklogDispatchResult,
@@ -73,7 +87,13 @@ export const backlogMigrations = [
   },
 ] as const;
 
-export type BacklogGoalCounts = { goal: string; ready: number; dispatched: number; failed: number };
+export type BacklogGoalCounts = {
+  goal: string;
+  ready: number;
+  dispatched: number;
+  failed: number;
+  returned: number;
+};
 
 export type BacklogRuntime = {
   db: Database;
@@ -105,6 +125,7 @@ export type BacklogSweep = {
   dispatched: { goal: string; taskId: string; brief: string; lintWarnings?: string[] }[];
   continued: { goal: string; taskId: string; attempt: number; brief: string }[];
   refused: { goal: string; brief: string; reason: string }[];
+  returned: { goal: string; brief: string; reason: string }[];
   expired: { goal: string; taskId: string }[];
   woken: string[];
 };
@@ -130,17 +151,20 @@ export function backlogStatus(stateDirectory: string): BacklogGoalCounts[] {
     ready: briefs(join(root, goal)).length,
     dispatched: briefs(join(root, goal, DISPATCHED_DIRECTORY)).length,
     failed: briefs(join(root, goal, FAILED_DIRECTORY)).length,
+    returned: briefs(join(root, goal, RETURNED_DIRECTORY)).length,
   }));
 }
 
 export function formatBacklogStatus(rows: BacklogGoalCounts[]): string {
   if (!rows.length) return 'No Goal backlog directories.';
   const width = Math.max(4, ...rows.map((row) => row.goal.length));
-  const line = (goal: string, ready: string, dispatched: string, failed: string) =>
-    `${goal.padEnd(width)}  ${ready.padStart(5)}  ${dispatched.padStart(10)}  ${failed.padStart(6)}`;
+  const line = (goal: string, ready: string, dispatched: string, failed: string, returned: string) =>
+    `${goal.padEnd(width)}  ${ready.padStart(5)}  ${dispatched.padStart(10)}  ${failed.padStart(6)}  ${returned.padStart(8)}`;
   return [
-    line('goal', 'ready', 'dispatched', 'failed'),
-    ...rows.map((row) => line(row.goal, String(row.ready), String(row.dispatched), String(row.failed))),
+    line('goal', 'ready', 'dispatched', 'failed', 'returned'),
+    ...rows.map((row) =>
+      line(row.goal, String(row.ready), String(row.dispatched), String(row.failed), String(row.returned)),
+    ),
   ].join('\n');
 }
 
@@ -263,6 +287,144 @@ function notifyRefusals(runtime: BacklogRuntime, goal: string, refused: { brief:
       (runtime.policy ?? defaultPolicy).backlog.refusalSummaryCharacters,
     ),
   });
+}
+
+function numberedReturnedName(file: string, sequence: number): string {
+  if (sequence === 1) return basename(file);
+  const suffix = `-${sequence}`;
+  const maxStemBytes = 255 - Buffer.byteLength(`${suffix}.md`);
+  let name = '';
+  for (const character of stem(file)) {
+    const next = name + character;
+    if (Buffer.byteLength(next) > maxStemBytes) break;
+    name = next;
+  }
+  return `${name}${suffix}.md`;
+}
+
+function returnBrief(goalDirectory: string, file: string, reason: string): string {
+  const returned = join(goalDirectory, RETURNED_DIRECTORY);
+  mkdirSync(returned, { recursive: true });
+  const text = `${reason.trim()}\n`;
+  for (let sequence = 1; ; sequence++) {
+    const name = numberedReturnedName(file, sequence);
+    const briefPath = join(returned, name);
+    const reasonPath = join(returned, `${stem(name)}.reason`);
+    if (existsSync(briefPath) || existsSync(reasonPath)) continue;
+    writeFileSync(reasonPath, text);
+    renameSync(file, briefPath);
+    return name;
+  }
+}
+
+type SizeReturnEntry = {
+  goal: string;
+  brief: string;
+  reason: string;
+  candidates: string[];
+};
+
+function closestMergeCandidates(
+  item: { name: string; snapshot?: BriefSizeSnapshot | undefined },
+  others: { name: string; snapshot?: BriefSizeSnapshot | undefined }[],
+  policy: ControlPolicy['brief'],
+): string[] {
+  const paths = item.snapshot?.paths ?? [];
+  if (!paths.length) return [];
+  return others
+    .map((other) => ({
+      name: other.name,
+      score: briefPathCloseness(paths, other.snapshot?.paths ?? [], policy),
+    }))
+    .filter((other) => other.score > 0)
+    .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
+    .slice(0, 3)
+    .map((other) => other.name);
+}
+
+function notifyReturns(runtime: BacklogRuntime, groups: Map<string, SizeReturnEntry[]>): void {
+  const policy = runtime.policy ?? defaultPolicy;
+  for (const [managerId, entries] of groups) {
+    const listed = entries
+      .slice(0, policy.backlog.refusalBriefs)
+      .map((entry) => {
+        const merge = entry.candidates.length ? `; merge with ${entry.candidates.join(', ')}` : '';
+        return `${entry.brief} (${oneLine(entry.reason, policy.backlog.refusalReasonCharacters)}${merge})`;
+      })
+      .join('; ');
+    const more =
+      entries.length > policy.backlog.refusalBriefs
+        ? `; and ${entries.length - policy.backlog.refusalBriefs} more`
+        : '';
+    const locations = [
+      ...new Set(entries.map((entry) => join(backlogDirectory(runtime.stateDirectory, entry.goal), RETURNED_DIRECTORY))),
+    ].join(', ');
+    runtime.inbox.deliver({
+      managerId,
+      goalId: entries[0]!.goal,
+      kind: 'instruction',
+      summary: oneLine(
+        `Backlog dispatch returned ${entries.length} product brief(s): ${listed}${more}. They are in ${locations}; merge same-Goal overlapping briefs into one outcome or rewrite them.`,
+        policy.backlog.refusalSummaryCharacters,
+      ),
+    });
+  }
+}
+
+function returnProductBriefs(
+  runtime: BacklogRuntime,
+  goals: string[],
+  now: number,
+): BacklogSweep['returned'] {
+  const policy = runtime.policy ?? defaultPolicy;
+  const returned: BacklogSweep['returned'] = [];
+  const groups = new Map<string, SizeReturnEntry[]>();
+  for (const goal of goals) {
+    const directory = backlogDirectory(runtime.stateDirectory, goal);
+    const scanned: {
+      file: string;
+      name: string;
+      snapshot: BriefSizeSnapshot | undefined;
+      violation: ReturnType<typeof productBriefSizeViolation>;
+    }[] = [];
+    for (const file of briefs(directory, now - policy.backlog.settleMs)) {
+      const markdown = readFileSync(file, 'utf8');
+      const name = basename(file);
+      scanned.push({
+        file,
+        name,
+        snapshot: readBriefSizeSnapshot(markdown),
+        violation: productBriefSizeViolation(markdown, policy.brief, name),
+      });
+    }
+    const staying = scanned.filter((entry) => !entry.violation);
+    const leaving = scanned.filter((entry) => entry.violation);
+    for (const item of leaving) {
+      const reason = productBriefSizeReturnReason(item.violation!, policy.brief);
+      const candidates = closestMergeCandidates(
+        item,
+        [...leaving.filter((other) => other !== item), ...staying],
+        policy.brief,
+      );
+      const archived = returnBrief(directory, item.file, reason);
+      returned.push({ goal, brief: archived, reason });
+      recordFlow(runtime.db, {
+        taskId: `${goal}/${archived}`,
+        attempt: 0,
+        stage: 'dispatch',
+        action: 'returned',
+        at: new Date(now).toISOString(),
+        detail: reason,
+      });
+      const managerId = item.snapshot?.manager ?? goal;
+      groups.set(managerId, [
+        ...(groups.get(managerId) ?? []),
+        { goal, brief: archived, reason, candidates },
+      ]);
+    }
+  }
+  notifyReturns(runtime, groups);
+  return returned;
 }
 
 type BriefPick = { goal: string; file: string; allowed: boolean };
@@ -428,7 +590,7 @@ function pickBriefs(
 async function dispatchReady(
   runtime: BacklogRuntime,
   now: number,
-): Promise<Pick<BacklogSweep, 'dispatched' | 'continued' | 'refused'>> {
+): Promise<Pick<BacklogSweep, 'dispatched' | 'continued' | 'refused' | 'returned'>> {
   const root = backlogDirectory(runtime.stateDirectory);
   const goals = directories(root);
   const dispatched: BacklogSweep['dispatched'] = [];
@@ -465,6 +627,7 @@ async function dispatchReady(
     for (const entry of recovered.dispatched) dispatched.push({ goal, ...entry });
     for (const entry of recovered.refused) refuse(goal, entry.brief, entry.reason);
   }
+  const returned = returnProductBriefs(runtime, goals, now);
 
   const waiterNeed = Math.max(0, Math.min(sweepLeft, waiterSlots));
   let waiterLeft = waiterNeed;
@@ -591,7 +754,7 @@ async function dispatchReady(
       });
   }
   for (const [goal, entries] of refusedByGoal) notifyRefusals(runtime, goal, entries);
-  return { dispatched, continued, refused };
+  return { dispatched, continued, refused, returned };
 }
 
 type StoppedRow = { id: string; current_attempt: number; body: string };
@@ -798,17 +961,17 @@ export async function sweepBacklog(runtime: BacklogRuntime): Promise<BacklogSwee
     lease = acquireDirectoryLease(join(runtime.stateDirectory, 'leases', 'backlog'), runtime.policy?.leases);
   } catch (error) {
     if (error instanceof LeaseHeldError)
-      return { skipped: true, dispatched: [], continued: [], refused: [], expired: [], woken: [] };
+      return { skipped: true, dispatched: [], continued: [], refused: [], returned: [], expired: [], woken: [] };
     throw error;
   }
   try {
     migrate(runtime.db, backlogMigrations);
     const now = (runtime.now ?? Date.now)();
     const expired = await expireStoppedTasks(runtime, now);
-    const { dispatched, continued, refused } = await dispatchReady(runtime, now);
+    const { dispatched, continued, refused, returned } = await dispatchReady(runtime, now);
     deliverResearchCompletions(runtime, now);
     const woken = wakeLowBacklogs(runtime, now);
-    return { dispatched, continued, refused, expired, woken };
+    return { dispatched, continued, refused, returned, expired, woken };
   } finally {
     lease.release();
   }

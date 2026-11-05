@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  briefPathCloseness,
   controlPlaneReleaseBrief,
   classifyRiskAreas,
   devProductBrief,
@@ -9,10 +10,13 @@ import {
   MAX_BRIEF_BYTES,
   parseBrief,
   pathsOverlap,
+  productBriefSizeReturnReason,
+  productBriefSizeViolation,
   readRiskOwnership,
   riskAreaRulesFor,
   validatePath,
 } from './briefs.ts';
+import { defaultPolicy } from './policy.ts';
 import { workerCheckProtocol } from './launch.ts';
 import { classifyTask } from './routing.ts';
 import { harness, markdown } from './test-support.ts';
@@ -305,4 +309,43 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:1,output_t
   } finally {
     await h.disposeAsync();
   }
+});
+
+test('product brief size returns use policy floors and exempt urgent research mechanical specification and continuation', () => {
+  const policy = defaultPolicy.brief;
+  expect(policy.minimumEstimateLines).toBe(1200);
+  expect(policy.maximumBodyCharacters).toBe(4000);
+  expect(productBriefSizeViolation(markdown)).toEqual({ estimateLines: 100 });
+  expect(productBriefSizeReturnReason({ estimateLines: 100 }, policy)).toContain('brief.minimumEstimateLines is 1200');
+  const complete = markdown.replace('lines: 100', `lines: ${policy.minimumEstimateLines}`);
+  expect(productBriefSizeViolation(complete)).toBeUndefined();
+  const omitted = markdown.replace('estimate:\n  lines: 100\n  files: 4\n', '');
+  expect(productBriefSizeViolation(omitted)).toBeUndefined();
+  const header = /^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/.exec(complete)![0];
+  const atLimit = header + 'x'.repeat(policy.maximumBodyCharacters);
+  expect(productBriefSizeViolation(atLimit)).toBeUndefined();
+  const over = atLimit + 'y';
+  expect(productBriefSizeViolation(over)).toEqual({ bodyCharacters: policy.maximumBodyCharacters + 1 });
+  expect(productBriefSizeReturnReason({ bodyCharacters: policy.maximumBodyCharacters + 1 }, policy)).toContain(
+    'brief.maximumBodyCharacters is 4000',
+  );
+  expect(productBriefSizeViolation(complete.replace('criticalPath: false', 'urgent: true\ncriticalPath: false'))).toBeUndefined();
+  for (const kind of ['research', 'mechanical', 'specification'] as const)
+    expect(productBriefSizeViolation(markdown.replace('kind: implementation', `kind: ${kind}`))).toBeUndefined();
+  expect(
+    productBriefSizeViolation(
+      markdown.replace('goal: fixture', 'goal: fixture\ncontinuation:\n  taskId: retained\n  expectedAttempt: 1'),
+    ),
+  ).toBeUndefined();
+  expect(productBriefSizeViolation(markdown, policy, 'continuation-abcd-1-rest.md')).toBeUndefined();
+  expect(
+    productBriefSizeViolation(markdown.replace('kind: implementation', 'kind: verification').replace('paths: [result.txt]', 'paths: []')),
+  ).toBeUndefined();
+  expect(
+    productBriefSizeViolation(markdown.replace('goal: fixture', 'goal: control-plane\ntarget: main')),
+  ).toBeUndefined();
+  expect(productBriefSizeViolation(complete, { ...policy, minimumEstimateLines: 2000 })).toEqual({ estimateLines: 1200 });
+  expect(briefPathCloseness(['tools/goal/src/backlog.ts'], ['tools/goal/src/briefs.ts'])).toBeGreaterThan(
+    briefPathCloseness(['tools/goal/src/backlog.ts'], ['apps/web/src/page.ts']),
+  );
 });

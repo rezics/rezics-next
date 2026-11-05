@@ -87,6 +87,7 @@ test('hourly report uses timestamped outcomes and leaves missing lifecycle evide
 
     const report = await renderHourlyEfficiencyReport(h.db, { bucket, now });
     expect(report).toContain('Landings in UTC hour: dev 1; stabilize 0; main 0; unknown 0 (each task counted once).');
+    expect(report).toContain('Backlog returns in bucket: 0.');
     expect(report).toContain('Landing identities: landed#2 at 2026-10-31T01:10:00.000Z (dev).');
     expect(report).toContain('Last useful landing: landed#2 at 2026-10-31T01:10:00.000Z.');
     expect(report).toContain('Worker starts / finishes in bucket: 2 starts (including resumes) / 1 finished attempts.');
@@ -107,6 +108,7 @@ test('hourly report uses timestamped outcomes and leaves missing lifecycle evide
   try {
     const report = await renderHourlyEfficiencyReport(db, { bucket: '2026-10-31T01:00:00.000Z' });
     expect(report).toContain('Landings: unknown (timestamped integration history unavailable).');
+    expect(report).toContain('Backlog returns in bucket: unknown (flow history unavailable).');
     expect(report).toContain('Last useful landing: unknown');
     expect(report).toContain('Current waits: unknown (current task state unavailable).');
     expect(report).toContain('Promotion: unknown (promotion state unavailable).');

@@ -585,6 +585,8 @@
       "bytes": 12288,
       "pathCharacters": 65536,
       "pathMatchStates": 1000000,
+      "minimumEstimateLines": 1200,
+      "maximumBodyCharacters": 4000,
       "sharedPaths": [
         "**/README.md",
         "docs/**",
