@@ -17,11 +17,11 @@ test('a running train reloads local settings between landings and logs each revi
   let runtime: ReturnType<typeof createRuntime> | undefined;
   let changed = false;
   try {
-    h.ensureDev();
     mkdirSync(join(h.root, 'tools/goal/src'), { recursive: true });
     writeFileSync(join(h.root, 'tools/goal/src/runtime.ts'), 'export const revision = 1;\n');
     git(h.root, 'add', '--', 'tools/goal/src/runtime.ts');
     git(h.root, 'commit', '-m', 'Add tools/goal');
+    h.ensureDev();
     setPrelandingTypecheck(h.settings.localFile, true);
     h.settings.integration.devPrelandingTypecheck = true;
     const first = h.dispatch('docs/first.md');

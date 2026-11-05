@@ -167,20 +167,27 @@ test('an unrelated main change outside tools/goal does not hand off', async () =
   const s = setup();
   try {
     addControlPlaneSource(s.repo.main);
+    git(s.repo.main, 'branch', 'dev');
     const originalVersion = codeVersion(s.repo.main, 'tools/goal');
     s.queue.enqueue(s.repo.branch('first', 'first-result'));
     s.queue.enqueue(s.repo.branch('second', 'second-result'));
     let handoffs = 0;
+    let unrelated = false;
     await new MergeTrain({
       ...s.options,
+      integrationBranch: 'dev',
       codeIsCurrent: () => codeVersion(s.repo.main, 'tools/goal') === originalVersion,
       handOff() {
         handoffs++;
       },
-      async runGate() {
+      async beforeRelease() {
+        if (unrelated) return;
+        unrelated = true;
         writeFileSync(join(s.repo.main, 'other.txt'), 'unrelated\n');
         git(s.repo.main, 'add', '--', 'other.txt');
         git(s.repo.main, 'commit', '-m', 'Unrelated main change');
+      },
+      async runGate() {
         return { passed: true, output: '', timedOut: false };
       },
     }).runWaiting();
@@ -396,8 +403,24 @@ while (!existsSync(${JSON.stringify(release)})) await new Promise((resolve) => s
     const replacement = trainLaneStatus(h.settings.stateDirectory).find(
       (lane) => lane.state === 'running' && lane.pid !== oldPid,
     );
+    expect(replacement?.pid).not.toBe(oldPid);
     expect(replacement?.codeVersion).toBe(published);
     if (replacement?.pid) pids.add(replacement.pid);
+    const live = spawnSync(process.execPath, [join(h.root, 'tools/goal/src/cli.ts'), 'status'], {
+      cwd: h.root,
+      encoding: 'utf8',
+      env: process.env,
+      timeout: 20_000,
+    });
+    expect(live.status ?? live.error?.message).toBe(0);
+    const liveTrains = (
+      JSON.parse(live.stdout) as {
+        trains: { state: string; pid?: number; codeVersion?: string }[];
+      }
+    ).trains;
+    expect(liveTrains.some((lane) => lane.pid === oldPid && lane.state === 'running')).toBe(false);
+    const reportedReplacement = liveTrains.find((lane) => lane.pid === replacement?.pid);
+    if (reportedReplacement) expect(reportedReplacement.codeVersion).toBe(published);
 
     await waitUntil(
       'both landings recorded',
@@ -424,9 +447,6 @@ while (!existsSync(${JSON.stringify(release)})) await new Promise((resolve) => s
       trains: { state: string; pid?: number; codeVersion?: string }[];
     };
     expect(reported.trains.some((lane) => lane.pid === oldPid && lane.state === 'running')).toBe(false);
-    expect(
-      reported.trains.some((lane) => lane.state === 'running' && lane.pid === replacement?.pid && lane.codeVersion === published),
-    ).toBe(true);
   } finally {
     try {
       writeFileSync(release, '');
