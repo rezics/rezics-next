@@ -1,6 +1,6 @@
 import { afterAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, Fragment, StrictMode, type ReactNode } from 'react';
+import { act, Fragment, StrictMode, useState, type ReactNode } from 'react';
 import type {
   ProgressFailure,
   ProgressFinishInput,
@@ -35,6 +35,7 @@ const globals = {
   getComputedStyle: window.getComputedStyle.bind(window),
   requestAnimationFrame: window.requestAnimationFrame.bind(window),
   cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+  scrollTo: window.scrollTo.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -93,7 +94,7 @@ mock.module('../src/library/progress-server', () => ({
 const { createRoot } = await import('react-dom/client');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const { renderToString } = await import('react-dom/server');
-const { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterContextProvider } =
+const { createBrowserHistory, createRootRoute, createRoute, createRouter, RouterProvider } =
   await import('@tanstack/react-router');
 const { within, userEvent } = await import('storybook/test');
 const { ProgressSessionPage } = await import('../src/library/progress-session');
@@ -166,11 +167,18 @@ async function mount(initial: LoadedPage, phone = false) {
   const root = createRoot(host as unknown as HTMLElement);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(['session'], { state: 'signed-out', csrfToken: null });
-  const rootRoute = createRootRoute();
+  let shown: Page | null = initial;
+  let renderPage: () => void;
+  const rootRoute = createRootRoute({ component: function Page() {
+    const [, render] = useState(0);
+    renderPage = () => render((value) => value + 1);
+    return shown && <ProgressSessionPage page={shown} logsCursor="logs:independent/==" />;
+  } });
   const destinationRoute = createRoute({ getParentRoute: () => rootRoute, path: '/destination' });
+  window.history.replaceState({}, '', '/');
   const router = createRouter({
     routeTree: rootRoute.addChildren([destinationRoute]),
-    history: createMemoryHistory({ initialEntries: ['/'] }),
+    history: createBrowserHistory({ window: window as unknown as Window }),
   });
   const originalMatchMedia = window.matchMedia;
   if (phone)
@@ -182,16 +190,15 @@ async function mount(initial: LoadedPage, phone = false) {
         removeEventListener() {},
       }) as unknown as MediaQueryList) as typeof window.matchMedia;
   await router.load();
-  const tree = (p: Page | null) => (
+  const tree = () => (
     <StrictMode>
       <QueryClientProvider client={client}>
-      <RouterContextProvider router={router}>
-        {p && <ProgressSessionPage page={p} logsCursor="logs:independent/==" />}
-      </RouterContextProvider>
+        <RouterProvider router={router} />
       </QueryClientProvider>
     </StrictMode>
   );
-  const show = async (p: Page | null) => settle(() => root.render(tree(p)));
+  await settle(() => root.render(tree()));
+  const show = async (p: Page | null) => settle(() => { shown = p; renderPage(); });
   const body = within(window.document.body as unknown as HTMLElement);
   const user = userEvent.setup({ document: window.document as unknown as Document });
   const click = async (label: string) =>
@@ -245,10 +252,11 @@ async function mount(initial: LoadedPage, phone = false) {
   };
   const intact = (p: LoadedPage, kind: Kind) => {
     expect(host.textContent).toContain(`Subject ${p.session.id}`);
-    expect(within(dialog()).queryByRole('alert')?.textContent ?? null).toBeNull();
+    expect(host.querySelector(':scope > article > [role="alert"]')?.textContent ?? null).toBeNull();
     if (kind === 'finish')
       expect(body.getByRole('button', { name: m.library_progress_confirm_complete() })).toBeDefined();
     else {
+      expect(dialog().querySelector(':scope > [role="alert"]')?.textContent ?? null).toBeNull();
       expect(key()).toBe(p.idempotencyKey);
       expect(
         field(
@@ -277,9 +285,10 @@ async function mount(initial: LoadedPage, phone = false) {
     path: () => router.state.location.pathname,
     start,
     intact,
-    ssr: () => renderToString(tree(initial)),
+    ssr: () => renderToString(tree()),
     close: async () => {
       await settle(() => root.unmount());
+      router.history.destroy();
       host.remove();
       client.clear();
       if (phone) window.matchMedia = originalMatchMedia;
@@ -396,7 +405,7 @@ test('manual refresh is latest-request-wins for successes, refusals and thrown f
       );
       expect(h.host.textContent).toContain('Subject latest');
       expect(h.field(m.library_progress_amount()).value).toBe('4.75');
-      expect(within(h.dialog()).queryByRole('alert')?.textContent ?? null).toBeNull();
+      expect(h.dialog().querySelector(':scope > [role="alert"]')?.textContent ?? null).toBeNull();
     } finally {
       await h.close();
     }
@@ -738,7 +747,8 @@ test('decimal corrections explain invalid operands before review and retain exac
           : { locator: ' ', position: '999999999999.123456' },
       );
       await settle(() => original.work.resolve({ ok: false, reason: 'unavailable' }));
-      await h.fill(label, '1e3');
+      expect(h.field(label).disabled).toBe(true);
+      expect(h.field(label).value).toBe('999999999999.123456');
       await h.submit('record');
       expect(commands[1]!.data).toEqual(original.data);
       await settle(() => commands[1]!.work.resolve({ ok: false, reason: 'unavailable' }));

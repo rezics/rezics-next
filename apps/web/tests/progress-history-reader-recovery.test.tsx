@@ -31,6 +31,7 @@ const globals = {
   getComputedStyle: window.getComputedStyle.bind(window),
   requestAnimationFrame: window.requestAnimationFrame.bind(window),
   cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+  scrollTo: window.scrollTo.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -71,7 +72,7 @@ const { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterP
 const { within, userEvent } = await import('storybook/test');
 const { ProgressSessionPage } = await import('../src/library/progress-session');
 const { m } = await import('../src/paraglide/messages.js');
-const { setLocale, deLocalizeUrl, localizeUrl } = await import('../src/paraglide/runtime.js');
+const { setLocale, getLocale, deLocalizeUrl, localizeUrl } = await import('../src/paraglide/runtime.js');
 
 type LoadedPage = Extract<Page, { signedIn: true }>;
 const stamp = '2026-10-02T23:59:59.123Z';
@@ -380,7 +381,7 @@ test('Absent operations hide only their navigation and retired origin/capture/lo
     const origin: ProgressDetailOrigin = {
       viewer: 'owner',
       address: { id: initial.session.id, ...cursors },
-      isCurrent: () => (retirement === 'origin' ? current : true),
+      isCurrent: () => getLocale() === 'en' && (retirement === 'origin' ? current : true),
       ...(retirement === 'capture' ? { capture: () => ({ isCurrent: () => current, headers: () => null }) } : {}),
       refresh: unexpectedRequest,
     };

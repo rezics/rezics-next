@@ -30,6 +30,7 @@ const globals = {
   getComputedStyle: window.getComputedStyle.bind(window),
   requestAnimationFrame: window.requestAnimationFrame.bind(window),
   cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+  scrollTo: window.scrollTo.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -400,6 +401,7 @@ test('a reviewed correction returns to its selected index only after the draft c
       progressReturnSelection?: { sessionId?: string; subjectId?: string };
     };
     expect(state.progressReturnSelection).toEqual({
+      indexHref: returnContext.indexHref,
       locale: 'en',
       sessionId: original.session.id,
       subjectId: original.session.subjectId,
