@@ -103,7 +103,7 @@ opened transaction. Advisory locks/settings access no product table keys.
 | Record one SDK copy |                                8 |                            19 | Latest work point 1/six statements, then root 1, advisory lock, work/copy INSERT SELECT 2 + receipt INSERT/two-column work FK 2, exact reread 1 (four body statements/twelve with wrapper); PLUS one actual SDK fence PK read/one statement/one key. The FK is one composite-key lookup; total local visits seven plus the SDK key |
 | Private receipt factory after begin |                               12 |                            20 | Exact work/erasure preflight 2/six statements, checking account/version/T before any native page; then five body statements: explicit settings, advisory lock, coverage 1, exact work/erasure 2 + marked-image LIMIT1 1 + exact replay/generation 2 + copy/consent absence prefixes 2 + coverage 1, then work UPDATE 1. Fourteen includes all transaction wrapper settings and controls. Every factory call first repeats begin receiving work (5 local keys/18 statements plus native registration 17 keys/9 statements), including historical obligations with no local work yet. Thus the complete Auth factory has 17 keys/38 client statements plus that native registration. If the preflight lacks a current native xid, one original native page and its existing producer fence run first, with their original separate bounds and no cursor reset; its receiving begin and terminal callback are additional, not included twice for free |
 | Restored import addition |     native invalidate + register |             no added Auth SQL | Owner recovery and existing source floor/lineage validation precede control operations; exact database identity/generation must match verified inventory before the original import transaction |
-| Restored replay addition            | 1 + native invalidate + register |       6 added Auth statements | Exact original source tuple read through deadline wrapper before existing native replay; original replay/copy costs remain charged on every reached invocation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Restored replay addition            | 1 + native invalidate + register |       6 added Auth statements | Exact original source tuple read through deadline wrapper before existing native replay; original replay/copy costs remain charged on every reached invocation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | Live home addition                  | native invalidate + read-control |             no added Auth SQL | One existing rotating home; quarantine commits before any original live enrollment                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 
 The copy row bound above includes a successful immutable receipt insertion and
@@ -381,9 +381,9 @@ Display limits never alter identity, authority, credential counts, freshness or 
 Historical records enter closed projections; no raw passkey row is serialized. IDs remain exact,
 nonempty and at most 1,024 units; invalid authoritative fields refuse the read or retain the
 section's unavailable state. Dates project to ISO timestamps (at most 27 units).
-Security retains windows64/32 plus sentinels, independent unavailable sections and current-session
-recognition. `/passkeys` projects at most32 entries. Selected clients/consents retain page20
-(default; native limit1–100), exact cursors (at most8,192 units), existing bindings and retry rules.
+Security retains windows 64/32 plus sentinels, independent unavailable sections and current-session
+recognition. `/passkeys` projects at most 32 entries. Selected clients/consents retain page 20
+(default; native limit 1–100), exact cursors (at most 8,192 units), existing bindings and retry rules.
 Invalid owned scope arrays refuse the page; invalid consent authority remains unavailable.
 
 `@rezics/auth-contract` exports `securityResponseLimits`, `securityScopeLimit`,
@@ -391,15 +391,15 @@ Invalid owned scope arrays refuse the page; invalid consent authority remains un
 `securityResponseByteBudgets(C, L=20)` publishes byte allowances `securityPage`, `clients`,
 `consents`, `session`, `passkeys`, `registrationPage` for the corresponding exact native reads.
 C is `securityScopeLimit(siteActions.keys())`: union of mounted keys with openid, offline_access
-and media:complete; only an absent catalogue uses1,000. Native selected inventory uses this same
-ceiling rather than the separate kind-consent512 contract. No configured scope is clipped.
-Scope text remains128 units with OAuth characters; proof AMR is one of the four installed methods,
+and media:complete; only an absent catalogue uses 1,000. Native selected inventory uses this same
+ceiling rather than the separate kind-consent 512 contract. No configured scope is clipped.
+Scope text remains 128 units with OAuth characters; proof AMR is one of the four installed methods,
 epoch/time are safe integers. Registration password requirements are positive safe integers;
 its viewer comes from the bounded native session projection.
 
 The executable formulas count every emitted key, colon, comma and bracket: string S(n)=2+6n,
 array A(k,b)=2+kb+max(0,k−1), object O=sum(quoted-key bytes+1+value bytes)+2+commas.
-Nullable fields use max(4,S); booleans use5; numbers use their maximum decimal widths.
+Nullable fields use max(4,S); booleans use 5; numbers use their maximum decimal widths.
 Six bytes per UTF-16 unit covers escaping, lone surrogates and UTF-8. All arithmetic must remain
 nonnegative safe finite integers; invalid composition fails before serving. Totals derive from
 closed fields and count limits, including worst-case escaped text, rather than row counts alone.
@@ -410,7 +410,7 @@ these derived allowances with that trusted page configuration before reading pri
 The page/BFF imports only the public pure helpers, never service/database code. Neither response
 Content-Length nor an arbitrary response header may raise a cap. There is no new metadata endpoint,
 scan, per-row read, polling or storage migration. Browser parsing/migration and native journey
-qualification remain separate work; sign-in's installed16,384-byte cap is unchanged.
+qualification remain separate work; sign-in's installed 16,384-byte cap is unchanged.
 
 Better Auth 1.8.0-beta.3's installed public `$context.adapter` types support
 `create({ forceAllowId: true })` and `transaction()`. Provisioning uses that

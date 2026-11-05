@@ -4,6 +4,7 @@ import { securityResponseByteBudgets, securityScopeLimit, securityJsonStringByte
 import { composeSecurityPage } from '../src/security-page.ts';
 import { securityPasskey } from '../src/security-response-bounds.ts';
 import { securityInventory } from '../src/security-inventory.ts';
+import { readRegistrationPage } from '../src/registration-page.ts';
 
 const bytes = (value: unknown) => Buffer.byteLength(JSON.stringify(value));
 const id = '\u0000'.repeat(1024),
@@ -149,4 +150,14 @@ test('budget arithmetic refuses unsafe or nonfinite configuration rather than pr
   for (const count of [-1, Infinity, NaN, 1.5, Number.MAX_SAFE_INTEGER])
     expect(() => securityResponseByteBudgets(count)).toThrow(RangeError);
   expect(() => securityResponseByteBudgets(1000, 101)).toThrow(RangeError);
+});
+
+test('registration requirements and current viewer fit the published private registration allowance', async () => {
+  const page = await readRegistrationPage({
+    readSession: async () => Response.json({ account_id: id }),
+    passwordLimits: async () => ({ minLength: 1, maxLength: Number.MAX_SAFE_INTEGER }),
+    verificationConfigured: true,
+  });
+  expect(page.kind).toBe('already-signed-in');
+  expect(bytes(page)).toBeLessThanOrEqual(securityResponseByteBudgets(1000).registrationPage);
 });
