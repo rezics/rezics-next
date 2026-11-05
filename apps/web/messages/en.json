@@ -11089,5 +11089,6 @@
   "library_selected_correction_cancel": "Cancel remaining corrections",
   "library_selected_correction_fresh_review": "This identity changed or is unavailable. Return to Entries and deliberately review the current Entry. A recreated Entry never inherits this correction.",
   "library_selected_correction_current": "Current native facts (separate observation)",
-  "library_selected_correction_confirm": "Confirm this reviewed item"
+  "library_selected_correction_confirm": "Confirm this reviewed item",
+  "library_selected_correction_note_error": "Enter a nonempty note of at most 4,096 UTF-8 bytes."
 }

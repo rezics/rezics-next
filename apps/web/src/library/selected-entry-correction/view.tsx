@@ -119,6 +119,7 @@ export function CorrectionVisit({
   const latest = useRef({ current, controller });
   latest.current = { current, controller };
   useEffect(() => {
+    alive.current = true;
     const retire = () => {
       if (!latest.current.current()) {
         latest.current.controller?.retire();
@@ -152,6 +153,9 @@ export function CorrectionVisit({
     undefined,
     {
       title: m.library_annotation_leave_title(),
+      discardTitle: m.library_annotation_leave_title(),
+      discardUnsaved: m.library_selected_correction_departure(),
+      discardPending: m.library_annotation_unresolved_departure(),
       unsaved: m.library_selected_correction_departure(),
       pending: m.library_annotation_unresolved_departure(),
     },
@@ -199,7 +203,7 @@ export function CorrectionVisit({
             <OperationField field="note" draft={draft} onChange={setDraft} disabled={preparing} />
             <OperationField field="priority" draft={draft} onChange={setDraft} disabled={preparing} />
           </div>
-          {issues.note ? <p role="alert">{m.library_annotation_note_error()}</p> : null}
+          {issues.note ? <p role="alert">{m.library_selected_correction_note_error()}</p> : null}
           {issues.priority ? <p role="alert">{m.library_annotation_priority_error()}</p> : null}
           <button
             className={button}
