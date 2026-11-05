@@ -241,7 +241,7 @@ const { CurrentProgressDetail } = await import('../src/library/progress-session'
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const { createRoot, hydrateRoot } = await import('react-dom/client');
 const { renderToString } = await import('react-dom/server');
-const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } =
+const { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterContextProvider, RouterProvider } =
   await import('@tanstack/react-router');
 const { within, userEvent } = await import('storybook/test');
 const { m } = await import('../src/paraglide/messages.js');
@@ -252,7 +252,7 @@ const settle = async (action: () => void) =>
     action();
   });
 
-async function mount(initial = detail(), hydrate = false, observed = viewer(initial.viewer)) {
+async function mount(initial = detail(), hydrate = false, observed = viewer(initial.viewer), routed = false) {
   preparations = [];
   prepared = 0;
   nativeReads.length = writes.length = 0;
@@ -273,9 +273,35 @@ async function mount(initial = detail(), hydrate = false, observed = viewer(init
   cache.setQueryData(['session'], current);
   cache.setQueryData(['exposure', 'viewer'], ['reading_progress']);
   cache.setQueryData(['exposure', 'anonymous'], ['reading_progress']);
+  const route = createRootRoute();
+  let loaders = 0;
+  const { Route } = await import('../src/routes/library/progress.$id');
+  const routedDetail = Route.update({
+    getParentRoute: () => route,
+    beforeLoad: async () => {},
+    loader: async () => {
+      loaders++;
+      return initial;
+    },
+  });
   const router = createRouter({
-    routeTree: createRootRoute(),
-    history: createMemoryHistory({ initialEntries: ['/'] }),
+    routeTree: routed
+      ? route.addChildren([
+          routedDetail,
+          createRoute({
+            getParentRoute: () => route,
+            path: '/library/progress',
+            component: () => <p>Progress index</p>,
+          }),
+        ])
+      : route,
+    history: createMemoryHistory({
+      initialEntries: [
+        routed
+          ? `/library/progress/${initial.address.id}?${new URLSearchParams(Object.entries(initial.address).filter(([key, value]) => key !== 'id' && value !== undefined) as [string, string][])}&history=%2Flibrary%2Fhistory%3Fcursor%3Doriginal%252F%252B%253D%253D`
+          : '/',
+      ],
+    }),
   });
   await router.load();
   const host = document.createElement('div');
@@ -286,9 +312,13 @@ async function mount(initial = detail(), hydrate = false, observed = viewer(init
   const tree = (visible = true) => (
     <StrictMode>
       <QueryClientProvider client={cache}>
-        <RouterContextProvider router={router}>
-          {visible && <CurrentProgressDetail loaded={loaded} address={at} />}
-        </RouterContextProvider>
+        {routed ? (
+          <RouterProvider router={router} />
+        ) : (
+          <RouterContextProvider router={router}>
+            {visible && <CurrentProgressDetail loaded={loaded} address={at} />}
+          </RouterContextProvider>
+        )}
       </QueryClientProvider>
     </StrictMode>
   );
@@ -363,6 +393,8 @@ async function mount(initial = detail(), hydrate = false, observed = viewer(init
     host,
     body,
     cache,
+    router,
+    loaders: () => loaders,
     show,
     click,
     field,
@@ -731,4 +763,125 @@ test('actual combined server export uses each reader preparation exactly once an
   listFailure = Response.json({ code: 'forbidden' }, { status: 403 });
   await expect(actualDetail({ data: address })).rejects.toMatchObject({ state: 'denied' });
   listFailure = null;
+});
+
+test('routed detail traverses independent native windows, retries an exact failed target, revisits facts and continues editing', async () => {
+  const h = await mount(detail(), false, viewer(), true);
+  const region = (section: 'changes' | 'units') =>
+    within(
+      h.body.getByRole('region', {
+        name: section === 'changes' ? m.library_progress_changes() : m.library_progress_units(),
+        exact: true,
+      }),
+    );
+  const move = async (section: 'changes' | 'units', label: string) =>
+    act(async () => {
+      await h.body.getByRole('region', {
+        name: section === 'changes' ? m.library_progress_changes() : m.library_progress_units(),
+        exact: true,
+      });
+      await userEvent.setup({ document }).click(region(section).getByRole('link', { name: label, exact: true }));
+    });
+  const admit = async (empty = false, restart?: 'changes' | 'units') => {
+    const at = h.reads.at(-1)!.data;
+    const p = detail('A', at);
+    p.progress.session.changesNext = at.changes === 'third-changes' ? null : 'third-changes';
+    p.progress.session.unitsNext = at.units === 'third-units' ? null : 'third-units';
+    if (empty) {
+      p.progress.session.changes = [];
+      p.progress.session.units = [];
+    }
+    if (restart) delete p.progress[restart === 'changes' ? 'changesCursor' : 'unitsCursor'];
+    await h.resolveRead(p);
+  };
+  try {
+    for (const section of ['changes', 'units'] as const) {
+      expect(region(section).queryByRole('link', { name: m.library_window_previous() })).toBeNull();
+      await move(section, m.library_progress_more());
+      const target = {
+        ...address,
+        [section]: `next-${section}`,
+        ...(section === 'units' ? { changes: 'third-changes' } : {}),
+      };
+      expect(h.reads.at(-1)!.data).toEqual(target);
+      await admit();
+      await move(section, m.library_progress_more());
+      await admit(true);
+      expect(region(section).queryByRole('link', { name: m.library_progress_more() })).toBeNull();
+      expect(region(section).getByRole('link', { name: m.library_window_previous() })).toBeTruthy();
+    }
+    expect(h.loaders()).toBe(1);
+    const units = h.router.state.location.search.units;
+    await move('changes', m.library_window_previous());
+    const failed = { ...h.reads.at(-1)!.data };
+    await settle(() => h.reads.at(-1)!.work.reject(new Error('native page failed')));
+    await h.click(m.library_progress_retry());
+    expect(h.reads.at(-1)!.data).toEqual(failed);
+    await admit();
+    await move('changes', m.library_window_previous());
+    expect(h.reads.at(-1)!.data.changes).toBe(address.changes);
+    expect(h.reads.at(-1)!.data.units).toBe(units);
+    await admit();
+    expect(region('changes').queryByRole('link', { name: m.library_window_previous() })).toBeNull();
+    await move('units', m.library_collections_first_page());
+    expect(h.reads.at(-1)!.data).toEqual({ ...address, units: undefined });
+    await admit();
+    expect(h.router.state.location.search.logs).toBe(address.logs);
+    expect(h.router.state.location.search.history).toBe('/library/history?cursor=original%2F%2B%3D%3D');
+    await h.record('4.75');
+    expect(writes).toHaveLength(1);
+    await settle(() => writes[0]!.work.resolve(recorded(detail())));
+    expect(h.reads.at(-1)!.data.units).toBeUndefined();
+    await admit();
+    await act(async () =>
+      userEvent
+        .setup({ document })
+        .click(h.body.getByRole('link', { name: m.library_progress_return_to_progress(), exact: true })),
+    );
+    expect(document.body.textContent).toContain('Progress index');
+  } finally {
+    await h.close();
+  }
+});
+
+test('a native section restart clears only its predecessors; replacement retires paths and late movement', async () => {
+  const h = await mount(detail(), false, viewer(), true);
+  const more = async (section: 'changes' | 'units') =>
+    act(async () =>
+      userEvent
+        .setup({ document })
+        .click(
+          within(
+            h.body.getByRole('region', {
+              name: section === 'changes' ? m.library_progress_changes() : m.library_progress_units(),
+              exact: true,
+            }),
+          ).getByRole('link', { name: m.library_progress_more() }),
+        ),
+    );
+  try {
+    await more('units');
+    await h.resolveRead(detail('A', h.reads.at(-1)!.data));
+    await more('changes');
+    const restarted = detail('A', h.reads.at(-1)!.data);
+    delete restarted.progress.changesCursor;
+    await h.resolveRead(restarted);
+    const changes = within(h.body.getByRole('region', { name: m.library_progress_changes(), exact: true }));
+    expect(changes.queryByRole('link', { name: m.library_window_previous() })).toBeNull();
+    expect(changes.getByRole('status').textContent).toBe(m.library_progress_history_restarted());
+    expect(
+      within(h.body.getByRole('region', { name: m.library_progress_units(), exact: true })).getByRole('link', {
+        name: m.library_window_previous(),
+      }),
+    ).toBeTruthy();
+    await more('changes');
+    const late = h.reads.at(-1)!;
+    await h.show({ session: viewer('B') });
+    await settle(() => late.work.resolve(detail('A', late.data)));
+    h.absent();
+    await h.resolveRead(detail('B', h.reads.at(-1)!.data));
+    expect(h.body.queryByRole('link', { name: m.library_window_previous() })).toBeNull();
+  } finally {
+    await h.close();
+  }
 });

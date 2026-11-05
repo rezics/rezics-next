@@ -11030,5 +11030,6 @@
   "library_bangumi_score_source_unsupported": "不受支持的证据",
   "library_bangumi_score_title": "原生评分",
   "library_bangumi_score_units": "使用已提供原生问题量表的单位",
-  "library_bangumi_score_units_invalid": "请输入已提供原生量表上的值，或选择保留。"
+  "library_bangumi_score_units_invalid": "请输入已提供原生量表上的值，或选择保留。",
+  "library_progress_history_restarted": "历史记录已更改。正在显示当前第一页。"
 }

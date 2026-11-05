@@ -11018,5 +11018,6 @@
   "library_bangumi_score_source_unsupported": "지원되지 않는 증거",
   "library_bangumi_score_title": "네이티브 점수",
   "library_bangumi_score_units": "제공된 네이티브 질문 척도의 단위",
-  "library_bangumi_score_units_invalid": "제공된 네이티브 척도의 값을 입력하거나 보존을 선택하세요."
+  "library_bangumi_score_units_invalid": "제공된 네이티브 척도의 값을 입력하거나 보존을 선택하세요.",
+  "library_progress_history_restarted": "기록이 변경되었습니다. 현재 첫 페이지를 표시합니다."
 }
