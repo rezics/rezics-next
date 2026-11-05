@@ -22,6 +22,7 @@ import {
   classifyRiskAreas,
   devProductBrief,
   parseBrief,
+  pathsOverlap,
   readRiskOwnership,
   riskAreaRulesFor,
   type RiskOwnership,

@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { isProtectedRiskPath } from './briefs.ts';
+import { isProtectedRiskPath, matchesPath } from './briefs.ts';
 import { choosePool } from './allowance.ts';
 import { agentAdapter } from './agents.ts';
 import type { AttemptRef, LandingRequest } from './contracts.ts';
