@@ -71,6 +71,7 @@ Decision: Review the exact Entry first; confirmation uses the existing clear, an
 Decision: Personal Shelf removal classifies native and recognized thrown refusals; definite refusals keep the row, show its failure and rotate the next explicit key, while uncertain retries retain their exact command and captured credentials only for the same viewer.
 
 Decision: Continue preserves exact native `platform_closed` and recognized `PlatformClosedError` refusals as a closed region, separate from permission denial and unavailability; closure clears retained rows and does not retry.
+Decision: Commerce owns Library diagnosis and receiving of Pin mutations; Accounts owns ordinary website scope alignment. Native Library permissions, preparations and gates remain authoritative; an actual denied mutation conveys no write authority.
 
 ## Dependencies
 
