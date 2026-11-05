@@ -149,13 +149,28 @@ test('sales retires late viewer, admission and address ABA results, retains acce
     await tick();
     expect(host.textContent).toContain(`Private sale ${A}`);
     expect(pending).toHaveLength(0);
+    const oldQuery = client.getQueryCache().findAll({ queryKey: ['creator-sales-current'] }).at(-1)!;
+    let oldRefresh!: Promise<unknown>;
+    await act(async () => {
+      oldRefresh = oldQuery.fetch();
+    });
+    await tick();
+    const stale = pending.at(-1)!;
+    expect(pending).toHaveLength(1);
     await act(async () => {
       session(A, 'healthy-rotation');
       admit();
+      stale.resolve(page(A));
+      await Promise.resolve();
     });
     await tick();
     expect(host.textContent).toContain(`Private sale ${A}`);
-    expect(pending).toHaveLength(0);
+    expect(pending).toHaveLength(2);
+    const renewed = pending.at(-1)!;
+    expect(renewed).not.toBe(stale);
+    await oldRefresh;
+    await settle(renewed, page(A));
+    expect(host.textContent).toContain(`Private sale ${A}`);
     cursor = 'second+/=';
     await show();
     await tick();

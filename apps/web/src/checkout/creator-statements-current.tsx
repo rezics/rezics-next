@@ -159,7 +159,7 @@ function StatementsRead({
   const windows = creatorStatementWindows(queryClient, JSON.stringify([origin.visitIdentity, address.locale]));
   useSyncExternalStore(windows.subscribe, windows.snapshot, windows.snapshot);
   const [initialData] = useState<Outcome | undefined>(() => {
-    const value = (origin.workspace.read as CurrentRead | undefined) ?? (seed ? initial : undefined);
+    const value = (origin.workspace.acceptedDisplay as CurrentRead | undefined) ?? (seed ? initial : undefined);
     return value && acceptsStatementsCurrent(value, subject, address) ? { kind: 'accepted', value } : undefined;
   });
   const query = useQuery<Outcome | null>({
@@ -179,13 +179,14 @@ function StatementsRead({
     },
     ...(initialData ? { initialData } : {}),
     // The actual loader already performed this lifetime's bounded read.
-    refetchOnMount: !initialData,
+    refetchOnMount: origin.refreshRetained ? 'always' : !initialData,
     gcTime: 0,
     retry: false,
     throwOnError: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
+  if (origin.isCurrent() && query.isFetchedAfterMount && query.data?.kind === 'accepted') origin.acceptRead();
   const [display, setDisplay] = useState(() => ({
     observed: initialData,
     page: initialData?.kind === 'accepted' ? initialData.value.page : ({ kind: 'preparing' } as Page),
@@ -209,12 +210,13 @@ function StatementsRead({
       return;
     }
     if (display.observed?.kind === 'accepted') {
-      const focus = windows.admit(address, sourceToken, display.page, origin.isCurrent());
+      const focus = windows.admit(address, sourceToken, display.page, origin.isReadCurrent());
       if (focus) document.getElementById(focus)?.focus();
     } else if (display.observed?.kind === 'failed') windows.failed(address, sourceToken, origin.isCurrent());
   }, [address, display, origin, sourceToken, windows]);
   if (hydrated && !origin.isCurrent()) return <StatementPresentation address={address} page={{ kind: 'preparing' }} />;
-  if (display.observed?.kind === 'accepted' && origin.isCurrent()) origin.workspace.read = display.observed.value;
+  if (display.observed?.kind === 'accepted' && origin.isCurrent())
+    origin.workspace.acceptedDisplay = display.observed.value;
   const payment =
     address.kind === 'detail' && display.page.kind === 'ready' && 'statement' in display.page ? (
       <CreatorPaymentAttestation

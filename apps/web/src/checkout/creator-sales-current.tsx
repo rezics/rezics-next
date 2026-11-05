@@ -212,7 +212,7 @@ export function CreatorSalesCurrent(props: Props) {
   if (loader.initial !== initial) {
     admittedLoader = { initial, version: loader.version + 1, origin: current.origin.id };
     setLoader(admittedLoader);
-    current.origin.workspace.read = undefined;
+    current.origin.workspace.acceptedDisplay = undefined;
   }
   const subject = current.hydrated ? current.subject : initial.sessionSubject;
   const admitted = current.hydrated ? current.origin.isCurrent() : initial.selling;
@@ -277,7 +277,7 @@ function CurrentSalesRead({
   const [, redraw] = useState(0);
   const queryKey = ['creator-sales-current', subject, locale, cursor ?? null, origin.id, revision];
   const seedData = () => {
-    const retained = origin.workspace.read;
+    const retained = origin.workspace.acceptedDisplay;
     const value = retained ?? (seed ? initial : undefined);
     return matches(value, subject, cursor ?? null) ? value : undefined;
   };
@@ -305,7 +305,7 @@ function CurrentSalesRead({
       }
     },
     initialData: seedData,
-    refetchOnMount: !seeded,
+    refetchOnMount: origin.refreshRetained ? 'always' : !seeded,
     structuralSharing: false,
     gcTime: 0,
     retry: false,
@@ -313,6 +313,7 @@ function CurrentSalesRead({
     refetchOnReconnect: false,
   });
   const value = query.data;
+  if (origin.isCurrent() && query.isFetchedAfterMount && value !== null && value !== undefined) origin.acceptRead();
   const observation = client.getQueryState(queryKey)?.dataUpdateCount;
   // Count successful observations, including responses equal to their predecessor.
   const source = useMemo(() => ({}), [value, observation]);
@@ -320,6 +321,7 @@ function CurrentSalesRead({
   const sourceIsCurrent = () =>
     origin.csrfToken() === credential &&
     origin.isCurrent() &&
+    origin.isReadCurrent() &&
     client.getQueryState(queryKey)?.dataUpdateCount === observation &&
     client.getQueryState(queryKey)?.fetchStatus !== 'fetching' &&
     client.getQueryData(queryKey) === value;
@@ -469,7 +471,7 @@ function CurrentSalesRead({
     return (
       <CreatorSalesPage page={{ kind: 'loading' }} locale={locale} {...(cursor === undefined ? {} : { cursor })} />
     );
-  if (origin.isCurrent()) origin.workspace.read = value;
+  if (origin.isCurrent()) origin.workspace.acceptedDisplay = value;
   const page: CreatorSalesData = windows.navigationFailed
     ? { kind: 'unavailable' }
     : (value?.page ?? { kind: 'loading' });
