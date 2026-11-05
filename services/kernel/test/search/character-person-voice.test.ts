@@ -316,7 +316,7 @@ test('rated first next and final retained pages stay ordered through dense curre
   for (let pageNumber = 0; pageNumber < 3; pageNumber++) {
     const page = await collectRetainedUsefulPage({
       limit: 2,
-      continuation,
+      ...(continuation === undefined ? {} : { continuation }),
       read: async (size) => {
         offset += consumed;
         const hits: SearchHit[] = subjects.slice(offset, offset + size).map((s) => ({
@@ -343,8 +343,13 @@ test('rated first next and final retained pages stay ordered through dense curre
           relationProperties: ['wdt:P725'],
           spoilerThreshold: 0,
         });
+        const passedSubjects = new Map<string, IndexedSubject>();
+        for (const { hit, subject } of checked.passed) passedSubjects.set(hit.id, subject);
         const subjectsByHit = new Map<SearchHit, IndexedSubject>();
-        for (const { hit, subject } of checked.passed) subjectsByHit.set(hit, subject);
+        for (const hit of hits) {
+          const subject = passedSubjects.get(hit.id);
+          if (subject !== undefined) subjectsByHit.set(hit, subject);
+        }
         return subjectsByHit;
       },
       consume: async (prefix) => {

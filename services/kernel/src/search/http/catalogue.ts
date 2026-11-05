@@ -81,7 +81,7 @@ export const searchHit = t.Object(
     base: genericBase,
     labels: t.Record(t.String(), t.String()),
     summary: t.Union([SubjectSummarySchema, t.Null()]),
-    matchEvidence: MatchEvidenceSchema,
+    matchEvidence: t.Optional(MatchEvidenceSchema),
     descriptions: t.Optional(t.Record(t.String(), t.String())),
     facts: t.Optional(t.Record(t.String(), t.Array(FactSchema))),
     figure: t.Ref('PublicFigure'),
