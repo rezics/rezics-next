@@ -63,6 +63,10 @@ passes citation references through the existing [post-history reader and return 
 preserving source post, source revision, question and vote revision as independent identities. Historical question
 labels and scales remain unavailable; no second history reader or lifetime host is added.
 
+The connected review-and-reply handoff requires the official root-derived reading callable to publish both top-level
+`reviewContext` and `conversationActivity`. Until that publication is installed, preserve the existing receiver and
+native projections. The older nested feed context and unavailable activity display do not complete this journey.
+
 The disclosure uses `browserObservation` and `subscribeCache` with a retiring lease scoped to the mounted page.
 Invalidation or fetching, equal session replacement, remount and an observed away-and-back session transition retire
 the old advice. Re-entry requires a new page admission.
