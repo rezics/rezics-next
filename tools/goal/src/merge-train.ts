@@ -48,6 +48,12 @@ import {
   transpileLandingCandidate,
   type LandingTranspileResult,
 } from './landing-transpile.ts';
+import { regenerateLandingSchema, SCHEMA_MIGRATION_PATHS, type LandingSchemaResult } from './landing-schema.ts';
+import {
+  importLandingKernelCandidate,
+  KERNEL_SRC_PATHS,
+  type LandingKernelImportResult,
+} from './landing-kernel-import.ts';
 import { openDb } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { SqliteLandingQueue, type LandingEntry } from './land.ts';
@@ -99,6 +105,7 @@ import {
 import {
   classifyCandidateDelta,
   derivedForPath,
+  ensureDerivedDependencies,
   planCandidateConflicts,
   resolveCandidateTextConflict,
   type DerivedFile,
@@ -457,25 +464,6 @@ function landingWorkingFiles(cwd: string, declaredPaths: readonly string[], poli
 }
 
 /** Refresh promotion outputs on a dev landing when its source changes require them. */
-/**
- * Derived generators need the workspace's dependencies (the pinned bun, dbmate for migrations), but a train worktree is
- * created with nothing installed: every landing that regenerated derived files failed with ENOENT on
- * node_modules/.bin/bun or services/kernel/node_modules/.bin/dbmate (2026-10-29). Install once before the first command.
- */
-function ensureDerivedDependencies(cwd: string, logPath: string, commands: Iterable<readonly string[]>): void {
-  // A lockfile regeneration is itself the install.
-  if ([...commands].every((command) => command[0] === 'bun' && command[1] === 'install')) return;
-  // Only a repository with a lockfile installs; fixtures and trees with dependencies already present do not.
-  if (!existsSync(join(cwd, 'bun.lock')) || existsSync(join(cwd, 'node_modules', '.bin'))) return;
-  const result = spawnSync('bun', ['install', '--frozen-lockfile'], { cwd, encoding: 'utf8' });
-  appendFileSync(
-    logPath,
-    `$ bun install --frozen-lockfile (cwd: ${cwd})\n${result.stdout ?? ''}${result.stderr ?? ''}`,
-  );
-  if (result.status !== 0)
-    throw new Error(`Failed to install dependencies for derived files: ${result.stderr || 'bun install failed'}`);
-}
-
 function regenerateLandingDerivedFiles(
   cwd: string,
   base: string,
@@ -1380,6 +1368,20 @@ function devTranspileEvidence(result: LandingTranspileResult): NonNullable<GateO
   };
 }
 
+function kernelImportEvidence(result: LandingKernelImportResult): NonNullable<GateOutcome['devKernelImport']> {
+  return {
+    base: result.base,
+    candidate: result.candidate,
+    changedFileCount: result.changedFileCount,
+    kernelFileCount: result.kernelFileCount,
+    setupMs: result.setupMs,
+    importMs: result.importMs,
+    cleanupMs: result.cleanupMs,
+    elapsedMs: result.elapsedMs,
+    outcome: 'passed',
+  };
+}
+
 function transpileHandoff(
   entry: Pick<LandingEntry, 'id' | 'request'>,
   sourceCommit: string,
@@ -1395,6 +1397,7 @@ function transpileHandoff(
   }
   return {
     kind: 'dev-landing-transpile',
+    guard: 'dev-landing-transpile',
     taskId: entry.request.taskId,
     attempt: entry.request.attempt,
     entryId: entry.id,
@@ -1408,6 +1411,97 @@ function transpileHandoff(
     logPath: result.logPath,
     diagnostic,
   };
+}
+
+/** A failed Kernel entry import returns through the transpile handback; its diagnostic is the first useful error. */
+function kernelImportHandoff(
+  entry: Pick<LandingEntry, 'id' | 'request'>,
+  sourceCommit: string,
+  changedFiles: readonly string[],
+  result: LandingKernelImportResult,
+): DevLandingTranspileHandoff {
+  if (result.outcome !== 'diagnostic' || !result.diagnostic || result.elapsedMs === null)
+    throw new Error('dev landing Kernel import handoff requires a measured source diagnostic');
+  const diagnostic = { ...result.diagnostic };
+  if (diagnostic.file) {
+    const sourcePath = changedFiles.find((path) => diagnostic.file!.endsWith(`/${path}`));
+    if (sourcePath) diagnostic.file = resolve(entry.request.worktree, sourcePath);
+  }
+  return {
+    kind: 'dev-landing-transpile',
+    guard: 'dev-landing-kernel-import',
+    taskId: entry.request.taskId,
+    attempt: entry.request.attempt,
+    entryId: entry.id,
+    request: entry.request,
+    sourceCommit,
+    base: result.base,
+    candidate: result.candidate,
+    changedFiles: [...changedFiles],
+    typescriptFiles: [...result.kernelFiles],
+    elapsedMs: result.elapsedMs,
+    logPath: result.logPath,
+    argv: result.argv,
+    entryPoint: result.diagnostic.entry,
+    setupMs: result.setupMs,
+    importMs: result.importMs,
+    cleanupMs: result.cleanupMs,
+    diagnostic,
+  };
+}
+
+function kernelImportOwner<T>(
+  members: readonly T[],
+  changedFilesOf: (member: T) => readonly string[],
+  cwd: string,
+  result: LandingKernelImportResult,
+): T {
+  const location = result.diagnostic?.file;
+  return (
+    (location
+      ? members.find((member) =>
+          changedFilesOf(member).some(
+            (path) => resolve(cwd, path) === resolve(location) || location.endsWith(`/${path}`),
+          ),
+        )
+      : undefined) ??
+    members.find((member) => changedFilesOf(member).some((path) => matchesPath(path, KERNEL_SRC_PATHS))) ??
+    members[0]!
+  );
+}
+
+/** A failed schema regeneration returns through the transpile handback; its diagnostic is the first error line. */
+function schemaHandoff(
+  entry: Pick<LandingEntry, 'id' | 'request'>,
+  sourceCommit: string,
+  base: string,
+  changedFiles: readonly string[],
+  result: Extract<LandingSchemaResult, { outcome: 'diagnostic' }>,
+): DevLandingTranspileHandoff {
+  return {
+    kind: 'dev-landing-transpile',
+    guard: 'dev-landing-schema',
+    taskId: entry.request.taskId,
+    attempt: entry.request.attempt,
+    entryId: entry.id,
+    request: entry.request,
+    sourceCommit,
+    base,
+    candidate: result.candidate,
+    changedFiles: [...changedFiles],
+    typescriptFiles: [],
+    elapsedMs: result.elapsedMs,
+    logPath: result.logPath,
+    diagnostic: { file: null, line: null, column: null, message: result.message },
+  };
+}
+
+/** Recount a candidate once a commit was added to it, so its outcome describes the commit that publishes. */
+function recountCandidate(result: GateOutcome, cwd: string, base: string, policy: ControlPolicy['merge'] | undefined) {
+  result.changedFiles = changedFiles(cwd, base, policy);
+  result.diffLines = diffLineCount(cwd, base, undefined, policy);
+  result.nonGeneratedChangedFiles = nonGeneratedFiles(cwd, result.changedFiles, policy);
+  result.nonGeneratedDiffLines = diffLineCount(cwd, base, result.nonGeneratedChangedFiles, policy);
 }
 
 class ControlPlaneProofInterrupted extends Error {}
@@ -1424,6 +1518,12 @@ class LandingTranspileUnavailableError extends Error {
   constructor(readonly result: LandingTranspileResult) {
     super(result.infrastructureError ?? 'dev landing transpile command unavailable');
     this.name = 'LandingTranspileUnavailableError';
+  }
+}
+class LandingKernelImportUnavailableError extends Error {
+  constructor(readonly result: LandingKernelImportResult) {
+    super(result.infrastructureError ?? 'dev landing Kernel import command unavailable');
+    this.name = 'LandingKernelImportUnavailableError';
   }
 }
 
@@ -1543,6 +1643,29 @@ export class MergeTrain {
         candidate: result.candidate,
         changedFileCount: result.changedFileCount,
         typescriptFileCount: result.typescriptFileCount,
+        elapsedMs: null,
+        logPath: result.logPath,
+        infrastructureError: result.infrastructureError ?? null,
+      }),
+    });
+  }
+
+  private recordUnavailableDevKernelImport(request: LandingRequest, result: LandingKernelImportResult): void {
+    if (!(this.options.fence instanceof WorkerStore)) return;
+    recordFlow(this.options.fence.db, {
+      ...request,
+      stage: 'landing',
+      action: 'dev-kernel-import',
+      at: new Date().toISOString(),
+      detail: JSON.stringify({
+        outcome: 'unavailable',
+        base: result.base,
+        candidate: result.candidate,
+        changedFileCount: result.changedFileCount,
+        kernelFileCount: result.kernelFileCount,
+        setupMs: null,
+        importMs: null,
+        cleanupMs: null,
         elapsedMs: null,
         logPath: result.logPath,
         infrastructureError: result.infrastructureError ?? null,
@@ -1920,6 +2043,7 @@ export class MergeTrain {
       let committed = false;
       let stale: LandingEntry | undefined;
       let transpileEvidence: GateOutcome['devTranspile'];
+      let kernelImportPassed: GateOutcome['devKernelImport'];
       try {
         for (const entry of pending) {
           const logPath = join(o.stateDirectory, `landing-${entry.id}.log`);
@@ -2241,7 +2365,7 @@ export class MergeTrain {
             taskPaths,
             this.options.policy?.merge,
           );
-          if (delta.kind !== 'effective') {
+          if (delta.kind === 'already-present' || (lane === 'main' && delta.kind === 'partial-no-effect')) {
             acceptAlreadyPresent(result, previous, delta.paths, logPath);
             localOutcomes.set(entry.id, result);
             resetTo(trainTree, previous);
@@ -2300,11 +2424,48 @@ export class MergeTrain {
         // The final rebased tree includes conflict resolution and formatting. It receives the configured
         // prelanding typecheck, then the policy boot check when changed paths match; other verification
         // runs after integration in the independent verifier.
-        const finalCandidate = prepared[prepared.length - 1]!.candidate;
+        let finalCandidate = prepared[prepared.length - 1]!.candidate;
         const batchLog = logPaths.get(prepared[0]!.entry.id)!;
         this.git(trainTree, 'reset', '--hard', prepared[prepared.length - 1]!.candidate);
+        const returnRepair = (owner: PreparedLanding, handoff: DevLandingTranspileHandoff) => {
+          for (const member of prepared) if (member.entry.id !== owner.entry.id) deferred.add(member.entry.id);
+          for (const [id, outcome] of localOutcomes) outcomes.set(id, outcome);
+          appendFileSync(
+            owner.result.logPath,
+            `Candidate ${finalCandidate} was not published; returning its ${handoff.guard} repair to task ${owner.entry.request.taskId} attempt ${owner.entry.request.attempt}.\n`,
+          );
+          return {
+            outcomes: orderedOutcomes(),
+            deferredIds: [...deferred],
+            skippedIds: [...skipped],
+            transpileHandoff: handoff,
+          };
+        };
         if (lane === 'dev') {
-          const finalChangedFiles = changedPathsBetween(trainTree, base, finalCandidate, this.options.policy?.merge);
+          // Returns a repair to its source owner and defers the other members of the batch.
+          let finalChangedFiles = changedPathsBetween(trainTree, base, finalCandidate, this.options.policy?.merge);
+          // The dumps are composed into the final candidate before the compiler check, so the check sees what publishes.
+          const schemaOwner =
+            prepared.find((member) =>
+              member.result.changedFiles.some((path) => matchesPath(path, SCHEMA_MIGRATION_PATHS)),
+            ) ?? prepared[0]!;
+          const schema = await regenerateLandingSchema({
+            cwd: trainTree,
+            changedFiles: finalChangedFiles,
+            taskId: schemaOwner.entry.request.taskId,
+            logPath: batchLog,
+            policy: this.options.policy?.merge,
+          });
+          if (schema.outcome === 'committed') {
+            finalCandidate = schema.candidate;
+            const last = prepared[prepared.length - 1]!;
+            last.candidate = finalCandidate;
+            last.commits = this.git(trainTree, 'rev-list', '--reverse', `${last.base}..${finalCandidate}`)
+              .split('\n')
+              .filter(Boolean);
+            recountCandidate(last.result, trainTree, last.base, this.options.policy?.merge);
+            finalChangedFiles = changedPathsBetween(trainTree, base, finalCandidate, this.options.policy?.merge);
+          }
           const transpiled = await transpileLandingCandidate({
             cwd: trainTree,
             base,
@@ -2332,6 +2493,17 @@ export class MergeTrain {
             retry = true;
             continue;
           }
+          if (schema.outcome === 'diagnostic')
+            return returnRepair(
+              schemaOwner,
+              schemaHandoff(
+                schemaOwner.entry,
+                schemaOwner.entry.request.workerCommit ?? finalCandidate,
+                base,
+                finalChangedFiles,
+                schema,
+              ),
+            );
           if (transpiled.outcome === 'diagnostic') {
             const location = transpiled.diagnostic?.file;
             const owner =
@@ -2340,23 +2512,15 @@ export class MergeTrain {
                     member.result.changedFiles.some((path) => resolve(trainTree, path) === resolve(location)),
                   )
                 : undefined) ?? prepared[0]!;
-            for (const member of prepared) if (member.entry.id !== owner.entry.id) deferred.add(member.entry.id);
-            for (const [id, outcome] of localOutcomes) outcomes.set(id, outcome);
-            appendFileSync(
-              owner.result.logPath,
-              `Candidate ${finalCandidate} was not published; returning its Bun diagnostic to task ${owner.entry.request.taskId} attempt ${owner.entry.request.attempt}.\n`,
-            );
-            return {
-              outcomes: orderedOutcomes(),
-              deferredIds: [...deferred],
-              skippedIds: [...skipped],
-              transpileHandoff: transpileHandoff(
+            return returnRepair(
+              owner,
+              transpileHandoff(
                 owner.entry,
                 owner.entry.request.workerCommit ?? finalCandidate,
                 finalChangedFiles,
                 transpiled,
               ),
-            };
+            );
           }
           if (transpiled.outcome === 'unavailable') {
             this.recordUnavailableDevTranspile(prepared[0]!.entry.request, transpiled);
@@ -2370,6 +2534,53 @@ export class MergeTrain {
           existsSync(join(trainTree, 'package.json'))
         )
           installShared(trainTree, undefined, undefined, this.options.policy);
+        if (lane === 'dev') {
+          const importedFiles = changedPathsBetween(trainTree, base, finalCandidate, this.options.policy?.merge);
+          const imported = await importLandingKernelCandidate({
+            cwd: trainTree,
+            base,
+            candidate: finalCandidate,
+            changedFiles: importedFiles,
+            logPath: batchLog,
+          });
+          let staleDuringImport: LandingEntry | undefined;
+          for (const member of prepared) {
+            try {
+              o.fence.assertCurrent(member.entry.request);
+            } catch (error) {
+              if (!(error instanceof StaleAttemptError)) throw error;
+              staleDuringImport = member.entry;
+              break;
+            }
+          }
+          if (staleDuringImport) {
+            skipped.add(staleDuringImport.id);
+            pending = pending.filter((entry) => entry.id !== staleDuringImport!.id);
+            retry = true;
+            continue;
+          }
+          if (target() !== base) {
+            retry = true;
+            continue;
+          }
+          if (imported.outcome === 'diagnostic') {
+            const owner = kernelImportOwner(prepared, (member) => member.result.changedFiles, trainTree, imported);
+            return returnRepair(
+              owner,
+              kernelImportHandoff(
+                owner.entry,
+                owner.entry.request.workerCommit ?? finalCandidate,
+                importedFiles,
+                imported,
+              ),
+            );
+          }
+          if (imported.outcome === 'unavailable') {
+            this.recordUnavailableDevKernelImport(prepared[0]!.entry.request, imported);
+            throw new LandingKernelImportUnavailableError(imported);
+          }
+          if (imported.outcome === 'passed') kernelImportPassed = kernelImportEvidence(imported);
+        }
         const {
           command,
           result: checked,
@@ -2517,6 +2728,7 @@ export class MergeTrain {
         committed = true;
         for (const member of prepared) {
           if (member === prepared[0] && transpileEvidence) member.result.devTranspile = transpileEvidence;
+          if (member === prepared[0] && kernelImportPassed) member.result.devKernelImport = kernelImportPassed;
           const request = member.entry.request;
           if (request.devResolution && o.trainResolver)
             o.trainResolver.devConflictLanded(
@@ -2539,7 +2751,7 @@ export class MergeTrain {
         for (const member of prepared) {
           member.result.passed = true;
           member.result.stage = 'merge';
-          member.result.mergedCommit = member.candidate;
+          member.result.mergedCommit = head;
           member.result.hostMs = Date.now() - member.started;
           this.notifyOwnersOfOutsideChanges(
             member.entry.request,
@@ -2554,7 +2766,7 @@ export class MergeTrain {
               ),
               member.entry.request.declaredPaths,
             ),
-            member.candidate,
+            head,
             branch,
             member.result.logPath,
           );
@@ -2568,7 +2780,11 @@ export class MergeTrain {
         };
       } catch (error) {
         if (committed) throw error;
-        if (error instanceof LandingTranspileUnavailableError || error instanceof LandingTranspileInterruptedError)
+        if (
+          error instanceof LandingTranspileUnavailableError ||
+          error instanceof LandingKernelImportUnavailableError ||
+          error instanceof LandingTranspileInterruptedError
+        )
           throw error;
         if (error instanceof StaleAttemptError) {
           const staleEntry = pending.find(
@@ -3127,6 +3343,7 @@ export class MergeTrain {
     let sharedTasks: Task[] = [];
     let sharedSource = '';
     let transpileEvidence: GateOutcome['devTranspile'];
+    let kernelImportPassed: GateOutcome['devKernelImport'];
 
     let integrationTarget: IntegrationTarget =
       recorded.target === 'stabilize' && recorded.goal !== 'control-plane'
@@ -3190,6 +3407,8 @@ export class MergeTrain {
     const finish = () => {
       if (transpileEvidence) result.devTranspile = transpileEvidence;
       else delete result.devTranspile;
+      if (kernelImportPassed) result.devKernelImport = kernelImportPassed;
+      else delete result.devKernelImport;
       ensureGateOutcomeRefusal(result);
       if (!result.passed && !this.workspaceFailures.has(entry.id)) attributeFailure(result);
       return result;
@@ -3424,7 +3643,9 @@ export class MergeTrain {
       for (;;) {
         o.fence.assertCurrent(request);
         transpileEvidence = undefined;
+        kernelImportPassed = undefined;
         delete result.devTranspile;
+        delete result.devKernelImport;
         delete result.firstFailure;
         delete result.failsOnMain;
         delete result.timedOut;
@@ -3639,6 +3860,33 @@ export class MergeTrain {
             return finish();
           }
         }
+        if (!stabilize && integratesIntoDev) {
+          // Before the derived generators: the contracts run migrates the same throwaway database, so a broken migration
+          // returns to the worker here rather than failing the attempt in that run.
+          const composed = this.git(trainTree, 'rev-parse', 'HEAD');
+          const composedChanges = changedFiles(trainTree, base, this.options.policy?.merge);
+          const schema = await regenerateLandingSchema({
+            cwd: trainTree,
+            changedFiles: composedChanges,
+            taskId: request.taskId,
+            logPath,
+            policy: this.options.policy?.merge,
+          });
+          if (schema.outcome === 'diagnostic') {
+            appendFileSync(
+              logPath,
+              `Candidate ${composed} was not published; returning its schema regeneration error to task ${request.taskId} attempt ${request.attempt}.\n`,
+            );
+            return schemaHandoff(
+              entry,
+              workerCommit ?? request.workerCommit ?? composed,
+              base,
+              composedChanges,
+              schema,
+            );
+          }
+          if (schema.outcome === 'committed') recountCandidate(result, trainTree, base, this.options.policy?.merge);
+        }
         if (!stabilize && integratesIntoDev)
           regenerateLandingDerivedFiles(
             trainTree,
@@ -3770,7 +4018,7 @@ export class MergeTrain {
           taskPaths,
           this.options.policy?.merge,
         );
-        if (delta.kind !== 'effective') {
+        if (delta.kind !== 'effective' && !(integratesIntoDev && !stabilize && delta.kind === 'partial-no-effect')) {
           if (integratesIntoDev && !stabilize) acceptAlreadyPresent(result, base, delta.paths, logPath);
           else refuseNoEffect(result, delta.paths, logPath);
           return finish();
@@ -3813,6 +4061,32 @@ export class MergeTrain {
             existsSync(join(trainTree, 'package.json'))
           )
             installShared(trainTree, undefined, undefined, this.options.policy);
+          const imported = await importLandingKernelCandidate({
+            cwd: trainTree,
+            base,
+            candidate,
+            changedFiles: result.changedFiles,
+            logPath,
+          });
+          o.fence.assertCurrent(request);
+          if (target() !== base) continue;
+          if (imported.outcome === 'diagnostic') {
+            appendFileSync(
+              logPath,
+              `Candidate ${candidate} was not published; returning its Kernel import diagnostic to task ${request.taskId} attempt ${request.attempt}.\n`,
+            );
+            return kernelImportHandoff(
+              entry,
+              workerCommit ?? request.workerCommit ?? candidate,
+              result.changedFiles,
+              imported,
+            );
+          }
+          if (imported.outcome === 'unavailable') {
+            this.recordUnavailableDevKernelImport(request, imported);
+            throw new LandingKernelImportUnavailableError(imported);
+          }
+          if (imported.outcome === 'passed') kernelImportPassed = kernelImportEvidence(imported);
           const { command, result: checked, kind } = await this.checkDevCandidate(trainTree, base, candidate, logPath);
           o.fence.assertCurrent(request);
           if (target() !== base) continue;
@@ -4297,6 +4571,7 @@ export class MergeTrain {
             continue;
           }
           transpileEvidence = release.devTranspile;
+          kernelImportPassed = release.devKernelImport;
           preparedControlPlaneRelease = release.prepared;
           preparedControlPlaneRelease.record.source = { branch: request.branch, commit: tip };
         }
@@ -4390,6 +4665,7 @@ export class MergeTrain {
         custody?.signal.aborted ||
         error instanceof StaleAttemptError ||
         error instanceof LandingTranspileUnavailableError ||
+        error instanceof LandingKernelImportUnavailableError ||
         error instanceof LandingTranspileInterruptedError
       )
         throw error;
@@ -7067,6 +7343,7 @@ export class MergeTrain {
     moved?: boolean;
     transpileHandoff?: DevLandingTranspileHandoff;
     devTranspile?: GateOutcome['devTranspile'];
+    devKernelImport?: GateOutcome['devKernelImport'];
   }> {
     if (isAncestor(this.options.mainCheckout, sourceCommit, targetHead, this.options.policy?.merge))
       return Promise.resolve({ commit: targetHead });
@@ -7094,6 +7371,7 @@ export class MergeTrain {
     moved?: boolean;
     transpileHandoff?: DevLandingTranspileHandoff;
     devTranspile?: GateOutcome['devTranspile'];
+    devKernelImport?: GateOutcome['devKernelImport'];
   }> {
     const tree = resolve(this.options.worktreeRoot, `control-plane-merge-${randomUUID()}`);
     const preparedMerge = this.trainWorkspace(tree, targetHead, { cleanup: { onError: 'rm' } });
@@ -7118,9 +7396,24 @@ export class MergeTrain {
         appendFileSync(logPath, `${message}\n`);
         return conflicts.length ? { conflicts, cause: cause || message } : { cause: message };
       }
-      const commit = this.git(tree, 'rev-parse', 'HEAD');
+      let commit = this.git(tree, 'rev-parse', 'HEAD');
       if (devLanding && targetBranch === devLanding.snapshot.devBranch) {
-        const changed = changedPathsBetween(tree, targetHead, commit, this.options.policy?.merge);
+        let changed = changedPathsBetween(tree, targetHead, commit, this.options.policy?.merge);
+        const schemaOwner =
+          devLanding.owners.find((owner) =>
+            owner.changedFiles.some((path) => matchesPath(path, SCHEMA_MIGRATION_PATHS)),
+          ) ?? devLanding.owners[0]!;
+        const schema = await regenerateLandingSchema({
+          cwd: tree,
+          changedFiles: changed,
+          taskId: schemaOwner.entry.request.taskId,
+          logPath,
+          policy: this.options.policy?.merge,
+        });
+        if (schema.outcome === 'committed') {
+          commit = schema.candidate;
+          changed = changedPathsBetween(tree, targetHead, commit, this.options.policy?.merge);
+        }
         const transpiled = await transpileLandingCandidate({
           cwd: tree,
           base: targetHead,
@@ -7130,6 +7423,10 @@ export class MergeTrain {
         });
         for (const owner of devLanding.owners) this.options.fence.assertCurrent(owner.entry.request);
         if (!this.controlPlaneSnapshotMatches(devLanding.snapshot)) return { moved: true };
+        if (schema.outcome === 'diagnostic')
+          return {
+            transpileHandoff: schemaHandoff(schemaOwner.entry, schemaOwner.sourceCommit, targetHead, changed, schema),
+          };
         if (transpiled.outcome === 'diagnostic') {
           const location = transpiled.diagnostic?.file;
           const owner =
@@ -7146,9 +7443,29 @@ export class MergeTrain {
           this.recordUnavailableDevTranspile(devLanding.owners[0]!.entry.request, transpiled);
           throw new LandingTranspileUnavailableError(transpiled);
         }
+        const imported = await importLandingKernelCandidate({
+          cwd: tree,
+          base: targetHead,
+          candidate: commit,
+          changedFiles: changed,
+          logPath,
+        });
+        for (const owner of devLanding.owners) this.options.fence.assertCurrent(owner.entry.request);
+        if (!this.controlPlaneSnapshotMatches(devLanding.snapshot)) return { moved: true };
+        if (imported.outcome === 'diagnostic') {
+          const owner = kernelImportOwner(devLanding.owners, (item) => item.changedFiles, tree, imported);
+          return {
+            transpileHandoff: kernelImportHandoff(owner.entry, owner.sourceCommit, changed, imported),
+          };
+        }
+        if (imported.outcome === 'unavailable') {
+          this.recordUnavailableDevKernelImport(devLanding.owners[0]!.entry.request, imported);
+          throw new LandingKernelImportUnavailableError(imported);
+        }
         return {
           commit,
           ...(transpiled.outcome === 'passed' ? { devTranspile: devTranspileEvidence(transpiled) } : {}),
+          ...(imported.outcome === 'passed' ? { devKernelImport: kernelImportEvidence(imported) } : {}),
         };
       }
       return { commit };
@@ -7173,6 +7490,7 @@ export class MergeTrain {
     cause?: string;
     transpileHandoff?: DevLandingTranspileHandoff;
     devTranspile?: GateOutcome['devTranspile'];
+    devKernelImport?: GateOutcome['devKernelImport'];
   }> {
     if (!this.controlPlaneSnapshotMatches(snapshot)) return {};
     let stabilizeCommit: string | undefined;
@@ -7246,6 +7564,7 @@ export class MergeTrain {
     return {
       prepared: { snapshot, record },
       ...(dev.devTranspile ? { devTranspile: dev.devTranspile } : {}),
+      ...(dev.devKernelImport ? { devKernelImport: dev.devKernelImport } : {}),
     };
   }
 

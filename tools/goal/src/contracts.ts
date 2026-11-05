@@ -257,13 +257,30 @@ export type GateOutcome = AttemptRef & {
     elapsedMs: number | null;
     outcome: 'passed' | 'unavailable';
   };
+  /** Kernel server/worker import against a candidate throwaway database, attached only to the published candidate. */
+  devKernelImport?: {
+    base: string;
+    candidate: string;
+    changedFileCount: number;
+    kernelFileCount: number;
+    setupMs: number | null;
+    importMs: number | null;
+    cleanupMs: number | null;
+    elapsedMs: number | null;
+    outcome: 'passed' | 'unavailable';
+  };
   diffLines: number;
   mergedCommit?: string;
 };
 
-/** Compiler diagnostics return to the source owner as a nonterminal same-session repair. */
+/**
+ * A dev landing repair returns to the source owner as a nonterminal same-session repair: a compiler diagnostic
+ * (`dev-landing-transpile`), a failed schema-dump regeneration (`dev-landing-schema`), or a Kernel entry-import /
+ * SQL-analysis failure (`dev-landing-kernel-import`).
+ */
 export type DevLandingTranspileHandoff = AttemptRef & {
   kind: 'dev-landing-transpile';
+  guard: 'dev-landing-transpile' | 'dev-landing-schema' | 'dev-landing-kernel-import';
   entryId: number;
   request: LandingRequest;
   sourceCommit: string;
@@ -273,6 +290,11 @@ export type DevLandingTranspileHandoff = AttemptRef & {
   typescriptFiles: readonly string[];
   elapsedMs: number;
   logPath: string;
+  argv?: readonly string[];
+  entryPoint?: string;
+  setupMs?: number | null;
+  importMs?: number | null;
+  cleanupMs?: number | null;
   diagnostic: {
     file: string | null;
     line: number | null;

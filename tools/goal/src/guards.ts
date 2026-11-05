@@ -90,6 +90,22 @@ export const GUARDS = {
     repair:
       'Return the first Bun diagnostic and retained log to the original worker session; repair in place and transpile the recomposed candidate before landing. Cost target: <1000ms per typical landing. Measured disposable fixture: 7ms for 7 changed files, 4 executable TypeScript entries and 180 source bytes.',
   },
+  'dev-landing-schema': {
+    defect:
+      'A changed Kernel migration reached dev without its regenerated schema dump, so the schema preflight rejects the candidate.',
+    owner: 'control-plane',
+    since: '2026-11-05',
+    repair:
+      'Return the first regeneration error to the original worker session; repair the migration in place and regenerate the dumps on the recomposed candidate before landing. Cost target: <30000ms per migration landing. Measured fresh throwaway database: 9173ms for the derived schema command with unchanged dumps.',
+  },
+  'dev-landing-kernel-import': {
+    defect:
+      'A changed Kernel source graph has a TDZ import cycle or Reylo SQL/query-key mismatch that unbundled transpile cannot see, so published dev cannot boot.',
+    owner: 'control-plane',
+    since: '2026-11-05',
+    repair:
+      'Import services/kernel/src/server.ts and worker.ts with one migrated throwaway database and explicit DATABASE_URL; return the first diagnostic and retained log to the original worker session; repair in place and re-import the recomposed candidate before landing. Cost target: <60000ms per Kernel-source landing. Measured representative candidate: setup 37473ms, import 223297ms, cleanup 0ms, total 260770ms for both Kernel entries against a migrated throwaway database.',
+  },
   'round-limit': {
     defect: 'The attempt reached its configured repair round limit.',
     owner: 'manager',
@@ -183,6 +199,18 @@ export const GUARDS = {
 } satisfies Record<string, GuardDefinition>;
 
 export type GuardId = keyof typeof GUARDS;
+
+/** Guards recorded when a dev landing returns a repair to its source owner's session. */
+export const DEV_LANDING_REPAIR_GUARDS = [
+  'dev-landing-transpile',
+  'dev-landing-schema',
+  'dev-landing-kernel-import',
+] as const;
+export type DevLandingRepairGuard = (typeof DEV_LANDING_REPAIR_GUARDS)[number];
+
+export function isDevLandingRepairGuard(id: GuardId): id is DevLandingRepairGuard {
+  return (DEV_LANDING_REPAIR_GUARDS as readonly GuardId[]).includes(id);
+}
 
 export const FAILURE_GUARDS = {
   environment: 'environment',

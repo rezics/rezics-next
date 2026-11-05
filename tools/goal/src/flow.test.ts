@@ -109,6 +109,91 @@ test('dev transpile reporting prices final checks and handbacks while keeping me
     [],
   );
   expect(unavailableOnly.devTranspile).toMatchObject({ unavailable: 1, measuredChecks: 0, totalMs: null });
+  const kernel = flowReport(
+    [
+      {
+        taskId: 'repair',
+        attempt: 1,
+        stage: 'landing',
+        action: 'dev-kernel-import',
+        at: date(1),
+        detail: JSON.stringify({
+          outcome: 'repair-handback',
+          elapsedMs: 0,
+          setupMs: 0,
+          importMs: 0,
+          cleanupMs: 0,
+          changedFileCount: 2,
+          kernelFileCount: 1,
+        }),
+      },
+      {
+        taskId: 'repair',
+        attempt: 2,
+        stage: 'landing',
+        action: 'dev-kernel-import',
+        at: date(2),
+        detail: JSON.stringify({
+          outcome: 'passed',
+          elapsedMs: 0,
+          setupMs: 0,
+          importMs: 0,
+          cleanupMs: 0,
+          changedFileCount: 1,
+          kernelFileCount: 1,
+        }),
+      },
+      {
+        taskId: 'unavailable',
+        attempt: 1,
+        stage: 'landing',
+        action: 'dev-kernel-import',
+        at: date(3),
+        detail: JSON.stringify({
+          outcome: 'unavailable',
+          elapsedMs: null,
+          setupMs: null,
+          importMs: null,
+          cleanupMs: null,
+        }),
+      },
+    ],
+    [],
+  );
+  expect(kernel.devKernelImport).toMatchObject({
+    successfulChecks: 1,
+    repairHandbacks: 1,
+    unavailable: 1,
+    measuredChecks: 2,
+    totalMs: 0,
+    setupMs: 0,
+    importMs: 0,
+    cleanupMs: 0,
+    changedFiles: 3,
+    kernelFiles: 2,
+  });
+  expect(kernel.devTranspile.successfulChecks).toBe(0);
+  const kernelUnavailableOnly = flowReport(
+    [
+      {
+        taskId: 'unavailable',
+        attempt: 1,
+        stage: 'landing',
+        action: 'dev-kernel-import',
+        at: date(3),
+        detail: JSON.stringify({ outcome: 'unavailable', elapsedMs: null }),
+      },
+    ],
+    [],
+  );
+  expect(kernelUnavailableOnly.devKernelImport).toMatchObject({
+    unavailable: 1,
+    measuredChecks: 0,
+    totalMs: null,
+    setupMs: null,
+    importMs: null,
+    cleanupMs: null,
+  });
 });
 
 test('every task records durable timestamps for dispatch, start, each check-slot request, acquisition and release, worker finish, landing enqueue, landing start, dev update, verification and integration', () => {
