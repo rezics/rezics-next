@@ -95,12 +95,12 @@ describe('Search Concept conditions', () => {
         qualifiers: [{ property: 'rezics:spoilerLevel', in: ['2'] }],
       },
     };
-    const retained = changeStatementProperty(existing, 'schema:keywords', metadata.properties);
+    const retained = changeStatementProperty(existing, 'schema:keywords', metadata);
     expect(retained.requiresConfirmation).toBe(false);
     expect(retained.next).toEqual({
       statement: { ...existing.statement, property: 'schema:keywords' },
     });
-    expect(changeStatementProperty(existing, 'schema:name', metadata.properties).requiresConfirmation).toBe(true);
+    expect(changeStatementProperty(existing, 'schema:name', metadata).requiresConfirmation).toBe(true);
   });
 
   it('shows a retained shared filter with its scheme and exact or descendant meaning while lookups are closed', () => {

@@ -4451,6 +4451,7 @@
   "condition_add": "Add conditions",
   "condition_add_type": "Add type",
   "condition_add_statement": "Add property condition",
+  "condition_property_change_direction_reset": "The inverse direction will reset to direct: each result becomes the source. Review the original condition and its replacement below.",
   "condition_property_change_title": "Change property?",
   "condition_property_change_message": "Incompatible values, bounds, units, or qualifiers will be cleared. Compatible parts stay unchanged.",
   "condition_property_change_confirm": "Change property",

@@ -34,11 +34,13 @@ import {
 } from './condition-editor-model';
 import { findConditionErrorTarget, isConditionEditorPointer } from './condition-error-target';
 import { conditionFieldChoices as buildConditionFieldChoices } from './condition-field-choices';
+import { PredicateDescription } from './search-context/predicate';
 import { changeConditionDirection, conditionDirection } from './condition-direction';
 import {
   changeQualifierProperty,
   changeStatementProperty,
   resolveConditionPropertyChange,
+  type ConditionPropertyTransition,
 } from './condition-property-edit';
 import { conditionDraftNodeAt, createConditionEditFocus } from './condition-edit-focus';
 import { createRequestResourceConditionExtension } from './resource-condition-editor';
@@ -68,9 +70,13 @@ import {
 
 type Choice = { value: string; labels: Record<string, string> };
 type MessageOptions = { locale: (typeof locales)[number] };
-type PendingPropertyChange =
-  | { kind: 'statement'; property: string; identity: string }
-  | { kind: 'qualifier'; index: number; property: string; identity: string };
+type PendingPropertyChange = {
+  property: string;
+  identity: string;
+  occurrence: string;
+  metadata: ConditionMetadata;
+  transition: ConditionPropertyTransition;
+};
 type PendingUnitChange = {
   from: string | undefined;
   to: string | undefined;
@@ -617,6 +623,13 @@ function NodeEditor({
   );
   const rangeMagnitudeIdentity = JSON.stringify(rangeMagnitudes);
   const [pendingPropertyChange, setPendingPropertyChange] = useState<PendingPropertyChange>();
+  const currentPropertyChange =
+    pendingPropertyChange?.identity === context.identity &&
+    pendingPropertyChange.occurrence === draft.key &&
+    pendingPropertyChange.metadata === context.metadata &&
+    pendingPropertyChange.transition.original === value
+      ? pendingPropertyChange
+      : undefined;
   const propertyChangeDialog = useRef<HTMLDialogElement>(null);
   const propertyChangeId = useId();
   const [pendingUnitChange, setPendingUnitChange] = useState<PendingUnitChange>();
@@ -624,13 +637,13 @@ function NodeEditor({
   const unitChangeId = useId();
   useEffect(() => {
     if (
-      pendingPropertyChange?.identity === context.identity &&
+      currentPropertyChange &&
       propertyChangeDialog.current &&
       !propertyChangeDialog.current.open
     ) {
       propertyChangeDialog.current.showModal();
     }
-  }, [context.identity, pendingPropertyChange]);
+  }, [currentPropertyChange]);
   useEffect(() => {
     if (
       pendingUnitChange?.identity === context.identity &&
@@ -650,12 +663,13 @@ function NodeEditor({
     ) {
       setPendingUnitChange(undefined);
     }
-    if (pendingPropertyChange && (context.disabled || pendingPropertyChange.identity !== context.identity))
+    if (pendingPropertyChange && (context.disabled || !currentPropertyChange))
       setPendingPropertyChange(undefined);
   }, [
     context.disabled,
     context.identity,
     pendingPropertyChange,
+    currentPropertyChange,
     pendingUnitChange,
     range?.unit,
     rangeMagnitudeIdentity,
@@ -680,35 +694,26 @@ function NodeEditor({
     onChange({ statement: { ...value.statement, ...next } });
   };
   const selectStatementProperty = (nextProperty: string) => {
-    const transition = changeStatementProperty(value, nextProperty, context.metadata.properties);
+    const transition = changeStatementProperty(value, nextProperty, context.metadata);
     setPendingPropertyChange(undefined);
     setPendingUnitChange(undefined);
     if (transition.requiresConfirmation)
-      setPendingPropertyChange({ kind: 'statement', property: nextProperty, identity: context.identity });
+      setPendingPropertyChange({ property: nextProperty, identity: context.identity, occurrence: draft.key, metadata: context.metadata, transition });
     else onChange(transition.next);
   };
   const selectQualifierProperty = (index: number, nextProperty: string) => {
     const transition = changeQualifierProperty(value, index, nextProperty, context.metadata.properties);
     setPendingPropertyChange(undefined);
     if (transition.requiresConfirmation)
-      setPendingPropertyChange({ kind: 'qualifier', index, property: nextProperty, identity: context.identity });
+      setPendingPropertyChange({ property: nextProperty, identity: context.identity, occurrence: draft.key, metadata: context.metadata, transition });
     else onChange(transition.next);
   };
   const resolvePendingPropertyChange = (confirmed: boolean) => {
-    if (!pendingPropertyChange || pendingPropertyChange.identity !== context.identity) {
+    if (!currentPropertyChange || context.disabled) {
       setPendingPropertyChange(undefined);
       return;
     }
-    const transition =
-      pendingPropertyChange.kind === 'statement'
-        ? changeStatementProperty(value, pendingPropertyChange.property, context.metadata.properties)
-        : changeQualifierProperty(
-            value,
-            pendingPropertyChange.index,
-            pendingPropertyChange.property,
-            context.metadata.properties,
-          );
-    onChange(resolveConditionPropertyChange(transition, confirmed));
+    onChange(resolveConditionPropertyChange(currentPropertyChange.transition, confirmed));
     setPendingPropertyChange(undefined);
     setPendingUnitChange(undefined);
   };
@@ -1189,7 +1194,7 @@ function NodeEditor({
       {'owner' in value && !extensionLeaf && (
         <p className="text-sm text-muted-foreground">{m.condition_retained({}, options)}</p>
       )}
-      {pendingPropertyChange?.identity === context.identity && (
+      {currentPropertyChange && (
         <dialog
           ref={propertyChangeDialog}
           role="alertdialog"
@@ -1206,16 +1211,44 @@ function NodeEditor({
             {m.condition_property_change_title({}, options)}
           </h2>
           <p className="mt-2 font-medium">
-            {pendingPropertyChange.property
+            {currentPropertyChange.property
               ? name(
-                  context.metadata.properties[pendingPropertyChange.property]?.labels,
-                  pendingPropertyChange.property,
+                  context.metadata.properties[currentPropertyChange.property]?.labels,
+                  currentPropertyChange.property,
                 )
               : m.refinement_choose_property({}, options)}
           </p>
           <p id={`${propertyChangeId}-description`} className="mt-2 text-sm text-muted-foreground">
             {m.condition_property_change_message({}, options)}
           </p>
+          {'statement' in currentPropertyChange.transition.original &&
+            'inverse' in currentPropertyChange.transition.original.statement &&
+            currentPropertyChange.transition.original.statement.inverse === true &&
+            'statement' in currentPropertyChange.transition.next &&
+            conditionDirection(currentPropertyChange.transition.next.statement) === 'direct' && (
+              <p className="mt-2 text-sm">{m.condition_property_change_direction_reset({}, options)}</p>
+            )}
+          <div className="mt-2 space-y-2" data-property-change-review>
+            {[currentPropertyChange.transition.original, currentPropertyChange.transition.next].map((condition, index) => (
+              <div key={index} data-property-change-version={index === 0 ? 'original' : 'next'}>
+                <PredicateDescription
+                  value={condition}
+                  locale={context.locale}
+                  presentation={{
+                    property: (id) => name(context.metadata.properties[id]?.labels, id),
+                    catalogueType: (id) => name(context.metadata.types[id]?.labels, id),
+                    discoveryType: (id) => id,
+                    value: (id, operand) =>
+                      (id === property && operandRequest && resolvedOperands?.request === operandRequest
+                        ? resolvedOperands.labels[operand.toLowerCase()]?.label
+                        : undefined) ??
+                      name(context.values[id]?.find((choice) => choice.value === operand)?.labels, operand),
+                    conceptScheme: (id) => id,
+                  }}
+                />
+              </div>
+            ))}
+          </div>
           <div className="mt-4 flex justify-end gap-2">
             <Button type="button" variant="outline" autoFocus onClick={() => resolvePendingPropertyChange(false)}>
               {m.condition_property_change_cancel({}, options)}

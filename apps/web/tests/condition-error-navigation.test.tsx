@@ -109,6 +109,47 @@ test('summary navigation focuses the scoped qualifier field, then its group when
     expect(changes).toEqual([0, 0, 0]);
     expect(JSON.stringify(tree)).toBe(before);
 
+    // Reopen an inverse occurrence, review replacement, cancel, then deliberately repair a retained range.
+    let current: FilterDocument = { statement: { ...tree.statement, inverse: true } };
+    const renderCorrection = () => root!.render(createElement(ConditionEditor, {
+      value: current, metadata, locale: 'en', values: {
+        'schema:author': [{ value: 'author', labels: { en: 'Selected author' } }],
+        'schema:isPartOf': [{ value: 'book', labels: { en: 'Selected book' } }],
+      },
+      onChange(next) { current = next!; renderCorrection(); },
+    }));
+    const select = async (pointer: string, value: string) => {
+      const control = host.querySelector<HTMLSelectElement>(`[data-condition-field-pointer="${CONDITION_POINTER}/statement/${pointer}"] select`)!;
+      await act(async () => {
+        control.value = value;
+        control.dispatchEvent(new window.Event('change', { bubbles: true }));
+      });
+    };
+    const press = async (label: string) => act(async () => {
+      [...host.querySelectorAll('button')].find((button) => button.textContent === label)!.click();
+    });
+    await act(async () => renderCorrection());
+    const originalInverse = current;
+    await select('property', 'schema:wordCount');
+    expect(host.querySelector('dialog')?.textContent).toContain(m.condition_property_change_direction_reset());
+    expect(host.querySelector('[data-property-change-version="original"]')?.textContent).toContain('Selected author');
+    await press(m.condition_property_change_cancel());
+    expect(current).toBe(originalInverse);
+    await select('property', 'schema:wordCount');
+    await press(m.condition_property_change_confirm());
+    expect(current).toMatchObject({ statement: { property: 'schema:wordCount', range: {} } });
+    expect('inverse' in (current as typeof tree).statement).toBe(false);
+    current = { statement: { property: 'schema:wordCount', range: { gte: 7 }, inverse: true } } as unknown as FilterDocument;
+    await act(async () => renderCorrection());
+    await select('inverse', 'direct');
+    expect(current).toEqual({ statement: { property: 'schema:wordCount', range: { gte: 7 } } });
+    current = originalInverse;
+    await act(async () => renderCorrection());
+    await select('property', 'schema:wordCount');
+    current = { statement: { ...tree.statement, inverse: true, in: ['different'] } };
+    await act(async () => renderCorrection());
+    expect(host.querySelector('dialog')).toBeNull();
+
     const synthetic = window.document.createElement('div');
     synthetic.setAttribute('data-condition-editor', '');
     const summary = window.document.createElement('div');

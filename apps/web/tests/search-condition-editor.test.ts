@@ -276,15 +276,15 @@ test('item property changes retain IDs only for an unchanged released target dom
     'ex:unbounded': { datatype: 'wikibase-item', labels: {} },
   };
   const statement: FilterDocument = { statement: { property: 'ex:work', in: [operand] } };
-  expect(changeStatementProperty(statement, 'ex:otherWork', definitions)).toMatchObject({
+  expect(changeStatementProperty(statement, 'ex:otherWork', { types: {}, properties: definitions })).toMatchObject({
     requiresConfirmation: false,
     next: { statement: { property: 'ex:otherWork', in: [operand] } },
   });
-  expect(changeStatementProperty(statement, 'ex:language', definitions)).toMatchObject({
+  expect(changeStatementProperty(statement, 'ex:language', { types: {}, properties: definitions })).toMatchObject({
     requiresConfirmation: true,
     next: { statement: { property: 'ex:language', in: [''] } },
   });
-  expect(changeStatementProperty(statement, 'ex:unbounded', definitions)).toMatchObject({
+  expect(changeStatementProperty(statement, 'ex:unbounded', { types: {}, properties: definitions })).toMatchObject({
     requiresConfirmation: true,
     next: { statement: { property: 'ex:unbounded', in: [''] } },
   });
@@ -326,11 +326,11 @@ test('released inverse relations round-trip through editing and the URL with the
   };
 
   expect(conditionAdmission(metadata)(inverse, state)).toEqual([]);
-  const propertyChange = changeStatementProperty(inverse, 'schema:inLanguage', metadata.properties);
+  const propertyChange = changeStatementProperty(inverse, 'schema:inLanguage', metadata);
   expect(propertyChange.requiresConfirmation).toBe(true);
   expect(resolveConditionPropertyChange(propertyChange, false)).toEqual(inverse);
   expect(resolveConditionPropertyChange(propertyChange, true)).toMatchObject({
-    statement: { property: 'schema:inLanguage', inverse: true },
+    statement: { property: 'schema:inLanguage', in: [''] },
   });
   const direct = changeConditionDirection(inverse, 'direct');
   expect(direct).toEqual({ statement: { property, in: [operand], qualifiers: inverse.statement.qualifiers } });

@@ -4349,6 +4349,7 @@
   "condition_add": "条件を追加",
   "condition_add_type": "種類を追加",
   "condition_add_statement": "プロパティ条件を追加",
+  "condition_property_change_direction_reset": "逆方向を順方向に変更し、各検索結果を起点にします。下の元の条件と変更後の条件を確認してください。",
   "condition_property_change_title": "プロパティを変更しますか？",
   "condition_property_change_message": "互換性のない値、境界、単位、修飾条件は消去されます。互換性のある項目は変更されません。",
   "condition_property_change_confirm": "プロパティを変更",

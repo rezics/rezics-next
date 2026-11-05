@@ -4346,6 +4346,7 @@
   "condition_add": "Añadir condiciones",
   "condition_add_type": "Añadir tipo",
   "condition_add_statement": "Añadir condición de propiedad",
+  "condition_property_change_direction_reset": "La dirección inversa cambiará a directa: cada resultado será el origen. Revisa abajo la condición original y su reemplazo.",
   "condition_property_change_title": "¿Cambiar la propiedad?",
   "condition_property_change_message": "Se borrarán los valores, límites, unidades o calificadores incompatibles. Las partes compatibles no cambiarán.",
   "condition_property_change_confirm": "Cambiar propiedad",
