@@ -15,8 +15,15 @@ mock.module('@tanstack/react-start/server', () => start);
 type PublicTextResult = { ok: false } | { ok: true; document: Record<string, unknown> };
 type PublicTextInvocation = { data: unknown; signal?: AbortSignal };
 const readPublicSubjectDocument = mock(async (_input: PublicTextInvocation): Promise<PublicTextResult> => ({ ok: false }));
-const subjectQueries = await import('../src/features/pages/subject-queries');
-mock.module('../src/features/pages/subject-queries', () => ({ ...subjectQueries, readPublicSubjectDocument }));
+const queryUnavailable = () => ({ queryKey: [], queryFn: async () => undefined });
+mock.module('../src/features/pages/subject-queries.ts', () => ({
+  readPublicSubjectDocument,
+  subjectLibraryQuery: queryUnavailable,
+  subjectOwnRatingQuery: queryUnavailable,
+  subjectOwnReactionQuery: queryUnavailable,
+  subjectRatingQuery: queryUnavailable,
+  subjectReaderQuery: queryUnavailable,
+}));
 const { Summary, OverviewContext } = await import('../src/features/pages/overview');
 
 const composition = {
