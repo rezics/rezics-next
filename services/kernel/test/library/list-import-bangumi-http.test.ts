@@ -545,7 +545,7 @@ test('score review retains source scale and native vote while requiring separate
     });
     expect(missingConsent.status).toBe(400);
     const preserved = await score.send('owner', 'POST', `/${uploadId}:apply`, {
-      rows: [{ ordinal: 2, reviewToken: reviews[2].token, state: 'preserve', skip: false }],
+      rows: [{ ordinal: 2, reviewToken: reviews[2].token, state: 'omit', skip: false }],
     });
     expect((await ok(preserved)).outcomes[0].score).toMatchObject({ action: 'preserve', status: 'skipped' });
     const changedChoice = await score.send('owner', 'POST', `/${uploadId}:apply`, {
@@ -571,11 +571,11 @@ test('score review retains source scale and native vote while requiring separate
         },
       ],
     });
-    expect((await ok(applied)).outcomes[0].score).toMatchObject({
-      action: 'set',
-      status: 'unavailable',
-      reason: 'atomic_guard_unavailable',
+    expect((await ok(applied)).outcomes[0]).toMatchObject({
+      status: 'unsupported', applied: ['type'],
+      score: { action: 'set', status: 'unavailable', reason: 'atomic_guard_unavailable' },
     });
+    expect(await score.commands.readEntry(score.owner.actor, target)).toMatchObject({ state: 'planned' });
     const clear = await score.send('owner', 'POST', `/${uploadId}:apply`, {
       rows: [
         {
@@ -592,7 +592,7 @@ test('score review retains source scale and native vote while requiring separate
       status: 'unavailable',
       reason: 'atomic_guard_unavailable',
     });
-    expect(await votes.readOwnVote(score.owner.actor, STANDARD_QUESTION_ID, target)).toMatchObject({ units: 7 });
+    expect(await votes.readVoteReview(score.owner.actor, STANDARD_QUESTION_ID, target)).toMatchObject({ currentVote: { state: 'counted', units: 7 } });
   } finally {
     await score.close();
   }
