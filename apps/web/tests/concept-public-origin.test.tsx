@@ -96,9 +96,7 @@ test('public entry and route admission retain only a bounded same-Subject observ
     candidateContext,
     other,
   )!;
-  const realmVisit = parse(
-    conceptPublicOriginHref(base, { ...origin, realm: other, returnHref: realmReturn }),
-  );
+  const realmVisit = parse(conceptPublicOriginHref(base, { ...origin, realm: other, returnHref: realmReturn }));
   expect(realmVisit).toMatchObject({ kind: 'unsupported', reason: 'realm' });
 });
 
@@ -189,12 +187,7 @@ test('production route admits public scope before the original session transport
         .href,
     );
     await render(
-      <SourceConceptPublicSession
-        id={id}
-        locale="en"
-        pathname={routePath}
-        publicVisit={unsupported.publicVisit}
-      />,
+      <SourceConceptPublicSession id={id} locale="en" pathname={routePath} publicVisit={unsupported.publicVisit} />,
     );
     expect(host.textContent).toContain(m.concept_public_origin_context_unsupported());
     expect(reads).toHaveLength(0);
@@ -222,20 +215,14 @@ test('production route admits public scope before the original session transport
     await waitFor(() =>
       expect(
         reads.some(
-          (request) =>
-            (request as { data: { expectedReader: string | null } }).data.expectedReader === signedInReader,
+          (request) => (request as { data: { expectedReader: string | null } }).data.expectedReader === signedInReader,
         ),
       ).toBe(true),
     );
     const signedInReadCount = reads.length;
 
     await render(
-      <SourceConceptPublicSession
-        id={id}
-        locale="en"
-        pathname={routePath}
-        publicVisit={observed.publicVisit}
-      />,
+      <SourceConceptPublicSession id={id} locale="en" pathname={routePath} publicVisit={observed.publicVisit} />,
     );
     await waitFor(() => expect(reads.length, 'observed Global Concept read').toBeGreaterThan(signedInReadCount));
     const returnedReadCount = reads.length;
@@ -267,12 +254,7 @@ test('production route admits public scope before the original session transport
     const changedIdentity = await load(observedHref, other);
     expect(changedIdentity.publicVisit).toEqual({ kind: 'invalid' });
     await render(
-      <SourceConceptPublicSession
-        id={id}
-        locale="en"
-        pathname={routePath}
-        publicVisit={{ kind: 'invalid' }}
-      />,
+      <SourceConceptPublicSession id={id} locale="en" pathname={routePath} publicVisit={{ kind: 'invalid' }} />,
     );
     expect(host.textContent).toContain(m.concept_public_origin_invalid());
     expect(reads).toHaveLength(returnedReadCount);

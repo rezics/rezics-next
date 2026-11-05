@@ -228,7 +228,11 @@ export function parseConceptPublicVisit(
   }
   const origin = originValue(parsed, id, locale);
   if (!origin || JSON.stringify(origin) !== raw) return { kind: 'invalid' };
-  const reason = origin.realm ? 'realm' : origin.context.toLowerCase() !== candidateContext.toLowerCase() ? 'context' : undefined;
+  const reason = origin.realm
+    ? 'realm'
+    : origin.context.toLowerCase() !== candidateContext.toLowerCase()
+      ? 'context'
+      : undefined;
   if (reason) return { kind: 'unsupported', origin, reason };
   if (params.has('returnTo')) return { kind: 'unsupported', origin, reason: 'return' };
   return { kind: 'origin', origin };

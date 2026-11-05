@@ -9,10 +9,7 @@ import { SourceConceptView } from '../../pages/source-concept-view';
 import { readSubjectConcept } from './actions';
 import type { ConceptWorksRoutePatch, ConceptWorksRouteState } from '../concept-works/view';
 import type { ConceptHierarchyAddress, ConceptVisitDescriptor } from '../../pages/source-concept-reading/navigation';
-import {
-  conceptGlobalVisitHref,
-  type ConceptPublicVisit,
-} from './public-visit';
+import { conceptGlobalVisitHref, type ConceptPublicVisit } from './public-visit';
 
 type SourceConceptSessionProps = {
   id: string;
