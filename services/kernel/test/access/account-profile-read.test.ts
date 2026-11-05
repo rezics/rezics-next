@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
+import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
 import { createHash } from 'node:crypto';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { createPool } from '../../src/database/pool.ts';
@@ -23,7 +23,7 @@ const pool = createPool(url);
 configureTestReceiptKeys(pool);
 const access = admittedAccess({ actions: LIFECYCLE_ACTIONS });
 const routeKey = new Uint8Array(32).fill(29);
-const kernel = createKernel({ pool, routeKey });
+const kernel = createKernel({ pool, routeKey, receiptKeys: testReceiptKeys() });
 const commands = createLifecycleCommands({ pool, access });
 const provisions = new Map<
   object,

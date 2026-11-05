@@ -410,7 +410,8 @@ export async function createLibraryDriver(options: NativeConformanceOptions = {}
     });
     const scopes = [...actionCatalogue(app).keys()].filter((scope) => scope !== 'media:complete');
     scopes.push(...[...LIFECYCLE_ACTIONS.keys()].filter((scope) => !scopes.includes(scope)));
-    scopes.push('access:grant');
+    // Internal governance actions are absent from the mounted route catalogue.
+    scopes.push('access:grant', 'gate:any');
     accountHost = await createLibraryAccountHost({
       pool: db.admin,
       authPool,
