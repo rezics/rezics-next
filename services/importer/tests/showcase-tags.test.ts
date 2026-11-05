@@ -905,7 +905,7 @@ test('selected rating evidence survives response loss and reopen before terminal
     }, journal),
   });
   try {
-    await expect(importShowcaseTags(input())).rejects.toThrow('Lost committed rating response');
+    await expect(importShowcaseTags(input())).rejects.toThrow('Durable operations remain unresolved');
     const sealed = journal.preparedCommands().filter(row => row.command.op === 'propose');
     expect(sealed.length).toBeGreaterThan(0);
     journal.close();
