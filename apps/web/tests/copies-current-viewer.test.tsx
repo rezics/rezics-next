@@ -586,7 +586,7 @@ test('The actual Copies route retires retained private rows and editor state on 
     await tick();
     absent('A');
     expect(host.textContent).toContain(m.library_copy_inventory_forbidden());
-    expect(host.querySelectorAll('article[data-slot="list-row"]')).toHaveLength(0);
+    expect(host.querySelectorAll('[data-slot="list-row"]')).toHaveLength(0);
     expect(host.querySelectorAll('article[data-copy-comparison-id]')).toHaveLength(0);
     expect([...host.querySelectorAll('button')].some((node) => node.textContent === m.library_copy_add())).toBe(false);
     expect(listInputs.at(-1)).toMatchObject(search);
@@ -603,14 +603,14 @@ test('The actual Copies route retires retained private rows and editor state on 
       replay.resolve({ ok: true, copy: { ...copy('A'), note: 'Captured before list denial', revision: 8 } }),
     );
     await tick();
-    expect(host.querySelectorAll('article[data-slot="list-row"]')).toHaveLength(0);
+    expect(host.querySelectorAll('[data-slot="list-row"]')).toHaveLength(0);
 
     await click(m.subject_view_retry(), host);
     expect(listInputs.at(-1)).toMatchObject(search);
     await act(async () => lists.at(-1)!.resolve(response('A', search)));
     await tick();
     expect(host.textContent).toContain('Private note A');
-    expect(host.querySelectorAll('article[data-slot="list-row"]')).toHaveLength(1);
+    expect(host.querySelectorAll('[data-slot="list-row"]')).toHaveLength(1);
     search = { subjectId: id(10), cursor: 'first' };
     await show(viewer('A'));
     await acceptList('A');
