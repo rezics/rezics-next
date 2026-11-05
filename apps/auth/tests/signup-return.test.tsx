@@ -254,9 +254,7 @@ test('an untouched draft returns only after fresh advice, without a warning', as
 test('a known first refusal returns to a fresh form only after current advice', async () => {
   const refused = await setup();
   await refused.ready();
-  await flush(() =>
-    refused.calls[0]!.resolve(Response.json({ error: 'registration_denied' }, { status: 409 })),
-  );
+  await flush(() => refused.calls[0]!.resolve(Response.json({ error: 'registration_denied' }, { status: 409 })));
   expect(refused.host.textContent).toContain('We could not create this account');
   await refused.transition('pagehide');
   await refreshAfterReturn(refused);

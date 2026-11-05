@@ -159,10 +159,7 @@ const fake = Bun.serve({
       if (signupStatus === 201) return Response.json({ accountId }, { status: 201, headers });
       if (signupStatus === 429) headers.set('retry-after', String(retryAfter));
       const error = signupStatus === 429 ? 'rate_limited' : signupStatus === 503 ? 'unavailable' : signupError;
-      return Response.json(
-        { error },
-        { status: signupStatus, headers },
-      );
+      return Response.json({ error }, { status: signupStatus, headers });
     }
 
     return new Response('Not Found', { status: 404, headers });
@@ -738,14 +735,12 @@ test(
       expect(alertText).toMatch(/sign in/i);
       expect(alertText).toMatch(/recover/i);
       expect(await page.getByLabel('Handle', { exact: true }).count()).toBe(0);
-      const links = await page
-        .getByRole('link')
-        .evaluateAll((elements) =>
-          elements.map((element) => ({
-            href: (element as HTMLAnchorElement).href,
-            text: element.textContent?.trim() ?? '',
-          })),
-        );
+      const links = await page.getByRole('link').evaluateAll((elements) =>
+        elements.map((element) => ({
+          href: (element as HTMLAnchorElement).href,
+          text: element.textContent?.trim() ?? '',
+        })),
+      );
       for (const link of links.filter((value) => ['/login', '/recovery'].includes(new URL(value.href).pathname))) {
         expect(new URL(link.href).origin).toBe(origin);
         expect(new URL(link.href).search).toBe(`?${authorizationQuery}`);

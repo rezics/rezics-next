@@ -12,11 +12,22 @@ export function registrationAccountId(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= REGISTRATION_ACCOUNT_ID_MAX_LENGTH;
 }
 export function registrationAcknowledgement(value: unknown): value is RegistrationAcknowledgement {
-  return value !== null && typeof value === 'object' && !Array.isArray(value) &&
-    Object.keys(value).length === 1 && 'accountId' in value && registrationAccountId(value.accountId);
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    Object.keys(value).length === 1 &&
+    'accountId' in value &&
+    registrationAccountId(value.accountId)
+  );
 }
 export function registrationError(value: unknown): value is { error: RegistrationError } {
-  return value !== null && typeof value === 'object' && !Array.isArray(value) &&
-    Object.keys(value).length === 1 && 'error' in value &&
-    (value.error === 'registration_denied' || value.error === 'handle_unavailable');
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    Object.keys(value).length === 1 &&
+    'error' in value &&
+    (value.error === 'registration_denied' || value.error === 'handle_unavailable')
+  );
 }
