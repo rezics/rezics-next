@@ -29,6 +29,7 @@ import { SubjectLabelNotice } from './subject-labels.tsx';
 import { ShelfTypes } from './shelf-types';
 import { SaveQueryLink } from './save-query';
 import { admitSavedQuerySelection } from './saved-query-editor/selection';
+import { ShelfTitlePreparation } from './shelf-title-preparation';
 
 import {
   ShelfSummaryCount,
@@ -57,6 +58,7 @@ export function PersonalLibraryPage({
   continueRead,
   continueCurrent,
   continueScope,
+  titlePreparation,
   entriesAdmitted = true,
   continueAdmitted = true,
   isCurrent,
@@ -77,6 +79,10 @@ export function PersonalLibraryPage({
   continueRead?: () => Promise<Exclude<ContinueView, { state: 'unknown' }>>;
   continueCurrent?: () => boolean;
   continueScope?: string;
+  titlePreparation?: {
+    prepare: (key: string) => Promise<import('./personal-library-server').ShelfTitlePreparationReceipt>;
+    refresh: () => Promise<void>;
+  };
   entriesAdmitted?: boolean;
   continueAdmitted?: boolean;
   isCurrent?: () => boolean;
@@ -237,8 +243,17 @@ export function PersonalLibraryPage({
             {m.library_filtered_by({ status: page.stateLabel ?? m.library_other() })}
           </p>
         ) : null}
-        {page.readState === 'score-unavailable' || page.readState === 'priority-unavailable' ? (
+        {page.readState === 'score-unavailable' ? (
           <ShelfScoreUnavailable locale={locale} view={firstPage} />
+        ) : page.readState === 'preparing' && sort.orderBy === 'title' && titlePreparation ? (
+          <div className="flex flex-col items-start gap-3">
+            <ShelfTitlePreparation
+              isCurrent={isCurrent ?? (() => true)}
+              prepare={titlePreparation.prepare}
+              refresh={titlePreparation.refresh}
+            />
+            <EntriesFirstPage locale={locale} view={firstPage} />
+          </div>
         ) : page.readState ? (
           <div className="flex flex-col items-start gap-3">
             <p role={page.readState === 'preparing' ? 'status' : 'alert'}>

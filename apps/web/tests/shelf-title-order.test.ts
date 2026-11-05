@@ -25,23 +25,54 @@ test('title URLs retain native intent across filters and display changes, with a
   expect(validateShelfSearch({ ...search, label: '01900000-0000-7000-8000-000000000001' }).orderBy).toBeUndefined();
 });
 
-test('a title preference cannot select an uninstalled index', () => {
+test('saved title order is native while unsupported saved orders retain date recovery', () => {
   const shelf = { sorts: { all: { field: 'title' as const, direction: 'asc' as const } } };
-  expect(resolveShelfPresentation({}, shelf).sort.orderBy).toBe('lastActivity');
-  expect(unsupportedShelfSorts(shelf)).toEqual([{ tab: 'all', field: 'title' }]);
+  expect(resolveShelfPresentation({}, shelf).sort).toEqual({ orderBy: 'title', direction: 'asc' });
+  expect(unsupportedShelfSorts(shelf)).toEqual([]);
   expect(resolveShelfPresentation({ orderBy: 'title', direction: 'asc' }, shelf).sort.orderBy).toBe('title');
+  const score = { sorts: { all: { field: 'rating' as const, direction: 'asc' as const } } };
+  expect(resolveShelfPresentation({}, score).sort.orderBy).toBe('lastActivity');
+  expect(unsupportedShelfSorts(score)).toEqual([{ tab: 'all', field: 'rating' }]);
 });
 
-test('the unpublished title client remains explicit preparation without fetching or sorting a date page', async () => {
-  let calls = 0;
+test('localized title order reads one native FULL page in the selected direction without reordering it', async () => {
+  const requests: Array<{ url: URL; headers: Headers }> = [];
+  const nativeRows = [
+    { subjectId: 'z-native-first', state: 'planned', revision: 1 },
+    { subjectId: 'a-native-second', state: 'planned', revision: 2 },
+  ];
   const client = createKernelClient('https://kernel.invalid', {
-    fetch: async () => {
-      calls++;
-      return new Response('{}', { status: 503 });
+    headers: { 'accept-language': 'ja-JP, ja;q=0.9' },
+    fetch: async (input, init) => {
+      requests.push({
+        url: new URL(input instanceof Request ? input.url : String(input)),
+        headers: new Headers(init?.headers),
+      });
+      return Response.json({ libraryEntries: nativeRows, next: 'native-next' });
     },
   });
-  await expect(
-    readEntryPage(client, 'Bearer current', undefined, undefined, 20, { orderBy: 'title', direction: 'asc' }),
-  ).rejects.toMatchObject({ state: 'preparing' });
-  expect(calls).toBe(0);
+  for (const direction of ['asc', 'desc'] as const) {
+    const page = await readEntryPage(
+      client,
+      'Bearer current',
+      'opaque:title-cursor',
+      'planned',
+      20,
+      { orderBy: 'title', direction },
+      'schema:Book',
+    );
+    expect(Object.fromEntries(requests.at(-1)!.url.searchParams)).toEqual({
+      view: 'FULL',
+      limit: '20',
+      cursor: 'opaque:title-cursor',
+      state: 'planned',
+      orderBy: 'title',
+      direction,
+      type: 'schema:Book',
+    });
+    expect(requests.at(-1)!.headers.get('authorization')).toBe('Bearer current');
+    expect(requests.at(-1)!.headers.get('accept-language')).toBe('ja-JP, ja;q=0.9');
+    expect(page.libraryEntries.map((entry) => entry.subjectId)).toEqual(['z-native-first', 'a-native-second']);
+    expect(page.next).toBe('native-next');
+  }
 });

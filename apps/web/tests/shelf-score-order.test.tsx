@@ -89,13 +89,13 @@ test('mounted sort form retains score addresses until date selection and replace
   const host = window.document.createElement('div');
   window.document.body.append(host);
   const root = createRoot(host);
-  const render = async (direction: 'asc' | 'desc') => {
+  const render = async (direction: 'asc' | 'desc', field: 'added' | 'rating' = 'rating') => {
     const props: ComponentProps<typeof SortControls> = {
       locale: 'en',
       state: 'completed',
       type: 'schema:Book',
       display: { layout: 'table', size: 'l', columns: 'title,status' },
-      sort: resolveShelfPresentation({}, { sorts: { all: { field: 'rating', direction } } }).sort,
+      sort: resolveShelfPresentation({}, { sorts: { all: { field, direction } } }).sort,
       isCurrent: () => client.getQueryData<{ subject: string }>(['session'])?.subject === 'A',
     };
     await act(async () =>
@@ -168,6 +168,18 @@ test('mounted sort form retains score addresses until date selection and replace
       await render(direction);
       await choose('orderBy', 'lastActivity');
     }
+    await render('asc', 'added');
+    const order = select('orderBy');
+    expect(order.value).toBe('createdAt');
+    await choose('orderBy', 'priority');
+    expect(order.querySelector('option[value="priority"]')?.hasAttribute('disabled')).toBe(false);
+    await choose('direction', 'desc');
+    expect(submitted()).toEqual({ ...retained, orderBy: 'priority', direction: 'desc' });
+    await submit();
+    expect(navigate.mock.calls.at(-1)?.[0]).toEqual({
+      to: '/library',
+      search: { ...retained, orderBy: 'priority', direction: 'desc' },
+    });
   } finally {
     await act(async () => root.unmount());
     navigate.mockRestore();

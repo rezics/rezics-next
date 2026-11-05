@@ -190,9 +190,46 @@ test('The actual personal Library accepts only matching prepared-viewer and sour
     expect(calls.every((call) => call.headers.get('authorization') === 'Bearer credential-A')).toBe(true);
     expect(headers.get('cache-control')).toBe('private, no-store');
     stale = true;
-    const restarted = await reads.readPersonalLibraryCurrent({ data: { cursor: 'stale' } });
+    const restartOffset = calls.length;
+    const restarted = await reads.readPersonalLibraryCurrent({
+      data: {
+        type: 'core:Book',
+        state: 'planned',
+        orderBy: 'priority',
+        direction: 'desc',
+        cursor: 'stale',
+      },
+    });
     expect(restarted.page).toMatchObject({ cursorReset: true });
-    expect(restarted.requested.cursor).toBe('stale');
+    expect(restarted.requested).toEqual({
+      type: 'core:Book',
+      state: 'planned',
+      orderBy: 'priority',
+      direction: 'desc',
+      cursor: 'stale',
+      locale: 'en',
+    });
+    const restartPages = calls
+      .slice(restartOffset)
+      .filter((call) => new URL(call.url).pathname === '/v1/libraryEntries')
+      .map((call) => new URL(call.url));
+    expect(restartPages).toHaveLength(2);
+    expect(Object.fromEntries(restartPages[0]!.searchParams)).toMatchObject({
+      type: 'core:Book',
+      state: 'planned',
+      orderBy: 'priority',
+      direction: 'desc',
+      cursor: 'stale',
+      limit: '20',
+    });
+    expect(Object.fromEntries(restartPages[1]!.searchParams)).toEqual({
+      view: 'FULL',
+      limit: '20',
+      state: 'planned',
+      orderBy: 'priority',
+      direction: 'desc',
+      type: 'core:Book',
+    });
     stale = false;
     for (const mixed of [
       [

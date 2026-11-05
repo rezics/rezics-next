@@ -4,12 +4,12 @@ import { env } from 'cloudflare:workers';
 import type { KernelClient } from '@rezics/client';
 import { kernelClient, requestLocale } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
-import { sessionSubject, viewerCredential } from '../session/request';
+import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 import { nameSubjectTypes, readRelease, typeNames } from '../subject/definitions';
 import { loadPersonalLibrary, presentLibraryStateLabels, type PersonalLibraryView } from './entries-read';
 import { loadContinueState, type ContinueResult } from './continue-read';
 import { loadLibraryNavigation, type LibraryNavigationRead } from './pins-read';
-import { shelfSort, validateShelfSearch, type ShelfSearch, type ShelfSort } from './shelf-params';
+import { shelfAddressIssues, shelfSort, validateShelfSearch, type ShelfSearch, type ShelfSort } from './shelf-params';
 
 export type PersonalLibraryAddress = ShelfSort & {
   type: string | null;
@@ -49,6 +49,21 @@ export type PersonalContinueRead = {
   requested: PersonalLibraryAddress;
   result: ContinueResult;
 };
+export type ShelfTitlePreparationReceipt = NonNullable<
+  Awaited<ReturnType<KernelClient['libraryShelfTitlePreparation']['post']>>['data']
+>;
+export async function prepareShelfTitleStep(
+  client: KernelClient,
+  authorization: string,
+  key: string,
+): Promise<ShelfTitlePreparationReceipt> {
+  const response = await client.libraryShelfTitlePreparation.post({
+    headers: { authorization, 'idempotency-key': key },
+    fetch: { cache: 'no-store', redirect: 'manual' },
+  });
+  if (response.error || !response.data) throw new Error('Library title preparation failed');
+  return response.data;
+}
 
 function validateInput(input: unknown): ShelfSearch {
   return validateShelfSearch(
@@ -59,6 +74,23 @@ function prepared(request: Request) {
   const subject = sessionSubject(request);
   const credential = viewerCredential(request);
   return subject && credential ? { subject, credential } : undefined;
+}
+
+function validateTitlePreparationInput(input: unknown): { search: ShelfSearch; key: string } {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Invalid title preparation');
+  const value = input as Record<string, unknown>;
+  const rawSearch = value.search;
+  if (!rawSearch || typeof rawSearch !== 'object' || Array.isArray(rawSearch))
+    throw new Error('Invalid title preparation address');
+  const search = validateInput(rawSearch);
+  if (shelfAddressIssues(rawSearch as Record<string, unknown>).length || search.orderBy !== 'title')
+    throw new Error('Invalid title preparation address');
+  if (
+    typeof value.key !== 'string' ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.key)
+  )
+    throw new Error('Invalid title preparation key');
+  return { search, key: value.key };
 }
 
 /** Each native reader prepares its own request. No WeakMap entry or asserted viewer is shared between readers. */
@@ -114,6 +146,23 @@ export const readPersonalLibraryCurrent = createServerFn({ method: 'GET' })
     setResponseHeader('cache-control', 'private, no-store');
     const result = await loadPersonalLibraryCurrent(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
     return result.sessionSubject ? { ...result, page: await namePage(result.page, result.requested.locale) } : result;
+  });
+
+/** One explicit native title-preparation command, bound to its current address and viewer. */
+export const preparePersonalLibraryTitle = createServerFn({ method: 'POST' })
+  .validator(validateTitlePreparationInput)
+  .handler(async ({ data }) => {
+    const request = getRequest();
+    setResponseHeader('cache-control', 'private, no-store');
+    const locale = requestLocale(request) ?? 'en';
+    const requested = personalLibraryAddress(data.search, locale);
+    if (await prepareSession(request, env as Partial<SessionEnv>)) throw new Error('Library session unavailable');
+    const authorization = viewerCredential(request);
+    const subject = sessionSubject(request);
+    if (!authorization || !subject) throw new Error('Library session unavailable');
+    const preparation = await prepareShelfTitleStep(kernelClient(locale), authorization, data.key);
+    const current = sessionSubject(request) === subject && viewerCredential(request) === authorization;
+    return { sessionSubject: current ? subject : null, requested, preparation };
   });
 
 /** Refresh only the existing bounded Continue source, with that reader's actual preparation. */
