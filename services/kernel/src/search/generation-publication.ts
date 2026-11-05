@@ -966,8 +966,7 @@ export function createSearchGenerationPublication(
       // before restoring this exact intent; a publication-completion verdict cannot authorize abort.
       const retained = await writerGuard.fencePublication(reference(job), context);
       add(meter, retained.cost);
-      if (retained.status !== 'fenced' || !same(retained.fence, fence(job)))
-        throw new Pending('source_pending');
+      if (retained.status !== 'fenced' || !same(retained.fence, fence(job))) throw new Pending('source_pending');
       const current = await aliasTarget(job, context, meter);
       if (current === job.physical_target) {
         const previous = job.previous_target;
