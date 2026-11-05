@@ -1,10 +1,40 @@
 import { createContext, useContext } from 'react';
 import { sessionCsrfToken } from '../../session/query';
-import type { AniListImportPort } from './contract';
+import { archiveTransportLost } from '../archive-entry-recovery/native';
+import type { AniListCommand, AniListImportPort } from './contract';
 
 export const AniListImportPortContext = createContext<AniListImportPort | null>(null);
 
+async function labelDelivery<T>(command: AniListCommand, send: () => Promise<T>) {
+  try {
+    return await send();
+  } catch (error) {
+    if (archiveTransportLost(error)) return { kind: 'unknown' as const, command };
+    throw error;
+  }
+}
+
 const productionPort: AniListImportPort = {
+  async reviewLabels(command) {
+    const { captureAniListLabelSender, reviewAniListLabels } = await import('./server');
+    const headers = { 'X-CSRF-Token': sessionCsrfToken() ?? '' };
+    command.custody.sender ??= await captureAniListLabelSender({ data: command.custody, headers });
+    return labelDelivery(command, () => reviewAniListLabels({ data: command, headers }));
+  },
+  async applyLabels(command) {
+    const { captureAniListLabelSender, applyAniListLabels } = await import('./server');
+    const headers = { 'X-CSRF-Token': sessionCsrfToken() ?? '' };
+    command.custody.sender ??= await captureAniListLabelSender({ data: command.custody, headers });
+    return labelDelivery(command, () => applyAniListLabels({ data: command, headers }));
+  },
+  async readLabels(command) {
+    const { readAniListLabels } = await import('./server');
+    return readAniListLabels({ data: command });
+  },
+  async labelTargets(query, cursor) {
+    const { searchAniListLabelTargets } = await import('./server');
+    return searchAniListLabelTargets({ data: { query, cursor } });
+  },
   async preview(command) {
     const { previewAniListImport } = await import('./server');
     return previewAniListImport({ data: command, headers: { 'X-CSRF-Token': sessionCsrfToken() ?? '' } });

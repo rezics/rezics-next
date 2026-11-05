@@ -75,6 +75,13 @@ personal labels and assignments. All new evidence lives in the existing account-
 100-key terminal-erasure owner. The installed producer has five-upload retention and explicit removal, with no timed
 expiry contract; this extension adds no new allowance or timer.
 
+Decision: Web keeps label confirmation separate from state/score confirmation on the existing retained page.
+Owners explicitly select positive evidence and either propose a name or select an identity from one 20-label search
+page. Native reviewed names and item order are displayed unchanged; collisions require choosing the existing label.
+Current assignment reads remain separate from command acknowledgement. A refresh retires unstarted label confirmation;
+started native work retains its original review for exact replay. The encrypted Library sender travels with uncertain
+label commands in the mounted visit. Locale replacement retires the private display with the existing visit lifetime.
+
 ## Cost and limits
 
 `ANILIST_LABEL_LIMITS` fixes R=20 selected rows per apply, T=8 selected values per row, at most four distinct new

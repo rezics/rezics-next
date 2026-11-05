@@ -216,6 +216,10 @@ function recordingPort(
     }),
   );
   const port: AniListImportPort = {
+    async reviewLabels() { return { kind: 'unavailable' }; },
+    async applyLabels() { return { kind: 'unavailable' }; },
+    async readLabels() { return { kind: 'unavailable' }; },
+    async labelTargets() { return { kind: 'unavailable' }; },
     async preview(command) {
       previews.push({ upload: command.upload, ...(command.scoreFormat ? { scoreFormat: command.scoreFormat } : {}) });
       return { kind: 'previewed', importId: id, count: total };

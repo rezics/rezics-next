@@ -1,4 +1,7 @@
+import { aniListLabelRequests } from './label-native';
 import type { KernelClient } from '@rezics/client';
+import { readSubjectLabelAssignments } from '../subject-labels';
+import { archiveTransportLost } from '../archive-entry-recovery/native';
 import { isPlatformClosedError } from '../../kernel/platform-closed';
 import { QUESTION } from '../../features/pages/subject-ratings';
 import { readHomeQuestion } from '../../features/pages/home-feed-questions';
@@ -300,6 +303,7 @@ export function kernelAniListPort(
   request: Request,
   sessionEnv: Partial<SessionEnv>,
   originConfigured: boolean,
+  originalAuthorization?: string,
 ): AniListImportPort {
   const authorizationHeaders = (authorization: string) => ({ authorization });
   const idempotencyHeaders = (authorization: string, key: string) => ({
@@ -316,17 +320,69 @@ export function kernelAniListPort(
     const anilist = nativeAniListImport(client);
     if (!anilist) return { kind: 'unavailable' };
     try {
-      const result = await send(anilist, session.authorization);
+      const result = await send(anilist, originalAuthorization ?? session.authorization);
       if (result.error) return outcomeOf(result.status, result.error.value, command);
       const value = read(result.data);
       if (!value) return { kind: 'unavailable' };
       return value;
     } catch (error) {
       if (isPlatformClosedError(error)) return { kind: 'unavailable' };
-      return unknown(command);
+      if (archiveTransportLost(error)) return unknown(command);
+      throw error;
     }
   }
   return {
+    async reviewLabels(command) {
+      return call(
+        command,
+        (_anilist, authorization) =>
+          aniListLabelRequests(client, authorization).review(command.importId, command.body, command.key),
+        (data) => {
+          // This is a generated native response at the HTTP boundary.
+          if (
+            !record(data) ||
+            typeof data.ordinal !== 'number' ||
+            !record(data.review) ||
+            typeof data.review.id !== 'string' ||
+            !Array.isArray(data.review.items)
+          )
+            return undefined;
+          return {
+            kind: 'labels-reviewed' as const,
+            ordinal: data.ordinal,
+            review: data.review as import('./contract').AniListLabelReview,
+          };
+        },
+      );
+    },
+    async applyLabels(command) {
+      return call(
+        command,
+        (_anilist, authorization) => aniListLabelRequests(client, authorization).apply(command.importId, command.body),
+        (data) => {
+          if (!record(data) || !Array.isArray(data.outcomes) || typeof data.complete !== 'boolean') return undefined;
+          return { kind: 'labels-applied' as const, result: data as import('./contract').AniListLabelApplyResult };
+        },
+      );
+    },
+    async readLabels(command) {
+      const session = await withSession(request, sessionEnv, originConfigured);
+      if ('kind' in session) return session;
+      return {
+        kind: 'labels-read',
+        labels: await readSubjectLabelAssignments(client, command.subjectId, session.authorization),
+      };
+    },
+    async labelTargets(query, cursor) {
+      const session = await withSession(request, sessionEnv, originConfigured);
+      if ('kind' in session) return session;
+      const result = await client.libraryLabels.get({
+        query: { q: query, limit: 20, ...(cursor ? { cursor } : {}) },
+        headers: authorizationHeaders(session.authorization),
+      });
+      if (result.error) return failure(result.status, result.error.value);
+      return { kind: 'label-targets', labels: result.data!.labels, next: result.data!.next };
+    },
     async question(): Promise<AniListQuestionResult> {
       const session = await withSession(request, sessionEnv, originConfigured);
       if ('kind' in session) return session;

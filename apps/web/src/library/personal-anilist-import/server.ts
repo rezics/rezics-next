@@ -1,3 +1,5 @@
+import { prepareExpectedReader, validExpectedReader } from '../../session/expected-reader';
+import { captureEntryRestoreCredential, originalEntryRestoreCredential } from '../entry-restore-credential';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
@@ -163,3 +165,106 @@ export const cancelAniListImport = createServerFn({ method: 'POST' })
     return { kind: 'cancel', importId: requireId(input.importId), key: requireKey(input.key), remove };
   })
   .handler(async ({ data }): Promise<AniListMutateResult> => port().cancel(data));
+
+// Capture the same encrypted private sender used by native Library continuations before any label effect.
+export const captureAniListLabelSender = createServerFn({ method: 'POST' })
+  .validator((input: unknown) => {
+    if (!validExpectedReader(input)) throw new Error('Invalid AniList viewer');
+    return input;
+  })
+  .handler(async ({ data }) => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const request = getRequest();
+    if (!(await prepareExpectedReader(request, env as Partial<SessionEnv>, data)))
+      throw new Error('AniList viewer changed');
+    return captureEntryRestoreCredential(request, env as Partial<SessionEnv>);
+  });
+
+export const reviewAniListLabels = createServerFn({ method: 'POST' })
+  .validator((input: unknown): Extract<AniListCommand, { kind: 'review-labels' }> => {
+    if (!record(input) || !record(input.body) || !validExpectedReader(input.custody))
+      throw new Error('Invalid AniList label review');
+    const selections = input.body.selections;
+    if (!Array.isArray(selections) || selections.length < 1 || selections.length > 8)
+      throw new Error('Invalid AniList selections');
+    const body = {
+      ordinal: requireOrdinal(input.body.ordinal),
+      subjectId: requireId(input.body.subjectId),
+      selections: selections.map((item) => {
+        if (!record(item) || typeof item.key !== 'string' || item.key.length > 65536 || !record(item.target))
+          throw new Error('Invalid AniList selection');
+        const target = item.target;
+        if (typeof target.labelId === 'string' && target.name === undefined)
+          return { key: item.key, target: { labelId: requireId(target.labelId) } };
+        if (typeof target.name === 'string' && target.labelId === undefined && target.name.length <= 65536)
+          return { key: item.key, target: { name: target.name } };
+        throw new Error('Invalid AniList label target');
+      }),
+    };
+    return {
+      kind: 'review-labels',
+      importId: requireId(input.importId),
+      key: requireKey(input.key),
+      body,
+      custody: labelCustody(input.custody),
+    };
+  })
+  .handler(async ({ data }) => (await labelPort(data.custody)).reviewLabels(data));
+
+export const applyAniListLabels = createServerFn({ method: 'POST' })
+  .validator((input: unknown): Extract<AniListCommand, { kind: 'apply-labels' }> => {
+    if (!record(input) || !record(input.body) || !validExpectedReader(input.custody))
+      throw new Error('Invalid AniList label confirmation');
+    return {
+      kind: 'apply-labels',
+      importId: requireId(input.importId),
+      body: {
+        confirmations: requireConfirmations(input.body.confirmations).map(({ ordinal, reviewId }) => ({
+          ordinal,
+          reviewId,
+        })),
+      },
+      custody: labelCustody(input.custody),
+    };
+  })
+  .handler(async ({ data }) => (await labelPort(data.custody)).applyLabels(data));
+
+function labelCustody(input: import('./contract').AniListLabelCustody) {
+  if (input.sender !== undefined && (typeof input.sender !== 'string' || input.sender.length > 3200))
+    throw new Error('Invalid AniList sender');
+  return input;
+}
+async function labelPort(custody: import('./contract').AniListLabelCustody) {
+  setResponseHeader('cache-control', 'private, no-store');
+  const request = getRequest();
+  if (!(await prepareExpectedReader(request, env as Partial<SessionEnv>, custody)))
+    throw new Error('AniList viewer changed');
+  const authorization = await originalEntryRestoreCredential(request, env as Partial<SessionEnv>, custody.sender);
+  if (!authorization) throw new Error('AniList sender changed');
+  return kernelAniListPort(kernelClient(), request, env as Partial<SessionEnv>, originConfigured(), authorization);
+}
+
+export const readAniListLabels = createServerFn({ method: 'GET' })
+  .validator((input: unknown): Extract<AniListCommand, { kind: 'read-labels' }> => {
+    if (!record(input)) throw new Error('Invalid AniList assignment read');
+    return {
+      kind: 'read-labels',
+      importId: requireId(input.importId),
+      ordinal: requireOrdinal(input.ordinal),
+      subjectId: requireId(input.subjectId),
+    };
+  })
+  .handler(async ({ data }) => port().readLabels(data));
+
+export const searchAniListLabelTargets = createServerFn({ method: 'GET' })
+  .validator((input: unknown) => {
+    if (
+      !record(input) ||
+      typeof input.query !== 'string' ||
+      input.query.length > 1000 ||
+      (input.cursor !== undefined && (typeof input.cursor !== 'string' || input.cursor.length > 4096))
+    )
+      throw new Error('Invalid AniList label search');
+    return { query: input.query, ...(typeof input.cursor === 'string' ? { cursor: input.cursor } : {}) };
+  })
+  .handler(async ({ data }) => port().labelTargets(data.query, data.cursor));

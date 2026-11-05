@@ -59,6 +59,17 @@ field names, 8,192-byte group metadata, five owner uploads and 20 rows per read/
 the upload during submission, the current response page without `rawUpload`, bounded per-row metadata for N
 rows and exact uncertain-command operands.
 
+## Native label adoption
+
+The [label adoption owner](../../../../../docs/library-import-anilist-labels.md) defines the retained evidence and
+immutable native review. The same page calls generated `:reviewLabels` and `:applyLabels` with separate label epochs,
+exact review UUIDs and ordered source selections. Positive native evidence supplies checkbox choices; false and
+unsupported representations remain visible evidence. Subject identity uses native match or explicit Subject choice.
+A bounded owned-label search offers live label IDs, while explicit proposals preserve source text beside the normalized
+native review. Confirmation never calls the state/score writer. Results show per-item label and assignment identities,
+partial work and independent current assignments through the installed Subject assignment reader. Unknown delivery
+keeps its original command and encrypted sender; a current read cannot release it.
+
 ## Cost
 
 - Operation: personal AniList upload preview, paged read, current-question point read, per-row review, owner
@@ -76,6 +87,11 @@ Decision: a missing AniList list-entry `id` uses the AniList media identifier fr
 provider record identity. Unix `createdAt`/`updatedAt` stay unknown. Confirm without the two source checkboxes
 still applies the import; the confirmation page disables Confirm until both are checked.
 
+- Label work adds L native reviews, A confirmations of at most 20 rows × 8 values, S explicit 20-label search
+  pages and C explicit 32-assignment Subject reads. Native work prices all R×T decisions, bounded identity/name
+  probes, up to four normalized creations per row, assignments, account/Subject preparation, source/label locks,
+  receipts, History/export fences, serialization, exact retries and cancellation in the linked owner. No fetch-all
+  label loop, page archive or second evidence store is retained.
 - Retained bound: `O(U + 20 × page-row bytes + N × metadata bytes)` with U the upload during submission only.
 - Installed caps: `ANILIST_LIMITS` in `list-import-anilist-parser.ts` (1 MiB, 200 rows, depth 24, page/apply 20).
 - Test reference: `apps/web/tests/personal-anilist-import.test.tsx` growth cases at 20/100/200 rows.

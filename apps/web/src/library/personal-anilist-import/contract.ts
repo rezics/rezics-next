@@ -11,6 +11,25 @@ type NativeAniListApplyBody = Parameters<NonNullable<NativeAniListItem['$apply']
 type NativeAniListApplyResult = NonNullable<
   Awaited<ReturnType<NonNullable<NativeAniListItem['$apply']>['post']>>['data']
 >;
+export type AniListLabelReviewBody = Parameters<NonNullable<NativeAniListItem['$reviewLabels']>['post']>[0];
+export type AniListLabelApplyBody = Parameters<NonNullable<NativeAniListItem['$applyLabels']>['post']>[0];
+export type AniListLabelApplyResult = NonNullable<
+  Awaited<ReturnType<NonNullable<NativeAniListItem['$applyLabels']>['post']>>['data']
+>;
+export type AniListLabelReview = NonNullable<NativeAniListRow['labelReview']>;
+export type AniListLabelSelection = AniListLabelReviewBody['selections'][number];
+export type AniListLabelEvidence = NativeAniListRow['labelEvidence'];
+export type AniListLabelWork = NativeAniListRow['labelWork'];
+export type AniListLabelTarget = import('../subject-labels').LibraryLabelSummary;
+export type AniListCurrentLabel = import('../subject-labels').SubjectLabel;
+export type AniListLabelCustody = import('../../session/expected-reader').ExpectedReader & { sender?: string };
+export type AniListLabelMeta = {
+  subjectId: string | null;
+  selections: AniListLabelSelection[];
+  review: AniListLabelReview | null;
+  invalidated: boolean;
+  outcomes: AniListLabelApplyResult['outcomes'][number] | null;
+};
 type NativeAniListRow = NativeAniListPage['rows'][number];
 type NativeAniListReview = NonNullable<NativeAniListRow['review']>;
 type NativeAniListOutcome = NonNullable<NativeAniListRow['outcome']>;
@@ -77,6 +96,10 @@ export type AniListRow = Pick<NativeAniListRow, 'ordinal' | 'match'> & {
   outcome: AniListOutcome | null;
   currentScore?: AniListJson;
   scoreLexeme?: string;
+  labelEvidence?: AniListLabelEvidence;
+  labelReview?: AniListLabelReview;
+  labelWork?: AniListLabelWork;
+  currentLabels?: AniListCurrentLabel[];
 };
 export type AniListCompleteness = {
   wrapper: AniListWrapper;
@@ -96,6 +119,7 @@ export type AniListQuestion = HomeQuestion;
 
 export type AniListRowMeta = {
   ordinal: number;
+  labels?: AniListLabelMeta;
   title: string;
   mediaType: string | null;
   status: string | null;
@@ -188,6 +212,9 @@ export type AniListCommand =
       body: PersonalEntrySourceAdmission;
       custody?: SourceAdmissionCustody;
     }
+  | { kind: 'review-labels'; key: string; importId: string; body: AniListLabelReviewBody; custody: AniListLabelCustody }
+  | { kind: 'apply-labels'; importId: string; body: AniListLabelApplyBody; custody: AniListLabelCustody }
+  | { kind: 'read-labels'; importId: string; ordinal: number; subjectId: string }
   | { kind: 'cancel'; key: string; importId: string; remove: boolean };
 
 export type AniListUnknown = { kind: 'unknown'; command: AniListCommand };
@@ -205,7 +232,27 @@ export type AniListMutateResult = { kind: 'cancelled'; removed: boolean } | AniL
 export type AniListAdmitResult = { kind: 'admitted' } | { kind: 'conflict' } | AniListFailure | AniListUnknown;
 export type AniListQuestionResult = { kind: 'question'; question: AniListQuestion } | AniListFailure;
 
+export type AniListLabelReviewResult =
+  | { kind: 'labels-reviewed'; ordinal: number; review: AniListLabelReview }
+  | AniListFailure
+  | AniListUnknown;
+export type AniListLabelApplyCallResult =
+  | { kind: 'labels-applied'; result: AniListLabelApplyResult }
+  | AniListFailure
+  | AniListUnknown;
+export type AniListLabelReadResult =
+  | { kind: 'labels-read'; labels: AniListCurrentLabel[] }
+  | AniListFailure
+  | AniListUnknown;
+export type AniListLabelTargetsResult =
+  | { kind: 'label-targets'; labels: AniListLabelTarget[]; next: string | null }
+  | AniListFailure;
+
 export type AniListImportPort = {
+  reviewLabels(command: Extract<AniListCommand, { kind: 'review-labels' }>): Promise<AniListLabelReviewResult>;
+  applyLabels(command: Extract<AniListCommand, { kind: 'apply-labels' }>): Promise<AniListLabelApplyCallResult>;
+  readLabels(command: Extract<AniListCommand, { kind: 'read-labels' }>): Promise<AniListLabelReadResult>;
+  labelTargets(query: string, cursor?: string): Promise<AniListLabelTargetsResult>;
   preview(command: Extract<AniListCommand, { kind: 'preview' }>): Promise<AniListPreviewResult>;
   page(command: Extract<AniListCommand, { kind: 'page' }>): Promise<AniListPageResult>;
   review(command: Extract<AniListCommand, { kind: 'review' }>): Promise<AniListReviewResult>;
