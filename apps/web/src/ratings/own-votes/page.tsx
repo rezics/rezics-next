@@ -45,8 +45,6 @@ export function CurrentViewerOwnVotesPage({
   const coordinates = useOwnVotesCoordinates(origin.coordinateAuthority, origin.cursor);
   const confirmMovement = useRef<OwnVotesDepartureControl>({
     current: null,
-    allowNavigation: null,
-    clearNavigation: null,
   });
   const acceptRead = useCallback(
     (candidate: unknown) => {
@@ -101,7 +99,7 @@ export function CurrentViewerOwnVotesPage({
       if (!origin.isCurrent()) return;
       const id = coordinates.stage(responseVersion, destination);
       if (!id) return;
-      const allowed = await confirmMovement.current!();
+      const allowed = await confirmMovement.current!.confirm();
       if (
         !allowed ||
         !origin.isCurrent() ||
@@ -113,7 +111,7 @@ export function CurrentViewerOwnVotesPage({
         coordinates.cancel(id);
         return;
       }
-      confirmMovement.allowNavigation?.();
+      confirmMovement.current!.allowNavigation();
       try {
         await router.navigate({
           to: '/library/ratings',
@@ -128,7 +126,7 @@ export function CurrentViewerOwnVotesPage({
         )
           coordinates.cancel(id);
       } finally {
-        confirmMovement.clearNavigation?.();
+        confirmMovement.current?.clearNavigation();
       }
     },
     [origin, coordinates, responseVersion, router],
