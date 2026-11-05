@@ -248,6 +248,25 @@ by the production Collection read. Successful empty grants stay current. Decisio
 controls remain unavailable; undocumented object fields and visible Entry/vote facts never grant navigation or
 dispatch. Preserve occurrence row keys and original Subjects while the producer delivers its typed closure.
 
+## My Collections cursor windows
+
+Decision: My Collections keeps at most eight admitted predecessor cursor coordinates plus the current coordinate in
+route-local visit state; only matching current-reader admissions commit movement, failed targets retry exactly, and
+reset or replacement retires coordinates without retaining Collection bodies. The visit stores only cursor
+coordinates, never private predicates, and commits Next, Previous or First only after the current private reader
+admits the matching subject and address. A failed movement keeps the accepted coordinates and exact target for retry;
+viewer, credential, browser observation, collection-list admission, locale, an unrelated address entry or route
+disposal retires them. A fresh direct later
+cursor has no predecessor. First explicitly reads without a cursor. Native `cursorReset` replaces the coordinates
+with the first-page coordinate and keeps its notice; it never accepts the failed cursor as current.
+
+These controls replace the current window and reuse the existing reads: rows use `LIBRARY_PAGE_LIMIT` (100), previews
+use `COLLECTION_PREVIEW_PAGE_LIMIT` (20), preview size 3 and the native raw-key budget of 100. The existing bounded
+first navigation page remains when the reader needs it. Pins remain an independent result capped at 100. Cursor
+history adds no list, preview, navigation or pins request. Layout changes preserve the current cursor and the existing
+preview budget. The current `/library/collections` response does not yet publish native saved-query capability
+evidence; Web consumes an optional explicit `savedQueryCapability` value and never infers support from rows.
+
 # Progress return navigation
 
 Decision: keep private Progress return context in router history state, re-read the native index before restoring row focus, and offer first-page/current-work recovery when the original address no longer admits the selected session; an explicit new session keeps its filters and removes only the Progress cursor.

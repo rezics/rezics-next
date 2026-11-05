@@ -5,10 +5,12 @@ Collection page. It never fetches later pages to build or sort a complete direct
 `membershipKind: "dynamic"`, no `builtinKind`, and `curatorAccountId` equal to the current session subject. The viewer
 controller accepts only a response for that same subject and page address.
 
-The current and already-required first navigation page provide the only capability evidence. If neither returns a
-dynamic Collection DTO, the directory shows an explicit unavailable state and retry link; it does not present that
-producer gap as an empty result. An empty message describes only the current page. The existing opaque `next` cursor
-and layout continue the same owner list. Dynamic rows show no membership count or timestamp.
+The private native owner-list response's explicit `savedQueryCapability` evidence controls directory availability;
+row presence never produces capability evidence. When the admitted current page contains no matching dynamic rows
+and capability is available, the directory reports an empty current page even if the native inventory is empty. If
+the response omits capability evidence, the directory shows the existing explicit unavailable state and retry link;
+it does not describe missing evidence as an empty result. The existing opaque `next` cursor and layout continue the
+same owner list. Dynamic rows show no membership count or timestamp.
 
 Opening a row uses `/collections/{id}` and its existing authorized Dynamic Collection reader. The row carries a
 validated same-locale return address for the exact bounded directory page, including its cursor and layout. That
