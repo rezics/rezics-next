@@ -205,6 +205,21 @@ const loaded = (
   },
 });
 
+function activateMenuTrigger(trigger: HTMLButtonElement) {
+  const propsKey = Object.getOwnPropertyNames(trigger).find((key) => key.startsWith('__reactProps$'))!;
+  const onClick = (trigger as unknown as Record<string, { onClick: (event: unknown) => void }>)[propsKey]!.onClick;
+  const event = {
+    currentTarget: trigger,
+    target: trigger,
+    defaultPrevented: false,
+    preventDefault() {
+      this.defaultPrevented = true;
+    },
+    stopPropagation() {},
+  };
+  onClick(event);
+}
+
 test('the mounted default Following composition retires viewer, cursor and row lifetimes while current native removal remains usable', async () => {
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -327,9 +342,7 @@ test('the mounted default Following composition retires viewer, cursor and row l
     const trigger = host.querySelector<HTMLButtonElement>('[data-slot="follow-control"] button')!;
     expect(trigger.disabled).toBe(false);
     await act(async () => {
-      trigger.dispatchEvent(
-        new window.PointerEvent('pointerdown', { bubbles: true, button: 0, pointerType: 'mouse', isPrimary: true }),
-      );
+      activateMenuTrigger(trigger);
       await tick();
     });
     const action = [...window.document.querySelectorAll<HTMLElement>('[role="menuitem"], button')].find(
@@ -684,9 +697,7 @@ test('Following recovery stays page-local through terminal pages, last-row remov
     const trigger = host.querySelector<HTMLButtonElement>('[data-slot="follow-control"] button')!;
     expect(trigger.disabled).toBe(false);
     await act(async () => {
-      trigger.dispatchEvent(
-        new window.PointerEvent('pointerdown', { bubbles: true, button: 0, pointerType: 'mouse', isPrimary: true }),
-      );
+      activateMenuTrigger(trigger);
       await tick();
     });
     const action = [...window.document.querySelectorAll<HTMLElement>('[role="menuitem"], button')].find(
