@@ -1780,3 +1780,345 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
             }),
           };
         });
+      },
+    )
+    .post(
+      '/v1/copy-loans',
+      {
+        headers,
+        body: loanWriteBody,
+        response: {
+          201: t.Object({ loan: loanResponse, boundary: loanBoundaryResponse }, closed),
+          ...loanWriteFailures,
+        },
+        detail: detail('copy_loan.create', 'copy:create', true),
+      },
+      async ({ actor, body, headers, admission, job, request, set, session }) => {
+        account(actor);
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        return loanRequest('create', actor, request, job.deadline, body, async () => {
+          const result = await admission.run('normal', job, () =>
+            command(() => loans().createLoan(actor, body, key, job.deadline)),
+          );
+          session.record(result);
+          set.status = 201;
+          set.headers['cache-control'] = 'private, no-store';
+          const boundary = loanDueBoundary((dependencies.clock ?? systemClock)());
+          const people =
+            result.value.counterparty.kind === 'person'
+              ? await loanPeopleDisplay(
+                  config(),
+                  actor,
+                  [result.value.counterparty.personId],
+                  job.deadline,
+                  languageRanges(request.headers.get('accept-language')),
+                )
+              : new Map<string, string | null>();
+          return { loan: loanView(result.value, boundary, people), boundary };
+        });
+      },
+    )
+    .patch(
+      '/v1/copy-loans/:loanId',
+      {
+        params: t.Object({ loanId: id }),
+        headers,
+        body: loanExtendBody,
+        response: {
+          200: t.Object({ loan: loanResponse, boundary: loanBoundaryResponse }, closed),
+          ...loanWriteFailures,
+        },
+        detail: detail('copy_loan.extend', 'copy:update', true),
+      },
+      async ({ actor, params, body, headers, admission, job, request, set, session }) => {
+        account(actor);
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        return loanRequest('extend', actor, request, job.deadline, { loanId: params.loanId, body }, async () => {
+          const result = await admission.run('normal', job, () =>
+            command(() => loans().extendLoan(actor, params.loanId, body, key, job.deadline)),
+          );
+          session.record(result);
+          set.headers['cache-control'] = 'private, no-store';
+          const boundary = loanDueBoundary((dependencies.clock ?? systemClock)());
+          const people =
+            result.value.counterparty.kind === 'person'
+              ? await loanPeopleDisplay(
+                  config(),
+                  actor,
+                  [result.value.counterparty.personId],
+                  job.deadline,
+                  languageRanges(request.headers.get('accept-language')),
+                )
+              : new Map<string, string | null>();
+          return { loan: loanView(result.value, boundary, people), boundary };
+        });
+      },
+    )
+    .post(
+      '/v1/copy-loans/:loanId/return',
+      {
+        params: t.Object({ loanId: id }),
+        headers,
+        body: loanReturnBody,
+        response: {
+          200: t.Object({ loan: loanResponse, boundary: loanBoundaryResponse }, closed),
+          ...loanWriteFailures,
+        },
+        detail: detail('copy_loan.return', 'copy:update', true),
+      },
+      async ({ actor, params, body, headers, admission, job, request, set, session }) => {
+        account(actor);
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        return loanRequest('return', actor, request, job.deadline, { loanId: params.loanId, body }, async () => {
+          const result = await admission.run('normal', job, () =>
+            command(() => loans().returnLoan(actor, params.loanId, body, key, job.deadline)),
+          );
+          session.record(result);
+          set.headers['cache-control'] = 'private, no-store';
+          const boundary = loanDueBoundary((dependencies.clock ?? systemClock)());
+          const people =
+            result.value.counterparty.kind === 'person'
+              ? await loanPeopleDisplay(
+                  config(),
+                  actor,
+                  [result.value.counterparty.personId],
+                  job.deadline,
+                  languageRanges(request.headers.get('accept-language')),
+                )
+              : new Map<string, string | null>();
+          return { loan: loanView(result.value, boundary, people), boundary };
+        });
+      },
+    )
+    .get(
+      '/v1/followCounts/outgoing',
+      {
+        query: t.Object({}, closed),
+        response: {
+          200: t.Object({ followingCount: t.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }) }, closed),
+          ...failures,
+          503: problemSchema('dependency_unavailable'),
+        },
+        detail: detail('follow_count.outgoing', 'follow:list'),
+      },
+      async ({ actor, admission, job, set }) => {
+        const result = await admission.run('normal', job, () =>
+          createFollowCountReads(config()).outgoing(actor, job.deadline),
+        );
+        set.headers['Cache-Control'] = 'private, no-store';
+        return result;
+      },
+    )
+    .get(
+      '/v1/followCounts/:targetType/:targetId',
+      {
+        query: t.Object({}, closed),
+        params: t.Object(
+          { targetType: t.Union([t.Literal('subject'), t.Literal('collection'), t.Literal('space')]), targetId: id },
+          closed,
+        ),
+        response: {
+          200: t.Object(
+            {
+              targetType: t.Union([t.Literal('subject'), t.Literal('collection'), t.Literal('space')]),
+              targetId: id,
+              followerCount: t.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }),
+            },
+            closed,
+          ),
+          ...failures,
+          503: problemSchema('dependency_unavailable'),
+        },
+        detail: detail('follow_count.target', 'follow:list'),
+      },
+      async ({ actor, params, admission, job, set }) => {
+        const result = await admission.run('normal', job, () =>
+          createFollowCountReads(config()).target(actor, params, job.deadline),
+        );
+        set.headers['Cache-Control'] = 'private, no-store';
+        return result;
+      },
+    )
+    .put(
+      '/v1/follows/:targetId',
+      {
+        params: t.Object({ targetId: id }),
+        headers,
+        body: t.Optional(t.Never()),
+        response: { 200: followResponse, ...failures },
+        detail: personalDetail('follow.put', 'follow:create'),
+      },
+      async ({ actor, params, headers, admission, job, session, set }) => {
+        set.headers['Cache-Control'] = 'private, no-store';
+        account(actor);
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        return withFollowWork(job.deadline, async () => {
+          const result = await admission.run('normal', job, () =>
+            command(() => follows().follow(actor, params.targetId, key, job.deadline)),
+          );
+          if (result.command) session.record(result.command);
+          return serializeFollowResponse({ follow: followView(result.follow) });
+        });
+      },
+    )
+    .delete(
+      '/v1/follows/:targetId',
+      {
+        params: t.Object({ targetId: id }),
+        headers,
+        response: { 200: followResponse, ...failures },
+        detail: personalDetail('follow.delete', 'follow:delete'),
+      },
+      async ({ actor, params, headers, admission, job, session, set }) => {
+        set.headers['Cache-Control'] = 'private, no-store';
+        account(actor);
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        return withFollowWork(job.deadline, async () => {
+          const result = await admission.run('normal', job, () =>
+            command(() => follows().unfollow(actor, params.targetId, key, job.deadline)),
+          );
+          if (result.command) session.record(result.command);
+          return serializeFollowResponse({ follow: followView(result.follow) });
+        });
+      },
+    )
+    .get(
+      '/v1/follows/:targetId',
+      {
+        query: t.Object(viewQuery, closed),
+        params: t.Object({ targetId: id }),
+        response: { 200: t.Object({ follow: embedded(followSchema, fullFollowFields) }, closed), ...failures },
+        detail: detail('follow.get', 'follow:read'),
+      },
+      async ({ actor, params, query, admission, job, set }) => {
+        set.headers['Cache-Control'] = 'private, no-store';
+        point(actor, params.targetId, 'follow:read');
+        return withFollowWork(job.deadline, () =>
+          admission.run('normal', job, async () => {
+            const follow = await command(() => follows().readFollow(actor, params.targetId, job.deadline), 'not_found');
+            if (!follow) throw new ProblemError('not_found');
+            return serializeFollowResponse(
+              await fullView(
+                config(),
+                actor,
+                query.view,
+                { follow: followView(follow) },
+                {
+                  deadline: job.deadline,
+                  ...(dependencies.followingSpaceTargets
+                    ? { followingSpaces: dependencies.followingSpaceTargets }
+                    : {}),
+                  follow: true,
+                },
+              ),
+            );
+          }),
+        );
+      },
+    )
+    .get(
+      '/v1/follows',
+      {
+        query: t.Object(
+          {
+            ...pageQuery,
+            targetType: t.Optional(t.Union([t.Literal('subject'), t.Literal('collection'), t.Literal('space')])),
+          },
+          closed,
+        ),
+        response: {
+          200: t.Object({ follows: t.Array(embedded(followSchema, fullFollowFields)), next: nullable }, closed),
+          ...failures,
+        },
+        detail: detail('follow.list', 'follow:list'),
+      },
+      async ({ actor, query, admission, job, set }) => {
+        set.headers['Cache-Control'] = 'private, no-store';
+        const owner = account(actor);
+        if (!owner.scopes.includes('follow:list')) throw new ProblemError('forbidden');
+        return withFollowWork(job.deadline, () =>
+          admission.run('normal', job, () =>
+            command(async () => {
+              const route = routeOf(owner.accountId)!;
+              const binding = {
+                operation: 'follow.list',
+                parameters: { accountId: owner.accountId, targetType: query.targetType ?? 'all', state: 'following' },
+              };
+              let after: FollowPageCursor | null = null;
+              let cursorEpoch: number | null = null;
+              if (query.cursor !== undefined) {
+                const cursor = decodeCursor(dependencies.tokens, binding, query.cursor);
+                if (
+                  !cursor.ok ||
+                  cursor.after.length !== 2 ||
+                  typeof cursor.after[0] !== 'string' ||
+                  !Number.isFinite(Date.parse(cursor.after[0])) ||
+                  typeof cursor.after[1] !== 'string' ||
+                  routeOf(cursor.after[1]) === null
+                )
+                  throw new ProblemError('invalid_cursor');
+                cursorEpoch = cursor.epoch;
+                after = { updatedAt: cursor.after[0], targetId: cursor.after[1] };
+              }
+              const partition = await withConnection(dependencies.pool, (client) =>
+                readPartition(deadlineClient(client, job.deadline), partitionOf(route)),
+              );
+              if (query.cursor !== undefined && cursorEpoch !== partition?.epoch)
+                throw new ProblemError('stale_cursor');
+              const size = query.limit ?? 20;
+              const targetType = query.targetType;
+              const rows = await follows().listFollows(
+                actor,
+                {
+                  cursor: after,
+                  limit: Math.min(100, size + 1),
+                  ...(targetType === undefined ? {} : { targetType }),
+                },
+                job.deadline,
+              );
+              const shown = rows.slice(0, size),
+                last = shown.at(-1);
+              let more = rows.length > size;
+              if (!more && size === 100 && last)
+                more =
+                  (
+                    await follows().listFollows(
+                      actor,
+                      {
+                        cursor: last,
+                        limit: 1,
+                        ...(targetType === undefined ? {} : { targetType }),
+                      },
+                      job.deadline,
+                    )
+                  ).length > 0;
+              return serializeFollowResponse(
+                await fullView(
+                  config(),
+                  actor,
+                  query.view,
+                  {
+                    follows: shown.map(followView),
+                    next:
+                      more && last && partition
+                        ? encodeCursor(dependencies.tokens, binding, {
+                            epoch: partition.epoch,
+                            after: [last.updatedAt, last.targetId],
+                          })
+                        : null,
+                  },
+                  {
+                    deadline: job.deadline,
+                    follow: true,
+                    ...(dependencies.followingSpaceTargets
+                      ? { followingSpaces: dependencies.followingSpaceTargets }
+                      : {}),
+                  },
+                ),
+              );
+            }),
+          ),
+        );
+      },
+    );
+}
