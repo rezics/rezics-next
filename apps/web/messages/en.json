@@ -10764,5 +10764,7 @@
   "identifiers_origin_unavailable": "The selected Realm reading is temporarily unavailable. Its values are not shown.",
   "character_visit_context": "Selected Context: {context}",
   "character_visit_unsupported": "This Character reading is admitted, but correction and candidate review are available only in Global.",
-  "character_visit_global": "Open a separate Global Character correction"
+  "character_visit_global": "Open a separate Global Character correction",
+  "work_franchise_stream_absent": "This stream was not requested on this page. Start again to read it.",
+  "work_franchise_stream_historical": "This stream has not caught up. These entries do not establish a complete current reading."
 }

@@ -21,6 +21,7 @@ import type { ConnectionVisit, ConnectionWork } from '../src/features/pages/subj
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { readConnectionVisit, connectionStreams } = await import('../src/features/pages/subject-connections');
 const { subjectBody } = await import('../src/features/pages/subject');
+const { loadSubjectPage, selectWorkFranchiseRegion } = await import('../src/features/pages/showcase-work');
 const { OverviewContext } = await import('../src/features/pages/overview');
 const { SubjectConnections } = await import('../src/features/pages/subject-connections-view');
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -107,6 +108,91 @@ test('unselected previews use best rank; native slot-selected previews preserve 
   expect(
     directedWorkRelations(id(1), property, 'in', { links: [{ ...inverse, summary: summary(id(3)) }] }),
   ).toBeUndefined();
+});
+
+test('native page acquisition selects the second exact region and never borrows a cursor or substitutes a successful sibling', async () => {
+  const page = pageFor();
+  page.catalogue = { state: 'unsupported', type: 'schema:Book' };
+  const reading = subjectBody(page)!;
+  page.continuation = { node: 'second', cursor: 'opaque-current' };
+  page.document = {
+    root: { props: {} },
+    content: [
+      { type: 'SubjectHeader', props: { id: 'identity' } },
+      { type: 'OutgoingRelations', props: { id: 'first', property, limit: 2, paged: true } },
+      { type: 'OutgoingRelations', props: { id: 'second', property, limit: 2, paged: true } },
+    ],
+  };
+  const plan = planReads(platformRegistry, page.document as CompositionDocument, {
+    subject: page.subject,
+    context: page.context,
+    continuation: page.continuation,
+  });
+  const rows = [forward(10), forward(11)];
+  page.reads = Object.fromEntries(
+    Object.entries(plan.reads).map(([key, read]) => [
+      key,
+      read.kind === 'subject'
+        ? { status: 200, body: reading }
+        : read.kind === 'relations' && read.cursor
+          ? { status: 200, body: { relations: rows, next: 'opaque-next' } }
+          : { status: 204, body: {} },
+    ]),
+  );
+  const aliasPage = { ...page, continuation: undefined };
+  const aliasPlan = planReads(platformRegistry, page.document as CompositionDocument, {
+    subject: page.subject,
+    context: page.context,
+  });
+  expect(aliasPlan.nodes.first).toBe(aliasPlan.nodes.second);
+  aliasPage.reads = Object.fromEntries(
+    Object.entries(aliasPlan.reads).map(([key, read]) => [
+      key,
+      { status: 200, body: read.kind === 'subject' ? reading : { relations: rows, next: 'alias-next' } },
+    ]),
+  );
+  expect(selectWorkFranchiseRegion(aliasPage, { node: 'second', property, direction: 'forward' })?.window.node).toBe(
+    'second',
+  );
+  const requests: unknown[] = [];
+  const client = createKernelClient('https://native.test', {
+    fetch: (async (input, init) => {
+      const request = new Request(input, init);
+      expect(new URL(request.url).pathname).toBe('/v1/pages:read');
+      requests.push(await request.json());
+      return Response.json(page);
+    }) as typeof fetch,
+  });
+  const loaded = await loadSubjectPage(client, id(1), 'relations', 'en', {
+    realm: id(4),
+    continuation: page.continuation,
+  });
+  expect(loaded.kind).toBe('page');
+  if (loaded.kind !== 'page') throw Error('Expected native page');
+  expect(requests).toMatchObject([
+    {
+      target: { subject: id(1), view: 'relations', realm: id(4) },
+      continuation: { node: 'second', cursor: 'opaque-current' },
+    },
+  ]);
+  const selection = { node: 'second', property, direction: 'forward' as const, cursor: 'opaque-current' };
+  const region = selectWorkFranchiseRegion(loaded.page, selection)!;
+  expect(region.window.rows).toBe((loaded.page.reads[plan.nodes.second!]!.body as { relations: unknown[] }).relations);
+  expect(region.window.limit).toBe(2);
+  expect(region.continuation).toEqual({ node: 'second', cursor: 'opaque-next' });
+  for (const change of [
+    { node: 'first' },
+    { node: 'missing' },
+    { property: 'wdt:P156' },
+    { direction: 'inverse' as const },
+    { cursor: 'borrowed' },
+  ])
+    expect(selectWorkFranchiseRegion(loaded.page, { ...selection, ...change })).toBeUndefined();
+  loaded.page.reads[plan.nodes.second!] = { status: 503, body: {} };
+  const failed = selectWorkFranchiseRegion(loaded.page, selection)!;
+  expect(failed.window.status).toBe(503);
+  expect(failed.window.valid).toBe(false);
+  expect(failed.continuation).toBeUndefined();
 });
 
 test('64/512/4096 composition counts requests, decoded rows and bytes; exact return detects current disclosure changes', async () => {

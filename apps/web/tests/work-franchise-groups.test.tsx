@@ -1,6 +1,8 @@
 import { expect, mock, test } from 'bun:test';
 import { act, createElement as h } from 'react';
 import { dirname } from 'node:path';
+import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
+import type { SubjectPageData } from '../src/features/pages/subject';
 import type { Subject } from '../src/subject/types';
 import type { OverviewValue } from '../src/features/pages/overview';
 import type { ProfileRelationWindow } from '../src/features/pages/views';
@@ -10,6 +12,7 @@ import { subjectVisitReturn } from '../src/features/pages/subject-visit-navigati
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { WorkFranchiseOverview } = await import('../src/features/pages/showcase-work/overview');
+const { WorkFranchiseReading, subjectBody } = await import('../src/features/pages/showcase-work');
 const { OverviewContext } = await import('../src/features/pages/overview');
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const property = 'wdt:P155';
@@ -99,6 +102,7 @@ test('bounded preview shares twelve places across streams and never converts inc
       { ...empty, caughtUp: false },
       { ...empty, status: 503 },
       { ...empty, property: 'unknown' },
+      { ...empty, status: 204, valid: false },
       windowFor('malformed', [{ ...row(99), summary: { ...row(99).summary, id: id(3) } }]),
     ],
     definitions,
@@ -109,6 +113,7 @@ test('bounded preview shares twelve places across streams and never converts inc
     'ready',
     'unavailable',
     'unsupported',
+    'absent',
     'unavailable',
   ]);
   expect(states[1]!.more && states[2]!.more).toBe(true);
@@ -244,6 +249,74 @@ test('mounted groups preserve originals, gated evidence, human labels and exact 
     );
     expect(host.textContent).not.toContain('Secret sequel');
     expect(host.querySelectorAll('button[type="submit"]')).toHaveLength(0);
+
+    const document: CompositionDocument = {
+      root: { props: {} },
+      content: [
+        { type: 'SubjectHeader', props: { id: 'identity' } },
+        { type: 'OutgoingRelations', props: { id: 'first', property, limit: 2, paged: true } },
+        { type: 'RelationGroups', props: { id: 'selected', property, limit: 2, paged: true } },
+      ],
+    };
+    const plan = planReads(platformRegistry, document, { subject: subject.id, context: value.context });
+    const native = {
+      subject: subject.id,
+      context: value.context,
+      document,
+      profile: 'native',
+      template: { scope: 'type', key: 'schema:Book' },
+      reads: Object.fromEntries(
+        Object.entries(plan.reads).map(([key, read]) => [
+          key,
+          {
+            status: 200,
+            body:
+              read.kind === 'subject'
+                ? { subject, related: {} }
+                : read.kind === 'links'
+                  ? { links: [row(20, true), row(21, true)], next: 'node-owned-next' }
+                  : { relations: [row(10)], next: null },
+          },
+        ]),
+      ),
+    } as SubjectPageData;
+    const continued: unknown[] = [];
+    const drawNative = (page = native, reading = value) =>
+      act(async () =>
+        root.render(
+          h(
+            OverviewContext.Provider,
+            { value: reading },
+            h(WorkFranchiseReading, {
+              page,
+              reading: subjectBody(page),
+              selection: { node: 'selected', property, direction: 'inverse' },
+              definitions,
+              locale: 'en',
+              returnTo: `/en/subjects/${id(1)}/source`,
+              onContinue: (next) => continued.push(next),
+            }),
+          ),
+        ),
+      );
+    await drawNative();
+    expect(host.querySelectorAll('[data-work-stream]')).toHaveLength(1);
+    expect(host.querySelector('[data-work-node]')?.getAttribute('data-work-node')).toBe('selected');
+    expect(
+      [...host.querySelectorAll('[data-work-statement]')].map((el) => el.getAttribute('data-work-statement')),
+    ).toEqual([id(20), id(21)]);
+    const next = [...host.querySelectorAll<HTMLButtonElement>('button')].find((el) => el.textContent === 'Next page')!;
+    await act(async () => next.click());
+    expect(continued).toEqual([{ node: 'selected', cursor: 'node-owned-next' }]);
+    host.querySelector<HTMLDetailsElement>('[data-work-statement] details')!.open = true;
+    const equal = structuredClone(native);
+    await drawNative(equal);
+    expect(host.querySelector<HTMLDetailsElement>('[data-work-statement] details')!.open).toBe(false);
+    await drawNative(equal, { ...value, cacheReader: 'replacement' });
+    expect(host.querySelector('[data-work-statement]')).toBeNull();
+    await drawNative(native);
+    expect(host.querySelector('[data-work-statement]')).toBeNull();
+    expect(host.textContent).toContain('Start again');
   } finally {
     await act(async () => root.unmount());
     for (const [key, descriptor] of previous) {

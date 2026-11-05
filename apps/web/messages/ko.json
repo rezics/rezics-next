@@ -10577,5 +10577,7 @@
   "identifiers_origin_unavailable": "선택한 Realm 읽기를 일시적으로 사용할 수 없어 값을 표시하지 않습니다.",
   "character_visit_context": "선택한 컨텍스트: {context}",
   "character_visit_unsupported": "이 캐릭터 읽기는 사용할 수 있지만 수정과 후보 검토는 Global에서만 지원합니다.",
-  "character_visit_global": "Global에서 별도의 캐릭터 수정 열기"
+  "character_visit_global": "Global에서 별도의 캐릭터 수정 열기",
+  "work_franchise_stream_absent": "이 페이지에서는 이 관계를 요청하지 않았습니다. 처음부터 다시 읽어 주세요.",
+  "work_franchise_stream_historical": "이 관계에는 최신 변경 사항이 아직 반영되지 않았습니다. 표시된 항목이 현재의 전체 내용은 아닙니다."
 }

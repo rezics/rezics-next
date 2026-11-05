@@ -1,4 +1,7 @@
-import { useContext, useId } from 'react';
+import { useContext, useId, useMemo } from 'react';
+import type { PageContinuation } from '@rezics/composition';
+import type { SubjectPageData, subjectBody } from '../subject';
+import { selectWorkFranchiseRegion, type WorkFranchiseSelection } from './selection';
 import { pickText } from '@rezics/composition';
 import { m } from '../../../paraglide/messages.js';
 import { subjectHref } from '../../../subject/subject-href';
@@ -16,50 +19,69 @@ import { useWorkRegionReturn } from './return';
 const workLink =
   'inline-flex min-h-11 min-w-11 w-full flex-col items-start justify-center gap-1 rounded-sm py-2 text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
-export function WorkFranchiseOverview({
-  subject,
-  related,
-  definitions,
-  locale,
-  returnTo,
-  currentHref,
-  relationsHref,
-  readerSpoiler = 0,
-  link = PlainLink,
-  windows,
-}: {
-  subject: Subject;
-  related: Related;
+type PresentationProps = {
   definitions: Record<string, RelationDefinition>;
   locale: string;
-  /** A validated same-locale Subject visit return, usually this work or the route's admitted opener. */
+  /** A validated same-locale Subject visit return. Web owns destination/return composition. */
   returnTo: string;
   currentHref?: string | undefined;
   relationsHref?: string;
   readerSpoiler?: number;
   link?: PageLink;
-  windows?: ProfileRelationWindow[];
-}) {
+};
+
+export type WorkFranchiseReadingProps = PresentationProps &
+  (
+    | { subject: Subject; related: Related; windows?: ProfileRelationWindow[] }
+    | {
+        /** The unchanged acknowledged loadSubjectPage result, including Context and reader binding. */
+        page: SubjectPageData;
+        selection: WorkFranchiseSelection;
+        /** subjectBody(page), retaining the installed Subject/value projection from this same page. */
+        reading: ReturnType<typeof subjectBody>;
+        /** Web acquires and mounts the successor through loadSubjectPage; this component never refills. */
+        onContinue?: (continuation: PageContinuation) => void;
+      }
+  );
+
+/** The overview and selected native region share this renderer and the installed OverviewContext. */
+export function WorkFranchiseReading(props: WorkFranchiseReadingProps) {
+  const { definitions, locale, returnTo, currentHref, relationsHref, readerSpoiler = 0, link = PlainLink } = props;
+  const page = 'page' in props ? props.page : undefined;
+  const selection = 'selection' in props ? props.selection : undefined;
+  const region = useMemo(
+    () => (page && selection ? selectWorkFranchiseRegion(page, selection) : undefined),
+    [page, selection?.node, selection?.property, selection?.direction, selection?.cursor],
+  );
+  const subject = 'subject' in props ? props.subject : props.reading?.subject;
+  const related = 'related' in props ? props.related : props.reading?.related;
+  const regionWindows = useMemo(() => (region ? [region.window] : []), [region]);
+  const windows = 'windows' in props ? props.windows : page ? regionWindows : undefined;
   const heading = useId();
   const options = { locale: locale as never };
   const value = useContext(OverviewContext);
   const journey = useWorkRegionReturn({
-    sources: [subject, related, definitions, windows],
+    sources: page ? [definitions, page] : [subject, related, definitions, windows],
     descriptor: JSON.stringify([
       value?.context,
       value?.reader,
       value?.cacheReader,
       value?.releaseDigest,
       value?.viewer,
+      page?.context,
+      page?.requestedRealm,
+      page?.requestedReader,
+      page?.catalogue?.digest,
+      selection,
     ]),
     currentHref,
     fallbackHref: returnTo,
     locale,
     spoiler: readerSpoiler,
-    release: subject.release,
-    revision: subject.revision,
+    release: subject?.release ?? '',
+    revision: subject?.revision ?? 0,
   });
-  if (!journey.available)
+  if (!journey.available || !subject || !related || (page && !region))
     return (
       <section id="work-franchise" data-slot="work-franchise" aria-labelledby={heading} className="space-y-3">
         <h2 id={heading} ref={journey.heading} tabIndex={-1}>
@@ -72,7 +94,7 @@ export function WorkFranchiseOverview({
       </section>
     );
   if (windows !== undefined) {
-    const groups = workFranchiseGroups(subject.id, windows, definitions);
+    const groups = workFranchiseGroups(subject.id, windows, definitions, page !== undefined);
     const Link = link;
     return (
       <section
@@ -84,7 +106,7 @@ export function WorkFranchiseOverview({
         <h2 id={heading} ref={journey.heading} tabIndex={-1} className="text-xl font-semibold">
           {m.work_franchise_title({}, options)}
         </h2>
-        <p className="text-sm text-muted-foreground">{m.work_franchise_preview_scope({}, options)}</p>
+        {!page && <p className="text-sm text-muted-foreground">{m.work_franchise_preview_scope({}, options)}</p>}
         {journey.missing && (
           <div role="status" className="space-y-2">
             <p>{m.character_work_return_missing({}, options)}</p>
@@ -112,7 +134,7 @@ export function WorkFranchiseOverview({
               kind: direction === 'in' ? 'links' : 'relations',
               id: subject.id,
               property: window.property,
-              limit: 20,
+              limit: window.limit ?? 20,
             },
             body: { [direction === 'in' ? 'links' : 'relations']: window.rows },
           };
@@ -135,7 +157,9 @@ export function WorkFranchiseOverview({
               <p className="text-sm text-muted-foreground">
                 {direction === 'in' ? m.subject_connections_in({}, options) : m.subject_connections_out({}, options)}
               </p>
-              {group.state === 'unsupported' ? (
+              {group.state === 'absent' ? (
+                <p role="status">{m.work_franchise_stream_absent({}, options)}</p>
+              ) : group.state === 'unsupported' ? (
                 <p role="status">{m.work_franchise_stream_unsupported({}, options)}</p>
               ) : group.state === 'unavailable' || !value ? (
                 <p role="status">
@@ -183,7 +207,37 @@ export function WorkFranchiseOverview({
                   );
                 })}
               {group.unavailable && <p role="status">{m.subject_relation_unavailable({}, options)}</p>}
-              {group.more && <p role="status">{m.work_franchise_preview_more({}, options)}</p>}
+              {window.caughtUp === false && <p role="status">{m.work_franchise_stream_historical({}, options)}</p>}
+              {group.more && !page && <p role="status">{m.work_franchise_preview_more({}, options)}</p>}
+              {page &&
+                region?.continuation &&
+                'onContinue' in props &&
+                props.onContinue &&
+                (() => {
+                  const continuation = region.continuation;
+                  const next = (
+                    <button
+                      type="button"
+                      className={workLink}
+                      onClick={() => {
+                        if (journey.current()) props.onContinue?.(continuation);
+                      }}
+                    >
+                      {m.subject_connections_next({}, options)}
+                    </button>
+                  );
+                  return group.relations.some((relation) => spoilerLevel(relation.statement) > readerSpoiler) ? (
+                    <SpoilerGate
+                      key={journey.key}
+                      label={value?.spoilerShow ?? m.thread_reveal_spoiler({}, options)}
+                      hideLabel={value?.labels.spoilerHide ?? m.subject_spoiler_hide({}, options)}
+                    >
+                      {next}
+                    </SpoilerGate>
+                  ) : (
+                    next
+                  );
+                })()}
               <Link href={href} className={workLink}>
                 {m.subject_connections_title({}, options)}
               </Link>
@@ -319,3 +373,6 @@ export function WorkFranchiseOverview({
     </section>
   );
 }
+
+/** Retained production overview placement uses the same supported producer. */
+export const WorkFranchiseOverview = WorkFranchiseReading;
