@@ -175,7 +175,12 @@ test('the mounted Search route retains multiple errors and a protected filter th
   expect(host.textContent).toContain('Order');
   expect(host.textContent).toContain('Condition');
   expect(host.textContent).not.toContain('Protected filter');
-  expect(router.state.location.search.filter).toMatchObject({ and: [{ realm: { id: '018f0000-0000-7000-8000-00a000000001' } }] });
+  expect(router.state.location.search.filter).toEqual({
+    and: [
+      { realm: { id: '018f0000-0000-7000-8000-00a000000001' } },
+      { statement: { property: 'schema:genre', in: ['fantasy'] } },
+    ],
+  });
   expect(document.activeElement).not.toBe(host.querySelector('[data-search-input-first] textarea'));
 
   const languageIssue = host.querySelector('[data-search-input-key="language"][data-search-input-occurrence="1"]')!;
@@ -184,7 +189,12 @@ test('the mounted Search route retains multiple errors and a protected filter th
   expect(router.state.location.search.language).toEqual(['ja', 'fr', 'zh-Hant']);
   expect(router.state.location.search.kinds).toEqual(['schema:Book', 'catalogue:Atlas']);
   expect(router.state.location.search['f.schema:genre']).toEqual(['mystery', 'mystery']);
-  expect(router.state.location.search.filter).toMatchObject({ and: [{ realm: { id: '018f0000-0000-7000-8000-00a000000001' } }] });
+  expect(router.state.location.search.filter).toEqual({
+    and: [
+      { realm: { id: '018f0000-0000-7000-8000-00a000000001' } },
+      { statement: { property: 'schema:genre', in: ['fantasy'] } },
+    ],
+  });
   const cursorRestart = host.querySelector('[data-search-input-key="cursor"] button')!;
   expect(document.activeElement).toBe(cursorRestart);
 
