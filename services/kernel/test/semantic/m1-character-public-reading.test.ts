@@ -9,6 +9,7 @@ import { bootstrapProfile } from '../../src/presentation/profiles.ts';
 import { platformProfile } from '../../src/presentation/setup.ts';
 import { newId } from '../../src/route/route.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { createRealAccess } from './real-access.ts';
 
 setDefaultTimeout(120_000);
@@ -61,6 +62,7 @@ beforeAll(async () => {
     pool: db.pool,
     routeKey: new Uint8Array(32).fill(49),
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(50)]]) },
+    receiptKeys: testReceiptKeys(),
     access: real.access,
     writeRate: real.writeRate,
   });
