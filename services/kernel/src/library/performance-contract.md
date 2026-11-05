@@ -84,6 +84,8 @@ writer/FK triggers, transaction controls and input/output encoding. The page wra
 body, so replay still prices its lookup. A segment prices workflow result work and performs at most 100 pages,
 then enqueues the original root/sequence/cutoff/frontier using return-existing identity. The reached enqueue adds
 one engine request separately from its native SQL; native-only terms translate with zero engine requests.
+The continuation wrapper also prices its registered step lookup and checkpoint. Native identity-basis projection
+and work lookup use normalized SQL keys, preserving the declarations after their query objects are copied.
 Page/segment discovery and SDK declarations compose independently; reached purge attempts add their command
 terms. A whole population requires change-proportional pages and segments, with no retained key vector.
 The native harness's measured 4096-byte checkpoint assertion is distinct from Source budgets.
