@@ -3,6 +3,8 @@ import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import type { SessionEnv } from '../session/client';
 import { sessionQuery } from '../session/query';
+import { cookie, SESSION_COOKIE, validId } from '../session/cookies';
+import { configured } from '../session/client';
 
 export type ExposureReadState = 'ready' | 'denied' | 'unavailable';
 export type ViewerExposure = { subject: string | null; admitted: readonly string[]; state?: ExposureReadState };
@@ -29,7 +31,8 @@ export const readViewerExposure = createServerFn({ method: 'GET' })
       const { env } = await import('cloudflare:workers');
       const { prepareSession, sessionSubject, viewerCredential } = await import('../session/request');
       const request = getRequest();
-      console.log('viewer exposure environment', Object.keys(env), Boolean(env.SESSIONS), env.AUTH_ISSUER);
+      const sessionId = cookie(request, SESSION_COOKIE);
+      console.log('viewer exposure environment', request.method, configured(env), sessionId, validId(sessionId), request.headers.get('authorization'));
       await prepareSession(request, env as Partial<SessionEnv>);
       console.log('viewer exposure prepared', request.url, request.headers.get('cookie'));
       const subject = sessionSubject(request);
