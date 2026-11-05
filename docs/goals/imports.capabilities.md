@@ -39,9 +39,9 @@ Career [conversion](../../packages/conversion/tests/bangumi-person-careers.test.
 
 ### Bangumi work, Book, Game and Character outcomes
 
-Preserve cited TVAnime websites/work evidence; Book and Character mappings; and independent Game names, dates, environment, genres and player count. Creator/voice credits follow Game environment/genres and precede Character identity/appearance; Game cast follows Character immediately. Appearance uses selected source relations and exact released roles. A malformed neighbor cannot suppress a valid fact.
+Preserve cited TVAnime websites/work evidence, Book/Character mappings and independent Game names/date/environment/genres/player count. Creator/voice credits follow Game environment/genres before Character identity/appearance; cast follows Character. Appearance requires selected relations/exact released roles; malformed neighbors cannot suppress valid facts.
 
-Existing cases cover [TVAnime websites](../../services/importer/tests/bangumi-official-websites.test.ts), [work evidence](../../services/importer/tests/bangumi-work-evidence.test.ts), [Game names](../../services/importer/tests/bangumi-game-names.test.ts), [publication dates](../../services/importer/tests/bangumi-game-publication.test.ts), [creator credits](../../services/importer/tests/bangumi-creator-credits.test.ts) and [Character appearance](../../services/importer/tests/showcase-bangumi-characters.test.ts). Other API/native outcomes stay with their owner suites.
+Cases: [websites](../../services/importer/tests/bangumi-official-websites.test.ts), [work evidence](../../services/importer/tests/bangumi-work-evidence.test.ts), [Game names](../../services/importer/tests/bangumi-game-names.test.ts), [publication dates](../../services/importer/tests/bangumi-game-publication.test.ts), [credits](../../services/importer/tests/bangumi-creator-credits.test.ts) and [Character appearance](../../services/importer/tests/showcase-bangumi-characters.test.ts). Other API/native outcomes stay with owner suites.
 
 ### Open Library Work publication date
 
