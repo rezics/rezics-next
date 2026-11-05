@@ -13,7 +13,7 @@ import {
 } from '../../services/importer/src/showcase-personal-list.ts';
 import { seedReviewedCatalogue } from '../../services/importer/src/reviewed-catalogue.ts';
 import { createSeedDenialDiagnostics } from '../../services/importer/src/showcase-denial-diagnostics.ts';
-import { fetchCrossMediaDumps } from './fetch-dumps.ts';
+import { fetchCrossMediaDumps, type CrossMediaDumpPaths } from './fetch-dumps.ts';
 import { ShowcaseJournal } from '../../services/importer/src/showcase-publication.ts';
 import {
   createDevelopmentShowcaseClient,
@@ -55,6 +55,7 @@ import {
 export type DevelopmentShowcaseReport = DevelopmentPublicationReport & {
   collections: DevelopmentShowcaseResult;
   personalList: ShowcasePersonalListUpload;
+  sourceSnapshots: CrossMediaDumpPaths['sourceSnapshots'];
 };
 
 /** Exact development roots: Steins;Gate/CLANNAD VNDB VNs; Steins;Gate anime/book and CLANNAD anime in Bangumi. */
@@ -261,7 +262,12 @@ export async function runDevelopmentSeed(
       },
     };
   }
-  const composedReport: DevelopmentShowcaseReport = { ...report, collections, personalList };
+  const composedReport: DevelopmentShowcaseReport = {
+    ...report,
+    collections,
+    personalList,
+    sourceSnapshots: dumps.sourceSnapshots,
+  };
   await attachDevelopmentShowcase(result, composedReport);
   if (report.state === 'complete') {
     process.stdout.write(

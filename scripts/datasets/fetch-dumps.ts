@@ -107,6 +107,16 @@ export type CrossMediaDumpPaths = Readonly<{
   vndb: string;
   bangumiArchive: string;
   vndbArchive: string;
+  sourceSnapshots: Readonly<Record<'bangumi' | 'vndb', DumpSnapshot>>;
+}>;
+
+/** Verified acquisition provenance; metadata licences do not grant media rights. */
+type DumpSnapshot = Readonly<{
+  file: string;
+  url: string;
+  sha256: string;
+  timestamp?: string;
+  licences: readonly string[];
 }>;
 
 export type VndbDumpManifest = Readonly<{
@@ -577,6 +587,19 @@ export async function fetchCrossMediaDumps(
     vndb: vndbDump.vndb,
     bangumiArchive,
     vndbArchive: vndbDump.vndbArchive,
+    sourceSnapshots: {
+      bangumi: {
+        file: dumpFileName(BANGUMI_ARCHIVE_URL),
+        url: BANGUMI_ARCHIVE_URL,
+        sha256: bangumiDigest,
+        licences: ['CC-BY-SA-3.0'],
+      },
+      vndb: {
+        ...vndbDump.manifest,
+        timestamp: DEVELOPMENT_VNDB_PIN.timestamp,
+        licences: ['ODbL-1.0', 'DbCL-1.0'],
+      },
+    },
   };
 }
 
