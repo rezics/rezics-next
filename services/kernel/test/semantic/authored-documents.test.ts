@@ -5,6 +5,7 @@ import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { fromPlainText, serializeDocument } from '@rezics/document';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { readAuthoredField } from '../../src/content/authored-fields.ts';
 import { readCandidateDisclosure } from '../../src/semantic/disclosure.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
@@ -73,6 +74,7 @@ function failOneSerializableCommit(target: Pool) {
 
 const commitFailure = failOneSerializableCommit(pool);
 const kernel = createKernel({
+  receiptKeys: testReceiptKeys(),
   pool: commitFailure.pool,
   access: realAccess.access,
   tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(3)]]) },
