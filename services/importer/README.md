@@ -1314,17 +1314,17 @@ Decision: `task seed:dev` publishes sealed current source/candidate digests; ord
 Decision: reviewed selection admits only source-supported i23/i30 traits and
 selected appearance roles; unavailable Concepts withhold their associations.
 
-The ordinary seed reads current reviewed traits and roles before initial import
-and every vocabulary reseed. Characters may occupy either planned record group.
+The seed rereads reviewed traits and roles before initial import and each
+vocabulary reseed. Characters may occupy either planned record group.
 The common journal publishes selected role schemes and Concepts, then current
 reads supply the returned trait/role profile and association bindings. Optional
 `--vndb-character-vocabulary` / `REZICS_DEV_VNDB_CHARACTER_VOCABULARY` UUIDs are
-lookup hints, never adoption authority. Unreviewed traits remain withheld.
+lookup hints, never adoption authority. Unreviewed traits stay withheld.
 
 - Touches: selected Character rows, one reviewed trait Scheme and only needed
   i23/i30 Concepts, plus selected current role bindings.
-- Bound: existing selected closure and publication caps; each refresh reads at
-  most one trait Scheme and two Concepts. No catalogue scan or new journal.
+- Bound: existing closure and publication caps; each refresh reads at most one
+  trait Scheme and two Concepts.
 - Growth check: `tests/showcase-vndb-traits.test.ts` covers source selection and
   isolated withdrawal; `test/imports/showcase-character-vocabulary.test.ts`
   retains independent current Character/work reads and reopen acceptance.
