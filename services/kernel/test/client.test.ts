@@ -19,6 +19,7 @@ test(
   'the client package carries the declarations the kernel emits for its HTTP contract',
   () => {
     const emitted = clientDeclarations();
+    expect([...clientDeclarations()]).toEqual([...emitted]);
     expect([...emitted.keys()]).toEqual(expect.arrayContaining(['http/kernel.d.ts', 'http/request.d.ts']));
     let sawSqlDeclaration = false;
     for (const [key, content] of emitted) {
