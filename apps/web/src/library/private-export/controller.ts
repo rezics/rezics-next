@@ -393,13 +393,17 @@ export function createExportJourney(input: {
       return snapshot();
     }
     const token = generation;
+    busy = true;
+    notice = null;
+    emit();
+    if (!live() || token !== generation || expireIfNeeded()) return snapshot();
     try {
       const saved = await deliver(file);
       if (!live() || token !== generation) return snapshot();
       if (expireIfNeeded()) return snapshot();
+      busy = false;
       if (!saved) {
         stage = 'save-failed';
-        notice = null;
         retain();
         return emit();
       }
@@ -410,8 +414,8 @@ export function createExportJourney(input: {
     } catch {
       if (!live() || token !== generation) return snapshot();
       if (expireIfNeeded()) return snapshot();
+      busy = false;
       stage = 'save-failed';
-      notice = null;
       retain();
       return emit();
     }

@@ -2,8 +2,9 @@
 
 The authenticated native API exports current owner facts independently of public Collection ItemList export.
 Decision: use a fifteen-minute fenced, replayable page stream with no retained private artifact; a source change
-requires a new request identity, including after a completed stream or a failed local download. Installed import
-evidence joins this fence; expiring MAL or VNDB evidence makes the original capture stale.
+after a completed stream requires a new request identity. Local delivery is single-flight per visit; false or thrown
+save failures retry the exact completed bytes under the same capture. Installed import evidence joins this fence;
+expiring MAL or VNDB evidence makes the original capture stale.
 Decision: version 2 appends independent `annotations`, `provenance` and `journals` sections; version 1 retains its
 original coverage, and reviewed V2 annotation/journal date/reflection recovery is owned by the existing archive consumer.
 Decision: version 3 adds the private occurrence assessment to each journal record. Version 4 appends VNDB and AniList

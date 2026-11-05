@@ -836,6 +836,102 @@ test('uncertain create retries the original key; save retry keeps identical byte
   expect(ready.creates).toHaveLength(2);
 });
 
+test('pending local save admits one delivery and retries the exact artifact after false or throw', async () => {
+  const ready = recordingPort(pagesFor(1));
+  const attempts: Array<ReturnType<typeof Promise.withResolvers<boolean>>> = [];
+  const bytes: Uint8Array[] = [];
+  const reentries: Promise<unknown>[] = [];
+  let journey!: ReturnType<typeof createExportJourney>;
+  let reenteredFromChange = false;
+  journey = createExportJourney({
+    port: ready.port,
+    visit: visit(),
+    onChange(snapshot) {
+      if (snapshot.busy && ['ready', 'empty', 'save-failed'].includes(snapshot.stage) && !reenteredFromChange) {
+        reenteredFromChange = true;
+        reentries.push(journey.download(), journey.replay());
+      }
+    },
+    deliver(file) {
+      bytes.push(file.bytes);
+      const pending = Promise.withResolvers<boolean>();
+      attempts.push(pending);
+      if (attempts.length === 1) reentries.push(journey.download(), journey.replay());
+      return pending.promise;
+    },
+  });
+  const complete = await journey.capture();
+  const key = complete.requestKey;
+  const pages = [...ready.pageCursors];
+  const delivery = journey.download();
+  expect(journey.snapshot()).toMatchObject({ busy: true, hasArtifact: true });
+  await Promise.all(reentries);
+  expect(attempts).toHaveLength(1);
+  expect(ready.statuses).toEqual([]);
+  expect(ready.pageCursors).toEqual(pages);
+  attempts[0]!.resolve(false);
+  expect(await delivery).toMatchObject({ stage: 'save-failed', busy: false, hasArtifact: true });
+  const retryAfterFalse = journey.download();
+  attempts[1]!.reject(new Error('local save failed'));
+  expect(await retryAfterFalse).toMatchObject({ stage: 'save-failed', busy: false, hasArtifact: true });
+  const retryAfterThrow = journey.download();
+  attempts[2]!.resolve(true);
+  expect(await retryAfterThrow).toMatchObject({ stage: 'ready', busy: false, notice: { kind: 'saved' } });
+  expect(bytes[0]).toBe(bytes[1]);
+  expect(bytes[1]).toBe(bytes[2]);
+  expect(journey.snapshot().requestKey).toBe(key);
+  expect(ready.creates).toEqual([key]);
+  expect(ready.statuses).toEqual([]);
+  expect(ready.pageCursors).toEqual(pages);
+
+  const mounted = recordingPort(pagesFor(1));
+  const handoff = Promise.withResolvers<boolean>();
+  let deliveries = 0;
+  await mount(mounted.port, visit(), {
+    deliver: () => {
+      deliveries += 1;
+      return handoff.promise;
+    },
+  });
+  await click(m.library_export_capture());
+  await waitFor(m.library_export_ready());
+  await click(m.library_export_download());
+  expect(button(m.library_export_download())?.disabled).toBe(true);
+  expect(deliveries).toBe(1);
+  await act(async () => handoff.resolve(true));
+  await waitFor(m.library_export_downloaded());
+  expect(button(m.library_export_download())?.disabled).toBe(false);
+});
+
+test('retired, replaced and expired visits discard pending delivery completion', async () => {
+  for (const outcome of ['retire', 'viewer', 'csrf', 'expiry'] as const) {
+    const ready = recordingPort(pagesFor(1));
+    const current = visit();
+    const pending = Promise.withResolvers<boolean>();
+    let clock = Date.now();
+    const journey = createExportJourney({ port: ready.port, visit: current, now: () => clock, deliver: () => pending.promise });
+    expect((await journey.capture()).hasArtifact).toBe(true);
+    const pages = [...ready.pageCursors];
+    const delivery = journey.download();
+    expect(journey.snapshot()).toMatchObject({ busy: true, hasArtifact: true });
+    if (outcome === 'retire') current.retire();
+    if (outcome === 'viewer') current.subject = 'replacement-viewer';
+    if (outcome === 'csrf') current.csrfToken = 'replacement-credential';
+    if (outcome === 'expiry') clock = Date.parse(expiresAt);
+    pending.resolve(true);
+    expect(await delivery).toMatchObject({
+      stage: outcome === 'expiry' ? 'expired' : 'coverage',
+      busy: false,
+      notice: null,
+      hasArtifact: false,
+      cost: { retainedBytes: 0 },
+    });
+    expect(ready.creates).toHaveLength(1);
+    expect(ready.statuses).toEqual([]);
+    expect(ready.pageCursors).toEqual(pages);
+  }
+});
+
 test('stale replay, cancellation, retirement and signed-out stay distinct', async () => {
   const ready = recordingPort(pagesFor(16, 0), { staleOnStatus: true });
   const journey = createExportJourney({ port: ready.port, visit: visit() });
