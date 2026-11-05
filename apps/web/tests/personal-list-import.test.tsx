@@ -169,6 +169,47 @@ test('reviews source score beside the current native vote and requires explicit 
   expect(zeroHtml).not.toContain('exact candidate units');
 });
 
+test('a non-exact source score can deliberately review counted zero native units', async () => {
+  const scored = scoredRow();
+  scored.fields.score = { kind: 'value', raw: '7.3', value: 7.3, scale: { min: 1, max: 10, step: 0.1 } };
+  scored.nativeScore.exactUnits = null;
+  const journey = createVndbJourney({
+    visit: visit(),
+    port: makePort({
+      preview: async () => ({ kind: 'previewed', value: previewValue(1) }),
+      page: async () => ({ kind: 'page', value: pageValue([scored]) }),
+      review: async () => ({
+        kind: 'reviewed',
+        value: {
+          reviewId: reviewIds[0]!,
+          status: 'reviewed',
+          targetId: subject,
+          action: 'vote',
+          units: 0,
+          question: scored.nativeScore.question!,
+          currentVote: scored.nativeScore.currentVote,
+          consent: 'adopt-native-vote',
+          sourceReason: 'deliberate native units',
+          nativeAdmission: 'conditional',
+        },
+      }),
+    }),
+  });
+  await journey.preview('<vndb-export version="1.0"/>');
+  const snap = await journey.review({
+    ordinal: 0,
+    action: 'score',
+    targetId: subject,
+    questionId: subject,
+    questionRevision: 1,
+    selection: { kind: 'vote', units: 0 },
+    consent: 'adopt-native-vote',
+  });
+  expect(snap.selectedEffects).toBe(1);
+  expect(snap.rows[0]?.scoreDecision).toMatchObject({ action: 'vote', units: 0 });
+  expect(snap.scoreNotices).toEqual([]);
+});
+
 test('keeps score and state reviews independent and retries exact score outcomes after a partial apply', async () => {
   const scored = scoredRow();
   const applyCommands: Extract<VndbCommand, { kind: 'apply' }>[] = [];
