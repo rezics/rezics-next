@@ -39,7 +39,7 @@ const productionPort: AniListImportPort = {
   },
   async labelTargets(query, cursor) {
     const { searchAniListLabelTargets } = await import('./server');
-    return searchAniListLabelTargets({ data: { query, cursor } });
+    return searchAniListLabelTargets({ data: { query, ...(cursor === undefined ? {} : { cursor }) } });
   },
   async preview(command) {
     const { previewAniListImport } = await import('./server');

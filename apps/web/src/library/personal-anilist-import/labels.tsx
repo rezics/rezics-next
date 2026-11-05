@@ -217,7 +217,7 @@ export function AniListLabelAdoption({
           <p>{m.library_anilist_labels_collision()}</p>
           <AniListAction
             type="button"
-            disabled={busy || labels.invalidated || (cancelled && !unfinished)}
+            disabled={busy || labels.invalidated || cancelled}
             onClick={onConfirm}
           >
             {m.library_anilist_labels_confirm()}
