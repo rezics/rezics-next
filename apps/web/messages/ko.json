@@ -207,6 +207,7 @@
   "settings_shelf_read_status": "현재 읽기 응답",
   "settings_shelf_values_unconfirmed": "표시된 값은 마지막으로 확인 가능한 서가 값이며, 현재 값은 확인되지 않았습니다.",
   "settings_shelf_write_confirmed": "원래 서가 변경이 버전 {version}에서 확인되었습니다. 현재 값을 다시 불러와야 합니다.",
+  "settings_shelf_keep_local": "저장하지 않은 선택 유지",
   "settings_shelf_use_current": "저장하지 않은 선택 버리기",
   "settings_shelf_choices_unavailable_title": "라이브러리 보기 기본값을 읽을 수 없음",
   "settings_shelf_choices_unavailable_text": "현재 라이브러리 보기 기본값을 확인할 수 없습니다. 다시 불러오기 전에 아래의 응답 이유와 대기 시간을 확인하세요. 이 브라우저의 모양은 그대로입니다.",

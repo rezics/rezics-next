@@ -128,6 +128,8 @@ The existing shelf editor adds exact type-URI layouts to its versioned dirty-fie
 
 **Decision:** Shelf writes and current reads keep independent retry deadlines. A confirmed original write remains complete when its follow-up read fails, so recovery reloads current values without replaying that command.
 
+**Decision:** Keep unsaved Shelf choices is a local review resolution beside Discard. It rebases clean fields onto the current snapshot and retains only later local intent. It never writes, mints a command key, or treats matching current values as a committed original. Save stays a separate command against that version. An unresolved original is unchanged. A confirmed receipt consumes its operands so they cannot roll back a newer current snapshot; a later edit remains. Reset review keeps later edits and drops pre-reset choices.
+
 ## Account safety
 
 Managed detail captures Retry-After at response receipt in its immutable viewer/target reader. The longest observed

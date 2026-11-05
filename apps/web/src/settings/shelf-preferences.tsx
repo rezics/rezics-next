@@ -586,10 +586,13 @@ export class ShelfPreferenceDraftRecovery {
     const shelf = receipt.shelf ?? {};
     const shouldRead = recovering || this.owner.version() > receipt.version;
     if (shouldRead) {
+      const remainingDirty = this.remainingDirty(pending);
       this.update({
         known: { shelf, version: receipt.version },
         advice: undefined,
         current: false,
+        draft: rebaseDraft(shelf, this.state.draft, remainingDirty),
+        dirty: remainingDirty,
         pending: null,
         comparison: pending,
         confirmedWrite: pending,
@@ -629,7 +632,6 @@ export class ShelfPreferenceDraftRecovery {
   private remainingDirty(pending: Pending) {
     return new Set(
       [...this.state.dirty].filter((key) => {
-        if (pending.reset && pending.dirty.size > 0) return true;
         if (key.startsWith('layout:')) {
           const scope = key.slice(7);
           return this.state.draft.layouts[scope] !== pending.draft.layouts[scope];
@@ -822,6 +824,29 @@ export class ShelfPreferenceDraftRecovery {
     this.update({
       draft: draftFrom(this.state.known.shelf),
       dirty: new Set(),
+      comparison: null,
+      confirmedWrite: null,
+      writeReceipt: null,
+      phase: 'idle',
+    });
+  }
+
+  keepLocal() {
+    if (
+      !this.active() ||
+      !this.owner.canRead() ||
+      !this.state.current ||
+      this.state.pending ||
+      this.state.readBusy ||
+      this.state.writeBusy ||
+      (this.state.phase !== 'review' && !this.state.comparison)
+    )
+      return;
+    const acknowledged = this.state.confirmedWrite;
+    const dirty = acknowledged ? this.remainingDirty(acknowledged) : this.state.dirty;
+    this.update({
+      draft: rebaseDraft(this.state.known.shelf, this.state.draft, dirty),
+      dirty,
       comparison: null,
       confirmedWrite: null,
       writeReceipt: null,
@@ -1243,9 +1268,14 @@ export function ShelfPreferencesCard({
                 {m.settings_shelf_reload()}
               </Button>
               {state.current && !state.pending && (state.phase === 'review' || state.comparison) ? (
-                <Button type="button" variant="ghost" className="min-h-11" onClick={() => controller.useCurrent()}>
-                  {m.settings_shelf_use_current()}
-                </Button>
+                <>
+                  <Button type="button" className="min-h-11" onClick={() => controller.keepLocal()}>
+                    {m.settings_shelf_keep_local()}
+                  </Button>
+                  <Button type="button" variant="ghost" className="min-h-11" onClick={() => controller.useCurrent()}>
+                    {m.settings_shelf_use_current()}
+                  </Button>
+                </>
               ) : null}
             </AlertDescription>
           </Alert>

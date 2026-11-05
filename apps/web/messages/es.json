@@ -207,6 +207,7 @@
   "settings_shelf_read_status": "Respuesta de la lectura actual",
   "settings_shelf_values_unconfirmed": "Estos son los últimos valores disponibles de la biblioteca; no se pudieron confirmar los valores actuales.",
   "settings_shelf_write_confirmed": "El cambio original de la biblioteca se confirmó en la versión {version}. Aún debes recargar los valores actuales.",
+  "settings_shelf_keep_local": "Conservar mis elecciones sin guardar",
   "settings_shelf_use_current": "Descartar mis elecciones sin guardar",
   "settings_shelf_choices_unavailable_title": "Opciones predeterminadas de la biblioteca no disponibles",
   "settings_shelf_choices_unavailable_text": "No se pudieron confirmar las opciones predeterminadas actuales de la biblioteca. Consulte abajo el motivo de la respuesta y cualquier tiempo de espera antes de volver a cargar. La apariencia en este navegador no cambia.",

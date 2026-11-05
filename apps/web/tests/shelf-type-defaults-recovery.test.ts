@@ -268,6 +268,96 @@ test('the native merged map bound includes preserved scopes, while removing one 
   expect(commands[0]?.shelf).toEqual({ layouts: { 'schema:Extra': 'table', 'schema:Type0': null } });
 });
 
+test('a confirmed receipt plus failed GET then newer current keeps a later edit on keep', async () => {
+  const { ShelfPreferenceDraftRecovery } = await import('../src/settings/shelf-preferences');
+  let version = 1;
+  let reads = 0;
+  const initial = withShelfAdvice({
+    spoilerLevel: 0,
+    suitability: 'blur',
+    version: 1,
+    shelf: { layouts: { all: 'list' }, gridSize: 'large' },
+  });
+  const receipt = withShelfAdvice({
+    spoilerLevel: 0,
+    suitability: 'blur',
+    version: 2,
+    shelf: { layouts: { all: 'table' }, gridSize: 'large' },
+  });
+  const newer = withShelfAdvice({
+    spoilerLevel: 0,
+    suitability: 'blur',
+    version: 3,
+    shelf: { layouts: { all: 'grid' }, gridSize: 'medium' },
+  });
+  const commands: Readonly<PreferenceChange>[] = [];
+  const draft = new ShelfPreferenceDraftRecovery(
+    initial,
+    {
+      save: async (input) => {
+        commands.push(input);
+        return commands.length === 1 ? { ok: false, reason: 'unavailable' } : { ok: true, preferences: receipt };
+      },
+      read: async () => {
+        reads++;
+        if (reads === 1)
+          return {
+            signedIn: true,
+            state: 'unavailable',
+            failure: { status: 503, code: 'dependency_unavailable', requestId: 'refresh-keep' },
+            securityHref: null,
+          };
+        return { signedIn: true, preferences: newer, securityHref: null };
+      },
+    },
+    {
+      canRead: () => true,
+      canWrite: () => true,
+      version: () => version,
+      onVersionChange: (next) => {
+        version = next;
+      },
+    },
+  );
+  draft.edit({ layout: 'table' }, 'layout');
+  await draft.submit();
+  const original = draft.snapshot().pending?.input;
+  draft.edit({ gridSize: 'small' }, 'gridSize');
+  await draft.retry();
+  expect(commands).toHaveLength(2);
+  expect(commands[1]).toBe(original);
+  expect(draft.snapshot().pending).toBeNull();
+  expect(draft.snapshot().phase).toBe('review');
+  expect(draft.snapshot().confirmedWrite?.input).toBe(original);
+  expect(draft.snapshot().comparison?.input).toBe(original);
+  expect(draft.snapshot().current).toBe(false);
+  expect(draft.snapshot().dirty.has('layout')).toBe(false);
+  expect(draft.snapshot().dirty.has('gridSize')).toBe(true);
+  expect(draft.snapshot().draft.gridSize).toBe('small');
+  expect(Object.isFrozen(original)).toBe(true);
+
+  await draft.reload();
+  expect(reads).toBe(2);
+  expect(draft.snapshot().known.version).toBe(3);
+  expect(draft.snapshot().current).toBe(true);
+  expect(draft.snapshot().draft.layout).toBe('grid');
+  expect(draft.snapshot().draft.gridSize).toBe('small');
+  expect(draft.snapshot().confirmedWrite?.input).toBe(original);
+  expect(draft.canSubmit()).toBe(false);
+  draft.keepLocal();
+  expect(commands).toHaveLength(2);
+  expect(draft.snapshot().confirmedWrite).toBeNull();
+  expect(draft.snapshot().comparison).toBeNull();
+  expect(draft.snapshot().phase).toBe('idle');
+  expect(draft.snapshot().draft.layout).toBe('grid');
+  expect(draft.snapshot().draft.gridSize).toBe('small');
+  expect(draft.canSubmit()).toBe(true);
+  await draft.submit();
+  expect(commands[2]?.expectedVersion).toBe(3);
+  expect(commands[2]?.shelf).toEqual({ gridSize: 'small' });
+  expect(commands[2]?.idempotencyKey).not.toBe(original?.idempotencyKey);
+});
+
 test('grid-only advice rejects a new table while stored tables stay inspectable and removable', async () => {
   const { ShelfPreferenceDraftRecovery } = await import('../src/settings/shelf-preferences');
   const book = 'schema:Book';
