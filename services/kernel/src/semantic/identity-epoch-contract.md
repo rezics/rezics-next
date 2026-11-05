@@ -53,7 +53,7 @@ polling, suspension and publication. Retained HTTP200 does not deliver HTTP202 a
 
 ### Reviewed Person identity precondition
 
-Decision: paired evidence uses the existing native merge/original Subject read; preserve asynchronous
+Decision: paired evidence uses the existing native merge/original Subject read; preserve
 admission/publication and refuse unsupported coverage. Adopted evidence:
 [reviewed identity atomic boundary](../../../../docs/research/merge-reviewed-identity-atomic-boundary.md).
 
@@ -94,7 +94,7 @@ The first-effect runtime covers unpending legacy self mappings in one partition;
 incarnations require concurrent admission composition. Guard success proves no publication. Imports retains
 original bindings and withholds credits until independent current canonical Person and mapping/Search/Library
 publication. Content keeps its sole publisher; Rating/Content retain original COMMIT/ROLLBACK obligations.
-Native races/growth and integration acceptance remain required.
+Native races/growth and integration remain required.
 
 ## Concurrent control and coherent admission
 
