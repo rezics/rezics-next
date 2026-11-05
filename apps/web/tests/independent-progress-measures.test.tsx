@@ -544,6 +544,7 @@ test('mounted visit refreshes pristine props and preserves a later field edit th
     DocumentFragment: window.DocumentFragment,
     MutationObserver: window.MutationObserver,
     getComputedStyle: window.getComputedStyle.bind(window),
+    scrollTo: window.scrollTo.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
   };
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -636,7 +637,9 @@ test('mounted visit refreshes pristine props and preserves a later field edit th
     await click(m.library_progress_measures_refresh());
     const volumeInput = inputs()[1]!;
     const propsKey = Object.keys(volumeInput).find((key) => key.startsWith('__reactProps$'))!;
-    Reflect.get(volumeInput, propsKey).onChange({ target: { value: '7' } });
+    await act(async () =>
+      Reflect.get(volumeInput, propsKey).onChange({ target: { value: '7' }, currentTarget: { value: '7' } }),
+    );
     await act(async () => {
       finishRefresh({ signedIn: true, idempotencyKey: 'read', session: saved(5, '12', '1') });
     });
