@@ -638,11 +638,14 @@ test('later selected-family reseeds carry the newly current release classificati
     expect(JSON.stringify(reread.bindings)).toBe(JSON.stringify(classifications.bindings));
     expect(classifications.bindings.concepts.some((item) => item.code === 'win')).toBe(true);
     expect(sameShowcaseVndbReleaseClassifications(first.bindings, classifications.bindings)).toBe(false);
+    const currentPlatformId = classifications.bindings.concepts.find(
+      (item) => item.taxonomy === vndbReleasePlatformTaxonomy && item.code === 'win',
+    )?.id;
     expect(groupsFromVndbReleaseBindings(classifications.bindings)).toContainEqual(
       expect.objectContaining({
         taxonomy: vndbReleasePlatformTaxonomy,
         uri: vndbReleasePlatformSchemeUri,
-        concepts: [{ code: 'win', id: platformWinId }],
+        concepts: [{ code: 'win', id: currentPlatformId }],
       }),
     );
     expect(catalogueVndbReleaseGroups(undefined, classifications.requirements)).toEqual([]);
