@@ -1128,7 +1128,24 @@ Cached-document retirement synchronously removes the keyed review before the bro
 
 Submitted return and explicit Retry call only `GET /session`. A matching automated session is displayed in a separate current-state region and is labelled as an observation; it does not prove which request created that session. Unknown issuance is never replayed. A new opening uses a fresh human step-up, current metadata, and a new explicit confirmation.
 
-Decision: Each explicit opening metadata or session-readback attempt has one five-second private browser-read lifetime through body and BFF completion. Route retirement aborts active reads on pagehide, departure, page replacement and unmount; a deliberate retry receives a fresh lifetime. A timed-out metadata read is unavailable and a timed-out readback remains unknown. The native opening-page service keeps its separate ten-second deadline.
+Decision: opening readback consumes the admitted `trustedSecurityResponseConfiguration` and
+`readSecurityIssuerResponse` seam, the same server-only `AUTH_SECURITY_SCOPE_CONFIGURATION` provenance as human
+account and selected inventory reads. Before parsing it uses `readJsonBounded` with
+`securityResponseByteBudgets(C).session`, then requires the closed operated proof, selected subject, opening client,
+one operator AMR, safe nonnegative epoch/time and no future time. Identifier/scope maxima are 1,024/128 UTF-16 units
+and C entries; there is no scope-membership requirement. C is the native mounted action/protocol union documented
+under [private review reads](#private-review-reads). Missing, malformed or overflowing configuration makes no GET.
+A matching current observation and every refused observation leave earlier unknown issuance unresolved.
+
+Opening metadata uses `OPERATOR_OPENING_PAGE_MAX_RESPONSE_BYTES` from the public browser-safe
+`operator-page-response-bounds` module before UTF-8 decoding or JSON parsing. Its own C-independent closed envelope
+counts the opaque native viewer ID as S(1024), three routed UUID36 IDs, canonical PostgreSQL nonnegative bigint19,
+fixed actor/operator kinds, undisclosed profile, opening action and every terminal stage. It does not reuse transfer's
+budget or require a UUID human proof. The producer projects selected IDs from the admitted request and bounds
+native viewer/relation fields before serialization. Invalid historical projection, streamed overflow, malformed or
+retired metadata is unavailable; exact Retry retains its original selection/key and sends no approval or issuance.
+
+Decision: Each explicit opening metadata or session-readback attempt has one five-second private browser-read lifetime through body and BFF completion. Route retirement aborts active reads on pagehide, departure, page replacement and unmount; a deliberate retry receives a fresh lifetime. A timed-out metadata read is unavailable and a timed-out readback remains unknown. The native opening-page service keeps its separate ten-second deadline. Each deliberate readback costs one native GET and zero metadata/mutation calls; no discovery or automatic retry is added. Installed stream, return and lifetime tests cover this seam; broader native/browser qualification remains with the controller.
 
 Keep public identity labels explicitly undisclosed under the opening profile; recovery links to `https://rezics.com/{locale}/accounts` and a confirmed operated session can continue to `https://rezics.com/{locale}/`.
 

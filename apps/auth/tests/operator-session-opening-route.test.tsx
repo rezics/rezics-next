@@ -1,6 +1,7 @@
 import { afterAll, expect, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
+import { openingReadbackFixture } from './operator-opening-read-fixture';
 import type { OpeningInput, OpeningRead } from '../src/operator-session-opening';
 
 const { Window } = await import(
@@ -80,6 +81,7 @@ async function open(
     requests.push({ path: String(path), body: JSON.parse(String(init?.body ?? '{}')), resolve });
     return promise;
   }) as typeof fetch;
+  const readback = openingReadbackFixture();
   const read = spyOn(opening, 'loadOpeningMetadata').mockResolvedValue(metadata);
   const session = spyOn(managementOperations, 'loadManagementSession').mockResolvedValue(initialSession);
   const approve = spyOn(managementOperations, 'approveManagementOperation').mockImplementation(async (input) => ({
@@ -126,6 +128,7 @@ async function open(
         await flush(() => root.unmount());
         history.destroy();
         host.remove();
+        readback.mockRestore();
         read.mockRestore();
         session.mockRestore();
         approve.mockRestore();
@@ -145,9 +148,15 @@ test('failed initial and review reads recover the exact identity and key through
     p.read.mockResolvedValueOnce({ kind: 'unavailable' });
     await p.review();
     const selected = p.read.mock.calls[0]![0];
+    p.read.mockResolvedValueOnce({ kind: 'unavailable' });
     await p.click('Retry account identity');
     await flush(() => Promise.resolve());
+    expect(p.requests).toHaveLength(0);
+    expect(p.approve).not.toHaveBeenCalled();
     expect(p.read.mock.calls[1]![0]).toEqual(selected);
+    await p.click('Retry account identity');
+    await flush(() => Promise.resolve());
+    expect(p.read.mock.calls[2]![0]).toEqual(selected);
     expect(selected).toMatchObject({ accountId: human, operation });
     expect(p.host.textContent).toContain(subject);
     expect(p.host.textContent).toContain(operator);

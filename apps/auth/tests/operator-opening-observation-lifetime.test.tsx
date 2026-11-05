@@ -9,6 +9,7 @@ import {
 import { creationFixture, button, dom, fill, flush, open, send } from './creation-page-fixture';
 import { OperatorSessionOpeningPage } from '../src/routes/automated.open';
 import * as opening from '../src/operator-session-opening';
+import * as management from '../src/management-operations';
 import { managementOperationProfile } from '../src/management-operations';
 
 creationFixture();
@@ -25,8 +26,10 @@ const metadata = {
   },
 };
 let read: ReturnType<typeof spyOn<typeof opening, 'loadOpeningMetadata'>> | undefined;
+let sessionRead: ReturnType<typeof spyOn<typeof management, 'loadManagementSession'>> | undefined;
 let browser: ReturnType<typeof createBrowserHistory> | undefined;
 afterEach(() => {
+  sessionRead?.mockRestore();
   read?.mockRestore();
   browser?.destroy();
 });
@@ -46,6 +49,15 @@ async function setup() {
     authn_epoch: 0,
     amr: ['pwd'],
   };
+  sessionRead = spyOn(management, 'loadManagementSession').mockResolvedValue({
+    kind: 'ready',
+    accountId: human,
+    clientId: session.client_id,
+    scopes: session.scope,
+    authTime: session.auth_time,
+    authnEpoch: session.authn_epoch,
+    amr: ['pwd'],
+  });
   const root = createRootRoute();
   const routeTree = root.addChildren(
     ['/automated/open', '/security'].map((path) => createRoute({ getParentRoute: () => root, path })),
