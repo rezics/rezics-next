@@ -430,10 +430,18 @@ test('a growing continuation batch reuses one inventory and incorporates publica
       expect(result.queued).toHaveLength(5);
       expect(result.proposed).toHaveLength(3);
       expect(result.queued.map((file) => basename(file))).toEqual(
-        Array.from({ length: 5 }, (_, index) => `continuation-${task.id.slice(0, 8)}-${ref.attempt}-journey-${String(index + 1).padStart(2, '0')}`),
+        Array.from(
+          { length: 5 },
+          (_, index) =>
+            `continuation-${task.id.slice(0, 8)}-${ref.attempt}-journey-${String(index + 1).padStart(2, '0')}.md`,
+        ),
       );
       expect(result.proposed.map(({ file }) => basename(file))).toEqual(
-        Array.from({ length: 3 }, (_, index) => `continuation-${task.id.slice(0, 8)}-${ref.attempt}-journey-${String(index + 6).padStart(2, '0')}`),
+        Array.from(
+          { length: 3 },
+          (_, index) =>
+            `continuation-${task.id.slice(0, 8)}-${ref.attempt}-journey-${String(index + 6).padStart(2, '0')}.md`,
+        ),
       );
       expect(result.dropped).toEqual([]);
       expect(result.retained).toEqual([]);
