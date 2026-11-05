@@ -11,12 +11,7 @@ import {
 } from './native';
 import { selectedArchiveRecoveryResults } from './results';
 import { type RecoverySection } from './selection';
-import {
-  ArchiveRecoveryVisit,
-  type RecoveryBinding,
-  type RecoveryReadDirection,
-  type RecoveryRequest,
-} from './visit';
+import { ArchiveRecoveryVisit, type RecoveryBinding, type RecoveryReadDirection, type RecoveryRequest } from './visit';
 
 type ResultPage = ReturnType<typeof selectedArchiveRecoveryResults>;
 type Confirmation = { uploadId: string; body: ArchiveConfirmation };

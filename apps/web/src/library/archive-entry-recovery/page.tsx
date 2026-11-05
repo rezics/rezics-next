@@ -419,7 +419,12 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
                   >
                     {m.library_window_previous()}
                   </button>
-                  <button type="button" className={control} disabled={busy} onClick={() => act(journey!.results('first'))}>
+                  <button
+                    type="button"
+                    className={control}
+                    disabled={busy}
+                    onClick={() => act(journey!.results('first'))}
+                  >
                     {m.library_archive_entry_first()}
                   </button>
                   <button
@@ -439,7 +444,12 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
                     {m.library_archive_entry_results_refresh()}
                   </button>
                   {state.resultsNavigation.staged?.failed && (
-                    <button type="button" className={control} disabled={busy} onClick={() => act(journey!.results('retry'))}>
+                    <button
+                      type="button"
+                      className={control}
+                      disabled={busy}
+                      onClick={() => act(journey!.results('retry'))}
+                    >
                       {m.library_window_retry()}
                     </button>
                   )}

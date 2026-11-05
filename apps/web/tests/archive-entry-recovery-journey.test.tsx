@@ -315,7 +315,10 @@ function fixture() {
     retire: () => {
       current = null;
     },
-    pages: (previews: ReadonlyMap<number, NativeArchivePreview>, results: ReadonlyMap<number, NativeArchiveResults>) => {
+    pages: (
+      previews: ReadonlyMap<number, NativeArchivePreview>,
+      results: ReadonlyMap<number, NativeArchiveResults>,
+    ) => {
       previewPages = previews;
       resultPages = results;
     },
@@ -498,9 +501,7 @@ test('Independent archive readers commit exact windows and keep choices and ackn
     await f.journey.results('refresh');
     expect(f.journey.snapshot().state!.results!.context.next).toBe(0);
     await f.journey.results('next');
-    expect(f.journey.snapshot().state!.results!.rows).toMatchObject([
-      { ordinal: 1, status: 'acknowledged', labelId },
-    ]);
+    expect(f.journey.snapshot().state!.results!.rows).toMatchObject([{ ordinal: 1, status: 'acknowledged', labelId }]);
     await f.journey.results('next');
     expect(f.journey.snapshot().state!.results!.context.next).toBeNull();
     f.failResultsOnce(1);
