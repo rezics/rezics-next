@@ -5,6 +5,39 @@ const start = await import('../.storybook/react-start');
 mock.module('@tanstack/react-start', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
+function controlledDeadlines() {
+  const setTimeoutBefore = globalThis.setTimeout;
+  const clearTimeoutBefore = globalThis.clearTimeout;
+  const scheduled: { callback: () => void; delay: number; canceled: boolean }[] = [];
+  globalThis.setTimeout = ((callback: TimerHandler, delay?: number) => {
+    if (typeof callback !== 'function') throw new Error('Unexpected string timer');
+    const timer = { callback: callback as () => void, delay: Number(delay ?? 0), canceled: false };
+    scheduled.push(timer);
+    return timer as unknown as ReturnType<typeof setTimeout>;
+  }) as typeof setTimeout;
+  globalThis.clearTimeout = ((handle?: ReturnType<typeof setTimeout>) => {
+    if (handle) (handle as unknown as (typeof scheduled)[number]).canceled = true;
+  }) as typeof clearTimeout;
+  return {
+    scheduled,
+    fireNext() {
+      const timer = scheduled.find((item) => !item.canceled);
+      if (!timer) return false;
+      timer.canceled = true;
+      timer.callback();
+      return true;
+    },
+    restore() {
+      globalThis.setTimeout = setTimeoutBefore;
+      globalThis.clearTimeout = clearTimeoutBefore;
+    },
+  };
+}
+
+async function flushMicrotasks() {
+  for (let turn = 0; turn < 8; turn++) await Promise.resolve();
+}
+
 test('a type command keeps its payload and key through unknown readback; clean sibling changes survive recovery', async () => {
   const { ShelfPreferenceDraftRecovery } = await import('../src/settings/shelf-preferences');
   const { SettingsNavigationDrafts } = await import('../src/settings/reading-navigation');
@@ -358,6 +391,126 @@ test('a confirmed receipt plus failed GET then newer current keeps a later edit 
   expect(commands[2]?.expectedVersion).toBe(3);
   expect(commands[2]?.shelf).toEqual({ gridSize: 'small' });
   expect(commands[2]?.idempotencyKey).not.toBe(original?.idempotencyKey);
+});
+
+test('a retried receipt survives a stalled GET and a later current read defeats its late result', async () => {
+  const { ShelfPreferenceDraftRecovery } = await import('../src/settings/shelf-preferences');
+  const timers = controlledDeadlines();
+  let version = 1;
+  let saves = 0;
+  let reads = 0;
+  let finishLateRead!: (page: { signedIn: true; preferences: ReadingPreferences; securityHref: null }) => void;
+  const initial = withShelfAdvice({
+    spoilerLevel: 0,
+    suitability: 'blur',
+    version: 1,
+    shelf: { layouts: { all: 'list' }, gridSize: 'large' },
+  });
+  const receipt = withShelfAdvice({
+    spoilerLevel: 0,
+    suitability: 'blur',
+    version: 2,
+    shelf: { layouts: { all: 'table' }, gridSize: 'large' },
+  });
+  const later = withShelfAdvice({
+    spoilerLevel: 0,
+    suitability: 'blur',
+    version: 3,
+    shelf: { layouts: { all: 'grid' }, gridSize: 'medium' },
+  });
+  const commands: Readonly<PreferenceChange>[] = [];
+  const draft = new ShelfPreferenceDraftRecovery(
+    initial,
+    {
+      save: async (input) => {
+        commands.push(input);
+        return ++saves === 1 ? { ok: false, reason: 'unavailable' } : { ok: true, preferences: receipt };
+      },
+      read: async () => {
+        reads++;
+        if (reads === 1) return { signedIn: true, preferences: initial, securityHref: null };
+        if (reads === 2)
+          return await new Promise<{ signedIn: true; preferences: ReadingPreferences; securityHref: null }>(
+            (resolve) => {
+              finishLateRead = resolve;
+            },
+          );
+        return { signedIn: true, preferences: later, securityHref: null };
+      },
+    },
+    {
+      canRead: () => true,
+      canWrite: () => true,
+      version: () => version,
+      onVersionChange: (next) => {
+        version = next;
+      },
+    },
+  );
+
+  try {
+    draft.edit({ layout: 'table' }, 'layout');
+    await draft.submit();
+    const original = draft.snapshot().pending?.input;
+    expect(original).toMatchObject({ expectedVersion: 1, shelf: { layouts: { all: 'table' } } });
+    await draft.reload();
+    expect(draft.canRetryOriginal()).toBe(true);
+
+    const beforeRetry = timers.scheduled.length;
+    let retrySettled = false;
+    const retrying = draft.retry().then(() => {
+      retrySettled = true;
+    });
+    await flushMicrotasks();
+    expect(timers.scheduled.length - beforeRetry).toBe(2);
+    expect(reads).toBe(2);
+    expect(commands).toHaveLength(2);
+    expect(commands[1]).toBe(original);
+    expect(draft.snapshot().pending).toBeNull();
+    expect(draft.snapshot().confirmedWrite?.input).toBe(original);
+    expect(draft.snapshot().writeReceipt).toEqual({ shelf: receipt.shelf, version: 2 });
+    expect(draft.snapshot().current).toBe(false);
+    expect(draft.snapshot().readBusy).toBe(true);
+    expect(draft.canSubmit()).toBe(false);
+
+    expect(timers.fireNext()).toBe(true);
+    await flushMicrotasks();
+    expect(retrySettled).toBe(true);
+    await retrying;
+    expect(draft.snapshot().readBusy).toBe(false);
+    expect(draft.snapshot().readResponse.failure).toEqual({ status: null, code: 'local_timeout' });
+    expect(draft.snapshot().readResponse.retryAt).toBe(0);
+    expect(draft.snapshot().confirmedWrite?.input).toBe(original);
+    expect(draft.snapshot().pending).toBeNull();
+    expect(draft.snapshot().current).toBe(false);
+    expect(draft.canSubmit()).toBe(false);
+
+    await draft.reload();
+    expect(reads).toBe(3);
+    expect(draft.snapshot().known).toEqual({ shelf: later.shelf, version: 3 });
+    expect(draft.snapshot().draft.layout).toBe('grid');
+    expect(draft.snapshot().draft.gridSize).toBe('medium');
+    expect(draft.snapshot().current).toBe(true);
+    expect(draft.snapshot().confirmedWrite?.input).toBe(original);
+    expect(draft.canSubmit()).toBe(false);
+
+    finishLateRead({ signedIn: true, preferences: receipt, securityHref: null });
+    await flushMicrotasks();
+    expect(reads).toBe(3);
+    expect(draft.snapshot().known).toEqual({ shelf: later.shelf, version: 3 });
+    expect(draft.snapshot().draft.layout).toBe('grid');
+    expect(draft.snapshot().confirmedWrite?.input).toBe(original);
+    expect(draft.snapshot().phase).toBe('review');
+
+    const commandCount = commands.length;
+    draft.keepLocal();
+    expect(commands).toHaveLength(commandCount);
+    expect(draft.snapshot().confirmedWrite).toBeNull();
+    expect(draft.snapshot().draft.layout).toBe('grid');
+    expect(draft.snapshot().draft.gridSize).toBe('medium');
+  } finally {
+    timers.restore();
+  }
 });
 
 test('grid-only advice rejects a new table while stored tables stay inspectable and removable', async () => {
