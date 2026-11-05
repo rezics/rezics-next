@@ -102,7 +102,7 @@ export async function mountOwnDrafts() {
       );
     },
     async click(label: string) {
-      const button = [...host.querySelectorAll('button')].find((node) => node.textContent === label);
+      const button = [...window.document.querySelectorAll('button')].find((node) => node.textContent === label);
       if (!button) throw new Error(`Missing own-drafts button: ${label}`);
       await act(async () => button.click());
     },

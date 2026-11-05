@@ -174,7 +174,7 @@ test('publish sends the selected revision and separates acknowledgement from pub
     expect(fixture.host.textContent).toContain('Retry publish');
     const { m } = await import('../src/paraglide/messages.js');
     await fixture.click('Return to drafts');
-    expect(fixture.host.querySelector('[role="alertdialog"]')?.textContent).toContain(
+    expect(fixture.window.document.querySelector('[role="alertdialog"]')?.textContent).toContain(
       m.thread_authoring_leave_pending(),
     );
     await fixture.click(m.thread_authoring_stay());
