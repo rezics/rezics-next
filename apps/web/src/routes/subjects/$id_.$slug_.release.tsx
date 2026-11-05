@@ -91,7 +91,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/release')({
         ...params,
         locale: getLocale(),
         context: deps.context,
-        realm: deps.realm,
+        ...(deps.realm ? { realm: deps.realm } : {}),
         hash: location.hash ? `#${location.hash.replace(/^#/, '')}` : '',
         search: keepSearch('', query.toString()),
       },

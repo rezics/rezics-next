@@ -1043,9 +1043,9 @@ function ReleaseFidelityLive({
                       void startRead(
                         {
                           kind: 'page',
-                          stream: previous.stream,
-                          cursor: previous.cursor,
-                          session: admitted?.address.session,
+                          ...(previous.stream ? { stream: previous.stream } : {}),
+                          ...(previous.cursor ? { cursor: previous.cursor } : {}),
+                          ...(admitted?.address.session ? { session: admitted.address.session } : {}),
                         },
                         event,
                         admitted,
