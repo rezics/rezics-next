@@ -53,7 +53,18 @@ export function SearchSort({
   const messageLocale = { locale: locale as never };
   return (
     <form
-      key={JSON.stringify([locale, state, query, type, facets, sort, ratingPopulation, ratingPopulations, ratingReadiness, disabled])}
+      key={JSON.stringify([
+        locale,
+        state,
+        query,
+        type,
+        facets,
+        sort,
+        ratingPopulation,
+        ratingPopulations,
+        ratingReadiness,
+        disabled,
+      ])}
       method="get"
       action={`/${locale}/search`}
       className="grid w-full min-w-0 gap-3 sm:grid-cols-[auto_minmax(0,24rem)_auto] sm:justify-end"
