@@ -714,6 +714,7 @@ function ProgressHistoryLink({
         return { ...next, ...(target.cursor === undefined ? {} : { [target.section]: target.cursor }) };
       }}
       state={(previous) => previous}
+      hash={(previous) => previous}
       preload={false}
       onClick={(event) => {
         if (!current()) {
@@ -737,7 +738,7 @@ function ProgressHistoryLink({
           const destination = { ...originating!.address, [target.section]: target.cursor };
           const cancel = navigation.stage(target, destination, event.detail === 0);
           void router
-            .navigate({ to: '/library/progress/$id', params: { id }, search, state: (previous) => previous })
+            .navigate({ to: '/library/progress/$id', params: { id }, search, state: (previous) => previous, hash: (previous) => previous })
             .then(cancel);
         }
       }}
