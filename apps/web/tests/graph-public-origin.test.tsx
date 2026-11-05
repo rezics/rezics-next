@@ -1,34 +1,39 @@
 import { expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
-import { candidateContext } from '../src/subject/candidates';
-import {
-  graphGlobalVisitHref,
-  graphPublicIntentFits,
-  graphPublicOriginHref,
-  graphPublicSourceReturnHref,
-  graphPublicVisitUnsupported,
-  parseGraphPublicVisit,
-} from '../src/features/pages/graph-browser/public-visit';
-import { subjectHref } from '../src/subject/subject-href';
 
 const subject = '00000000-0000-4000-8000-00000000d101';
 const otherSubject = '00000000-0000-4000-8000-00000000d102';
 const context = '00000000-0000-4000-8000-00000000d103';
 const realm = '00000000-0000-4000-8000-00000000d104';
-const base = `${subjectHref({ id: subject, label: 'Origin' }, 'en').href}/graph`;
-const publicReturn = `${subjectHref({ id: subject, label: 'Origin' }, 'en').href}#subject-heading`;
-const observed = {
-  subject,
-  context: candidateContext,
-  locale: 'en',
-  returnHref: publicReturn,
-};
-const parse = (href: string, id = subject, locale = 'en') => {
-  const url = new URL(href, 'https://site.test');
-  return parseGraphPublicVisit(url.search, url.hash, id, locale, url.pathname);
-};
+
+async function graphFixtures() {
+  mock.module('cloudflare:workers', () => ({ env: {} }));
+  const [{ candidateContext }, publicVisit, { subjectHref }] = await Promise.all([
+    import('../src/subject/candidates'),
+    import('../src/features/pages/graph-browser/public-visit'),
+    import('../src/subject/subject-href'),
+  ]);
+  const base = `${subjectHref({ id: subject, label: 'Origin' }, 'en').href}/graph`;
+  const publicReturn = `${subjectHref({ id: subject, label: 'Origin' }, 'en').href}#subject-heading`;
+  const observed = { subject, context: candidateContext, locale: 'en', returnHref: publicReturn };
+  const parse = (href: string, id = subject, locale = 'en') => {
+    const url = new URL(href, 'https://site.test');
+    return publicVisit.parseGraphPublicVisit(url.search, url.hash, id, locale, url.pathname);
+  };
+  return { ...publicVisit, candidateContext, subjectHref, base, publicReturn, observed, parse };
+}
 
 test('the public entry preserves admitted Global and selected Context observations with one bounded Subject return', async () => {
+  const {
+    candidateContext,
+    graphPublicOriginHref,
+    graphPublicSourceReturnHref,
+    graphPublicVisitUnsupported,
+    subjectHref,
+    base,
+    observed,
+    parse,
+  } = await graphFixtures();
   const { catalogueEntries } = await import('../src/features/catalogue/catalogue-entry');
   const { SubjectExploreSlot } = await import('../src/features/pages/subject-slots');
   const { createElement: h } = await import('react');
@@ -69,6 +74,14 @@ test('the public entry preserves admitted Global and selected Context observatio
 });
 
 test('the production graph route gates unsupported origins and a fresh Global choice uses only the original transport', async () => {
+  const {
+    graphGlobalVisitHref,
+    graphPublicSourceReturnHref,
+    subjectHref,
+    base,
+    publicReturn,
+    observed,
+  } = await graphFixtures();
   const start = await import('../.storybook/react-start');
   mock.module('@tanstack/react-start', () => start);
   mock.module('@tanstack/react-start/server', () => start);
@@ -234,6 +247,16 @@ test('the production graph route gates unsupported origins and a fresh Global ch
 });
 
 test('the graph route rejects conflicting, foreign, recursive and encoded-overflow intent before mounting a visit', async () => {
+  const {
+    graphPublicIntentFits,
+    graphPublicOriginHref,
+    parseGraphPublicVisit,
+    subjectHref,
+    base,
+    publicReturn,
+    observed,
+    parse,
+  } = await graphFixtures();
   const { graphBrowserReturnHref } = await import('../src/features/pages/graph-browser/view');
   const href = graphPublicOriginHref(base, observed);
   const query = new URL(href, 'https://site.test').search;
