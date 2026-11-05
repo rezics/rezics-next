@@ -70,7 +70,7 @@ test('actual Sources retry returns focus locally and retires focus across reader
         getParentRoute: () => parent,
         path: '/$locale/subjects/$id/$slug/sources',
       } as never);
-      const suffix = '?realm=realm-a&intent=exact%20read#kept';
+      const suffix = '?realm=00000000-0000-4000-8000-000000000005&intent=exact%20read#kept';
       const router = routing.createRouter({
         routeTree: parent.addChildren([sources]),
         history: routing.createMemoryHistory({ initialEntries: [page.sourcesHref + suffix] }),
@@ -108,7 +108,12 @@ test('actual Sources retry returns focus locally and retires focus across reader
           await tick();
         });
         expect(calls).toHaveLength(2);
-        expect(calls[1]).toEqual({ id: page.id, locale: 'en', realm: 'realm-a', reader: 'alice' });
+        expect(calls[1]).toEqual({
+          id: page.id,
+          locale: 'en',
+          realm: '00000000-0000-4000-8000-000000000005',
+          reader: 'alice',
+        });
         expect(host.querySelector('article')?.getAttribute('aria-busy')).toBe('true');
         if (mode === 'moved') outside.focus();
         if (mode === 'tab') document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));

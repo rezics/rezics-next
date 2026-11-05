@@ -98,19 +98,13 @@ test('one admitted original selection reaches the native seam, retaining languag
   if (result.kind !== 'ready') throw new Error('Missing exact source projection');
   expect(result.page.fields).toHaveLength(1);
   expect(result.page.fields[0]?.facts).toHaveLength(1);
-  expect(result.page.fields[0]?.facts[0]).toMatchObject({
-    statement: candidate,
-    display: 'document',
-    snak: { value: { type: 'somevalue' } },
-    citations: [
-      [],
-      [
-        expect.objectContaining({
-          snak: expect.objectContaining({ value: { type: 'value', content: 'https://example.org/exact-support' } }),
-        }),
-      ],
-    ],
-  });
+  const fact = result.page.fields[0]!.facts[0]!;
+  expect(fact.statement).toBe(candidate);
+  expect(fact.display).toBe('document');
+  expect(fact.snak.value).toEqual({ type: 'somevalue' });
+  expect(fact.citations.map((parts) => parts.length)).toEqual([0, 1]);
+  expect(fact.citations[1]![0]!.snak.value).toEqual({ type: 'value', content: 'https://example.org/exact-support' });
+  expect(typeof fact.citations[1]![0]!.label.text).toBe('string');
   expect(result.page.sources).toEqual({ credit: null, records: [], urls: [], identifiers: [] });
   expect(result.page.selection).toEqual({ kind: 'synopsis', context: candidateContext, release });
   const serialized = JSON.stringify(result);
