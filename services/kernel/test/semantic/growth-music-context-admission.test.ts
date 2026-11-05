@@ -60,7 +60,8 @@ beforeAll(async () => {
   await create(venue, 'schema:MusicVenue', 'Selected venue', digest);
   await create(area, 'schema:AdministrativeArea', 'Selected area', digest);
   await create(instrument, 'wd:Q34379', 'Selected instrument', digest);
-  for (const [index, id] of performers.entries()) await create(id, 'schema:Person', `Selected performer ${index}`, digest);
+  for (const [index, id] of performers.entries())
+    await create(id, 'schema:Person', `Selected performer ${index}`, digest);
 
   const eventStatements = statementRows('' + event, 'schema:MusicEvent', {
     'schema:location': [
@@ -194,7 +195,13 @@ beforeAll(async () => {
                   filter_value: '00000000-0000-0000-0000-000000000000',
                   value: 1,
                 },
-                { route, subject_id: event, property: 'schema:performer', filter_value: instrument, value: performers.length },
+                {
+                  route,
+                  subject_id: event,
+                  property: 'schema:performer',
+                  filter_value: instrument,
+                  value: performers.length,
+                },
                 {
                   route,
                   subject_id: venue,

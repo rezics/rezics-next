@@ -177,8 +177,8 @@ propertyDescriptions:
   rezics:releaseGroup: 'The independently readable AniDB source group associated with this file, separate from a publication release and personal copy.'
   schema:containedInPlace: 'The immediate place containing this place, such as its administrative area.'
   schema:location: 'The place where this event occurs; it does not identify the event or a performance occurrence.'
-  schema:startDate: 'The stated beginning of the subject''s time span, preserving source precision and calendar.'
-  schema:endDate: 'The stated end of the subject''s time span, preserving source precision and calendar.'
+  schema:startDate: "The stated beginning of the subject's time span, preserving source precision and calendar."
+  schema:endDate: "The stated end of the subject's time span, preserving source precision and calendar."
 typeDescriptions:
   wd:Q2095: 'A food or edible substance, such as flour; a recipe describes how to prepare it.'
   wd:Q2620972: 'A named, ordered span of episodes or chapters within a work, with first and last part numbers.'

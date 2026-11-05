@@ -983,7 +983,8 @@ export function SearchPage({
       { type },
     );
   for (const kind of navigationState.kinds ?? []) {
-    const choice = discovery?.status === 'ready' ? discovery.page.kinds.values.find((entry) => entry.id === kind) : undefined;
+    const choice =
+      discovery?.status === 'ready' ? discovery.page.kinds.values.find((entry) => entry.id === kind) : undefined;
     const kindLabel = choice ? localizedLabel(choice.labels, locale) : undefined;
     const description = pickText(bundledRelease.types[kind]?.descriptions ?? {}, locale);
     add(

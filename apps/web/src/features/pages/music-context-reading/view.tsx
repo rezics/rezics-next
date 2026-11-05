@@ -687,66 +687,66 @@ function MusicContextReadingBound({
                   )}
                   {!link.unreadable && link.role && (
                     <span className="ms-2">
-                      {link.role.label}: {link.role.target ? (
-                        (() => {
-                          const target = link.role!.target!;
-                          const targetBase = target.targetKind && !realm
-                            ? catalogueEntries.musicContext({
-                                id: target.id,
-                                label: target.label,
-                                locale,
-                                context: selectedContext,
-                              }).href
-                            : subjectHref({ id: target.id, label: target.label }, locale).href;
-                          const exact = !!target.targetKind && !realm;
-                          const exactWithReturn =
-                            exact && target.id !== id && visibleAddress
-                              ? musicContextTargetHref(targetBase, visibleAddress, locale, target.id)
-                              : undefined;
-                          const generalWithReturn =
-                            !exact && !realm && visibleAddress
-                              ? withSubjectVisitReturn(targetBase, visibleAddress)
-                              : targetBase;
-                          const generalFits = fitsRetainedAddress(generalWithReturn);
-                          const href = exact
-                            ? target.id === id || !visibleAddress
-                              ? targetBase
-                              : (exactWithReturn ?? targetBase)
-                            : generalFits
-                              ? generalWithReturn
-                              : targetBase;
-                          const returnUnavailable =
-                            !!visibleAddress &&
-                            ((exact && target.id !== id && !exactWithReturn) || (!exact && !realm && !generalFits));
-                          return (
-                            <>
-                              <a className={linkClass} href={href}>
-                                {exact || (selectedContext === candidateContext && !realm)
-                                  ? target.label || m.subject_value_unlabelled({}, o)
-                                  : m.music_context_open_general_target({}, o)}
-                              </a>
-                              {(realm || (selectedContext !== candidateContext && !target.targetKind)) && (
-                                <span className="ms-2 text-muted-foreground">
-                                  {m.music_context_exact_target_unsupported({}, o)}
-                                </span>
-                              )}
-                              {returnUnavailable && (
-                                <span className="ms-2 text-muted-foreground">
-                                  {m.music_context_visit_return_unavailable({}, o)}
-                                </span>
-                              )}
-                            </>
-                          );
-                        })()
-                      ) : link.role.unknown === 'novalue' ? (
-                        m.subject_value_none({}, o)
-                      ) : link.role.unknown === 'somevalue' ? (
-                        m.subject_value_unknown({}, o)
-                      ) : link.role.unknown ? (
-                        m.music_context_unknown_value({}, o)
-                      ) : (
-                        link.role.text
-                      )}
+                      {link.role.label}:{' '}
+                      {link.role.target
+                        ? (() => {
+                            const target = link.role!.target!;
+                            const targetBase =
+                              target.targetKind && !realm
+                                ? catalogueEntries.musicContext({
+                                    id: target.id,
+                                    label: target.label,
+                                    locale,
+                                    context: selectedContext,
+                                  }).href
+                                : subjectHref({ id: target.id, label: target.label }, locale).href;
+                            const exact = !!target.targetKind && !realm;
+                            const exactWithReturn =
+                              exact && target.id !== id && visibleAddress
+                                ? musicContextTargetHref(targetBase, visibleAddress, locale, target.id)
+                                : undefined;
+                            const generalWithReturn =
+                              !exact && !realm && visibleAddress
+                                ? withSubjectVisitReturn(targetBase, visibleAddress)
+                                : targetBase;
+                            const generalFits = fitsRetainedAddress(generalWithReturn);
+                            const href = exact
+                              ? target.id === id || !visibleAddress
+                                ? targetBase
+                                : (exactWithReturn ?? targetBase)
+                              : generalFits
+                                ? generalWithReturn
+                                : targetBase;
+                            const returnUnavailable =
+                              !!visibleAddress &&
+                              ((exact && target.id !== id && !exactWithReturn) || (!exact && !realm && !generalFits));
+                            return (
+                              <>
+                                <a className={linkClass} href={href}>
+                                  {exact || (selectedContext === candidateContext && !realm)
+                                    ? target.label || m.subject_value_unlabelled({}, o)
+                                    : m.music_context_open_general_target({}, o)}
+                                </a>
+                                {(realm || (selectedContext !== candidateContext && !target.targetKind)) && (
+                                  <span className="ms-2 text-muted-foreground">
+                                    {m.music_context_exact_target_unsupported({}, o)}
+                                  </span>
+                                )}
+                                {returnUnavailable && (
+                                  <span className="ms-2 text-muted-foreground">
+                                    {m.music_context_visit_return_unavailable({}, o)}
+                                  </span>
+                                )}
+                              </>
+                            );
+                          })()
+                        : link.role.unknown === 'novalue'
+                          ? m.subject_value_none({}, o)
+                          : link.role.unknown === 'somevalue'
+                            ? m.subject_value_unknown({}, o)
+                            : link.role.unknown
+                              ? m.music_context_unknown_value({}, o)
+                              : link.role.text}
                     </span>
                   )}
                 </li>
@@ -802,12 +802,11 @@ function MusicContextReadingBound({
             )}
           </div>
 
-          {canCorrect &&
-            correctionHref && (
-              <a className={linkClass} href={correctionHref}>
-                {m.music_context_correct({}, o)}
-              </a>
-            )}
+          {canCorrect && correctionHref && (
+            <a className={linkClass} href={correctionHref}>
+              {m.music_context_correct({}, o)}
+            </a>
+          )}
         </div>
       )}
       {!profile && failure && failedAddress && (

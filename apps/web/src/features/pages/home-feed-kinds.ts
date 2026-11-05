@@ -11,7 +11,13 @@ export function homeFeedKind(value: unknown): string | undefined {
   return value;
 }
 
-export type HomeKindChoice = { id: string; text: string; lang?: string; description?: string; descriptionLang?: string };
+export type HomeKindChoice = {
+  id: string;
+  text: string;
+  lang?: string;
+  description?: string;
+  descriptionLang?: string;
+};
 export function homeKindChoice(kind: DiscoveryKinds['values'][number], locale: string): HomeKindChoice {
   homeFeedKind(kind.id);
   const label = pickText(kind.labels, locale);

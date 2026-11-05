@@ -155,7 +155,12 @@ test('the mounted music-context reader selects, pages, retries and returns throu
         initialAttempts += 1;
         return Promise.resolve(
           initialAttempts === 1
-            ? { ...successful('schema:location', 'Initial row', 'initial-token', null), links: [], next: null, relationsUnavailable: true }
+            ? {
+                ...successful('schema:location', 'Initial row', 'initial-token', null),
+                links: [],
+                next: null,
+                relationsUnavailable: true,
+              }
             : successful('schema:location', 'Initial row', 'initial-token'),
         );
       }
@@ -163,7 +168,12 @@ test('the mounted music-context reader selects, pages, retries and returns throu
         pageAttempts += 1;
         return Promise.resolve(
           pageAttempts === 1
-            ? { ...successful('schema:location', 'Current venue', 'current-token', null), links: [], next: null, relationsUnavailable: true }
+            ? {
+                ...successful('schema:location', 'Current venue', 'current-token', null),
+                links: [],
+                next: null,
+                relationsUnavailable: true,
+              }
             : successful('schema:location', 'Second page endpoint', 'page-token', null),
         );
       }

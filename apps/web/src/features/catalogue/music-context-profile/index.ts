@@ -36,7 +36,9 @@ export type MusicContextLink = {
         property: string;
         label: string;
         text?: string | undefined;
-        target?: { id: string; label: string; targetKind?: Exclude<MusicContextKind, 'unsupported'> | undefined } | undefined;
+        target?:
+          | { id: string; label: string; targetKind?: Exclude<MusicContextKind, 'unsupported'> | undefined }
+          | undefined;
         unknown?: 'somevalue' | 'novalue' | 'value' | undefined;
       }
     | undefined;
@@ -232,8 +234,7 @@ export async function readMusicContext(
                 ? row.related?.[role.value.content]
                 : undefined;
             const roleVisible =
-              !!role &&
-              (role.value.type !== 'value' || roleField?.datatype !== 'wikibase-item' || !!roleTarget);
+              !!role && (role.value.type !== 'value' || roleField?.datatype !== 'wikibase-item' || !!roleTarget);
             const targetKind = summary.type ? musicContextKind(release, summary.type) : 'unsupported';
             return {
               id: summary.id,
@@ -243,7 +244,13 @@ export async function readMusicContext(
               position: index + 1,
               ...(typeof row.statement.id === 'string' ? { occurrence: row.statement.id } : {}),
               ...(date && dateField
-                ? { date: { property: dateField.id, label: dateField.label, time: timePresentation(date.value, locale) } }
+                ? {
+                    date: {
+                      property: dateField.id,
+                      label: dateField.label,
+                      time: timePresentation(date.value, locale),
+                    },
+                  }
                 : {}),
               ...(roleVisible && role && roleField
                 ? {

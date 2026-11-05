@@ -31,7 +31,12 @@ const actions = [
 const value = (content: unknown) => ({ type: 'value', content });
 const part = (property: string, content: unknown) => ({ property: { id: property }, value: value(content) });
 const source = (url: string) => ({ parts: [part('schema:url', url)] });
-const fact = (property: string, content: unknown, qualifiers: unknown[] = [], url = 'https://source.example.test/music') => ({
+const fact = (
+  property: string,
+  content: unknown,
+  qualifiers: unknown[] = [],
+  url = 'https://source.example.test/music',
+) => ({
   property: { id: property },
   value: typeof content === 'object' && content !== null && 'type' in content ? content : value(content),
   qualifiers,
@@ -191,7 +196,9 @@ test('released music context Types admit sourced identities, facts, exact credit
   expect(venueRead.response.status).toBe(200);
   expect(venueRead.body.subject.statements['schema:containedInPlace'][0]).toMatchObject({
     value: value(area.id),
-    references: [{ parts: [{ property: { id: 'schema:url' }, value: value('https://music.example.test/venue-location') }] }],
+    references: [
+      { parts: [{ property: { id: 'schema:url' }, value: value('https://music.example.test/venue-location') }] },
+    ],
   });
   const eventRead = await send('GET', `/v1/subjects/${event.id}`, undefined, 'anonymous');
   expect(eventRead.response.status).toBe(200);
@@ -209,7 +216,9 @@ test('released music context Types admit sourced identities, facts, exact credit
       { property: { id: 'wdt:P1932' }, value: value('Harbor Quartet') },
       { property: { id: 'wdt:P3831' }, value: value(role.id) },
     ],
-    references: [{ parts: [{ property: { id: 'schema:url' }, value: value('https://music.example.test/performer-credit') }] }],
+    references: [
+      { parts: [{ property: { id: 'schema:url' }, value: value('https://music.example.test/performer-credit') }] },
+    ],
   });
 
   const relations = await send(
@@ -220,8 +229,13 @@ test('released music context Types admit sourced identities, facts, exact credit
   );
   expect(relations.response.status).toBe(200);
   expect(relations.body.relations[0]).toMatchObject({
-    statement: { value: value(artist.id), qualifiers: [{ property: { id: 'wdt:P1303' }, value: value(instrument.id) }] },
-    related: { [instrument.id]: { id: instrument.id, type: 'wd:Q34379', label: { value: 'Electric guitar', language: 'en' } } },
+    statement: {
+      value: value(artist.id),
+      qualifiers: [{ property: { id: 'wdt:P1303' }, value: value(instrument.id) }],
+    },
+    related: {
+      [instrument.id]: { id: instrument.id, type: 'wd:Q34379', label: { value: 'Electric guitar', language: 'en' } },
+    },
   });
 
   const wrongTarget = await send('POST', `/v1/subjects/${event.id}/candidates`, {
@@ -252,13 +266,22 @@ test('released music context Types admit sourced identities, facts, exact credit
     context: GLOBAL_CONTEXT,
     actions: { statementPropose: 'allowed' },
   });
-  expect(Object.values(page.body.reads).some((read: any) => read.status === 200 && read.body.subject?.id === event.id)).toBe(
-    true,
+  expect(
+    Object.values(page.body.reads).some((read: any) => read.status === 200 && read.body.subject?.id === event.id),
+  ).toBe(true);
+  const anonymous = await send(
+    'POST',
+    '/v1/pages:read',
+    { target: { subject: event.id }, languages: ['en'] },
+    'anonymous',
   );
-  const anonymous = await send('POST', '/v1/pages:read', { target: { subject: event.id }, languages: ['en'] }, 'anonymous');
   expect(anonymous.body.viewer).toMatchObject({ state: 'anonymous', actions: { statementPropose: 'denied' } });
   const denied = await send('POST', '/v1/pages:read', { target: { subject: event.id }, languages: ['en'] }, 'outsider');
-  expect(denied.body.viewer).toMatchObject({ state: 'account', account: outsider, actions: { statementPropose: 'denied' } });
+  expect(denied.body.viewer).toMatchObject({
+    state: 'account',
+    account: outsider,
+    actions: { statementPropose: 'denied' },
+  });
 
   const oldRelease = await send(
     'GET',
@@ -270,7 +293,12 @@ test('released music context Types admit sourced identities, facts, exact credit
   await write(`/v1/subjects/${venue.id}:hide`, { reason: 'The admitted venue is withheld.' });
   const hiddenVenue = await send('GET', `/v1/subjects/${venue.id}`, undefined, 'anonymous');
   expect(hiddenVenue.response.status).toBe(404);
-  const eventAfterHide = await send('GET', `/v1/subjects/${event.id}/relations?property=schema:location&context=${GLOBAL_CONTEXT}&limit=20`, undefined, 'anonymous');
+  const eventAfterHide = await send(
+    'GET',
+    `/v1/subjects/${event.id}/relations?property=schema:location&context=${GLOBAL_CONTEXT}&limit=20`,
+    undefined,
+    'anonymous',
+  );
   expect(eventAfterHide.response.status).toBe(200);
   expect(eventAfterHide.body.relations).toEqual([]);
   expect(JSON.stringify(eventAfterHide.body)).not.toContain(venue.id);

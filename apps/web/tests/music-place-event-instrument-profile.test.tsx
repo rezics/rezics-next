@@ -41,7 +41,10 @@ function subject(): SubjectRead {
             references: [
               {
                 parts: [
-                  { property: { id: 'schema:url', data_type: 'url' }, value: value('https://festival.example.test/program') },
+                  {
+                    property: { id: 'schema:url', data_type: 'url' },
+                    value: value('https://festival.example.test/program'),
+                  },
                 ],
                 hash: 'start-date-source',
               },
@@ -83,7 +86,12 @@ function credit(instrument: string, statementId: string, disclosed = true) {
       references: [],
       rezics: { release: bundledDigest, revision: 3 },
     },
-    summary: { id: performer, type: 'schema:Person', types: ['schema:Person'], label: { value: 'Harbor Quartet', language: 'en' } },
+    summary: {
+      id: performer,
+      type: 'schema:Person',
+      types: ['schema:Person'],
+      label: { value: 'Harbor Quartet', language: 'en' },
+    },
     related: disclosed
       ? {
           [instrument]: {
@@ -97,29 +105,46 @@ function credit(instrument: string, statementId: string, disclosed = true) {
   };
 }
 
-function client(options: {
-  status?: number;
-  throw?: boolean;
-  rows?: unknown[];
-} = {}) {
+function client(
+  options: {
+    status?: number;
+    throw?: boolean;
+    rows?: unknown[];
+  } = {},
+) {
   const relationReads: unknown[] = [];
   const native = {
     subjects: ({ id }: { id: string }) => ({
-      get: async ({ query, fetch }: { query: { context: string; language: string }; fetch: { cache: string; redirect: string } }) => {
+      get: async ({
+        query,
+        fetch,
+      }: {
+        query: { context: string; language: string };
+        fetch: { cache: string; redirect: string };
+      }) => {
         expect(id).toBe(event);
         expect(query).toEqual({ context: candidateContext, language: locale });
         expect(fetch).toEqual({ cache: 'no-store', redirect: 'manual' });
         return { status: 200, data: subject() };
       },
       relations: {
-        get: async ({ query, fetch }: { query: Record<string, unknown>; fetch: { cache: string; redirect: string } }) => {
+        get: async ({
+          query,
+          fetch,
+        }: {
+          query: Record<string, unknown>;
+          fetch: { cache: string; redirect: string };
+        }) => {
           relationReads.push({ query, fetch });
           if (options.throw) throw new TypeError('network unavailable');
           if (options.status !== undefined) return { status: options.status };
           return {
             status: 200,
             data: {
-              relations: options.rows ?? [credit(guitar, '00000000-0000-4000-8000-00000000e211'), credit(bass, '00000000-0000-4000-8000-00000000e212')],
+              relations: options.rows ?? [
+                credit(guitar, '00000000-0000-4000-8000-00000000e211'),
+                credit(bass, '00000000-0000-4000-8000-00000000e212'),
+              ],
               next: null,
               freshness: { caught_up: true },
             },
@@ -146,7 +171,12 @@ test('released music context reads source-bearing partial event time and the exa
     stream: 'schema:performer',
   });
   if (!read.ok) throw new Error('expected the admitted music event');
-  expect(read.public.subject).toMatchObject({ id: event, type: 'schema:MusicEvent', release: bundledDigest, context: candidateContext });
+  expect(read.public.subject).toMatchObject({
+    id: event,
+    type: 'schema:MusicEvent',
+    release: bundledDigest,
+    context: candidateContext,
+  });
   expect(read.facts.find((fact) => fact.property === 'schema:startDate')?.time).toMatchObject({
     state: 'supported',
     date: '+2025-06',
