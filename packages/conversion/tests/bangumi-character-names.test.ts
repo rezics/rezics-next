@@ -41,6 +41,24 @@ function facts(output: ReturnType<typeof convert>, property: string) {
   );
 }
 
+test('serialized character projections replay the same source digest and complete name and measurement proposals', () => {
+  const source = {
+    id: 12393,
+    name: '牧瀬紅莉栖',
+    infobox: infobox(sourceAliases).replace('|性别= 女', '|性别= 女\r\n|身高=160cm'),
+  };
+  const input = { external_id: 'character:12393', record_revision: 'pinned-format-1', record: source };
+  const context = { source: 'bangumi_cross_media', subjectId: characterId };
+  const original = convertCrossMediaEntity(input, context);
+  const replay = convertCrossMediaEntity(
+    { ...input, record: JSON.parse(JSON.stringify(original.normalizedRecord)) },
+    context,
+  );
+  expect(replay.digest).toBe(original.digest);
+  expect(replay.normalizedRecord).toEqual(original.normalizedRecord);
+  expect(replay.proposals).toEqual(original.proposals);
+});
+
 test('pinned Crt source names and aliases retain exact spelling and explicit label language', () => {
   const output = convert();
   const bootstrap = convert(sourceAliases, false);
