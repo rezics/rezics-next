@@ -218,14 +218,11 @@ export type SubjectIdentityOperation =
 export async function observeSubjectIdentityOperation(
   tx: CommandTransaction,
   id: string,
-): Promise<
-  | {
-      operation: SubjectIdentityOperation;
-      original: string;
-      terminal: string;
-    }
-  | null
-> {
+): Promise<{
+  operation: SubjectIdentityOperation;
+  original: string;
+  terminal: string;
+} | null> {
   const route = routeOf(id);
   if (route === null) return null;
   const found = (await tx.query(selectJobById.sql, [partitionOf(route), id])).rows[0] as

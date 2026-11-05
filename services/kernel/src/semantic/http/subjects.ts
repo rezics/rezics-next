@@ -16,11 +16,7 @@ import { readSubjectSummaries, summaryAuthorization } from '../summaries.ts';
 import { languageRanges } from '../language.ts';
 import { CoverSummarySchema, SubjectSummarySchema } from './summaries.ts';
 import { SourceSchema, BatchReferenceSchema } from '@rezics/definitions/bulk';
-import {
-  admitMergeSubjects,
-  observeSubjectIdentityOperation,
-  SubjectRedirectError,
-} from '../merges.ts';
+import { admitMergeSubjects, observeSubjectIdentityOperation, SubjectRedirectError } from '../merges.ts';
 import { IdentityEpochStoreError } from '../identity-adapters/index.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
@@ -972,10 +968,7 @@ function subjectRoutes(
           202: withHeaders(
             t.Object(
               {
-                operation: t.Object(
-                  { id: t.String({ format: 'uuid' }) },
-                  { additionalProperties: false },
-                ),
+                operation: t.Object({ id: t.String({ format: 'uuid' }) }, { additionalProperties: false }),
               },
               { additionalProperties: false },
             ),
@@ -1055,10 +1048,7 @@ function subjectRoutes(
           200: t.Object(
             {
               operation: t.Union([
-                t.Object(
-                  { id: t.String({ format: 'uuid' }), done: t.Literal(false) },
-                  { additionalProperties: false },
-                ),
+                t.Object({ id: t.String({ format: 'uuid' }), done: t.Literal(false) }, { additionalProperties: false }),
                 t.Object(
                   {
                     id: t.String({ format: 'uuid' }),
@@ -1103,26 +1093,30 @@ function subjectRoutes(
         };
         try {
           const observed = await admission.run('normal', job, () =>
-            withReadTransaction(pool, async (tx) => {
-              if (!(await mergeGrant(tx))) return null;
-              const saved = await observeSubjectIdentityOperation(tx, params.id);
-              if (!saved) return null;
-              for (const subject of [saved.original, saved.terminal]) {
-                const route = routeOf(subject);
-                if (route === null) return null;
-                const readable = await accessCheck(
-                  access(),
-                  actor,
-                  'subject:read',
-                  { route, id: subject, eligibility: subjectReadEligibility({ route, id: subject }) },
-                  { pool, deadline: job.deadline },
-                );
-                if (!(await readable(tx))) return null;
-                const visible = await readVisibility.run(tx, { route, subject_id: subject });
-                if (!visible || visible.visibility !== 'visible') return null;
-              }
-              return saved;
-            }, job.deadline),
+            withReadTransaction(
+              pool,
+              async (tx) => {
+                if (!(await mergeGrant(tx))) return null;
+                const saved = await observeSubjectIdentityOperation(tx, params.id);
+                if (!saved) return null;
+                for (const subject of [saved.original, saved.terminal]) {
+                  const route = routeOf(subject);
+                  if (route === null) return null;
+                  const readable = await accessCheck(
+                    access(),
+                    actor,
+                    'subject:read',
+                    { route, id: subject, eligibility: subjectReadEligibility({ route, id: subject }) },
+                    { pool, deadline: job.deadline },
+                  );
+                  if (!(await readable(tx))) return null;
+                  const visible = await readVisibility.run(tx, { route, subject_id: subject });
+                  if (!visible || visible.visibility !== 'visible') return null;
+                }
+                return saved;
+              },
+              job.deadline,
+            ),
           );
           if (!observed) return conceal();
           return { operation: observed.operation };
