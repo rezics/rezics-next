@@ -233,12 +233,7 @@ test('Large Collections keep bounded point edits and resumable order repair', as
           committed.transactionId,
         );
         expect(
-          (
-            await advanceCollectionOrderRepair(
-              { pool: f.pool, clock: () => new Date() },
-              boundaryLocator,
-            )
-          ).value.state,
+          (await advanceCollectionOrderRepair({ pool: f.pool, clock: () => new Date() }, boundaryLocator)).value.state,
         ).toBe('stale');
         expect(await boundaryRows()).toEqual(afterCommit);
       }

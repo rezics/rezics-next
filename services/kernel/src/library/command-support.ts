@@ -56,10 +56,7 @@ export type TrustedAccountCommand = {
  */
 export type LibraryCommandExecutionBinding = <T>(dispatch: () => Promise<T>) => Promise<T>;
 
-export function runLibraryCommand<T>(
-  dispatch: () => Promise<T>,
-  bind?: LibraryCommandExecutionBinding,
-): Promise<T> {
+export function runLibraryCommand<T>(dispatch: () => Promise<T>, bind?: LibraryCommandExecutionBinding): Promise<T> {
   return bind ? bind(dispatch) : dispatch();
 }
 
