@@ -236,6 +236,7 @@ test('composed Character keeps names, traits, appearances, credits, exact Work/P
         new URL(personLink.href).searchParams.get('via'),
       );
       browser.location.href = `https://site.test${via}`;
+      const returned = pageFor(character);
       await act(async () =>
         root.render(
           createElement(
@@ -245,11 +246,11 @@ test('composed Character keeps names, traits, appearances, credits, exact Work/P
               OverviewContext.Provider,
               { value: { ...fixture.value, locale } },
               createElement(CharacterAssociationBridge, {
-                source: page,
+                source: returned,
                 children: [
                   createElement(CharacterOverview, {
                     key: 'profile',
-                    source: page,
+                    source: returned,
                     viewer: null,
                     locale,
                     public: fixture.profile.read,
@@ -258,7 +259,7 @@ test('composed Character keeps names, traits, appearances, credits, exact Work/P
                   }),
                   createElement(SubjectConnections, {
                     key: 'connections',
-                    page,
+                    page: returned,
                     viewer: { state: 'signed-out', csrfToken: null },
                     read: wrapped,
                   }),
