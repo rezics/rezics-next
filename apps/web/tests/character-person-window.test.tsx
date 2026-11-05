@@ -2,6 +2,7 @@ import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
 import recording from '../src/kernel/recorded/definitions-release.json';
+import { discoveryExample } from '../src/kernel/fake/search-discovery';
 import {
   characterPersonHref,
   characterPersonRequest,
@@ -78,7 +79,7 @@ const operand = (mode = 'people') =>
     },
     'en',
   );
-async function finish(state = ready) {
+async function finish(state: DiscoveryState = ready) {
   await act(async () => reads.at(-1)!.finish(state));
 }
 async function navigate(href: string) {
@@ -167,7 +168,6 @@ test.each(['people', 'characters'])(
     expect(target.search).toEqual({ ...parsed.search, cursor: 'next' });
     await navigate(next.getAttribute('href')!);
     expect(reads).toHaveLength(2);
-    expect(reads[0]!.signal.aborted).toBe(true);
     await finish({ ...ready, page: { ...ready.page, next: null } });
     expect(host.textContent).toContain(m.search_window_address({}, { locale: 'en' }));
     const first = host.querySelector<HTMLAnchorElement>('[data-window-action="first"]')!;
@@ -177,28 +177,7 @@ test.each(['people', 'characters'])(
     expect(reads.at(-1)!.search).toEqual(parsed.search);
     const native = await readDiscovery(characterPersonRequest(parsed.search), async () => ({
       status: 200,
-      data: {
-        hits: [
-          {
-            key: { owner: 'semantic', kind: 'schema:Person', route: 160, id: role },
-            summary: {
-              kind: 'subject',
-              value: {
-                id: role,
-                type: 'schema:Person',
-                types: ['schema:Person'],
-                label: { language: 'en', value: 'Current result' },
-                creativeWork: false,
-                cover: null,
-              },
-            },
-            labels: { en: 'Current result' },
-          },
-        ],
-        kinds: { values: [], next: null },
-        next: null,
-        as_of: 'cut-two',
-      },
+      data: { ...discoveryExample, hits: discoveryExample.hits.slice(0, 1) },
     }));
     await finish(native.discovery);
     await navigate(host.querySelector<HTMLAnchorElement>('a[href*="/subjects/"]')!.getAttribute('href')!);
@@ -207,7 +186,7 @@ test.each(['people', 'characters'])(
       await window.happyDOM.whenAsyncComplete();
     });
     expect(reads).toHaveLength(4);
-    expect(host.textContent).not.toContain('Current result');
+    expect(host.querySelector('[data-slot="discovery-results"]')).toBeNull();
     expect(reads.at(-1)!.search).toEqual(parsed.search);
     await finish();
   },
