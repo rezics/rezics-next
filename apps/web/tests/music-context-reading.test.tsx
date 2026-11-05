@@ -151,7 +151,7 @@ test('the mounted music-context reader selects, pages, retries and returns throu
   const transport = {
     read: (input: MusicContextAddress & { session?: string | undefined }): Promise<MusicContextRead> => {
       calls.push(input);
-      if (!input.stream && !input.cursor) {
+      if (!input.cursor && (!input.stream || (input.stream === 'schema:location' && initialAttempts === 1))) {
         initialAttempts += 1;
         return Promise.resolve(
           initialAttempts === 1
@@ -209,6 +209,10 @@ test('the mounted music-context reader selects, pages, retries and returns throu
     if (!initialRetry) throw new Error('Initial retry action was not rendered');
     await settle(() => initialRetry.click());
     expect(host.textContent).toContain('Initial row');
+    expect(calls.slice(0, 2)).toEqual([
+      { context: candidateContext },
+      { context: candidateContext, stream: 'schema:location', session: 'initial-token' },
+    ]);
 
     await choose('schema:performer');
     await choose('schema:location');
