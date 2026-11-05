@@ -135,6 +135,13 @@ test('bounded count-free facet state keeps absent and malformed selections remov
   });
   expect(JSON.stringify(model)).not.toMatch(/"(?:count|total)"/);
 
+  const partial = resourceLanguageRefinement([languageProperty], ['ja'], ready, true, 'partial');
+  expect(partial).toMatchObject({
+    applicability: 'partial',
+    readiness: 'ready',
+    actions: { select: true, continue: true },
+  });
+
   for (const status of ['preparing', 'unavailable', 'invalid', 'restart', 'refused', 'withheld'] as const) {
     const failed = resourceLanguageRefinement([languageProperty], ['ja'], { status });
     expect(failed.readiness).toBe(status);

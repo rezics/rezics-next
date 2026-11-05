@@ -18,6 +18,9 @@ test('facet validation closes both objects, reports missing fields and bounds si
   const cases: [unknown, string, FieldErrorCode][] = [
     [{}, '/facets', 'required'],
     [{ facets: null }, '/facets', 'invalid_type'],
+    [{ facets, kinds: 'collection' }, '/kinds', 'invalid_type'],
+    [{ facets, kinds: [] }, '/kinds', 'out_of_range'],
+    [{ facets, kinds: [''] }, '/kinds', 'invalid_format'],
     [{ facets: [null] }, '/facets/0', 'invalid_type'],
     [{ facets: [{}] }, '/facets/0/property', 'required'],
     [{ facets, 'a/b~': true }, '/a~1b~0', 'unknown_field'],
@@ -40,6 +43,7 @@ test('facet validation closes both objects, reports missing fields and bounds si
   expect(validateFacets({ facets: [{ property: 'schema:author' }] })).toEqual([
     { property: 'schema:author', size: 10 },
   ]);
+  expect(validateFacets({ facets, kinds: ['collection', 'schema:Book'] })).toEqual(facets);
 });
 
 test('facet admission preserves type intersections and saved anchors without spending filter limits', () => {

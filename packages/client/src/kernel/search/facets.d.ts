@@ -7,6 +7,7 @@ export type ScopedFacetRequest = Readonly<{
     conditions?: unknown;
     text?: string;
     filter?: unknown;
+    kinds?: string[];
     languages?: string[];
     facets: Facet[];
 }>;

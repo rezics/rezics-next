@@ -358,6 +358,12 @@ const page = v.object({
   spaceEntries: v.exactOptional(spaceEntryPage),
   hits: v.pipe(v.array(hit), v.maxLength(100)),
   kinds,
+  applicability: v.exactOptional(
+    v.strictObject({
+      type: v.picklist(['all', 'partial', 'none', 'unknown']),
+      statement: v.picklist(['all', 'partial', 'none', 'unknown']),
+    }),
+  ),
   next: v.nullable(v.string()),
   as_of: v.string(),
   freshness,

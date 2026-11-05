@@ -1,5 +1,6 @@
 import { TextDiagnosticSchema } from './text-diagnostic.ts';
 export { FactSchema } from './catalogue.ts';
+import { FILTER_LIMITS } from '@rezics/filter';
 import { createCatalogueResponseAdapter, searchResponse, type SearchHttpResponse } from './catalogue.ts';
 import { releaseGroupsResponse, releaseChildrenResponse, releaseResponse } from './releases.ts';
 import { facetResponse } from './facets.ts';
@@ -414,6 +415,9 @@ export function searchRoutes<App>(
             text: t.Optional(t.String()),
             filter: t.Optional(t.Any()),
             conditions: t.Optional(t.Any()),
+            kinds: t.Optional(
+              t.Array(t.String({ minLength: 1, maxLength: 128 }), { minItems: 1, maxItems: FILTER_LIMITS.in }),
+            ),
             languages: t.Optional(t.Array(t.String(), { minItems: 1, maxItems: 8 })),
             scope: t.Optional(
               t.Object(

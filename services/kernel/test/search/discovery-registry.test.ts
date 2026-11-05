@@ -13,6 +13,7 @@ import {
 } from '../../src/search/discovery-documents.ts';
 import {
   createDiscoveryRegistry,
+  discoveryFilterApplicability,
   discoveryDomain,
   evaluateDiscoveryCondition,
   validateKindCountEvidence,
@@ -49,6 +50,22 @@ const options: DiscoveryRegistryOptions = {
   },
 };
 const registry = createDiscoveryRegistry(options);
+const registryWithCollection = createDiscoveryRegistry({
+  ...options,
+  ownerAdapters: {
+    collection: {
+      readiness: 'ready',
+      adapter: {
+        owner: 'commerce',
+        kind: 'collection',
+        metadata: { id: 'collection', labels: { en: 'Collection' }, icon: 'collection' },
+        readCurrent: noRead,
+      },
+    },
+    review: { readiness: 'unavailable' },
+    space: { readiness: 'unavailable' },
+  },
+});
 const accountKey: DiscoveryKey = { owner: 'accounts', kind: 'account', route, id: nativeId };
 const personKey: DiscoveryKey = { owner: 'semantic', kind: 'schema:Person', route, id: nativeId };
 const account = (handle: string | null): IndexedAccount => ({
@@ -69,6 +86,20 @@ const subject: IndexedSubject = {
   descriptions: [{ language: 'en', value: 'Public description' }],
   statements: [{ property: 'schema:inLanguage', value: 'en', facet: { kind: 'code' } }],
 };
+
+test('refinement applicability comes from registered domains for the selected population', () => {
+  expect(discoveryFilterApplicability(registry, ['schema:Person'])).toEqual({ type: 'all', statement: 'all' });
+  expect(discoveryFilterApplicability(registryWithCollection, ['collection'])).toEqual({
+    type: 'none',
+    statement: 'none',
+  });
+  expect(discoveryFilterApplicability(registryWithCollection, ['collection', 'schema:Person'])).toEqual({
+    type: 'partial',
+    statement: 'partial',
+  });
+  expect(discoveryFilterApplicability(registry)).toEqual({ type: 'partial', statement: 'partial' });
+  expect(discoveryFilterApplicability(registry, null)).toEqual({ type: 'unknown', statement: 'unknown' });
+});
 
 // These tests exercise the real registry and pure document boundary; they do not certify a native mixed population.
 test('released catalogue kinds and Account have independent tagged identities and closed owner/route dispatch', () => {

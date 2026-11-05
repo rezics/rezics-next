@@ -9,6 +9,7 @@ import { RESOURCE_LANGUAGE_PROPERTY, resourceLanguageRefinement } from '../src/s
 import type { FacetState } from '../src/search/refinement/request';
 import { SearchInputRecovery } from '../src/search/search-input-recovery';
 import type { SearchPageData } from '../src/search/search';
+import { discoveryExample } from '../src/kernel/fake/search-discovery';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('@rezics/ui/bottom-sheet', () => ({
@@ -135,7 +136,16 @@ function resourceLanguagePageData(editing = false): SearchPageData {
     ...pageData(editing),
     queryState,
     type: queryState.type,
-    condition: queryState.condition,
+    discovery: {
+      status: 'ready',
+      page: {
+        hits: [],
+        kinds: { values: [], next: null },
+        applicability: { type: 'all', statement: 'all' },
+        next: null,
+        as_of: '2026-11-03T00:00:00.000Z',
+      },
+    },
     selectedFacets: queryState.facets,
     selectedFacetLabels: {},
     refinement: { key: 'resource-language-test', properties, initial },
@@ -144,6 +154,86 @@ function resourceLanguagePageData(editing = false): SearchPageData {
       queryState.facets[RESOURCE_LANGUAGE_PROPERTY] ?? [],
       initial,
     ),
+  };
+}
+
+function applicabilityPageData(
+  kinds: string[],
+  applicability: { type: 'all' | 'partial' | 'none'; statement: 'all' | 'partial' | 'none' },
+  selected = false,
+  collectionHit = false,
+): SearchPageData {
+  const queryState = searchLoaderDeps({
+    q: 'Mira',
+    kinds,
+    ...(selected ? { type: 'schema:Book', 'f.schema:author': ['writer-1'] } : {}),
+  });
+  const page = structuredClone(discoveryExample);
+  page.kinds = {
+    values: [
+      { id: 'collection', labels: { en: 'Collection' }, icon: 'collection' },
+      { id: 'schema:Book', labels: { en: 'Book' }, icon: 'book' },
+    ],
+    next: null,
+  };
+  page.applicability = applicability;
+  if (collectionHit) {
+    const id = crypto.randomUUID();
+    const title = 'Current public collection';
+    page.hits = [
+      {
+        key: { owner: 'library', kind: 'collection', route: 0, id },
+        summary: {
+          kind: 'collection',
+          value: {
+            id,
+            title,
+            description: null,
+            card: {
+              kind: 'collection',
+              id,
+              destination: `/collections/${id}`,
+              title,
+              description: null,
+              visibility: 'public',
+              revision: 1,
+              sourceGeneration: '1',
+              presentationKind: null,
+              presentationKindSource: 'mixed',
+              cover: null,
+              coverSource: 'none',
+              curator: { state: 'unavailable', reason: 'withheld' },
+              preview: { state: 'empty' },
+              membershipKind: 'dynamic',
+              outputGeneration: '1',
+            },
+          },
+        },
+      },
+    ];
+  } else page.hits = [];
+  return {
+    ...pageData(),
+    queryState,
+    type: queryState.type,
+    condition: queryState.condition,
+    typeLabels: { en: 'Book' },
+    selectedFacets: queryState.facets,
+    discovery: { status: 'ready', page },
+    refinement: {
+      key: 'search-applicability',
+      properties: [
+        { property: 'type', labels: {}, mode: 'types', datatype: 'type', units: [] },
+        { property: 'schema:author', labels: { en: 'Author' }, mode: 'values', datatype: 'wikibase-item', units: [] },
+      ],
+      initial: {
+        status: 'ready',
+        page: {
+          as_of: page.as_of,
+          facets: [{ property: 'schema:author', values: [{ value: 'writer-1', labels: { en: 'Writer' } }], next: null }],
+        },
+      },
+    },
   };
 }
 
@@ -331,6 +421,47 @@ test('resource-language refusal, preparation, unavailable and missing-release st
   const missingHtml = renderToStaticMarkup(createElement(SearchPage, { query: 'Mira', data: missing, locale: 'en' }));
   expect(missingHtml).toContain(m.search_resource_language_not_applicable({}, options.en));
   expect(missingHtml).toContain(m.search_resource_language_clear({}, options.en));
+});
+
+test('owner-only, mixed and catalogue populations retain predicates while exposing only applicable refinements', () => {
+  const owner = applicabilityPageData(['collection'], { type: 'none', statement: 'none' }, false, true);
+  const ownerHtml = renderToStaticMarkup(createElement(SearchPage, { query: 'Mira', data: owner, locale: 'en' }));
+  expect(ownerHtml).toContain('Current public collection');
+  expect(ownerHtml).toContain(`href="/en/collections/`);
+  expect(ownerHtml).toContain('name="q" value="Mira"');
+  expect(ownerHtml).toContain('name="kinds"');
+  expect(ownerHtml).toContain(m.search_refinement_owner_only({}, options.en));
+  expect(ownerHtml).not.toContain('name="type"');
+  expect(ownerHtml).not.toContain('name="f.schema:author"');
+  expect(ownerHtml).not.toContain('Author');
+
+  const retained = applicabilityPageData(['collection'], { type: 'none', statement: 'none' }, true);
+  const retainedHtml = renderToStaticMarkup(createElement(SearchPage, { query: 'Mira', data: retained, locale: 'en' }));
+  expect(retainedHtml).toContain('name="type" value="schema:Book"');
+  expect(retainedHtml).toContain('name="f.schema:author" value="writer-1"');
+  expect(retainedHtml).toContain(m.search_refinement_not_applicable({}, options.en));
+  const repair = new window.DOMParser()
+    .parseFromString(retainedHtml, 'text/html')
+    .querySelector('[role="status"] a');
+  expect(repair).not.toBeNull();
+  const repairUrl = new URL(repair!.getAttribute('href')!, 'https://search.test');
+  expect(repairUrl.searchParams.has('kinds')).toBe(false);
+  expect(repairUrl.searchParams.get('type')).toBe('schema:Book');
+  expect(repairUrl.searchParams.get('f.schema:author')).toBe('writer-1');
+
+  for (const [kinds, applicability] of [
+    [['collection', 'schema:Book'], { type: 'partial', statement: 'partial' }],
+    [['schema:Book'], { type: 'all', statement: 'all' }],
+  ] as const) {
+    const data = applicabilityPageData([...kinds], applicability, true);
+    const html = renderToStaticMarkup(createElement(SearchPage, { query: 'Mira', data, locale: 'en' }));
+    expect(html).toContain(m.search_subject_type({}, options.en));
+    expect(html).toContain('name="type"');
+    expect(html).toContain('name="f.schema:author"');
+    expect(html).toContain('writer-1');
+    if (applicability.type === 'partial') expect(html).toContain(m.search_refinement_partial({}, options.en));
+    else expect(html).not.toContain(m.search_refinement_partial({}, options.en));
+  }
 });
 
 test('mobile Filters heading follows the supplied locale while ambient English differs', async () => {

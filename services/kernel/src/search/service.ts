@@ -1753,6 +1753,7 @@ export function createSearchService({
               meaning: {
                 text: normalized.text ?? null,
                 filter: admitted,
+                kinds: scopedRequest.kinds ?? null,
                 release: kindDigest(current),
                 languages: languages ?? null,
               },
@@ -1763,6 +1764,7 @@ export function createSearchService({
       const { languages: languageChain, ...facetRequest } = request;
       const { languages } = validateHitOptions({ languages: languageChain });
       const facets = validateFacets(facetRequest);
+      const kinds = request.kinds;
       admitFacetPage(facets);
       const { text, filter } = validate({
         ...(request.text === undefined ? {} : { text: request.text }),
@@ -1772,6 +1774,7 @@ export function createSearchService({
         principal,
         text,
         originalFilter: filter === undefined ? undefined : catalogueFilter(filter),
+        ...(kinds ? { kinds } : {}),
         facets,
         languages,
         now,
@@ -1795,6 +1798,7 @@ export function createSearchService({
           text,
           filter: catalogue,
           originalFilter: filter === undefined ? undefined : catalogueFilter(filter),
+          ...(kinds ? { kinds } : {}),
           release: current,
           facets,
           languages,

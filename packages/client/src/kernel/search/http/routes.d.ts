@@ -1545,6 +1545,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                         text?: string;
                         filter?: any;
                         conditions?: any;
+                        kinds?: string[];
                         languages?: string[];
                         scope?: {
                             kind: "collection" | "realm";

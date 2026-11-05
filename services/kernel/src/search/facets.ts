@@ -1,4 +1,4 @@
-import { admitFilter, FilterError, walkFilter, type FilterDocument, type FilterRelease } from '@rezics/filter';
+import { admitFilter, FILTER_LIMITS, FilterError, walkFilter, type FilterDocument, type FilterRelease } from '@rezics/filter';
 import { ProblemError, type FieldErrorCode } from '../http/problem.ts';
 import { LIST_CURSOR_BOUNDS } from '../tokens/list-cursor.ts';
 import type { FacetDiscoveryRequest, FacetDiscoveryScope } from './facet-discovery-contract.ts';
@@ -13,6 +13,7 @@ export type ScopedFacetRequest = Readonly<{
   conditions?: unknown;
   text?: string;
   filter?: unknown;
+  kinds?: string[];
   languages?: string[];
   facets: Facet[];
 }>;
@@ -65,7 +66,8 @@ function closed(input: unknown, fields: string[], pointer: string): Record<strin
 }
 
 export function validateFacets(request: FacetRequest): Facet[] {
-  const body = closed(request, ['text', 'filter', 'facets'], '');
+  const body = closed(request, ['text', 'filter', 'kinds', 'facets'], '');
+  if (body.kinds !== undefined) validateFacetKinds(body.kinds, '/kinds');
   if (body.facets === undefined) invalid('/facets', 'required');
   if (!Array.isArray(body.facets)) invalid('/facets', 'invalid_type');
   if (body.facets.length < 1 || body.facets.length > 8) invalid('/facets', 'out_of_range');
@@ -89,9 +91,20 @@ export function validateFacets(request: FacetRequest): Facet[] {
   });
 }
 
+function validateFacetKinds(value: unknown, pointer: string): string[] {
+  if (value === undefined) invalid(pointer, 'invalid_type');
+  if (!Array.isArray(value)) invalid(pointer, 'invalid_type');
+  if (value.length < 1 || value.length > FILTER_LIMITS.in) invalid(pointer, 'out_of_range');
+  if (
+    value.some((entry) => typeof entry !== 'string' || entry.length < 1 || entry.length > 128)
+  )
+    invalid(pointer, 'invalid_format');
+  return value as string[];
+}
+
 /** Validate the additive scoped wire while leaving semantic conditions to shared Search admission. */
 export function validateScopedFacetRequest(request: unknown): ScopedFacetRequest {
-  const body = closed(request, ['text', 'filter', 'languages', 'scope', 'conditions', 'facets'], '');
+  const body = closed(request, ['text', 'filter', 'kinds', 'languages', 'scope', 'conditions', 'facets'], '');
   if (body.scope === undefined) invalid('/scope', 'required');
   const scope = closed(body.scope, ['kind', 'id'], '/scope');
   if (scope.kind !== 'realm' && scope.kind !== 'collection') invalid('/scope/kind', 'invalid_format');
@@ -107,9 +120,11 @@ export function validateScopedFacetRequest(request: unknown): ScopedFacetRequest
     (!Array.isArray(body.languages) || body.languages.some((v) => typeof v !== 'string'))
   )
     invalid('/languages', 'invalid_type');
+  const kinds = body.kinds === undefined ? undefined : validateFacetKinds(body.kinds, '/kinds');
   const facets = validateFacets({
     ...(body.text === undefined ? {} : { text: body.text as string }),
     ...(body.filter === undefined ? {} : { filter: body.filter }),
+    ...(kinds === undefined ? {} : { kinds }),
     facets: body.facets as FacetRequest['facets'],
   });
   return {
@@ -117,6 +132,7 @@ export function validateScopedFacetRequest(request: unknown): ScopedFacetRequest
     ...(body.conditions === undefined ? {} : { conditions: body.conditions }),
     ...(body.text === undefined ? {} : { text: body.text as string }),
     ...(body.filter === undefined ? {} : { filter: body.filter }),
+    ...(kinds === undefined ? {} : { kinds }),
     ...(body.languages === undefined ? {} : { languages: body.languages as string[] }),
     facets,
   };

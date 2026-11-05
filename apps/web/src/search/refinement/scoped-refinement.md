@@ -1,10 +1,11 @@
 # Scoped Search refinement
 
-Scoped Search results and property facets are built from the same `discoveryRequest` predicate. The additive facet
-request carries `scope: {kind,id}` plus `conditions` with the complete effective filter, including the scope leaf,
-alongside the existing text, filter, languages and facets fields. The `subjects:facets` route runs the shared Search
-scope admission with the verified actor, current reader, Access instance and request deadline before cursor or native
-producer work. Its response DTO and opaque per-property continuation remain owned by
+Scoped Search results and property facets use one effective predicate. The facet request carries the exact selected
+result kinds and `scope: {kind,id}` separately, alongside the complete semantic filter in `conditions` and `filter`.
+Combining these fields preserves the result population without sending Discovery-only kind or request-only scope leaves
+to the Subject facet compiler. The `subjects:facets` route runs the shared Search scope admission with the verified
+actor, current reader, Access instance and request deadline before cursor or native producer work. Its response DTO and
+opaque per-property continuation remain owned by
 [Public facet discovery](../../../../../docs/search-facets.md).
 
 Collection facets use the installed service-bound Search Scope candidate and current-membership interfaces. Search
