@@ -318,7 +318,7 @@ test('the mounted default Following composition retires viewer, cursor and row l
   const write = spyOn(followActions, 'setFollow').mockImplementation(({ data, headers }) => {
     const call = {
       ...deferred<FollowWriteResult>(),
-      input: structuredClone(data),
+      input: data,
       csrf: new Headers(headers).get('X-CSRF-Token'),
     };
     writes.push(call);
