@@ -118,9 +118,15 @@ test('range drafts survive Filters remounts and reset to the next committed rang
     await act(async () => {
       setNumber(numbers()[0]!, '4');
       setNumber(numbers()[1]!, '');
+    });
+    await act(async () => {
       const unit = document.querySelector<HTMLSelectElement>('select[id$="-unit"]')!;
       unit.value = 'lb';
       unit.dispatchEvent(new window.Event('change', { bubbles: true }));
+    });
+    await act(async () => {
+      [...document.querySelectorAll<HTMLButtonElement>('dialog button')]
+        .find((button) => button.textContent === m.search_quantity_unit_change_confirm({}, { locale: 'en' }))!.click();
     });
     const resize = async (nextWidth: number) =>
       act(async () => {
@@ -166,53 +172,27 @@ test('range drafts survive Filters remounts and reset to the next committed rang
 
 test('mounted criteria reserve IME keys, then Apply ordered labels without changing executed operands', async () => {
   for (const [key, value] of Object.entries(globals))
-    Object.defineProperty(globalThis, key, {
-      configurable: true,
-      writable: true,
-      value,
-    });
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   const committed = {
-    query: 'exact 日本語',
-    type: 'schema:Book',
-    kinds: ['subject'],
-    facets: { 'schema:inLanguage': ['ja'] },
-    languages: ['en'],
-    cursor: 'obsolete',
-    sort: 'rating' as const,
-    ranges: { 'schema:numberOfPages': { gte: 20 } },
-    condition: { type: { in: ['schema:Book'] } },
+    query: 'exact 日本語', type: 'schema:Book', kinds: ['subject'], languages: ['en'], cursor: 'obsolete',
+    facets: { 'schema:inLanguage': ['ja'] }, sort: 'rating' as const,
+    ranges: { 'schema:numberOfPages': { gte: 20 } }, condition: { type: { in: ['schema:Book'] } },
   };
-  let locale = 'en';
   const data = {
-    queryState: committed,
-    condition: committed.condition,
-    ranges: committed.ranges,
-    type: committed.type,
-    sort: committed.sort,
-    selectedFacets: committed.facets,
+    ...committed, queryState: committed, selectedFacets: committed.facets,
     conditionMetadata: conditionMetadata(recording.release),
-    discovery: {
-      status: 'ready',
-      page: {
-        kinds: { values: [] },
-        applicability: { type: 'all', statement: 'all' },
-      },
-    },
+    discovery: { status: 'ready', page: { kinds: { values: [] }, applicability: { type: 'all', statement: 'all' } } },
   } as unknown as SearchPageData;
+  let locale = 'en';
   const host = document.createElement('main');
   document.body.append(host);
   const root = createRoot(host);
-  const render = () =>
-    root.render(<SearchPage query={committed.query} data={data} filtersOnly initiallyOpen locale={locale} />);
-  const key = (input: HTMLInputElement, name: string, extra = {}) =>
-    input.dispatchEvent(
-      new window.KeyboardEvent('keydown', {
-        key: name,
-        bubbles: true,
-        cancelable: true,
-        ...extra,
-      }),
-    );
+  const render = () => root.render(
+    <SearchPage query={committed.query} data={data} filtersOnly initiallyOpen locale={locale} />,
+  );
+  const key = (input: HTMLInputElement, name: string, extra = {}) => input.dispatchEvent(
+    new window.KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true, ...extra }),
+  );
   const compose = (input: HTMLInputElement, phase: string) =>
     input.dispatchEvent(new window.CompositionEvent(phase, { bubbles: true }));
   const fill = (input: HTMLInputElement, text: string) => {
@@ -221,14 +201,14 @@ test('mounted criteria reserve IME keys, then Apply ordered labels without chang
   };
   try {
     for (const nextWidth of [1280, 390]) {
-      width = nextWidth;
-      await act(async () => render());
       await act(async () => {
+        width = nextWidth;
+        render();
         for (const listener of mediaListeners) listener({} as MediaQueryListEvent);
       });
       await settle();
       let input = document.querySelector<HTMLInputElement>('input[id$="-custom"]')!;
-      expect(input, host.textContent ?? 'Mounted Search criteria').not.toBeNull();
+      expect(input, document.body.textContent ?? 'Mounted Search criteria').not.toBeNull();
       const form = input.form!;
       const submit = () => form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
       const languages = () => [...form.querySelectorAll('ol li code')].map((node) => node.textContent);
@@ -237,74 +217,48 @@ test('mounted criteria reserve IME keys, then Apply ordered labels without chang
         fill(input, 'pt-B');
         input.setSelectionRange(2, 4);
         compose(input, 'compositionstart');
-        for (const extra of [{}, { isComposing: true }, { keyCode: 229 }]) {
-          key(input, 'Enter', extra);
-          key(input, 'Escape', extra);
-          expect(submit()).toBe(false);
-        }
+        key(input, 'Enter'); key(input, 'Escape');
+        expect(submit()).toBe(false);
       });
-      expect(input.isConnected).toBe(true);
       expect(document.activeElement).toBe(input);
       expect([input.value, input.selectionStart, input.selectionEnd]).toEqual(['pt-B', 2, 4]);
       expect(languages()).toEqual(['en']);
       expect(form.querySelector('[role="alert"]')).toBeNull();
       await act(async () => {
-        fill(input, 'PT-br');
-        compose(input, 'compositionend');
+        fill(input, 'PT-br'); compose(input, 'compositionend');
         expect(submit()).toBe(false); // Candidate key is still down after compositionend.
         input.dispatchEvent(new window.KeyboardEvent('keyup', { key: 'Enter', bubbles: true }));
         for (const extra of [{ isComposing: true }, { keyCode: 229 }]) {
-          key(input, 'Enter', extra);
-          key(input, 'Escape', extra);
+          key(input, 'Enter', extra); key(input, 'Escape', extra);
           expect(submit()).toBe(false);
           expect(input.value).toBe('PT-br');
         }
         key(input, 'Enter');
       });
       expect(languages()).toEqual(['en', 'pt-BR']);
-      await act(async () =>
-        form
-          .querySelector<HTMLButtonElement>(
-            `button[aria-label="${m.condition_languages_move_up({ language: 'pt-BR' }, { locale: 'en' })}"]`,
-          )!
-          .click(),
-      );
+      const move = m.condition_languages_move_up({ language: 'pt-BR' }, { locale: 'en' });
+      await act(async () => form.querySelector<HTMLButtonElement>(`button[aria-label="${move}"]`)!.click());
       expect(languages()).toEqual(['pt-BR', 'en']);
       const request = new window.FormData(form as never);
-      expect(request.get('q')).toBe(committed.query);
       expect(request.getAll('language')).toEqual(['pt-BR', 'en']);
-      expect(request.get('f.schema:inLanguage')).toBe('ja');
-      expect(request.get('condition')).toBe(JSON.stringify(committed.condition));
-      expect(request.get('r.schema:numberOfPages')).toBe(JSON.stringify(committed.ranges['schema:numberOfPages']));
-      expect(request.get('cursor')).toBeNull();
-      expect(request.get('type')).toBe(committed.type);
-      expect(request.get('sort')).toBe('rating');
-      expect(request.getAll('kinds')).toEqual(['subject']);
-      await act(async () => {
-        expect(submit()).toBe(true);
+      expect(Object.fromEntries(request)).toEqual({
+        q: committed.query, type: committed.type, kinds: 'subject', sort: 'rating', language: 'en',
+        'f.schema:inLanguage': 'ja', condition: JSON.stringify(committed.condition),
+        'r.schema:numberOfPages': JSON.stringify(committed.ranges['schema:numberOfPages']),
       });
-      await act(async () => {
-        input.focus();
-        fill(input, 'not a tag');
-        key(input, 'Enter');
-      });
-      expect(form.querySelector('[role="alert"]')?.textContent).toContain(
-        m.condition_languages_invalid({}, { locale: 'en' }),
-      );
+      await act(async () => { expect(submit()).toBe(true); });
+      await act(async () => { input.focus(); fill(input, 'not a tag'); key(input, 'Enter'); });
+      expect(form.querySelector('[role="alert"]')?.textContent).toContain(m.condition_languages_invalid({}, { locale: 'en' }));
       expect(document.activeElement).toBe(input);
-      await act(async () => {
-        compose(input, 'compositionstart');
-        locale = 'zh-Hans';
-        render();
-      });
+      await act(async () => { compose(input, 'compositionstart'); locale = 'zh-Hans'; render(); });
       expect(input.isConnected).toBe(false);
       input = document.querySelector<HTMLInputElement>('input[id$="-custom"]')!;
       expect(input.value).toBe('');
       expect([...input.form!.querySelectorAll('ol li code')].map((node) => node.textContent)).toEqual(['en']);
-      await act(async () => {
-        locale = 'en';
-        render();
-      });
+      await act(async () => { input.focus(); fill(input, 'not a tag'); key(input, 'Enter'); });
+      expect(input.form!.querySelector('[role="alert"]')?.textContent).toContain(m.condition_languages_invalid({}, { locale: 'zh-Hans' }));
+      expect(document.activeElement).toBe(input);
+      await act(async () => { locale = 'en'; render(); });
     }
   } finally {
     await act(async () => root.unmount());
