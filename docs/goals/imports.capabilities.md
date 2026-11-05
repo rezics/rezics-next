@@ -31,6 +31,8 @@ Launch sources are Bangumi, VNDB, Open Library and Wikidata. Their grains, forma
 
 ## Ordinary import and recovery acceptance
 
+Decision: ordinary Wikidata acceptance retains the original CLI/native cases and separate review/public reads; mounted-page acceptance runs on an approved stack, with no change to importer authority or source bindings.
+
 For each source cover initial import, unchanged reopen, changed and reimported records, vanished fields, mass-disappearance stop, ownership fences, malformed and unsupported values, bounded readers, unavailability, unknown delivery, refusal and resume. Denial is not success. Unknown delivery replays the original sealed actor, destination, body and key under current authorization before any receipt or replacement effect. Current subject and tuple-home fences apply to unchanged, cached and disclosed results. A takedown cannot be restored by refresh. Changed dependency resolution on unchanged source remains visible.
 
 Retained metadata is integrated native acceptance: [coordinator](../../services/kernel/test/library/list-import-metadata-coordinator.test.ts), [entry metadata](../../services/kernel/test/library/entry-import-metadata.test.ts), [VNDB HTTP](../../services/kernel/test/library/list-import-vndb-http.test.ts) and [Bangumi HTTP](../../services/kernel/test/library/list-import-bangumi-http.test.ts) cover selection, partial application, confirmation replay and adapters. Extraction corrections stay with their owner.
