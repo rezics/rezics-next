@@ -420,7 +420,13 @@ export function WriteReviewAction({
   locale: string;
   returnTo?: string;
 }) {
-  const visit = useWriteReviewVisit({ subjectId, subjectTitle, locale, returnTo, session });
+  const visit = useWriteReviewVisit({
+    subjectId,
+    subjectTitle,
+    locale,
+    ...(returnTo === undefined ? {} : { returnTo }),
+    session,
+  });
   if (session === 'signed-out')
     return (
       <SignInPrompt
