@@ -593,9 +593,9 @@ the current one; adding the first password leaves existing sessions active. Secu
 The password wire contracts are exact: stage echoes the original key and subject with an Auth UUID effect reference,
 `set-password`, and a lowercase 64-character digest; approval has an Access sealed reference and canonical UTC
 millisecond expiry; apply has an Auth UUID receipt and a boolean replay flag. Key and subject echoes use the host's
-actual 1,024 UTF-16-unit string admission. Their maximum streamed success bodies are 12,465 bytes for stage, 2,821
+actual 1,024 UTF-16-unit string admission. Their maximum streamed success bodies are 12,465 bytes for stage, 2,823
 for password approval, and 69 for apply; either exact native error body is at most 66 bytes. The password approval
-reference is an Access base64url seal plus a dot and 43-character HMAC, at most 2,766 characters from the exact
+reference is an Access base64url seal plus a dot and 43-character HMAC, at most 2,768 characters from the exact
 workflow/operator producer shapes. Stage, approval and apply each use the installed bounded reader before fatal UTF-8
 decoding and JSON parsing. Auth checks Access approval output against the stage-purpose bound and canonical UTC
 millisecond expiry before projection. Apply carries the reference through its dedicated bounded input unchanged. A

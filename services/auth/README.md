@@ -514,8 +514,8 @@ three-second deadline and the existing authorization, current credential,
 approval, floor, receipt, lock, replay and session-revocation behavior. The host
 admits a bounded 16,384-byte JSON request; its ordinary string fields retain the
 actual 1,024 UTF-16-unit limit. The apply approval reference has its own
-producer-derived allowance: the password Access seal is at most 2,766 ASCII
-characters; the shared host accepts up to 2,770 for the longest supported
+producer-derived allowance: the password Access seal is at most 2,768 ASCII
+characters; the shared host accepts up to 2,772 for the longest supported
 credential purpose (`remove-password`). These are Access's base64url payload,
 dot and 43-character SHA-256 HMAC, derived from its 255-unit operation-key
 locator, UUID account/effect/receipt fields, 64-character digest and embedded
@@ -530,7 +530,7 @@ purpose: "set-password", digest }`, approval `{ reference, expiresAt }`, and
 apply `{ receiptId, replayed }`; the only error bodies are exact
 `credential_effect_denied` or `step_up_required` with
 `effect_status: "not_applied"`. Their largest UTF-8 bodies are respectively
-12,465, 2,821 and 69 bytes, with a 66-byte error ceiling. The Auth page spends
+12,465, 2,823 and 69 bytes, with a 66-byte error ceiling. The Auth page spends
 one absolute five-second browser allowance per POST through headers and streamed
 body admission; it sends stage, approval and apply once each on ordinary
 completion. A lost response remains possible completion and only an explicit

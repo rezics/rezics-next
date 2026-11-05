@@ -36,8 +36,8 @@ test('password phase bounds admit producer maxima before UTF-8 parsing', () => {
 });
 
 test('phase identifiers follow Auth UUIDs and Access sealed-reference syntax', () => {
-  expect(credentialEffectResponseLimits.passwordApprovalReferenceUnits).toBe(2_766);
-  expect(credentialEffectResponseLimits.approvalReferenceUnits).toBe(2_770);
+  expect(credentialEffectResponseLimits.passwordApprovalReferenceUnits).toBe(2_768);
+  expect(credentialEffectResponseLimits.approvalReferenceUnits).toBe(2_772);
   expect(isCredentialEffectUuid(uuid)).toBe(true);
   expect(isCredentialEffectUuid('effect-ref')).toBe(false);
   expect(isCredentialEffectApprovalReference(`${'A'.repeat(20)}.${'A'.repeat(43)}`)).toBe(true);
