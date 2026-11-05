@@ -253,6 +253,7 @@ serialization or duplicate writers replace those whole producers.
 Decision: routed Collection filter states enter `/collections/$id` through PageStory (`library-collection-filters.stories.tsx#ActualCombined`) with explicit `f.`/`l.`/`r.` search; long property labels stay a pattern overlay because the Collection reader takes property labels from the definitions release. CombinedFilters remains pattern coverage.
 Decision: the owner browse-route editor join is `library-collection-editor.stories.tsx#OwnerEdit` (PageStory in AppShell) so existing Pattern IDs stay; Details and Reordering remain pattern coverage. A source/type document or scoped test proves
 neither full native/API/UI delivery nor integrated root/main behavior.
+Decision: focused Collection presentation checks pin the delivered owner composition: a curator-led header above the count and updated-time line, the complete-view export hidden for an unknown count, one facts row per supplied member, and an unavailable owner preview when native preview data is absent. These checks establish neither native nor browser acceptance.
 
 Required outcomes include owner, other account, anonymous and suspended credentials; hidden original/member and
 terminal; mixed defaults across member Type changes; override/clear and retired Type fallback; denied cover and
