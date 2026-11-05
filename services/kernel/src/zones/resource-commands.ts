@@ -36,7 +36,7 @@ import {
 } from './resource-store.ts';
 import { changeTakedown, movesWithheldElement } from './takedown.ts';
 
-export type ZoneMutation = 'configure' | 'publish' | 'delete' | 'restore' | 'takedown' | 'releaseTakedown';
+export type ZoneMutation = 'configure' | 'publish' | 'delete' | 'restore' | 'takedown' | 'release_takedown';
 
 export function zoneIfMatch(value: string | undefined): string {
   if (
@@ -240,7 +240,7 @@ export function createZoneCommands(dependencies: { pool: Pool; access: Access; t
     requireZoneAccount(actor);
     const resource = zoneIdentity(id);
     // Takedown is a platform moderation decision, so Access checks it on Global Context rather than the owner's Zone.
-    const platform = operation === 'takedown' || operation === 'releaseTakedown';
+    const platform = operation === 'takedown' || operation === 'release_takedown';
     const action = platform ? 'moderation:takedown' : `zone:${operation}`;
     const authority = platform ? globalContextAnchor.resource : resource;
     const base = resourceAuthorization({
@@ -354,7 +354,7 @@ export function createZoneCommands(dependencies: { pool: Pool; access: Access; t
             delete: 'deleted',
             restore: 'restored',
             takedown: 'taken_down',
-            releaseTakedown: 'takedown_released',
+            release_takedown: 'takedown_released',
           }[operation];
           return {
             value: { zone: zoneOwned(updated) },

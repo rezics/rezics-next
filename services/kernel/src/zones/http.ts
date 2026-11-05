@@ -375,7 +375,7 @@ export function zoneRoutes(
         const expected = zoneIfMatch(headers['if-match']);
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const result = await admission.run('normal', job, () =>
-          commands().mutate(actor, params.id, 'releaseTakedown', body, expected, key, job.deadline),
+          commands().mutate(actor, params.id, 'release_takedown', body, expected, key, job.deadline),
         );
         session.record(result);
         cache(set, result.value.zone.revision);

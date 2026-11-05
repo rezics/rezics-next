@@ -101,7 +101,7 @@ export const ZONE_HISTORY_RECEIPT_KINDS = Object.freeze([
   'zone.delete',
   'zone.restore',
   'zone.takedown',
-  'zone.releaseTakedown',
+  'zone.release_takedown',
 ] as const);
 export const ZONE_HISTORY_EVENT_TYPES = Object.freeze([
   'com.rezics.zone.created.v1',
