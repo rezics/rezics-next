@@ -6,6 +6,7 @@
  */
 import { type StackSlot, acquireStackSlot } from './stack-lease.ts';
 import { walkStackDirectory } from './stack-run.ts';
+import { createServer, type Server } from 'node:net';
 
 export const WALK_STACKS_DEFAULT = 6;
 const WALK_STACKS_MAXIMUM = 1000;
@@ -49,6 +50,32 @@ export function walkStackPorts(index: number): WalkPorts {
   return { web: base, issuer: base + 1, native: base + 2, kernel: base + 3, database: base + 4, search: base + 5 };
 }
 
+/** A released lease may leave another task's containers behind; never claim their listening ports. */
+export async function walkPortsAvailable(ports: Iterable<number>): Promise<boolean> {
+  const reservations: Server[] = [];
+  try {
+    for (const port of ports) {
+      const server = createServer((socket) => socket.destroy());
+      await new Promise<void>((resolve, reject) => {
+        server.once('error', reject);
+        server.listen({ host: '127.0.0.1', port, exclusive: true }, resolve);
+      });
+      reservations.push(server);
+    }
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'EADDRINUSE') return false;
+    throw error;
+  } finally {
+    await Promise.all(
+      reservations.map(
+        (server) =>
+          new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve()))),
+      ),
+    );
+  }
+}
+
 /** The variables that give one admitted stack its own names, ports and origins. */
 export function walkStackEnvironment(task: string, index: number): Record<string, string> {
   const names = walkStackNames(task);
@@ -87,5 +114,6 @@ export function admitWalkStack(
     undefined,
     POSITION_INTERVAL_MS,
     signal,
+    (index) => walkPortsAvailable(Object.values(walkStackPorts(index))),
   );
 }

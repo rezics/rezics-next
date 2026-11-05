@@ -157,6 +157,7 @@ export async function acquireStackSlot(
   onWaiting?: (line: string) => void,
   repeatMs = 60_000,
   signal?: AbortSignal,
+  available?: (index: number) => Promise<boolean>,
 ): Promise<StackSlot> {
   const capacity = stackCapacity(env);
   if (!Number.isSafeInteger(weight) || weight < 1 || weight > capacity)
@@ -245,6 +246,7 @@ export async function acquireStackSlot(
           const acquired: { index: number; lock: Lock }[] = [];
           for (let index = 1; index <= capacity && acquired.length < weight; index++) {
             if (heldSlots.includes(index)) continue;
+            if (available && !(await available(index))) continue;
             const slotLock = await lock(join(directory, `slot-${index}.lock`));
             if (slotLock) acquired.push({ index, lock: slotLock });
           }
