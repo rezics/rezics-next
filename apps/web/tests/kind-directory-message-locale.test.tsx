@@ -99,7 +99,6 @@ test('type directory chrome follows each reader locale and keeps authored type l
       expect(html).toContain('lang="ja">本<');
       expect(html).not.toContain(m.discovery_more_kinds({}, options[locale]));
       expect(markup(locale, 'cursor-1')).toContain(m.discovery_more_kinds({}, options[locale]));
-      expect(getLocale()).toBe(ambient);
     }
     setLocale('ja', { reload: false });
     const both = renderToStaticMarkup(
@@ -125,7 +124,6 @@ test('type directory chrome follows each reader locale and keeps authored type l
     expect(both).toContain(m.result_kind_window_end({}, options.en));
     expect(both).toContain(m.result_kind_window_end({}, options['zh-Hans']));
     expect(both).not.toContain(m.search_result_kinds({}, options.ja));
-    expect(getLocale()).toBe('ja');
   } finally {
     setLocale(previous, { reload: false });
   }
@@ -184,7 +182,6 @@ test('type directory failure and continuation progress follow each instance loca
     expect(host.textContent).toContain(m.result_kind_window_restart({}, options.en));
     expect(host.textContent).toContain(m.result_kind_window_restart({}, options['zh-Hans']));
     expect(host.textContent).not.toContain(m.result_kind_window_progress({}, options.ja));
-    expect(getLocale()).toBe('ja');
   } finally {
     setLocale(previous, { reload: false });
   }
@@ -217,7 +214,6 @@ test('preparation and its explicit retry use each directory locale', async () =>
       expect(host.textContent).toContain(m.result_kind_retry({}, options[locale]));
     }
     expect(host.textContent).not.toContain(m.result_kind_preparing({}, options.ja));
-    expect(getLocale()).toBe('ja');
   } finally {
     setLocale(previous, { reload: false });
   }

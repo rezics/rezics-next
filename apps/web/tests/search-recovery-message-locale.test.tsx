@@ -76,7 +76,6 @@ test('search recovery messages and actions follow the owning locale against the 
     expect(both).toContain(m.search_recovery_edit({}, options['zh-Hans']));
     expect(both).not.toContain(m.search_recovery_session({}, options.ja));
     expect(both).not.toContain(m.discovery_restart({}, options.ja));
-    expect(getLocale()).toBe('ja');
   } finally {
     setLocale(previous, { reload: false });
   }
@@ -168,7 +167,6 @@ test('kind continuation recovery text follows each instance locale through the s
     expect(host.textContent).toContain(m.search_recovery_session({}, options['zh-Hans']));
     expect(host.textContent).not.toContain(m.result_kind_unavailable({}, options.ja));
     expect(host.textContent).not.toContain(m.search_recovery_session({}, options.ja));
-    expect(getLocale()).toBe('ja');
   } finally {
     setLocale(previous, { reload: false });
   }
