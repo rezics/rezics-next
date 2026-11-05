@@ -1,15 +1,6 @@
 import type { CheckResults } from './check-results.ts';
-import {
-  gateRunner,
-  processGroupRunner,
-  type CheckResultGateOptions,
-  type GateRunner,
-} from './merge.ts';
-import {
-  trainConfigurationRevision,
-  type IntegrationCheck,
-  type TrainConfigurationReloader,
-} from './merge-train.ts';
+import { gateRunner, processGroupRunner, type CheckResultGateOptions, type GateRunner } from './merge.ts';
+import { trainConfigurationRevision, type IntegrationCheck, type TrainConfigurationReloader } from './merge-train.ts';
 import { loadSettings, packageDerivedFiles } from './settings.ts';
 import type { DerivedFile, Settings } from './types.ts';
 import { bootSmokeEnvironment } from './verification.ts';
@@ -67,10 +58,7 @@ export function createCheckRuntime(options: CheckRuntimeOptions) {
     shadow: !settings.integration.checkResultReuse,
     enabled: settings.integration.checkResultReuse,
     alert: (summary: string) =>
-      options.deliverReuseAlert(
-        settings.integration.supermanager,
-        `Check result reuse alert: ${summary}`,
-      ),
+      options.deliverReuseAlert(settings.integration.supermanager, `Check result reuse alert: ${summary}`),
   };
   const trainRunners = createTrainCheckRunners(settings, options.runGate, checkResultOptions);
   const runGate = trainRunners.runGate;

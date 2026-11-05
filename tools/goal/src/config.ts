@@ -43,11 +43,7 @@ import { deliverDueReminders } from './notes.ts';
 import { alertUnspentAllowances, refreshCodexSchedule } from './pacing.ts';
 import { watch, sshProbe } from './watchdog.ts';
 import { readRouting } from './routing.ts';
-import {
-  MergeTrain,
-  type IntegrationCheck,
-  type TrainOptions,
-} from './merge-train.ts';
+import { MergeTrain, type IntegrationCheck, type TrainOptions } from './merge-train.ts';
 import { promote } from './promotion.ts';
 import { preparePromotionGate } from './promotion-placement.ts';
 import { verifyDev } from './dev-verifier.ts';
