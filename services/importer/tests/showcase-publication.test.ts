@@ -14,12 +14,14 @@ import {
 } from '../src/cross-media-seed.ts';
 import { createPublicBulkClient } from '../src/public-bulk-client.ts';
 import { buildShowcaseManifest, showcaseDigest } from '../src/showcase-manifest.ts';
+import { vndbPublicTagConceptUri, vndbPublicTagScheme } from '../../../packages/conversion/src/support.ts';
 import {
   captureShowcaseCommands,
   publishShowcase,
   ShowcaseJournal,
   type ShowcaseReviewPort,
 } from '../src/showcase-publication.ts';
+import { prepareShowcaseTags } from '../src/showcase-tags.ts';
 import { seedShowcaseVndbReleases } from '../src/showcase-vndb-releases.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 
@@ -37,6 +39,27 @@ test('selected dump candidates publish only by exact intent and resume a refused
       statements: Record<string, unknown[]>;
     }
   >();
+  const tagSchemeId = '00000000-0000-4000-8000-000000000041';
+  const tagConceptId = '00000000-0000-4000-8000-000000000042';
+  const tagSchemeUri = vndbPublicTagScheme('cont');
+  const tagConceptUri = vndbPublicTagConceptUri('cont', 'g105');
+  subjects.set(tagSchemeId, {
+    id: tagSchemeId,
+    type: 'skos:ConceptScheme',
+    sourceExternalId: 'vocabulary:vndb.tag.cont',
+    labels: { en: 'cont' },
+    statements: { 'schema:url': [{ value: { type: 'value', content: tagSchemeUri } }] },
+  });
+  subjects.set(tagConceptId, {
+    id: tagConceptId,
+    type: 'skos:Concept',
+    sourceExternalId: 'vocabulary:vndb.tag.cont:g105',
+    labels: { und: 'Reviewed tag' },
+    statements: {
+      'schema:url': [{ value: { type: 'value', content: tagConceptUri } }],
+      'skos:inScheme': [{ value: { type: 'value', content: tagSchemeId } }],
+    },
+  });
   const bySource = new Map<string, string>();
   const candidates = new Map<
     string,
@@ -45,7 +68,9 @@ test('selected dump candidates publish only by exact intent and resume a refused
   const accepted = new Set<string>();
   const adopted = new Map<string, { head: number; selection: { candidate: string; rank: 'normal' | 'preferred' }[] }>();
   const publicReadIds = new Set<string>();
+  const acceptanceCalls: { candidateId: string; body: unknown; idempotencyKey: string }[] = [];
   let refuseAcceptance = true;
+  let tagSpoiler = 0;
   const unavailableReviewSubjects = new Set<string>();
   const metadata = sourceRecordMetadataFixture();
 
@@ -70,6 +95,10 @@ test('selected dump candidates publish only by exact intent and resume a refused
         yield { id: 'v2', olang: 'ja', alias: null };
         yield { id: 'v3', olang: 'ja', alias: null };
       }
+      if (provider === 'vndb' && table === 'tags')
+        yield { id: 'g105', cat: 'cont', defaultspoil: 0, searchable: true, applicable: true };
+      if (provider === 'vndb' && table === 'tags_vn')
+        yield { tag: 'g105', vid: 'v2', uid: null, vote: 3, spoiler: tagSpoiler, ignore: false, lie: false };
       if (provider === 'vndb' && table === 'entry_meta') {
         yield { id: 'v1', revision: '1', lastmod: '2026-10-25 00:00:00+00' };
         yield { id: 'v2', revision: '1', lastmod: '2026-10-25 00:00:00+00' };
@@ -129,29 +158,28 @@ test('selected dump candidates publish only by exact intent and resume a refused
   };
   const port = {
     async batch(request: { commands: readonly BatchCommand[] }): Promise<BatchWriteResult> {
-      return {
-        results: request.commands.map((command) => {
-          if (command.op === 'create') {
-            const sourceKey = `${command.source.source}\0${command.source.external_id}`;
-            const id = bySource.get(sourceKey) ?? randomUUID();
-            bySource.set(sourceKey, id);
-            subjects.set(id, {
-              id,
-              type: command.subject.type,
-              sourceExternalId: command.source.external_id,
-              labels: command.subject.labels,
-              statements: {},
-            });
-            return { key: command.key, status: 201 as const, value: { id, revision: 1 } };
-          }
-          if (command.op === 'propose') {
-            const id = randomUUID();
-            candidates.set(id, { id, source: command.source, statement: command.statement, head: null });
-            return { key: command.key, status: 201 as const, value: { candidate: id, revision: 1 } };
-          }
-          return { key: command.key, status: 200 as const, value: { revision: 1 } };
-        }),
-      };
+      const results = request.commands.map((command) => {
+        if (command.op === 'create') {
+          const sourceKey = `${command.source.source}\0${command.source.external_id}`;
+          const id = bySource.get(sourceKey) ?? randomUUID();
+          bySource.set(sourceKey, id);
+          subjects.set(id, {
+            id,
+            type: command.subject.type,
+            sourceExternalId: command.source.external_id,
+            labels: command.subject.labels,
+            statements: {},
+          });
+          return { key: command.key, status: 201 as const, value: { id, revision: 1 } };
+        }
+        if (command.op === 'propose') {
+          const id = randomUUID();
+          candidates.set(id, { id, source: command.source, statement: command.statement, head: null });
+          return { key: command.key, status: 201 as const, value: { candidate: id, revision: 1 } };
+        }
+        return { key: command.key, status: 200 as const, value: { revision: 1 } };
+      });
+      return { results };
     },
     async readReviewedSubject(id: string) {
       return read(id);
@@ -170,15 +198,37 @@ test('selected dump candidates publish only by exact intent and resume a refused
 
   const journalPath = join(directory, 'showcase.sqlite');
   let journal = new ShowcaseJournal(journalPath);
-  try {
-    const result = await seedShowcaseVndbReleases({
+  const prepareSelectedTags = () =>
+    prepareShowcaseTags({
       tables,
-      plan,
-      path: join(directory, 'import.sqlite'),
-      port: captureShowcaseCommands(port, journal),
-      destination: { origin: 'https://fixture.test' },
-      extras: { providers: ['bangumi', 'vndb'], mediaDeadlineMs: 0 },
+      selectedVids: ['v2'],
+      port,
+      known: {
+        schemes: [{ category: 'cont', id: tagSchemeId }],
+        concepts: [{ category: 'cont', code: 'g105', id: tagConceptId }],
+      },
+      fetch: async () =>
+        Response.json({
+          more: false,
+          results: [{ id: 'v2', tags: [{ id: 'g105', rating: 4.5, spoiler: 0, lie: false }] }],
+        }),
     });
+  try {
+    let preparedTags = await prepareSelectedTags();
+    const seed = () =>
+      seedShowcaseVndbReleases({
+        tables,
+        plan,
+        path: join(directory, 'import.sqlite'),
+        port: captureShowcaseCommands(port, journal),
+        destination: { origin: 'https://fixture.test' },
+        extras: {
+          providers: ['bangumi', 'vndb'],
+          mediaDeadlineMs: 0,
+          vocabularyAdmissions: [preparedTags.vocabularyAdmission],
+        },
+      });
+    let result = await seed();
     expect(result.gaps).toEqual([]);
     expect(result.unresolved).toEqual([]);
     const workIds = result.readings.map((reading) => reading.subject.subject!.id!);
@@ -214,7 +264,8 @@ test('selected dump candidates publish only by exact intent and resume a refused
           adoption: adopted.get(`${id}\0${query.property}`) ?? null,
         } as never;
       },
-      async acceptReviewedCandidate(_id, candidateId, body) {
+      async acceptReviewedCandidate(_id, candidateId, body, idempotencyKey) {
+        acceptanceCalls.push({ candidateId, body, idempotencyKey });
         if (refuseAcceptance) {
           const error = new Error('refused') as Error & { status: number };
           error.status = 403;
@@ -259,30 +310,210 @@ test('selected dump candidates publish only by exact intent and resume a refused
         return Response.json(read(id));
       }) as typeof fetch,
     });
-    const first = await publishShowcase({ plan, result, aliases: crossMediaAliases, journal, review, publicClient });
+    let tagOptions = {
+      tagAssociations: preparedTags.associationBindings,
+      tagAssociationRefreshes: preparedTags.associationRefreshes,
+      tagWeightObservations: preparedTags.tagWeightObservations,
+      tagWeightRefreshes: preparedTags.tagWeightRefreshes,
+    };
+    const first = await publishShowcase({
+      plan,
+      result,
+      aliases: crossMediaAliases,
+      journal,
+      review,
+      publicClient,
+      ...tagOptions,
+    });
     expect(first.status).toBe('incomplete');
     const acknowledged = journal.acknowledgedCommands().filter((entry) => entry.candidateId);
     expect(acknowledged.length).toBeGreaterThan(0);
     expect(accepted.size).toBe(0);
+    const membership = acknowledged.find(
+      (entry) =>
+        entry.command.op === 'propose' &&
+        entry.command.statement.property.id === 'schema:genre' &&
+        !entry.command.statement.qualifiers?.some((term) => term.property.id === 'rezics:sourceTagWeightMetric'),
+    );
+    expect(membership?.command.op).toBe('propose');
+    if (!membership || membership.command.op !== 'propose') throw new Error('Missing selected tag membership');
+    expect(
+      membership.command.statement.references?.flatMap((reference) => reference.parts).map((part) => part.value),
+    ).toContainEqual({ type: 'value', content: 'https://vndb.org/v2.1#/tags_vn/v2/g105/tag' });
+    const membershipCandidateId = membership.candidateId!;
+    const lostAckPath = join(directory, 'lost-proposal.sqlite');
+    let lostAckJournal = new ShowcaseJournal(lostAckPath);
+    const remoteCandidates = new Map<string, string>();
+    const deliveredCommands: BatchCommand[][] = [];
+    let loseFirstResponse = true;
+    const remotePort = {
+      ...port,
+      async batch(request: { commands: readonly BatchCommand[] }): Promise<BatchWriteResult> {
+        deliveredCommands.push(structuredClone([...request.commands]));
+        const results = request.commands.map((command) => {
+          if (command.op === 'propose') {
+            const candidate = remoteCandidates.get(command.key) ?? randomUUID();
+            remoteCandidates.set(command.key, candidate);
+            return { key: command.key, status: 201 as const, value: { candidate, revision: 1 } };
+          }
+          if (command.op === 'create')
+            return { key: command.key, status: 201 as const, value: { id: randomUUID(), revision: 1 } };
+          return { key: command.key, status: 200 as const, value: { revision: 1 } };
+        });
+        if (loseFirstResponse) {
+          loseFirstResponse = false;
+          throw new Error('simulated lost VNDB proposal acknowledgement');
+        }
+        return { results };
+      },
+    } as CrossMediaPort;
+    try {
+      await expect(
+        captureShowcaseCommands(remotePort, lostAckJournal).batch({ commands: [membership.command] }),
+      ).rejects.toThrow('simulated lost VNDB proposal acknowledgement');
+      expect(lostAckJournal.preparedCommands().map((entry) => entry.command)).toContainEqual(membership.command);
+      expect(lostAckJournal.acknowledgedCommands()).toEqual([]);
+      lostAckJournal.close();
+      lostAckJournal = new ShowcaseJournal(lostAckPath);
+      const replayResult = await captureShowcaseCommands(remotePort, lostAckJournal).batch({
+        commands: [membership.command],
+      });
+      expect(deliveredCommands).toEqual([[membership.command], [membership.command]]);
+      expect(replayResult.results).toEqual([
+        {
+          key: membership.command.key,
+          status: 201,
+          value: { candidate: remoteCandidates.get(membership.command.key), revision: 1 },
+        },
+      ]);
+      expect(lostAckJournal.acknowledgedCommands()).toContainEqual(
+        expect.objectContaining({
+          command: membership.command,
+          candidateId: remoteCandidates.get(membership.command.key),
+        }),
+      );
+    } finally {
+      lostAckJournal.close();
+    }
+    expect(preparedTags.associationBindings).toEqual([
+      expect.objectContaining({
+        workId: 'v2',
+        sourceKey: '/tags_vn/v2/g105/tag',
+        tagId: 'g105',
+        conceptId: tagConceptId,
+        schemeId: tagSchemeId,
+      }),
+    ]);
 
     journal.close();
     journal = new ShowcaseJournal(journalPath);
     refuseAcceptance = false;
+    const replayed = await publishShowcase({
+      plan,
+      result,
+      aliases: crossMediaAliases,
+      journal,
+      review,
+      publicClient,
+      ...tagOptions,
+    });
+    expect(replayed.status).toBe('published');
+    expect(replayed.manifest.digest).toBe(first.manifest.digest);
+    expect(accepted).toEqual(new Set(acknowledged.map((entry) => entry.candidateId!)));
+    const tagAcceptanceCalls = acceptanceCalls.filter((call) => call.candidateId === membershipCandidateId);
+    expect(tagAcceptanceCalls).toHaveLength(1);
+
+    journal.close();
+    journal = new ShowcaseJournal(journalPath);
     unavailableReviewSubjects.add(vndbTargetId);
-    const withheld = await publishShowcase({ plan, result, aliases: crossMediaAliases, journal, review, publicClient });
-    expect(withheld.status).toBe('incomplete');
-    const withheldSource = withheld.published.find((record) => record.provider === 'vndb' && record.sourceKey === 'r1');
-    expect(withheldSource?.assertions.some((assertion) => assertion.property === 'schema:name')).toBe(true);
-    expect(withheldSource?.assertions.some((assertion) => assertion.property === 'schema:exampleOfWork')).toBe(false);
+    subjects.get(tagConceptId)!.statements['skos:inScheme'] = [
+      { value: { type: 'value', content: '00000000-0000-4000-8000-000000000043' } },
+    ];
+    const withdrawn = await publishShowcase({
+      plan,
+      result,
+      aliases: crossMediaAliases,
+      journal,
+      review,
+      publicClient,
+      ...tagOptions,
+    });
+    expect(withdrawn.status).toBe('incomplete');
+    expect(
+      withdrawn.published.find((record) => record.provider === 'vndb' && record.sourceKey === 'v2')?.assertions,
+    ).not.toContainEqual(expect.objectContaining({ property: 'schema:genre' }));
+    expect(
+      subjects.get(
+        result.readings.find((reading) => reading.source === 'vndb' && reading.externalId === 'v2')!.subject.subject!
+          .id!,
+      )!.statements['schema:genre'],
+    ).toEqual([]);
+
     journal.close();
     journal = new ShowcaseJournal(journalPath);
     unavailableReviewSubjects.delete(vndbTargetId);
+    subjects.get(tagConceptId)!.statements['skos:inScheme'] = [{ value: { type: 'value', content: tagSchemeId } }];
     publicReadIds.clear();
-    const resumed = await publishShowcase({ plan, result, aliases: crossMediaAliases, journal, review, publicClient });
-    expect(resumed.omissions).toEqual([]);
-    expect(resumed.status).toBe('published');
+    const withheldSource = withdrawn.published.find(
+      (record) => record.provider === 'vndb' && record.sourceKey === 'r1',
+    );
+    expect(withheldSource?.assertions.some((assertion) => assertion.property === 'schema:name')).toBe(true);
+    expect(withheldSource?.assertions.some((assertion) => assertion.property === 'schema:exampleOfWork')).toBe(false);
+    const withheldTagWork = withdrawn.published.find(
+      (record) => record.provider === 'vndb' && record.sourceKey === 'v2',
+    );
+    expect(withheldTagWork?.assertions.some((assertion) => assertion.property === 'schema:genre')).toBe(false);
+    expect(withdrawn.omissions).toContainEqual({
+      provider: 'vndb',
+      sourceKey: 'v2',
+      code: 'vocabulary-binding-missing',
+    });
+    expect(accepted.has(membershipCandidateId)).toBe(true);
+    tagSpoiler = 1;
+    preparedTags = await prepareSelectedTags();
+    result = await seedShowcaseVndbReleases({
+      tables,
+      plan,
+      path: join(directory, 'import.sqlite'),
+      port: captureShowcaseCommands(port, journal),
+      destination: { origin: 'https://fixture.test' },
+      extras: {
+        providers: ['bangumi', 'vndb'],
+        mediaDeadlineMs: 0,
+        vocabularyAdmissions: [preparedTags.vocabularyAdmission],
+      },
+    });
+    tagOptions = {
+      tagAssociations: preparedTags.associationBindings,
+      tagAssociationRefreshes: preparedTags.associationRefreshes,
+      tagWeightObservations: preparedTags.tagWeightObservations,
+      tagWeightRefreshes: preparedTags.tagWeightRefreshes,
+    };
+    publicReadIds.clear();
+    const resumed = await publishShowcase({
+      plan,
+      result,
+      aliases: crossMediaAliases,
+      journal,
+      review,
+      publicClient,
+      ...tagOptions,
+    });
+    expect(resumed.omissions).toContainEqual({
+      provider: 'vndb',
+      sourceKey: 'v2',
+      code: 'vocabulary-binding-missing',
+    });
+    expect(resumed.status).toBe('incomplete');
     expect(resumed.published.map((record) => record.subjectId).sort()).toEqual([...workIds].sort());
-    expect(accepted).toEqual(new Set(acknowledged.map((entry) => entry.candidateId!)));
+    expect(accepted).toEqual(
+      new Set(
+        journal
+          .acknowledgedCommands()
+          .filter((entry) => entry.candidateId)
+          .map((entry) => entry.candidateId!),
+      ),
+    );
     const relation = resumed.published
       .find((record) => record.provider === 'vndb' && record.sourceKey === 'r1')
       ?.assertions.find((assertion) => assertion.property === 'schema:exampleOfWork');
@@ -300,6 +531,29 @@ test('selected dump candidates publish only by exact intent and resume a refused
     expect(resumed.published.some((record) => record.subjectId === vndbTargetId)).toBe(true);
     expect(publicReadIds.has(vndbSourceId)).toBe(true);
     expect(publicReadIds.has(vndbTargetId)).toBe(true);
+    const tagWorkId = result.readings.find((reading) => reading.source === 'vndb' && reading.externalId === 'v2')!
+      .subject.subject!.id!;
+    expect(publicReadIds.has(tagWorkId)).toBe(true);
+    const refreshedMembership = journal
+      .acknowledgedCommands()
+      .find(
+        (entry) =>
+          entry.command.op === 'propose' &&
+          entry.command.statement.property.id === 'schema:genre' &&
+          entry.command.statement.qualifiers?.some(
+            (term) =>
+              term.property.id === 'rezics:spoilerLevel' &&
+              term.value.type === 'value' &&
+              JSON.stringify(term.value.content) === JSON.stringify({ amount: '+1', unit: '1' }),
+          ),
+      );
+    expect(refreshedMembership?.candidateId).toBeTruthy();
+    expect(refreshedMembership?.candidateId).not.toBe(membershipCandidateId);
+    const refreshedCommand = refreshedMembership?.command;
+    expect(refreshedCommand?.op).toBe('propose');
+    if (!refreshedCommand || refreshedCommand.op !== 'propose') throw new Error('Missing refreshed tag proposal');
+    expect(subjects.get(tagWorkId)!.statements['schema:genre']).toContainEqual(refreshedCommand.statement);
+    expect(subjects.get(tagWorkId)!.statements['schema:genre']).not.toContainEqual(membership.command.statement);
     const manifestRelation = resumed.manifest.records
       .find((record) => record.provider === 'vndb' && record.sourceKey === 'r1')
       ?.assertions.find((assertion) => assertion.property === 'schema:exampleOfWork');
@@ -313,7 +567,7 @@ test('selected dump candidates publish only by exact intent and resume a refused
     expect(adopted.get(`${workId}\0schema:name`)?.selection.some((item) => item.candidate === unrelatedId)).toBe(false);
     expect(subjects.get(workId)!.statements['schema:name']).toHaveLength(1);
     expect(subjects.get(workId)!.statements['schema:name']?.[0]).toEqual(name.statement);
-    expect(first.manifest.digest).toBe(resumed.manifest.digest);
+    expect(replayed.manifest.digest).toBe(first.manifest.digest);
     expect(resumed.manifest.records[0]?.sourceRevision).toBe('unversioned');
     expect(resumed.published[0]?.readerRoute).toBe(`/subjects/${workId}/steins-gate`);
 

@@ -1,6 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { sameStatementProvenance } from './statement-provenance.ts';
 import type { BatchCommand, BatchWriteRequest, BatchWriteResult, BatchStatement } from '@rezics/definitions/bulk';
+import { bundledDigest } from '@rezics/definitions/bundled';
 import type { ReviewedSubjectRead } from './import-client.ts';
 import { createImportTransport } from './import-client.ts';
 import type { CrossMediaPlan, CrossMediaPort, CrossMediaSeedResult } from './cross-media-seed.ts';
@@ -15,6 +16,7 @@ import {
   type ShowcaseAssertion,
   type ShowcaseManifest,
   type ShowcaseRecord,
+  type ShowcaseTagAssociation,
   type ShowcaseVocabularyRecord,
   type ShowcaseVocabularyRequirement,
   showcaseMediaContext,
@@ -351,6 +353,8 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
       })),
       tagWeightObservations: manifest.tagWeightObservations,
       tagWeightRefreshes: manifest.tagWeightRefreshes,
+      tagAssociations: manifest.tagAssociations ?? [],
+      tagAssociationRefreshes: manifest.tagAssociationRefreshes ?? [],
     };
     const body = json(intent);
     const prior = this.#db
@@ -894,6 +898,85 @@ function sourceTagId(statement: BatchStatement): string | undefined {
   return undefined;
 }
 
+function tagAssociationKey(association: ShowcaseTagAssociation): string {
+  return [
+    association.workId,
+    association.sourceKey,
+    association.tagId,
+    association.category,
+    association.conceptId ?? '',
+    association.schemeId ?? '',
+  ].join('\0');
+}
+
+function vndbTagMembership(record: ShowcaseRecord, assertion: ShowcaseAssertion): boolean {
+  return (
+    record.provider === 'vndb' &&
+    record.kind === 'work' &&
+    assertion.property === 'schema:genre' &&
+    !sourceTagWeight(assertion.statement)
+  );
+}
+
+function tagAssociationFor(
+  record: ShowcaseRecord,
+  assertion: ShowcaseAssertion,
+  associations: readonly ShowcaseTagAssociation[],
+): ShowcaseTagAssociation | undefined {
+  const identity = tagAssociationPath(record, assertion.source, assertion.statement);
+  if (!identity) return;
+  return associations.find(
+    (association) =>
+      association.workId === record.sourceKey &&
+      association.sourceKey === identity.sourceKey &&
+      association.tagId === identity.tagId,
+  );
+}
+
+function tagAssociationPath(
+  record: ShowcaseRecord,
+  source: BatchCommand['source'] | null,
+  statement: BatchStatement,
+): { sourceKey: string; tagId: string } | undefined {
+  if (
+    record.provider !== 'vndb' ||
+    record.kind !== 'work' ||
+    !record.sourceUri ||
+    !source ||
+    source.source !== record.sourceAlias ||
+    source.external_id !== record.sourceKey ||
+    source.field_group !== 'facts' ||
+    statement.property.id !== 'schema:genre' ||
+    sourceTagWeight(statement)
+  )
+    return;
+  for (const reference of statement.references ?? []) {
+    for (const part of reference.parts) {
+      if (part.property.id !== 'schema:url' || part.value.type !== 'value' || typeof part.value.content !== 'string')
+        continue;
+      const citation = part.value.content;
+      if (!sourceCitationMatchesRecord(record, citation)) continue;
+      const match = /^#\/tags_vn\/(v[1-9][0-9]*)\/(g[1-9][0-9]{0,9})\/tag$/u.exec(new URL(citation).hash);
+      if (!match || match[1] !== record.sourceKey) continue;
+      return { sourceKey: `/tags_vn/${match[1]}/${match[2]}/tag`, tagId: match[2]! };
+    }
+  }
+  return;
+}
+
+function tagAssociationStatementMatches(association: ShowcaseTagAssociation, statement: BatchStatement): boolean {
+  if (statement.value.type !== 'value' || statement.value.content !== association.conceptId) return false;
+  const spoiler = statement.qualifiers?.find((term) => term.property.id === 'rezics:spoilerLevel');
+  if (!spoiler || spoiler.value.type !== 'value' || !spoiler.value.content || typeof spoiler.value.content !== 'object')
+    return false;
+  const quantity = spoiler.value.content as { amount?: unknown; unit?: unknown };
+  return quantity.amount === `+${association.spoiler}` && quantity.unit === '1';
+}
+
+function managedSourceTagMembership(candidate: CandidateRead, alias: string, record: ShowcaseRecord): boolean {
+  return !!tagAssociationPath(record, candidate.source, candidate.statement) && candidate.source?.source === alias;
+}
+
 function managedSourceTagWeight(candidate: CandidateRead, alias: string, workId: string): boolean {
   return (
     candidate.source?.source === alias &&
@@ -1148,6 +1231,8 @@ export async function publishShowcase(input: {
   vocabularyRequirements?: readonly ShowcaseVocabularyRequirement[];
   tagWeightObservations?: ShowcaseManifest['tagWeightObservations'];
   tagWeightRefreshes?: ShowcaseManifest['tagWeightRefreshes'];
+  tagAssociations?: ShowcaseManifest['tagAssociations'];
+  tagAssociationRefreshes?: ShowcaseManifest['tagAssociationRefreshes'];
 }): Promise<ShowcasePublicationResult> {
   const mediaOutcomes = await currentCoverOutcomes(input.result, input.review);
   const result = { ...input.result, mediaOutcomes };
@@ -1184,6 +1269,8 @@ export async function publishShowcase(input: {
         : {}),
       ...(input.tagWeightObservations ? { tagWeightObservations: input.tagWeightObservations } : {}),
       ...(input.tagWeightRefreshes ? { tagWeightRefreshes: input.tagWeightRefreshes } : {}),
+      ...(input.tagAssociations ? { tagAssociations: input.tagAssociations } : {}),
+      ...(input.tagAssociationRefreshes ? { tagAssociationRefreshes: input.tagAssociationRefreshes } : {}),
       ...(input.vocabularyRequirements ? { vocabularyRequirements: input.vocabularyRequirements } : {}),
       ...(genre
         ? {
@@ -1251,6 +1338,7 @@ export async function publishShowcase(input: {
   const currentSubjectCache = new Map<string, ReviewedSubjectRead | null>();
   const pageCache = new Map<string, CandidatePage>();
   const validated = new Map<string, CandidateRead>();
+  const currentTagMembershipCandidateDigests = new Set<string>();
   const blockedSubjects = new Set<string>();
   const blockedCoverCandidates = new Set<string>();
   let vocabularyById = new Map(manifest.vocabulary.map((record) => [record.subjectId, record]));
@@ -1260,10 +1348,16 @@ export async function publishShowcase(input: {
       for (const binding of observation.bindings)
         observedTagBindings.set(`${observation.workId}\0${binding.tagId}\0${binding.conceptId}`, binding);
   const currentTagBindings = new Set<string>();
+  const currentMembershipBindings = new Set<string>();
   const bindingReadIds = new Set<string>();
   for (const binding of observedTagBindings.values()) {
     bindingReadIds.add(binding.conceptId);
     bindingReadIds.add(binding.schemeId);
+  }
+  for (const association of manifest.tagAssociations ?? []) {
+    if (!association.conceptId || !association.schemeId) continue;
+    bindingReadIds.add(association.conceptId);
+    bindingReadIds.add(association.schemeId);
   }
   const readCurrentSubject = async (id: string): Promise<ReviewedSubjectRead | null> => {
     if (currentSubjectCache.has(id)) return currentSubjectCache.get(id) ?? null;
@@ -1279,21 +1373,40 @@ export async function publishShowcase(input: {
   const bindingReadIdsList = [...bindingReadIds];
   for (let offset = 0; offset < bindingReadIdsList.length; offset += 16)
     await Promise.all(bindingReadIdsList.slice(offset, offset + 16).map(readCurrentSubject));
-  for (const [key, binding] of observedTagBindings) {
+  const currentBindingMatches = (
+    binding: Pick<VndbTagRatingBinding, 'category' | 'tagId' | 'conceptUri' | 'schemeUri'> & {
+      conceptId: string | null;
+      schemeId: string | null;
+    },
+  ) => {
+    if (!binding.conceptId || !binding.schemeId) return false;
     const conceptRead = currentSubjectCache.get(binding.conceptId) ?? null;
     const schemeRead = currentSubjectCache.get(binding.schemeId) ?? null;
-    if (
+    return !!(
       conceptRead &&
       schemeRead &&
       subjectId(conceptRead) === binding.conceptId &&
       subjectType(conceptRead) === 'skos:Concept' &&
-      publicHasValue(conceptRead, 'schema:url', vndbPublicTagConceptUri(binding.category, binding.tagId)) &&
+      binding.conceptUri === vndbPublicTagConceptUri(binding.category, binding.tagId) &&
+      publicHasValue(conceptRead, 'schema:url', binding.conceptUri) &&
       publicHasValue(conceptRead, 'skos:inScheme', binding.schemeId) &&
       subjectId(schemeRead) === binding.schemeId &&
       subjectType(schemeRead) === 'skos:ConceptScheme' &&
-      publicHasValue(schemeRead, 'schema:url', vndbPublicTagScheme(binding.category))
+      binding.schemeUri === vndbPublicTagScheme(binding.category) &&
+      publicHasValue(schemeRead, 'schema:url', binding.schemeUri)
+    );
+  };
+  for (const [key, binding] of observedTagBindings) {
+    if (currentBindingMatches(binding)) currentTagBindings.add(key);
+  }
+  for (const association of manifest.tagAssociations ?? []) {
+    if (
+      association.conceptId &&
+      association.schemeId &&
+      association.releaseDigest === bundledDigest &&
+      currentBindingMatches(association)
     )
-      currentTagBindings.add(key);
+      currentMembershipBindings.add(tagAssociationKey(association));
   }
   for (const record of manifest.records) {
     if (!record.subjectId || recordHasSourceIdentity(record)) continue;
@@ -1341,6 +1454,7 @@ export async function publishShowcase(input: {
   for (const { record, assertion } of assertions) {
     const id = record.subjectId;
     if (!id || !recordSource(record, assertion)) continue;
+    let currentMembership = false;
     let current = currentSubjectCache.get(id);
     if (current === undefined) {
       try {
@@ -1370,6 +1484,23 @@ export async function publishShowcase(input: {
         omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'vocabulary-binding-missing' });
         continue;
       }
+    }
+    if (vndbTagMembership(record, assertion)) {
+      const association = tagAssociationFor(record, assertion, manifest.tagAssociations ?? []);
+      const content = assertion.statement.value.type === 'value' ? assertion.statement.value.content : null;
+      if (
+        !association ||
+        !association.conceptId ||
+        !association.schemeId ||
+        association.releaseDigest !== bundledDigest ||
+        content !== association.conceptId ||
+        !tagAssociationStatementMatches(association, assertion.statement) ||
+        !currentMembershipBindings.has(tagAssociationKey(association))
+      ) {
+        omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'vocabulary-binding-missing' });
+        continue;
+      }
+      currentMembership = true;
     }
     if (assertion.graphTarget) {
       const target = manifest.records.find(
@@ -1499,6 +1630,7 @@ export async function publishShowcase(input: {
       continue;
     }
     validated.set(assertion.candidateId, candidate);
+    if (currentMembership) currentTagMembershipCandidateDigests.add(assertion.candidateDigest);
   }
 
   manifestAcknowledgements = manifestAcknowledgements.filter(
@@ -1604,6 +1736,14 @@ export async function publishShowcase(input: {
     const key = groupKey(record.subjectId, 'schema:genre');
     if (!grouped.has(key)) grouped.set(key, { record, property: 'schema:genre', ids: new Set<string>() });
   }
+  for (const workId of manifest.tagAssociationRefreshes ?? []) {
+    const record = manifest.records.find(
+      (item) => item.provider === 'vndb' && item.sourceAlias === input.aliases.vndb && item.sourceKey === workId,
+    );
+    if (!record?.subjectId) continue;
+    const key = groupKey(record.subjectId, 'schema:genre');
+    if (!grouped.has(key)) grouped.set(key, { record, property: 'schema:genre', ids: new Set<string>() });
+  }
 
   const publicSubjects = new Map<string, ReviewedSubjectRead | null>();
   const publicRead = async (id: string): Promise<ReviewedSubjectRead | null> => {
@@ -1677,6 +1817,8 @@ export async function publishShowcase(input: {
       continue;
     }
     const selections = new Map<string, 'normal' | 'preferred'>();
+    const refreshMemberships =
+      group.record.provider === 'vndb' && (manifest.tagAssociationRefreshes ?? []).includes(group.record.sourceKey);
     for (const item of priorSelection) {
       if (!item?.candidate) continue;
       const selectedCandidate = page.candidates.find((candidate) => candidate.id === item.candidate);
@@ -1684,6 +1826,15 @@ export async function publishShowcase(input: {
         refreshWeights &&
         selectedCandidate &&
         managedSourceTagWeight(selectedCandidate, input.aliases.vndb, group.record.sourceKey)
+      )
+        continue;
+      if (
+        refreshMemberships &&
+        selectedCandidate &&
+        managedSourceTagMembership(selectedCandidate, input.aliases.vndb, group.record) &&
+        !currentTagMembershipCandidateDigests.has(
+          showcaseDigest({ source: selectedCandidate.source, statement: selectedCandidate.statement }),
+        )
       )
         continue;
       selections.set(item.candidate, item.rank === 'preferred' ? 'preferred' : 'normal');
@@ -1762,7 +1913,7 @@ export async function publishShowcase(input: {
         .sort(([left], [right]) => left.localeCompare(right))
         .map(([candidate, rank]) => ({ candidate, rank })),
     };
-    const action = actionKey('adopt', `${id}:${group.property}`, manifest.digest);
+    const action = actionKey('adopt', `${id}:${group.property}`, showcaseDigest({ intent: manifest.digest, body }));
     const idempotencyKey = actionIdempotencyKey(body);
     const priorAction = input.journal.action(action);
     if (priorAction?.state === 'acknowledged') continue;

@@ -22,6 +22,7 @@ import {
   showcaseDigest,
   showcaseLimits,
   showcaseVocabularyExternalId,
+  type ShowcaseTagAssociation,
   type ShowcaseVocabularyRequirement,
 } from './showcase-manifest.ts';
 import type { ShowcaseJournal } from './showcase-publication.ts';
@@ -38,6 +39,7 @@ import {
   planVndbPublicTags,
   readVndbPublicTagBindings,
   vndbPublicTagVocabularyAdmission,
+  type AdmittedPublicTag,
   type VndbPublicTagKnownBindings,
   type VndbPublicTagPlan,
   type VndbPublicTagsResult,
@@ -453,6 +455,35 @@ function composePlan(
   };
 }
 
+function associationBindings(
+  admitted: readonly AdmittedPublicTag[],
+  bindings: SourceVocabularyBindings,
+): ShowcaseTagAssociation[] {
+  return admitted
+    .map((row) => {
+      const taxonomy = vndbPublicTagTaxonomy(row.category);
+      const scheme = bindings.schemes.find((item) => item.taxonomy === taxonomy);
+      const concept = bindings.concepts.find((item) => item.taxonomy === taxonomy && item.code === row.tag);
+      return {
+        workId: row.vid,
+        sourceKey: row.path,
+        tagId: row.tag,
+        category: row.category,
+        spoiler: row.spoiler,
+        conceptId: concept?.id ?? null,
+        schemeId: concept?.schemeId ?? scheme?.id ?? null,
+        conceptUri: vndbPublicTagConceptUri(row.category, row.tag),
+        schemeUri: vndbPublicTagScheme(row.category),
+        releaseDigest: bindings.releaseDigest,
+      };
+    })
+    .sort((left, right) => left.sourceKey.localeCompare(right.sourceKey));
+}
+
+function associationRefreshes(planned: ShowcaseTagPlan, selectedVids: readonly string[]): string[] {
+  return planned.truncated || planned.gaps.length ? [] : [...new Set(selectedVids)];
+}
+
 /** Finite selected-family tag plan for the default real-dump seed. */
 export async function planShowcaseTags(input: {
   tables: CrossMediaTables;
@@ -473,6 +504,8 @@ export type ShowcaseTagsResult = VndbPublicTagsResult & {
   vocabulary: ShowcaseTagVocabularyRecord[];
   truncated: boolean;
   bindings: SourceVocabularyBindings;
+  associationBindings: ShowcaseTagAssociation[];
+  associationRefreshes: string[];
   tagWeightObservations: readonly VndbTagRatingObservation[];
   tagWeightRefreshes: readonly string[];
 };
@@ -505,6 +538,8 @@ export async function prepareShowcaseTags(input: {
   return {
     ...planned,
     bindings,
+    associationBindings: associationBindings(planned.admitted, bindings),
+    associationRefreshes: associationRefreshes(planned, input.selectedVids),
     vocabularyAdmission: vndbPublicTagVocabularyAdmission(bindings, planned.admitted, ratingAcquisition.snapshots),
     tagWeightObservations: ratingAcquisition.observations,
     tagWeightRefreshes: [...new Set(input.selectedVids)],
@@ -552,6 +587,8 @@ export async function importShowcaseTags(input: {
     vocabulary: planned.vocabulary,
     truncated: planned.truncated,
     bindings,
+    associationBindings: associationBindings(planned.admitted, bindings),
+    associationRefreshes: associationRefreshes(planned, input.selectedVids),
     tagWeightObservations: ratingAcquisition.observations,
     tagWeightRefreshes: [...new Set(input.selectedVids)],
   };
