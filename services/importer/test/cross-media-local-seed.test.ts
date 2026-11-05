@@ -44,16 +44,16 @@ test('seed origins allow loopback HTTP and require HTTPS elsewhere', () => {
 });
 
 test('development seed fetches the shared cache once and passes the local persona to the importer', async () => {
-  const root = resolve(import.meta.dir, '../../..');
+  const root = await mkdtemp(join(tmpdir(), 'cross-media-wrapper-'));
   const keyDirectory = await mkdtemp(join(tmpdir(), 'cross-media-persona-key-'));
   const key = join(keyDirectory, 'persona.key');
   const jwk = generateKeyPairSync('ec', { namedCurve: 'prime256v1' }).privateKey.export({ format: 'jwk' });
-  await writeFile(key, JSON.stringify({ ...jwk, alg: 'ES256', kid: 'local-test' }), { mode: 0o600 });
+  await writeFile(key, JSON.stringify({ ...jwk, alg: 'ES256', kid: '11111111-1111-4111-8111-111111111111' }), { mode: 0o600 });
   const args: string[] = [];
   let passedOptions: unknown;
   let fetches = 0;
   const credentialScopes: string[][] = [];
-  const report = { persona: { status: 'incomplete', collections: [] } };
+  const report = { readings: [], workLinks: [], persona: { status: 'incomplete', collections: [] } };
   try {
     const result = await runDevelopmentSeed({
       root,
@@ -61,6 +61,8 @@ test('development seed fetches the shared cache once and passes the local person
         REZICS_DEV_PERSONA_ACCOUNT_KEY: key,
         REZICS_DEV_PERSONA_ACCOUNT: 'local-importer',
         REZICS_DEV_PERSONA_CLIENT: 'local-cli',
+        REZICS_DEV_SHOWCASE_ACCOUNT_KEY: key,
+        REZICS_DEV_SHOWCASE_CLIENT: 'local-showcase',
         REZICS_DEV_VNDB_CHARACTER_VOCABULARY: '/shared/vocabulary.json',
         REZICS_DEV_BANGUMI_GAME_GENRE_BINDINGS: '/private/game-genres.json',
         KERNEL_PORT: '4100',
@@ -84,12 +86,16 @@ test('development seed fetches the shared cache once and passes the local person
       runSeed: async (argv, seedOptions) => {
         args.push(...argv);
         passedOptions = seedOptions;
+        await writeFile(join(root, '.temp/cross-media-seed/result.json'), JSON.stringify(report));
         return report as never;
       },
     });
     const option = (name: string) => args[args.indexOf(name) + 1];
     expect(fetches).toBe(1);
-    expect(result).toBe(report);
+    expect(result.collections).toBe(report.persona);
+    expect(result).toMatchObject({ state: 'incomplete', community: { state: 'missing_source' } });
+    expect(JSON.parse(await readFile(join(root, '.temp/cross-media-seed/result.json'), 'utf8')).developmentShowcase)
+      .toEqual(result);
     expect(option('--bangumi')).toBe('/shared/dumps/bangumi');
     expect(option('--vndb')).toBe('/shared/dumps/vndb');
     expect(option('--api')).toBe('http://127.0.0.1:4100');
@@ -114,5 +120,6 @@ test('development seed fetches the shared cache once and passes the local person
     expect(credentialScopes[1]).toEqual(['subject:read', 'collection:create', 'collection:read', 'collection:update']);
   } finally {
     await rm(keyDirectory, { recursive: true, force: true });
+    await rm(root, { recursive: true, force: true });
   }
 });
