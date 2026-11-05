@@ -1,6 +1,7 @@
 import {
   parsePublicCollectionDirectoryAddress,
   publicCollectionDirectoryHref,
+  type PublicCollectionDirectoryAddress,
 } from '../../library/public-collection-discovery/address';
 import { type MouseEvent, useLayoutEffect, useRef } from 'react';
 import { createFileRoute, useRouter } from '@tanstack/react-router';
@@ -19,7 +20,12 @@ import {
   type Movement,
 } from '../../library/public-collection-discovery/window-navigation';
 
-function validateCollectionSearch(search: Record<string, unknown>) {
+type CollectionRouteSearch = PublicCollectionDirectoryAddress & {
+  invalidCursor?: true;
+  invalidSelection?: true;
+};
+
+function validateCollectionSearch(search: Record<string, unknown>): CollectionRouteSearch {
   const parsed = parsePublicCollectionDirectoryAddress(search);
   if (parsed.state === 'invalid')
     return parsed.field === 'cursor' ? { invalidCursor: true } : { invalidSelection: true };
