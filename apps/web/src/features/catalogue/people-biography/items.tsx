@@ -1,4 +1,4 @@
-import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useId, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -6,9 +6,10 @@ import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { coverSrc } from '../../../media/cover-src';
 import { m } from '../../../paraglide/messages.js';
-import { subjectHref } from '../../../subject/subject-href';
+import { defaultReader } from '../../../subject/reader';
 import { CandidateReview, type CandidateTransport } from '../../../subject/candidate-review';
-import { pageText } from '../../pages/data';
+import { spoilerLevel } from '../../pages/shared';
+import { SpoilerGate } from '../../pages/values';
 import { useCurrentReadingActive, useCurrentReadingVisible } from '../editor-lifetime';
 import {
   factChanged,
@@ -21,7 +22,15 @@ import {
 } from '../subject-facts';
 import { statementInput, type StatementInput } from '../statement-editor';
 import { PartValue, StatementFields } from '../statement-editor-view';
-import { peopleSelectedFact, peopleRelationHref, type PeopleBiographyField } from './index';
+import { peopleBiographyAddress, peopleBiographyTargetHref } from './current-visit';
+import { PeopleBiographyAssertion, peopleBiographyAssertionAnchor, peopleBiographyFieldAnchor } from './assertion';
+import {
+  peopleLabel,
+  peopleSelectedFact,
+  peopleSubjectLabel,
+  peopleRelationHref,
+  type PeopleBiographyField,
+} from './index';
 
 const actionClass =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8 md:pointer-fine:min-w-0 md:pointer-fine:py-1';
@@ -43,6 +52,20 @@ function populated(statement: StatementInput): boolean {
   );
 }
 
+function preserveReturnForBack(event: MouseEvent<HTMLAnchorElement>, returnHref: string) {
+  if (
+    event.defaultPrevented ||
+    event.button !== 0 ||
+    event.metaKey ||
+    event.ctrlKey ||
+    event.shiftKey ||
+    event.altKey ||
+    event.currentTarget.target
+  )
+    return;
+  window.history.replaceState(window.history.state, '', returnHref);
+}
+
 /** Independently selected admitted occupation or language items; a stale choice must be reselected. */
 export function PeopleSelectedItems({
   field,
@@ -51,21 +74,22 @@ export function PeopleSelectedItems({
   search,
   transport,
   review,
-  returnHref,
+  restoredAssertion,
 }: {
   field: PeopleBiographyField;
   read: FactsCurrent;
   locale: string;
-  search: EntityPickerSearch;
+  search?: EntityPickerSearch;
   transport: FactsTransport;
   review: (property: string, session?: string) => CandidateTransport;
-  returnHref: string;
+  restoredAssertion?: string;
 }) {
   const active = useCurrentReadingActive();
   const visible = useCurrentReadingVisible();
   const o = { locale: locale as never };
   const definition = read.release.properties[field.id];
   const admitted =
+    !!search &&
     field.editor === 'item' &&
     !!definition &&
     definition.datatype === 'wikibase-item' &&
@@ -83,7 +107,7 @@ export function PeopleSelectedItems({
   const running = useRef(false);
   const latest = useRef({ draft, admitted, active });
   latest.current = { draft, admitted, active };
-  const label = admitted ? pageText(definition.labels, locale) : field.label;
+  const label = admitted ? peopleLabel(definition.labels, locale) : field.label;
   const usable = () => active() && latest.current.admitted === admitted;
   function stage(id: string | null) {
     if (!usable() || !admitted || (draft && factLocked(draft))) return;
@@ -135,47 +159,108 @@ export function PeopleSelectedItems({
   );
   const value = draft?.statement.value;
   const target = value?.type === 'value' && typeof value.content === 'string' ? value.content : '';
-  const title = Object.values(read.public.subject.labels)[0] ?? '';
+  const subject = read.public.subject;
+  const title = peopleSubjectLabel(subject, locale).text;
+  const returnHref = peopleBiographyAddress(subject.id, title, locale, subject.context, field.kind, field.id);
+  const associationHidden = field.facts.some((fact) => spoilerLevel(fact.statement) > defaultReader.spoilerLevel);
+  const relationAction = (
+    <a
+      className={actionClass + ' inline-flex items-center underline'}
+      href={peopleRelationHref(subject.id, title, locale, subject.context, returnHref)}
+      onClick={(event) => preserveReturnForBack(event, returnHref)}
+    >
+      {m.people_biography_edit({}, o)}
+    </a>
+  );
   if (!visible) return null;
+  const factRows = field.facts.map((fact, index) => {
+    const factReturn = peopleBiographyAddress(
+      subject.id,
+      title,
+      locale,
+      subject.context,
+      field.kind,
+      field.id,
+      fact.id,
+    );
+    const content = (
+      <article
+        id={peopleBiographyAssertionAnchor(fact.id)}
+        tabIndex={-1}
+        className="min-w-0 space-y-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      >
+        <p className="text-sm font-medium">{m.facts_selected_value({ number: index + 1 }, o)}</p>
+        {fact.target ? (
+          <a
+            className={actionClass + ' inline-flex items-center underline'}
+            lang={fact.target.lang ?? undefined}
+            href={peopleBiographyTargetHref(
+              fact.target.id,
+              fact.target.label,
+              locale,
+              subject.context,
+              factReturn,
+            )}
+          >
+            {fact.target.label || m.subject_value_unlabelled({}, o)}
+          </a>
+        ) : fact.statement.property.data_type === 'wikibase-item' && fact.statement.value.type === 'value' ? (
+          <span role="status">{m.candidate_value_unavailable({}, o)}</span>
+        ) : (
+          <PartValue part={fact.statement} read={read} locale={locale} />
+        )}
+        <PeopleBiographyAssertion
+          fact={fact}
+          field={field}
+          read={read}
+          locale={locale}
+          title={title}
+          restored={restoredAssertion === fact.id}
+        />
+      </article>
+    );
+    return (
+      <div key={fact.id} className="min-w-0">
+        {spoilerLevel(fact.statement) > defaultReader.spoilerLevel ? (
+          <SpoilerGate label={m.subject_spoiler_show({}, o)} hideLabel={m.subject_spoiler_hide({}, o)} unmountOnHide>
+            {content}
+          </SpoilerGate>
+        ) : (
+          content
+        )}
+      </div>
+    );
+  });
   if (field.editor === 'relation') {
     return (
-      <ContentItemFrame as="article" data-slot="people-selected-items" className="min-w-0 space-y-3 py-3 sm:py-4">
+      <ContentItemFrame
+        as="article"
+        id={peopleBiographyFieldAnchor(field.id)}
+        tabIndex={-1}
+        data-slot="people-selected-items"
+        className="min-w-0 space-y-3 py-3 sm:py-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      >
         <ContentItemHeading level={3} className="text-lg font-semibold" lang={label.lang ?? undefined}>
           {label.text}
         </ContentItemHeading>
-        <a
-          className={actionClass + ' inline-flex items-center underline'}
-          href={peopleRelationHref(read.public.subject.id, title, locale)}
-        >
-          {m.people_biography_edit({}, o)}
+        {field.status === 'absent' ? <p role="status">{m.people_biography_absent({}, o)}</p> : null}
+        {field.status === 'unreadable' ? <p role="status">{m.people_biography_unreadable({}, o)}</p> : null}
+        {factRows}
+        {associationHidden ? (
+          <SpoilerGate label={m.subject_spoiler_show({}, o)} hideLabel={m.subject_spoiler_hide({}, o)} unmountOnHide>
+            {relationAction}
+          </SpoilerGate>
+        ) : (
+          relationAction
+        )}
+        <a className={actionClass + ' inline-flex items-center underline'} href={returnHref}>
+          {m.people_biography_return({}, o)}
         </a>
       </ContentItemFrame>
     );
   }
-  return (
-    <ContentItemFrame as="article" data-slot="people-selected-items" className="min-w-0 space-y-3 py-3 sm:py-4">
-      <ContentItemHeading level={3} className="text-lg font-semibold" lang={label.lang ?? undefined}>
-        {label.text}
-      </ContentItemHeading>
-      {field.status === 'unsupported' ? <p role="status">{m.people_biography_unsupported({}, o)}</p> : null}
-      {field.status === 'absent' && !draft ? <p role="status">{m.people_biography_absent({}, o)}</p> : null}
-      {field.status === 'unreadable' ? <p role="status">{m.people_biography_unreadable({}, o)}</p> : null}
-      {field.facts.map((fact, index) => (
-        <article key={fact.id} className="min-w-0 space-y-2">
-          <p className="text-sm font-medium">{m.facts_selected_value({ number: index + 1 }, o)}</p>
-          {fact.target ? (
-            <a
-              className={actionClass + ' inline-flex items-center underline'}
-              lang={fact.target.lang ?? undefined}
-              href={subjectHref({ id: fact.target.id, label: fact.target.label }, locale).href}
-            >
-              {fact.target.label || m.subject_value_unlabelled({}, o)}
-            </a>
-          ) : (
-            <PartValue part={fact.statement} read={read} locale={locale} />
-          )}
-        </article>
-      ))}
+  const controls = (
+    <>
       {admitted && !draft ? (
         <div className="flex flex-wrap items-end gap-3">
           {!!selected.length && (
@@ -241,7 +326,7 @@ export function PeopleSelectedItems({
                           ]
                         : []
                   }
-                  search={search}
+                  search={search!}
                   onValueChange={(items) => {
                     if (!change) return;
                     setPicked(items);
@@ -285,6 +370,30 @@ export function PeopleSelectedItems({
           </div>
         </fieldset>
       ) : null}
+    </>
+  );
+  return (
+    <ContentItemFrame
+      as="article"
+      id={peopleBiographyFieldAnchor(field.id)}
+      tabIndex={-1}
+      data-slot="people-selected-items"
+      className="min-w-0 space-y-3 py-3 sm:py-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+    >
+      <ContentItemHeading level={3} className="text-lg font-semibold" lang={label.lang ?? undefined}>
+        {label.text}
+      </ContentItemHeading>
+      {field.status === 'unsupported' ? <p role="status">{m.people_biography_unsupported({}, o)}</p> : null}
+      {field.status === 'absent' && !draft ? <p role="status">{m.people_biography_absent({}, o)}</p> : null}
+      {field.status === 'unreadable' ? <p role="status">{m.people_biography_unreadable({}, o)}</p> : null}
+      {factRows}
+      {associationHidden ? (
+        <SpoilerGate label={m.subject_spoiler_show({}, o)} hideLabel={m.subject_spoiler_hide({}, o)} unmountOnHide>
+          {controls}
+        </SpoilerGate>
+      ) : (
+        controls
+      )}
       <a className={actionClass + ' inline-flex items-center underline'} href={returnHref}>
         {m.people_biography_return({}, o)}
       </a>

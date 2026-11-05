@@ -2,6 +2,13 @@
 
 This module owns subject facts and their item projections, partition paging, and immutable definition releases with editorial activation history.
 
+## Semantic label policy
+
+`languageRanges` and `chooseLabel` are pure shared Definitions functions exported by the package root, including its
+browser condition. The native `services/kernel/src/semantic/language.ts` entry is a compatibility re-export for
+Content, Library and Search. The policy and stored-tag behavior remain unchanged; native consumers retain their
+existing import path.
+
 ## Canonical identity boundary
 
 Decision: canonical identity stays local to Semantic; `identity-core/index.ts` is the pure public entry,

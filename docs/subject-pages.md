@@ -2429,3 +2429,25 @@ render requests. It admits the complete choice metadata projection up to 256 KiB
 make the selector unavailable instead of dropping choices. This Web consumer limit is separate from native statement,
 provenance and document bounds. It retains one selected body, one active explicit read and one bounded return
 descriptor; no cross-visit body cache is added. Composition growth and native producer checks remain separate acceptance.
+
+## Person correction current visit
+
+Decision: Person correction returns use one bounded `#person-biography` locator in the existing Subject via address and reread the Person before restoring a matching current assertion.
+
+The mounted Person correction page presents biography documents, admitted occupations and languages, and released
+Organization affiliations together. Admission still requires the released Type and exact property. The shared
+Definitions root/browser `chooseLabel` rule selects each Subject, target and property label and preserves the stored
+language tag; the native `services/kernel/src/semantic/language.ts` path remains a compatibility re-export.
+
+Authored, relationship and disclosed target addresses carry the current Context. A target visit uses one validated
+`via` source address with a bounded locator containing a Context UUID, field, optional assertion UUID and one of the
+four mounted section names. Return rereads the current Person once through the existing page transport. It restores the
+field, open assertion inspection and focus only when that assertion remains current; a replaced assertion is reported
+and focus moves to its field. A concealed assertion never opens its spoiler gate during restoration. Missing related
+targets remain unreadable and have no label or href derived from their identifiers. Evidence and document bodies stay
+inside the existing value and document readers, including their disclosure and rights behavior.
+
+Readable facts do not grant mutation. Authored and relationship corrections continue through their existing editors,
+operation advice and command recovery. The locator carries no draft, permission, credential or nested return address;
+it does not change Context resolution or choose a replacement assertion. The browser review at 390/1440, light/dark
+and keyboard-only remains an integration acceptance.
