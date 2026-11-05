@@ -43,13 +43,22 @@ scale, Content's current standard question/revision/meaning and owner-selected 0
 an explicit native clear separately. Apply needs a separate `confirmNativeVoteEffects:true`; source privacy,
 upload confirmation, state import and the score value do not provide that consent.
 
-The mounted Content writer currently exposes `createVoteCommands.putVoteOutcome(actor, {questionId, targetId, units},
-idempotencyKey)` without a guard for the reviewed question revision, current counted vote or absence, canonical/counting
-identity and local correction. The AniList plan persists the original operands, question, target observation, stable
-native command key, separate consent and client attribution, but returns typed `unavailable` with
-`counted_vote_review_missing` and performs no native write or clear until Content supplies that conditional producer.
-The owner read authorizes score review and every result replay before disclosing the private plan. This unavailable
-path is not score-adoption completion. Progress keeps episodes (ANIME), chapters (MANGA), unknown measures and
+Decision: compose Rating's complete native review observation and exact guarded command in the existing AniList
+row. The base producer still refuses guarded effects with `atomic_guard_unavailable`; completing atomic question
+and identity fencing remains Content work. Never bypass that refusal with an unguarded write.
+
+`createVoteCommands.readVoteReview` supplies the current question, canonical identity and required identity epochs,
+raw original/canonical slots and counted own-vote witness. The importer stores its complete version 1 guard with
+immutable source evidence and selected native operands. Review reports observation availability independently of
+write availability. `putVoteOutcome(actor, {questionId,targetId,units,guard}, key)` owns validation, receipt digest
+and effects. `replace:true` explicitly permits replacing a current vote as well as state; clear remains an explicit
+score action. Missing effect consent is resumable. Consent checkpoints retain the original key and guard across
+uncertain delivery; retries call that exact command without replacing its observations. Native stale and unavailable
+results remain typed. Unexpected delivery errors propagate with the started checkpoint retained. Owner page reads
+include `currentScore` from Rating alongside the current Entry proposal; receipts and retained evidence are not
+current readback. Native effect success remains unproved while Content returns `atomic_guard_unavailable`.
+
+Progress keeps episodes (ANIME), chapters (MANGA), unknown measures and
 volumes separate. Repeat, priority, notes, privacy, precise/partial dates, updatedAt and all unrecognized fields are
 retained, never applied. Unknown date components are not filled. Private notes are not reviews; custom/private lists
 are not public Collections. No holdings, entitlements or labels are inferred. Explicitly selected supported custom membership can be adopted
@@ -136,19 +145,23 @@ not admitted facts. `complete:false` is resumable, not success for every row.
   accounts for UTF-8 sizing, JSON parse, structural validation and one bounded source-token walk over `B`, then
   writes the header and `N` rows through the existing owner receipt/event. Each page accounts for its indexed
   20-row read, per-row provider claims and current Subject/Profile/Entry observations; score-review rows add one
-  authorized Content question read. Each review repeats its row, provider-claim and Subject/Profile/Entry reads;
-  selecting a score adds the question read, header score-format read and one bounded plan/receipt write. Each apply
+  authorized complete Rating review read for current readback. Each review repeats its row, provider-claim and Subject/Profile/Entry reads;
+  selecting a score adds the question read, header score-format read and one bounded plan/receipt write.
+  Complete Rating observations add question/target admission, at most two native identity-home epoch reads and
+  one account snapshot with account admission, at most two exact raw slots and one indexed counted slot. Each apply
   confirmation repeats cancellation/header and row reads; a selected score repeats Content question, provider-claim
-  and current target reads and writes the persisted consent plan before returning unavailable. Existing state commands
+  and current target reads before its first attempt, then persists consent and invokes one exact guarded native
+  command. Every retry repeats current authorization and native receipt lookup; started commands retain their guard. Existing state commands
   retain their own admission and receipt work. No history discovery or account-wide vote scan is added.
 - Caps and encoding: the existing 1 MiB upload, 200-row, 65,536-byte row, 8,192-byte group and SQL 4 MiB row-payload
   limits retain `scoreLexeme`, reviewed operands and consent in the existing rows. Page encoding checks the existing
   result-byte bound after adding score/question details; apply still selects at most 20 bounded outcomes. There is
   no additional evidence store. Upload deletion and account cleanup remain the existing explicit delete and 100-key
-  owned-graph phase. A future native score attempt must include Content's repeated question/current-counted-vote/
-  identity admission, component and aggregate work, native receipt, retry and serialization cost; that producer is
-  missing and its cost is unmeasured here.
+  owned-graph phase. The bounded guard carries at most two epochs and a native witness capped at 4,096 bytes.
+  Native attempts include repeated question/target/account admission, identity epochs, receipt lookup, raw and
+  counted vote locks and witness reads. Successful effects additionally require Content's component/aggregate and
+  receipt work; current atomic refusal precedes those effects. No independent measurement writer is introduced.
 - Growth check: Web focused test `apps/web/tests/personal-anilist-import.test.tsx` drives 20, 100 and 200
   native-shaped rows through the same controller and asserts call counts, 20-row reads, 20-row writes and the
-  retained-byte bound. Native statement/index bounds stay with the Commerce engine; this journey introduces no new
-  kernel query path. Content conditional admission and its write cost remain unavailable and unmeasured.
+  retained-byte bound. Native statement/index bounds stay with the Commerce engine; the native review uses exact slot keys and the counted-target index. Positive conditional write cost remains
+  unmeasured while the producer refuses atomic admission.

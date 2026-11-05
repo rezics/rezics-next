@@ -47,6 +47,10 @@ import {
   RatingQuestionNotFoundError,
   STANDARD_QUESTION_ID,
   type RatingQuestion,
+  type VoteReviewGuard,
+  type Vote,
+  VoteReviewStaleError,
+  VoteReviewUnavailableError,
 } from '../rating/votes.ts';
 import {
   ENTRY_IMPORT_METADATA_LIMITS,
@@ -134,11 +138,12 @@ export type AniListScoreReview = {
   units: number | null;
   conversion: 'owner-selected-native-units';
   native: {
-    availability: 'unavailable';
-    reason: 'conditional_vote_admission_missing';
+    availability: 'available' | 'unavailable';
+    reason?: string;
+    guard?: VoteReviewGuard;
     question: AniListNativeQuestion;
     target: { subjectId: string; identityEpoch: string; matchFingerprint: string };
-    currentVote: { status: 'unavailable'; reason: 'counted_vote_review_missing' };
+    currentVote: { status: 'current'; vote: Vote | null } | { status: 'unavailable'; reason: string };
     commandKey: string;
     consentKey: string;
     consented: boolean;
@@ -655,7 +660,11 @@ export function createAniListImport(deps: Dependencies) {
     );
     const rows = [];
     for (const row of raw) {
-      if (row.payload.review?.score) await readScoreQuestion(actor);
+      let currentScore = null;
+      if (row.payload.review?.score) {
+        const native = await votes.readVoteReview(actor, STANDARD_QUESTION_ID, row.payload.review.score.native.target.subjectId);
+        currentScore = { question: nativeQuestion(native.question), vote: native.currentVote };
+      }
       const matching = await match(actor, row.payload.source);
       const inspected = matching.state === 'matched' ? await observe(actor, matching.candidates[0]!) : null;
       const { profile, profileBinding: _profileBinding, ...publicObservation } = inspected ?? {};
@@ -663,6 +672,7 @@ export function createAniListImport(deps: Dependencies) {
       rows.push({
         ordinal: row.ordinal,
         ...row.payload,
+        currentScore,
         labelEvidence: aniListLabelEvidence(row.payload.source),
         match: matching,
         proposal: observation,
@@ -700,12 +710,12 @@ export function createAniListImport(deps: Dependencies) {
     if (input.score) {
       if (!selected || !observation || !Object.hasOwn(stored.source.evidence, 'score'))
         throw new LibraryConflictError();
-      if (input.score.questionId !== STANDARD_QUESTION_ID || input.score.questionRevision !== 1)
+      if (input.score.questionId !== STANDARD_QUESTION_ID || input.score.questionRevision < 1)
         throw new LibraryConflictError();
       const question = await readScoreQuestion(actor);
       if (
         question.id !== STANDARD_QUESTION_ID ||
-        question.revision !== 1 ||
+        question.revision !== input.score.questionRevision ||
         question.minimumUnits !== 0 ||
         question.maximumUnits !== 20 ||
         question.stepUnits !== 1 ||
@@ -714,6 +724,14 @@ export function createAniListImport(deps: Dependencies) {
           (!Number.isSafeInteger(input.score.units) || input.score.units < 0 || input.score.units > 20))
       )
         throw new LibraryConflictError();
+      let native: Awaited<ReturnType<typeof votes.readVoteReview>> | null = null;
+      let unavailable: string | undefined;
+      try {
+        native = await votes.readVoteReview(actor, question.id, selected);
+      } catch (error) {
+        if (!(error instanceof VoteReviewUnavailableError)) throw error;
+        unavailable = error.reason;
+      }
       const scoreField = stored.source.fields.find((field) => field.field === 'score');
       score = {
         source: {
@@ -728,15 +746,15 @@ export function createAniListImport(deps: Dependencies) {
         units: input.score.action === 'vote' ? input.score.units : null,
         conversion: 'owner-selected-native-units',
         native: {
-          availability: 'unavailable',
-          reason: 'conditional_vote_admission_missing',
-          question,
+          availability: native ? 'available' : 'unavailable',
+          ...(native ? { guard: native.guard } : { reason: unavailable! }),
+          question: native ? nativeQuestion(native.question) : question,
           target: {
             subjectId: observation.subjectId,
             identityEpoch: observation.epoch,
             matchFingerprint: matching.fingerprint,
           },
-          currentVote: { status: 'unavailable', reason: 'counted_vote_review_missing' },
+          currentVote: native ? { status: 'current', vote: native.currentVote } : { status: 'unavailable', reason: unavailable! },
           commandKey: randomUUID(),
           consentKey: randomUUID(),
           consented: false,
@@ -1107,7 +1125,7 @@ export function createAniListImport(deps: Dependencies) {
         continue;
       }
       let scoreCurrent: 'current' | 'stale' | null = null;
-      if (reviewed.score) {
+      if (reviewed.score && !reviewed.score.native.consented) {
         const question = await readScoreQuestion(actor);
         const current = await observe(actor, reviewed.score.native.target.subjectId);
         const matching = await match(actor, stored.source);
@@ -1197,6 +1215,12 @@ export function createAniListImport(deps: Dependencies) {
         } else if (confirmation.confirmNativeVoteEffects !== true) {
           scoreOutcome = { status: 'skipped', reason: 'Native vote effects were not separately confirmed.' };
           if (status === 'unsupported') status = 'skipped';
+        } else if (!reviewed.score.native.guard) {
+          scoreOutcome = { status: 'unavailable', reason: reviewed.score.native.reason };
+        } else if (reviewed.score.action === 'vote' && reviewed.score.native.currentVote.status === 'current' &&
+          reviewed.score.native.currentVote.vote?.units !== null && reviewed.score.native.currentVote.vote !== null &&
+          !reviewed.input.replace) {
+          scoreOutcome = { status: 'skipped', reason: 'The current native vote was preserved; replacement was not selected.' };
         } else {
           if (signal?.aborted || Date.now() >= deadline) break;
           const admission = await save(
@@ -1226,11 +1250,20 @@ export function createAniListImport(deps: Dependencies) {
             ...reviewed,
             score: { ...reviewed.score, native: { ...reviewed.score.native, consented: true } },
           };
-          scoreOutcome = {
-            status: 'unavailable',
-            reason: 'Content has no conditional vote admission producer for the reviewed baseline and identity guard.',
-          };
-          if (status === 'unsupported') status = 'unavailable';
+          try {
+            await votes.putVoteOutcome(actor, {
+              questionId: reviewed.score!.native.question.id,
+              targetId: reviewed.score!.native.target.subjectId,
+              units: reviewed.score!.units,
+              guard: reviewed.score!.native.guard!,
+            }, reviewed.score!.native.commandKey);
+            scoreOutcome = { status: 'applied' };
+          } catch (error) {
+            if (error instanceof VoteReviewStaleError) scoreOutcome = { status: 'stale', reason: error.reason };
+            else if (error instanceof VoteReviewUnavailableError) scoreOutcome = { status: 'unavailable', reason: error.reason };
+            else throw error;
+          }
+          if (status === 'unsupported') status = scoreOutcome.status;
         }
         if (scoreOutcome.status === 'applied') retained = retained.filter((field) => field !== 'score');
       }
