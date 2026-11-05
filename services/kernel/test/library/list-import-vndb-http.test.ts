@@ -192,7 +192,7 @@ test('VNDB Progress requires its declared current-profile unit, uses exported pl
   });
   expect(applied.outcomes[1].progress.readback.revision).toBe(current.progressSession.revision);
 
-  const unsupportedId = (await upload(xml(vn(vnId, '<progress unit="chapter">4</progress>')))).uploadId;
+  const unsupportedId = (await upload(xml(vn(vnId, '<progress unit="minute">4</progress>')))).uploadId;
   const unsupportedReview = await review(unsupportedId, {
     ordinal: 0,
     action: 'progress',
