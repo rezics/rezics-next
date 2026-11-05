@@ -12,7 +12,7 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import { EditorialConflictError, SubjectNotFoundError } from './candidates.ts';
 import { SUBJECT_MERGED } from '../events/contracts/semantic.ts';
 import type { Release } from '@rezics/definitions';
-import readRedirect from './read-redirect.sql';
+import { redirectOf, SubjectRedirectError } from './subject-redirect.ts';
 import changePartitionSubjectCount from './change-partition-subject-count.sql';
 import updateSubjectRelease from './update-subject-release.sql';
 import insertRedirect from './merges-insert-redirect.sql';
@@ -22,19 +22,7 @@ import readVisible from './merges-read-visible.sql';
 import { AccountAgentVerificationError, accountAgentsForSubjects } from './agents.ts';
 import markProjectionPending from './merge-mark-projection-pending.sql';
 
-export class SubjectRedirectError extends Error {
-  constructor(
-    public readonly from: string,
-    public readonly to: string,
-  ) {
-    super('Subject has been redirected');
-  }
-}
-
-export async function redirectOf(client: CommandTransaction, id: string): Promise<string | null> {
-  const row = await readRedirect.run(client, { route: routeOf(id)!, subject_id: id });
-  return row?.target ?? null;
-}
+export { redirectOf, SubjectRedirectError };
 
 async function mergeSubject(client: CommandTransaction, id: string) {
   const row = await readVisible.run(client, { route: routeOf(id)!, subject_id: id });

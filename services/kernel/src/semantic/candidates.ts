@@ -25,7 +25,7 @@ import type { AccountActor } from '../request/access.ts';
 import { derivedId, partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding, type CursorKey } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { redirectOf, SubjectRedirectError } from './merges.ts';
+import { redirectOf, SubjectRedirectError } from './subject-redirect.ts';
 import { initializeRevisionAuthorship, revisionResource, StaleRevisionAuthorshipError } from './authorship.ts';
 import { creationDeclares } from '../access/index.ts';
 import { activeRelease, GLOBAL_CONTEXT, readRelease } from './definitions.ts';
