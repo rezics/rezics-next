@@ -1078,6 +1078,7 @@ export function createCollectionReads(
     if (result.members.length > MAX_VIEWER_FACTS_ROWS)
       throw new RangeError('Collection personal actions accept at most 100 raw members');
     let facts: ViewerPersonalActionsPage;
+    let subjectsCurrent: (() => Promise<boolean>) | undefined;
     try {
       if (!dependencies.viewerPersonalActions) {
         facts = { state: 'unavailable', reason: 'currentness', retryable: true };
@@ -1085,6 +1086,7 @@ export function createCollectionReads(
         const subjects = await readSubjectSummaryObservation({ ...dependencies, actor: viewer, deadline }, [
           ...new Set(result.members.map((member) => member.subjectId)),
         ]);
+        subjectsCurrent = () => subjects.current();
         // Missing native type evidence is unavailable, never a fabricated type or canonical sibling operand.
         const rows = result.members.flatMap((member, index) => {
           const subject = subjects.summaries.get(member.subjectId);
@@ -1097,7 +1099,8 @@ export function createCollectionReads(
             ? { state: 'unavailable', reason: 'identity', retryable: true }
             : await dependencies.viewerPersonalActions(viewer, rows, STANDARD_QUESTION_ID, deadline);
       }
-      if (!(await subjects.current())) facts = { state: 'unavailable', reason: 'currentness', retryable: true };
+      if (subjectsCurrent && !(await subjectsCurrent()))
+        facts = { state: 'unavailable', reason: 'currentness', retryable: true };
     } catch (error) {
       // Operand/size violations are errors, never a truncated or successful private result.
       if (error instanceof RangeError) throw error;
