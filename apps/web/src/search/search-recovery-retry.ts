@@ -16,7 +16,7 @@ export function useSearchRetryWait(retryAt?: number): boolean {
   const [now, setNow] = useState<number>();
   useEffect(() => {
     if (retryAt === undefined) return;
-    let timer: ReturnType<typeof setTimeout>;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const update = () => {
       const current = Date.now();
       setNow(current);
