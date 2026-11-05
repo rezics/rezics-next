@@ -9,6 +9,10 @@ import { ZonePageReadProgressSchema } from '../../src/zones/page-continuation.ts
 import { createReleasedLibraryPopulation } from '../library/support/released-library-population.ts';
 import { discoveryKey, type DiscoveryPersona } from '../support/released-discovery.ts';
 import { createBody, page, resourceFixture } from '../zones/resource-fixture.ts';
+import { workerTestEnv } from '../support/worker-env.ts';
+
+// Isolated Auth registration runs kernel workers that read the receipt ring from the environment.
+process.env.KERNEL_RECEIPT_KEYS ??= workerTestEnv().KERNEL_RECEIPT_KEYS;
 
 // A saved Zone site over real Search and curated Collections. Readers are anonymous, a signed-in member without
 // grants, and the Zone owner. The only delegated source is the owner's private Collection, read after an explicit grant.

@@ -1,4 +1,5 @@
 import { suspendAccount } from '../support/native-suspension-driver.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { expect } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { PROFILE_FORMAT, type CompositionDocument, type ZoneStarter } from '@rezics/composition';
@@ -61,6 +62,7 @@ export async function resourceFixture(options: { scopes?: readonly string[] } = 
       clock,
       routeKey: new Uint8Array(32).fill(73),
       tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(74)]]) },
+      receiptKeys: testReceiptKeys(),
       requestDeadlineMs: 30_000,
       access: (config) => {
         // Lifecycle time may advance by months; credential expiry retains actual wall time.
