@@ -4,15 +4,15 @@ import {
   type AccessWork,
   type AccessWorkSink,
 } from '../work/access-work.ts';
-import type { WorkDimensions } from '../library/collection-source.ts';
-import { NativeCollectionWork } from '../library/collection-source-work.ts';
+import type { WorkDimensions } from './collection-source.ts';
+import { NativeCollectionWork } from './collection-source-work.ts';
 import {
   currentCommandWorkAssociation,
   registerCommandWorkAssociation,
   type CommandWorkAssociation,
-} from './work-context.ts';
-export { currentCommandWorkAssociation, withCommandWorkAssociation } from './work-context.ts';
-export type { CommandWorkAssociation, CommandWorkReservation } from './work-context.ts';
+} from '../command/work-context.ts';
+export { currentCommandWorkAssociation, withCommandWorkAssociation } from '../command/work-context.ts';
+export type { CommandWorkAssociation, CommandWorkReservation } from '../command/work-context.ts';
 
 const sourceAxes = [
   'candidateKeys',

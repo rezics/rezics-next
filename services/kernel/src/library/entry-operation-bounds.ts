@@ -1,6 +1,6 @@
 import { declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
 import { RELEASE_LIMITS } from '@rezics/definitions';
-import { currentCommandWorkAssociation } from '../command/work.ts';
+import { currentCommandWorkAssociation } from './command-work.ts';
 import type { WorkDimensions } from './collection-source.ts';
 import page from './entry-state-history-page.sql';
 import entryPage from './entry-store-entry-page.sql';

@@ -4,7 +4,7 @@ import { COMMAND_STEP_RETRIES } from '../../src/work/retries.ts';
 import type { AccessWorkAccounting } from '../../src/work/access-work.ts';
 import type { WorkReceipt } from '../../src/library/collection-source.ts';
 import { registerCommandWorkAssociation, type CommandWorkAssociation } from '../../src/command/work-context.ts';
-import { withCommandWorkAssociation } from '../../src/command/work.ts';
+import { withCommandWorkAssociation } from '../../src/library/command-work.ts';
 import {
   PUBLISHED_LOG_RETENTION_PAGE_BOUND,
   PUBLISHED_LOG_RETENTION_SEGMENT_BOUND,

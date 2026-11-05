@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { createCommandWorkAssociation, withCommandWorkAssociation } from '../../src/command/work.ts';
+import { createCommandWorkAssociation, withCommandWorkAssociation } from '../../src/library/command-work.ts';
 import type { WorkDimensions } from '../../src/library/collection-source.ts';
 import { NativeCollectionWork } from '../../src/library/collection-source-work.ts';
 import { EMPTY_ACCESS_WORK } from '../../src/work/access-work.ts';

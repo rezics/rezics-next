@@ -504,7 +504,8 @@
         "services/kernel/src/request/derived-access.ts",
         "services/kernel/src/request/resource-access-errors.ts",
         "services/kernel/src/request/authentication-work.ts",
-        "services/kernel/src/request/auth-consent.ts"
+        "services/kernel/src/request/auth-consent.ts",
+        "services/kernel/src/command/work-context.ts"
       ],
       "allowedDependencies": [
         "bounds",
