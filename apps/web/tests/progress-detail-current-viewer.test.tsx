@@ -934,7 +934,12 @@ test('a native section restart clears only its predecessors; replacement retires
     expect(h.reads.at(-1)!.data.changes).toBeUndefined();
     expect(h.reads.at(-1)!.data.units).toBe('next-units');
     const refreshed = detail('A', h.reads.at(-1)!.data, 8);
+    delete refreshed.progress.unitsCursor; // A later ordinary refresh can restart the sibling too.
     await h.resolveRead(refreshed);
+    await h.record();
+    await settle(() => writes[1]!.work.resolve(recorded(refreshed)));
+    expect(h.reads.at(-1)!.data.units).toBeUndefined();
+    await h.resolveRead(detail('A', h.reads.at(-1)!.data, 9));
     await more('changes');
     const late = h.reads.at(-1)!;
     await h.show({ session: viewer('B') });
