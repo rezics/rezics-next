@@ -53,6 +53,9 @@ export default defineConfig((context) => {
         ssrFiles: ['src/server.ts', 'src/session/routes.ts', 'src/session/website-scopes.ts'],
       },
     },
+    ...(process.env.REZICS_WALK_STACK_SLOT
+      ? { cacheDir: resolve(workspaceRoot, '.temp/web-vite', process.env.REZICS_WALK_STACK_SLOT) }
+      : {}),
     html: { cspNonce: viteNonceMarker },
     // Fonts must stay on the site origin; the page policy does not allow data: fonts.
     build: { assetsInlineLimit: 0 },

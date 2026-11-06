@@ -851,7 +851,6 @@ async function walk(command: string[]): Promise<number> {
   if (!task || !walkStackRequired(process.env))
     throw new Error('walk stacks are for a worker whose brief lists acceptance.requires native or browser');
   if (command.length === 0) throw new Error('Usage: bun services/auth/scripts/dev-stack.ts walk -- <command...>');
-  const names = walkStackNames(task);
   const controller = new AbortController();
   let current: ReturnType<typeof Bun.spawn> | undefined;
   let interrupted: keyof typeof SIGNAL_NUMBERS | undefined;
@@ -868,11 +867,12 @@ async function walk(command: string[]): Promise<number> {
   let code = 0;
   try {
     slot = await admitWalkStack(task, process.env, root, controller.signal);
+    const names = walkStackNames(task, slot.index!);
     const env = walkProcessEnvironment(task, slot.index!);
     const ports = walkStackPorts(slot.index!);
     let starting: ReturnType<typeof Bun.spawn> | undefined;
     try {
-      removeWalkStack(names); // an interrupted attempt of this task may have left its stack behind
+      removeWalkStack(names); // an interrupted attempt of this slot may have left its stack behind
       for (const script of [
         ['services/kernel/scripts/database.ts', 'up'],
         ['services/kernel/scripts/search.ts', 'up'],

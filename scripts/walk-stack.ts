@@ -37,11 +37,13 @@ export function walkStackLimit(env: Record<string, string | undefined>): number 
   return Number(value);
 }
 
-/** Container and volume names carry the task. An identifier Docker cannot use as a name is refused, not altered. */
-export function walkStackNames(task: string): WalkNames {
+/** Container and volume names carry the task and slot, so a stuck container cannot block a later slot. */
+export function walkStackNames(task: string, index: number): WalkNames {
   if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,100}$/.test(task))
     throw new Error(`GOAL_TASK_ID cannot name a walk stack: ${JSON.stringify(task)}`);
-  const prefix = `rezics-walk-${task}`;
+  if (!Number.isInteger(index) || index < 1)
+    throw new Error(`walk stack slot must be a positive integer, received ${index}`);
+  const prefix = `rezics-walk-${task}-${index}`;
   return { prefix, database: `${prefix}-database`, search: `${prefix}-search` };
 }
 
@@ -125,7 +127,7 @@ export async function walkPortsAvailable(ports: Iterable<number>): Promise<boole
 
 /** The variables that give one admitted stack its own names, ports and origins. */
 export function walkStackEnvironment(task: string, index: number): Record<string, string> {
-  const names = walkStackNames(task);
+  const names = walkStackNames(task, index);
   const ports = walkStackPorts(index);
   const origin = (port: number) => `http://127.0.0.1:${port}`;
   return {
@@ -166,7 +168,7 @@ export function admitWalkStack(
   root: string,
   signal?: AbortSignal,
 ): Promise<StackSlot> {
-  walkStackNames(task);
+  walkStackNames(task, 1);
   return acquireStackSlot(
     `walk ${task}`,
     { REZICS_STACK_LEASE_DIR: walkStackDirectory(root, env), REZICS_STACK_SLOTS: String(walkStackLimit(env)) },

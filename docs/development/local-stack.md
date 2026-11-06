@@ -231,9 +231,10 @@ bun services/auth/scripts/dev-stack.ts walk -- <command...>
 1. Waits for a walk slot. At most `REZICS_WALK_STACKS` stacks (default 6; an integer from 1 to 1000) run on the host
    at once, counted across worktrees under the main checkout's `.temp/walk-stacks`. A further start waits in arrival
    order and prints its position, `walk <task> waiting (<held>/<limit> held, <n> ahead)`. It is never refused.
-2. Names the stack's containers and volumes `rezics-walk-<task>-database` and `rezics-walk-<task>-search`, and gives
-   it its slot's loopback ports: `20000 + 10 × slot` plus 0 for Web, 1 for the Auth pages, 2 for native Auth, 3 for
-   Kernel, 4 for PostgreSQL and 5 for search.
+2. Names the stack's containers and volumes `rezics-walk-<task>-<slot>-database` and
+   `rezics-walk-<task>-<slot>-search`, and gives it its slot's loopback ports: `20000 + 10 × slot` plus 0 for Web, 1
+   for the Auth pages, 2 for native Auth, 3 for Kernel, 4 for PostgreSQL and 5 for search. A stuck container from an
+   earlier slot cannot occupy a later slot's names.
 3. Runs `db up`, `search up` and `setup`, starts the processes `dev` starts, and waits until Web, the Auth pages and
    Kernel answer, for at most twenty minutes. Readiness first checks that the port accepts TCP, then allows two minutes
    for Web's first compile; aborting that request too early prevents Vite from ever listening. `db up` and `search up`

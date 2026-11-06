@@ -9,6 +9,7 @@ import {
   walkPortsAvailable,
   walkProcessEnvironment,
   walkReadyUrls,
+  walkStackNames,
   walkStackPorts,
   WALK_READY_FETCH_MS,
   WALK_READY_POLL_MS,
@@ -52,6 +53,10 @@ test('walk process environment does not inherit check-host cgroup placement', ()
   });
   expect(env.KERNEL_CHECK_ON_REMOTE).toBeUndefined();
   expect(env.REZICS_WALK_STACK_SLOT).toBe('3');
+  expect(env.KERNEL_SEARCH_CONTAINER).toBe('rezics-walk-6a6ca25b-b24d-431b-bc8f-615cef277eda-3-search');
+  expect(walkStackNames('6a6ca25b-b24d-431b-bc8f-615cef277eda', 3).database).toBe(
+    'rezics-walk-6a6ca25b-b24d-431b-bc8f-615cef277eda-3-database',
+  );
   expect(cgroupArgs(env)).toEqual([]);
 });
 
