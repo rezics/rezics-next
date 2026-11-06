@@ -1,8 +1,8 @@
 import { createElement } from 'react';
 
-// Process-wide stubs for the question-management walk tests. A module mock registered by one test file stays in place
+// Process-wide stubs for the question-management test files. A module mock registered by one test file stays in place
 // for every file that runs after it, so each mock below is the same factory in every file and only reads these handlers.
-// A file sets its handlers in beforeAll and clears them in afterAll; without a handler, the real module answers.
+// A file sets its handlers in beforeEach and clears them in afterEach; without a handler, the real module answers.
 type Handler = (input: any) => any;
 
 export type QuestionStubs = {
