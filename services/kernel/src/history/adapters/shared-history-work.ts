@@ -1,7 +1,10 @@
-import { advanceOutstandingRecordHistory, advanceSelectedHistoryOriginal } from './work.ts';
 import type { WorkModule } from '../../work/registry.ts';
-import { verifyAgentIdentityRecoveryArtifactReadiness } from './agent-identity-recovery-receiving.ts';
-import { admitSharedHistory } from './shared-history.ts';
+import {
+  admitSharedHistory,
+  advanceOutstandingRecordHistory,
+  advanceSelectedHistoryOriginal,
+  verifyAgentIdentityRecoveryArtifactReadiness,
+} from '../application/index.ts';
 import {
   advancePendingContextRoleProvenance,
   type ContextRoleOccurrence,

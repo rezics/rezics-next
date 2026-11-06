@@ -6,19 +6,11 @@ import { sealHistoryAccount } from './gates.ts';
 import { minimizeHistoryReceipt } from './receipt.ts';
 import { minimizeHistoryOutbox } from './outbox.ts';
 import { minimizeHistoryWork } from './durable.ts';
-import { recordHistoryReceivingProof } from './receiving.ts';
 import type { WorkClient } from '../../work/client.ts';
 import type { WorkContext } from '../../work/registry.ts';
-import { withAgentIdentityHistoryUnit } from './agent-identity-retirement.ts';
-import {
-  identityHistoryCommand,
-  reserveIdentityHistoryWork,
-  IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK,
-} from './agent-identity-inventory-work.ts';
 import { deadlineFor } from '../../request/deadline.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../../command/command.ts';
 import { systemClock } from '../../clock.ts';
-import { readAgentIdentityRecoveryArtifactInTransaction } from './agent-identity-inventory.ts';
 import {
   observeAccountErasureSearch,
   type AccountErasureSearchObservation,
@@ -38,7 +30,13 @@ import {
 import {
   commandHistoryKind,
   currentAgentIdentityHistoryUnit,
+  identityHistoryAccountsLocalWork,
+  identityHistoryCommand,
   lockRecordedAgentIdentityHistory,
+  readAgentIdentityRecoveryArtifactInTransaction,
+  recordHistoryReceivingProof,
+  reserveIdentityHistoryWork,
+  withAgentIdentityHistoryUnit,
 } from '../application/index.ts';
 import {
   type AgentIdentityRecoveryArtifactInspection,
@@ -373,7 +371,7 @@ export async function advanceSharedHistory(
         );
         if (gap) {
           await identityHistoryCommand(deps.pool, funded, async (tx) => {
-            await reserveIdentityHistoryWork(deps.pool, IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.nativeWrite, funded);
+            await reserveIdentityHistoryWork(deps.pool, identityHistoryAccountsLocalWork().nativeWrite, funded);
             await tx.query(
               "UPDATE core.preference_history_job SET next_run=now()+interval '10 seconds' WHERE job_id=$1",
               [jobId],
@@ -384,7 +382,7 @@ export async function advanceSharedHistory(
         const unit = currentAgentIdentityHistoryUnit();
         if (!unit?.stage) return result('more', 'identity-history-current-unit-unavailable');
         return identityHistoryCommand(deps.pool, funded, async (tx) => {
-          await reserveIdentityHistoryWork(deps.pool, IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.selectedJob, funded);
+          await reserveIdentityHistoryWork(deps.pool, identityHistoryAccountsLocalWork().selectedJob, funded);
           const current = (
             await tx.query<Job>(`SELECT * FROM core.preference_history_job WHERE job_id=$1 FOR UPDATE`, [jobId])
           ).rows[0];
@@ -404,7 +402,7 @@ export async function advanceSharedHistory(
             current.barrier_at !== job.barrier_at
           )
             return result('more', 'identity-history-selected-cursor-changed');
-          await reserveIdentityHistoryWork(deps.pool, IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.selectedBarrier, funded);
+          await reserveIdentityHistoryWork(deps.pool, identityHistoryAccountsLocalWork().selectedBarrier, funded);
           await barrier(tx, current);
           const held = await lockRecordedAgentIdentityHistory(tx, deps.client, unit.stage!, funded);
           if (held.state === 'pending') return result('more', held.gap);
@@ -417,7 +415,7 @@ export async function advanceSharedHistory(
             funded,
           );
           if (receivingGap) return result('more', receivingGap);
-          await reserveIdentityHistoryWork(deps.pool, IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.nativeWrite, funded);
+          await reserveIdentityHistoryWork(deps.pool, identityHistoryAccountsLocalWork().nativeWrite, funded);
           await scannedArtifact(tx, current, 'durable-work/v1', work, null);
           if (original) await recordSelectedHistoryOriginalProgress(deps, original, jobId, tx);
           // The real Source/domain/fence and receiving locks survive this command's COMMIT.
@@ -486,7 +484,7 @@ async function continueRecoveryReceiving(
       return result('pending', 'agent-identity-recovery-event-cut-unavailable');
     } else {
       try {
-        await reserveIdentityHistoryWork(deps.pool, IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.recoveryReceiving, {
+        await reserveIdentityHistoryWork(deps.pool, identityHistoryAccountsLocalWork().recoveryReceiving, {
           deadline: selected.deadline,
         });
         recoveryReceivingReserved = true;

@@ -9,7 +9,8 @@ exports the receiving, record, operational, shared-work and identity facades; th
 capability. `kernel-history-adapters` implements that capability with native Postgres operations, command execution,
 and Access, Semantic, Search, Zones and Work owner bindings.
 
-Foreign Kernel modules import the declared History application and contract entries. The composition root in
+Foreign Kernel modules import the declared History application and contract entries. Access keeps compatibility
+re-exports at `access/shared-history.ts` and `access/shared-history-work.ts` that resolve to those facades. The composition root in
 `composition/history.ts` binds every capability method to its native adapter. Server and worker startup, and the shared
 runtime defaults in `composition/runtime-defaults.ts`, install that composition before use; `composition/preload.ts`
 exposes the same binding through an explicit preload hook used by

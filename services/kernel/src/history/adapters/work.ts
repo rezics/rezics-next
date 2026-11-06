@@ -8,9 +8,11 @@ import { minimizeRecordHistoryPurge, prepareRecordHistoryPurge } from './record-
 import { registerHistoryFamilyCoverage } from './family-coverage-work.ts';
 import type { WorkModule } from '../../work/registry.ts';
 import type { WorkClient } from '../../work/client.ts';
-import { advanceSharedHistory } from './shared-history.ts';
 import { withSelectedHistoryOriginal } from '../../access/identity-original-admission.ts';
-import { localSharedHistoryWorkModule as localHistoryWorkModule } from '../application/index.ts';
+import {
+  advanceSharedHistory,
+  localSharedHistoryWorkModule as localHistoryWorkModule,
+} from '../application/index.ts';
 import { HistoryRegistry, type SharedHistoryResult } from '../contract/index.ts';
 
 /** Preserve the delivered local minimizers and add the independent selected-family aggregate. */

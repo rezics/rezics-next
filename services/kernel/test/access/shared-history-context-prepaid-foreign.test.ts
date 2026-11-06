@@ -8,7 +8,7 @@ import {
   type HistoryOriginalDependencies,
   type IdentityOriginalSourceContext,
 } from '../../src/access/identity-original-admission.ts';
-import { admitSharedHistory } from '../../src/history/adapters/shared-history.ts';
+import { admitSharedHistory } from '../../src/access/shared-history.ts';
 import { noEffect, runCommand } from '../../src/command/command.ts';
 import { identityHistoryCommand } from '../../src/history/adapters/agent-identity-inventory-work.ts';
 import {

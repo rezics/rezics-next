@@ -1,12 +1,25 @@
 import { expect, test } from 'bun:test';
+import { admitSharedHistory as accessAdmitSharedHistory } from '../../src/access/shared-history.ts';
+import { sharedHistoryWorkModule as accessSharedHistoryWorkModule } from '../../src/access/shared-history-work.ts';
 import { historyComposition, installHistoryComposition } from '../../src/history/application/composition.ts';
-import { recordHistoryReceivingProof } from '../../src/history/application/receiving.ts';
+import {
+  admitSharedHistory,
+  localSharedHistoryWorkModule,
+  recordHistoryReceivingProof,
+} from '../../src/history/application/index.ts';
 import type { HistoryComposition } from '../../src/history/contract/ports.ts';
 
+function currentComposition(): HistoryComposition | undefined {
+  try {
+    return historyComposition();
+  } catch {
+    return undefined;
+  }
+}
+
 test('application facades delegate to whichever composition is installed', async () => {
-  const native = historyComposition();
+  const previous = currentComposition();
   const calls: string[] = [];
-  // A fake capability set: every member records its name and yields nothing.
   const fake = new Proxy(
     {},
     {
@@ -30,6 +43,21 @@ test('application facades delegate to whichever composition is installed', async
     );
     expect(calls).toEqual(['recordHistoryReceivingProof']);
   } finally {
-    installHistoryComposition(native);
+    if (previous) installHistoryComposition(previous);
   }
+});
+
+test('calling a facade before installation throws', () => {
+  const previous = currentComposition();
+  try {
+    installHistoryComposition(undefined as unknown as HistoryComposition);
+    expect(() => historyComposition()).toThrow('History composition is not installed');
+  } finally {
+    if (previous) installHistoryComposition(previous);
+  }
+});
+
+test('Access compatibility entries are the installed application facades', () => {
+  expect(accessAdmitSharedHistory).toBe(admitSharedHistory);
+  expect(accessSharedHistoryWorkModule).toBe(localSharedHistoryWorkModule);
 });

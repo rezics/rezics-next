@@ -21,7 +21,7 @@ import {
   withSelectedHistoryOriginal,
   type IdentityOriginalSourceContext,
 } from '../../src/access/identity-original-admission.ts';
-import { admitSharedHistory } from '../../src/history/adapters/shared-history.ts';
+import { admitSharedHistory } from '../../src/access/shared-history.ts';
 import {
   assertAgentIdentityHistoryUnit,
   currentAgentIdentityHistoryUnit,

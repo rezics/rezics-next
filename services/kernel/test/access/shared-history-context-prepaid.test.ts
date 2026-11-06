@@ -5,7 +5,7 @@ import { createDeletionFixture } from '../semantic/support/deletion-fixture.ts';
 import { createWorkClient, type WorkClient } from '../../src/work/client.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { noEffect, runCommand } from '../../src/command/command.ts';
-import { admitSharedHistory } from '../../src/history/adapters/shared-history.ts';
+import { admitSharedHistory } from '../../src/access/shared-history.ts';
 import { HistoryRegistry } from '../../src/history/contract/registry.ts';
 import {
   consumeSelectedHistoryOriginal,

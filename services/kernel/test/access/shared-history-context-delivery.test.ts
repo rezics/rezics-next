@@ -11,7 +11,7 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { createDeletionFixture } from '../semantic/support/deletion-fixture.ts';
 import { HistoryRegistry } from '../../src/history/contract/registry.ts';
-import { admitSharedHistory } from '../../src/history/adapters/shared-history.ts';
+import { admitSharedHistory } from '../../src/access/shared-history.ts';
 import {
   withSelectedHistoryOriginal,
   consumeSelectedHistoryOriginal,
