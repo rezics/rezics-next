@@ -87,6 +87,9 @@ Content then shares database.pool with WorkClient and composeWork. Registration 
 WorkClient; native queue registration refuses a stub. Tests pin the declaration, supplied clock, request identity
 and worker-import graph; no extra stories.
 
+Decision: pin Community construction with declaration inventory, ambient deadline refusal, and one populated Realm
+witness revision/replay native test including stale work; no extra stories.
+
 Type compatibility repairs preserve outcome assertions and align callers with producer-owned contracts without
 changing behavior.
 

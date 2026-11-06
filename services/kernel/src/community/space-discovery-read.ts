@@ -106,12 +106,10 @@ export async function spaceDiscoveryRound(
     }
     const realms = slots.size
       ? await realmRows.run(client, {
-          keys: JSON.stringify(
-            [...slots].map(([id, realmId]) => ({
-              route: requested.find((key) => key.id === id)!.route,
-              id: realmId,
-            })),
-          ),
+          keys: [...slots].map(([id, realmId]) => ({
+            route: requested.find((key) => key.id === id)!.route,
+            id: realmId,
+          })),
         })
       : [];
     const allowedSpaces = await decisions.decide(

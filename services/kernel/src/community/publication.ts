@@ -20,6 +20,7 @@ import { subjectReadEligibility } from '../semantic/eligibility.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { SpaceDependencies } from './space.ts';
+import type { CommunityAmbient } from './ambient.ts';
 import { realmReadEligibility } from './realm.ts';
 import { readContainerBinding, revalidateContainerBinding } from './container-lifecycle.ts';
 import { realmGovernanceAuthorization } from './realm-continuity.ts';
@@ -30,7 +31,7 @@ import moveHead from './publication-head-move.sql';
 import pageHeads from './publication-page.sql';
 import readHead from './publication-read.sql';
 
-export type PublicationDependencies = SpaceDependencies;
+export type PublicationDependencies = SpaceDependencies & CommunityAmbient;
 export type PublicationContext = Readonly<{ idempotencyKey: string; deadline: number }>;
 export type PublicationReadContext = Readonly<{ actor: Actor; deadline: number; languages?: readonly string[] }>;
 export type PublicationInput = Readonly<{ realmId: string; subjectId: string; expectedHead?: string }>;
@@ -114,8 +115,8 @@ function ring(routeKey: Uint8Array): KeyRing {
   if (routeKey.byteLength < 32) throw new PublicationInputError();
   return { current: 1, keys: new Map([[1, routeKey]]) };
 }
-function open(deadline: number): boolean {
-  return Number.isFinite(deadline) && Date.now() < deadline;
+function open(deadline: number, now: () => number): boolean {
+  return Number.isFinite(deadline) && now() < deadline;
 }
 async function rows<S extends Statement>(client: AccessClient, statement: S, input: S['~reylo']['input']) {
   const values = statement.params.map((name) => input[name as keyof typeof input]);
@@ -227,7 +228,7 @@ function decide(
   verdict: PublicationVerdict,
 ) {
   const author = account(actor);
-  if (!open(context.deadline)) throw new GrantDeniedError();
+  if (!open(context.deadline, deps.deadlineNow)) throw new GrantDeniedError();
   const realmRoute = routeOf(input.realmId);
   const subjectRoute = routeOf(input.subjectId);
   if (realmRoute === null || subjectRoute === null) throw new PublicationInputError();
@@ -353,7 +354,7 @@ export async function readPublication(
   context: PublicationReadContext,
 ): Promise<PublicationHead | null> {
   const route = routeOf(realmId);
-  if (route === null || routeOf(subjectId) === null || !open(context.deadline)) return null;
+  if (route === null || routeOf(subjectId) === null || !open(context.deadline, deps.deadlineNow)) return null;
   const realmCheck = await prepareRealm(deps, context.actor, realmId, context.deadline);
   if (!realmCheck) return null;
   const before = await withConnection(deps.pool, async (client) => {
@@ -400,7 +401,7 @@ export async function preparePublicationPage(
   query: PublicationQuery = {},
 ): Promise<PublicationSelection | null> {
   const route = routeOf(realmId);
-  if (route === null || !open(context.deadline)) return null;
+  if (route === null || !open(context.deadline, deps.deadlineNow)) return null;
   const limit = query.limit === undefined ? PAGE.default : query.limit;
   if (!Number.isInteger(limit) || limit < 1 || limit > PAGE.max) throw new RangeError('Page limit must be 1 to 100');
   const binding: CursorBinding = {

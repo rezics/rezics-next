@@ -3,7 +3,7 @@ import { communityPresentationResponse } from '../content/community-presentation
 import { ProblemError } from '../http/problem.ts';
 import type { AccountActor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import type { OwnRealmMembership, OwnRealmsDependencies } from './own-realms.ts';
+import type { OwnRealmMembership, OwnRealmsDependencies } from './own-realms-shape.ts';
 import { createRealmViewerObservation, type RealmViewerObservation } from './own-realms-viewer.ts';
 
 /** Compose the installed home owners, with no account transaction held and no

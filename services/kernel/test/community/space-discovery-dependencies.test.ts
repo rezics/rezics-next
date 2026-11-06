@@ -119,12 +119,11 @@ test('a complete empty tuple witness is explicit; imported tuple fences retire i
     partition: home,
     epoch: 1,
     position,
-    eventId: crypto.randomUUID(),
+    eventId: Bun.randomUUIDv7(),
     type: 'com.rezics.search.source-tuple.changed.v1',
     resourceId: space.spaceId,
   });
-  const source = spaceDiscoverySource({ clock: () => new Date(), pool: system.database.pool, access: system.access });
-  await registerSpaceDiscoveryTupleProducer(system.database.pool, {
+const source = spaceDiscoverySource({ clock: () => new Date(), pool: system.database.pool, access: system.access, deadlineNow: () => Date.now() });  await registerSpaceDiscoveryTupleProducer(system.database.pool, {
     generation: 'space-source-test-generation',
     cut: 'space-source-test-cut',
     complete: true,
@@ -356,8 +355,7 @@ test('shared native Context changes drain sparse retained identities, survive re
     [home, home * 16, routeOf(first.spaceId), first.spaceId],
   );
   expect(await drainSpaceDiscoveryFrontier(pool, key, 1)).toBe('preparing');
-  const source = spaceDiscoverySource({ clock: () => new Date(), pool, access: system.access });
-  expect((await source.dependencies()).state).toBe('preparing');
+const source = spaceDiscoverySource({ clock: () => new Date(), pool, access: system.access, deadlineNow: () => Date.now() });  expect((await source.dependencies()).state).toBe('preparing');
   while (await initializeSpaceDiscoveryDependencies(pool, home, 1)) {
     /* raw bounded installation pages */
   }
@@ -366,7 +364,7 @@ test('shared native Context changes drain sparse retained identities, survive re
     capabilities: { 'source-fence': 'preparing' },
   });
   const hydrate = (ids: string[]) =>
-    readSpaceDiscoverySummaries({ clock: () => new Date(), pool, access: system.access }, ids, {
+    readSpaceDiscoverySummaries({ pool, access: system.access, deadlineNow: () => Date.now() }, ids, {
       deadline: Date.now() + 30_000,
     });
   expect((await hydrate(owners.map((o) => o.space.spaceId))).size).toBe(0);

@@ -76,6 +76,7 @@ export function testAccess(options: TestAccessOptions): Access {
     pool: options.pool,
     tokens: defaults.tokens,
     clock: defaults.clock,
+    deadlineNow: defaults.deadlineNow,
     access: accessFactory,
     ...(options.realmRoleReader === undefined ? {} : { realmRoleReader: options.realmRoleReader }),
   });
@@ -116,6 +117,7 @@ export function testApp(options: TestAppOptions): ReturnType<typeof createApp> {
     pool: options.pool,
     tokens: defaults.tokens,
     clock: defaults.clock,
+    deadlineNow: defaults.deadlineNow,
     access: accessFactory,
     ...(options.realmRoleReader === undefined ? {} : { realmRoleReader: options.realmRoleReader }),
   });
@@ -164,6 +166,7 @@ export function testKernel(options: TestKernelOptions): TestKernel {
     pool: options.pool,
     tokens: defaults.tokens,
     clock: defaults.clock,
+    deadlineNow: defaults.deadlineNow,
     access: accessFactory,
     ...(options.realmRoleReader === undefined ? {} : { realmRoleReader: options.realmRoleReader }),
   });

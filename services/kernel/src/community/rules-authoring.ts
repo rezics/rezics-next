@@ -11,6 +11,7 @@ import {
 import { listRealmBoards } from '../content/boards.ts';
 import type { ReadContext } from '../content/model.ts';
 import { readRealmSettingsPage, type RealmSettingsPage } from './settings-page.ts';
+import type { CommunityAmbient } from './ambient.ts';
 import type { RealmDependencies } from './realm.ts';
 
 const closed = { additionalProperties: false } as const;
@@ -85,9 +86,10 @@ export function RulesAuthoringPageSchema() {
   );
 }
 export type RulesAuthoringPage = Static<ReturnType<typeof RulesAuthoringPageSchema>>;
-export type RulesAuthoringDependencies = Pick<RealmDependencies, 'pool' | 'access' | 'clock'> & {
-  tokens: import('../tokens/seal.ts').KeyRing;
-};
+export type RulesAuthoringDependencies = Pick<RealmDependencies, 'pool' | 'access' | 'clock'> &
+  CommunityAmbient & {
+    tokens: import('../tokens/seal.ts').KeyRing;
+  };
 
 function languageOf(body: DocumentSnapshot): string | null {
   for (const node of body.doc.content ?? []) {

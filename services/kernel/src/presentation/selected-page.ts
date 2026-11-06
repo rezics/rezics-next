@@ -2,6 +2,7 @@ import type { SelectedContext } from '@rezics/composition';
 import { readRealm, type RealmView } from '../community/realm.ts';
 import { readPublication, type PublicationHead } from '../community/publication.ts';
 import type { SpaceDependencies } from '../community/space.ts';
+import type { CommunityAmbient } from '../community/index.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import { ProblemError } from '../http/problem.ts';
 import { accessCheck, type Actor } from '../request/access.ts';
@@ -11,7 +12,7 @@ import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import type { SessionComponent } from '../tokens/session.ts';
 
 type Authority = {
-  deps: SpaceDependencies;
+  deps: SpaceDependencies & CommunityAmbient;
   actor: Actor;
   deadline: number;
   run<T>(work: () => Promise<T>): Promise<T>;

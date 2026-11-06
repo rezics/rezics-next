@@ -166,7 +166,6 @@ afterAll(async () => {
   await db?.close();
 });
 const deps = () => ({ clock: () => new Date(), pool: db.pool, access: f.access, routeKey });
-
 function population(name: string, hotPartition: number, positionBase: number): Population {
   return {
     name,

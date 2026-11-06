@@ -231,8 +231,7 @@ test.serial(
       access,
       tokens: testTokens(),
       routeKey: world.routeKey,
-      realmParticipation: createRealmParticipationCheck({ clock: () => new Date(), pool: world.db.pool, access }),
-      async readConversationActivityBatch() {
+      realmParticipation: createRealmParticipationCheck({ clock: () => new Date(), pool: world.db.pool, access, deadlineNow: () => Date.now() }),      async readConversationActivityBatch() {
         if (!changed) {
           changed = true;
           await world.checked('POST', pinPath, { pinned: false }, 200);

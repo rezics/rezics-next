@@ -687,13 +687,15 @@ test.serial(
         },
         async operation() {
           const changed = await board.setBoardScheme(
-            { pool, access, routeKey },
+            { pool, access, routeKey, deadlineNow: () => Date.now() },
             actor,
             { realmId: probe.realmId, schemeId, expectedHead: head },
             { deadline: Date.now() + 90_000, idempotencyKey: crypto.randomUUID() },
           );
           head = changed.value.revisionId;
-          const read = await readRealm({ pool, access }, actor, probe.realmId, { deadline: Date.now() + 90_000 });
+          const read = await readRealm({ deadlineNow: () => Date.now(), pool, access }, actor, probe.realmId, {
+            deadline: Date.now() + 90_000,
+          });
           expect(read?.boardSchemeId).toBe(schemeId);
           expect(read?.headRevisionId).toBe(head);
           return changed;

@@ -17,8 +17,7 @@ afterAll(async () => {
 
 function read(realmId: string, access = f.base.system.access) {
   return readRealmSettingsPage(
-    { clock: () => new Date(), pool: f.db.pool, access },
-    f.base.system.actors.author.actor,
+    { clock: () => new Date(), pool: f.db.pool, access, deadlineNow: () => Date.now()  },    f.base.system.actors.author.actor,
     realmId,
     {
       deadline: Date.now() + 30_000,
@@ -211,7 +210,7 @@ test.serial(
         }
       });
       await expect(
-        readRealmSettingsPage({ clock: () => new Date(), pool: f.db.pool, access }, actor, s.realmId, {
+        readRealmSettingsPage({ pool: f.db.pool, access, deadlineNow: () => Date.now() }, actor, s.realmId, {
           deadline: Date.now() + 30_000,
         }),
       ).rejects.toMatchObject({ code: 'not_found' });
