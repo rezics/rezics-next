@@ -158,7 +158,9 @@ Genuine purchase targets are published Content editions on Content's isolated na
 `board:create`/`offer:create` as account subjects on Global through the ordinary grant command after the governance
 account holds `board:create` via the native local-showcase bootstrap. Buyer `order:create` uses the same grant command
 after the governance account holds that action on the offer. Genuine-order editions live on a public Realm published
-board, the same buyer sale-capture composition acquisition uses. Global showcase board current-role projection remains
+board, the same buyer sale-capture composition acquisition uses. Realm minting keeps Access page ports
+through the derived extra-check adapter so Global `realm:create` and host `space:manage` share that
+typed parent path. Global showcase board current-role projection remains
 Accounts' Diagnostic7 repair. Protected source threads are not a public read floor;
 the native fixture seeds `thread:read` for each buyer on those exact threads, matching acquisition's sale-authority
 setup, because `grant.create` cannot admit that action. It also seeds `board:read` on that Realm board so buyer

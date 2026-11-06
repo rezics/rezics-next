@@ -1004,7 +1004,8 @@ current-role seam. `grant.create` authenticates the governance bearer on that Ac
 same actor snapshot; a Content-issued actor object is not reused. Seller Global grants are
 `board:create` and `offer:create` only, because Content already installed `subject:create`, `space:create` and
 `realm:create`. Genuine-order editions use a public Realm published board; Global showcase board current-role
-projection stays with Accounts. Buyer sale capture
+projection stays with Accounts. Typed parent creation through derived Access keeps page ports, and
+Realm extra host/context checks wrap that path, so `POST /v1/realms` can mint that board. Buyer sale capture
 seeds `thread:read` on each protected source thread and `board:read` on that Realm board; `grant.create` cannot admit
 `thread:read`. The composed worker is
 startWorker's live default composition under `workerTestEnv`, decorated so only `commerce_erasure` consumes
