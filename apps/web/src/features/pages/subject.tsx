@@ -1026,8 +1026,8 @@ export function SubjectPage({
               label={subjectPageTitle(page, locale)}
               locale={locale}
               context={page.context?.id ?? read.subject.context}
-              realm={realm}
-              currentHref={currentHref}
+              {...(realm !== undefined ? { realm } : {})}
+              {...(currentHref !== undefined ? { currentHref } : {})}
             />
           )}
           {page.views?.includes('credits') && <PeopleProfileEntry work={read.subject.id} locale={locale} />}
@@ -1037,7 +1037,7 @@ export function SubjectPage({
             label={subjectPageTitle(page, locale)}
             locale={locale}
             context={page.context?.id ?? read.subject.context}
-            realm={realm}
+            {...(realm !== undefined ? { realm } : {})}
             release={page.catalogue?.digest}
             reader={page.requestedReader ?? null}
           />
@@ -1071,10 +1071,10 @@ export function SubjectPage({
               realm={page.context?.population.kind === 'realm' ? page.context.population.id : undefined}
               definition={page.catalogue?.digest}
               via={storyArcPublicOrigin({
-                currentHref,
+                ...(currentHref !== undefined ? { currentHref } : {}),
                 id: read.subject.id,
                 locale,
-                realm: page.context?.population.kind === 'realm' ? page.context.population.id : undefined,
+                ...(page.context?.population.kind === 'realm' ? { realm: page.context.population.id } : {}),
               })}
             />
           )}
@@ -1084,7 +1084,7 @@ export function SubjectPage({
                 id={read.subject.id}
                 label={subjectPageTitle(page, locale)}
                 context={page.context?.id ?? read.subject.context}
-                realm={realm}
+                {...(realm !== undefined ? { realm } : {})}
                 locale={locale}
               />
               <CharacterRelationshipsEntry
@@ -1129,7 +1129,7 @@ export function SubjectPage({
               label={subjectPageTitle(page, locale)}
               locale={locale}
               context={page.context?.id ?? read.subject.context}
-              realm={realm}
+              {...(realm !== undefined ? { realm } : {})}
               previous={visitReturn}
             />
           )}
@@ -1139,7 +1139,7 @@ export function SubjectPage({
               label={subjectPageTitle(page, locale)}
               locale={locale}
               context={page.context?.id ?? read.subject.context}
-              realm={realm}
+              {...(realm !== undefined ? { realm } : {})}
               type={read.subject.type}
               definition={read.subject.release}
               {...(currentHref ? { source: currentHref } : {})}
@@ -1183,7 +1183,7 @@ export function SubjectPage({
               label={subjectPageTitle(page, locale)}
               locale={locale}
               context={page.context?.id ?? read.subject.context}
-              realm={realm}
+              {...(realm !== undefined ? { realm } : {})}
               release={page.catalogue?.digest}
               reader={page.requestedReader ?? null}
             />
@@ -1214,7 +1214,7 @@ export function SubjectPage({
             locale,
           ).href
         }
-        realm={realm}
+        {...(realm !== undefined ? { realm } : {})}
         {...(visitReturn ? { returnTo: visitReturn } : {})}
         labels={tabLabels}
       />
@@ -1239,7 +1239,7 @@ export function SubjectPage({
           related={read.related}
           definitions={subjectCatalogueTagDefinitions(read.subject, page.catalogue)}
           locale={locale}
-          realm={realm}
+          {...(realm !== undefined ? { realm } : {})}
           spoilerThreshold={(reader ?? defaultReader).spoilerLevel}
         />
       )}
@@ -1255,7 +1255,7 @@ export function SubjectPage({
           locale={locale}
           readingView={view}
           subject={page.subject}
-          currentHref={currentHref}
+          {...(currentHref !== undefined ? { currentHref } : {})}
           listTarget={
             page.account
               ? { account: page.account.handle, ...(view ? { view } : {}) }
@@ -1286,7 +1286,7 @@ export function SubjectPage({
           document={page.document}
           reads={page.reads}
           context={page.context}
-          realm={realm}
+          {...(realm !== undefined ? { realm } : {})}
           {...(page.viewer ? { viewer: page.viewer } : {})}
           {...(page.catalogue?.digest ? { releaseDigest: page.catalogue.digest } : {})}
           cacheReader={page.requestedReader}
@@ -1340,7 +1340,7 @@ export function SubjectPage({
                 windows={profileRelationWindows(page, { includeAliases: true })}
                 reader={reader ?? defaultReader}
                 view={view}
-                realm={realm}
+                {...(realm !== undefined ? { realm } : {})}
                 continuation={page.continuation}
                 selectedNode={selectedNode}
                 selectedStreamProperty={selectedStreamProperty}
@@ -1363,7 +1363,7 @@ export function SubjectPage({
             {!page.account && (
               <ContextNavigation
                 context={page.context}
-                realm={realm}
+                {...(realm !== undefined ? { realm } : {})}
                 href={subjectUrlForView(
                   subjectHref(
                     { id: page.subject ?? '', label: subjectLabel ?? subjectPageTitle(page, locale) },
@@ -1397,7 +1397,7 @@ export function SubjectPage({
                 definitions={relations ?? EMPTY_RELATION_DEFINITIONS}
                 locale={locale}
                 returnTo={workReturn}
-                currentHref={currentHref}
+                {...(currentHref !== undefined ? { currentHref } : {})}
                 {...(workRelationsHref ? { relationsHref: workRelationsHref } : {})}
                 readerSpoiler={reader?.spoilerLevel ?? 0}
                 link={ContextLink}
@@ -1417,11 +1417,11 @@ export function SubjectPage({
                 definitions={relations ?? EMPTY_RELATION_DEFINITIONS}
                 locale={locale}
                 returnTo={workReturn}
-                currentHref={currentHref}
+                {...(currentHref !== undefined ? { currentHref } : {})}
                 {...(workRelationsHref ? { relationsHref: workRelationsHref } : {})}
                 readerSpoiler={reader?.spoilerLevel ?? 0}
                 link={ContextLink}
-                onContinue={onWorkContinue}
+                {...(onWorkContinue ? { onContinue: onWorkContinue } : {})}
               />
             ) : null}
             {mangaSubject && (view === 'overview' || view === 'contents' || view === 'editions') ? (
@@ -1432,11 +1432,11 @@ export function SubjectPage({
                 locale={locale}
                 view={view}
                 context={page.context?.id ?? mangaSubject.context ?? null}
-                realm={realm}
+                {...(realm !== undefined ? { realm } : {})}
                 continuation={page.continuation}
                 viewer={page.requestedReader ?? null}
                 admission={readingAdmission}
-                currentHref={currentHref}
+                {...(currentHref !== undefined ? { currentHref } : {})}
                 release={page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined}
                 propertyLabels={
                   page.catalogue?.state === 'released' ? page.catalogue.definitions?.properties : undefined
@@ -1460,7 +1460,12 @@ export function SubjectPage({
               </p>
             ) : null}
             {overview && read && !page.account && returnSource && returnSource !== read.subject.id ? (
-              <CatalogueFileReturnLink id={returnSource} locale={locale} currentHref={currentHref} link={ContextLink} />
+              <CatalogueFileReturnLink
+                id={returnSource}
+                locale={locale}
+                {...(currentHref !== undefined ? { currentHref } : {})}
+                link={ContextLink}
+              />
             ) : null}
             {overview && read && !page.account ? (
               <CatalogueFileReaderOverview
@@ -1470,7 +1475,7 @@ export function SubjectPage({
                 link={ContextLink}
                 returning={returnSource === read.subject.id}
                 readerSpoiler={reader?.spoilerLevel ?? 0}
-                currentHref={currentHref}
+                {...(currentHref !== undefined ? { currentHref } : {})}
                 recoverCurrentPage={recoverCatalogueFileReader}
               />
             ) : null}
@@ -1489,7 +1494,7 @@ export function SubjectPage({
                 id={read.subject.id}
                 context={page.context?.id ?? read.subject.context}
                 locale={locale}
-                realm={realm}
+                {...(realm !== undefined ? { realm } : {})}
               />
             ) : null}
             {overview && gameReturnStatus ? (
@@ -1501,7 +1506,7 @@ export function SubjectPage({
                     className={`${linkClass} ${linkColor} inline-flex min-h-11 items-center underline underline-offset-4`}
                     href={gameRestart.href}
                   >
-                    {m.game_visit_restart({}, { locale: locale as never })}
+                    {m.game_visit_return({}, { locale: locale as never })}
                   </a>
                 ) : null}
               </div>
@@ -1514,7 +1519,7 @@ export function SubjectPage({
                 type={read.subject.type}
                 context={page.context?.id ?? read.subject.context}
                 locale={locale}
-                realm={realm}
+                {...(realm !== undefined ? { realm } : {})}
                 spoiler={reader?.spoilerLevel}
                 {...(returnCheck?.selection ? { returnSelection: returnCheck.selection } : {})}
                 sessionObservation={readingAdmission ?? ''}
@@ -1536,7 +1541,7 @@ export function SubjectPage({
                   id={read.subject.id}
                   context={page.context?.id ?? read.subject.context}
                   locale={locale}
-                  realm={realm}
+                  {...(realm !== undefined ? { realm } : {})}
                 />
               </>
             ) : null}
@@ -1548,7 +1553,7 @@ export function SubjectPage({
                 id={read.subject.id}
                 context={page.context?.id ?? read.subject.context}
                 locale={locale}
-                realm={realm}
+                {...(realm !== undefined ? { realm } : {})}
               />
             ) : null}
             {overview && read && !page.account && read.subject.type === recordingType ? (
@@ -1569,7 +1574,7 @@ export function SubjectPage({
                 subject={composedSubjectRead(read)}
                 context={page.context?.id ?? read.subject.context}
                 locale={locale}
-                realm={realm}
+                {...(realm !== undefined ? { realm } : {})}
               />
             ) : null}
             {overview && read && !page.account && isScreenType(read.subject.type) ? (
@@ -1591,7 +1596,7 @@ export function SubjectPage({
                 source={page}
                 locale={locale}
                 reader={page.requestedReader ?? null}
-                realm={realm}
+                {...(realm !== undefined ? { realm } : {})}
                 link={ContextLink}
                 public={composedSubjectRead(read)}
                 release={page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined}
