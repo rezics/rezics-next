@@ -19,6 +19,25 @@ export type ZoneVisit = {
 
 export type ZonePageSearch = { cursor?: string };
 
+/** Map a served Zone page target onto the existing visit record. Cursor is continuation, not identity. */
+export function zoneVisitFromRequest(
+  locale: string,
+  zoneId: string,
+  target: { route: string } | { subject: string; view?: View },
+  cursor?: string,
+): ZoneVisit {
+  const visitTarget: ZoneVisitTarget =
+    'route' in target
+      ? { kind: 'route', route: target.route }
+      : { kind: 'subject', subject: target.subject, ...(target.view ? { view: target.view } : {}) };
+  return {
+    locale,
+    zoneId,
+    target: visitTarget,
+    ...(cursor ? { cursor } : {}),
+  };
+}
+
 function encodeSegment(value: string): string {
   return encodeURIComponent(value);
 }

@@ -62,6 +62,8 @@ visit return. Session, upload and download use the existing personal BFF driver 
 Decision: Zone session/media binding prepares the current personal session on every served Zone BFF request and
 reuses the existing `/media` driver for upload intent, completion and download authorization; SessionMedia keeps
 those handlers, and PageStates keeps shared TypeList composition.
+Decision: A served Zone read retires in-flight continuation through the existing callback identity when the Zone
+revision or target changes; it does not keep another visit's cursor.
 Configured routes are decoded once, relative, case-sensitive and canonical: no leading/trailing slash,
 empty segment, dot segment, query, fragment, encoded slash, backslash or URL. The empty string means home.
 Reserve the entire first segment `subjects`, including `subjects` itself, before page lookup. A configured

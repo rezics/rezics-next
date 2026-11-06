@@ -31,7 +31,8 @@ import {
   type ZonePageRouteOutcome,
 } from './zone-read';
 import { zoneAppearanceAttributes, zonePageDocument } from './appearance';
-import { zoneVisitReturn } from './visit';
+import { advanceZoneCallback, type ZoneCallbackIdentity } from './callback';
+import { zoneVisitFromRequest, zoneVisitReturn } from './visit';
 import { kernelClient } from '../kernel/client';
 import { m } from '../paraglide/messages.js';
 import { metaText } from '@rezics/ui/meta-line';
@@ -134,10 +135,15 @@ export function ZoneReadBoundary({
   children: (page: Extract<ZonePageRouteOutcome, { kind: 'page' }>) => ReactNode;
 }) {
   const targetKey = JSON.stringify(request.target);
+  const callbackRef = useRef<ZoneCallbackIdentity | undefined>(undefined);
+  const callback = advanceZoneCallback(
+    callbackRef.current,
+    zoneVisitFromRequest(request.locale, request.id, request.target),
+    initial.kind === 'page' ? initial.page.zone.revision : '0',
+  );
+  callbackRef.current = callback;
   const requestKey = JSON.stringify([
-    request.id,
-    request.locale,
-    targetKey,
+    callback.key,
     request.credentialMode ?? null,
     request.cursor ?? null,
   ]);

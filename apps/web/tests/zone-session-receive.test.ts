@@ -7,7 +7,8 @@ import {
   zoneMediaCredential,
   zoneSessionRevoked,
 } from '../src/zones/session';
-import { zoneCallbackIdentity, replaceZoneCallback } from '../src/zones/callback';
+import { advanceZoneCallback, zoneCallbackIdentity, replaceZoneCallback } from '../src/zones/callback';
+import { zoneVisitFromRequest } from '../src/zones/visit';
 import {
   receiveZoneDownloadRequest,
   receiveZoneMediaCompletion,
@@ -101,4 +102,12 @@ test('source replacement retires the previous Zone callback identity', () => {
   expect(replaceZoneCallback(current, '4')).toEqual(current);
   expect(replaceZoneCallback(current, '5')?.revision).toBe('5');
   expect(replaceZoneCallback(current, '5')?.key).not.toBe(current.key);
+  const served = zoneVisitFromRequest('en', visit.zoneId, { route: '' });
+  const held = advanceZoneCallback(undefined, served, '4');
+  const replaced = advanceZoneCallback(held, served, '5');
+  expect(replaced.revision).toBe('5');
+  expect(replaced.key).not.toBe(held.key);
+  expect(advanceZoneCallback(replaced, zoneVisitFromRequest('en', visit.zoneId, { route: 'guide' }), '5').key).not.toBe(
+    replaced.key,
+  );
 });
