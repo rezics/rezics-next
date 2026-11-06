@@ -279,7 +279,7 @@ beforeAll(async () => {
           deleted_at: null,
           restorable: false,
           decision_id: null,
-        } as Parameters<typeof readResource>[0],
+        } as unknown as Parameters<typeof readResource>[0],
         {},
       );
       const disclosedBoardAllowed = await (
