@@ -498,6 +498,8 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         try {
           return await fn(...args);
         } catch (error) {
+          // DIAG temporary: in-process cause of the step refusal.
+          console.error('DIAG_STEP', name, error instanceof Error ? `${error.name}: ${error.message}\n${error.stack}` : String(error));
           // Journal an explicit native refusal before SDK error serialization.
           // Successful legacy results remain unchanged; legacy untyped errors
           // stay errors and are never inferred to be authorization refusals.
