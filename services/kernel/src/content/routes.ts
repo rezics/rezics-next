@@ -100,6 +100,7 @@ import {
   withReactionCounts,
   withReactionCountsAndCoverage,
   withViewerReactions,
+  retainCurrentReactions,
   type SubjectReactionKind,
 } from './reads.ts';
 import {
@@ -1032,7 +1033,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
             session.record(sessionComponent(final.anchor));
             if (actor.kind === 'account') set.headers['cache-control'] = 'private, no-store';
             return {
-              thread: { ...final.value, ...shown },
+              thread: retainCurrentReactions(final.value, shown),
               reactionsAsOf: counted.reactionsAsOf,
               ...(authorErasure ? { authorErasure } : {}),
             };
@@ -1132,7 +1133,10 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
                 reactionsAsOf = source;
             }
             return {
-              posts: page.entries.map((post) => ({ ...post, ...enriched.get(post.id)! })),
+              posts: page.entries.map((post) => {
+                const countedPost = enriched.get(post.id);
+                return countedPost === undefined ? post : retainCurrentReactions(post, countedPost);
+              }),
               next: page.nextCursor,
               reactionsAsOf,
             };
@@ -1203,7 +1207,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
             if (!final.value) throw new ProblemError('not_found');
             session.record(sessionComponent(final.anchor));
             if (actor.kind === 'account') set.headers['cache-control'] = 'private, no-store';
-            return { post: { ...final.value, ...shown } };
+            return { post: retainCurrentReactions(final.value, shown) };
           }),
         ),
     )

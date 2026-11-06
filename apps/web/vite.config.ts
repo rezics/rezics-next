@@ -103,9 +103,13 @@ export default defineConfig((context) => {
     build: { assetsInlineLimit: 0 },
     optimizeDeps: {
       // Scan the complete route graph up front so a local Worker browser check never discovers a route dependency
-      // after the first page has loaded.
-      entries: ['src/routes/**/*.tsx', 'src/server.ts', 'src/session/routes.ts'],
-      holdUntilCrawlEnd: true,
+      // after the first page has loaded. Focused browser files compile the journey route on demand; crawling Home
+      // during Vite startup holds the ready line until the process dies.
+      entries:
+        process.env.REZICS_TEST_RUNTIME === '1'
+          ? ['src/server.ts', 'src/session/routes.ts']
+          : ['src/routes/**/*.tsx', 'src/server.ts', 'src/session/routes.ts'],
+      holdUntilCrawlEnd: process.env.REZICS_TEST_RUNTIME !== '1',
     },
     ssr: {
       optimizeDeps: {

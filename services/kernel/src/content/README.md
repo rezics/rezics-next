@@ -84,7 +84,8 @@ connection-free timing barriers for late-revocation acceptance. `disclosureBarri
 checks; `pageDisclosureBarrier` pauses after page enrichment. Both change timing only and are absent in production.
 Author and Subject page handlers convert the existing numeric query limit (1 through 20) for internal paging.
 Selected reading references validate each Board’s own routed identity. Current thread-to-Board membership supplies
-placement authority; the Board and thread need not share a native home.
+placement authority; the Board and thread need not share a native home. Subject discussion cards keep the Subject
+key and confirm it on the disclosed thread; they do not treat the Board id as a Subject place.
 Native tests create identities, Boards, threads, replies and revisions through HTTP and run production effects/relays.
 They cover anonymous takedown and protected read-grant revocation for heads, exact revisions, Subject discussions,
 author activity, all three Board orders and thread posts, including first/continuing pages and eligible controls.

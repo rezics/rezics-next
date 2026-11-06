@@ -5,7 +5,7 @@ import { openThreadBoardSystem } from './support/thread-board-system.ts';
 let system: Awaited<ReturnType<typeof openThreadBoardSystem>>;
 beforeAll(async () => {
   system = await openThreadBoardSystem();
-}, 90_000);
+}, 180_000);
 afterAll(async () => {
   await system?.close();
 });

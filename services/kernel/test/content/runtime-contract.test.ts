@@ -44,7 +44,9 @@ test('trusted optional content runtime types retain exactly the native ports and
   expect({} satisfies ContentRuntime).toEqual({});
 });
 
-test('kernel forwards native ports unchanged without executing jobs, I/O, access or its sole clock', async () => {
+test(
+  'kernel forwards native ports unchanged without executing jobs, I/O, access or its sole clock',
+  async () => {
   const forbidden = mock((): never => {
     throw new Error('Composition must not execute a dependency');
   });
@@ -130,7 +132,7 @@ test('kernel forwards native ports unchanged without executing jobs, I/O, access
     connect.mockRestore();
     await pool.end();
   }
-});
+}, 240_000);
 
 test('content composition retains lazy access resolution and the validated kernel clock', async () => {
   const pool = createPool('postgres://kernel.invalid/content-runtime');

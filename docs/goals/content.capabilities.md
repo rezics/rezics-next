@@ -35,6 +35,9 @@ Personas: anonymous, author, Realm member, outsider and moderator. Fixtures: `ra
 and deterministic revocation; the bound thread/disclosure/media suites retain their own native fixtures. Media
 claims are covered here, including uploader identity, parent disclosure and lifecycle.
 
+Decision: reading-card `placeId` is the Board identity. Subject discussion pages confirm the Subject on the
+disclosed thread and the Board home separately; they do not pass the Board id to `readSubjectThread` as a place.
+
 | Surface cell             | Scope and scenarios                                                                                                                                                   |
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Catalogue                | In: the subject's discussion list, `test/content/subject-threads-http.test.ts`; bound thread/disclosure scenarios and `late-board-revocation` subject-thread reads.   |

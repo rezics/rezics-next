@@ -15,7 +15,6 @@ import {
   withThreadReadAdmission,
   listThreadPosts,
   readThread,
-  readSubjectThread,
   readPost,
   withReactionCountsAndCoverage,
   withViewerReactions,
@@ -260,7 +259,9 @@ export type ReadingPageDependencies = ContentReadDependencies &
     viewerActionRuntime?: () => ReadingPageViewerActionRuntime;
   }>;
 
-/** A consumer-selected, exact native reference. Subject selections retain their Subject key and place. */
+/** A consumer-selected, exact native reference. `placeId` is the current Board identity.
+ * Subject selections also retain the Subject key; the Board's current Realm or Global home
+ * is observed from that Board, and the thread need not share the Board's native route. */
 export type SelectedReadingCardReference =
   | Readonly<{
       type: 'content.thread';
@@ -706,17 +707,17 @@ function sourceChanged(): ProblemError {
   return new ProblemError('dependency_unavailable', { detail: 'A selected reading source changed during hydration' });
 }
 
-function readSelectedThread(
+async function readSelectedThread(
   dependencies: ReadingPageDependencies,
   threadId: string,
   subjectId: string | undefined,
-  placeId: string,
   actor: Actor,
   deadline: number,
 ) {
-  return subjectId === undefined
-    ? readThread(dependencies, threadId, { actor, deadline })
-    : readSubjectThread(dependencies, threadId, subjectId, placeId, { actor, deadline });
+  const thread = await readThread(dependencies, threadId, { actor, deadline });
+  if (subjectId !== undefined && thread.value && !thread.value.subjectIds.includes(subjectId))
+    return { ...thread, value: null };
+  return thread;
 }
 
 function selectedAuthors(
@@ -857,14 +858,7 @@ export async function createContentReadingCardBatch(
   const places = new Map<string, SelectedPlaceSource>();
   const context = { actor, deadline };
   for (const group of groups.values()) {
-    const thread = await readSelectedThread(
-      dependencies,
-      group.threadId,
-      group.subjectId,
-      group.placeId,
-      actor,
-      deadline,
-    );
+    const thread = await readSelectedThread(dependencies, group.threadId, group.subjectId, actor, deadline);
     if (!thread.value || thread.value.firstPost.availability === 'withheld' || thread.value.boardId !== group.placeId)
       continue;
     let placeSource = places.get(group.placeId);
@@ -1091,14 +1085,7 @@ export async function createContentReadingCardBatch(
         const finalAnchors: AnchoredPosition[] = [];
         for (const group of groups.values()) {
           if (group.state !== 'current') continue;
-          const thread = await readSelectedThread(
-            dependencies,
-            group.threadId,
-            group.subjectId,
-            group.placeId,
-            actor,
-            deadline,
-          );
+          const thread = await readSelectedThread(dependencies, group.threadId, group.subjectId, actor, deadline);
           if (
             !thread.value ||
             thread.value.firstPost.availability === 'withheld' ||
