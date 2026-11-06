@@ -91,6 +91,7 @@ Check 78b0bbff ran the landing set on the final code (`a94948e022`). Five files 
 
 The changed routes (thread head, post head and the thread post page) run their first read before any changed code, and
 the Subject, Board page and reaction-write paths are unchanged, so these are not regressions from the read-ordering fix.
-A comparison run of the same landing set on the base kernel source was queued and had not started when this attempt
-ended. What settles it: the base run reproducing the same failures, or Access and Accounts establishing the public
+A comparison run of the same landing set on the base kernel source ran, but aborted at the typecheck: the contract pins
+and the new test imports name types that base source does not have, so it produced no test evidence. What settles it:
+a base run that drops those files and reproduces the same failures, or Access and Accounts establishing the public
 floor for seeded anonymous reads and member `reaction:set` authority on this base. Then the landing set must pass.
