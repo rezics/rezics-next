@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { createGrantCommands } from '../../src/access/grant-commands.ts';
+import { accessCheck } from '../../src/request/access.ts';
 import { grantFixture } from './grant-fixture.ts';
 
 let f: Awaited<ReturnType<typeof grantFixture>>;
@@ -28,4 +29,30 @@ test('a grantor can revoke its own action using permission held before the mutat
   const after = await f.snapshot();
   expect(after.receipts).toBe(before.receipts + 1);
   expect(after.events).toBe(before.events + 1);
+});
+
+test('a recipient keeps the same authenticated bearer while a native grant is created and revoked', async () => {
+  const commands = createGrantCommands({ pool: f.pool, access: f.access, managementAction: 'access:grant' });
+  const administrator = await f.context();
+  const recipient = await f.context(f.recipient);
+  const allowed = async () => {
+    const check = await accessCheck(f.access, recipient.actor, 'subject:update', f.resource, {
+      pool: f.pool,
+      deadline: Date.now() + 5000,
+    });
+    return check(f.pool);
+  };
+  const input = {
+    resource: f.resource,
+    subjectId: f.recipient,
+    subjectRole: '',
+    actions: ['subject:update'],
+    valid: '(,)',
+    key: Bun.randomUUIDv7(),
+  };
+  expect(await allowed()).toBe(false);
+  await commands.create(administrator, input);
+  expect(await allowed()).toBe(true);
+  await commands.revoke(administrator, { ...input, key: Bun.randomUUIDv7() });
+  expect(await allowed()).toBe(false);
 });

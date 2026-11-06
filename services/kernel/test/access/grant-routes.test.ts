@@ -1,7 +1,8 @@
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { afterAll, afterEach, beforeAll, expect, spyOn, test } from 'bun:test';
 import { Pool } from 'pg';
 import { createAuthHost, type AuthService } from '@rezics/auth';
-import { decodeJwt, exportJWK, generateKeyPair, importJWK, SignJWT } from 'jose';
+import { exportJWK, generateKeyPair } from 'jose';
 import { createAccess } from '../../src/access/index.ts';
 import { authoritativeTimeValue } from '../../src/command/command.ts';
 import { createGrantCommands } from '../../src/access/grant-commands.ts';
@@ -24,6 +25,7 @@ const pool = new Pool({ connectionString: 'postgres://kernel.invalid/routes' });
 afterAll(() => pool.end());
 const app = createKernel({
   pool,
+  receiptKeys: testReceiptKeys(),
   routeKey: new Uint8Array(32),
   writeRate: {
     async spend() {
@@ -94,7 +96,7 @@ let now = Date.now();
 let fixedKernelTime = false;
 let spends = 0;
 
-async function issue(email: string, scope = scopes) {
+async function issue(email: string, scope = scopes, requestedBy?: string) {
   const signed = await service.handler(
     new Request(`${issuer}/signin`, {
       method: 'POST',
@@ -111,7 +113,7 @@ async function issue(email: string, scope = scopes) {
     new Request(`${issuer}/token`, {
       method: 'POST',
       headers: { origin: issuer, 'content-type': 'application/json', cookie },
-      body: '{}',
+      body: JSON.stringify(requestedBy === undefined ? {} : { requested_by: requestedBy }),
     }),
   );
   expect(response.status).toBe(200);
@@ -174,6 +176,7 @@ beforeAll(async () => {
   });
   kernel = createKernel({
     pool: db.pool,
+    receiptKeys: testReceiptKeys(),
     routeKey,
     tokens,
     clock: () => new Date(now),
@@ -291,20 +294,19 @@ test('real operator bootstrap then native binding grant enables HTTP delegation 
 
 test('actor grant, client scope, principal grant and every delegated action independently remain ceilings', async () => {
   const limited = await issue('grant_root@grant.test', ['access:grant']);
-  // A negative component token isolates the principal operand. Its assignment is
-  // test setup only; positive product proof above uses ordinary Auth tokens.
+  // Auth verifies the actual assignment before issuing the delegated bearer. The
+  // principal's missing resource grants remain an independent permission ceiling.
   const requestId = newId(routeOf(recipient.accountId)!);
   await db.admin.query(
     `INSERT INTO access.principal_assignment(route,principal_id,creator_principal_id,request_id,assigned_actor_id,valid,transaction_id)
     VALUES($1,$2,$2,$3,$4,'(,)',$5)`,
     [routeOf(recipient.accountId), recipient.accountId, requestId, root.accountId, Bun.randomUUIDv7()],
   );
-  const delegated = await new SignJWT({
-    ...decodeJwt<Record<string, unknown>>(root.bearer),
-    requested_by: `urn:rezics:request:${recipient.accountId}:${requestId}`,
-  })
-    .setProtectedHeader({ alg: 'ES256', kid: signingKey.kid, typ: 'at+jwt' })
-    .sign(await importJWK(signingKey, 'ES256'));
+  const delegated = await issue(
+    'grant_root@grant.test',
+    scopes,
+    `urn:rezics:request:${recipient.accountId}:${requestId}`,
+  );
   for (const [bearer, body] of [
     [recipient.bearer, inputFor(root.accountId)],
     [limited, inputFor(root.accountId)],

@@ -5,7 +5,8 @@ import {
   type NativePermissionProjection,
 } from '../../src/access/policy-core.ts';
 import type { ActionCatalogue } from '../../src/request/access.ts';
-import type { ResolvedResourceRoles } from '../../src/access/resource-roles.ts';
+import { resolveResourceRoles, type ResolvedResourceRoles } from '../../src/access/resource-roles.ts';
+import { productionActions } from '../support/production-actions.ts';
 
 const actions: ActionCatalogue = new Map([
   ['collection:read', { anonymous: true }],
@@ -28,7 +29,7 @@ const catalogue = compileNativePolicyCatalogue(actions, roles);
 function projection(overrides: Partial<NativePermissionProjection> = {}): NativePermissionProjection {
   return {
     assignmentValid: true,
-    live: true,
+    deadlineLive: true,
     localDenied: false,
     actorActionGrant: false,
     actorResourceRoleGrant: false,
@@ -90,7 +91,7 @@ test('Collection policy consumes separate actor and principal facts, never the l
   });
 });
 
-test('native live projection permits current grants and expires ordinary and explicit advice together', () => {
+test('native deadline projection permits current grants and expires ordinary and explicit advice together', () => {
   const facts = projection({
     actorActionGrant: true,
     principalActionGrant: true,
@@ -99,10 +100,12 @@ test('native live projection permits current grants and expires ordinary and exp
   });
   for (const mode of ['ordinary', 'explicit'] as const) {
     expect(decideNativePermission(catalogue, { ...collection, mode }, facts).decision).toBe('allow');
-    expect(decideNativePermission(catalogue, { ...collection, mode }, { ...facts, live: false })).toMatchObject({
-      decision: 'deny',
-      reason: 'deadline',
-    });
+    expect(decideNativePermission(catalogue, { ...collection, mode }, { ...facts, deadlineLive: false })).toMatchObject(
+      {
+        decision: 'deny',
+        reason: 'deadline',
+      },
+    );
   }
 });
 
@@ -147,4 +150,19 @@ test('exact registered Global reach is the only alternate path, and unavailable 
     projection({ actorActionGrant: null, principalActionGrant: true }),
   );
   expect(unknown.decision).toBe('unavailable');
+});
+
+test('mounted production actions retain complete board ownership and exact definition and media policy types', () => {
+  const mounted = productionActions();
+  const resolved = resolveResourceRoles(mounted);
+  expect(resolved.roles.get('content.board.owner')).toEqual(['board:read', 'thread:create']);
+  expect(resolved.types.get('content.board')?.owner).toBe('content.board.owner');
+  const production = compileNativePolicyCatalogue(mounted, resolved);
+  for (const [action, resourceType] of [
+    ['board:read', 'content.board'],
+    ['thread:create', 'content.board'],
+    ['definitions:activate', 'semantic.context'],
+    ['media:import_from_url', 'content.media'],
+  ])
+    expect(production.actionByName[action]?.resourceTypes).toContain(resourceType);
 });

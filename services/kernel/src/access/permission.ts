@@ -401,7 +401,7 @@ async function checkPreparedPermission(
         (row) =>
           typeof row.resourceId !== 'string' ||
           !ids.includes(row.resourceId) ||
-          (policyCore ? typeof row.live !== 'boolean' : typeof row.allowed !== 'boolean'),
+          (policyCore ? typeof row.deadlineLive !== 'boolean' : typeof row.allowed !== 'boolean'),
       )
     )
       return { allowed: false, explicit: false };
@@ -1228,7 +1228,7 @@ export function createAccess(config: PermissionConfig): Access {
                 rows.some(
                   (row) =>
                     !ids.includes(row.resourceId) ||
-                    (policyCore ? typeof row.live !== 'boolean' : typeof row.allowed !== 'boolean') ||
+                    (policyCore ? typeof row.deadlineLive !== 'boolean' : typeof row.allowed !== 'boolean') ||
                     (!policyCore && typeof row.explicit !== 'boolean') ||
                     !row.at ||
                     !row.live,

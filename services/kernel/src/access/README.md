@@ -54,8 +54,9 @@ the same core for ordinary and explicit advice. Own-account action metadata bind
 excludes that floor and resource-role grants; own-account grants remain explicit advice. A core decision reached through registered Global authority still
 marks the same governance provenance used by command auditing.
 
-The typed native projection maps SQL `live` to the core's `deadlineLive` operand without structural casts.
-Scalar and batched consumers use that same projection; the native statement and its output remain unchanged.
+The typed native projection passes SQL `deadlineLive` to the core without structural casts.
+Scalar and batched consumers use that same projection; SQL `live` independently checks read freshness.
+The native work bound includes both projected fields.
 
 The exact type operand is deliberately not guessed for point `Resource` checks. Resource-role registrations bind
 `access:grant` to `community.realm`, `semantic.context` and `semantic.zone`; that point action keeps the existing

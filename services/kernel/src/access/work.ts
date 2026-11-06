@@ -445,8 +445,9 @@ export function accessNativeDeclaration(
             explicit: false,
             publicAllowed: false,
             at: timestamp,
+            live: false,
             ...({
-              live: false,
+              deadlineLive: false,
               assignmentValid: false,
               localDenied: false,
               actorActionGrant: false,

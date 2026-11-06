@@ -344,6 +344,10 @@ when present and the native operator marking for automation. Delegation does not
 
 `effective permission = actor grants ∩ current client-consented scopes ∩ principal grants (if delegated)`.
 
+Decision: native policy consumes the declared `deadlineLive` fact, while `live` fences read freshness. Grant
+acceptance uses Auth-issued assignment tokens and checks grant/revoke with the same bearer. Own-account authority
+remains explicit advice.
+
 Each operand can deny independently. Unknown actions and missing evidence deny; native resource, time,
 suspension, revocation and fence floors remain. Signed-in identity, a role label, page advice or review link
 establishes no allowed action. Consumers use supported Access preparations rather than reproduce this formula.

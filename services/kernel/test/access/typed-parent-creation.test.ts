@@ -34,7 +34,9 @@ const access = createAccess({
 });
 
 beforeAll(async () => {
-  await pool.query('CREATE TABLE IF NOT EXISTS public.typed_parent_child (route integer, id uuid, PRIMARY KEY (route,id))');
+  await pool.query(
+    'CREATE TABLE IF NOT EXISTS public.typed_parent_child (route integer, id uuid, PRIMARY KEY (route,id))',
+  );
   await pool.query(
     "INSERT INTO access.account (route,account_id,kind,state,transaction_id) VALUES ($1,$2,'actor','active',$3) ON CONFLICT DO NOTHING",
     [routeOf(actorId), actorId, transactionId],
