@@ -5,8 +5,8 @@ import { initializeSubjectPagePublication } from './subject-page-publication-sto
 import { subjectPageFacts, recordSubjectPageDiff } from './subject-page-publication-native.ts';
 import type { Pool, PoolClient } from 'pg';
 import { runCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
-import { ACCOUNT_ROLE_BITS } from '../history/contracts.ts';
-import { bindCommandHistoryEvidence } from '../history/command-evidence.ts';
+import { bindCommandHistoryEvidence } from '../history/application/index.ts';
+import { ACCOUNT_ROLE_BITS } from '../history/contract/index.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { withReadTransaction } from './read.ts';
 import { readPartition } from '../partition/partition.ts';
