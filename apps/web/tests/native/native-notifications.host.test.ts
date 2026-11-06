@@ -33,7 +33,20 @@ async function inbox(accountId: string, actor: 'alice' | 'bob' = 'alice', limit 
     actor,
   );
   expect(response.status).toBe(200);
-  return (await response.json()) as NativeNoticePage;
+  const page = (await response.json()) as NativeNoticePage & {
+    items: Array<
+      NativeNotice & { target?: { threadId?: string | null; postId?: string | null; decisionId?: string | null } }
+    >;
+  };
+  return {
+    next: page.next,
+    items: page.items.map((item) => ({
+      ...item,
+      threadId: item.threadId ?? item.target?.threadId ?? null,
+      postId: item.postId ?? item.target?.postId ?? null,
+      decisionId: item.decisionId ?? item.target?.decisionId ?? null,
+    })),
+  };
 }
 
 async function waitForNotice(accountId: string, notice: (item: NativeNotice) => boolean, actor: 'alice' | 'bob') {

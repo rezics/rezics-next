@@ -3107,6 +3107,9 @@ shared version. Viewer state and read/update actions sit on the shared preferenc
 catalogue and shelf observation can add their slices without a second preference version. Unknown or malformed choice
 data is unavailable; consumers do not guess the spoiler or suitability enum, nor invent shelf catalogues or limits.
 
+Decision: Native content fixtures grant Global parent-creation actions through ordinary `POST /v1/grants` receipts.
+Whether the Global B-tree seek admits those rows for Space and Realm creation is the permission-formula owner.
+
 ## Direct resource role data
 
 `resourceRoleHeld(client, { resource: { route, id }, role, accountId, at }): Promise<boolean>`, exported from

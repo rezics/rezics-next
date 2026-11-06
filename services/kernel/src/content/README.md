@@ -823,6 +823,8 @@ use their own optional, default-on `thread_watch` preference, separate from repl
 
 Decision: `thread_watch` has its own default-on preference, and a reader can clear their own watch after access to the thread is lost.
 
+Decision: Notice fixtures create discussion boards through ordinary Space, Realm and board routes; a SQL-inserted Board without Realm, purpose or identity is not a thread parent.
+
 A published post with a parent notifies that parent's author with `reply`. A published post without a parent
 notifies the thread's opening-post author. Creating the opening post never notifies its own author. A `mention`
 inline node with `attrs.accountId` in a post's first published revision notifies each distinct named account, in

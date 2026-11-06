@@ -38,9 +38,11 @@ function resultMap<T>(value: ApiResult<unknown>, map: (body: unknown) => T): Api
 }
 
 function notificationTarget(value: Raw): Notice['target'] {
+  const nested = value.target;
+  const nestedTarget = typeof nested === 'object' && nested !== null && !Array.isArray(nested) ? (nested as Raw) : {};
   const target: Notice['target'] = {};
   for (const key of ['threadId', 'postId', 'decisionId', 'reportId'] as const) {
-    const id = value[key];
+    const id = value[key] ?? nestedTarget[key];
     if (id !== null && id !== undefined) target[key] = string(id, `notification.${key}`);
   }
   return target;
