@@ -11,8 +11,9 @@ type Proposed = Extract<BatchCommand, { op: 'propose' }>;
 const proposedProperties = (proposals: readonly BatchCommand[]) =>
   proposals.flatMap((command) => (command.op === 'propose' ? [command.statement.property.id] : []));
 const proposed = (proposals: readonly BatchCommand[], property: string) =>
-  proposals.find((command): command is Proposed => command.op === 'propose' && command.statement.property.id === property)
-    ?.statement;
+  proposals.find(
+    (command): command is Proposed => command.op === 'propose' && command.statement.property.id === property,
+  )?.statement;
 const bangumiCitation = (id: string) =>
   ({
     type: 'value',
