@@ -4376,6 +4376,10 @@ root export at the complete-input publication stage. Web retains its receiver an
 
 ## Exact post contribution attribution
 
+Decision: receive the shared receipt keys and thirty-second test request budget through the existing authored
+erasure, native-operation HTTP, admission HTTP and native growth suites. Batch post/parent attribution remains
+the exact-point assembly contract; fixture setup failures remain distinct from its assertions.
+
 Decision: the ordinary exact post point read receives the public Accounts attribution contract. Native author IDs
 remain required by authorization; `ContributedPostResponseSchema` publishes the separately typed serialization.
 Explicit deletion removes `authorId` and supplies the id-free deletion label. Missing/pending attribution remains null;
