@@ -1,3 +1,4 @@
+import type { BatchCommand, BatchReference } from '@rezics/definitions/bulk';
 import { createHash } from 'node:crypto';
 import { mapSourceEnumeration, vndbProducerParentEnds } from './cross-media-entities.ts';
 import {
@@ -11,6 +12,10 @@ import {
   type VndbVocabularyRow,
 } from './source-vocabulary.ts';
 import {
+  commandKey,
+  sourceDigest,
+  sourceEnvelope,
+  type VndbPublicTagCategory,
   vndbReleaseMediumCodes,
   vndbReleaseMediumSchemeUri,
   vndbReleaseMediumTaxonomy,
@@ -923,5 +928,86 @@ export function produceVndbSourceTagWeightCandidate(input: VndbSourceTagWeightIn
       statement,
       source: { recordId: input.subjectRecordId, tagId: input.tagId, digest, amount: decimal },
     },
+  };
+}
+
+export {
+  vndbPublicTagConceptUri,
+  vndbPublicTagScheme,
+  vndbPublicTagTaxonomy,
+  type VndbPublicTagCategory,
+} from './support.ts';
+
+/** Caller-resolved native identities for one admitted tags_parents row. */
+export type VndbPublicTagParentBinding = Readonly<{
+  child: string;
+  parent: string;
+  main: boolean;
+  category: VndbPublicTagCategory;
+  path: string;
+  childId: string;
+  parentId: string;
+  schemeId: string;
+  childUri: string;
+  parentUri: string;
+  schemeUri: string;
+  releaseDigest: string;
+}>;
+
+export const vndbPublicTagParentRevision = 'vndb-public-tag-vocabulary@2';
+
+export function vndbPublicTagParentCommand(
+  binding: VndbPublicTagParentBinding,
+): Extract<BatchCommand, { op: 'propose' }> {
+  const source = sourceEnvelope(
+    {
+      source: 'vndb_cross_media',
+      external_id: binding.path,
+      record_revision: null,
+      converter_revision: vndbPublicTagParentRevision,
+      digest: sourceDigest({
+        provider: 'vndb',
+        table: 'tags_parents',
+        path: binding.path,
+        child: binding.child,
+        parent: binding.parent,
+        main: binding.main,
+        category: binding.category,
+        childId: binding.childId,
+        parentId: binding.parentId,
+        schemeId: binding.schemeId,
+        releaseDigest: binding.releaseDigest,
+      }),
+    },
+    'facts',
+  );
+  const references: BatchReference[] = [
+    {
+      parts: [
+        ...new Set([`https://vndb.org/${binding.child}#${binding.path}`, binding.childUri, binding.parentUri]),
+      ].map((content) => ({
+        property: { id: 'schema:url' },
+        value: { type: 'value' as const, content },
+      })),
+    },
+  ];
+  const statement = {
+    property: { id: 'skos:broader' },
+    value: { type: 'value' as const, content: binding.parentId },
+    references,
+  };
+  return {
+    op: 'propose',
+    key: `vndb-public-tag-parent:${commandKey([
+      JSON.stringify(source),
+      binding.path,
+      binding.childId,
+      binding.parentId,
+      binding.schemeId,
+      JSON.stringify(statement),
+    ])}`,
+    source,
+    subject: binding.childId,
+    statement,
   };
 }

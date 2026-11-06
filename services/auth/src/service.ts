@@ -223,6 +223,17 @@ async function bodyOf(request: Request): Promise<Record<string, unknown>> {
   return parsed as Record<string, unknown>;
 }
 
+export async function createAuthService(options: AuthServiceOptions): Promise<AuthService> {
+  return buildAuthService(
+    options.restoredGeneration
+      ? {
+          ...options,
+          restoredGeneration: { ...options.restoredGeneration, receiving: options.trustedAccess },
+        }
+      : options,
+  );
+}
+
 export async function buildAuthService(options: AuthServiceOptions): Promise<AuthService> {
   const kindConsentReceiver = options.kindConsentReceiver ?? options.restoredGeneration?.kindConsentReceiver;
   const kindConsent = createKindConsentParticipant({
@@ -1976,12 +1987,14 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         const granted = scopes(input.scopes);
         if (id === WEBSITE_CLIENT_ID || granted.includes('media:complete')) throw new Denied(400);
         const observed =
-          (
-            await database.query<{ scopes: string[]; first_party: boolean }>(
-              'SELECT scopes,first_party FROM auth_client WHERE client_id=$1',
-              [id],
-            )
-          ).rows[0] ?? null;
+          input.mode === 'create-or-match'
+            ? null
+            : ((
+                await database.query<{ scopes: string[]; first_party: boolean }>(
+                  'SELECT scopes,first_party FROM auth_client WHERE client_id=$1',
+                  [id],
+                )
+              ).rows[0] ?? null);
         const sameAuthority =
           !!observed &&
           observed.first_party === input.firstParty &&
@@ -1992,6 +2005,17 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           const previous =
             (await connection.query<Client>('SELECT * FROM auth_client WHERE client_id=$1 FOR UPDATE', [id])).rows[0] ??
             null;
+          // Startup must decide against the writer that committed while it waited
+          // for this lock. A match never changes authority or enters a transition.
+          if (previous && input.mode === 'create-or-match') {
+            if (
+              previous.first_party !== input.firstParty ||
+              new Set(previous.scopes).size !== granted.length ||
+              previous.scopes.some((scope) => !granted.includes(scope))
+            )
+              throw new Denied();
+            return true;
+          }
           if (
             expected &&
             (!previous ||
@@ -2006,15 +2030,6 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             (previous.scopes.some((scope) => !granted.includes(scope)) || (previous.first_party && !input.firstParty))
           )
             throw new Denied();
-          if (previous && input.mode === 'create-or-match') {
-            if (
-              previous.first_party !== input.firstParty ||
-              new Set(previous.scopes).size !== granted.length ||
-              previous.scopes.some((scope) => !granted.includes(scope))
-            )
-              throw new Denied();
-            return true;
-          }
           await configureClientLabel(connection, id, displayName);
           await connection.query(
             'INSERT INTO auth_client (client_id, first_party, scopes, display_name) VALUES ($1,$2,$3,$4) ON CONFLICT (client_id) DO UPDATE SET first_party=EXCLUDED.first_party, scopes=EXCLUDED.scopes, display_name=EXCLUDED.display_name',

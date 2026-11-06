@@ -246,27 +246,17 @@ export function normalizeVoteReviewGuard(value: unknown, requestedTargetId: stri
 }
 
 function freezeIdentityOperand(operand: IdentityRatingReviewOperand): IdentityRatingReviewOperand {
-  const {
-    version,
-    requestedOriginalId,
-    canonicalTerminalId,
-    sourceIdentities,
-    sourceHomes,
-    controlLocators,
-    evidence,
-    ...extra
-  } = operand;
+  const { requestedOriginalId, canonicalTerminalId, sourceIdentities, sourceHomes, controlLocators, evidence } =
+    operand;
   return Object.freeze({
-    version,
+    version: 1,
     requestedOriginalId,
     canonicalTerminalId,
     sourceIdentities: Object.freeze([...sourceIdentities]),
-    sourceHomes: Object.freeze([...sourceHomes]),
+    sourceHomes: Object.freeze(sourceHomes.map((home) => Number(home))),
     controlLocators: Object.freeze(
-      controlLocators.map(({ partition, group, ...extra }) => Object.freeze({ partition, group, ...extra })),
+      controlLocators.map(({ partition, group }) => Object.freeze({ partition: Number(partition), group })),
     ),
     evidence,
-    // Preserve unknown fields for Semantic's closed validation rather than dropping them.
-    ...extra,
   });
 }

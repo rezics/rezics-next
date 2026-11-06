@@ -9,10 +9,9 @@ import { MediaProblem } from '../media/kernel';
 import { m } from '../paraglide/messages.js';
 import { getLocale, localizeHref } from '../paraglide/runtime.js';
 import { threadLocation } from '../threads/thread-href';
+import { INBOX_PAGE_SIZE, MAX_INBOX_CURSOR_LENGTH } from './inbox-work';
 
-export const INBOX_PAGE_SIZE = 20;
-/** One composed private list read; disclosure and destinations arrive with each admitted item. */
-export const INBOX_PAGE_KERNEL_READ_CEILING = 1;
+export { INBOX_PAGE_KERNEL_READ_CEILING, INBOX_PAGE_SIZE } from './inbox-work';
 export const INBOX_SELECTIONS = ['all', 'unread'] as const;
 export type InboxSelection = (typeof INBOX_SELECTIONS)[number];
 export const DEFAULT_INBOX_SELECTION: InboxSelection = 'all';
@@ -151,36 +150,102 @@ function noticeId(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && !/[\s/\\?#%]/.test(value) && value !== '.' && value !== '..';
 }
 
+function positiveInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1;
+}
+
 function exactKeys(value: Record<string, unknown>, expected: readonly string[]) {
   const actual = Object.keys(value).sort();
   return actual.length === expected.length && actual.every((key, index) => key === [...expected].sort()[index]);
 }
 
+function validAvatarSummary(value: unknown): boolean {
+  if (value === null) return true;
+  if (
+    !isRecord(value) ||
+    !exactKeys(value, ['media', 'width', 'height', 'placeholder', 'variants', 'focalPoint', 'credit']) ||
+    !noticeId(value.media) ||
+    !positiveInteger(value.width) ||
+    !positiveInteger(value.height) ||
+    value.credit !== null
+  )
+    return false;
+  const placeholder = value.placeholder;
+  if (
+    !isRecord(placeholder) ||
+    !exactKeys(placeholder, ['thumbhash', 'color']) ||
+    typeof placeholder.thumbhash !== 'string' ||
+    placeholder.thumbhash.length > 44 ||
+    typeof placeholder.color !== 'string' ||
+    !/^#[0-9a-f]{6}$/.test(placeholder.color)
+  )
+    return false;
+  if (!Array.isArray(value.variants) || value.variants.length > 12) return false;
+  for (const variant of value.variants) {
+    if (
+      !isRecord(variant) ||
+      !exactKeys(variant, ['format', 'width']) ||
+      (variant.format !== 'avif' && variant.format !== 'webp') ||
+      !positiveInteger(variant.width)
+    )
+      return false;
+  }
+  if (value.focalPoint === null) return true;
+  return (
+    isRecord(value.focalPoint) &&
+    exactKeys(value.focalPoint, ['x', 'y']) &&
+    typeof value.focalPoint.x === 'number' &&
+    value.focalPoint.x >= 0 &&
+    value.focalPoint.x <= 1 &&
+    typeof value.focalPoint.y === 'number' &&
+    value.focalPoint.y >= 0 &&
+    value.focalPoint.y <= 1
+  );
+}
+
+function validClosedActorLabels(
+  value: Record<string, unknown>,
+  state: 'withheld' | 'system',
+  displayName: 'Former or unavailable account' | 'Moderation team',
+): boolean {
+  const installed = exactKeys(value, ['state', 'displayName', 'handle', 'avatar', 'avatarUrl']);
+  const retained = exactKeys(value, ['state', 'displayName', 'handle', 'avatarUrl']);
+  return (
+    (installed || retained) &&
+    value.state === state &&
+    value.displayName === displayName &&
+    value.handle === null &&
+    value.avatarUrl === null &&
+    (!installed || value.avatar === null)
+  );
+}
+
 function validActor(value: unknown): value is NativeActor {
   if (!isRecord(value)) return false;
-  if (value.state === 'available')
+  if (value.state === 'available') {
+    const installed = exactKeys(value, [
+      'state',
+      'accountId',
+      'displayName',
+      'handle',
+      'avatar',
+      'avatarUrl',
+      'automated',
+    ]);
+    const retained = exactKeys(value, ['state', 'accountId', 'displayName', 'handle', 'avatarUrl', 'automated']);
     return (
-      exactKeys(value, ['state', 'accountId', 'displayName', 'handle', 'avatarUrl', 'automated']) &&
+      (installed || retained) &&
       noticeId(value.accountId) &&
       typeof value.displayName === 'string' &&
       (value.handle === null || typeof value.handle === 'string') &&
-      (value.avatarUrl === null || typeof value.avatarUrl === 'string') &&
-      typeof value.automated === 'boolean'
+      typeof value.automated === 'boolean' &&
+      (installed
+        ? validAvatarSummary(value.avatar) && value.avatarUrl === null
+        : value.avatarUrl === null || typeof value.avatarUrl === 'string')
     );
-  if (value.state === 'withheld')
-    return (
-      exactKeys(value, ['state', 'displayName', 'handle', 'avatarUrl']) &&
-      value.displayName === 'Former or unavailable account' &&
-      value.handle === null &&
-      value.avatarUrl === null
-    );
-  return (
-    exactKeys(value, ['state', 'displayName', 'handle', 'avatarUrl']) &&
-    value.state === 'system' &&
-    value.displayName === 'Moderation team' &&
-    value.handle === null &&
-    value.avatarUrl === null
-  );
+  }
+  if (value.state === 'withheld') return validClosedActorLabels(value, 'withheld', 'Former or unavailable account');
+  return validClosedActorLabels(value, 'system', 'Moderation team');
 }
 
 function validTarget(value: unknown): value is NativeTarget {
@@ -412,7 +477,10 @@ export function decodeInboxPage(value: unknown, accountId?: string): NoticePage 
     !exactKeys(value, ['items', 'next', 'viewer', 'selection', 'actions']) ||
     !Array.isArray(value.items) ||
     value.items.length > INBOX_PAGE_SIZE ||
-    !(value.next === null || (typeof value.next === 'string' && value.next.length > 0 && value.next.length <= 4096)) ||
+    !(
+      value.next === null ||
+      (typeof value.next === 'string' && value.next.length > 0 && value.next.length <= MAX_INBOX_CURSOR_LENGTH)
+    ) ||
     !isInboxSelection(value.selection)
   )
     throw new InboxReadError({ status: 200 });
@@ -549,7 +617,7 @@ export const readInboxPage = createServerFn({ method: 'GET' })
     if (
       'cursor' in value &&
       value.cursor !== undefined &&
-      (typeof value.cursor !== 'string' || value.cursor.length > 4096)
+      (typeof value.cursor !== 'string' || value.cursor.length > MAX_INBOX_CURSOR_LENGTH)
     )
       throw new Error('Invalid inbox cursor');
     const selection = value.selection === undefined ? DEFAULT_INBOX_SELECTION : value.selection;

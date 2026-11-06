@@ -589,7 +589,7 @@ async function startDriver(
       },
       async grant(persona, actions, resourceId) {
         if (persona === 'anonymous') throw new Error('Anonymous is not an account grant recipient');
-        const grantor = resourceId === GLOBAL_CONTEXT ? governor : editor;
+        const grantor = (resourceId ?? GLOBAL_CONTEXT) === GLOBAL_CONTEXT ? governor : editor;
         await grantAccount(accounts[persona], actions, resourceId, grantor);
       },
       async projection(state) {

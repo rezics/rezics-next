@@ -413,6 +413,7 @@ export async function assemble(options?: {
   env: Record<string, string>;
   authDatabaseUrl: string;
   keys: DevelopmentKeys;
+  recoveryDelivery?: import('../src/index.ts').AuthServiceOptions['recoveryDelivery'];
 }) {
   if (process.env.NODE_ENV === 'production') throw new Error('Local stack is development only');
   await import('reylo/register');
@@ -481,6 +482,7 @@ export async function assemble(options?: {
     trustedAccess: bindings.trustedAccess,
     access: bindings.workflowPorts,
     siteActions: actions,
+    ...(options?.recoveryDelivery ? { recoveryDelivery: options.recoveryDelivery } : {}),
     accountManagementReads: createAccountManagementReadAccess({ pool: kernelPool, access }),
     // The local widget and verifier never call Cloudflare. Production composition is unchanged.
     turnstile: {

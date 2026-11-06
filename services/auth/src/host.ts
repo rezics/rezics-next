@@ -32,7 +32,8 @@ import {
 import { operatorSessionTransport } from './operator-session-transport.ts';
 import { readWorkflowRetentionConfig } from './retention.ts';
 import type { Pool } from 'pg';
-import { createAuthService, type AuthServiceOptions } from './index.ts';
+import { createAuthService } from './service.ts';
+import type { AuthServiceOptions } from './index.ts';
 import { credentialEffects, CredentialEffectDenied } from './credential-effects.ts';
 import { createAccountWorkflows, type AccountWorkflowPorts, type WorkflowContext } from './workflows.ts';
 import type { TurnstileConfiguration } from './turnstile.ts';

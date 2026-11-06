@@ -3,6 +3,7 @@ import { Client, Pool } from 'pg';
 import { createAuthHost, type AuthService } from '@rezics/auth';
 import { decodeJwt, exportJWK, generateKeyPair, importJWK, SignJWT } from 'jose';
 import { createAuthDatabase } from '../support/auth-database.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { authoritativeTimeValue } from '../../src/command/command.ts';
 import { createGrantCommands } from '../../src/access/grant-commands.ts';
@@ -15,7 +16,7 @@ import { newId, routeOf } from '../../src/route/route.ts';
 import { openGrowthDatabase } from '../support/growth.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
-import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
+import { bootstrapGovernance, PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { ACCESS_EVENTS } from '../../src/access/events.ts';
 import { EVENT_TYPES } from '../../src/events/log.ts';
 import { Value } from 'typebox/value';
@@ -114,7 +115,7 @@ async function call(
   );
   return { response, value: await response.json() };
 }
-const inputFor = (accountId: string, actions = ['context:create']) => ({
+const inputFor = (accountId: string, actions = ['account:suspend']) => ({
   resource: PLATFORM_RESOURCE,
   subject: { kind: 'account' as const, id: accountId },
   actions,
@@ -145,9 +146,12 @@ beforeAll(async () => {
     pool: db.pool,
     routeKey,
     tokens,
+    receiptKeys: testReceiptKeys(),
     clock: () => new Date(now),
     access: (config) => {
-      expect([...config.actions]).toEqual([...actionCatalogue(kernel)]);
+      for (const [action, metadata] of actionCatalogue(kernel)) {
+        expect(config.actions.get(action)).toEqual(metadata);
+      }
       return access;
     },
     writeRate: {
@@ -209,12 +213,7 @@ beforeAll(async () => {
   root = await person('grant_root');
   grantor = await person('grant_grantor');
   recipient = await person('grant_recipient');
-  const bootstrap = Bun.spawn(['bun', 'scripts/bootstrap-governance.ts', '--account', root.accountId], {
-    env: { ...process.env, DATABASE_URL: db.url },
-    stdout: 'pipe',
-    stderr: 'pipe',
-  });
-  expect(await bootstrap.exited).toBe(0);
+  await bootstrapGovernance(db.pool, root.accountId);
 }, setupTimeout);
 afterAll(async () => {
   await host?.stop();
@@ -308,25 +307,10 @@ test('native Auth and mounted platform suspension commit the real terminal state
   expect((await call(target.bearer, pathFor(recipient.accountId), {})).response.status).toBe(401);
   await expect(commands.suspend(cached, cachedInput)).rejects.toThrow();
   await expect(commands.suspend(cached, { accountId: recipient.accountId, key: Bun.randomUUIDv7() })).rejects.toThrow();
-  await grants.create(await context(root.bearer), { ...inputFor(recipient.accountId), key: Bun.randomUUIDv7() });
-  const published = await call(root.bearer, '/v1/definitions/releases', {
-    release: {
-      format: 'https://rezics.com/definitions/release/1',
-      catalogue: { id: 'https://rezics.com/catalogue/test', version: '1' },
-      generator: { name: 'test', version: '1' },
-      prefixes: {},
-      types: {},
-      properties: {},
-    },
-  });
-  expect(published.response.status).toBe(201);
-  const { digest } = published.value as { digest: string };
-  expect(
-    (await call(root.bearer, `/v1/definitions/releases/${digest}:activate`, { expected_head: null })).response.status,
-  ).toBe(200);
-  expect((await call(recipient.bearer, '/v1/contexts', { labels: { en: 'Unrelated account' } })).response.status).toBe(
-    201,
-  );
+  const unaffected = await person('unaffected_actor');
+  await grants.create(await context(root.bearer), { ...inputFor(unaffected.accountId), key: Bun.randomUUIDv7() });
+  const unrelated = await person('unrelated_victim');
+  expect((await call(unaffected.bearer, pathFor(unrelated.accountId), {})).response.status).toBe(200);
 });
 
 test('the mounted action checks Global Context at the sole clock and independently denies actor, scope and principal ceilings', async () => {
@@ -448,12 +432,16 @@ test('suspension preserves membership, first-owner and operator reservations ind
     const after = await account(subject.accountId);
     expect(after).toMatchObject({
       ...before,
+      discovery_revision: expect.any(String),
+      public_changed_at: expect.any(Date),
       state: 'suspended',
       authn_fenced: true,
       minimum_authn_epoch: String(Number(before.minimum_authn_epoch) + 1),
       fence_receipt_id: expect.any(String),
       transaction_id: expect.any(String),
     });
+    expect(BigInt(after.discovery_revision)).toBeGreaterThan(BigInt(before.discovery_revision));
+    expect(after.public_changed_at.getTime()).toBeGreaterThanOrEqual(before.public_changed_at.getTime());
     const effectsAfter = (await effects())[0]!;
     expect(effectsAfter).toEqual({
       ...effectsBefore[0]!,

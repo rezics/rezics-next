@@ -285,6 +285,10 @@ Only trusted application code may call the internal effects:
   With `mode: 'create-or-match'`, the same native client lock and reduction guards
   protect insertion or an exact first-party flag and normalized scope-set match.
   A match preserves all existing metadata; a mismatch rolls back without writes.
+  The decision reads the committed client under that lock, including a concurrent
+  insertion. A refused match does not open a consent transition or block later
+  client reduction. Startup repeats the same three exact-key registry probes
+  independently of unrelated clients; management-client registration is separate.
   Invalid modes are refused. Omitting the mode retains the ordinary upsert behavior.
 
 These are in-process methods, with no internal HTTP authorization endpoint.
@@ -2304,6 +2308,26 @@ Trusted `registerWebsiteDeployment(auth, actionCatalogue(kernel), registration, 
 registers first, then emits Web's public `WEBSITE_CONFIGURATION_FILE` operand. Deployment supplies the actual
 composition, public JWK and callbacks; Web refuses a scope override mismatch. Importer grants stay separate.
 
+`createAuthDeployment({host,kernelOrigin,turnstileSiteKey,website})` is the complete native host entry when
+installing Auth and Web together. `host` supplies the existing Auth host options and requires `siteActions`,
+`turnstile` and `recoveryDelivery`. `website` supplies public JWKs and one to eight canonical website origins.
+The entry registers each origin's installed `/auth/callback` and `/` sign-out return, starts the host and only then
+returns `{host,authPages,website}`. A registration/start failure closes the host. Deploy the returned `authPages`
+bindings on Auth pages and `website` bindings on Web; install the matching website private JWK separately as Web's
+`WEBSITE_CLIENT_KEY` secret. No secret, recovery proof or mail payload appears in the returned bindings.
+
+The shared `websiteDeploymentScopes` derives protocol scopes, mounted actions and the three native account
+scopes above. Auth pages receive `catalogue:<C>` from the same `siteActions` passed to native Auth, plus the paired
+Turnstile site key; fixed Security/enrollment/registration budgets remain unchanged. Configuration refuses path,
+query or userinfo in an origin and refuses HTTP website redirects for an HTTPS issuer. `authDeploymentConfiguration`
+allows a deployment to inspect those exact operands before construction; it neither registers nor starts a host.
+
+Delivery remains the installed private `recoveryDelivery.deliver` callback: forward the original native URL and
+delivery identity through the configured delivery owner. A void return retains the native unresolved external-copy
+custody; successful delivery does not certify deletion or make an uncertain command safe to resend. Local
+`assemble({env,authDatabaseUrl,keys,recoveryDelivery})` forwards an explicitly supplied adapter to that same port.
+No local mailbox, public delivery endpoint, provider receipt or new storage is introduced.
+
 Update registration/configuration together, then deliberately sign out, sign in and complete renewed consent.
 Old sessions/access/refresh ceilings remain unchanged. Registration supplies no resource, exposure, ownership
 or lifecycle grant; populated journeys still require native receiving and prepared fixtures.
@@ -3342,3 +3366,13 @@ JSON lengths for errors. Approval references remain opaque strings; the native a
 approval or execution POST has one five-second headers-and-body lifetime and retries only exact 503
 `{error:'unavailable'}` once with the same body. A matching result means tombstone committed and cleanup pending; it
 does not mean adopted retention, backups or external copies are erased. Current advice cannot acknowledge the command.
+
+The native registration pending event is observed under its original workflow identity. If its producer has
+failed before publishing that event, observation surfaces the stored workflow exception. A still pending or
+missing workflow reports its status; callers retain their original registration key for deliberate recovery.
+The installed stack registers website scopes from mounted action names, including `progress_session:update`.
+Local object storage uses the conditional native media origin/token bindings; deployments without those
+bindings keep the R2 binding. Media configuration does not expand session or consent authority.
+
+The ordinary host constructs its service through the internal service factory. The package entry point only
+re-exports that factory; deployment composition does not feed back through the package entry point.

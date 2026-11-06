@@ -46,6 +46,15 @@ The development seed uses the private VNDB list preview through the authenticate
 Selected Bangumi Game publication adopts the acknowledged provider identifier through a separate reviewer before reopening the unchanged import and checking public readings. A source claim alone does not admit a current public identity; date adoption and source-fence assertions remain separate.
 
 Decision: seed fixtures return the exact current VNDB Person identifier; only the existing common publisher plus authorized review, Global adoption and independent readback qualify showcase publication.
+The personal caller also exposes explicit generated review/apply methods with stable intent IDs and the existing
+private journal. Retry sends the original operands even if a form changes, and a deadline resumes the same selection.
+Current preview and FULL Library reads always go to their native owners; journal acknowledgements supply no current
+facts. [Personal VNDB import](../../docs/library-import-vndb.md) owns matching, consent, privacy and native admission.
+Each invocation adds one addressed native request, bounded by the existing eight-row page/action limits; each command
+adds one exact intent key containing its bounded original body. The journal retains private command operands under its
+existing private-run retention and cleanup policy, independently of the native upload's 24-hour lifetime.
+Decision: `showcase-personal-list.test.ts` is the importer pin for sealed preview/review/apply, changed reimport and
+the independent FULL Library read with explicit language.
 
 Creator/voice candidates retain exact source relationships, Person identity, role qualifiers and citations. VNDB credited spelling comes from the exact `staff_alias` selected by `aid`; relationship notes remain source provenance and never become P1932 names. Source weights, votes and ranks are not native votes, confidence, acceptance, adoption or publication. Ordinary imports only propose; selected showcase runs reuse the same converter, publisher, resolver and journal. Facts fences apply to unchanged and cached records too. `task seed:dev` reports complete only after shared publication is current and published. Its report retains source keys, Subject IDs, candidate IDs, Global head/rank and exact statement readbacks. The [capability acceptance](../../docs/goals/imports.capabilities.md) owns the full native, browser and independent-page scenarios.
 
@@ -58,6 +67,8 @@ Current Work reads follow native canonical redirects only while the exact provid
 ### Reviewed VNDB tags and character vocabulary
 
 Tags require current exact Scheme/Concept bindings and source identity; labels do not bind providers. Source parent edges keep child/parent, category, source path and `main`; malformed, cyclic or cross-category ancestry withholds dependent memberships. Publish each admitted `tags_parents` edge as a cited ODbL `skos:broader` candidate on its current child Concept, then separately accept, adopt and independently read it before work-tag membership. Retire only VNDB-managed parent/member selections for a complete current inventory or exact unresolved associations; preserve editorial facts and source fences. `main` is source bookkeeping, not a native qualifier.
+
+Decision: Keep source-specific reviewed Schemes and Concepts, independently adopt parent and work-membership candidates, and reread their current native identities on unchanged input. Parent references include the exact VNDB `tags_parents` row fragment beside both dictionary URLs. ODbL evidence is native source-record metadata; facts proposals omit summary-only bulk `rights`. Parent output `vndb-public-tag-vocabulary@2` preserves sealed `@1` requests and replaces managed current adoption even when source bytes are unchanged. Refresh retires only managed selections using their original source tuples; independent editorial selections survive. Current candidate-page reads use the native `accepted`/`rejected`/`abstained` verdicts, including the parent receiving helper; a rejected candidate cannot be accepted again by publication. Accept-action receipts remain `decision: accept`. Parent citation checks keep the `tags_parents` row URL beside both current dictionary URLs. Candidate-page fixtures include retracted, retraction, release, revision and rank so they match the current native page; they do not change those verdicts. The existing explorer and return-state contracts remain the receiving surface.
 
 Decision: Only a reviewed-subject 404 is treated as an absent binding; authorization refusals and other read failures stop the import before dependent work tags can publish.
 
@@ -82,6 +93,8 @@ Decision: Keep exact Character provider keys, appearance rows and units; omit un
 ## Native execution boundary
 
 Kernel owns runtime, authorization, command execution and native reads. Importer does not add privileged writes, acceptance shortcuts or SQL adoption. Decision: ordinary four-provider CLI identity uses the current Auth host account-operation ports, independent account-management reads and native Access grant commands on the Global Context; concurrent setups in one process take turns on the process-wide Auth workflow runtime. Isolated media workers inherit the check SQL analysis, start after that Auth executor is down, wait until MEDIA_READY, and parallel check files take turns launching one worker. A later identity in the same process relaunches Auth against its own database after the previous host's teardown turn. The ordinary account-key client includes `subject:read` so Bangumi CLI sign-in matches the scopes it requests.
+
+Native account commands reuse one idempotency key in their body and HTTP header. The API runtime grants its importer `statement:propose` on Global independently of `subject:batch_write`, through the ordinary grant API; its management credential includes that exact action so the grantor holds the permission it grants. The identity-only fixture retains its minimal admission scopes.
 
 Native selected-family checks register the six frozen VNDB statistics cases in the admitted test process, preserving each case's 120-second deadline and direct failure output. Isolated media workers compile SQL through Reylo's synchronous jest adapter and append each new compilation once, transferring the compiled map at process handoffs; serializing the growing map for every imported SQL module makes startup cost quadratic. An asynchronous onLoad makes those modules async, which Work's require() of native adapters cannot load. Readiness failures retain child output and release the owned compiler files after process exit.
 

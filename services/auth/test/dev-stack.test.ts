@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
-import { mkdir, mkdtemp, symlink, rm } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readdir, symlink, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { root } from '../scripts/dev-stack.ts';
 
@@ -10,6 +10,7 @@ test('fresh checkout starts native loopback Auth and signs a person into and out
   await mkdir(resolve(root, '.temp'), { recursive: true });
   const checkout = await mkdtemp(resolve(root, '.temp/dev-stack-'));
   const suffix = randomUUID();
+  const task = Bun.which('task') ?? 'go-task';
   const database = `rezics-dev-stack-db-${suffix}`;
   const search = `rezics-dev-stack-search-${suffix}`;
   const env = {
@@ -32,16 +33,21 @@ test('fresh checkout starts native loopback Auth and signs a person into and out
   let stack: ReturnType<typeof Bun.spawn> | undefined;
   let browser: { close(): Promise<void> } | undefined;
   try {
-    const archive = Bun.spawn(['git', 'archive', 'HEAD'], { cwd: root, stdout: 'pipe' });
-    const extract = Bun.spawn(['tar', '-x', '-C', checkout], { stdin: archive.stdout });
-    expect(await archive.exited).toBe(0);
-    expect(await extract.exited).toBe(0);
+    // Check hosts receive source snapshots without Git metadata. Copy retained
+    // source, excluding shared dependencies and generated attempt state.
+    for (const entry of await readdir(root)) {
+      if (['node_modules', '.git', '.temp'].includes(entry)) continue;
+      await cp(resolve(root, entry), resolve(checkout, entry), {
+        recursive: true,
+        filter: (source) => !['node_modules', '.git', '.temp'].includes(source.split('/').at(-1)!),
+      });
+    }
     // Dependency stores are read-only; all generated state belongs to the isolated copy.
     for (const workspace of ['', 'services/auth', 'services/kernel', 'apps/auth', 'apps/web'])
       await symlink(resolve(root, workspace, 'node_modules'), resolve(checkout, workspace, 'node_modules'));
-    await commands(['go-task', 'dev:infra']);
-    await commands(['go-task', 'dev:infra']); // Existing, migrated development DB is a no-op.
-    stack = Bun.spawn(['go-task', 'dev'], {
+    await commands([task, 'dev:infra']);
+    await commands([task, 'dev:infra']); // Existing, migrated development DB is a no-op.
+    stack = Bun.spawn([task, 'dev'], {
       cwd: checkout,
       env,
       stdout: Bun.file(resolve(checkout, '.temp/stack.log')),

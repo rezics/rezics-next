@@ -14,7 +14,6 @@ export function vndbSourceFingerprint(observation: {
     String(anchor.identityEpoch),
     anchor.component.partition,
     anchor.component.epoch,
-    String(anchor.component.position),
     source.kind === 'supported' ? source.pin.releaseDigest : null,
   ]);
 }

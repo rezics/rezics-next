@@ -351,3 +351,87 @@ test('readUnreadCount keeps setup failures private and the configured Eden clien
   expect(responseHeaders.get('cache-control')).toBe('private, no-store');
   requestFailure = undefined;
 });
+
+test('installed actors decode avatar summaries while retained fixtures without avatar still pass', () => {
+  const avatar = {
+    media: '01a17a3b-0884-721b-91ef-d7ffd7bb58aa',
+    width: 64,
+    height: 64,
+    placeholder: { thumbhash: 'P5N4GA==', color: '#112233' },
+    variants: [{ format: 'webp' as const, width: 64 }],
+    focalPoint: null,
+    credit: null,
+  };
+  const installed = notice('watch-1');
+  const page = decodeInboxPage(
+    nativeInboxEnvelope(
+      [
+        {
+          ...installed,
+          kind: 'thread_watch',
+          actor: { ...installed.actor!, avatar, avatarUrl: null },
+        },
+        notice('retained-reply'),
+        {
+          ...notice('withheld-mention', true),
+          kind: 'mention',
+          actorId: null,
+          actor: {
+            state: 'withheld',
+            displayName: 'Former or unavailable account',
+            handle: null,
+            avatar: null,
+            avatarUrl: null,
+          },
+        },
+        {
+          ...notice('system-outcome', false),
+          kind: 'moderation_decision',
+          actorId: null,
+          threadId: null,
+          postId: null,
+          decisionId: 'decision-1',
+          reportId: null,
+          actor: { state: 'system', displayName: 'Moderation team', handle: null, avatar: null, avatarUrl: null },
+          target: {
+            state: 'withheld',
+            threadId: null,
+            postId: null,
+            boardId: null,
+            threadTitle: null,
+            boardTitle: null,
+          },
+          actions: {
+            open: { kind: 'moderation_decision', decisionId: 'decision-1' },
+            markSeen: { method: 'POST', path: '/v1/accounts/alice/notifications/system-outcome:markSeen' },
+          },
+        },
+      ],
+      null,
+      'alice',
+    ),
+    'alice',
+  );
+  expect(page.items.map(({ kind, actor }) => [kind, actor?.state, 'avatar' in (actor ?? {})])).toEqual([
+    ['thread_watch', 'available', true],
+    ['reply', 'available', false],
+    ['mention', 'withheld', true],
+    ['moderation_decision', 'system', true],
+  ]);
+  expect(page.items[0]?.actor).toMatchObject({ avatar, avatarUrl: null });
+  expect(() =>
+    decodeInboxPage(
+      nativeInboxEnvelope(
+        [
+          {
+            ...installed,
+            actor: { ...installed.actor!, avatar, avatarUrl: 'https://images.test/stored.png' },
+          },
+        ],
+        null,
+        'alice',
+      ),
+      'alice',
+    ),
+  ).toThrow();
+});

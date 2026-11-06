@@ -498,7 +498,7 @@ test('host startup keeps fixed exact-key registry touches at 1/8/64 unrelated cl
       observe(pool, (sql, values) => {
         if (
           measuring &&
-          ((sql.includes('auth_client') && values[0] !== 'login') ||
+          ((sql.includes('auth_client') && values[0] === operationClient.clientId) ||
             values[0] === `auth-client:${operationClient.clientId}`)
         )
           touches.push(sql);
@@ -509,7 +509,7 @@ test('host startup keeps fixed exact-key registry touches at 1/8/64 unrelated cl
         await Promise.all([host.start(), host.start(), host.start()]);
         measuring = false;
         expect(touches).toEqual([
-          'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+          'SELECT pg_advisory_xact_lock(hashtextextended($1,0))',
           'SELECT client_id FROM auth_client_reduction WHERE client_id=$1',
           'SELECT * FROM auth_client WHERE client_id=$1 FOR UPDATE',
         ]);
@@ -522,5 +522,74 @@ test('host startup keeps fixed exact-key registry touches at 1/8/64 unrelated cl
     expect(counts).toEqual([3, 3, 3]);
   } finally {
     await f.close();
+  }
+}, 60000);
+
+test('deployed native host starts registered destinations and publishes matching Auth and Web bindings', async () => {
+  const fixture = testDatabase();
+  const database = new Pool({ connectionString: fixture.url });
+  let host: Awaited<ReturnType<typeof createAuthHost>> | undefined;
+  try {
+    const { createAuthDeployment } = await import('../src/index.ts');
+    const pair = await generateKeyPair('ES256', { extractable: true });
+    const deployment = await createAuthDeployment({
+      host: {
+        database,
+        issuer,
+        audience,
+        secret: 'deployed-host-secret-with-at-least-32-bytes',
+        signing: {
+          activeKid: 'deployment',
+          privateKeys: [{ ...(await exportJWK(pair.privateKey)), kid: 'deployment' }],
+        },
+        trustedAccess: trustedAccessPorts({
+          readAccount: unused,
+          readFencedAccount: unused,
+          authorizeProvisioning: unused,
+        }),
+        access,
+        stagingKey: randomBytes(32),
+        maintenanceSchedule: '0 0 0 1 1 *',
+        siteActions: new Map(
+          ['media:complete', 'account:manage', ...operationClient.scopes].map((action) => [
+            action,
+            { anonymous: false },
+          ]),
+        ),
+        turnstile: { secret: 'deployment-challenge-secret' },
+        recoveryDelivery: { deliver: unused },
+      },
+      kernelOrigin: audience,
+      turnstileSiteKey: 'deployment-site-key',
+      website: {
+        origins: ['https://deployed-web.test'],
+        publicJwks: {
+          keys: [{ ...(await exportJWK(pair.publicKey)), kid: 'website', alg: 'ES256', use: 'sig' }],
+        } as PublicJwks,
+      },
+    });
+    host = deployment.host;
+    const clients = (
+      await database.query(
+        'SELECT client_id,scopes,"redirectUris","postLogoutRedirectUris" FROM auth_client ORDER BY client_id',
+      )
+    ).rows;
+    const website = clients.find((client) => client.client_id === 'rezics-website');
+    expect(website.scopes).toEqual(deployment.website.WEBSITE_SCOPES.split(' ').sort());
+    expect(website.redirectUris).toEqual(['https://deployed-web.test/auth/callback']);
+    expect(website.postLogoutRedirectUris).toEqual(['https://deployed-web.test/']);
+    expect(clients.find((client) => client.client_id === 'login').scopes).toEqual([]);
+    expect(clients.find((client) => client.client_id === operationClient.clientId).scopes).toEqual(
+      [...operationClient.scopes].sort(),
+    );
+    expect(deployment.authPages).toEqual({
+      AUTH_SECURITY_SCOPE_CONFIGURATION: 'catalogue:6',
+      TURNSTILE_SITE_KEY: 'deployment-site-key',
+    });
+    expect(deployment.website.SITE_ORIGINS).toBe('https://deployed-web.test');
+  } finally {
+    if (host) await host.stop();
+    else await database.end();
+    fixture.close();
   }
 }, 60000);

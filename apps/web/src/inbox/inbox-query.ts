@@ -18,6 +18,7 @@ import {
   type UnreadCount,
 } from './inbox-read';
 import { inboxObservationRecovery, type InboxObservationRecovery } from './inbox-acknowledgement-recovery';
+import { coalesceInboxViewerCount } from './inbox-work';
 import { forInboxViewer, inboxViewerCsrfToken, type InboxViewer } from './inbox-viewer';
 
 const inboxKey = readQueryKey(['notifications', 'inbox'], 'session');
@@ -96,10 +97,12 @@ export async function fetchInboxUnreadCount(viewer: InboxViewer, signal?: AbortS
     if (last) return last;
     throw new DOMException('Inbox viewer unavailable', 'AbortError');
   }
-  return forInboxViewer(
-    viewer,
-    async () => rememberUnreadCount(viewer, await readUnreadCount(signal ? { signal } : {})),
-    signal,
+  return coalesceInboxViewerCount(viewer, () =>
+    forInboxViewer(
+      viewer,
+      async () => rememberUnreadCount(viewer, await readUnreadCount(signal ? { signal } : {})),
+      signal,
+    ),
   );
 }
 

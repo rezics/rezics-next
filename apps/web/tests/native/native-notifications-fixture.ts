@@ -31,6 +31,7 @@ export type NativeNotificationFixture = {
     options?: { parentId?: string; mentionIds?: string[]; text?: string },
   ): Promise<{ id: string; threadId: string; nativeResponse: { path: string; status: number; body: unknown } }>;
   takeDownThread(thread: NativeNoticeThread, reason: string): Promise<void>;
+  watchThread(actor: NotificationPersona, thread: NativeNoticeThread): Promise<void>;
   grant(resource: { id: string; route: number }, accountId: string, action: string): Promise<void>;
   revoke(resource: { id: string; route: number }, accountId: string, action: string): Promise<void>;
   close(): Promise<void>;
@@ -246,6 +247,12 @@ export async function startNativeNotificationFixture(): Promise<NativeNotificati
     async function takeDownThread(thread: NativeNoticeThread, reason: string) {
       await json(stack, `/v1/threads/${thread.id}:takeDown`, 'governor', 'POST', { reason });
     }
+    async function watchThread(actor: NotificationPersona, thread: NativeNoticeThread) {
+      const accountId = (await stack.authPersona(actor)).accountId;
+      await grant(thread, accountId, 'thread:read');
+      await grant(thread, accountId, 'thread:watch');
+      await json(stack, `/v1/threads/${thread.id}/watch`, actor, 'PUT');
+    }
     return {
       stack,
       auth,
@@ -259,6 +266,7 @@ export async function startNativeNotificationFixture(): Promise<NativeNotificati
       createThread,
       createPost,
       takeDownThread,
+      watchThread,
       grant,
       revoke,
       async close() {
