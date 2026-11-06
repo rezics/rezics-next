@@ -1,6 +1,8 @@
-import type { CommandTransaction } from '../command/command.ts';
+import type { PoolClient } from 'pg';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { lockCountOwner } from './follow-count-source.ts';
+
+type FollowIdentityClient = Pick<PoolClient, 'query'>;
 
 export type FollowIdentityCursor = Readonly<{ partition: number; accountId: string }> | null;
 export type FollowIdentityHandoff = Readonly<{
@@ -22,7 +24,7 @@ function route(id: string): number {
   return value;
 }
 
-async function lockTotals(tx: CommandTransaction, targetIds: readonly string[]) {
+async function lockTotals(tx: FollowIdentityClient, targetIds: readonly string[]) {
   const ids = [...new Set(targetIds)].sort();
   const routes = ids.map(route);
   const rows = await tx.query<{ route: number; target_id: string }>(
@@ -34,7 +36,7 @@ async function lockTotals(tx: CommandTransaction, targetIds: readonly string[]) 
   if (rows.rowCount !== ids.length) throw new Error('Follow identity target total is not initialized');
 }
 
-async function changeSupport(tx: CommandTransaction, targetId: string, accountId: string, delta: -1 | 1) {
+async function changeSupport(tx: FollowIdentityClient, targetId: string, accountId: string, delta: -1 | 1) {
   const targetRoute = route(targetId);
   const args = [targetRoute, 'subject', targetId, accountId];
   if (delta > 0)
@@ -73,7 +75,7 @@ async function changeSupport(tx: CommandTransaction, targetId: string, accountId
   }
 }
 
-async function removeOldPair(tx: CommandTransaction, original: string, targetId: string, accountId: string) {
+async function removeOldPair(tx: FollowIdentityClient, original: string, targetId: string, accountId: string) {
   const removed = await tx.query<{ eligible: boolean }>(
     `DELETE FROM library.follow_count_pair
      WHERE route=$1 AND target_type='subject' AND target_id=$2 AND account_id=$3 AND original_id=$4
@@ -84,7 +86,7 @@ async function removeOldPair(tx: CommandTransaction, original: string, targetId:
 }
 
 async function writeNewPair(
-  tx: CommandTransaction,
+  tx: FollowIdentityClient,
   input: { original: string; targetId: string; accountId: string; revision: bigint; eligible: boolean },
 ): Promise<boolean> {
   const targetRoute = route(input.targetId);
@@ -120,7 +122,7 @@ async function writeNewPair(
  * retained as a precise handoff. Source rows remain on their account home and negative rows are included.
  */
 export async function applyFollowIdentityPage(
-  tx: CommandTransaction,
+  tx: FollowIdentityClient,
   input: Readonly<{
     partition: number;
     original: string;
