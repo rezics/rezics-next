@@ -12,7 +12,7 @@ The public subpaths are defined in [package.json](package.json).
 | @rezics/conversion/bangumi              | Bangumi converter, revision and result                                                       |
 | @rezics/conversion/bangumi-vocabulary   | Bangumi vocabulary mapper and revision                                                       |
 | @rezics/conversion/vndb                 | VNDB converter, revision, limits and result                                                  |
-| @rezics/conversion/vndb-vocabulary      | VNDB vocabulary mapper, revision, tag-weight and parent producers and row types                          |
+| @rezics/conversion/vndb-vocabulary      | VNDB vocabulary mapper, revision, tag-weight and parent producers and row types              |
 | @rezics/conversion/source-vocabulary    | Released binding, identity, row, gap and result types                                        |
 | @rezics/conversion/open-library         | Open Library converter, revision and result                                                  |
 | @rezics/conversion/wikidata             | Wikidata converter, revision, limits and result                                              |
