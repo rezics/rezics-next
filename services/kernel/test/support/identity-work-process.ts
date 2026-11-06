@@ -1,7 +1,8 @@
 import { fileURLToPath } from 'node:url';
 
 const READY = 'IDENTITY_WORK_READY';
-const READY_TIMEOUT_MS = 60_000;
+// The child loads the whole kernel module graph before it can launch; the suites' beforeAll budget covers this wait.
+const READY_TIMEOUT_MS = 150_000;
 
 export type IdentityWorkProcessConfig = {
   databaseUrl: string;

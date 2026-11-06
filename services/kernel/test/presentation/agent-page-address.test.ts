@@ -14,6 +14,9 @@ import { linkProjection } from '../../src/semantic/links.ts';
 import { createSubject } from '../../src/semantic/subject.ts';
 import { bootstrapProfile } from '../../src/presentation/profiles.ts';
 import { createWorkClient, type WorkClient } from '../../src/work/client.ts';
+import { composeWork } from '../../src/work/registry.ts';
+import { KERNEL_WORK_MODULES } from '../support/default-work-modules.ts';
+import { workerTestEnv } from '../support/worker-env.ts';
 import type { Resource } from '../../src/request/access.ts';
 import {
   completeAgentVerification,
@@ -56,6 +59,7 @@ let manager: Seeded;
 let registrar: ReturnType<typeof createIdentityRegistrar>;
 // The production work modules publish identity epochs; verified-subject addresses depend on that publication.
 let workClient: WorkClient;
+let registration: Awaited<ReturnType<typeof composeWork>> | undefined;
 let identityWork: Awaited<ReturnType<typeof startIdentityWorkProcess>> | undefined;
 const node = (type: string, id: string) => ({ type, props: { id } });
 const document = {
@@ -301,14 +305,28 @@ beforeAll(async () => {
     },
   });
   workClient = await createWorkClient(db.url, pool);
-  // Identity publication indexes through the Search participant, which the check runner configures per run. The
-  // production executor runs in a child process; this process keeps its DBOS client for enqueueing.
+  // Identity publication indexes through the Search participant, which the check runner configures per run. This
+  // process composes the registration that the coordinator enqueues through; the production executor is launched only
+  // by the child process.
+  const routeKeyText = Buffer.from(routeKey).toString('base64url');
+  // A check run and its load reruns share one OpenSearch; each composition owns fresh index names.
+  const searchPrefix = `page-address-${randomUUID().slice(0, 8)}-`;
+  registration = await composeWork(KERNEL_WORK_MODULES, {
+    databaseUrl: db.url,
+    pool,
+    client: workClient,
+    env: workerTestEnv({
+      KERNEL_ROUTE_KEY: routeKeyText,
+      OPENSEARCH_URL: process.env.OPENSEARCH_URL,
+      KERNEL_SEARCH_PREFIX: searchPrefix,
+    }),
+    receiptKeys: testReceiptKeys(),
+  });
   identityWork = await startIdentityWorkProcess({
     databaseUrl: db.url,
-    routeKey: Buffer.from(routeKey).toString('base64url'),
+    routeKey: routeKeyText,
     openSearchUrl: process.env.OPENSEARCH_URL,
-    // A check run and its load reruns share one OpenSearch; each composition owns fresh index names.
-    searchPrefix: `page-address-${randomUUID().slice(0, 8)}-`,
+    searchPrefix,
   });
   registrar = createIdentityRegistrar(pool, routeKey);
   staff = await seedAccount('page_staff');
@@ -321,10 +339,11 @@ beforeAll(async () => {
     [GLOBAL_CONTEXT, staff.id],
   );
   expect((await post('/v1/platform/exposure/agent_verification:open', await bearer(staff))).response.status).toBe(200);
-}, 60_000);
+}, 180_000);
 
 afterAll(async () => {
   await identityWork?.stop();
+  await registration?.shutdown();
   await workClient?.close();
   await db?.close();
 });
