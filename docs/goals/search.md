@@ -96,13 +96,17 @@ Keyed-template removal confirmation binds to the reviewed keyed entry and its ed
 or reader/visit retirement retires it, while equivalent rerenders and unrelated sibling changes keep a still-valid
 intention.
 
-Decision: Search, facet and typeahead recovery stays bound to the exact executed request and current reader/locale;
-`ready` requires useful output from an actual current-generation native observation, and Retry-After expiry enables only
-a deliberate retry. A new or removed resource scope retires prior facet fields and the hit cursor. Installed readers
-share the native HTTP families (invalid, invalid-cursor, session, closed, denied, restart, index-not-ready,
+Decision: Search, facet and typeahead recovery stays bound to the executed request (operands, current reader,
+identity epoch); `ready` requires useful output from a current-generation native observation, and Retry-After expiry
+enables a deliberate retry. A new or removed resource scope retires prior facet fields and the hit cursor. Installed
+readers share the native HTTP families (invalid, invalid-cursor, session, closed, denied, restart, index-not-ready,
 source-not-ready, unavailable, ready). Decision: the fewest adapter tests pin that journey through createKernelClient
 on Search, suggest, facets and Realm More/Retry/Restart; named stories stay unchanged; native/browser cells remain
 deferred until stack releases land.
+Decision: Search HTTP omits absent optional problem fields when classifying those families. Leftover History imports
+in Semantic/Zones use the documented contract and application entries so kernel typecheck can complete.
+Decision: four native HTTP cases pin executed-request recovery (ties and the terminal page, lost-generation restart,
+temporary source retry, invalid operands with the rating pair and a replaced reader); seeded browser stays held.
 
 Search rating order and population are one pending native GET pair, applied only by Submit in both hydrated and
 unhydrated visits. A field change never dispatches. Application starts a first traversal, retaining every other

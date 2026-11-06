@@ -4,7 +4,7 @@ import { type RealmContinuity } from './realm-continuity.ts';
 import type { RealmVotes } from './realm-votes.ts';
 import type { SpaceDependencies, SpaceContext } from './space.ts';
 import { type RealmPresentation } from './presentation.ts';
-import read from './realm-read.sql';
+import read from './realm-read.sql.d.ts';
 export type RealmDependencies = SpaceDependencies;
 export type RealmContext = SpaceContext;
 export type RealmInput = Readonly<{

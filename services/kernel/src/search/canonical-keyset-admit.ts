@@ -15,6 +15,66 @@ export type CanonicalKeysetAdmission<T extends { id: string }> =
     }>
   | Readonly<{ status: 'preparing' }>;
 
+/** Admitted operands Search, facets and typeahead bind into one confidential request. */
+export type ExecutedSearchOperands = Readonly<{
+  text?: string;
+  filter?: unknown;
+  sort?: string;
+  population?: Readonly<{ realm: string }>;
+  limit?: number;
+  languages?: readonly string[];
+  properties?: readonly string[];
+  descriptions?: boolean;
+  spoilerThreshold?: number;
+}>;
+
+export type ExecutedRatingPair = Readonly<{
+  sort: string | null;
+  population: Readonly<{ realm: string }> | null;
+}>;
+
+export type ExecutedSearchRequest = Readonly<{
+  principal: string;
+  identityEpoch: string;
+  operands: ExecutedSearchOperands;
+}>;
+
+/** Rating order and selected population travel as one executed pair; recovery restarts both. */
+export function executedRatingPair(operands: ExecutedSearchOperands): ExecutedRatingPair {
+  return {
+    sort: operands.sort ?? null,
+    population: operands.population ?? null,
+  };
+}
+
+export function executedSearchOperands(request: ExecutedSearchOperands): ExecutedSearchOperands {
+  return {
+    ...(request.text === undefined ? {} : { text: request.text }),
+    ...(request.filter === undefined ? {} : { filter: request.filter }),
+    ...(request.sort === undefined ? {} : { sort: request.sort }),
+    ...(request.population === undefined ? {} : { population: request.population }),
+    ...(request.limit === undefined ? {} : { limit: request.limit }),
+    ...(request.languages === undefined ? {} : { languages: [...request.languages] }),
+    ...(request.properties === undefined ? {} : { properties: [...request.properties] }),
+    ...(request.descriptions ? { descriptions: true } : {}),
+    ...(request.spoilerThreshold === undefined ? {} : { spoilerThreshold: request.spoilerThreshold }),
+  };
+}
+
+export function bindExecutedSearchRequest(
+  principal: string,
+  identityEpoch: string,
+  operands: ExecutedSearchOperands,
+): ExecutedSearchRequest {
+  if (principal !== 'anonymous' && !/^account:.+$/.test(principal))
+    throw new TypeError('Invalid Search executed principal');
+  return {
+    principal,
+    identityEpoch,
+    operands: executedSearchOperands(operands),
+  };
+}
+
 /** Bind the published identity epoch into the same request object the cursor already authenticates. */
 export function bindSearchIdentityCursorRequest(request: unknown, identityEpoch: string): Record<string, unknown> {
   if (typeof identityEpoch !== 'string' || !identityEpoch || identityEpoch.length > 128)
@@ -30,6 +90,7 @@ export function bindSearchIdentityCursorRequest(request: unknown, identityEpoch:
  * Unique canonical traversal: original AND terminal authority, one row per terminal.
  * Pending or incomplete identity prepares. Hidden originals with a readable terminal remain.
  * Stale indexed originals whose terminal is absent from the page prepare rather than omit.
+ * An original with no identity source row is its own terminal while it remains on the page.
  */
 export function admitCanonicalKeyset<T extends { id: string }>(
   subjects: readonly T[],
@@ -48,7 +109,11 @@ export function admitCanonicalKeyset<T extends { id: string }>(
   for (const [index, subject] of subjects.entries()) {
     const mapping = mappings[index]!;
     if (mapping.state === 'pending' || mapping.state === 'unavailable') return { status: 'preparing' };
-    if (mapping.state === 'absent') continue;
+    if (mapping.state === 'absent') {
+      keys.set(subject.id, { original: subject.id, terminal: subject.id });
+      terminalsOnPage.add(subject.id);
+      continue;
+    }
     keys.set(subject.id, { original: mapping.original, terminal: mapping.terminal });
     if (subject.id === mapping.terminal) terminalsOnPage.add(mapping.terminal);
   }

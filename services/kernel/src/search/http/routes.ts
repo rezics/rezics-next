@@ -33,6 +33,7 @@ import { systemClock, type KernelClock } from '../../clock.ts';
 import { PublicFigureSchema } from '../../rating/public-figure-http.ts';
 import { readEmptyRecovery, type EmptyRecoveryAction, type EmptyRecoveryCandidate } from '../empty-recovery.ts';
 import { EmptyRecoveryActionsSchema, EmptyRecoverySchema } from './empty-recovery-schemas.ts';
+import { searchHttpExecute, searchHttpPrincipal } from './search.ts';
 
 type SearchServiceImplementation = ReturnType<typeof createSearchService>;
 export type SearchService = Omit<SearchServiceImplementation, 'releaseGroups'> & {
@@ -320,20 +321,22 @@ export function searchRoutes<App>(
                 : null;
             };
             const page = discoveryHttpPage(
-              await discovery(
-                actor.kind === 'account' ? `account:${actor.accountId}` : 'anonymous',
-                { ...nativeBody, representation: 'discovery-v1' },
-                {
-                  access: ownerAccess,
-                  actor,
-                  deadline: job.deadline,
-                  ...(body.languages === undefined ? {} : { languages: body.languages }),
-                  descriptions: body.descriptions === true,
-                  ...(body.spoilerThreshold === undefined
-                    ? {}
-                    : { spoilerThreshold: body.spoilerThreshold as 0 | 1 | 2 }),
-                  observeRelationRelease,
-                },
+              await searchHttpExecute(nativeBody, () =>
+                discovery(
+                  searchHttpPrincipal(actor),
+                  { ...nativeBody, representation: 'discovery-v1' },
+                  {
+                    access: ownerAccess,
+                    actor,
+                    deadline: job.deadline,
+                    ...(body.languages === undefined ? {} : { languages: body.languages }),
+                    descriptions: body.descriptions === true,
+                    ...(body.spoilerThreshold === undefined
+                      ? {}
+                      : { spoilerThreshold: body.spoilerThreshold as 0 | 1 | 2 }),
+                    observeRelationRelease,
+                  },
+                ),
               ),
             );
             const emptyRecovery = await recoveryForPage(
@@ -361,12 +364,8 @@ export function searchRoutes<App>(
               ? { access: scopeAccess, actor, deadline: job.deadline, routeKey }
               : undefined;
             let completed: SearchHttpResponse | undefined;
-            await search.search(
-              actor.kind === 'account' ? `account:${actor.accountId}` : 'anonymous',
-              nativeBody,
-              clock().getTime(),
-              active,
-              {
+            await searchHttpExecute(nativeBody, () =>
+              search.search(searchHttpPrincipal(actor), nativeBody, clock().getTime(), active, {
                 deadline: job.deadline,
                 ...(scopeOptions ? { scope: scopeOptions } : {}),
                 ...(realmAccess ? { realmAuthority: { access: realmAccess, actor } } : {}),
@@ -377,7 +376,7 @@ export function searchRoutes<App>(
                     active,
                   );
                 },
-              },
+              }),
             );
             if (!completed) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
             const emptyRecovery = await recoveryForPage(
@@ -394,7 +393,8 @@ export function searchRoutes<App>(
           return admission.run('normal', job, async () => {
             set.headers['cache-control'] = 'private, no-store';
             if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('forbidden');
-            if (!search?.releaseGroups) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
+            const releaseGroups = search?.releaseGroups;
+            if (!releaseGroups) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
             if (
               body.population !== undefined ||
               body.kindPage !== undefined ||
@@ -405,14 +405,14 @@ export function searchRoutes<App>(
                 errors: [{ pointer: '/representation', code: 'unsupported' }],
               });
             const active = await activeRelease(pool);
-            const principal: 'anonymous' | `account:${string}` =
-              actor.kind === 'account' ? `account:${actor.accountId}` : 'anonymous';
-            const page = await search.releaseGroups(
-              principal,
-              nativeBody as GroupedReleaseSearchRequest,
-              clock().getTime(),
-              active,
-              { deadline: job.deadline, complete: async () => {} },
+            const page = await searchHttpExecute(nativeBody, () =>
+              releaseGroups(
+                searchHttpPrincipal(actor),
+                nativeBody as GroupedReleaseSearchRequest,
+                clock().getTime(),
+                active,
+                { deadline: job.deadline, complete: async () => {} },
+              ),
             );
             await trending.submitted(actor, body);
             return releaseResponse(page, catalogueResponses, authorize, body.languages ?? [], active);
@@ -501,14 +501,11 @@ export function searchRoutes<App>(
           if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('forbidden');
           if (!search) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
           const scopeAccess = routeAccess();
-          return search.facets(
-            actor.kind === 'account' ? `account:${actor.accountId}` : 'anonymous',
-            body,
-            clock().getTime(),
-            {
+          return searchHttpExecute(body, () =>
+            search.facets(searchHttpPrincipal(actor), body, clock().getTime(), {
               deadline: job.deadline,
               ...(scopeAccess ? { scope: { access: scopeAccess, actor, deadline: job.deadline, routeKey } } : {}),
-            },
+            }),
           );
         });
       },
@@ -567,15 +564,17 @@ export function searchRoutes<App>(
             ? createNativeSuggestionWorkContextReader({ pool, access: scopeAccess, actor, routeKey })
             : undefined;
           let completed: Static<ReturnType<typeof suggestResponse>> | undefined;
-          await search.suggest(query.q, query.limit, query.languages, {
-            deadline: job.deadline,
-            ...(filter === undefined ? {} : { filter }),
-            ...(scopeAccess ? { scope: { access: scopeAccess, actor, deadline: job.deadline, routeKey } } : {}),
-            ...(suggestionWorkContext ? { suggestionWorkContext } : {}),
-            async complete(page) {
-              completed = await fill(page, authorize, query.languages);
-            },
-          });
+          await searchHttpExecute(query, () =>
+            search.suggest(query.q, query.limit, query.languages, {
+              deadline: job.deadline,
+              ...(filter === undefined ? {} : { filter }),
+              ...(scopeAccess ? { scope: { access: scopeAccess, actor, deadline: job.deadline, routeKey } } : {}),
+              ...(suggestionWorkContext ? { suggestionWorkContext } : {}),
+              async complete(page) {
+                completed = await fill(page, authorize, query.languages);
+              },
+            }),
+          );
           if (!completed) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
           return completed;
         });

@@ -17,5 +17,6 @@
     ".storybook/**/*.tsx",
     "vitest.config.ts",
     "*.ts"
-  ]
+  ],
+  "exclude": ["scripts/check.ts", "scripts/record.ts", "scripts/seeded-content-ratings-reviews-walk.ts"]
 }

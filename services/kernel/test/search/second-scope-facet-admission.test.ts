@@ -16,7 +16,9 @@ import type { KeyRing } from '../../src/tokens/seal.ts';
 
 const ring: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(7)]]) };
 const denied = new ProblemError('not_found');
-const conditionTree = { not: { or: [{ subject: { realm: 'r-1' } }, { true: true }] } };
+const realmId = '10000000-0000-4000-8000-000000000010';
+const collectionId = '10000000-0000-4000-8000-000000000011';
+const conditionTree = { not: { or: [{ subject: { realm: realmId } }, { true: true }] } };
 const readerPrincipal = 'account:10000000-0000-4000-8000-000000000001';
 
 function fixture() {
@@ -56,6 +58,7 @@ function fixture() {
     const now = Date.now();
     return {
       principal: 'account:reader' as const,
+      identityEpoch: 'epoch-digest',
       text: undefined,
       filter: undefined,
       originalFilter: undefined,
@@ -80,7 +83,7 @@ test('scoped admission forwards every condition reference and rejects before pro
     readScopedFacetDiscovery(
       ring,
       provider,
-      { scope: { kind: 'realm', id: 'r-1' }, conditions: conditionTree, facets: [{ property: 'type' }] },
+      { scope: { kind: 'realm', id: realmId }, conditions: conditionTree, facets: [{ property: 'type' }] },
       admit,
     ),
   ).rejects.toBe(denied);
@@ -96,7 +99,7 @@ test('admitted scoped facets remain preparing until scoped native operations exi
     readScopedFacetDiscovery(
       ring,
       provider,
-      { scope: { kind: 'collection', id: 'c-1' }, conditions: conditionTree, facets: [{ property: 'type' }] },
+      { scope: { kind: 'collection', id: collectionId }, conditions: conditionTree, facets: [{ property: 'type' }] },
       admit,
     ),
   ).rejects.toMatchObject({ code: 'index_not_ready' });
@@ -111,6 +114,7 @@ test('opaque continuations bind scope, principal, conditions and dynamic admissi
   const facet = { property: 'type', size: 10 };
   const input: FacetCursorInput = {
     principal: readerPrincipal,
+    identityEpoch: 'epoch-digest',
     text: undefined,
     originalFilter: undefined,
     kinds: ['schema:Book', 'collection'],
@@ -150,7 +154,7 @@ test('opaque continuations bind scope, principal, conditions and dynamic admissi
   });
   const admitted = await admitScopedFacetRequest(
     {
-      scope: { kind: 'realm', id: 'r-1' },
+      scope: { kind: 'realm', id: realmId },
       conditions: conditionTree,
       kinds: ['schema:Book', 'collection'],
       facets: [{ property: 'type' }],
@@ -160,8 +164,8 @@ test('opaque continuations bind scope, principal, conditions and dynamic admissi
   expect(admitted.kinds).toEqual(['schema:Book', 'collection']);
   const changedConditions = await admitScopedFacetRequest(
     {
-      scope: { kind: 'realm', id: 'r-1' },
-      conditions: { not: { or: [{ subject: { realm: 'r-2' } }, { true: true }] } },
+      scope: { kind: 'realm', id: realmId },
+      conditions: { not: { or: [{ subject: { realm: collectionId } }, { true: true }] } },
       facets: [{ property: 'type' }],
     },
     fixture().admit,
@@ -175,6 +179,9 @@ test('opaque continuations bind scope, principal, conditions and dynamic admissi
   ).toThrow(expect.objectContaining({ code: 'search_restart_required' }));
   expect(facetCursorBinding(input, facet).request).not.toEqual(
     facetCursorBinding({ ...input, languages: ['zh-Hant'] }, facet).request,
+  );
+  expect(facetCursorBinding(input, facet).request).not.toEqual(
+    facetCursorBinding({ ...input, identityEpoch: 'other-epoch' }, facet).request,
   );
   expect(facetCursorBinding(input, facet).request).not.toEqual(
     facetCursorBinding({ ...input, facets: [{ ...facet, size: 11 }] }, { ...facet, size: 11 }).request,

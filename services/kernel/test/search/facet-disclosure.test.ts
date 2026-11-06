@@ -82,6 +82,7 @@ function fixture(finalStatus: 'current' | 'changed') {
   const now = Date.now();
   const input: FacetDiscoveryInput = {
     principal: 'anonymous',
+    identityEpoch: 'epoch-digest',
     text: undefined,
     filter: undefined,
     originalFilter: undefined,

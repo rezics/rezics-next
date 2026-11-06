@@ -4,7 +4,7 @@ import { Link } from '@tanstack/react-router';
 import { useOperation } from '../../kernel/exposure';
 import { m } from '../../paraglide/messages.js';
 import type { useSession } from '../../session/query';
-import type { DiaryPage as KernelDiaryPage } from '../../../../../services/kernel/src/library/diary-model.ts';
+import type { DiaryPage as KernelDiaryPage } from '@rezics/client';
 import type { PrivateDiaryLoad, PrivateDiaryLoadResult } from './server';
 import { cancelPrivateDiary } from './server';
 import { PRIVATE_DIARY_PAGE_BYTES, PRIVATE_DIARY_PAGE_LIMIT } from './native';

@@ -6,6 +6,7 @@ import type { KeyRing } from '../tokens/seal.ts';
 import type { PublicFilterCost } from '../semantic/public-filter-source-contract.ts';
 import type { PublicFilterConsumerContext } from './public-filter-consumer-contract.ts';
 import type { FacetScopeCursorBinding } from './facet-discovery-contract.ts';
+import { bindSearchIdentityCursorRequest } from './canonical-keyset-admit.ts';
 import { decodeSearchCursor, encodeSearchCursor, type SearchCursorBinding } from './cursor.ts';
 import type { FacetDiscovery200Response, FacetDiscoveryValue } from './facet-discovery-contract.ts';
 import type { FacetDiscoveryProvider, FacetNativePlan, FacetNativeRead } from './facet-discovery-native.ts';
@@ -32,6 +33,7 @@ type Position = Readonly<{
 
 export type FacetDiscoveryInput = Readonly<{
   principal: 'anonymous' | `account:${string}`;
+  identityEpoch: string;
   text: TextNode | undefined;
   filter: FilterDocument | undefined;
   originalFilter: FilterDocument | undefined;
@@ -70,7 +72,7 @@ export function admitFacetPage(facets: readonly Facet[]) {
 
 export type FacetCursorInput = Pick<
   FacetDiscoveryInput,
-  'principal' | 'text' | 'originalFilter' | 'kinds' | 'languages' | 'facets' | 'now' | 'scopeBinding'
+  'principal' | 'identityEpoch' | 'text' | 'originalFilter' | 'kinds' | 'languages' | 'facets' | 'now' | 'scopeBinding'
 >;
 export function facetCursorReleaseBinding(release: FilterRelease, scopeBinding?: FacetScopeCursorBinding): string {
   const canonical = canonicalize(scopeBinding ? { release, admission: scopeBinding.admission } : release);
@@ -82,15 +84,18 @@ export function facetCursorBinding(input: FacetCursorInput, facet: Facet): Searc
   return {
     operation,
     principal: input.principal,
-    request: {
-      text: input.text ?? null,
-      filter: input.originalFilter ?? null,
-      kinds: input.kinds ?? null,
-      property: facet.property,
-      languages: input.languages ?? null,
-      size: facet.size,
-      ...(input.scopeBinding ? { scope: input.scopeBinding.request } : {}),
-    },
+    request: bindSearchIdentityCursorRequest(
+      {
+        text: input.text ?? null,
+        filter: input.originalFilter ?? null,
+        kinds: input.kinds ?? null,
+        property: facet.property,
+        languages: input.languages ?? null,
+        size: facet.size,
+        ...(input.scopeBinding ? { scope: input.scopeBinding.request } : {}),
+      },
+      input.identityEpoch,
+    ),
   };
 }
 

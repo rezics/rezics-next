@@ -148,6 +148,7 @@ let membershipButton: HTMLButtonElement | null = null;
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
+// Keep this mock closed: loading the actual space-actions module leaves the public hydrate empty.
 mock.module('../src/community/space-actions', () => ({
   readSpacePage: ({ data }: { data: PageInput }) => {
     calls.pages.push(structuredClone(data));
@@ -1296,7 +1297,7 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
   });
 });
 
-test('the admitted Space returns acknowledged membership focus to its selected shelf only while eligible', async () => {
+test('the admitted Space keeps acknowledged membership focus on its header control and never hands it to a shelf', async () => {
   showMembershipHarness = true;
   pageReader = async (input) => pageFor(input.address, true, input.credentialMode);
   boardReader = async () => ({ kind: 'page', items: [board()], next: null, unavailable: 0 });
@@ -1313,8 +1314,8 @@ test('the admitted Space returns acknowledged membership focus to its selected s
   if (!action) throw new Error('The admitted membership control was not mounted');
   action.focus();
   await act(async () => action.click());
-  expect(membershipResult).toBe(true);
-  expect(window.document.activeElement?.id).toBe(`realm-board-${boardId}`);
+  expect(membershipResult).toBe(false);
+  expect(window.document.activeElement).toBe(action);
 
   const other = window.document.createElement('button');
   host.append(other);

@@ -1,9 +1,16 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { expect, expectTypeOf, test } from 'bun:test';
 import type { KernelClient } from '@rezics/client';
-import { clientDeclarationCacheDirectory, clientDeclarations } from './client.ts';
+import {
+  clientDeclarationCacheDirectory,
+  clientDeclarations,
+  committedDeclarations,
+  rewriteSqlDeclarationSpecifiers,
+  runtimeClosure,
+} from './client.ts';
 
 const repository = resolve(import.meta.dir, '../../..');
 
@@ -188,4 +195,85 @@ test('KernelClient accepts order reconciliation headers and types the queued res
   >;
   const response: QueuedResponse = { orderId: 'order-id', reconciliation: 'queued' };
   expect(response.reconciliation).toBe('queued');
+});
+
+test('installed declarations point SQL imports at .sql.d.ts so a consumer mapper cannot load Kernel SQL', () => {
+  expect(rewriteSqlDeclarationSpecifiers("import read from './account-read.sql';\n")).toBe(
+    "import read from './account-read.sql.d.ts';\n",
+  );
+  expect(rewriteSqlDeclarationSpecifiers("import read from './account-read.sql.d.ts';\n")).toBe(
+    "import read from './account-read.sql.d.ts';\n",
+  );
+  expect(
+    [...committedDeclarations()]
+      .filter(([, content]) => /from ['"][^'"]+\.sql['"]/.test(content))
+      .map(([file]) => file),
+  ).toEqual([]);
+});
+
+test('the installed package ships the question-management schemas as byte copies of their Kernel source', () => {
+  const sourceRoot = resolve(repository, 'services/kernel/src');
+  const packageRoot = resolve(repository, 'packages/client/src/kernel');
+  const closure = runtimeClosure();
+  expect([...closure.keys()]).toEqual([
+    'memoized.ts',
+    'rating/question-management-schemas.ts',
+    'rating/vote-response-schemas.ts',
+  ]);
+  for (const [key, content] of closure) {
+    expect(content).toBe(readFileSync(resolve(sourceRoot, key), 'utf8'));
+    expect(readFileSync(resolve(packageRoot, key), 'utf8')).toBe(content);
+  }
+});
+
+test('generated KernelClient exposes Realm question management, caption history and command results', () => {
+  const management = (client: KernelClient) =>
+    client.realms({ realmId: '019a1b2c-3d4e-7f00-8a00-5ab1ec702001' })['rating-questions'].management.get({
+      query: {},
+    });
+  const history = (client: KernelClient) =>
+    client['rating-questions']({ questionId: '019a1b2c-3d4e-7f00-8a00-5ab1ec702102' }).labels.get({
+      query: { limit: 20 },
+    });
+  const create = (client: KernelClient) =>
+    client.realms({ realmId: '019a1b2c-3d4e-7f00-8a00-5ab1ec702001' })['rating-questions'].post(
+      {
+        meaning: 'Judge translation independently.',
+        label: 'Translation',
+        grain: 'release',
+        scale: { min: 0, max: 20, displayStep: 2 },
+      },
+      { headers: { 'idempotency-key': 'create-key' } },
+    );
+  const caption = (client: KernelClient) =>
+    client['rating-questions']({ questionId: '019a1b2c-3d4e-7f00-8a00-5ab1ec702102' }).label.put(
+      { expectedLabelRevision: 1, label: 'Translation clarity' },
+      { headers: { 'idempotency-key': 'caption-key' } },
+    );
+  const retire = (client: KernelClient) =>
+    client['rating-questions']({ questionId: '019a1b2c-3d4e-7f00-8a00-5ab1ec702102' })['$retire'].post(
+      { expectedLifecycleRevision: 1 },
+      { headers: { 'idempotency-key': 'retire-key' } },
+    );
+  type ManagementResponse = NonNullable<Awaited<ReturnType<typeof management>>['data']>;
+  type HistoryResponse = NonNullable<Awaited<ReturnType<typeof history>>['data']>;
+  type CreateResponse = NonNullable<Awaited<ReturnType<typeof create>>['data']>;
+  type CaptionResponse = NonNullable<Awaited<ReturnType<typeof caption>>['data']>;
+  type RetireResponse = NonNullable<Awaited<ReturnType<typeof retire>>['data']>;
+  expectTypeOf<ManagementResponse>().toEqualTypeOf<import('@rezics/client').QuestionManagementPage>();
+  expectTypeOf<HistoryResponse>().toEqualTypeOf<import('@rezics/client').QuestionLabelHistory>();
+  type CreateAck = Extract<CreateResponse, { id: string; label: string; revision: number }>;
+  expectTypeOf<CreateAck>().not.toEqualTypeOf<never>();
+  expectTypeOf<CaptionResponse>().toEqualTypeOf<import('@rezics/client').QuestionLabelResult>();
+  expectTypeOf<RetireResponse>().toEqualTypeOf<import('@rezics/client').QuestionLifecycleResult>();
+});
+
+test('the runtime closure refuses an import the installed package cannot provide', () => {
+  const directory = mkdtempSync(resolve(tmpdir(), 'runtime-closure-'));
+  try {
+    writeFileSync(resolve(directory, 'entry.ts'), "import { z } from 'zod';\nexport const schema = z;\n");
+    expect(() => runtimeClosure(['entry.ts'], directory)).toThrow('imports zod');
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });

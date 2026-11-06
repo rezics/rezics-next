@@ -406,6 +406,7 @@ export async function countFacets(
   const relation: SearchResult['total']['relation'] =
     total.relation === 'exact' && total.value <= plan.sample ? 'exact' : 'lower_bound';
   return {
+    ...(plan.generation === undefined ? {} : { generation: plan.generation }),
     total,
     facets: plan.facets.map(({ property }, index) => {
       const aggregation = (filterOverflow ? body.aggregations.definite! : body.aggregations)[`facet_${index}`]!;
