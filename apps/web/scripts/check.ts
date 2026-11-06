@@ -638,7 +638,7 @@ export async function main(args: string[], runtime: WebCheckRuntime = {}): Promi
     return;
   }
   const results = await Promise.allSettled([
-    runCommand('typecheck', 'bun', ['check', '--no-script', '-p', 'tsconfig.json'], env),
+    runCommand('typecheck', 'bun', ['run', 'typecheck'], env),
     runTests(files, env, testScript),
   ]);
   const hostResult = await Promise.allSettled([runHostTests(env)]);

@@ -30,7 +30,8 @@ async function compile(env: NodeJS.ProcessEnv): Promise<number> {
     const code = await command(args, env);
     if (code !== 0) return code;
   }
-  // The tooling scripts import kernel and auth sources, so they run as their own program within the check memory envelope.
+  // Tooling imports Kernel/Auth's Node interfaces. Its owning config includes every script with Bun/Node globals;
+  // the product program keeps Cloudflare Worker globals. Both retain the inherited Reylo content mapper.
   // Both programs run even when the web program has diagnostics; the scripts are never skipped by a red web program.
   let result = 0;
   for (const args of [

@@ -30,6 +30,16 @@ check admission, including callers of `dev` with `REZICS_TEST_RUNTIME=1`; the `-
 From `apps/web`, use `bun run storybook` for interface development and `bun run check` to generate, type-check, test,
 and build through the supported check route.
 
+## Workspace typing
+
+Decision: `bun run typecheck` compiles both `tsconfig.json` (product with Worker globals) and
+`tsconfig.scripts.json` (all executable scripts with Bun/Node globals), after localization and route generation.
+The scripts program clears the product program's exclusions, so `scripts/check.ts`, `scripts/record.ts` and
+`scripts/seeded-content-ratings-reviews-walk.ts` remain compiler roots. Both programs retain the Reylo mapper
+and use the same prepared compiler database. Diagnostics in either program fail the check; both programs run.
+The full Web check invokes this same workspace entry. Browser consumers use installed Client contracts;
+tooling may use the owning services' native interfaces without imposing Worker globals on those services.
+
 ## Prepared remote Web checks
 
 `scripts/check-placement.ts` is the Web receiving adapter. `routeWebCheck` prepares one invocation through the trusted
