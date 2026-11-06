@@ -23,8 +23,10 @@ test('review population readiness follows native pageWithCut and omits a prepari
         throw new Error('readiness must not read reviews');
       },
     }) as never;
+  const clock = () => new Date();
   for (const state of ['preparing', 'unavailable', 'ready'] as const) {
     const producers = createDiscoveryProducerEntry({
+      clock,
       pool: {} as never,
       routeKey: new Uint8Array(32),
       access: {} as never,
@@ -33,6 +35,7 @@ test('review population readiness follows native pageWithCut and omits a prepari
     expect(await producers.metadataProducers.review?.readiness()).toBe(state);
   }
   const preparing = createDiscoveryProducerEntry({
+    clock,
     pool: {} as never,
     routeKey: new Uint8Array(32),
     access: {} as never,
@@ -47,6 +50,7 @@ test('review population readiness follows native pageWithCut and omits a prepari
 
 test('a preparing review page retires the generation instead of claiming the kind is unsupported', async () => {
   const producers = createDiscoveryProducerEntry({
+    clock: () => new Date(),
     pool: {} as never,
     routeKey: new Uint8Array(32),
     access: {} as never,
@@ -72,6 +76,7 @@ test('a preparing review page retires the generation instead of claiming the kin
 
 test('review population readiness treats an Access deadline as preparing', async () => {
   const producers = createDiscoveryProducerEntry({
+    clock: () => new Date(),
     pool: {} as never,
     routeKey: new Uint8Array(32),
     access: {} as never,
