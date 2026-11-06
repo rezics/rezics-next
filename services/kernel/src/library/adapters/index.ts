@@ -9,8 +9,5 @@ export {
   nativeIdentityPartitionQuery,
 } from './identity-statements.ts';
 export { createSearchPreparationAdapter, type SearchPreparationAdapterPorts } from './search-scope.ts';
-export {
-  createContentPublicationAdapter,
-  type ContentPublicationAdapterPorts,
-} from './publication-foreign.ts';
+export { createContentPublicationAdapter, type ContentPublicationAdapterPorts } from './publication-foreign.ts';
 export { createNativeSourceCaptureAdapter } from './native-source.ts';

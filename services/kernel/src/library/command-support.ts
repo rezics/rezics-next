@@ -84,11 +84,7 @@ export async function admitComposedEntryProgress(input: {
   });
   if (result.admitted) return;
   const reason = result.admission.terms[0]?.name;
-  if (
-    reason === 'identity-disclosure-unavailable' ||
-    reason === 'deadline' ||
-    reason === 'collection-read-unbound'
-  )
+  if (reason === 'identity-disclosure-unavailable' || reason === 'deadline' || reason === 'collection-read-unbound')
     return;
   throw new GrantDeniedError();
 }
