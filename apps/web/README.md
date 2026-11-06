@@ -86,7 +86,7 @@ Source read for this surface: the native edition model, routes, reads and fixed-
 edition publication route/controls and shell-integrated stories; and the existing creator-offer list transport/view.
 No external reference-project source applies to this metadata list.
 Local Worker values are opt-in: `bun run check --prepare-only` creates ignored `.dev.vars` from `.dev.vars.example` only when absent. Normal checks and isolated test startup leave it untouched.
-Vite pre-bundles browser dependencies by scanning the site routes and their imported components before the first page load.
+Vite pre-bundles browser dependencies by scanning the site routes and their imported components before the first page load. The Worker environment does not scan its server graph: it pre-bundles only React, TanStack's server set and the paraglide polyfill, and loads other packages directly, so the first Worker request does not wait for a whole-graph scan.
 Run `bun run storybook` to browse the page stories. Run `bun run record` to create committed page recordings; it needs Docker with permission to start a disposable PostgreSQL container and Bun, and does not use a development kernel or database.
 The Worker inspector is off by default; `WORKER_INSPECTOR_PORT=<port> bun run dev` opens it on that port for DevTools.
 
