@@ -32,6 +32,7 @@ export function createRatedSubjectSource(
       ...rated,
       canonicalNames: native.canonicalNames,
       readSubjectKeyPage: native.readSubjectKeyPage.bind(native),
+      ...(native.creditSearch ? { creditSearch: native.creditSearch } : {}),
     },
     ratings,
   };

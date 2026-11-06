@@ -17,6 +17,7 @@ import { discardConnection, withConnection } from '../database/pool.ts';
 import { withoutFencedEntries } from './fences.ts';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
 import type { IndexedStatement, IndexedSubject, SubjectSnapshot, SubjectSource } from '../search/source.ts';
+import { createCreditSearchSource } from './credit-search.ts';
 import count from './search-source-count.sql';
 import readCurrentStatements from './search-source-current-statements.sql';
 import readFacts from './search-source-facts.sql';
@@ -167,9 +168,11 @@ export function subjectSource(
     readCompleteWorkLinks: NonNullable<SubjectSource['readCompleteWorkLinks']>;
   } {
   const relations = relationSource(pool, routeKey);
+  const creditSearch = createCreditSearchSource(pool, routeKey);
   return {
     readSubjectKeyPage,
     canonicalNames: createSubjectCanonicalNames(pool),
+    creditSearch,
     async read(partition, ids): Promise<SubjectSnapshot> {
       assertPartition(partition);
       if (ids.length > SEARCH_SOURCE_SUBJECT_BATCH) throw new TypeError('A subject snapshot accepts at most 256 ids');

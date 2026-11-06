@@ -96,5 +96,6 @@ export function withPublicRatings(
     ...(source.prepareRelationFacets ? { prepareRelationFacets: source.prepareRelationFacets.bind(source) } : {}),
     ...(source.matchRelationFacets ? { matchRelationFacets: source.matchRelationFacets.bind(source) } : {}),
     ...(source.readCompleteWorkLinks ? { readCompleteWorkLinks: source.readCompleteWorkLinks.bind(source) } : {}),
+    ...(source.creditSearch ? { creditSearch: source.creditSearch } : {}),
   };
 }
