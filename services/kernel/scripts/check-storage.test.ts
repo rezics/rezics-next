@@ -13,6 +13,7 @@ test('the check database keeps its data on a disk-backed volume, not a memory-ca
 
   const run = calls[0]!;
   expect(run[0]).toBe('run');
+  expect(run).toContain('--stop-timeout');
   expect(run).toContain('--rm');
   expect(run).toContain('--mount');
   expect(run).toContain(

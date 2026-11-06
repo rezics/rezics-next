@@ -317,6 +317,8 @@ export function throwawayDatabaseRunArgs(pid = process.pid): string[] {
   return [
     'run',
     '-d',
+    '--stop-timeout',
+    '2',
     '--rm',
     ...network,
     ...cgroupArgs(),
@@ -415,12 +417,12 @@ export async function withThrowawayDatabase<T>(
   };
   const onSigint = (): void => {
     stopListen();
-    if (!reuse) cleanup([container]);
+    if (!reuse) cleanup([container], docker, false);
     process.exit(130);
   };
   const onSigterm = (): void => {
     stopListen();
-    if (!reuse) cleanup([container]);
+    if (!reuse) cleanup([container], docker, false);
     process.exit(143);
   };
   process.on('SIGINT', onSigint);
