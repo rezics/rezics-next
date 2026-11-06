@@ -402,8 +402,9 @@ type ProbeTimeoutState = { firstAt: number; reported: boolean };
 function readProbeTimeoutState(path: string): ProbeTimeoutState | undefined {
   try {
     const parsed = JSON.parse(readFileSync(path, 'utf8')) as Partial<ProbeTimeoutState>;
-    if (!Number.isSafeInteger(parsed.firstAt) || parsed.firstAt < 0) return undefined;
-    return { firstAt: parsed.firstAt, reported: parsed.reported === true };
+    const firstAt = parsed.firstAt;
+    if (typeof firstAt !== 'number' || !Number.isSafeInteger(firstAt) || firstAt < 0) return undefined;
+    return { firstAt, reported: parsed.reported === true };
   } catch {
     return undefined;
   }
