@@ -88,7 +88,7 @@ points to render; the native command remains authoritative. Membership's existin
 verification remain in its owner. Pin, watch, and slow-mode commands remain with their existing owners. Readability,
 membership labels, and successful reads do not grant contribution or moderation authority.
 
-Decision: the thread receiver consumes the mounted reading page's exact-revision review citation, mention and image projections without browser-side enrichment; historical question metadata stays unavailable, and local revisions cannot borrow the previous document's projections.
+Decision: the thread receiver consumes the mounted reading page's exact-revision review citation, mention and image projections without browser-side enrichment; historical question metadata stays unavailable, and local revisions cannot borrow the previous document's projections. Page-wide mention maps still require the identity to appear in the admitted document; per-post maps stay bound to that document's exact revision source.
 
 ## Evidence boundary
 
