@@ -692,7 +692,7 @@ export class WorkerJob implements GateOutcomeSink {
         if (attempt.state !== 'running') return;
         const now = Date.now();
         const noteNow = () => {
-          lastLogActivityAt = now;
+          lastLogActivityAt = Date.now();
           checkWaitAtLastLogActivity = checkWaitMs(ref.logPath);
         };
         const stat = statSync(ref.logPath, { throwIfNoEntry: false });
@@ -719,27 +719,31 @@ export class WorkerJob implements GateOutcomeSink {
           noteNow();
         }
         const hadWorkBaseline = sampledWork;
+        const hadCpu = lastCpu !== undefined;
         if (sampledWork) {
           if (headSample.head !== undefined && lastHead !== undefined && headSample.head !== lastHead) noteNow();
           if (newest > lastNewestMtime) noteNow();
           if (cpu !== undefined && lastCpu !== undefined && cpu > lastCpu) noteNow();
         } else {
           sampledWork = true;
-          if (newest > activity.startedAt) lastLogActivityAt = Math.max(lastLogActivityAt, Math.min(now, newest));
-          if (headSample.committedAt !== undefined && headSample.committedAt > activity.startedAt)
-            lastLogActivityAt = Math.max(lastLogActivityAt, Math.min(now, headSample.committedAt));
+          noteNow();
         }
         if (headSample.head !== undefined) lastHead = headSample.head;
         if (newest > lastNewestMtime) lastNewestMtime = newest;
         if (cpu !== undefined) lastCpu = cpu;
-        // Stall requires a later sample that shows log, HEAD, files and CPU all unchanged. The first worktree
-        // sample only records that baseline: a worker still starting has an empty log, checkout mtimes and no
-        // CPU pair, so treating that sample as silence stops file-active CLIs on a loaded host.
+        // The first worktree sample, and the first CPU reading, only record baselines. Timestamp them when the
+        // sample finishes so a slow git/walk/proc scan is not counted as silence. A process group that has not
+        // appeared yet is still starting: start grace owns that, not stall.
         if (!hadWorkBaseline) return;
+        if (!hadCpu && cpu !== undefined) return;
+        if (!hadCpu && cpu === undefined && attempt.process) {
+          const grace = this.tasks.settings.startGraceMs ?? this.policy.worker.startGraceMs;
+          if (Date.now() - activity.startedAt < grace) return;
+        }
         // Check tools append elapsed check time beside the run log. Subtract it from idle time so a worker blocked on
         // a local or remote check does not look silent while the command is running.
         const waitedMs = Math.max(0, checkWaitMs(ref.logPath) - checkWaitAtLastLogActivity);
-        if (now - lastLogActivityAt - waitedMs < silenceMs) return;
+        if (Date.now() - lastLogActivityAt - waitedMs < silenceMs) return;
         const minutes = Math.max(1, Math.ceil(silenceMs / 60_000));
         silenceFailure = `stalled: no output for ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`;
         store.updateAttempt(ref, (current) => {
