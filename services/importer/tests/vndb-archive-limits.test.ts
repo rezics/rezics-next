@@ -63,7 +63,9 @@ test('all archive entries count and an excessive entry is rejected before openin
   }
   try {
     store.begin('vndb', 'entries');
-    await expect(store.stage('vndb', 'entries', entries())).rejects.toBeInstanceOf(Error);
+    await expect(store.stage('vndb', 'entries', entries())).rejects.toThrow(
+      'VNDB table staging failed at phase loading',
+    );
     expect(pulls).toBe(3);
     expect(bodies).toBe(2);
     expect(closed).toBe(true);
@@ -95,7 +97,9 @@ test('ignored entry bytes count toward the total before an excessive body is pul
   }
   try {
     store.begin('vndb', 'bytes');
-    await expect(store.stage('vndb', 'bytes', entries())).rejects.toBeInstanceOf(Error);
+    await expect(store.stage('vndb', 'bytes', entries())).rejects.toThrow(
+      'VNDB table staging failed at phase loading',
+    );
     expect(pulls).toBe(2);
     expect(bodies).toBe(1);
     expect(store.inspect('vndb', 'bytes').state).toBe('failed');

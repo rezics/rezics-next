@@ -668,11 +668,19 @@ export class RunStore<Projection = BatchStatement[]> {
         resolved INTEGER NOT NULL DEFAULT 0, expected INTEGER NOT NULL DEFAULT 0,
         changed INTEGER NOT NULL DEFAULT 0, prepared INTEGER NOT NULL DEFAULT 0,
         cursor TEXT NOT NULL DEFAULT '', skipped INTEGER NOT NULL DEFAULT 0,
+        kind_new INTEGER NOT NULL DEFAULT 0, kind_changed INTEGER NOT NULL DEFAULT 0,
+        kind_unchanged INTEGER NOT NULL DEFAULT 0, kind_vanished INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY(source,id)) WITHOUT ROWID`);
       // Additive migration leaves existing run journals and immutable prepared work intact.
       const generationColumns = this.all<{ name: string }>('PRAGMA table_info(run_generations)');
       if (!generationColumns.some(({ name }) => name === 'skipped'))
         this.database.exec('ALTER TABLE run_generations ADD COLUMN skipped INTEGER NOT NULL DEFAULT 0');
+      if (!generationColumns.some(({ name }) => name === 'kind_new')) {
+        this.database.exec('ALTER TABLE run_generations ADD COLUMN kind_new INTEGER NOT NULL DEFAULT 0');
+        this.database.exec('ALTER TABLE run_generations ADD COLUMN kind_changed INTEGER NOT NULL DEFAULT 0');
+        this.database.exec('ALTER TABLE run_generations ADD COLUMN kind_unchanged INTEGER NOT NULL DEFAULT 0');
+        this.database.exec('ALTER TABLE run_generations ADD COLUMN kind_vanished INTEGER NOT NULL DEFAULT 0');
+      }
       if (!generationColumns.some(({ name }) => name === 'diagnostics_recorded'))
         this.database.exec('ALTER TABLE run_generations ADD COLUMN diagnostics_recorded INTEGER NOT NULL DEFAULT 0');
       if (!generationColumns.some(({ name }) => name === 'diagnostic_records'))
@@ -2068,10 +2076,15 @@ export class RunStore<Projection = BatchStatement[]> {
           key,
         );
         this.write(
-          `UPDATE run_generations SET classified=classified+1,changed=changed+?,prepared=prepared+?
+          `UPDATE run_generations SET classified=classified+1,changed=changed+?,prepared=prepared+?,
+          kind_new=kind_new+?,kind_changed=kind_changed+?,kind_unchanged=kind_unchanged+?,kind_vanished=kind_vanished+?
           WHERE source=? AND id=?`,
           snapshotChanged ? 1 : 0,
           keys.length ? 1 : 0,
+          e.kind === 'new' ? 1 : 0,
+          e.kind === 'changed' ? 1 : 0,
+          e.kind === 'unchanged' ? 1 : 0,
+          e.kind === 'vanished' ? 1 : 0,
           run.source,
           run.id,
         );

@@ -38,6 +38,29 @@ import {
 } from '../../../../specs/imports-identity-driver.ts';
 
 export const MISSING_IMPORT_IDENTITY = 'openImportIdentity is not implemented';
+
+export type IdentityStallFields = { readonly stalledPhase: string; readonly phaseElapsedMs: number };
+
+/** Producer diagnostic for a reached Auth/registration/readiness step; no credentials or SQL. */
+export function identityStallError(phase: string, startedAtMs: number, error: unknown): Error & IdentityStallFields {
+  const phaseElapsedMs = Math.max(0, Date.now() - startedAtMs);
+  const detail = error instanceof Error ? error.message : String(error);
+  const wrapped = new Error(`Import identity stalled at ${phase} after ${phaseElapsedMs}ms: ${detail}`, {
+    cause: error instanceof Error ? error : undefined,
+  }) as Error & IdentityStallFields;
+  wrapped.stalledPhase = phase;
+  wrapped.phaseElapsedMs = phaseElapsedMs;
+  return wrapped;
+}
+
+function isIdentityStall(error: unknown): error is Error & IdentityStallFields {
+  return (
+    error instanceof Error &&
+    typeof (error as Error & Partial<IdentityStallFields>).stalledPhase === 'string' &&
+    typeof (error as Error & Partial<IdentityStallFields>).phaseElapsedMs === 'number'
+  );
+}
+
 let mountedActions: ReturnType<typeof actionCatalogue> | undefined;
 /** Auth workflows are a process singleton. Concurrent identity setups take turns
  * from host construction through quiesce so registrations and grants see one live runtime. */
@@ -295,22 +318,31 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
   let authDatabase: GrowthDatabase | undefined;
   let host: Awaited<ReturnType<typeof createAuthHost>> | undefined;
   let ending: Promise<void> | undefined;
+  const phase = { current: 'identity-open', startedAtMs: Date.now() };
+  const enter = (name: string) => {
+    phase.current = name;
+    phase.startedAtMs = Date.now();
+  };
   const close = () =>
     (ending ??= (async () => {
       const releaseCloseAuth = await beginIdentityAuthTurn();
       try {
         try {
+          enter('auth-host-stop');
           await host?.stop();
         } finally {
           // Drop this host's executor before another identity in the same
           // process can register against its own Auth database.
+          enter('dbos-shutdown');
           await DBOS.shutdown({ deregister: true }).catch(() => {});
         }
       } finally {
         try {
+          enter('auth-database-close');
           await authDatabase?.close();
         } finally {
           try {
+            enter('auth-namespace-close');
             await namespace?.close();
             if (namespace) {
               owned.delete(`host:${namespace.name}`);
@@ -323,6 +355,7 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
       }
     })());
   try {
+    enter('auth-database');
     if (options.authTemplate) {
       namespace = await createIdentityNamespace(database.url, options.authTemplate);
     } else {
@@ -426,7 +459,9 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
     try {
       // Sequential identities share one SDK executor. Drop a previous host's
       // leftover launch so this Auth database can register and run workflows.
+      enter('auth-executor-quiesce');
       await DBOS.shutdown({ deregister: true }).catch(() => {});
+      enter('auth-host-construct');
       host = await createAuthHost({
         database: authPool,
         systemDatabasePool: authPool,
@@ -443,6 +478,7 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
         maintenanceSchedule: '0 0 1 1 *',
       });
       auth = host.service;
+      enter('media-boundary-configure');
       await options.configured?.({ access, accessConfig, routeKey, tokenKeys });
       owned.set(
         `host:${namespace.name}`,
@@ -464,8 +500,10 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
         ],
       };
       const managementClient = `governance-${randomUUID()}`;
+      enter('auth-client-register');
       await auth.internal.registerClient(client);
       await auth.internal.registerClient({ clientId: managementClient, firstParty: true, scopes: managementScopes });
+      enter('auth-host-start');
       await host.start();
       const request = (path: string, body: unknown, headers = new Headers()) =>
         auth.handler(
@@ -492,6 +530,7 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
         const result = await host!.workflows.register({ key: name, handle: name, email, password });
         return { ...result, email };
       };
+      enter('auth-registration');
       const [human, comparison] = await Promise.all([person('governance'), person('ordinary')]);
       await options.afterStage?.('auth-registration');
       // The deployment CLI owns a fresh connection. No HTTP bootstrap or actor bypass.
@@ -499,6 +538,7 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
         (await database.admin.query('SELECT position FROM core.partition WHERE partition_no=$1', [GLOBAL.route >>> 4]))
           .rows[0].position,
       );
+      enter('bootstrap');
       await runIdentityBootstrap(database.url, human.accountId, true);
       const afterBootstrap = String(
         (await database.admin.query('SELECT position FROM core.partition WHERE partition_no=$1', [GLOBAL.route >>> 4]))
@@ -627,6 +667,7 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
         }
         if (operation === 'create') grantLocators.push(input);
       }
+      enter('grants');
       await grant(robot.accountId, importerScopes, 'create');
       if (statisticScopes.length) await grant(robot.accountId, statisticScopes, 'create');
       await grant(comparison.accountId, COMMON_ACTIONS, 'create');
@@ -1044,6 +1085,7 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
       // DBOS is a process singleton. Quiesce its workflows after finite setup so
       // the isolated media worker can launch. Close later takes its own turn so
       // the next identity relaunches against a settled executor.
+      enter('auth-executor-quiesce');
       await host.workflows.close();
       return result;
     } finally {
@@ -1051,7 +1093,7 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
     }
   } catch (error) {
     await close();
-    throw error;
+    throw isIdentityStall(error) ? error : identityStallError(phase.current, phase.startedAtMs, error);
   }
 }
 
