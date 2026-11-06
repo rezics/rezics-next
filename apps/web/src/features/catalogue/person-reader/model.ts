@@ -82,8 +82,7 @@ export function personGroups(release: PersonDefinitions, read: SubjectRead, loca
   const kinds: PersonGroup['kind'][] = ['biography', 'occupations', 'languages'];
   return kinds.map((kind) => {
     const requested: readonly string[] = peopleBiographyRequested[kind];
-    const extra =
-      kind === 'biography' ? admitted.filter((id) => release.properties[id]?.datatype === 'document') : [];
+    const extra = kind === 'biography' ? admitted.filter((id) => release.properties[id]?.datatype === 'document') : [];
     const ids = [...new Set([...requested, ...extra])];
     const supported = ids.filter((id) => admitted.includes(id) && release.properties[id]);
     return {
@@ -105,8 +104,7 @@ export function personGroups(release: PersonDefinitions, read: SubjectRead, loca
         return {
           ...field!,
           presentable:
-            field!.id === 'wdt:P106' ||
-            definition.datatype === (kind === 'biography' ? 'document' : 'wikibase-item'),
+            field!.id === 'wdt:P106' || definition.datatype === (kind === 'biography' ? 'document' : 'wikibase-item'),
         };
       }),
     };

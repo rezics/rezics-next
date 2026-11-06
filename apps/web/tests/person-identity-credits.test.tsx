@@ -38,8 +38,8 @@ test('Person identity keeps names, sites, biography and named unsupported occupa
     expect(filter).toContain('min-w-11');
     expect(html).toContain('whitespace-normal [overflow-wrap:anywhere]');
     expect(
-      personGroups(fixture.release, fixture.read, locale)[1]!.fields
-        .filter((field) => !field.admitted)
+      personGroups(fixture.release, fixture.read, locale)[1]!
+        .fields.filter((field) => !field.admitted)
         .map((field) => field.id),
     ).toEqual(['schema:hasOccupation', 'schema:occupation']);
   }
@@ -144,7 +144,12 @@ test('Person names filter accepts keyboard entry and keeps the supplied identity
         h(
           QueryClientProvider,
           { client },
-          h(PersonReader, { public: fixture.read, release: fixture.release, documents: fixture.documents, locale: 'en' }),
+          h(PersonReader, {
+            public: fixture.read,
+            release: fixture.release,
+            documents: fixture.documents,
+            locale: 'en',
+          }),
         ),
       ),
     );
@@ -162,7 +167,9 @@ test('Person names filter accepts keyboard entry and keeps the supplied identity
     });
     expect(input.value).toBe('ミラ');
     expect(
-      [...host.querySelectorAll('#supplied-names [data-supplied-name]')].some((node) => node.textContent === '佐藤ミラ'),
+      [...host.querySelectorAll('#supplied-names [data-supplied-name]')].some(
+        (node) => node.textContent === '佐藤ミラ',
+      ),
     ).toBe(true);
     expect(host.textContent).toContain('Mira Sato');
   } finally {

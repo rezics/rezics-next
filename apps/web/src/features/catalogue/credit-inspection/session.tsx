@@ -105,11 +105,7 @@ export function CreditInspectionSession({
     [observed.subject, revision, store],
   );
   return (
-    <CandidateReaderBoundary
-      admission={admission}
-      observed={observed}
-      address={JSON.stringify([id, locale, address])}
-    >
+    <CandidateReaderBoundary admission={admission} observed={observed} address={JSON.stringify([id, locale, address])}>
       <CreditInspectionBody
         credit={credit}
         visit={visit}
