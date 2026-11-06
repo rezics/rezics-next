@@ -1,4 +1,4 @@
-import { expect, mock, test } from 'bun:test';
+import { expect, mock, spyOn, test } from 'bun:test';
 import { createKernelClient, type NoticeInboxItem } from '@rezics/client';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -356,6 +356,87 @@ test('a consumed acknowledgement does not offer command retry, and a native send
     expect(sends).toEqual([attempt, attempt]);
     expect(invalidations).toBe(2);
   } finally {
+    unsubscribe();
+    client.clear();
+  }
+});
+
+test('composed Inbox work keeps one 20-row body, eight prior addresses and zero hydration', async () => {
+  const { inboxPaginationWork } = await import('../src/inbox/inbox-pagination');
+  const { composeInboxWork, INBOX_CONTENT_DISCLOSURE_EVIDENCE, MAX_INBOX_CURSOR_LENGTH } =
+    await import('../src/inbox/inbox-work');
+  const rows = Array.from({ length: 20 }, (_, index) => notice(`page-${index}`, 'reply'));
+  let state = receiveInboxPage(
+    emptyInboxPagination,
+    { signedIn: true, state: 'ready', ...(await resolveInboxItems(nativeInboxEnvelope(rows, 'cursor-1', 'alice'))) },
+  );
+  for (let index = 1; index <= 10; index += 1) {
+    state = nextInboxPage(state);
+    state = receiveInboxPage(state, {
+      signedIn: true,
+      state: 'ready',
+      ...(await resolveInboxItems(
+        nativeInboxEnvelope(rows, index === 10 ? null : `cursor-${index + 1}`, 'alice'),
+      )),
+    });
+  }
+  const work = inboxPaginationWork(state, { listRequests: 11, countRequests: 1, commandRequests: 0, visits: 3 });
+  expect(work).toMatchObject({
+    retainedRows: 20,
+    priorAddresses: 8,
+    hydrationRequests: 0,
+    countRequests: 1,
+    content: INBOX_CONTENT_DISCLOSURE_EVIDENCE,
+  });
+  expect(work.cursorPayloadBytes).toBeLessThanOrEqual(80 * 1024);
+  expect(composeInboxWork({
+    listRequests: 1,
+    countRequests: 1,
+    retainedRows: 20,
+    priorAddresses: 8,
+    cursors: Array.from({ length: 9 }, () => 'c'.repeat(MAX_INBOX_CURSOR_LENGTH)),
+    visits: 2,
+  }).content.growth).toContain('services/kernel/test/content/growth-notice-inbox.test.ts');
+});
+
+test('concurrent unread-count consumers for one viewer episode share one native observation', async () => {
+  const { QueryClient } = await import('@tanstack/react-query');
+  const { inboxViewerStore } = await import('../src/inbox/inbox-viewer');
+  const { fetchInboxUnreadCount } = await import('../src/inbox/inbox-query');
+  const { sessionQuery } = await import('../src/session/query');
+  const reads = await import('../src/inbox/inbox-read');
+  let loads = 0;
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const spy = spyOn(reads, 'readUnreadCount').mockImplementation(async () => {
+    loads += 1;
+    await gate;
+    return {
+      signedIn: true,
+      state: 'ready',
+      count: 4,
+      capped: false,
+      basis: 'current-visible-unread',
+      witness: { kind: 'current-disclosure', at: '2026-11-04T00:00:00.000Z' },
+    };
+  });
+  const client = new QueryClient();
+  const store = inboxViewerStore(client);
+  const unsubscribe = store.subscribe(() => {});
+  try {
+    client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'alice', csrfToken: 'alice-token' });
+    const viewer = store.snapshot()!;
+    const pending = Promise.all([fetchInboxUnreadCount(viewer), fetchInboxUnreadCount(viewer)]);
+    expect(loads).toBe(1);
+    release();
+    const [first, second] = await pending;
+    expect(first).toBe(second);
+    expect(first).toMatchObject({ count: 4, state: 'ready' });
+    expect(loads).toBe(1);
+  } finally {
+    spy.mockRestore();
     unsubscribe();
     client.clear();
   }

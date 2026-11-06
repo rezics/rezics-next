@@ -13,6 +13,7 @@ const storyThread = '01a17a3b-0884-721b-91ef-d7ffd7bb58f1';
 const storyPost = '01a17a3b-0884-721b-91ef-d7ffd7bb58f2';
 const storyReport = '01a17a3b-0884-721b-91ef-d7ffd7bb58f3';
 const storyDecision = '01a17a3b-0884-721b-91ef-d7ffd7bb58f4';
+const storyBoard = '01a17a3b-0884-721b-91ef-d7ffd7bb58f7';
 const ownReport: ReporterStatus = {
   id: storyReport,
   target: { kind: 'post', id: storyPost },
@@ -31,14 +32,23 @@ function availableActor(accountId: string) {
     accountId,
     displayName: 'Momo',
     handle: 'momo',
+    avatar: null,
     avatarUrl: null,
     automated: false,
   };
 }
+const withheldActor = {
+  state: 'withheld' as const,
+  displayName: 'Former or unavailable account' as const,
+  handle: null,
+  avatar: null,
+  avatarUrl: null,
+};
 const systemActor = {
   state: 'system' as const,
   displayName: 'Moderation team' as const,
   handle: null,
+  avatar: null,
   avatarUrl: null,
 };
 const withheldTarget = {
@@ -53,7 +63,7 @@ const withheldTarget = {
 function composeNotice(
   item: {
     id: string;
-    kind: 'reply' | 'moderation_decision';
+    kind: 'reply' | 'mention' | 'moderation_decision' | 'thread_watch' | 'board_activity';
     createdAt: string;
     actorId: string | null;
     threadId: string | null;
@@ -61,36 +71,51 @@ function composeNotice(
     decisionId: string | null;
     reportId: string | null;
     unread: boolean;
+    actorState?: 'available' | 'withheld' | 'system';
   },
   accountId: string,
 ) {
   const report = item.kind === 'moderation_decision' && item.reportId;
   const decision = item.kind === 'moderation_decision' && item.decisionId;
+  const board = item.kind === 'board_activity';
   const open = report
     ? { kind: 'report_outcome' as const, reportId: item.reportId! }
     : decision
       ? { kind: 'moderation_decision' as const, decisionId: item.decisionId! }
       : item.threadId && item.postId
         ? { kind: 'thread_post' as const, threadId: item.threadId, postId: item.postId }
-        : null;
+        : board && item.threadId
+          ? { kind: 'thread' as const, threadId: item.threadId }
+          : null;
+  const { actorState, ...wire } = item;
+  const actor =
+    actorState === 'withheld' || (!item.actorId && actorState !== 'system' && item.kind !== 'moderation_decision')
+      ? withheldActor
+      : item.actorId
+        ? availableActor(item.actorId)
+        : systemActor;
   return {
-    ...item,
-    actor: item.actorId ? availableActor(item.actorId) : systemActor,
+    ...wire,
+    actor,
     target: item.threadId
       ? {
           state: 'available' as const,
           threadId: item.threadId,
           postId: item.postId,
-          boardId: null,
-          threadTitle: 'Current discussion',
-          boardTitle: null,
+          boardId: board ? storyBoard : null,
+          threadTitle: item.kind === 'thread_watch' ? 'Reading together' : 'Current discussion',
+          boardTitle: board ? 'Books' : null,
         }
       : withheldTarget,
     summary: report
       ? 'your report was actioned'
       : decision
         ? 'a moderation outcome was recorded'
-        : 'A useful update summary',
+        : item.kind === 'thread_watch'
+          ? 'A new post on a thread you watch'
+          : item.kind === 'board_activity'
+            ? 'A newly published discussion'
+            : 'A useful update summary',
     actions: {
       open,
       markSeen: { method: 'POST' as const, path: `/v1/accounts/${accountId}/notifications/${item.id}:markSeen` },
@@ -152,6 +177,53 @@ const fixtureRows = {
       id: '01a17a3b-0884-721b-91ef-d7ffd7bb5805',
       kind: 'reply' as const,
       createdAt: '2026-10-29T09:45:00.000Z',
+      actorId: storyActor,
+      threadId: storyThread,
+      postId: storyPost,
+      decisionId: null,
+      reportId: null,
+      unread: true,
+    },
+  ],
+  'thread-watch': [
+    {
+      id: '01a17a3b-0884-721b-91ef-d7ffd7bb5811',
+      kind: 'thread_watch' as const,
+      createdAt: '2026-11-04T10:00:00.000Z',
+      actorId: storyActor,
+      threadId: storyThread,
+      postId: storyPost,
+      decisionId: null,
+      reportId: null,
+      unread: true,
+    },
+    {
+      id: '01a17a3b-0884-721b-91ef-d7ffd7bb5812',
+      kind: 'mention' as const,
+      createdAt: '2026-11-04T09:00:00.000Z',
+      actorId: null,
+      threadId: storyThread,
+      postId: storyPost,
+      decisionId: null,
+      reportId: null,
+      unread: true,
+      actorState: 'withheld' as const,
+    },
+    {
+      id: '01a17a3b-0884-721b-91ef-d7ffd7bb5813',
+      kind: 'moderation_decision' as const,
+      createdAt: '2026-11-04T08:00:00.000Z',
+      actorId: null,
+      threadId: null,
+      postId: null,
+      decisionId: storyDecision,
+      reportId: null,
+      unread: false,
+    },
+    {
+      id: '01a17a3b-0884-721b-91ef-d7ffd7bb5814',
+      kind: 'board_activity' as const,
+      createdAt: '2026-11-04T07:00:00.000Z',
       actorId: storyActor,
       threadId: storyThread,
       postId: storyPost,
@@ -249,6 +321,13 @@ const list: FakeRoute = {
     const url = new URL(request.url);
     if (url.pathname.endsWith('/count')) {
       const fixture = url.searchParams.get('fixture') ?? storyFixture(request);
+      if (fixture === 'observation-recovery' && inboxTriageStory.writes.length > 0)
+        return {
+          status: 503,
+          code: 'deadline_exceeded',
+          retryable: true,
+          request_id: 'story-inbox-count-observation',
+        };
       return fixture === 'many'
         ? {
             status: 200,
@@ -296,10 +375,21 @@ const list: FakeRoute = {
       return url.searchParams.has('cursor')
         ? listPage(request, fixtureRows.unavailable, null)
         : listPage(request, fixtureRows.mixed, fixture === 'seen-wait' ? 'story-seen-next' : null);
+    if (fixture === 'thread-watch') return listPage(request, fixtureRows['thread-watch'], null);
+    if (fixture === 'observation-recovery') {
+      inboxTriageStory.pageReads++;
+      if (inboxTriageStory.writes.length > 0)
+        return {
+          status: 503,
+          code: 'deadline_exceeded',
+          retryable: true,
+          request_id: 'story-inbox-page-observation',
+        };
+      return listPage(request, fixtureRows['thread-watch'], null);
+    }
     if (fixture === 'retry-after') {
       inboxReadRecoveryStory.reads += 1;
-      if (inboxReadRecoveryStory.reads > 1)
-        return recordings['notifications-inbox-empty'] ?? listPage(request, [], null);
+      if (inboxReadRecoveryStory.reads > 1) return listPage(request, [], null);
       return {
         status: 503,
         headers: { 'Retry-After': '2' },
@@ -335,7 +425,7 @@ const list: FakeRoute = {
       };
     if (fixture?.startsWith('report-')) return listPage(request, [fixtureRows.mixed[1]!], null);
     return fixture === 'empty' || !fixture
-      ? (recordings['notifications-inbox-empty'] ?? listPage(request, [], null))
+      ? listPage(request, [], null)
       : listPage(request, fixtureRows[fixture as keyof typeof fixtureRows] ?? [], null);
   },
   fixture: ({ request }) => {
@@ -442,4 +532,33 @@ const seen: FakeRoute = {
   fixture: () => ({ status: 204 }),
 };
 
-export const routes = [list, ...storyTargets, seen];
+const noticeSeen: FakeRoute = {
+  method: 'POST',
+  path: /^\/v1\/accounts\/[^/]+\/notifications\/[^/]+(?:\$markSeen|:markSeen)$/,
+  story: async ({ request }) => {
+    const fixture = storyFixture(request);
+    if (fixture === 'triage-journey' || fixture === 'thread-watch' || fixture === 'observation-recovery') {
+      inboxTriageStory.writes.push({
+        through: new URL(request.url).pathname,
+        key: request.headers.get('idempotency-key'),
+        body: null,
+      });
+      return inboxTriageStory.writes.length === 1 && fixture === 'triage-journey'
+        ? {
+            status: 503,
+            code: 'deadline_exceeded',
+            retryable: true,
+            request_id: 'story-inbox-notice-unknown',
+          }
+        : { status: 204 };
+    }
+    if (fixture === 'seen-wait') {
+      inboxSeenRecoveryStory.commands.push({ through: new URL(request.url).pathname, key: request.headers.get('idempotency-key') });
+      return inboxSeenRecoveryStory.commands.length > 1 ? { status: 204 } : { status: 429, code: 'rate_limited', retryable: true, request_id: 'story-inbox-notice-seen', headers: { 'Retry-After': '2' } };
+    }
+    return { status: 204 };
+  },
+  fixture: () => ({ status: 204 }),
+};
+
+export const routes = [list, ...storyTargets, seen, noticeSeen];
