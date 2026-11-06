@@ -11,6 +11,7 @@ import type { CommerceDependencies } from '../../src/commerce/routes.ts';
 import type { Access, AccessRealmRoleReader, ActionCatalogue } from '../../src/request/access.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 import type { WorkClient } from '../../src/work/client.ts';
+import type { ContentRuntime } from '../../src/content/runtime.ts';
 import { createKernelRuntimeDefaults, type KernelRuntimeOverrides } from '../../src/server.ts';
 import { createApp } from '../../src/http/app.ts';
 import {

@@ -211,15 +211,19 @@ beforeAll(async () => {
   ]);
   for (const group of ['personal_library', 'purchases', 'selling'])
     await accepted(personas.staff, `/v1/platform/exposure/${group}:open`, {});
-  const editionPublisher = await createNativeEditionFixture((method, path, body, headers = {}) =>
-    kernel.handle(
+  const editionPublisher = await createNativeEditionFixture(async (method, path, body, headers = {}) => {
+    if (method === 'POST' && path === '/v1/boards') {
+      const conceptId = (body as { conceptId: string }).conceptId;
+      await grant(seller, { route: routeOf(conceptId)!, id: conceptId }, ['subject:read']);
+    }
+    return kernel.handle(
       new Request(`http://kernel.test${path}`, {
         method,
         headers: { authorization: `Bearer ${seller.bearer}`, ...headers },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       }),
-    ),
-  );
+    );
+  });
   contentEdition = await editionPublisher.publish({
     title: 'Native erasure book',
     subjectTitle: 'Native erasure source',
