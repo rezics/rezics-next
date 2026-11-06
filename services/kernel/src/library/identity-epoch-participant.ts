@@ -45,6 +45,18 @@ import {
 import type { NativeSourceIdentity } from './native-source-custody.ts';
 import type { NativeCollectionWork } from './collection-source-work.ts';
 import { applyLibraryIdentityCandidate } from './owner-identity.ts';
+import { applyFollowIdentityPage, type FollowIdentityCursor, type FollowIdentityHandoff } from './follow-identity.ts';
+import {
+  beginCanonicalSourceRepair,
+  observeCanonicalSource,
+  publishCanonicalSourceRepair,
+  readCanonicalSourceState,
+  repairCanonicalSourceStep,
+  type CanonicalAllowance,
+  type CanonicalWork,
+} from './canonical-source-store.ts';
+import { CANONICAL_SOURCE_REPAIR_STEP, canonicalSourceCallAllowance } from './canonical-source-bounds.ts';
+import type { WorkDimensions, WorkReceipt } from './contract/work-dimensions.ts';
 import invalidate from './identity-epoch-participant-invalidate.sql';
 
 const step = 'library-private-follow-counts';
@@ -506,8 +518,13 @@ async function registerLibraryIdentityNativeEffect(
       await tx.query(
         `INSERT INTO library.identity_epoch_participant_work
          (partition_no,job_id,job_epoch,effect_key,original,owner_id,role,receiving_partition,
-          receiving_epoch,receiving_position,receiving_transaction_id,source_route,source_id,plan_key,disposition)
-         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+          receiving_epoch,receiving_position,receiving_transaction_id,source_route,source_id,plan_key,disposition,
+          follow_complete)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,
+           NOT ($15::text IN ('OLD','NEW','first-apply') AND NOT EXISTS(
+             SELECT 1 FROM library.identity_epoch_participant_work w
+             WHERE w.partition_no=$1 AND w.job_id=$2 AND w.job_epoch=$3 AND w.original=$5
+               AND w.disposition=$15::text)))`,
         [
           home,
           effect.job.jobId,
@@ -837,10 +854,244 @@ async function applyLibraryPlanEffect(
 }
 
 export type LibraryIdentitySourceProgress = Readonly<{
-  state: 'progress' | 'source-scopes' | 'owner-handoff' | 'follow-closure';
+  /** 'closed' means native, scope, follow, canonical and handoff proof are all closed in this frame. */
+  state:
+    | 'progress'
+    | 'source-scopes'
+    | 'follow-progress'
+    | 'canonical-progress'
+    | 'canonical-blocked'
+    | 'owner-handoff'
+    | 'closed';
   effectKey: string | null;
   work: ReturnType<NativeCollectionWork['receipt']>;
 }>;
+
+/** Follow obligations ride on native OLD, NEW and first-apply rows. The planner attaches one obligation per
+ * (job, original, disposition), so six drivers never repeat the same follower page six times.
+ */
+type FollowWorkRow = Readonly<{
+  effect_key: string;
+  original: string;
+  disposition: 'OLD' | 'NEW' | 'first-apply';
+  follow_partition: number | null;
+  follow_after: string | null;
+  operation: { change: { previousTerminal: string; terminal: string } };
+}>;
+
+/** Records a follow page's handoff against the follower account. The table's reasons do not name a target home,
+ * so a foreign target is retained as a foreign owner with its target partition in the locator.
+ */
+async function retainFollowHandoff(
+  tx: Parameters<typeof applyFollowIdentityPage>[0],
+  job: IdentityJobRef,
+  effectKey: string,
+  handoff: FollowIdentityHandoff,
+): Promise<void> {
+  const accountRoute = routeOf(handoff.accountId);
+  if (accountRoute === null) throw new TypeError('Library follow handoff requires a native account ID');
+  await tx.query(
+    `INSERT INTO library.identity_epoch_participant_handoff
+     (partition_no,job_id,job_epoch,effect_key,owner_id,owner_partition,role,reason,locator)
+     VALUES($1,$2,$3,$4,$5,$6,'follow','foreign-owner',$7::jsonb) ON CONFLICT DO NOTHING`,
+    [
+      identityJobPartition(job),
+      job.jobId,
+      job.epoch.toString(),
+      effectKey,
+      handoff.accountId,
+      partitionOf(accountRoute),
+      JSON.stringify({
+        kind: handoff.reason,
+        targetPartition: handoff.reason === 'foreign-target' ? handoff.ownerPartition : null,
+      }),
+    ],
+  );
+}
+
+/** Advances ONE retained follow obligation by ONE bounded follower page (at most 100 followers).
+ * The cursor, completion and handoffs commit with the follow pair/support/total/fence effects in one command,
+ * so a crash resumes from the saved cursor and a lost result re-reads the same locator. Returns false when no
+ * open obligation remains; an empty queue alone is never reported as completion proof.
+ */
+export async function advanceLibraryIdentityFollowPage(pool: Pool, job: IdentityJobRef, deadline: number): Promise<boolean> {
+  const partition = identityJobPartition(job);
+  const picked = await runCommand(pool, { partition, deadline }, async (tx) => {
+    const result = await tx.query<FollowWorkRow>(
+      `SELECT w.effect_key, w.original::text AS original, w.disposition,
+              w.follow_partition, w.follow_after::text AS follow_after, e.operation
+       FROM library.identity_epoch_participant_work w
+       JOIN library.identity_scope_effect e
+         ON e.route=w.source_route AND e.collection_id=w.source_id AND e.plan_key=w.plan_key
+        AND e.effect_key=w.effect_key AND e.disposition=w.disposition
+       WHERE w.partition_no=$1 AND w.job_id=$2 AND w.job_epoch=$3
+         AND NOT w.follow_complete AND NOT w.handed_off
+       ORDER BY w.effect_key LIMIT 1`,
+      [partition, job.jobId, job.epoch.toString()],
+    );
+    return noEffect(result.rows[0] ?? null);
+  });
+  const row = picked.value;
+  if (!row) return false;
+  const cursor: FollowIdentityCursor =
+    row.follow_partition === null || row.follow_after === null
+      ? null
+      : { partition: row.follow_partition, accountId: row.follow_after };
+  const { previousTerminal, terminal } = row.operation.change;
+
+  await runCommand(pool, { partition, deadline }, async (tx) => {
+    const page = await applyFollowIdentityPage(tx, {
+      partition,
+      original: row.original,
+      previousTerminal,
+      terminal,
+      disposition: row.disposition,
+      after: cursor,
+      limit: 100,
+    });
+    for (const handoff of page.handoffs) await retainFollowHandoff(tx, job, row.effect_key, handoff);
+    const saved = await tx.query(
+      `UPDATE library.identity_epoch_participant_work
+       SET follow_partition=$6::integer, follow_after=$7::uuid, follow_complete=$8
+       WHERE partition_no=$1 AND job_id=$2 AND job_epoch=$3 AND effect_key=$4 AND NOT follow_complete
+         AND follow_partition IS NOT DISTINCT FROM $5::integer AND follow_after IS NOT DISTINCT FROM $9::uuid
+       RETURNING effect_key`,
+      [
+        partition,
+        job.jobId,
+        job.epoch.toString(),
+        row.effect_key,
+        row.follow_partition,
+        page.after?.partition ?? null,
+        page.after?.accountId ?? null,
+        page.exhausted,
+        row.follow_after,
+      ],
+    );
+    if (saved.rowCount !== 1) throw stale('Library follow obligation cursor changed during its page');
+    return { value: null, events: [] };
+  });
+  return true;
+}
+
+/** Per-call ceiling for one canonical store call. The store opens a fresh ledger per call, so each call is
+ * reserved from the prepaid frame at this ceiling before dispatch and settled from the usage it returns.
+ */
+function canonicalCallCeiling(): Readonly<{
+  allowance: ReturnType<typeof canonicalSourceCallAllowance>;
+  dimensions: WorkDimensions;
+}> {
+  const allowance = canonicalSourceCallAllowance(CANONICAL_SOURCE_REPAIR_STEP());
+  return Object.freeze({
+    allowance,
+    dimensions: Object.freeze({
+      candidateKeys: allowance.rawKeys,
+      nativeRows: allowance.nativeRows,
+      identityMetadataRows: allowance.identityMetadataRows,
+      emptySeeks: allowance.emptySeeks,
+      nativePoints: allowance.nativePoints,
+      witnessKeys: 0,
+      statements: allowance.statements,
+      bytes: allowance.bytes,
+    }),
+  });
+}
+
+function canonicalUsage(used: CanonicalWork): WorkDimensions {
+  return Object.freeze({
+    candidateKeys: used.candidateKeys + used.aliasKeys + used.duplicateKeys + used.lookaheadKeys + used.internalDriverKeys,
+    nativeRows: used.nativeRows,
+    identityMetadataRows: used.identityMetadataRows,
+    emptySeeks: used.emptySeeks,
+    nativePoints: used.nativePoints,
+    witnessKeys: 0,
+    statements: used.statements,
+    bytes: used.bytes,
+  });
+}
+
+/** One canonical store call, composed under the frame at its declared ceiling. The receipt settles the prepaid
+ * partition with the store's actual usage; no call runs outside the frame's remaining balance.
+ */
+async function chargedCanonicalCall<T extends { readonly work: CanonicalWork }>(
+  frame: NativeCollectionWork,
+  call: (allowance: CanonicalAllowance) => Promise<T>,
+): Promise<T> {
+  const ceiling = canonicalCallCeiling();
+  const settled = await frame.compose(
+    async (allowance) => {
+      const result = await call({ ...ceiling.allowance, reservationId: allowance.reservationId });
+      const receipt: WorkReceipt = { reservationId: allowance.reservationId, used: canonicalUsage(result.work) };
+      return { result, work: receipt };
+    },
+    ceiling.dimensions,
+  );
+  return settled.result;
+}
+
+type CanonicalStageState = 'done' | 'progress' | 'blocked';
+
+/** One bounded canonical unit for the job's collections, in saved scope order. Each collection whose head already
+ * publishes the observed admitted basis is skipped; the first other collection gets one begin, one page or one
+ * publish. A basis that is not admitted, or a store not-ready result, is 'blocked' and never completion.
+ */
+async function advanceLibraryIdentityCanonicalStage(
+  pool: Pool,
+  job: IdentityJobRef,
+  source: LiveLibrarySource,
+): Promise<CanonicalStageState> {
+  const partition = identityJobPartition(job);
+  const deadline = source.context.deadline;
+  const collections = await runCommand(pool, { partition, deadline }, async (tx) =>
+    noEffect(
+      (
+        await tx.query<{ source_route: number; source_id: string }>(
+          `SELECT DISTINCT source_route,source_id::text AS source_id
+           FROM library.identity_epoch_participant_scope
+           WHERE partition_no=$1 AND job_id=$2 AND job_epoch=$3
+           ORDER BY source_route,source_id::text LIMIT 100`,
+          [partition, job.jobId, job.epoch.toString()],
+        )
+      ).rows,
+    ),
+  );
+  let blocked = false;
+  for (const collection of collections.value) {
+    const ref = { route: collection.source_route, collectionId: collection.source_id, deadline };
+    const observed = await chargedCanonicalCall(source.work, (allowance) =>
+      observeCanonicalSource(pool, { ...ref, allowance }),
+    );
+    if (observed.state !== 'admitted') {
+      blocked = true;
+      continue;
+    }
+    const head = await chargedCanonicalCall(source.work, (allowance) =>
+      readCanonicalSourceState(pool, { ...ref, allowance }),
+    );
+    if (head.state === 'ready' && head.basis.digest === observed.basis.digest) continue;
+    const begun = await chargedCanonicalCall(source.work, (allowance) =>
+      beginCanonicalSourceRepair(pool, { ...ref, allowance, basis: observed.basis }),
+    );
+    if (begun.state !== 'working') {
+      blocked = true;
+      continue;
+    }
+    const stepped = await chargedCanonicalCall(source.work, (allowance) =>
+      repairCanonicalSourceStep(pool, { ...ref, allowance, basis: observed.basis, repair: begun.repair }),
+    );
+    if (stepped.state === 'working') return 'progress';
+    if (stepped.state !== 'complete') {
+      blocked = true;
+      continue;
+    }
+    const published = await chargedCanonicalCall(source.work, (allowance) =>
+      publishCanonicalSourceRepair(pool, { ...ref, allowance, basis: observed.basis, repair: stepped.repair }),
+    );
+    if (published.state !== 'published') blocked = true;
+    return published.state === 'published' ? 'progress' : 'blocked';
+  }
+  return blocked ? 'blocked' : 'done';
+}
 
 /** Exact callable for Semantic's existing Source maintenance frame. It drains at most one
  * retained Library receiving effect per call and reports unfinished Source/follow proof instead
@@ -889,8 +1140,15 @@ export async function stepLibraryIdentityEpochWithSource(
     ]);
     return noEffect({ scopes: BigInt(scopes.rows[0]!.count), handoffs: BigInt(handoffs.rows[0]!.count) });
   });
+  if (status.value.scopes) return { state: 'source-scopes', effectKey: null, work: work.receipt() };
+  // Follow pages run before canonical and handoff reporting: a blocked or foreign item never stops supported work.
+  if (await advanceLibraryIdentityFollowPage(pool, job, deadline))
+    return { state: 'follow-progress', effectKey: null, work: work.receipt() };
+  const canonical = await advanceLibraryIdentityCanonicalStage(pool, job, source);
+  if (canonical === 'progress') return { state: 'canonical-progress', effectKey: null, work: work.receipt() };
+  if (canonical === 'blocked') return { state: 'canonical-blocked', effectKey: null, work: work.receipt() };
   return {
-    state: status.value.handoffs ? 'owner-handoff' : status.value.scopes ? 'source-scopes' : 'follow-closure',
+    state: status.value.handoffs ? 'owner-handoff' : 'closed',
     effectKey: null,
     work: work.receipt(),
   };
