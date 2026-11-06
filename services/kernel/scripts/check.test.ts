@@ -11,6 +11,7 @@ import {
   formatConnectionRunSummary,
   formatFileConnectionResult,
   formatPostgresErrors,
+  isolatedPostgresUnixSockets,
   invokeTypecheck,
   reportCheckFailure,
   reportPostgresErrors,
@@ -163,7 +164,8 @@ test('an isolated walk bind-mounts a unix socket directory instead of publishing
     expect(args).toContain('-v');
     expect(args).toContain(`${socketDirectory}:/rezics-pg-socket:z`);
     expect(args).toContain('PGHOST=/rezics-pg-socket');
-    expect(args).toContain('unix_socket_directories=/rezics-pg-socket');
+    expect(isolatedPostgresUnixSockets).toBe('/rezics-pg-socket,/var/run/postgresql');
+    expect(args).toContain(`unix_socket_directories=${isolatedPostgresUnixSockets}`);
     expect(args).not.toContain('127.0.0.1::5432');
     expect(args.some((argument) => argument.startsWith('ns:') || argument.startsWith('port='))).toBe(false);
     expect(() => startPostgresContainer((next) => next.join(' '), { socketDirectory: 'relative-socket' })).toThrow(

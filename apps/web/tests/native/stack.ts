@@ -3,6 +3,7 @@ import type { Access, AccessConfig } from '../../../../services/kernel/src/reque
 import { fork, spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { request as httpsRequest } from 'node:https';
+import { existsSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -423,8 +424,13 @@ function postgresContainerLogs(container: string): string {
   return `network ${inspect.stdout.toString().trim()}\n${logs.stdout}${logs.stderr}`;
 }
 
-async function waitForOwnedPostgres(container: string, databaseUrl: string): Promise<void> {
+async function waitForOwnedPostgres(
+  container: string,
+  databaseUrl: string,
+  socketDirectory?: string,
+): Promise<void> {
   const deadline = Date.now() + 60_000;
+  const socketPath = socketDirectory ? join(socketDirectory, '.s.PGSQL.5432') : undefined;
   while (true) {
     const inspect = Bun.spawnSync([
       'docker',
@@ -439,8 +445,25 @@ async function waitForOwnedPostgres(container: string, databaseUrl: string): Pro
         `Disposable PostgreSQL container is not running (${status || inspect.stderr.toString()}).\n${postgresContainerLogs(container)}`,
       );
     }
+    if (socketPath && !existsSync(socketPath)) {
+      if (Date.now() >= deadline)
+        throw new Error(
+          `Disposable PostgreSQL did not create ${socketPath}.\n${postgresContainerLogs(container)}`,
+        );
+      await Bun.sleep(500);
+      continue;
+    }
     const probe = new Pool({
-      connectionString: databaseUrl,
+      ...(socketDirectory
+        ? {
+            host: socketDirectory,
+            port: 5432,
+            user: 'rezics',
+            password: 'rezics',
+            database: 'rezics',
+            ssl: false,
+          }
+        : { connectionString: databaseUrl }),
       connectionTimeoutMillis: 1500,
       max: 1,
     });
@@ -481,7 +504,7 @@ async function startOwnedPostgres(): Promise<{
   reportStackProgress(
     `Native web stack startup: PostgreSQL ${socketDirectory ? `unix socket ${socketDirectory}` : 'published host port'} at ${databaseUrl.replace(/:[^:@]+@/, ':***@')}`,
   );
-  await waitForOwnedPostgres(container, databaseUrl);
+  await waitForOwnedPostgres(container, databaseUrl, socketDirectory);
   return socketDirectory ? { container, databaseUrl, socketDirectory } : { container, databaseUrl };
 }
 

@@ -133,7 +133,8 @@ Decision: Global distribution uses the native `/ratings` aggregate admission (ex
 a published headline never reconstructs a histogram from an unadmitted source. Disposable native stacks reach
 PostgreSQL through a bind-mounted unix socket when the test namespace has only loopback, differs from PID 1, or
 cannot read PID 1's netns (`unshare --user`). Docker does not join `ns:/proc/.../ns/net`, and a published host
-port is invisible on that loopback.
+port is invisible on that loopback. Isolated servers also listen on `/var/run/postgresql` so the image entrypoint
+can finish after it clears `PGHOST`.
 
 The existing route reads one preference snapshot, then prepares shelf, Continue and navigation reads independently
 and accepts only matching viewer/credential origins. Chronological shelf reads request one FULL page of 20 entries;

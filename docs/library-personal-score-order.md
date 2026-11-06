@@ -125,3 +125,5 @@ Bound declarations read canonical Source cost leaves so Kernel can boot through 
 Global distribution reads admit the native aggregate shape; focused `--private-network` walks reach disposable
 PostgreSQL through a bind-mounted unix socket when the namespace is loopback-only, differs from PID 1, or cannot
 read PID 1's netns. Docker cannot join that netns, and a host-published port never appears on the unshared loopback.
+The server also listens on `/var/run/postgresql` so the image entrypoint's init `psql` (which clears `PGHOST`) can
+finish. Acceptance remains the existing native host walk; unit tests pin socket isolation and the dual listen path.

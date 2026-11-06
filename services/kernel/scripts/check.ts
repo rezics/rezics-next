@@ -770,12 +770,15 @@ function postgresSocketMount(socketDirectory: string): string[] {
   ];
 }
 
+/** Official image `docker_process_sql` clears PGHOST and talks to `/var/run/postgresql`. */
+export const isolatedPostgresUnixSockets = '/rezics-pg-socket,/var/run/postgresql';
+
 export function startPostgresContainer(
   dockerCommand: DockerCommand = docker,
   options: PostgresContainerOptions = {},
 ): string {
   const network = options.socketDirectory ? postgresSocketMount(options.socketDirectory) : ['-p', '127.0.0.1::5432'];
-  const socketListen = options.socketDirectory ? ['-c', 'unix_socket_directories=/rezics-pg-socket'] : [];
+  const socketListen = options.socketDirectory ? ['-c', `unix_socket_directories=${isolatedPostgresUnixSockets}`] : [];
   return dockerCommand([
     'run',
     '-d',
