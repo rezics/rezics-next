@@ -33,7 +33,10 @@ receipt association and selected-admission adapters stay in `kernel-platform` an
 `composition/work-modules.ts`. Compact `domain-composition` tests pin enqueue, registration, selected admission and
 retirement against fake ports; the existing growth-work-client, selected-runtime-native, sdk-transaction-fence,
 sdk-retirement-fence and growth-retention fixtures remain the bounded-work proof. Retention deletion cost is selected
-IDs plus owned payload/FK cascade rows; a selected count alone cannot bound that payload.
+IDs plus owned payload/FK cascade rows; a selected count alone cannot bound that payload. The growth-retention suite
+uses one folded capture per measured batch or sweep: nested SDK-delete auto_explain notices exceed the 32 MiB raw
+cap at a 1,000-id batch, so occurrence costs, SQL, binds and background attribution stay and selector-plan samples
+prove `workflow_retention_selector`.
 
 ## Semantic domain composition
 

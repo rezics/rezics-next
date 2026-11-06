@@ -70,16 +70,33 @@ batch is seven statements. A two-batch sweep of 1,000 then 10 is fourteen.
 `test/work/growth-retention.test.ts` measures empty, short (10) and full (1,000) batches at scales 64, 512 and 4,096
 history units (16 rows each) with selected work and unit payload fixed; eligible-application backlog with the
 returned batch fixed at 1,000; independent payload fanout 1/8/64 on a short batch; and a 1,010-row two-batch sweep.
-Plans must use `workflow_retention_selector` with no sequential scan. The full-batch series bound retires the former
-`GROWTH_BASELINE` step exemption for `workflow retention batch`. Native recovery
+Each check uses `captureMode: 'cost-folded'` so nested SDK-delete auto_explain notices stay inside the 32 MiB
+telemetry cap; raw retention of those notices overflowed on eligible-backlog, payload-fanout and two-batch sweep.
+Plans must use `workflow_retention_selector` with no sequential scan. The suite samples only selector-plan notices
+for that index proof and classifies the four exact-ID deletes from folded statement lists. The full-batch series
+bound retires the former `GROWTH_BASELINE` step exemption for `workflow retention batch`. Native recovery
 `test/work/retention.test.ts` interrupts before and after the durable batch checkpoint, resumes the same workflow
-identity on the frozen cutoff/application, and finishes on repeated empty. Measured SQL, binds, plans, rows, blocks,
-statements, payload fanout and background attribution are logged from those native checks.
+identity on the frozen cutoff/application, and finishes on repeated empty. Measured SQL, binds, selector-plan
+indexes/nodes, rows, blocks, statements, payload fanout and background attribution are logged from those native
+checks.
+
+### Cost: workflow retention batch
+
+- Touches: the tagged indexed selector on `dbos.workflow_status` plus SDK `deleteWorkflows(ids, false)` — BEGIN, four
+  exact-ID DELETEs of input/output/operations/status, COMMIT — and FK cascades into events, event history,
+  notifications and streams. Permanent writer fences are not deleted.
+- Bound: empty batch 1 statement and 0 deletion rows; nonempty batch 7 statements; a 1,000-then-10 sweep 14
+  statements. Deletion/examined rows are selected IDs plus owned payload and cascade copies, constant in unrelated
+  history and in eligible backlog beyond 1,000, linear in payload fanout 1/8/64. Selector blocks are logarithmic.
+  Nested engine work is folded into those occurrence costs.
+- Growth check: `test/work/growth-retention.test.ts` empty, short, full, eligible-backlog, payload-fanout and
+  two-batch sweep titles.
 
 Decision: pin this outcome with the four named native suites only — compact selector and migration pins, registered
 interrupt/resume with frozen cutoff and application, and growth empty/short/full/backlog/fanout/sweep — rather than
 extra stories. Each growth series uses its own application and seed identities so a selected count cannot borrow
-another series' payload.
+another series' payload. Growth capture is folded; a selected 1,000-id delete cannot keep every nested auto_explain
+document under the shared 32 MiB cap.
 
 A selected workflow count cannot bound deletion: owned payload/cascade rows are the deletion operand. The installed
 SDK `listWorkflows` path stays creation-ordered and is unused by scheduled retention. No custom scheduler or
