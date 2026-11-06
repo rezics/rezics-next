@@ -112,6 +112,22 @@ function privateWorkingIdentity(
 ): identity is CollectionPublicationSource['input']['identity'] {
   return identity.scope === 'private_builtin';
 }
+function admitsWorkingPublication(
+  saved: SavedCollectionRule,
+  metadata: Awaited<ReturnType<typeof readNativeCollectionWorkingMetadata>>['metadata'],
+  actorId: string,
+  revision: number,
+) {
+  return (
+    !!metadata &&
+    metadata.curatorAccountId === actorId &&
+    metadata.sourceGeneration === saved.sourceGeneration &&
+    metadata.revision === revision &&
+    (saved.source.kind === 'catalogue'
+      ? metadata.authority === 'unavailable_output'
+      : metadata.authority === 'private_builtin')
+  );
+}
 function sourceValid(source: CollectionPublicationSource, record: DurableInitiatorRecord) {
   const { locator, input, target, output, rule } = source;
   return (
@@ -510,14 +526,7 @@ export function createCollectionPublicationEpisodes(config: {
                   { deadline, allowance: metadataAllowance() },
                 )
               ).metadata;
-          if (
-            !materialization &&
-            (!metadata ||
-              metadata.authority !== 'private_builtin' ||
-              metadata.curatorAccountId !== actor.accountId ||
-              metadata.sourceGeneration !== saved.sourceGeneration ||
-              metadata.revision !== saved.collectionRevision)
-          )
+          if (!materialization && !admitsWorkingPublication(saved, metadata, actor.accountId, saved.collectionRevision))
             throw unavailable();
           return {
             proof,
@@ -665,11 +674,12 @@ export function createCollectionPublicationEpisodes(config: {
             )
           ).metadata;
           if (
-            !metadata ||
-            metadata.curatorAccountId !== actor.accountId ||
-            metadata.authority !== 'private_builtin' ||
-            metadata.sourceGeneration !== prepared.saved.sourceGeneration ||
-            metadata.revision !== (materialization ? 1 : input.revision)
+            !admitsWorkingPublication(
+              prepared.saved,
+              metadata,
+              actor.accountId,
+              materialization ? 1 : input.revision,
+            )
           )
             throw unavailable();
           const identity = await initializeCanonicalCollectionSource(tx, {
