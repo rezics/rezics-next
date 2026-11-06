@@ -5,14 +5,15 @@ is unconfigured. The effect durably enqueues `commerce.eraseAccount` with identi
 `commerce:erasure:{accountId}:v1`. The existing executor and workflows queue own it. Dispatch is not acknowledgement.
 The native version 1 obligation and current deleted account are required for every page.
 
-A page reads at most 100 entitlement UUIDs and 100 acquisition-slot UUIDs from their account-leading indexes,
-then removes at most 100 merged child UUIDs (1,600 raw key bytes) using a shared keyset cursor.
-Physical child deletion, sticky evidence that data applied, and the next cursor/phase commit in the same
-platform command. Progress contains only account/barrier identity, cursor, phase and a fixed blocker. It survives
+A child phase reads and removes at most 100 raw keys (at most 1,600 UUID key bytes) from one account-leading index
+per page, including entitlements and acquisition slots. Physical deletion, sticky evidence that data applied, and
+the next cursor/phase commit in the same platform command. Progress contains only account/barrier identity,
+cursor, phase, a fixed blocker and explicit retention metadata; it never copies a source payload. It survives
 DBOS history expiry and is not a second coordinator. Replay cannot reopen a terminal phase or coordinator outcome.
-There is currently no acknowledgement path: local absence cannot attest native no-data. The required unused-actor
-`none` acceptance remains unsatisfied until the real shared-history and foreign-role proof producers are delivered.
-This is an incomplete participant, not a successful replacement of that outcome with permanent pending.
+The participant acknowledges an actual local outcome only after its owned pages commit. The unused-actor `none` path
+still requires real shared-history and foreign-role coverage; local absence never attests whole-account no-data. A
+data-bearing buyer can acknowledge a configured finite local Checkout exception while shared, foreign and provider
+custody remains independently pending.
 
 ## Native ownership evidence and unknown custody
 
@@ -20,7 +21,8 @@ Indexed, account-home existence probes establish positive local evidence for off
 creator royalty lines and statements. `had_data` records only this observed evidence, sticky across local purge;
 `false` means no local root was observed, never that all roles or custody were empty. An account with no observed
 local roots finishes the available page work with `COMMERCE_CUSTODY_BLOCKER`, explicitly recording UNKNOWN custody.
-Known local use records `FINANCIAL_ERASURE_BLOCKER`. Neither result acknowledges `none` or `erased`.
+Data-bearing accounts stay pending unless every local obligation has an explicit disposition. A successful local
+Commerce acknowledgement does not close other participants or unknown custody.
 
 Seller/creator copies on buyer homes cannot be disproved by these local probes. Commerce does not add creator-leading
 cross-home indexes or query all Core receipts, Access operator slots, workflow inputs or JSON payloads. Accounts owns
@@ -80,8 +82,39 @@ a refund/dispute reason. Slots have actual `(route, buyer_account_id, slot_id)` 
 order IDs and exact benefit keys are removed together. Terminal financial refreshes do not recreate slots.
 Verified acquisition disposition belongs to the existing `(route, buyer_account_id, order_id)` financial root
 and its retained-field obligation, rather than an additional unlocated copy.
-No financial root is removed by this participant. Observed local data remains pending after this partial cleanup;
-unobserved foreign/shared custody remains UNKNOWN. Exhausting private children is not whole-graph erasure.
+No financial root is deleted by this participant. Without a supported explicit order-retention policy, the order
+phase stays pending. Unobserved foreign/shared custody remains UNKNOWN; exhausting private children is not whole-graph
+erasure.
+
+## Explicit native test order-retention composition
+
+`prepareCommerceOrderRetention(pool, { orderId, expiresAt })` is the trusted Commerce owner callable for the native
+fixture. It locks the active buyer and exact genuine order, attaches the fixed `commerce.purchase_order_retained`
+policy before T, and rejects inconsistent per-buyer expiry, purpose or fields. No HTTP caller supplies a policy and
+there is no production default. The fixture purpose is `Finite native test retention of the exact original Checkout
+capability.` and the exact fields are `buyer_account_id`, `checkout_url` and `expires_at`. This deterministic test
+policy is not production legal approval.
+
+For a configured order, the participant copies only these Checkout fields to the restricted owner table and clears
+`purchase_order.checkout_url` and `checkout_expires_at` under the exact current T proof. Copy, source minimization,
+policy removal and progress checkpoint commit in one buyer-home command. Durable progress stores only store, fields,
+purpose and deadline. Entitlements, acquisition slots and copied `money_observation` evidence are removed in
+account-leading pages of at most 100 keys. Exact private readers and new Checkout writes remain fenced at T.
+
+The retained Checkout row is inspectable only by an exact internal owner locator; there is no buyer-facing read. At
+its configured deadline, the existing Commerce workflow waits on durable work, purges eligible retained rows in
+bounded pages, and commits that purge before calling Access `resolveRetention` in a separate platform command. A
+restart between minimization/checkpoint or purge/resolve replays the durable phase and exact owner locator. Late paid
+and refund reconciliation may update settlement and immutable transaction truth, but cannot restore benefits,
+Checkout URLs or deleted provider observations.
+
+The accounting `purchase_order` remains as the financial root needed to preserve accepted terms, payment identity and
+later reconciliation; its amount, currency/unit, signs and payment meaning are unchanged. Its retained financial
+fields and payment-reference duration remain subject to the unresolved production jurisdiction, category, field
+and expiry schedule below. The fixture's finite Checkout exception does not approve that broader retention or
+discharge shared-history, foreign seller, provider or backup custody.
+
+Commerce ACK is limited to its finite local Checkout exception; shared, foreign, provider, backup and production financial custody remain pending.
 
 ## Remaining producer blockers and retained records
 
@@ -92,16 +125,18 @@ exist, they remain restricted behind account fences and the participant stays pe
 The committed Access API accepts `retained?: readonly RetentionException[]` only with outcome `erased`:
 each exception has `store`, `fields: readonly string[]`, `purpose` and `expiresAt: Date`. It permits at most 16
 unique stores, validates identifiers and requires expiry strictly after T. These validation limits are not legal
-approval. This participant supplies no exceptions while the schedule is undecided. After a real expiry purge
-commits, its owner must separately call `resolveRetention({ pool }, { accountId, participant: 'commerce', store })`;
+approval. The native fixture supplies only its fixed Checkout exception; unconfigured production financial policy
+remains unresolved. After a real expiry purge commits, its owner must separately call
+`resolveRetention({ pool }, { accountId, participant: 'commerce', store })`;
 Access requires expiry to have arrived. Passing time or dispatching the purge does not resolve retention.
 No fixture policy is lawful production approval and no live Stripe call/key is required for native acceptance.
 
 Complete financial acknowledgement also requires these actual owned/shared APIs:
 
-- Commerce: bounded field minimizers for offers and archived captured terms, checkout URL/session/intents,
-  orders, immutable transaction payloads and royalty lines/statements/references, with exact role inverses and
-  custody locators surviving any parent purge. Current immutable accounting guards are not erasure APIs.
+- Commerce: broader bounded field minimizers for offers and archived captured terms, payment references, immutable
+  transaction payloads and royalty lines/statements/references, with exact role inverses and custody locators
+  surviving any parent purge. The native Checkout URL exception does not supply a production financial schedule;
+  current immutable accounting guards are not erasure APIs.
 - Shared history: registered commerce artifact minimizers for exact receipt keys, outbox envelope/event keys,
   write-basis transaction keys, and all DBOS workflow/step/input/result/event/message records. Provider dispatch
   and terminal workflow retention are not minimization. Acting-human and operator history needs exact locators.
@@ -111,9 +146,9 @@ Complete financial acknowledgement also requires these actual owned/shared APIs:
 - Delivery/operations: backup expiry and any external logs/caches holding commerce payloads need named custody and
   minimizers/expiry proof. Unknown custody remains incomplete.
 
-These are the parent account-erasure launch gate. The participant deliberately acknowledges neither `erased` nor
-retention completion for data-present accounts. Its durable `pending` phase records the concrete blocker without
-claiming missing proof is complete.
+These remain the parent account-erasure launch gate. Unconfigured or unsupported data-bearing accounts retain a
+durable `pending` phase with a concrete blocker. The supported fixture exception acknowledges only its exact local
+retained Checkout record, not a whole-account disposition.
 
 ## Native fixture boundary
 

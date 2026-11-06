@@ -991,21 +991,27 @@ Disclosure/rights stay with existing Access and target owners. [Shared deletion]
 Financial Commerce is separate from Library's erasure participant. It must acknowledge actual minimized cleanup
 or no applicable data, never mere dispatch; minimal completion outside workflow history prevents late resurrection.
 The native live-copy purpose extends existing lifecycle coordination; it adds no account restore, workflow engine or lifecycle service.
+The [Commerce erasure participant](erasure-participant.md) owns the fixed native-test order-retention seam, Checkout
+minimization, deadline purge and separate Access resolution; it distinguishes this fixture policy from unresolved
+production financial retention and remaining shared custody.
 
 The [financial lifecycle and cost review](../../../../docs/research/commerce-cost-lifecycle-quality.md)
-retains its recorded source bindings and unavailable measurements. It identifies a source-level mismatch between
-the unused-account test's `none` expectation and the participant's pending result, not an observed failing exit.
-Preserve that expectation: local emptiness cannot prove absence of historical financial roles. Complete native
-History coverage and Accounts' opaque terminal proof must precede a safe `none`. Financial field expiry and
-external-payment attestation policy still require their owners' decisions.
+retains its recorded source bindings and unavailable measurements. Preserve the unused-account test's `none`
+expectation: local emptiness cannot prove absence of historical financial roles. Commerce now consults the actual
+History owner coverage before that acknowledgement. Complete native History coverage must precede a safe `none`.
+The bounded local Checkout
+retention journey is implemented; production financial field expiry and external-payment attestation still require
+their owners' decisions.
 
 At T conceal private orders/statements/entitlements and fence late producers. Minimize offer party data, buyer/target
 relations and Checkout payloads, entitlement relations, immutable transaction/royalty source relations and statement
 payment references except the restricted legally necessary fields with purpose and expiry. Immutable guards do not
 create retention exemptions. Enumerate exact shared receipt/outbox/write-basis/work payload locators; actual store
 owners minimize and acknowledge them. Account-linked indexed child pages and atomic checkpoints must replace global
-principal/JSON/history scans. Full financial erasure participant, shared custody and retained-field expiry remain
-undelivered; the account barrier alone does not close them. A jurisdiction/category/field retention schedule and
+principal/JSON/history scans. The native test-only Checkout exception is finite and records only its declared fields;
+it does not approve a jurisdiction/category/field financial schedule or alter accepted money. Broader financial
+erasure, shared custody and retained-field expiry remain undelivered; the account barrier alone does not close them.
+A jurisdiction/category/field retention schedule and
 provider metadata deletion limits are external conditions, not a reason to omit deterministic fence/cleanup work.
 
 Every provider attempt charges all sends/retries/body parsing, expansions, abandoned work and capacity until physical
