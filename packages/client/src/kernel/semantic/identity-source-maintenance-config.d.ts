@@ -1,5 +1,5 @@
 import type { NativeStepWork } from './identity-epoch-contract.ts';
-import type { WorkDimensions } from '../library/collection-source.ts';
+import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
 type Environment = Readonly<Record<string, string | undefined>>;
 /** Executed by the private Source receiver, rather than inferred from page size.
  * An exhausted-page recheck is the second verifier inside the Source fence; it is

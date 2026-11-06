@@ -62,16 +62,19 @@ runtime dependencies can request its bound during module assembly.
 Decision: Account client exports project mounted route types and add no parallel producer for account profile, avatar,
 managed-account navigation or unread data.
 
-The profile admits 512 regular members, 32 MiB decoded total, 2 MiB per member, 16 relative path components and
+Decision: allow the complete 543-member declaration closure within a 1024-member profile; retain the existing
+decoded byte, per-member and path limits and test the observed closure plus the member-count boundary.
+
+The profile admits 1024 regular members, 32 MiB decoded total, 2 MiB per member, 16 relative path components and
 1024 UTF-8 path bytes. Paths must be normalized NFC, collision-free under case folding, and free of traversal,
 backslashes, control characters and ambiguous trailing dots/spaces. Links, multiple hard links and special files,
 including symlink ancestors at capture, staging or destination, refuse the whole result. Empty directories are not
-members. Capture enumerates at most `1 + 512 * 16` directories.
+members. Capture enumerates at most `1 + 1024 * 16` directories.
 
 The deterministic uncompressed version 1 format is a 21-byte magic line, a JSON header line of at most 1024 bytes,
-at most 512 ordered JSON member lines of at most `6 * 1024 + 160 = 6304` bytes each, then the exact raw member bytes.
-Line bounds include newlines. Thus the complete manifest is at most 3,228,672 bytes and the complete transport at
-most 36,783,125 bytes. Count/encoded bounds precede catalogue parsing and content allocation; each member's size,
+at most 1024 ordered JSON member lines of at most `6 * 1024 + 160 = 6304` bytes each, then the exact raw member bytes.
+Line bounds include newlines. Thus the complete manifest is at most 6,456,320 bytes and the complete transport at
+most 40,010,773 bytes. Count/encoded bounds precede catalogue parsing and content allocation; each member's size,
 SHA-256, aggregate size and the ordered catalogue SHA-256 must agree. Unknown versions/profiles refuse explicitly;
 there is no general archive extractor or arbitrary profile registration.
 

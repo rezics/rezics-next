@@ -14,7 +14,6 @@ import eventFence from '../command/fence.sql';
 import noEffectFence from '../command/no-effect-fence.sql';
 import receiptRead from '../command/read-receipt.sql';
 import readTime from '../command/time.sql';
-import { COMMAND_HISTORY_KINDS } from '../history/record.ts';
 import partitionRead from '../partition/read.sql';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
 import collectionAuthorization from './collection-store-collection-authorization.sql';
@@ -34,6 +33,7 @@ import {
 } from './ordinal.ts';
 import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
 import { sessionShelfWork } from './session-operation-bounds.ts';
+import { COMMAND_HISTORY_KINDS } from '../history/contract/index.ts';
 
 const zero = (): Bound =>
   declareBound({

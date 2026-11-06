@@ -2,6 +2,7 @@ import { MediaProblem } from '../media/kernel';
 import type { SuggestionResult } from './suggestions';
 import { readHeaderSuggestions, type HeaderSuggestionLoader } from './header-search/suggestions';
 import type { SearchScope } from './header-search/types';
+import { searchRecoveryFromResponse, suggestionFailureFromSearchRecovery } from './search-recovery';
 import { searchRetryAt } from './search-recovery-retry';
 
 /** The native prefix bound counts code points, while HTML maxlength counts UTF-16 units. */
@@ -19,13 +20,11 @@ export type SuggestionFailure =
   | 'credentials';
 
 export function suggestionFailure(status: number, code?: unknown): SuggestionFailure {
-  if (status === 401 || code === 'invalid_credentials') return 'credentials';
-  if (code === 'platform_closed') return 'closed';
-  if (code === 'search_restart_required') return 'restart';
-  if (code === 'index_not_ready') return 'preparing';
-  if (status === 400 || status === 422) return 'invalid';
-  if (status === 403 || status >= 500) return 'unavailable';
-  return 'error';
+  const error = typeof code === 'string' ? { code } : code;
+  return suggestionFailureFromSearchRecovery(
+    searchRecoveryFromResponse({ status, ...(error !== undefined ? { error } : {}) }),
+    status,
+  );
 }
 
 export function suggestionErrorState(error: unknown): SuggestionFailure {

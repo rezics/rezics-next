@@ -7,10 +7,10 @@ import {
 import { loadAccountIdentitySource } from '../../src/access/agent-verification-identity.ts';
 import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { partitionOf, routeOf, newId } from '../../src/route/route.ts';
-import { readAgentIdentityNativeInventory } from '../../src/history/agent-identity-inventory.ts';
-import { readAgentIdentityRecoveryInventoryInTransaction } from '../../src/history/agent-identity-inventory.ts';
-import { verifyAgentIdentityRecoveryArtifactReadiness } from '../../src/history/agent-identity-recovery-receiving.ts';
-import { readAgentIdentitySDKRetirementGap } from '../../src/history/agent-identity-retirement.ts';
+import { readAgentIdentityNativeInventory } from '../../src/history/adapters/agent-identity-inventory.ts';
+import { readAgentIdentityRecoveryInventoryInTransaction } from '../../src/history/adapters/agent-identity-inventory.ts';
+import { verifyAgentIdentityRecoveryArtifactReadiness } from '../../src/history/adapters/agent-identity-recovery-receiving.ts';
+import { readAgentIdentitySDKRetirementGap } from '../../src/history/adapters/agent-identity-retirement.ts';
 import { noEffect, runCommand } from '../../src/command/command.ts';
 import { readOriginalAccountAgentIdentity } from '../../src/semantic/account-agent-identity-recovery.ts';
 import { stepIdentityEpochAdmission } from '../../src/semantic/identity-epoch-admission.ts';

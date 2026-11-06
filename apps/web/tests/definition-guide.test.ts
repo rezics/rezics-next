@@ -11,6 +11,7 @@ import {
   readGuide,
 } from '../src/features/catalogue/definition-guide';
 import { DefinitionGuideContent, DefinitionGuideLink } from '../src/features/catalogue/definition-guide-view';
+import { publicationHref } from '../src/features/catalogue/definition-publication/model';
 import { definitionGuideFixture, historicalGuideDigest } from '../src/kernel/fake/definition-guide';
 import { statementFixture } from '../src/kernel/fake/catalogue-statements';
 import { statementInput, validateStatement } from '../src/features/catalogue/statement-editor';
@@ -90,6 +91,8 @@ test('reads the exact historical release without an active lookup and retains la
   expect(html).toContain(m.guide_integer({}, { locale: 'ja' }));
   expect(html).toContain(m.guide_pinned({}, { locale: 'ja' }));
   expect(html).toContain(m.guide_missing({}, { locale: 'ja' }));
+  expect(html).toContain(publicationHref('ja'));
+  expect(html).toContain(m.definition_publication_title({}, { locale: 'ja' }));
   const current = definitionGuideFixture();
   const currentRelease = await fetchGuideRelease(current.client);
   const pinned = (address: { type: string; property: string }) =>

@@ -1,12 +1,12 @@
 import { expect, test } from 'bun:test';
 import type { Pool } from 'pg';
 import type { WorkClient } from '../../src/work/client.ts';
-import { HistoryRegistry } from '../../src/history/registry.ts';
+import { HistoryRegistry } from '../../src/history/contract/registry.ts';
 import {
   withPrepaidAgentIdentityHistoryUnit,
   withAgentIdentityHistoryUnit,
   currentAgentIdentityHistoryUnit,
-} from '../../src/history/agent-identity-retirement.ts';
+} from '../../src/history/adapters/agent-identity-retirement.ts';
 import {
   accountHistoryWork,
   accountHistoryWorkDeclaration,
@@ -14,7 +14,7 @@ import {
   nativeWork,
   IDENTITY_HISTORY_ACCOUNTS_DECLARATION,
   IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK,
-} from '../../src/history/agent-identity-inventory-work.ts';
+} from '../../src/history/adapters/agent-identity-inventory-work.ts';
 import { identitySourceConsumerNativeWork } from '../../src/semantic/identity-source-consumer-maintenance.ts';
 import {
   type IdentityOriginalSourceContext,
@@ -78,13 +78,24 @@ test('Prepaid refusal never consults environment funding or opens independent co
 
 test('A nested prepaid entry poisons the existing unit without native work or replacement funding', async () => {
   const f = noIO();
-  await withAgentIdentityHistoryUnit(f.deps, { deadline: Date.now() + 5000 }, async (funded) => {
-    const before = identitySourceConsumerNativeWork(f.deps.pool, funded.identityConsumerWork, funded.deadline);
+  const enclosingDeps = { pool: f.deps.pool, env: f.deps.env, clock: f.deps.clock };
+  await withAgentIdentityHistoryUnit(enclosingDeps, { deadline: Date.now() + 5000 }, async (funded) => {
+    const before = identitySourceConsumerNativeWork(
+      f.deps.pool,
+      funded.identityConsumerWork as Parameters<typeof identitySourceConsumerNativeWork>[1],
+      funded.deadline,
+    );
     await expect(callable(f.deps, {} as IdentityOriginalSourceContext, async () => {})).rejects.toThrow(
       'identity-history-unit-reentered',
     );
     expect(() => currentAgentIdentityHistoryUnit()).toThrow('identity-history-unit-reentered');
-    expect(identitySourceConsumerNativeWork(f.deps.pool, funded.identityConsumerWork, funded.deadline)).toEqual(before);
+    expect(
+      identitySourceConsumerNativeWork(
+        f.deps.pool,
+        funded.identityConsumerWork as Parameters<typeof identitySourceConsumerNativeWork>[1],
+        funded.deadline,
+      ),
+    ).toEqual(before);
   });
   expect(f.attempts()).toBe(0);
 });

@@ -25,8 +25,9 @@ import { createOpenSearch, type OpenSearch } from '../../src/search/opensearch.t
 import { createSearchService } from '../../src/search/service.ts';
 import { subjectPartition, type IndexedSubject } from '../../src/search/source.ts';
 import { createFakeSource } from './support/fake-source.ts';
-import { epochFixture } from '../semantic/support/identity-epoch.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
+import { createSemanticDriver, type SemanticOutcomeDriver } from '../semantic/outcome-driver.ts';
+import { closeOwnedSemanticAuth } from '../semantic/outcome-auth.ts';
 
 const missingFigure: PublicFigureView = {
   questionId: STANDARD_QUESTION_ID,
@@ -96,6 +97,9 @@ process.env.KERNEL_RECEIPT_KEYS = [...testReceiptKeys().keys]
   .join(',');
 let failure: ProblemError | null = null;
 const service: SearchService = {
+  async savedCatalogueMembers() {
+    throw new Error('Unexpected saved catalogue members call');
+  },
   async search(principal, request, _now, _active, context) {
     calls.push(['search', principal, request]);
     if (failure) throw failure;
@@ -127,9 +131,6 @@ const service: SearchService = {
     const page = { subjects: [result], as_of: asOf };
     await read?.complete(page);
     return page;
-  },
-  async savedCatalogueMembers() {
-    throw new Error('Unexpected saved catalogue members call');
   },
   async releaseGroups(principal, request) {
     calls.push(['releaseGroups', principal, request]);
@@ -431,10 +432,10 @@ test('HTTP forwards one resolved kernel instant to hits, ratings and facets whil
   const deadlines: number[] = [];
   let now = Date.now() - 2 * 60 * 60_000;
   const app = createKernel({
+    receiptKeys: testReceiptKeys(),
     pool,
     access,
     tokens,
-    receiptKeys: testReceiptKeys(),
     routeKey,
     clock: () => new Date(now),
     search: {
@@ -476,7 +477,8 @@ describe('bounded native kind metadata and checked-hit witnesses', () => {
   const database = process.env.DATABASE_URL;
   const url = process.env.OPENSEARCH_URL;
   if (!database || !url) throw new Error('DATABASE_URL and OPENSEARCH_URL must name the check database and node');
-  const pool = createPool(database);
+  let driver: SemanticOutcomeDriver;
+  let service: ReturnType<typeof createSearchService>;
   const native = createOpenSearch(url);
   const prefix = `kinds-${crypto.randomUUID().slice(0, 8)}-`;
   const index = subjectIndexName(prefix, 1);
@@ -513,22 +515,25 @@ describe('bounded native kind metadata and checked-hit witnesses', () => {
       throw new Error('dirty count must not block hits');
     },
   };
-  const service = createSearchService({
-    pool,
-    client: engine,
-    prefix,
-    source,
-    cursors: ring,
-    release: async () => version,
-  });
-  let identity: Awaited<ReturnType<typeof epochFixture>> | undefined;
   const subjects: IndexedSubject[] = [];
   beforeAll(async () => {
-    identity = await epochFixture(database, { pool });
+    driver = await createSemanticDriver();
+    // Canonical admission consumes native identity mappings, even when this test owns
+    // a deliberately small index/source projection for metadata witness counts.
     for (let n = 0; n < 5; n++) {
-      const created = await identity.create(`Book ${n}`, 0xa0);
+      const created = await driver.request(
+        'editor',
+        'POST',
+        '/v1/subjects',
+        {
+          type: 'schema:Book',
+          labels: { en: `Book ${n}` },
+        },
+        { 'Idempotency-Key': JSON.stringify(crypto.randomUUID()) },
+      );
+      expect(created.status).toBe(201);
       const subject: IndexedSubject = {
-        id: created.id,
+        id: (created.body.subject as { id: string }).id,
         type: n < 3 ? 'schema:Book' : 'kind:Kind1',
         visibility: 'visible',
         redirect: null,
@@ -542,6 +547,14 @@ describe('bounded native kind metadata and checked-hit witnesses', () => {
       fake.put(subject);
     }
     await installTemplates(native, prefix);
+    service = createSearchService({
+      pool: driver.fixtures.pool,
+      client: engine,
+      prefix,
+      source,
+      cursors: ring,
+      release: async () => version,
+    });
     await createSubjectIndex(native, prefix, 1);
     const partitions = new Map<number, string[]>();
     for (const subject of subjects) {
@@ -558,8 +571,8 @@ describe('bounded native kind metadata and checked-hit witnesses', () => {
     await native.request('DELETE', `/${index}`);
     for (const name of [HIT_TEMPLATE, SEARCH_TEMPLATE, SUGGEST_TEMPLATE, FACET_TEMPLATE])
       await native.request('DELETE', `/_scripts/${prefix}${name}`);
-    await identity?.close();
-    await pool.end();
+    await driver?.close();
+    await closeOwnedSemanticAuth();
   }, 600_000);
   const request = { sort: 'id' as const, languages: ['en'], limit: 4 };
   test('initial counts reuse at most two unique current hits, once, without count reads or extra engine execution', async () => {

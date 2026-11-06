@@ -7,8 +7,8 @@ import { createKernel } from '../src/http/kernel.ts';
 import { customMethod } from '../src/http/custom-method.ts';
 import { ProblemError, problemSchema } from '../src/http/problem.ts';
 import type { SearchService } from '../src/search/service-scope.ts';
-import { testReceiptKeys } from './support/receipt-keys.ts';
 import { Value } from 'typebox/value';
+import { testReceiptKeys } from './support/receipt-keys.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -26,8 +26,11 @@ beforeAll(async () => {
   }
 });
 afterAll(async () => {
-  await pool.query('DELETE FROM access.exposure_opening WHERE transaction_id = $1', [opening]);
-  await pool.end();
+  try {
+    await pool.query('DELETE FROM access.exposure_opening WHERE transaction_id = $1', [opening]);
+  } finally {
+    await pool.end();
+  }
 });
 
 process.env.KERNEL_RECEIPT_KEYS = [...testReceiptKeys().keys]
@@ -40,7 +43,7 @@ const search: SearchService = {
   async releaseGroups() {
     throw new Error('Unexpected release groups call');
   },
-  async savedCatalogueMembers() {
+  savedCatalogueMembers: async () => {
     throw new Error('Unexpected saved catalogue members call');
   },
   async search(_principal, request, _now, _active, context) {
@@ -68,9 +71,9 @@ const detail = {
   security: [{ bearerAuth: [] }, {}],
 };
 const kernel = createKernel({
+  receiptKeys: testReceiptKeys(),
   pool,
   routeKey: new Uint8Array(32).fill(1),
-  receiptKeys: testReceiptKeys(),
   access: {
     async authenticate() {
       authentications++;

@@ -135,6 +135,20 @@ export async function walkStackPortsAvailable(ports: WalkPorts): Promise<boolean
   return walkPortsAvailable(Object.values(ports));
 }
 
+/**
+ * Whether `url` currently answers below HTTP 500. A listener that accepts TCP and never writes
+ * must not stall the walk's ten-minute ready wait: abort and a hard budget both settle as not ready.
+ */
+export async function walkHttpAnswers(url: string, budgetMs = 2_000): Promise<boolean> {
+  return await Promise.race([
+    fetch(url, { signal: AbortSignal.timeout(budgetMs) }).then(
+      (response) => response.status < 500,
+      () => false,
+    ),
+    Bun.sleep(budgetMs + 500).then(() => false),
+  ]);
+}
+
 /** The variables that give one admitted stack its own names, ports and origins. */
 export function walkStackEnvironment(task: string, index: number): Record<string, string> {
   const names = walkStackNames(task, index);

@@ -56,4 +56,12 @@ const position = Type.Object({
   ),
   exhausted: Type.Boolean(),
 });
-export const ZonePagePositionSchema = Type.Object({ reads: Type.Record(Type.String(), position) });
+export const ZonePagePositionSchema = Type.Object({
+  reads: Type.Record(Type.String(), position),
+  predecessor: Type.Optional(
+    Type.Object({
+      generation: Type.String(),
+      revision: Type.String(),
+    }),
+  ),
+});

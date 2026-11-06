@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { showcaseFranchiseAssertions } from './showcase-franchise.ts';
 import type { GraphEdgeEvidence } from './cross-media-bindings.ts';
 import { sameStatementProvenance } from './statement-provenance.ts';
@@ -7,238 +6,60 @@ import type { SourceRecord } from '@rezics/conversion';
 import { bangumiRecordUrl, crossMediaCoverDigest, vndbRecordUrl } from '@rezics/conversion/cross-media-entities';
 import { bangumiVocabularyRevision } from '@rezics/conversion/bangumi-vocabulary';
 import { vndbTagsRatingMetric, vndbVocabularyRevision } from '@rezics/conversion/vndb-vocabulary';
-import {
-  sourceDigest,
-  vndbPublicTagTaxonomy,
-  type VndbPublicTagCategory,
-} from '../../../packages/conversion/src/support.ts';
+import { sourceDigest, vndbPublicTagTaxonomy } from '@rezics/conversion/support';
 import { showcaseTagParentCommand } from './showcase-cross-provider-tags.ts';
 import { createSelectedFamilySourceRegistration, crossMediaBangumiRevision } from './source-registry.ts';
-import type { CrossMediaGap, CrossMediaPlan, CrossMediaReading } from './cross-media-seed.ts';
+import {
+  showcaseDigest,
+  showcaseLimits,
+  showcaseSourceMatches,
+  showcaseVocabularyExternalId,
+  type CrossMediaGap,
+  type CrossMediaPlan,
+  type CrossMediaReading,
+  type ShowcaseAcknowledgement,
+  type ShowcaseAssertion,
+  type ShowcaseKind,
+  type ShowcaseManifest,
+  type ShowcaseMediaRecord,
+  type ShowcaseOmission,
+  type ShowcaseRecord,
+  type ShowcaseTagAssociation,
+  type ShowcaseTagAssociationWithdrawal,
+  type ShowcaseTagParentBinding,
+  type ShowcaseTagParentPublication,
+  type ShowcaseTagParentRefresh,
+  type ShowcaseVocabularyRecord,
+  type ShowcaseVocabularyRequirement,
+} from './showcase-contract.ts';
 import { bangumiAppearanceSource, graphEdgeCommandKey, graphEdgeSource } from './cross-media-bindings.ts';
-import { BANGUMI_MEDIA_BATCH_LIMIT, validAvailableCover, type CrossMediaMediaOutcome } from './showcase-media.ts';
+import { validAvailableCover, type CrossMediaMediaOutcome } from './showcase-media.ts';
 import type { VndbTagRatingObservation } from './showcase-vndb-tag-ratings.ts';
 import { vndbStaffCreditConverterRevision } from './vndb-staff-credits.ts';
 
-export const showcaseLimits = Object.freeze({
-  records: 768,
-  media: BANGUMI_MEDIA_BATCH_LIMIT,
-  candidates: 8192,
-  vocabulary: 512,
-  candidatesPerRecord: 128,
-  reviewPage: 100,
-  omissions: 320,
-});
+export {
+  showcaseLimits,
+  showcaseMediaLimit,
+  showcaseDigest,
+  showcaseSourceMatches,
+  showcaseVocabularyExternalId,
+  type ShowcaseKind,
+  type ShowcaseAcknowledgement,
+  type ShowcaseAssertion,
+  type ShowcaseRecord,
+  type ShowcaseVocabularyRecord,
+  type ShowcaseVocabularyRequirement,
+  type ShowcaseTagAssociation,
+  type ShowcaseTagAssociationWithdrawal,
+  type ShowcaseTagParentBinding,
+  type ShowcaseTagParentRefresh,
+  type ShowcaseTagParentPublication,
+  type ShowcaseOmission,
+  type ShowcaseMediaRecord,
+  type ShowcaseManifest,
+} from './showcase-contract.ts';
+
 const nativeUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
-
-export type ShowcaseKind =
-  | 'work'
-  | 'person'
-  | 'character'
-  | 'release'
-  | 'episode'
-  | 'source-vocabulary'
-  | 'organization';
-
-export type ShowcaseAcknowledgement = Readonly<{
-  command: BatchCommand;
-  subjectId?: string;
-  candidateId?: string;
-  commandDigest: string;
-}>;
-
-export type ShowcaseAssertion = Readonly<{
-  commandKey: string;
-  candidateId: string;
-  candidateDigest: string;
-  /** Selected work owning an exact source-row assertion whose envelope has its own row key. */
-  ownerKey?: string;
-  /** Exact selected source-parent row attached to a Concept assertion. */
-  tagParentPath?: string;
-  property: string;
-  source: BatchCommand['source'];
-  statement: BatchStatement;
-  rights?: Extract<BatchCommand, { op: 'propose' }>['rights'];
-  citations: readonly string[];
-  graphTarget?: Readonly<{
-    provider: 'bangumi' | 'vndb';
-    sourceKey: string;
-    subjectId: string;
-    nativeType: string;
-    /** Work-row publication checks the current facts fence at both source endpoints. */
-    factsFence?: true;
-  }>;
-}>;
-
-export type ShowcaseRecord = Readonly<{
-  provider: 'bangumi' | 'vndb';
-  sourceAlias: string;
-  sourceKey: string;
-  sourceUri: string | null;
-  sourceRevision: string;
-  rawDigest: string;
-  semanticDigest: string;
-  converterRevision: string;
-  kind: ShowcaseKind;
-  subjectId: string | null;
-  nativeType: string | null;
-  readerRoute: string | null;
-  assertions: readonly ShowcaseAssertion[];
-}>;
-
-export type ShowcaseVocabularyRecord = Readonly<{
-  provider: 'bangumi' | 'vndb';
-  sourceAlias: string;
-  sourceKey: string;
-  sourceUri: string | null;
-  subjectId: string;
-  nativeType: 'skos:ConceptScheme' | 'skos:Concept';
-  schemeId: string | null;
-  schemeUri?: string;
-  provenance?: 'reviewed-catalogue' | 'source-parent-binding';
-  assertions: readonly ShowcaseAssertion[];
-}>;
-
-/** Exact, bounded source vocabulary requirements supplied by a provider adapter. */
-export type ShowcaseVocabularyRequirement = Readonly<{
-  provider: 'bangumi' | 'vndb';
-  ownerKey: string;
-  sourceKey: string;
-  source: BatchCommand['source'];
-  sourceUri: string;
-  nativeType: 'skos:ConceptScheme' | 'skos:Concept';
-  schemeId?: string;
-}>;
-
-/** Exact selected COPY association and the current native vocabulary identity it resolves through. */
-export type ShowcaseTagAssociation = Readonly<{
-  workId: string;
-  sourceKey: string;
-  tagId: string;
-  category: VndbPublicTagCategory;
-  spoiler: number;
-  conceptId: string | null;
-  schemeId: string | null;
-  conceptUri: string;
-  schemeUri: string;
-  releaseDigest: string;
-}>;
-
-/** Exact selected COPY associations withheld by required source-parent admission. */
-export type ShowcaseTagAssociationWithdrawal = Readonly<{
-  workId: string;
-  sourceKey: string;
-  tagId: string;
-}>;
-
-/** Source parent evidence joined to exact current Concept and category Scheme identities, before hierarchy admission. */
-export type ShowcaseTagParentBinding = Readonly<{
-  child: string;
-  parent: string;
-  main: boolean;
-  category: VndbPublicTagCategory;
-  path: string;
-  childId: string;
-  parentId: string;
-  schemeId: string;
-  childUri: string;
-  parentUri: string;
-  schemeUri: string;
-  releaseDigest: string;
-}>;
-
-/** A complete selected dictionary row set that permits retiring stale source parent assertions. */
-export type ShowcaseTagParentRefresh = Readonly<{
-  category: VndbPublicTagCategory;
-  tagId: string;
-  childId: string;
-  schemeId: string;
-  childUri: string;
-  schemeUri: string;
-  releaseDigest: string;
-}>;
-
-export type ShowcaseTagParentPublication = Readonly<{
-  path: string;
-  childId: string;
-  parentId: string;
-  schemeId: string;
-  status: 'proposed' | 'public' | 'withheld';
-  candidateId?: string;
-  rights?: ShowcaseAssertion['rights'];
-  reason?: string;
-}>;
-
-export function showcaseVocabularyExternalId(sourceKey: string): string {
-  if (!/^[a-z][a-z0-9_.:-]{0,127}$/u.test(sourceKey)) throw new TypeError('Invalid showcase vocabulary source key');
-  return `vocabulary:${sourceKey}`;
-}
-
-export type ShowcaseOmission = Readonly<{
-  provider: 'bangumi' | 'vndb';
-  sourceKey: string;
-  code:
-    | 'source-read-missing'
-    | 'candidate-ack-missing'
-    | 'candidate-limit'
-    | 'vocabulary-binding-missing'
-    | 'source-claim-withheld'
-    | 'cover-source-absent'
-    | 'cover-source-unavailable'
-    | 'cover-source-invalid'
-    | 'cover-pending'
-    | 'cover-rejected'
-    | 'cover-refused'
-    | 'cover-unknown'
-    | 'cover-fenced'
-    | 'cover-candidate-missing'
-    | 'cover-not-public'
-    | 'graph-endpoint-unavailable'
-    | 'graph-endpoint-mismatch';
-}>;
-
-export type ShowcaseMediaRecord = Readonly<{
-  sourceAlias: string;
-  sourceKey: string;
-  sourceUri: string;
-  sourceRevision: string;
-  archiveDigest: string;
-  responseDigest?: string;
-  etag?: string;
-  sourceUrl?: string;
-  status: CrossMediaMediaOutcome['status'];
-  mediaState?: CrossMediaMediaOutcome['mediaState'];
-  containerId: string | null;
-  mediaId?: string;
-  credit?: CrossMediaMediaOutcome['credit'];
-  provenance?: CrossMediaMediaOutcome['provenance'];
-  candidateId?: string;
-  candidateDigest?: string;
-  readHandoff?: { subjectId: string; readerRoute: string; property: 'schema:image'; value: string };
-  gap?: string;
-}>;
-
-export type ShowcaseManifest = Readonly<{
-  version: 1;
-  digest: string;
-  records: readonly ShowcaseRecord[];
-  vocabulary: readonly ShowcaseVocabularyRecord[];
-  media: readonly ShowcaseMediaRecord[];
-  tagAssociations?: readonly ShowcaseTagAssociation[];
-  tagAssociationWithdrawals?: readonly ShowcaseTagAssociationWithdrawal[];
-  tagAssociationRefreshes?: readonly string[];
-  tagParentEvidence?: readonly ShowcaseTagParentBinding[];
-  tagParentGaps?: readonly CrossMediaGap[];
-  tagParentRefreshes?: readonly ShowcaseTagParentRefresh[];
-  tagParentPublications?: readonly ShowcaseTagParentPublication[];
-  tagWeightObservations: readonly VndbTagRatingObservation[];
-  tagWeightRefreshes: readonly string[];
-  omissions: readonly ShowcaseOmission[];
-}>;
-
-export function showcaseDigest(value: unknown): string {
-  return createHash('sha256').update(sourceDigest(value)).digest('hex');
-}
 
 export function showcasePlanDigest(plan: CrossMediaPlan): string {
   const records = (rows: readonly SourceRecord[]) =>
@@ -1247,13 +1068,6 @@ function kindFromType(type: string): ShowcaseKind {
   if (type === 'wd:Q95074') return 'character';
   if (type === 'wd:Q20631656') return 'release';
   return 'work';
-}
-
-export function showcaseSourceMatches(
-  actual: BatchCommand['source'] | null,
-  expected: BatchCommand['source'],
-): boolean {
-  return !!actual && showcaseDigest(actual) === showcaseDigest(expected);
 }
 
 export function showcaseStatementMatches(actual: BatchStatement | null, expected: BatchStatement): boolean {

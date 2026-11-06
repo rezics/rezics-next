@@ -41,6 +41,51 @@ export type SearchOutcome = {
   result?: LegacySearchPage;
 };
 
+export type SuggestionRecoveryFailure =
+  | 'error'
+  | 'unavailable'
+  | 'preparing'
+  | 'closed'
+  | 'restart'
+  | 'invalid'
+  | 'credentials';
+
+/** Typeahead consumes the same native families as Search; unexpected 2xx bodies stay local errors. */
+export function suggestionFailureFromSearchRecovery(
+  recovery: SearchRecoveryState,
+  status: number,
+): SuggestionRecoveryFailure {
+  switch (recovery.status) {
+    case 'session':
+      return 'credentials';
+    case 'closed':
+      return 'closed';
+    case 'restart':
+      return 'restart';
+    case 'invalid':
+    case 'invalid-cursor':
+      return 'invalid';
+    case 'index-not-ready':
+    case 'source-not-ready':
+      return 'preparing';
+    case 'denied':
+      return 'unavailable';
+    default:
+      return status >= 500 || status === 403 || status === 404 ? 'unavailable' : 'error';
+  }
+}
+
+/** Ready binds to a parsed current-generation page, never a reconstructed empty success. */
+export function nativeSearchObservation(outcome: SearchOutcome): object | undefined {
+  if (outcome.discovery?.status === 'ready') return outcome.discovery.page;
+  return outcome.result;
+}
+
+export function nativeSearchCheckpoint(outcome: SearchOutcome): string | undefined {
+  if (outcome.discovery?.status === 'ready') return outcome.discovery.page.as_of;
+  return outcome.result?.as_of;
+}
+
 /** Keep HTTP admission, credentials, current authority and dependency failures distinct. */
 export function searchRecoveryFromResponse(
   response: SearchWireResponse,

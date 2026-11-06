@@ -28,15 +28,15 @@ import {
   withAgentIdentityHistoryUnit,
   withPrepaidAgentIdentityHistoryUnit,
   type IdentitySourceConsumerMaintenanceContext,
-} from '../../src/history/agent-identity-retirement.ts';
+} from '../../src/history/adapters/agent-identity-retirement.ts';
 import {
   addNativeWork,
   IDENTITY_HISTORY_ACCOUNTS_DECLARATION,
   IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK,
   identityHistoryCommand,
   reserveIdentityHistoryWork,
-} from '../../src/history/agent-identity-inventory-work.ts';
-import { HistoryRegistry } from '../../src/history/registry.ts';
+} from '../../src/history/adapters/agent-identity-inventory-work.ts';
+import { HistoryRegistry } from '../../src/history/contract/registry.ts';
 import type { WorkDimensions } from '../../src/library/contract/work-dimensions.ts';
 import { identitySourceConsumerNativeWork } from '../../src/semantic/identity-source-consumer-maintenance.ts';
 import { createWorkClient } from '../../src/work/client.ts';
@@ -72,6 +72,11 @@ async function authentic<T>(
   const account = newId(0);
   const job = randomUUID();
   const registry = new HistoryRegistry();
+  // The erasure row references its account; the account is the deleted subject it erases.
+  await f.admin.query(
+    "INSERT INTO access.account(route,account_id,kind,state,transaction_id) VALUES($1,$2,'actor','deleted',$2)",
+    [routeOf(account), account],
+  );
   await f.admin.query('INSERT INTO access.erasure(route,account_id,version,at) VALUES($1,$2,1,now())', [
     routeOf(account),
     account,

@@ -12,8 +12,7 @@ import { withConnection } from '../database/pool.ts';
 import { partitionOf, routeOf, newId } from '../route/route.ts';
 import type { WorkClient } from '../work/client.ts';
 import { CommandUnavailableError } from './unavailable.ts';
-import { encodeLocator } from '../history/locator.ts';
-import { validateRoleMask } from '../history/contracts.ts';
+import { encodeLocator, validateRoleMask } from '../history/contract/index.ts';
 
 /** Internal native business-copy protocol. It grants no Access or Source authority. */
 export type LiveCopyModule = 'commerce.creator-sale' | 'library.subject-listing';

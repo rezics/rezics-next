@@ -382,6 +382,34 @@ test('companion and correction links return only exact public selection state an
   }
 });
 
+test('quotation navigation offers a fresh visit when the exact graph return exceeds its address budget', async () => {
+  const ui = await mounted();
+  const path = `/en/subjects/${anchor}/${'a'.repeat(1800)}/graph`;
+  const transport: GraphBrowserTransport = { read: async (query) => reading(query) };
+  try {
+    expect(ui.graphBrowserReturnHref(path, reading().query, { kind: 'node', id: first })).toBeDefined();
+    await ui.show(
+      h(ui.RoutedVisit, {
+        id: anchor,
+        locale: 'en',
+        initialRoute: { property, direction: 'out', depth: 2, node: first },
+        graphPath: path,
+        transport,
+      }),
+    );
+    await ui.flush();
+    expect(ui.host.textContent).toContain('The quotation address exceeds the supported size limit.');
+    const general = [...ui.host.querySelectorAll<HTMLAnchorElement>('a')].find(
+      (link) => link.textContent === 'Visit general quotations',
+    )!;
+    expect(general).toBeDefined();
+    expect(new URL(general.href).pathname).toContain(`/subjects/${first}/`);
+    expect(new URL(general.href).searchParams.has('returnTo')).toBe(false);
+  } finally {
+    await ui.close();
+  }
+});
+
 const replacementCase = test.each(['success', 'denied'] as const);
 replacementCase('source replacement rejects retired %s and tokens', async (lateResult) => {
   const ui = await mounted();

@@ -4,12 +4,13 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { bundledDigest } from '@rezics/definitions/bundled';
-import { importVndbReleaseIdentifiers } from '../../../importer/src/vndb-release-identifiers.ts';
+
 import { CrossMediaDumpFiles, crossMediaAliases } from '../../../importer/src/cross-media-seed.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { identitySupport } from './identity-fixture.ts';
 import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
+import { importVndbReleaseIdentifiers } from '../../../importer/src/selected-import.ts';
 
 const globalContext = GLOBAL_CONTEXT;
 const supported = '4580123456789';

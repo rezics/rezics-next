@@ -2,7 +2,7 @@ import { useEffect, useRef, type ComponentProps } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { LiteraryReaderEntry } from '../features/catalogue/literary-reader/entry';
-import { literaryGrainExample, literaryIds } from '../features/catalogue/literary-reader/examples';
+import { literaryGrainExample, literaryGrainRow, literaryIds } from '../features/catalogue/literary-reader/examples';
 
 const client = new QueryClient();
 const realm = '0192f3a0-6c1e-7b2a-9d4e-000000000941';
@@ -57,7 +57,7 @@ export const DesktopDark: Story = {
 
 const concealed = literaryGrainExample();
 const concealedWindow = concealed.windows[0]!;
-const concealedRow = concealedWindow.rows[0]!;
+const concealedRow = literaryGrainRow(concealedWindow.rows[0]);
 export const SpoilerConcealed: Story = {
   args: {
     ...concealed,
@@ -141,13 +141,16 @@ export const LongNamesAndJapaneseLabels: Story = {
     },
     windows: longLabels.windows.map((window) => ({
       ...window,
-      rows: window.rows.map((row) => ({
-        ...row,
-        summary: {
-          ...row.summary,
-          label: { value: '港の物語とそこに暮らした人々の長い記録'.repeat(5), language: 'ja' },
-        },
-      })),
+      rows: window.rows.map((row) => {
+        const grain = literaryGrainRow(row);
+        return {
+          ...grain,
+          summary: {
+            ...grain.summary,
+            label: { value: '港の物語とそこに暮らした人々の長い記録'.repeat(5), language: 'ja' },
+          },
+        };
+      }),
     })),
   },
   globals: { viewport: { value: 'phone390' }, theme: 'dark', locale: 'ja' },

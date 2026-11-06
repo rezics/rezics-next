@@ -15,9 +15,7 @@ import {
   unavailableNotificationIntent,
   type NotificationEditorIO,
 } from './notification-recovery';
-import type { PreferencePage } from './preferences';
-import { preferencePageAllows } from './preferences';
-import { usePreferenceRetry } from './preference-failure-retry';
+import { preferencePageAllows, usePreferenceRetry, type PreferencePage } from './preferences';
 import { useSettingsNavigationDraft } from './reading-navigation';
 
 import { useSettingsCurrent, useSettingsReadCurrent, useSettingsDisposal } from './settings-session-owner';

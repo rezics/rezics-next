@@ -24,5 +24,34 @@ export function ZonePageReadProgressSchema() {
   return memoizedValue(ZonePageReadProgressSchema, () => t.Object({ next: cursorSchema() }, closed));
 }
 
+function defaultCursorSchema() {
+  return memoizedValue(defaultCursorSchema, () =>
+    t.String({
+      minLength: 1,
+      maxLength: LIST_CURSOR_BOUNDS.default.maxTokenLength,
+      pattern: '^[A-Za-z0-9_-]+$',
+    }),
+  );
+}
+
+/** Default-profile query for GET /v1/zones/:id/subjects. */
+export function ZoneSubjectListQuerySchema() {
+  return memoizedValue(ZoneSubjectListQuerySchema, () =>
+    t.Object(
+      {
+        limit: t.Optional(t.String({ pattern: '^(?:[1-9]|[1-9][0-9]|100)$' })),
+        cursor: t.Optional(defaultCursorSchema()),
+      },
+      closed,
+    ),
+  );
+}
+
+export function ZoneSubjectListProgressSchema() {
+  return memoizedValue(ZoneSubjectListProgressSchema, () => t.Object({ next: defaultCursorSchema() }, closed));
+}
+
 export type ZonePageQuery = Static<ReturnType<typeof ZonePageQuerySchema>>;
 export type ZonePageReadProgress = Static<ReturnType<typeof ZonePageReadProgressSchema>>;
+export type ZoneSubjectListQuery = Static<ReturnType<typeof ZoneSubjectListQuerySchema>>;
+export type ZoneSubjectListProgress = Static<ReturnType<typeof ZoneSubjectListProgressSchema>>;

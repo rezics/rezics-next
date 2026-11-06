@@ -9,13 +9,14 @@ import { createAccountTokenProvider, IMPORTER_SCOPES } from '../../../importer/s
 import { createImportTransport } from '../../../importer/src/import-client.ts';
 import { createPublicBulkClient } from '../../../importer/src/public-bulk-client.ts';
 import { crossMediaAliases, type CrossMediaTables } from '../../../importer/src/cross-media-seed.ts';
-import { importShowcaseBooks, showcaseBooksToCrossMediaPlan } from '../../../importer/src/showcase-books.ts';
+import { showcaseBooksToCrossMediaPlan } from '../../../importer/src/showcase-books.ts';
 import {
   captureShowcaseCommands,
   publishShowcase,
   ShowcaseJournal,
 } from '../../../importer/src/showcase-publication.ts';
 import source from './showcase-books-source.json';
+import { importShowcaseBooks } from '../../../importer/src/selected-import.ts';
 
 const root = resolve(import.meta.dir, '../../../..');
 // Playwright is installed with the web app; only the calls this journey makes are typed here.
@@ -228,6 +229,11 @@ try {
     ),
     'Kara author must stay an exact property_not_admitted gap',
   );
+  for (const path of ['/subject-persons/499/6023/position', '/subject-persons/499/5839/position'])
+    assert(
+      first.creditGaps.some((gap: any) => gap.path === path && gap.reason === 'property_not_admitted'),
+      `${path} must stay an exact property_not_admitted gap`,
+    );
   for (const key of ['26', '5329', '10862']) assert(first.selected.volumes.includes(key));
   for (const key of ['person:1466', 'person:1467', 'person:128', '233'])
     assert(first.identities[key], `Missing ${key}`);

@@ -16,6 +16,8 @@ import { subjectHref } from '../../subject/subject-href';
 import { timePresentation } from '../../subject/time-presentation';
 import type { Related, Subject, Summary } from '../../subject/types.ts';
 
+export { originalLanguage, timePresentation };
+
 type JsonValue = string | number | JsonValue[] | { [key: string]: JsonValue };
 // The kernel client infers statement values as one union. Indexing it is too large for the compiler,
 // and every field below is checked again at run time.
@@ -63,12 +65,14 @@ export function publicSubjectReference(
   type: string | undefined,
   locale: string,
   origin: string,
+  sameAs?: string,
 ): Record<string, JsonValue> {
   return {
     '@id': `${idBase}${id}`,
     ...(label === undefined ? {} : { name: label }),
     ...(type ? { '@type': schemaType(type) } : {}),
     ...(type && label ? { url: `${origin}${subjectHref({ id, label }, locale).href}` } : {}),
+    ...(sameAs && webUrl(sameAs) ? { sameAs } : {}),
   };
 }
 
@@ -184,6 +188,13 @@ function statementValue(
   const content = statement.value.content;
   if (property === 'schema:cookTime')
     return statement.property.data_type === 'quantity' ? cookTime(content) : undefined;
+  if (property === 'schema:recipeIngredient')
+    return statement.property.data_type === 'monolingualtext' &&
+      record(content) &&
+      typeof content.text === 'string' &&
+      typeof content.language === 'string'
+      ? content.text
+      : undefined;
   if (property === 'schema:recipeInstructions')
     return statement.property.data_type === 'document' && record(content)
       ? instructions({ language: content.language, document: statementDocument(subject, statement, documents) })
@@ -273,10 +284,11 @@ export function subjectJsonLd({
     ['@type', schemaType(subject.type, schemaOrgType)],
     ['url', url],
   ];
+  const additionalTypes: JsonValue[] = [];
   if (!subject.type.startsWith('schema:')) {
     const separator = subject.type.indexOf(':');
     const base = separator > 0 ? prefixes.get(subject.type.slice(0, separator)) : undefined;
-    if (base) entries.push(['additionalType', base + subject.type.slice(separator + 1)]);
+    if (base) additionalTypes.push(base + subject.type.slice(separator + 1));
   }
   const name = text(subject.labels, locale, original);
   const description = text(subject.descriptions, locale, original);
@@ -300,14 +312,16 @@ export function subjectJsonLd({
   const references = new Map<string, JsonValue>();
   for (const [id, entry] of Object.entries(related)) {
     const label = text(entry.labels, locale);
-    references.set(id, publicSubjectReference(entry.redirect ?? id, label, entry.type, locale, site));
+    const sameAs = 'sameAs' in entry && typeof entry.sameAs === 'string' ? entry.sameAs : undefined;
+    references.set(id, publicSubjectReference(entry.redirect ?? id, label, entry.type, locale, site, sameAs));
   }
 
   const identifiers: JsonValue[] = [];
   for (const [property, statements] of Object.entries(subject.statements)) {
+    const form = property === 'wdt:P7937';
     const key = property.startsWith('schema:') ? property.slice(7) : undefined;
-    const externalId = /^wdt:P\d+$/.test(property);
-    if ((key === undefined && !externalId) || (key !== undefined && reserved.has(key))) continue;
+    const externalId = /^wdt:P\d+$/.test(property) && !form;
+    if ((key === undefined && !externalId && !form) || (key !== undefined && reserved.has(key))) continue;
     const values: JsonValue[] = [];
     const hasDocuments = statements.some((statement) => statement.property.data_type === 'document');
     const selectedCandidate = hasDocuments
@@ -327,6 +341,8 @@ export function subjectJsonLd({
           propertyID: `http://www.wikidata.org/entity/${property.slice(4)}`,
           value,
         });
+      } else if (form) {
+        additionalTypes.push(value);
       } else {
         if (property === 'schema:recipeInstructions' && Array.isArray(value)) values.push(...value);
         else values.push(value);
@@ -334,6 +350,8 @@ export function subjectJsonLd({
     }
     if (key !== undefined && values.length) entries.push([key, values.length === 1 ? values[0]! : values]);
   }
+  if (additionalTypes.length)
+    entries.push(['additionalType', additionalTypes.length === 1 ? additionalTypes[0]! : additionalTypes]);
   if (identifiers.length) entries.push(['identifier', identifiers]);
   const global = ratings?.figure;
   if (global && hasPublicMean(global)) {

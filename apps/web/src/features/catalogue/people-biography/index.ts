@@ -2,7 +2,7 @@ import type { SubjectRead } from '@rezics/client';
 import { chooseLabel, languageRanges, type PropertyDefinition, type Release } from '@rezics/definitions';
 import { subjectHref } from '../../../subject/subject-href';
 import { originalLanguage } from '../../../subject/language';
-import { authoredProperties } from '../authored-field';
+import { authoredProperties } from '../authored-properties';
 import { correctionProperty } from '../statement-editor';
 import { peopleBiographyAddress, peopleBiographyEditorHref } from './current-visit';
 

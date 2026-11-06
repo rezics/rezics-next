@@ -8,12 +8,12 @@ import {
 } from '@rezics/definitions/bulk';
 import type { SourceVocabularyBindings, SourceVocabularyGap } from '@rezics/conversion';
 import { mapSourceEnumeration } from '@rezics/conversion/cross-media-entities';
-import { commandKey, sourceDigest, sourceEnvelope } from '../../../packages/conversion/src/support.ts';
+import { commandKey, sourceDigest, sourceEnvelope } from '@rezics/conversion/support';
 import { currentBangumiCharacterVocabularyBindings } from './bangumi-character-fidelity.ts';
-import type { CrossMediaPlan, CrossMediaPort } from './cross-media-seed.ts';
-import { showcaseDigest, showcaseVocabularyExternalId } from './showcase-manifest.ts';
+import { type CrossMediaPlan, type CrossMediaPort } from './showcase-contract.ts';
+import { showcaseDigest, showcaseVocabularyExternalId } from './showcase-contract.ts';
 import type { ShowcaseJournal } from './showcase-publication.ts';
-import type { ShowcaseVocabularyRequirement } from './showcase-manifest.ts';
+import { type ShowcaseVocabularyRequirement } from './showcase-contract.ts';
 
 const adapterRevision = 'bangumi-character-vocabulary@3';
 const taxonomy = {

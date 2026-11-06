@@ -2,7 +2,6 @@ import { jsonParameter } from '../database/json.ts';
 import type { Pool } from 'pg';
 import { createHash } from 'node:crypto';
 import { currentCommand, registerCommandCallback, type CommandTransaction } from '../command/command.ts';
-import { declareCommandRecordSourceSet, recordHistorySourceKey } from '../history/record-source.ts';
 import { readAuthoredFieldHistorySource } from '../content/authored-fields-history.ts';
 import { AccessUnavailableError } from '../access/unavailable.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
@@ -16,7 +15,8 @@ import page from './record-source-set-page.sql';
 import guard from './record-source-set-guard.sql';
 import candidate from './record-source-set-candidate.sql';
 import term from './record-source-set-term.sql';
-import type { RecordHistorySourceReference } from '../history/record-source.ts';
+import { declareCommandRecordSourceSet } from '../history/application/index.ts';
+import { type RecordHistorySourceReference, recordHistorySourceKey } from '../history/contract/index.ts';
 
 declare const semanticSourceSet: unique symbol;
 export type SemanticRecordSourceSet = Readonly<{ [semanticSourceSet]: true }>;

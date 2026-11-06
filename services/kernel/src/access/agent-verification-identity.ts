@@ -5,13 +5,11 @@ import {
   readAccountIdentityTechnicalSource,
 } from './agent-verification-identity-retention.ts';
 import type { IdentitySourceConsumerReference } from '../semantic/identity-source-consumer-custody.ts';
-import { recordAgentIdentityWorkSource } from '../history/agent-identity-source.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 /** Access-owned source history. These helpers are internal to the native identity bridge. */
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
-import { declareAgentIdentitySource, type AgentIdentitySourceKey } from '../history/agent-identity-source.ts';
 import {
   authoritativeTimeValue,
   currentCommand,
@@ -38,6 +36,8 @@ import {
   recoverMissingAccountIdentitySource,
   originalRecoveredAccountIdentitySource,
 } from './agent-verification-identity-recovery.ts';
+import { declareAgentIdentitySource, recordAgentIdentityWorkSource } from '../history/application/index.ts';
+import { ACCOUNT_ROLE_BITS, type AgentIdentitySourceKey, unionHistoryScope } from '../history/contract/index.ts';
 
 type AccountReceipt = Exclude<IdentityReceipt, { kind: 'subject.merge' }>;
 type Source = {
@@ -97,7 +97,7 @@ type OriginalIdentity = Readonly<{
     transactionId: string;
     eventType: string;
   }> | null;
-  accounts: readonly import('../history/locator.ts').AccountReference[];
+  accounts: readonly import('../history/contract/locator.ts').AccountReference[];
 }>;
 const originalIdentities = new WeakMap<CommandTransaction, OriginalIdentity>();
 
@@ -240,8 +240,8 @@ export async function recordAccountIdentitySource(tx: CommandTransaction, source
   // It must never rebind an existing historical source from a new command.
   if (inserted.rowCount !== 1) throw accountIdentityUnavailable(`conflicting original source ${keyOf(source.receipt)}`);
   const row = inserted.rows[0];
-  const { ACCOUNT_ROLE_BITS: roles } = await import('../history/contracts.ts');
-  const { unionHistoryScope } = await import('../history/record.ts');
+  const { ACCOUNT_ROLE_BITS: roles } = await import('../history/contract/contracts.ts');
+  const { unionHistoryScope } = await import('../history/contract/record-vocabulary.ts');
   const ref = (accountId: string, mask: number) => ({ accountRoute: routeOf(accountId)!, accountId, roles: mask });
   const undoRoles =
     source.undo?.source.roles.map(({ account_id, role }) => {

@@ -8,15 +8,14 @@ import { type GraphEdgeDraft } from './cross-media-bindings.ts';
 import {
   crossMediaAliases,
   emptyCrossMediaPlan,
-  seedCrossMedia,
   type CrossMediaGap,
   type CrossMediaMember,
   type CrossMediaPlan,
   type CrossMediaPort,
   type CrossMediaReading,
-  type CrossMediaSeedResult,
   type CrossMediaTables,
-} from './cross-media-seed.ts';
+} from './showcase-contract.ts';
+import type { seedCrossMedia, CrossMediaSeedResult } from './cross-media-seed.ts';
 import type { ImporterOptions } from './importer.ts';
 
 export const episodeTypeSchemeUri = 'https://rezics.com/schemes/bangumi/episode-types';
@@ -215,6 +214,8 @@ export type BangumiEpisodeFidelityResult = CrossMediaSeedResult & {
 
 /** Production operator: import admitted episode members through the existing seed/importer caller. Disc is omitted from identity. */
 export async function importBangumiEpisodeFidelity(input: {
+  seed: typeof seedCrossMedia;
+
   tables: CrossMediaTables;
   path: string;
   port: CrossMediaPort;
@@ -222,7 +223,7 @@ export async function importBangumiEpisodeFidelity(input: {
   destination?: { origin: string };
 }): Promise<BangumiEpisodeFidelityResult> {
   const plan = await planBangumiEpisodeFidelity(input.tables);
-  const result = await seedCrossMedia(plan, input.path, input.port, input.destination, {
+  const result = await input.seed(plan, input.path, input.port, input.destination, {
     vocabularyAdmission: episodeVocabularyAdmission(input.bindings),
   });
   return { ...result, converterRevision: entityRevision };

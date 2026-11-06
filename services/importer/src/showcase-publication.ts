@@ -7,24 +7,19 @@ import { showcaseTagParentSourceFence } from './showcase-cross-provider-tags.ts'
 import type { BatchCommand, BatchWriteRequest, BatchWriteResult, BatchStatement } from '@rezics/definitions/bulk';
 import { bundledDigest } from '@rezics/definitions/bundled';
 import type { ReviewedSubjectRead } from './import-client.ts';
-import { createImportTransport } from './import-client.ts';
-import type {
-  CrossMediaPlan,
-  CrossMediaPort,
-  CrossMediaSeedResult,
-  VndbWorkRelationOutcome,
-} from './cross-media-seed.ts';
+import type { CrossMediaSeedResult, VndbWorkRelationOutcome } from './cross-media-seed.ts';
 import {
-  buildShowcaseManifest,
   showcaseDigest,
   showcaseLimits,
   showcaseSourceMatches,
-  showcaseStatementMatches,
   showcaseVocabularyExternalId,
+  type CrossMediaPlan,
+  type CrossMediaPort,
   type ShowcaseAcknowledgement,
   type ShowcaseAssertion,
   type ShowcaseManifest,
   type ShowcaseRecord,
+  type ShowcaseReviewPort,
   type ShowcaseTagAssociation,
   type ShowcaseTagAssociationWithdrawal,
   type ShowcaseTagParentBinding,
@@ -32,11 +27,11 @@ import {
   type ShowcaseTagParentRefresh,
   type ShowcaseVocabularyRecord,
   type ShowcaseVocabularyRequirement,
-  showcaseMediaContext,
-} from './showcase-manifest.ts';
+} from './showcase-contract.ts';
+import { buildShowcaseManifest, showcaseStatementMatches, showcaseMediaContext } from './showcase-manifest.ts';
 import type { PublicBulkClient } from './public-bulk-client.ts';
-import { GLOBAL_CONTEXT } from './public-bulk-client.ts';
-import { createSourceRegistration, crossMediaBangumiRevision } from './source-registry.ts';
+import { GLOBAL_CONTEXT, admitSelectedSynopsisSupport, selectedSynopsisQueryFromPublic } from './public-bulk-client.ts';
+import { createSourceRegistration, crossMediaBangumiRevision, isBookSeriesSourceTuple } from './source-registry.ts';
 import {
   bangumiRecordUrl,
   converter_revision as entityRevision,
@@ -45,7 +40,7 @@ import {
 } from '@rezics/conversion/cross-media-entities';
 import { createSelectedFamilySourceRegistration } from './source-registry.ts';
 import { subjectSlug } from '@rezics/definitions/slug';
-import { safeSourceUrl } from '../../../packages/conversion/src/support.ts';
+import { safeSourceUrl } from '@rezics/conversion/support';
 import type {
   BangumiCoverSource,
   BangumiCoverSourceJournal,
@@ -54,7 +49,7 @@ import type {
 } from './showcase-media.ts';
 import type { BangumiPersonSourceJournal } from './showcase-bangumi-people.ts';
 import { validAvailableCover } from './showcase-media.ts';
-import { vndbPublicTagConceptUri, vndbPublicTagScheme } from '../../../packages/conversion/src/support.ts';
+import { vndbPublicTagConceptUri, vndbPublicTagScheme } from '@rezics/conversion/support';
 import { vndbTagsRatingMetric, vndbPublicTagParentRevision } from '@rezics/conversion/vndb-vocabulary';
 import type {
   VndbTagRatingBinding,
@@ -62,12 +57,7 @@ import type {
   VndbTagRatingSnapshot,
 } from './showcase-vndb-tag-ratings.ts';
 
-type ImportTransport = ReturnType<typeof createImportTransport>;
-export type ShowcaseReviewPort = Pick<
-  ImportTransport,
-  'readReviewedSubject' | 'reviewedCandidates' | 'acceptReviewedCandidate' | 'adoptReviewedCandidates'
-> &
-  Partial<Pick<ImportTransport, 'fence'>>;
+export type { ShowcaseReviewPort };
 
 type JournalCommandRow = {
   command_key: string;
@@ -715,7 +705,8 @@ function statementOnPublicRead(value: unknown, expected: BatchStatement): boolea
 
 function sourceIdentity(record: ShowcaseRecord): { property: string; value: string } | null {
   if (record.provider === 'vndb') return { property: 'wdt:P3180', value: record.sourceKey };
-  if (record.kind === 'work') return { property: 'wdt:P5732', value: record.sourceKey };
+  if (record.kind === 'work' && !isBookSeriesSourceTuple(record.sourceKey, record.nativeType ?? undefined))
+    return { property: 'wdt:P5732', value: record.sourceKey };
   if (record.kind === 'character' && record.sourceKey.startsWith('character:'))
     return { property: 'wdt:P6296', value: record.sourceKey.slice('character:'.length) };
   if (record.kind === 'person' && record.sourceKey.startsWith('person:'))
@@ -724,14 +715,19 @@ function sourceIdentity(record: ShowcaseRecord): { property: string; value: stri
   return null;
 }
 
+/** Bangumi Organizations and BookSeries admit no provider identifier, so their identity is their cited schema:name. */
+function nameIdentified(record: ShowcaseRecord): boolean {
+  return (
+    record.provider === 'bangumi' &&
+    ((record.kind === 'organization' && /^person:[1-9][0-9]*$/u.test(record.sourceKey)) ||
+      isBookSeriesSourceTuple(record.sourceKey, record.nativeType ?? undefined))
+  );
+}
+
 function sourceIdentityProperty(record: ShowcaseRecord): string | null {
   const identity = sourceIdentity(record);
   if (identity) return identity.property;
-  return record.provider === 'bangumi' &&
-    record.kind === 'organization' &&
-    /^person:[1-9][0-9]*$/u.test(record.sourceKey)
-    ? 'schema:name'
-    : null;
+  return nameIdentified(record) ? 'schema:name' : null;
 }
 
 function phase(record: ShowcaseRecord, assertion: ShowcaseAssertion): number {
@@ -1184,12 +1180,7 @@ function publicVocabularySourceEvidence(read: ReviewedSubjectRead, record: Showc
 }
 
 function publicHasSourceIdentity(read: ReviewedSubjectRead, record: ShowcaseRecord): boolean {
-  if (
-    record.provider === 'bangumi' &&
-    record.kind === 'organization' &&
-    /^person:[1-9][0-9]*$/u.test(record.sourceKey) &&
-    record.sourceUri
-  ) {
+  if (nameIdentified(record) && record.sourceUri) {
     return record.assertions.some(
       (assertion) =>
         assertion.property === 'schema:name' &&
@@ -1209,12 +1200,7 @@ function publicHasSourceIdentity(read: ReviewedSubjectRead, record: ShowcaseReco
 }
 
 function recordHasSourceIdentity(record: ShowcaseRecord): boolean {
-  if (
-    record.provider === 'bangumi' &&
-    record.kind === 'organization' &&
-    /^person:[1-9][0-9]*$/u.test(record.sourceKey) &&
-    record.sourceUri
-  ) {
+  if (nameIdentified(record) && record.sourceUri) {
     return record.assertions.some(
       (assertion) =>
         assertion.property === 'schema:name' &&
@@ -2984,6 +2970,35 @@ export async function publishShowcase(input: {
       !!imageAssertion &&
       visible.some((assertion) => assertion.candidateId === imageAssertion.candidateId);
     const reportable = visible.filter((assertion) => assertion.property !== 'schema:image' || imageVisible);
+    let selectedSynopsisCurrent = true;
+    for (const assertion of reportable.filter((item) => item.property === 'schema:abstract')) {
+      const readback = readbacksByCandidate.get(assertion.candidateId);
+      const statementId =
+        readback &&
+        typeof readback === 'object' &&
+        !Array.isArray(readback) &&
+        typeof (readback as { id?: unknown }).id === 'string'
+          ? (readback as { id: string }).id
+          : assertion.candidateId;
+      const operands = selectedSynopsisQueryFromPublic(read, statementId);
+      if (!operands) continue;
+      try {
+        const supportRead = await input.publicClient.readSelectedSynopsis(record.subjectId, operands.query);
+        if (admitSelectedSynopsisSupport(supportRead, statementId, operands.document).kind !== 'matched')
+          selectedSynopsisCurrent = false;
+      } catch {
+        selectedSynopsisCurrent = false;
+      }
+      if (!selectedSynopsisCurrent) break;
+    }
+    if (!selectedSynopsisCurrent) {
+      omissions.push({
+        provider: record.provider,
+        sourceKey: record.sourceKey,
+        code: 'selected-synopsis-not-current',
+      });
+      continue;
+    }
     const required = record.assertions.filter(
       (assertion) =>
         !withheldGraphCandidates.has(assertion.candidateId) &&

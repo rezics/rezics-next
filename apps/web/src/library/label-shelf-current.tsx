@@ -22,7 +22,7 @@ import {
   type LabelShelfPageData,
   type LabelShelfSource,
 } from './label-shelf-read';
-import { shelfHref, validateShelfSearch, type ShelfDisplay } from './shelf-params';
+import { explicitShelfDisplay, shelfHref, validateShelfSearch, type ShelfDisplay } from './shelf-params';
 import type { ShelfPresentationResolution } from './shelf-preferences';
 
 const routeId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -452,7 +452,7 @@ function LabelShelfRead({
   }, [accepted, current, isCurrent, onAdmitted, onFailed, query.isFetching, query.isError, source.cursor, windows]);
   const canUnassign = () => isCurrent() && page.state === 'loaded' && !!page.csrfToken?.trim() && write();
   const view = presentation?.intent ?? { label: source.labelId, ...explicitShelfDisplay(display) };
-  const hrefAt = (cursor: string | null) => shelfHref(locale, { ...view, cursor: cursor ?? undefined });
+  const hrefAt = (cursor: string | null) => shelfHref(locale, cursor === null ? view : { ...view, cursor });
   const action = (move: LabelShelfWindowMove, target: string | null) => ({
     href: hrefAt(target),
     onClick: (event: MouseEvent<HTMLAnchorElement>) => {

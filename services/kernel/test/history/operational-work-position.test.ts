@@ -16,17 +16,19 @@ import {
   verifyCommittedOperationalWorkOrigin,
   receiveCommittedOperationalWork,
   operationalWorkSource,
-  type OperationalMembersBinding,
-  type OperationalWorkRegistration,
-  type OperationalWorkTransfer,
-} from '../../src/history/operational-work.ts';
+} from '../../src/history/adapters/operational-work.ts';
 import {
   inspectOperationalWorkRetirement,
   verifyOperationalWorkReplay,
-} from '../../src/history/operational-work-receiving.ts';
+} from '../../src/history/adapters/operational-work-receiving.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import type { WorkIntent } from '../../src/work/client.ts';
 import { operationalFixture } from '../command/support/operational-fixture.ts';
+import {
+  type OperationalMembersBinding,
+  type OperationalWorkRegistration,
+  type OperationalWorkTransfer,
+} from '../../src/history/contract/operational-types.ts';
 
 // UNRUN: native acceptance is owned by the integration controller.
 let native: Awaited<ReturnType<typeof operationalFixture>>;

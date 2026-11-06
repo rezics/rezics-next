@@ -17,8 +17,14 @@ import {
   vndbPublicTagScheme,
   vndbPublicTagTaxonomy,
   type VndbPublicTagCategory,
-} from '../../../packages/conversion/src/support.ts';
-import type { CrossMediaGap, CrossMediaPlan, CrossMediaPort, CrossMediaTables } from './cross-media-seed.ts';
+} from '@rezics/conversion/support';
+import {
+  type CrossMediaGap,
+  type CrossMediaPlan,
+  type CrossMediaPort,
+  type CrossMediaTables,
+} from './showcase-contract.ts';
+import type { seedCrossMedia } from './cross-media-seed.ts';
 import {
   showcaseDigest,
   showcaseLimits,
@@ -29,7 +35,7 @@ import {
   type ShowcaseTagParentBinding,
   type ShowcaseTagParentRefresh,
   type ShowcaseVocabularyRequirement,
-} from './showcase-manifest.ts';
+} from './showcase-contract.ts';
 import {
   bindShowcaseTagParents,
   showcaseTagParentCommand,
@@ -723,6 +729,7 @@ export async function prepareShowcaseTags(input: {
 
 /** Default adapter: bounded projection, current binding read, then the integrated public-tag importer. */
 export async function importShowcaseTags(input: {
+  seed: typeof seedCrossMedia;
   tables: CrossMediaTables;
   selectedVids: readonly string[];
   path: string;
@@ -754,6 +761,7 @@ export async function importShowcaseTags(input: {
   });
   input.manifest?.recordVocabulary?.(planned.vocabulary);
   const imported = await importVndbPublicTags({
+    seed: input.seed,
     tables: projected.tables,
     path: input.path,
     port: input.port,

@@ -8,7 +8,7 @@ import type { Static } from 'typebox';
 import type { DiscoveryUnionHit } from '../../discovery.ts';
 import { t } from 'elysia';
 import { Compile } from 'typebox/compile';
-import { MatchEvidenceSchema } from '../../http/match-evidence-schema.ts';
+import { MatchEvidenceSchema } from '../match-evidence-schema.ts';
 import { closed, id, nullableText, key, unavailable, evidenceOrDefault, admitIdentity } from './primitives.ts';
 function reviewKey() {
   return memoizedValue(reviewKey, () =>

@@ -1,6 +1,7 @@
 import { afterAll, expect, test } from 'bun:test';
 import type { FilterDocument } from '@rezics/filter';
 import type { Source } from '../../../../specs/imports-api-driver.ts';
+import { discoveryKey } from '../support/released-discovery.ts';
 import { closeOwnedSemanticAuth } from '../semantic/outcome-auth.ts';
 import {
   createReleasedDiscoveryFixture,
@@ -13,7 +14,12 @@ import {
 
 // Cache native setup, including genuine admission failure, without retrying failed writes per case.
 let released: ReturnType<typeof createReleasedDiscoveryFixture> | undefined;
-const fixture = () => (released ??= createReleasedDiscoveryFixture({ version: 1 }));
+const fixture = () =>
+  (released ??= (async () => {
+    const native = await createReleasedDiscoveryFixture({ version: 1, search: 'native' });
+    await native.setup.openFeatures(['search', 'search_advanced']);
+    return native;
+  })());
 let population: ReturnType<Awaited<ReturnType<typeof fixture>>['books']> | undefined;
 async function books() {
   return (population ??= (await fixture()).books());
@@ -60,7 +66,7 @@ test('catalogue conjunction of words and released form AND harem returns only B-
   await searchBooks(await fixture(), (await predicates()).combined, [b.subjects['B-long'].id]);
 }, 300000);
 
-test('catalogue harem facet counts only the exact selected three-book conjunction', async () => {
+test('catalogue harem facet returns the exact selected Concept without population counts', async () => {
   await books();
   const { formHarem, c } = await predicates();
   const response = await (
@@ -70,12 +76,12 @@ test('catalogue harem facet counts only the exact selected three-book conjunctio
     facets: [{ property: 'schema:keywords', size: 20 }],
   });
   successful(response);
-  expect(response.body.total).toEqual({ value: 3, relation: 'exact' });
+  expect(response.body).not.toHaveProperty('total');
   expect(response.body.facets).toEqual([
     {
       property: 'schema:keywords',
-      relation: 'exact',
-      values: [{ value: c.harem.id, count: 3, labels: expect.any(Object) }],
+      next: null,
+      values: [{ value: c.harem.id, labels: expect.any(Object) }],
     },
   ]);
 }, 300000);
@@ -115,6 +121,89 @@ test('readable Book detail projects actual adopted light-novel and source-scoped
       'schema:keywords': [expect.objectContaining({ value: { type: 'value', content: c.harem.id } })],
     },
   });
+}, 300000);
+
+test('independently imported selection is shared while Alice and Bob keep separate Library and Collection populations', async () => {
+  const f = await fixture();
+  const imported = await f.importedHarem();
+  const book = { id: imported.subject, release: f.release.digest, revision: 1 };
+  const before = await f.read(book);
+  successful(before);
+  expect(before.body.subject).toMatchObject({
+    statements: {
+      'schema:keywords': [
+        expect.objectContaining({ id: imported.candidate, value: { type: 'value', content: imported.sourceConcept } }),
+      ],
+    },
+  });
+  await f.setup.openFeatures(['personal_library']);
+  const profile = f.release.definition.libraryProfiles![f.release.definition.types['schema:Book']!.library!.profileId]!;
+  const state = profile.entryStateSet!.states[0]!.id;
+  successful(await f.request('alice', 'PUT', `/v1/libraryEntries/${book.id}`, { state }, discoveryKey()), 201);
+  const alice = await f.request('alice', 'GET', `/v1/libraryEntries/${book.id}`);
+  const bob = await f.request('bob', 'GET', `/v1/libraryEntries/${book.id}`);
+  successful(alice);
+  expect(alice.body.libraryEntry).toMatchObject({ state });
+  expect(bob.status).toBe(404);
+  expect(bob.body).toMatchObject({ code: 'not_found' });
+  expect(bob.body).not.toHaveProperty('libraryEntry');
+
+  for (const [owner, visibility, copies] of [
+    ['alice', 'public', 2],
+    ['alice', 'private', 1],
+    ['bob', 'private', 1],
+  ] as const) {
+    const created = await f.request(
+      owner,
+      'POST',
+      '/v1/collections',
+      {
+        title: `${owner} ${visibility} imported reading`,
+        visibility,
+      },
+      discoveryKey(),
+    );
+    successful(created, 201);
+    const collection = created.body.collection as { id: string };
+    const memberIds: string[] = [];
+    for (let index = 0; index < copies; index++) {
+      const added = await f.request(
+        owner,
+        'POST',
+        `/v1/collections/${collection.id}/members`,
+        {
+          subjectId: book.id,
+          note: `${owner} occurrence ${index}`,
+        },
+        discoveryKey(),
+      );
+      successful(added, 201);
+      memberIds.push((added.body.member as { id: string }).id);
+    }
+    for (const viewer of ['alice', 'bob', 'anonymous'] as const) {
+      const metadata = await f.request(viewer, 'GET', `/v1/collections/${collection.id}`);
+      const members = await f.request(viewer, 'GET', `/v1/collections/${collection.id}/members`);
+      if (visibility === 'private' && viewer !== owner) {
+        expect([metadata.status, members.status]).toEqual([404, 404]);
+        expect(metadata.body).not.toHaveProperty('collection');
+        expect(members.body).not.toHaveProperty('members');
+      } else {
+        successful(metadata);
+        successful(members);
+        expect(metadata.body.collection).toMatchObject({ memberCount: copies });
+        expect(members.body.members).toEqual(
+          memberIds.map((id) => expect.objectContaining({ id, subjectId: book.id })),
+        );
+        expect(members.body.next).toBeNull();
+      }
+    }
+  }
+  // Neither private population nor a public Collection occurrence adopts catalogue facts.
+  for (const viewer of ['anonymous', 'editor', 'alice', 'bob'] as const) {
+    const current = await f.read(book, viewer);
+    successful(current);
+    expect(current.body.subject).toEqual(before.body.subject);
+  }
 }, 300000);
 
 let imported: ReturnType<typeof openDiscoveryImports> | undefined;
@@ -229,4 +318,87 @@ test('imported selected metadata public read exposes sourceRecords without inven
   expect(response.status).toBe(200);
   const body = (await response.json()) as { subject: { sourceRecords?: unknown[] } };
   expect(body.subject.sourceRecords).toEqual([]);
+}, 300000);
+
+test('imported synopsis remains a proposal until separate Context and Global adoption, then exact support is independently current', async () => {
+  const native = await load('bangumi');
+  const dump = await discoveryDump('bangumi');
+  dump.bytes = new TextEncoder().encode(
+    `${JSON.stringify({
+      ...(await observedBangumi()),
+      summary: 'Controlled imported synopsis for independent current reads.',
+    })}\n`,
+  );
+  expect((await native.runtime.run(dump)).outcome).toBe('complete');
+  const view = await native.observer.read('bangumi', '498');
+  const candidate = view.proposals.find((proposal) => proposal.statement?.property.id === 'schema:abstract')!;
+  expect(candidate).toBeDefined();
+  const id = view.subject!.id;
+  const global = '00000000-0000-8000-8000-000000000000';
+  const publicRead = async () => {
+    const response = await native.runtime.request(`/v1/subjects/${id}`);
+    expect(response.status).toBe(200);
+    return (await response.json()) as { subject: typeof view.subject };
+  };
+  expect((await publicRead()).subject!.statements).not.toHaveProperty('schema:abstract');
+  await native.selected('bangumi', '498', ['schema:abstract']);
+  // Selection in an editorial Context does not silently select the same candidate in Global.
+  expect((await publicRead()).subject!.statements).not.toHaveProperty('schema:abstract');
+  successful(
+    await native.observer.http('/v1/grants', {
+      resource: { route: 0, id: global },
+      subject: { kind: 'account', id: native.runtime.identity.governance.accountId },
+      actions: ['context:accept', 'context:adopt'],
+      valid: '(,)',
+    }),
+    201,
+  );
+  successful(
+    await native.observer.http(`/v1/subjects/${id}/candidates/${candidate.id}:accept`, {
+      context: global,
+      expected_head: null,
+    }),
+  );
+  // Acceptance alone also leaves the current public slot unchanged.
+  expect((await publicRead()).subject!.statements).not.toHaveProperty('schema:abstract');
+  successful(
+    await native.observer.http(`/v1/subjects/${id}:adopt`, {
+      context: global,
+      property: 'schema:abstract',
+      mode: 'replace',
+      expected_head: null,
+      selection: [{ candidate: candidate.id, rank: 'normal' }],
+    }),
+  );
+  const current = (await publicRead()).subject!;
+  expect(current.statements['schema:abstract']).toHaveLength(1);
+  const selected = current.statements['schema:abstract']![0]!;
+  expect(selected.id).toBe(candidate.id);
+  const reference = selected.value.content as { document: string; digest: string; language: string };
+  const document = await native.runtime.request(`/v1/documents/${reference.document}`);
+  expect(document.status).toBe(200);
+  expect(JSON.stringify(await document.json())).toContain('Controlled imported synopsis');
+  const query = {
+    statement: candidate.id,
+    document: reference.document,
+    digest: reference.digest,
+    language: reference.language,
+    context: global,
+    release: current.release,
+  };
+  const exact = await native.runtime.request(
+    `/v1/subjects/${id}?${new URLSearchParams({
+      selectedSynopsis: JSON.stringify(query),
+    })}`,
+  );
+  expect(exact.status).toBe(200);
+  const support = ((await exact.json()) as { selectedSynopsis: unknown }).selectedSynopsis;
+  expect(support).toMatchObject({
+    kind: 'matched',
+    context: global,
+    release: current.release,
+    fact: { id: candidate.id, value: { type: 'somevalue' }, references: selected.references },
+  });
+  for (const operand of [reference.document, reference.digest, 'Controlled imported synopsis'])
+    expect(JSON.stringify(support)).not.toContain(operand);
 }, 300000);

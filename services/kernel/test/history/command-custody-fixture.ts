@@ -4,10 +4,11 @@ import { createPreferenceCommands } from '../../src/access/preferences.ts';
 import { resourceAuthorization } from '../../src/access/resource-authorization.ts';
 import { principalCommandIdentity, runCommand, noEffect, type CommandTransaction } from '../../src/command/command.ts';
 import { configureReceiptKeys, encodeReceiptKey, receiptKeysFor } from '../../src/command/receipt-key.ts';
-import { declareCommandHistory, type CommandHistoryScopes } from '../../src/history/record.ts';
+import { declareCommandHistory } from '../../src/history/adapters/record.ts';
 import { routeOf, partitionOf } from '../../src/route/route.ts';
 import { nativeFixture, scopes } from '../access/native-account-bindings-fixture.ts';
 import { openGrowthDatabase } from '../support/growth.ts';
+import { type CommandHistoryScopes } from '../../src/history/contract/record-vocabulary.ts';
 
 export const kind = 'access.account.preferences';
 export const digest = Buffer.alloc(32, 81);

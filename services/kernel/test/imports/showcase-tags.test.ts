@@ -17,7 +17,6 @@ import { VNDB_PUBLIC_TAG_COLUMNS } from '../../../importer/src/vndb-tables.ts';
 import { captureShowcaseCommands, ShowcaseJournal } from '../../../importer/src/showcase-publication.ts';
 import { showcaseVocabularyExternalId } from '../../../importer/src/showcase-manifest.ts';
 import {
-  importShowcaseTags,
   knownShowcaseTagBindings,
   planShowcaseTags,
   prepareShowcaseVndbPublicTagVocabulary,
@@ -27,6 +26,7 @@ import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { identitySupport } from './identity-fixture.ts';
 import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
+import { importShowcaseTags } from '../../../importer/src/selected-import.ts';
 
 const globalContext = GLOBAL_CONTEXT;
 const tagsHeader = VNDB_PUBLIC_TAG_COLUMNS.tags.join('\t');

@@ -11,8 +11,7 @@ import {
 import {
   associateSelectedEpisode,
   finishSelectedEpisode,
-  type SelectedEpisode,
-} from '../../src/history/operational-work-selected.ts';
+} from '../../src/history/adapters/operational-work-selected.ts';
 import type { WorkClient } from '../../src/work/client.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
 import {
@@ -22,6 +21,7 @@ import {
   SELECTED_CLEANUP_DECLARATION,
   sumSelectedCost,
 } from '../../src/work/selected-runtime-cost.ts';
+import { type SelectedEpisode } from '../../src/history/contract/operational-types.ts';
 
 // UNRUN. These tests reject counterfeit authority before database access.
 const pool = new pg.Pool({ connectionString: 'postgres://unused:unused@127.0.0.1:1/unused' });

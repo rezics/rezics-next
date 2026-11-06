@@ -48,6 +48,15 @@ export function listWorkPlan(
     dates: properties.filter((id) => release.properties[id]?.datatype === 'time'),
   };
 }
+
+/** Released selected outgoing credit properties. Credit search uses this list, never a role roster. */
+export function workCreditProperties(
+  release: Release,
+  typeId: string,
+  directionResolver?: ReleasedRelationDirectionResolver,
+): readonly string[] {
+  return listWorkPlan(release, typeId, directionResolver)?.creators ?? [];
+}
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 type PendingValue =

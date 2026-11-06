@@ -5,7 +5,8 @@ import {
   type NativePermissionProjection,
 } from '../../src/access/policy-core.ts';
 import type { ActionCatalogue } from '../../src/request/access.ts';
-import type { ResolvedResourceRoles } from '../../src/access/resource-roles.ts';
+import { resolveResourceRoles, type ResolvedResourceRoles } from '../../src/access/resource-roles.ts';
+import { productionActions } from '../support/production-actions.ts';
 
 const actions: ActionCatalogue = new Map([
   ['collection:read', { anonymous: true }],
@@ -91,6 +92,24 @@ test('Collection policy consumes separate actor and principal facts, never the l
   });
 });
 
+test('native deadline projection permits current grants and expires ordinary and explicit advice together', () => {
+  const facts = projection({
+    actorActionGrant: true,
+    principalActionGrant: true,
+    explicitActorActionGrant: true,
+    explicitPrincipalActionGrant: true,
+  });
+  for (const mode of ['ordinary', 'explicit'] as const) {
+    expect(decideNativePermission(catalogue, { ...collection, mode }, facts).decision).toBe('allow');
+    expect(decideNativePermission(catalogue, { ...collection, mode }, { ...facts, deadlineLive: false })).toMatchObject(
+      {
+        decision: 'deny',
+        reason: 'deadline',
+      },
+    );
+  }
+});
+
 test('Collection floor remains public and scopeless while explicit advice drops floor and resource roles', () => {
   const publicInput = projection();
   expect(
@@ -132,4 +151,26 @@ test('exact registered Global reach is the only alternate path, and unavailable 
     projection({ actorActionGrant: null, principalActionGrant: null }),
   );
   expect(unknown.decision).toBe('unavailable');
+});
+
+test('mounted production actions retain complete board ownership and exact definition and media policy types', () => {
+  const mounted = productionActions();
+  const resolved = resolveResourceRoles(mounted);
+  expect(resolved.roles.get('content.board.owner')).toEqual(['board:read', 'thread:create']);
+  expect(resolved.types.get('content.board')?.owner).toBe('content.board.owner');
+  expect(resolved.roles.get('library.collection.owner')).toEqual([
+    'collection:delete',
+    'collection:read',
+    'collection:update',
+  ]);
+  expect(resolved.types.get('library.collection')?.owner).toBe('library.collection.owner');
+  const production = compileNativePolicyCatalogue(mounted, resolved);
+  for (const [action, resourceType] of [
+    ['collection:read', 'library.collection'],
+    ['board:read', 'content.board'],
+    ['thread:create', 'content.board'],
+    ['definitions:activate', 'semantic.context'],
+    ['media:import_from_url', 'content.media'],
+  ] as const)
+    expect(production.actionByName[action]?.resourceTypes).toContain(resourceType);
 });

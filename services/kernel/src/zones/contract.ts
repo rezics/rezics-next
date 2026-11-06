@@ -243,3 +243,76 @@ export type ZoneMetadataResponse = Static<ReturnType<typeof ZoneMetadataResponse
 export type ZoneConfigurationResponse = Static<ReturnType<typeof ZoneConfigurationResponseSchema>>;
 export type ZoneList = Static<ReturnType<typeof ZoneListSchema>>;
 export type ZonePublishInput = Static<typeof ZonePublishInputSchema>;
+
+function zoneSubjectSummarySchema() {
+  return memoizedValue(zoneSubjectSummarySchema, () =>
+    t.Object(
+      {
+        id: t.String({ format: 'uuid' }),
+        type: t.String(),
+        types: t.Array(t.String()),
+        label: t.Union([t.Object({ value: t.String(), language: t.String() }, closed), t.Null()]),
+        creativeWork: t.Boolean(),
+        cover: t.Union([
+          t.Object(
+            {
+              media: t.String({ format: 'uuid' }),
+              width: t.Integer({ minimum: 1 }),
+              height: t.Integer({ minimum: 1 }),
+              placeholder: t.Object({ thumbhash: t.String(), color: t.String() }, closed),
+              variants: t.Array(
+                t.Object(
+                  { format: t.Union([t.Literal('avif'), t.Literal('webp')]), width: t.Integer({ minimum: 1 }) },
+                  closed,
+                ),
+              ),
+              focalPoint: t.Union([t.Object({ x: t.Number(), y: t.Number() }, closed), t.Null()]),
+              credit: t.Object(
+                {
+                  rightsHolder: t.String(),
+                  via: t.Object({ name: t.String(), url: t.String() }, closed),
+                  license: t.String(),
+                  obligations: t.Array(t.String()),
+                },
+                closed,
+              ),
+            },
+            closed,
+          ),
+          t.Null(),
+        ]),
+      },
+      closed,
+    ),
+  );
+}
+
+function zoneSubjectListItemSchema() {
+  return memoizedValue(zoneSubjectListItemSchema, () =>
+    t.Object(
+      {
+        id: routedUuidSchema,
+        type: t.String(),
+        labels: t.Record(t.String(), t.String()),
+        summary: zoneSubjectSummarySchema(),
+      },
+      closed,
+    ),
+  );
+}
+
+/** Canonical UUID membership page. Continuation uses the default list-cursor profile. */
+export function ZoneSubjectListResponseSchema() {
+  return memoizedValue(ZoneSubjectListResponseSchema, () =>
+    t.Object(
+      {
+        subjects: t.Array(zoneSubjectListItemSchema(), { maxItems: 100 }),
+        next: t.Union([t.String({ minLength: 1, maxLength: 4096, pattern: '^[A-Za-z0-9_-]+$' }), t.Null()]),
+      },
+      closed,
+    ),
+  );
+}
+
+export type ZoneSubjectListItem = Static<ReturnType<typeof zoneSubjectListItemSchema>>;
+export type ZoneSubjectListResponse = Static<ReturnType<typeof ZoneSubjectListResponseSchema>>;

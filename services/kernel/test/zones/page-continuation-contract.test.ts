@@ -1,7 +1,12 @@
 import { expect, test } from 'bun:test';
 import { Compile } from 'typebox/compile';
 import { ZonePageRequestSchema } from '../../src/zones/contract.ts';
-import { ZonePageQuerySchema, ZonePageReadProgressSchema } from '../../src/zones/page-continuation.ts';
+import {
+  ZonePageQuerySchema,
+  ZonePageReadProgressSchema,
+  ZoneSubjectListQuerySchema,
+  ZoneSubjectListProgressSchema,
+} from '../../src/zones/page-continuation.ts';
 
 test('Zone readPage progress is a separate closed 202 body and its cursor stays in query', () => {
   const query = Compile(ZonePageQuerySchema());
@@ -26,4 +31,23 @@ test('Zone readPage progress is a separate closed 202 body and its cursor stays 
   const body = Compile(ZonePageRequestSchema());
   expect(body.Check({ target: { route: '' }, cursor: 'token' })).toBe(false);
   expect(body.Check({ target: { route: '' } })).toBe(true);
+});
+
+test('GET Zone subjects uses the default cursor envelope and closed query', () => {
+  const query = Compile(ZoneSubjectListQuerySchema());
+  expect(query.Check({})).toBe(true);
+  expect(query.Check({ limit: '20', cursor: 'opaque-token' })).toBe(true);
+  expect(query.Check({ limit: '100' })).toBe(true);
+  expect(query.Check({ cursor: 'x'.repeat(4096) })).toBe(true);
+  expect(query.Check({ limit: '0' })).toBe(false);
+  expect(query.Check({ limit: '101' })).toBe(false);
+  expect(query.Check({ cursor: 'x'.repeat(4097) })).toBe(false);
+  expect(query.Check({ cursor: 'token=' })).toBe(false);
+  expect(query.Check({ limit: '20', ownerId: 'private' })).toBe(false);
+  const progress = Compile(ZoneSubjectListProgressSchema());
+  expect(progress.Check({ next: 'opaque-token' })).toBe(true);
+  expect(progress.Check({ next: 'x'.repeat(4096) })).toBe(true);
+  expect(progress.Check({ next: null })).toBe(false);
+  expect(progress.Check({ next: 'x'.repeat(4097) })).toBe(false);
+  expect(progress.Check({ next: 'token', subjects: [] })).toBe(false);
 });

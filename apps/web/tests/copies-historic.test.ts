@@ -11,6 +11,7 @@ import {
   type NativeCopyPresentation,
 } from '../src/library/copies-server';
 import { m } from '../src/paraglide/messages.js';
+import { CopyConflictReview } from '../src/library/copy-conflict-review';
 
 mock.module('../src/library/copies-actions', () => ({
   createCopy() {},
@@ -44,7 +45,17 @@ const native = {
   disposedOn: null,
   note: 'First copy',
 } satisfies NativeCopy;
+const conditions = {
+  mediaCondition: { state: 'recorded', id: 'good', label: 'Good' },
+  packagingCondition: { state: 'cleared' },
+  conditionEditing: {
+    state: 'supported',
+    currentness: 'current',
+    choices: [{ id: 'good', label: 'Good', description: 'Normal signs of use.' }],
+  },
+} satisfies Pick<NativeCopyPresentation, 'mediaCondition' | 'packagingCondition' | 'conditionEditing'>;
 const presentation = {
+  ...conditions,
   meaning: 'known',
   kindLabel: 'Original print label',
   kindLabelLanguage: 'en',
@@ -200,6 +211,9 @@ test('malformed or wrong-shape native presentation is unavailable without invent
       statusEditing: { state: 'supported', statuses: [{ id: 'grant', label: 'Access' }] },
     },
     { ...presentation, meaning: 'physical' },
+    { ...presentation, mediaCondition: { state: 'recorded', id: 'invented', label: 'Invented' } },
+    { ...presentation, packagingCondition: { state: 'cleared', id: 'good' } },
+    { ...presentation, conditionEditing: { state: 'supported', currentness: 'retired', choices: [] } },
     { ...presentation, kindLabel: 42 },
     { ...presentation, kindLabelLanguage: undefined },
     { ...presentation, statusLabelLanguage: 42 },
@@ -254,7 +268,7 @@ test('native unknown historic kinds and missing releases retain raw facts withou
       ...native,
       kind: 'legacy-unspecified',
       status: 'owned',
-      presentation: { meaning, statusEditing: { state: 'unavailable' } },
+      presentation: { ...conditions, meaning, statusEditing: { state: 'unavailable' } },
     } satisfies NativeCopy;
     const { client, calls } = transport(() => json({ copy: historic }));
     const result = await loadCopyDetail(client, request(), {}, { id });
@@ -276,7 +290,7 @@ test('native unknown historic kinds and missing releases retain raw facts withou
 test('unknown and unavailable presentation cannot supply labels or establish status-write support', () => {
   for (const meaning of ['unknown', 'unavailable'] as const) {
     const detail = { ...native, presentation: { ...presentation, meaning } } satisfies NativeCopy;
-    expect(nativeCopyPresentation(detail)).toEqual({ meaning, statusEditing: { state: 'unavailable' } });
+    expect(nativeCopyPresentation(detail)).toEqual({ ...conditions, meaning, statusEditing: { state: 'unavailable' } });
   }
 });
 
@@ -466,4 +480,17 @@ test('a captured status submit uses its exact observed revision and key, with na
   expect(calls).toHaveLength(1);
   expect(await calls[0]!.json()).toMatchObject({ revision: 12, status: 'loan' });
   expect(observed.status).toBe('shelf');
+});
+
+test('closed conflict readback cannot offer adoption of former Copy facts', () => {
+  const html = renderToStaticMarkup(
+    createElement(CopyConflictReview, {
+      review: { state: 'closed' },
+      disabled: false,
+      onReview() {},
+      onAccept() {},
+    }),
+  );
+  expect(html).toContain(m.library_subject_closed());
+  expect(html).not.toContain(m.library_copy_conflict_review_accept());
 });

@@ -107,9 +107,15 @@ and properties≤8 do not supply a continuation schema. Owner adoption is pendin
 **Native wrapper/command:** [Search wrapper](../../services/kernel/test/search/outcomes.test.ts) and
 [relation wrapper](../../services/kernel/test/search/relation-facet-outcomes.test.ts), with the Search driver;
 `bun run --cwd services/kernel check test/search/outcomes.test.ts test/search/relation-facet-outcomes.test.ts`.
+Path 7 tagged-work admission, remaining-predicate kind proof, same-statement quantity matching and cursor
+traversal are `test/search/tagged-work-plan.test.ts`, `test/search/tagged-work-query.test.ts` and
+`test/search/type-facet-kind.test.ts`; the mounted Concept list and Search weight control are
+`apps/web/tests/concept-tagged-works.test.ts`. Released meaning IDs come from Definitions; LN/HAREM Concept
+UUIDs and crossed platform/language tuples stay Semantic `classification()`/`platform` prerequisites.
 No complete six-surface catalogue command is registered. Semantic/Imports first supply released definitions and
 builder/pins; Commerce adopts owner query, then consumers reuse those records. Unsupported required requests remain
-failures of the job; typed422 only passes deliberately unsupported controls. No title matching or fake release.
+failures of the job; typed422 only passes deliberately unsupported controls. No title matching or fake release. Seeded
+browser proof of the mounted Concept list stays held until existing stack releases land.
 
 | Stage                                   | Evidence                                                                                               |
 | --------------------------------------- | ------------------------------------------------------------------------------------------------------ |
@@ -152,7 +158,7 @@ for anonymous and editor; the suspended pre-suspension bearer stays 401 and page
 
 **Native wrapper/command:** these outcomes import [Search driver](../../services/kernel/test/search/outcome-driver.ts);
 `bun run --cwd services/kernel check test/search/deletion-count-outcomes.test.ts test/search/cursor-confidentiality-outcomes.test.ts`.
-New withheld-positive/negative, foreign repair and late barrier/ACK races: REQUIRED NOT YET FROZEN/BOUND. Reuse
+Fewest unit tests pin the current predicate and owner revalidation; native persona and seeded browser stay unaccepted. New withheld-positive/negative, foreign repair and late barrier/ACK races: REQUIRED NOT YET FROZEN/BOUND. Reuse
 [Semantic producer contract](../../services/kernel/src/semantic/public-filter-source-contract.md), currently types/future
 boundary: same-transaction lossless reductions, complete routing/registration, all4096-home logical coverage through
 behind/changed access paths, actual refresh-visible local AND dependent foreign repair before contiguous ACK.
@@ -161,13 +167,13 @@ is insufficient. Late registration, old snapshots, lost CAS, ambiguous sink resu
 Start/final validation detects a relevant reduction even if repaired/ACKed between observations. Unknown routing
 prepares; query key narrowing never replaces Access or own-row checks. No estimate, zero or row-length fallback.
 
-| Stage                                   | Evidence                                                                                             |
-| --------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| specification validated red             | Existing cases present; measured red receipt not recorded; full race matrix REQUIRED NOT YET FROZEN. |
-| native driver registered                | Deletion/confidentiality outcomes registered; complete producer/repair/ACK binding missing.          |
-| implementation exposed                  | Hit checks exist; public route still requires totals; narrowed native query privacy incomplete.      |
-| user-case native pass at named revision | None recorded for this capability.                                                                   |
-| promoted                                | No main closure evidence.                                                                            |
+| Stage                                   | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| specification validated red             | Existing cases present; measured red receipt not recorded; full race matrix REQUIRED NOT YET FROZEN.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| native driver registered                | Deletion/confidentiality outcomes registered; complete producer/repair/ACK binding missing.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| implementation exposed                  | One current-source predicate now discloses hits, exclusion, order and live-facet identities; owner hydration and Collection directory revalidate after nested reads; catalogue kind chips are lower bounds from that predicate and stay omitted on continuation; exact kind totals need exhausted aggregate proof. Public Search totals remain omitted. Native producer gaps stay typed readiness. Nested owner-current disclosure throws a local restart mapped at Search HTTP. Unit tests pin anonymous/editor/suspended readers, hidden/taken-down/withheld subjects, paused public-to-private changes and unready owners. Seeded browser acceptance stays unaccepted. |
+| user-case native pass at named revision | None recorded for this capability. Native persona cells are recorded separately from promotion.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| promoted                                | No main closure evidence.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 
 ## freshness-and-recovery
 
@@ -317,6 +323,7 @@ driver cannot express it.
 `bun run --cwd services/kernel check test/search/outcomes.test.ts`.
 No new suggest suite is needed for already frozen prefixes/operators/budgets; extend only missing persona/source
 outcomes after owner adoption. Shared consumer acceptance is catalogue-jobs and composition-and-profile-governance.
+Focused Web adapter tests pin installed Search/suggest/facet/Realm native HTTP families; they are not a native pass.
 
 | Stage                                   | Evidence                                                                                           |
 | --------------------------------------- | -------------------------------------------------------------------------------------------------- |

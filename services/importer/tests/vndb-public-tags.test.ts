@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BatchCommand } from '@rezics/definitions/bulk';
 import { converter_revision } from '@rezics/conversion/cross-media-entities';
-import { vndbPublicTagConceptUri, vndbPublicTagScheme } from '../../../packages/conversion/src/support.ts';
+import { vndbPublicTagConceptUri, vndbPublicTagScheme } from '@rezics/conversion/support';
 import type { CrossMediaPort } from '../src/cross-media-seed.ts';
 import { ImportTransportError } from '../src/import-client.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
@@ -16,12 +16,8 @@ import {
   projectVndbPublicTagAssociation,
   VNDB_PUBLIC_TAG_COLUMNS,
 } from '../src/vndb-tables.ts';
-import {
-  importVndbPublicTags,
-  parseAuthoredVndbCopy,
-  planVndbPublicTags,
-  readVndbPublicTagBindings,
-} from '../src/vndb-public-tags.ts';
+import { importVndbPublicTags } from '../src/selected-import.ts';
+import { parseAuthoredVndbCopy, planVndbPublicTags, readVndbPublicTagBindings } from '../src/vndb-public-tags.ts';
 
 const tagsHeader = VNDB_PUBLIC_TAG_COLUMNS.tags.join('\t');
 const associationHeader = VNDB_PUBLIC_TAG_COLUMNS.tags_vn.join('\t');

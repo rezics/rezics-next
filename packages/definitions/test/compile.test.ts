@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
-import { CatalogueError, compileCatalogue } from '../src/compile.ts';
-import { releaseDigest, validateRelease, valueSchema } from '../src/index.ts';
+import { admitImportedDocument, CatalogueError, compileCatalogue } from '../src/compile.ts';
+import { compareReleases, reconcileActivation, releaseDigest, validateRelease, valueSchema } from '../src/index.ts';
 
 const prefixes = `prefixes:
   linkml: https://w3id.org/linkml/
@@ -290,4 +290,47 @@ test('unsafe patterns, duplicate terms, LinkML errors and oversized files are re
   expect(unknownRange.length).toBeGreaterThan(0);
   expect(unknownRange.every((entry) => entry.endsWith(' linkml'))).toBe(true);
   expect(await violations({ music: `${music}#${'x'.repeat(256 * 1024)}\n` })).toEqual(['music.yaml  limit']);
+});
+
+test('imported sources compile to a release identity and name the repairable source field', async () => {
+  const sources = {
+    root: 'main.yaml',
+    schemas: {
+      'main.yaml': JSON.stringify({
+        id: 'urn:catalogue:import',
+        name: 'import',
+        version: '1',
+        prefixes: { ex: 'https://example.org/' },
+        classes: { Work: { class_uri: 'ex:Work' }, Extra: { class_uri: 'ex:Extra' } },
+      }),
+    },
+    presentation: { en: JSON.stringify({ types: { 'ex:Work': 'work', 'ex:Extra': 'extra' }, properties: {} }) },
+  };
+  const compiled = await compileCatalogue(sources);
+  const admitted = await admitImportedDocument(sources);
+  expect(admitted.kind).toBe('sources');
+  if (admitted.kind !== 'sources') throw new Error('expected compiled sources');
+  expect(releaseDigest(admitted.release)).toBe(releaseDigest(compiled));
+  expect(admitted.diagnostics).toEqual([]);
+  const missing = await admitImportedDocument({
+    ...sources,
+    presentation: { en: JSON.stringify({ types: { 'ex:Work': 'work' }, properties: {} }) },
+  });
+  expect(missing.kind).toBe('invalid');
+  expect(missing.diagnostics.some((diagnostic) => diagnostic.file === 'presentation/en')).toBe(true);
+  expect(missing.diagnostics.some((diagnostic) => diagnostic.pointer.includes('ex:Extra'))).toBe(true);
+  const unknown = await admitImportedDocument({ format: 'nope' });
+  expect(unknown).toEqual({
+    kind: 'invalid',
+    diagnostics: [{ pointer: '/document', code: 'invalid_type', file: null }],
+  });
+  const compared = compareReleases(compiled, {
+    ...compiled,
+    types: {
+      ...compiled.types,
+      'ex:Work': { ...compiled.types['ex:Work']!, labels: { en: 'renamed' } },
+    },
+  });
+  expect(compared.changedTypes).toEqual([]);
+  expect(reconcileActivation('sha256:aa', { digest: 'sha256:bb', head: 4 }, 5).stale).toBe(true);
 });

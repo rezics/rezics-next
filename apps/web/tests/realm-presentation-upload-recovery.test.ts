@@ -41,8 +41,8 @@ function open() {
         ? (selected.push(choice.mediaId),
           { kind: 'image', image: { ...image, id: choice.mediaId, containerId: realm } })
         : { kind: 'unavailable' },
-    upload: (id, slot, file, signal) =>
-      uploadRealmImage(id, slot === 'avatar' ? 'realm-icon' : 'realm-banner', file, signal),
+    upload: (id, slot, file, signal, key) =>
+      uploadRealmImage(id, slot === 'avatar' ? 'realm-icon' : 'realm-banner', file, signal, key),
     resume: resumeRealmImageUpload,
   };
   return { selected, saved, control: createRealmAppearance(realm, { kind: 'ready', snapshot: configured }, adapter) };

@@ -42,6 +42,8 @@ import {
   type BangumiCharacterMeasurementProjection,
 } from './bangumi-character-measurements.ts';
 import { projectBangumiPersonBirthDate, type BangumiPersonBirthDate } from './bangumi-person-birth-date.ts';
+import { liveActionWorkType } from './bangumi-subject-profile.ts';
+export { liveActionWorkType };
 
 export const converter_revision = 'cross-media-entities@15';
 export const bangumiCharacterNameCommandLimit =
@@ -180,34 +182,6 @@ const FAMILY_TERMS = new Set([
   'rezics:editionCounterpart',
 ]);
 
-// Pinned subject_platforms.yml / platform.go.json ids, type, type_cn and alias.
-const TV_PLATFORMS = new Set([
-  '0',
-  '1',
-  '2',
-  '3',
-  '6001',
-  '6003',
-  '6004',
-  'other',
-  'misc',
-  'jp',
-  'en',
-  'cn',
-  'tv',
-  'TV',
-  'live',
-  'show',
-  '其他',
-  '日剧',
-  '欧美剧',
-  '华语剧',
-  '电视剧',
-  '演出',
-  '综艺',
-]);
-const FILM_PLATFORMS = new Set(['6002', 'movie', 'Movie', '电影']);
-
 let bangumiInventory: BangumiInventory | undefined;
 let vndbInventory: VndbInventory | undefined;
 const bangumiIndex = new Map<string, Map<string, SourceMapping>>();
@@ -324,15 +298,6 @@ export function bangumiStaffRoleDefinition(
 
 export function isFamilyRelationTerm(term: string | undefined): boolean {
   return term !== undefined && FAMILY_TERMS.has(term);
-}
-
-export function liveActionWorkType(platform: unknown): 'schema:Movie' | 'schema:TVSeries' | undefined {
-  if (platform === undefined || platform === null) return undefined;
-  const value = String(platform).trim();
-  if (!value) return undefined;
-  if (FILM_PLATFORMS.has(value)) return 'schema:Movie';
-  if (TV_PLATFORMS.has(value)) return 'schema:TVSeries';
-  return undefined;
 }
 
 export type EntityKind =

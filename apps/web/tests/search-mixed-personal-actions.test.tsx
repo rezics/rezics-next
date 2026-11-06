@@ -161,7 +161,9 @@ test('guarded native BFF ports refuse credentials changed during session await a
         vote: {
           put: async (body: unknown, options: unknown) => {
             sent.push({ id, questionId, body, options });
-            return { status: 200 };
+            return questionId === QUESTION
+              ? { status: 200 }
+              : { status: 503, error: { code: 'atomic_guard_unavailable', retryable: true } };
           },
           delete: async (options: unknown) => {
             sent.push({ id, questionId, options });
@@ -198,17 +200,25 @@ test('guarded native BFF ports refuse credentials changed during session await a
     subjectId: reader,
     question: input.question,
   });
+  expect(
+    await writeQuestionBoundRatingForCurrentReader(client, request(), env, {
+      ...input,
+      idempotencyKey: crypto.randomUUID(),
+      question: { ...input.question, id: '00000000-0000-7000-8000-000000000002' },
+    }),
+  ).toBe('uncertain');
+  expect(sent[2]).toMatchObject({ questionId: '00000000-0000-7000-8000-000000000002' });
   pause = deferred<typeof session>();
   const stale = writeQuestionBoundRatingForCurrentReader(client, request(), env, input);
   session = { ...session, subject: 'another-reader' };
   pause.resolve(session);
   expect(await stale).toBe('rejected');
-  expect(sent).toHaveLength(2);
+  expect(sent).toHaveLength(3);
   pause = deferred<typeof session>();
   const staleCredential = writeQuestionBoundRatingForCurrentReader(client, request(), env, input);
   pause.resolve({ ...session, subject: reader, csrfToken: 'B'.repeat(22) });
   await expect(staleCredential).rejects.toThrow();
-  expect(sent).toHaveLength(2);
+  expect(sent).toHaveLength(3);
   pause = undefined;
   const entry = await changePersonalLibraryEntry(client, request(), env, {
     subjectId: reader,
@@ -218,7 +228,7 @@ test('guarded native BFF ports refuse credentials changed during session await a
     idempotencyKey: crypto.randomUUID(),
   });
   expect(entry).toEqual({ ok: false, reason: 'signed-out' });
-  expect(sent).toHaveLength(2);
+  expect(sent).toHaveLength(3);
 });
 
 const empty: DiscoveryState = {

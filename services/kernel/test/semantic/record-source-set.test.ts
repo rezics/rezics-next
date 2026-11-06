@@ -4,8 +4,8 @@ import { bundledRelease } from '@rezics/definitions/bundled';
 import { fromPlainText } from '@rezics/document';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { principalCommandIdentity, runCommand, type CommandTransaction } from '../../src/command/command.ts';
-import { declareCommandHistory } from '../../src/history/record.ts';
-import { declareCommandRecordSources, type RecordHistorySourceReference } from '../../src/history/record-source.ts';
+import { declareCommandHistory } from '../../src/history/adapters/record.ts';
+import { declareCommandRecordSources } from '../../src/history/adapters/record-source.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import {
   appendSemanticRecordSourceSet,
@@ -26,6 +26,7 @@ import {
   type Person,
 } from '../history/command-custody-fixture.ts';
 import { createDeletionFixture } from './support/deletion-fixture.ts';
+import { type RecordHistorySourceReference } from '../../src/history/contract/record-vocabulary.ts';
 
 let f: CustodyFixture;
 let native: Awaited<ReturnType<typeof createDeletionFixture>>;

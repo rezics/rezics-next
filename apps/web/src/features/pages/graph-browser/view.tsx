@@ -581,6 +581,14 @@ export function GraphBrowserPage({
     active?.status === 'success' && read && graphPath
       ? graphBrowserReturnHref(graphPath, read.query, selection, visit)
       : undefined;
+  const quotations = read?.detail
+    ? catalogueEntries.quotations({
+        id: read.detail.subject.subject.id,
+        label: pickText(read.detail.subject.subject.labels, locale).text,
+        locale,
+        returnTo,
+      })
+    : null;
   const error = active?.status === 'failure' ? active.failure : undefined;
   const failed =
     error?.reason === 'denied'
@@ -832,19 +840,25 @@ export function GraphBrowserPage({
                 >
                   {m.graph_explore_open_subject({}, o)}
                 </a>
-                <a
-                  className={linkClass}
-                  href={appendReturnTo(
-                    catalogueEntries.quotations({
-                      id: read.detail.subject.subject.id,
-                      label: pickText(read.detail.subject.subject.labels, locale).text,
-                      locale,
-                    }).href,
-                    returnTo,
-                  )}
-                >
-                  {m.graph_explore_quotations({}, o)}
-                </a>
+                {quotations &&
+                  ('href' in quotations ? (
+                    <a className={linkClass} href={quotations.href}>
+                      {m.graph_explore_quotations({}, o)}
+                    </a>
+                  ) : (
+                    <div className="space-y-2">
+                      <p role="status" className="text-sm text-muted-foreground">
+                        {quotations.unsupported === 'origin'
+                          ? m.quotation_entry_origin_unsupported({}, o)
+                          : m.quotation_entry_address_unsupported({}, o)}
+                      </p>
+                      {quotations.generalHref && (
+                        <a className={linkClass} href={quotations.generalHref}>
+                          {m.quotation_entry_general({}, o)}
+                        </a>
+                      )}
+                    </div>
+                  ))}
                 <a
                   className={linkClass}
                   href={appendReturnTo(

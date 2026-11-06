@@ -78,8 +78,11 @@ beforeEach(async () => {
   await pool.query('TRUNCATE access.write_rate_counter');
 });
 afterAll(async () => {
-  await pool.query('DELETE FROM access.exposure_opening WHERE transaction_id = $1', [opening]);
-  await pool.end();
+  try {
+    await pool.query('DELETE FROM access.exposure_opening WHERE transaction_id = $1', [opening]);
+  } finally {
+    await pool.end();
+  }
 });
 
 test('native HTTP stage spends the complete batch once before effects and preserves rejected expiry', async () => {
@@ -208,9 +211,9 @@ test('createKernel subject:read POST custom search authorizes without a write ch
     as_of: '2026-10-25T00:00:00.000Z',
   };
   const app = createKernel({
+    receiptKeys: testReceiptKeys(),
     pool,
     routeKey: new Uint8Array(32),
-    receiptKeys: testReceiptKeys(),
     access: ({ actions: catalogue }) => {
       expect(catalogue.get('subject:read')).toEqual({
         anonymous: true,
@@ -340,8 +343,8 @@ test('createKernel payout markPaid and offer delist spend once before effect wit
     [route, account],
   );
   await pool.query(
-    "INSERT INTO commerce.payout_statement(route,statement_id,creator_account_id,period,currency) VALUES ($1,$2,$3,'1900-01','usd')",
-    [route, statement, account],
+    "INSERT INTO commerce.payout_statement(route,statement_id,creator_account_id,period,currency,money_unit) VALUES ($1,$2,$3,'1900-01','usd',$4::jsonb)",
+    [route, statement, account, JSON.stringify({ system: 'stripe-api', exponent: 2, factsVersion: 'stripe-money-v1' })],
   );
   await pool.query(
     `INSERT INTO commerce.offer(route,offer_id,creator_account_id,target_subject_id,title,currency,unit_amount_minor,tax_code,royalty_basis_points,state,revision,created_at,updated_at,transaction_id)
@@ -388,9 +391,9 @@ test('createKernel payout markPaid and offer delist spend once before effect wit
       .rows[0],
   ];
   const app = createKernel({
+    receiptKeys: testReceiptKeys(),
     pool,
     routeKey: new Uint8Array(32),
-    receiptKeys: testReceiptKeys(),
     access: (config) =>
       createAccess({
         ...config,

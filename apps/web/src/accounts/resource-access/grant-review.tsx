@@ -1,5 +1,5 @@
 import type { AccessSnapshot, Change, Grant } from './data';
-import { resourceLabel } from './owner-transfer.tsx';
+import { resourceName } from './owner-transfer.tsx';
 import { permissionPresentation, rolePresentation } from './permission-presentation';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
@@ -151,7 +151,7 @@ export function GrantReview({
       <dl className="grid gap-3 [overflow-wrap:anywhere] sm:grid-cols-2">
         <div>
           <dt className="font-medium">{m.access_resource()}</dt>
-          <dd>{resourceLabel(page.resource.type)}</dd>
+          <dd>{resourceName(page)}</dd>
           <dd>
             <code>{page.resource.id}</code>
           </dd>

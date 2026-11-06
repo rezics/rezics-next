@@ -9,12 +9,13 @@ import {
   readVndbCharacterProfileBindings,
   vndbCharacterBloodTypeConceptUri,
 } from '../../../importer/src/vndb-character-profile.ts';
-import { seedShowcaseVndbReleases } from '../../../importer/src/showcase-vndb-releases.ts';
+
 import { vndbCharacterBloodTypeSchemeUri } from '@rezics/conversion/vndb-vocabulary';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { identitySupport } from './identity-fixture.ts';
 import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
+import { seedShowcaseVndbReleases } from '../../../importer/src/selected-import.ts';
 
 const globalContext = GLOBAL_CONTEXT;
 const authored = {

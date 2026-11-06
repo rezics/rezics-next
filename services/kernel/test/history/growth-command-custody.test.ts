@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { assertGrowthAccessPaths, checkGrowth } from '../support/growth.ts';
 import { custodyFixture, scope, type CustodyFixture } from './command-custody-fixture.ts';
-import { encodeLocator, decodeLocator } from '../../src/history/locator.ts';
+import { encodeLocator, decodeLocator } from '../../src/history/contract/locator.ts';
 import { partitionOf, routeOf, newId } from '../../src/route/route.ts';
-import { advancePreferenceHistory } from '../../src/history/receipt.ts';
+import { advancePreferenceHistory } from '../../src/history/adapters/receipt.ts';
 import { CommandResultErasedError } from '../../src/command/command.ts';
 import { deletePersona } from '../support/account-deletion.ts';
 import { KERNEL_WORK_MODULES } from '../support/default-work-modules.ts';

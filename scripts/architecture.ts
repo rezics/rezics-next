@@ -937,7 +937,7 @@ export function findLoadTimeReads(
   for (const file of relevantFiles) {
     if (extname(file) === '.json') leaves.add(file);
     if (!CODE_EXTENSIONS.has(extname(file)) || file.endsWith('.d.ts')) continue;
-    const parsed = parseSync(file, readFileSync(join(root, file), 'utf8'));
+    const parsed = parseSync(file, readText(join(root, file)));
     if (parsed.errors.length) throw new Error(`${file}: ${parsed.errors[0]!.message}`);
     programs.set(file, parsed.program);
     if (literalLeaf(parsed.program)) leaves.add(file);
@@ -973,7 +973,7 @@ export function findLoadTimeReads(
       }
     }
     if (imports.size === 0) continue;
-    const source = readFileSync(join(root, file), 'utf8');
+    const source = readText(join(root, file));
     const seen = new Set<string>();
     const activeCalls = new Set<Node>();
     const activeValues = new Set<Node>();
@@ -1870,7 +1870,17 @@ function architectureDeltaErrors(
 ): AuditResult {
   const changedPaths = changedPathsFromBase(root, base);
   const previous = changedArchitectureGraph(root, base, manifest, currentGraph, changedPaths);
-  const previousResult = auditArchitecture(root, previous.manifest, previous.baseline, previous.graph);
+  // Source reads of the base graph must see base text, including files moved or deleted by the candidate.
+  for (const path of changedPaths) {
+    if (!CODE_EXTENSIONS.has(extname(path))) continue;
+    fileOverrides.set(resolve(root, path), gitBaseText(root, base, path) ?? null);
+  }
+  let previousResult: AuditResult;
+  try {
+    previousResult = auditArchitecture(root, previous.manifest, previous.baseline, previous.graph);
+  } finally {
+    fileOverrides.clear();
+  }
   const previousCounts = new Map<string, number>();
   for (const error of previousResult.errors) {
     const identity = architectureErrorIdentity(error);

@@ -1,4 +1,4 @@
-import { createFileRoute, notFound } from '@tanstack/react-router';
+import { useLocation, createFileRoute, notFound } from '@tanstack/react-router';
 import { SourceConceptPublicSession } from '../../features/catalogue/source-concept-explorer/session';
 import { parseConceptPublicVisit } from '../../features/catalogue/source-concept-explorer/public-visit';
 import { getLocale } from '../../paraglide/runtime.js';
@@ -67,7 +67,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug/concepts')({
       property: typeof property === 'string' && property.length <= 128 ? property : undefined,
       scheme: typeof scheme === 'string' && /^[0-9a-f-]{36}$/i.test(scheme) ? scheme : undefined,
       type: typeof type === 'string' && type.length <= 128 ? type : undefined,
-      ...(sort === 'name' || sort === 'rating' ? { sort } : {}),
+      ...(sort === 'name' || sort === 'rating' ? { sort: sort as 'name' | 'rating' } : {}),
       includeChildren: children === 'true' || children === true,
       ...(spoiler === '1' || spoiler === '2'
         ? { spoilerThreshold: spoiler === '1' ? (1 as const) : (2 as const) }
@@ -92,7 +92,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug/concepts')({
 
 function ConceptsRoute() {
   const { id } = Route.useParams();
-  const location = Route.useLocation();
+  const location = useLocation();
   const { publicVisit } = Route.useLoaderData();
   const {
     role,
@@ -120,7 +120,12 @@ function ConceptsRoute() {
   const propertyValue = property ?? workIntent?.property;
   const schemeValue = scheme ?? workIntent?.scheme;
   const typeValue = type ?? workIntent?.type;
-  const sortValue = sort ?? workIntent?.sort;
+  const sortValue =
+    sort === 'name' || sort === 'rating'
+      ? sort
+      : workIntent?.sort === 'name' || workIntent?.sort === 'rating'
+        ? workIntent.sort
+        : undefined;
   const childrenValue = includeChildren ?? workIntent?.includeChildren;
   const spoilerValue = spoilerThreshold ?? workIntent?.spoilerThreshold;
   const conditionValue = conditionText ?? workIntent?.conditionText;

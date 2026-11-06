@@ -4,7 +4,7 @@ The private route `/library/recover-progress` consumes only installed `KernelCli
 [Native recovery](../../../../docs/library-archive-progress-recovery.md) owns admission, effects, bounds and cost.
 Library navigation and the private export page link this journey separately from Entry/label/journal recovery.
 Decision: keep the original upload bytes for Restart after cancellation, and offer a completed export from this
-signed-in owner. A completed version 4 capture is projected to the installed version 3 envelope at upload. An
+signed-in owner. All supported versions reach native validation as original bytes, preserving their manifests and unsupported coverage. An
 acknowledged Session opens the current progress reader. Journey tests pin that restart; the native Web owner walk
 restores one occurrence through the page. Named stories stay with Collection and Entry recovery.
 

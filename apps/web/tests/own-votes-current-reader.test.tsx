@@ -2,7 +2,7 @@ import { subjectSummary } from './factories/subjects';
 import { afterAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement } from 'react';
-import type { OwnVoteEntry, OwnVotesPage } from '../../../services/kernel/src/rating/own-votes-page.ts';
+import type { OwnVoteEntry, OwnVotesPage } from '../src/ratings/own-votes/types';
 import type { OwnVotesRead } from '../src/ratings/own-votes/actions';
 
 function deferred<T>() {
@@ -19,7 +19,8 @@ let routeLoaderReads = false;
 let routeReadPlan: ((subject: string, cursor: string | null) => OwnVotesRead) | null = null;
 let commandPlan: (input: { data: unknown }) => Promise<unknown> = async () => ({ kind: 'rejected' });
 mock.module('cloudflare:workers', () => ({ env: {} }));
-mock.module('../src/kernel/client', () => ({ configured: () => false }));
+const kernel = await import('../src/kernel/client');
+mock.module('../src/kernel/client', () => ({ ...kernel, configured: () => false }));
 mock.module('../src/ratings/own-votes/actions', () => ({
   readOwnVotesForViewer: ({ data }: { data: { cursor?: string } }) => {
     const call = { ...deferred<OwnVotesRead>(), subject: activeSubject, cursor: data.cursor ?? null };

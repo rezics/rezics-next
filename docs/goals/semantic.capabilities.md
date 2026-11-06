@@ -79,12 +79,14 @@ Released fixture: Actual bundled release plus a separately compiled board-game e
 
 Scenarios and binding: Existing original semantic outcomes; TO-FREEZE vertical-release and expansion-10-and-100. Fixture admission titles are listed below.
 
+Decision: imported-document inspection stays off the release barrel; the author workspace uses the existing definition-guide session port and web-semantic public entries. The definition guide does not import kernel exposure; grant control remains on `/catalogue/definitions/publish`.
+
 Stages: Declared: yes. Partial bound/exposed: original semantic extension API; launch release and expansion composition remain open. API-passed: unrecorded; promoted: no.
 
 Native acceptance for the existing bound slice (full pending job is not claimed by this command):
 
 ```sh
-bun run --cwd services/kernel check test/semantic/outcomes.test.ts test/semantic/expansion.test.ts
+bun run --cwd services/kernel check test/semantic/outcomes.test.ts test/semantic/expansion.test.ts test/semantic/definition-publication-workspace.test.ts
 ```
 
 ## Released verticals and identity grain
@@ -403,12 +405,12 @@ Released fixture: sources extension: actual public/unlisted/private curated Coll
 
 Scenarios and binding: Existing native Zone resource/typed/membership contracts; TO-FREEZE zone-user-site and full native default readPage composition. Original page outcomes remain bound.
 
-Stages: Declared: yes. Bound/exposed: resource and contract slices only; complete routed union/direct-target job open. API-passed: no; promoted: no.
+Stages: Declared: yes. Bound/exposed: resource, membership, mounted GET subjects, TypeList observed-key, served Zone routes, TypeList list-query identity and reader stale-cursor restart. API-passed: no; promoted: no. Full persona/growth/browser acceptance remains deferred.
 
 Native acceptance for the existing bound slice (full pending job is not claimed by this command):
 
 ```sh
-bun run --cwd services/kernel check test/zones/resource-core.test.ts test/zones/membership-contract.test.ts test/presentation/outcomes.test.ts
+bun run --cwd services/kernel check test/zones/resource-core.test.ts test/zones/membership-contract.test.ts test/zones/page-continuation-contract.test.ts test/presentation/zone-reads.test.ts test/presentation/outcomes.test.ts
 ```
 
 ## Zone and source lifecycle

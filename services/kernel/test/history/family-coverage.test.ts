@@ -1,17 +1,20 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { noEffect, runCommand, type CommandTransaction } from '../../src/command/command.ts';
 import { newId, partitionOf, PARTITIONS } from '../../src/route/route.ts';
-import { HistoryRegistry, type HistoryBarrier, type HistoryFamilySource } from '../../src/history/registry.ts';
-import { advanceHistoryFamilyCoverage, installHistoryFamilyDefinitions } from '../../src/history/family-coverage.ts';
+import { HistoryRegistry, type HistoryBarrier, type HistoryFamilySource } from '../../src/history/contract/registry.ts';
+import {
+  advanceHistoryFamilyCoverage,
+  installHistoryFamilyDefinitions,
+} from '../../src/history/adapters/family-coverage.ts';
 import {
   readHistoryOwnerCoverage,
   verifyHistoryOwnerCoverage,
   recordHistoryReceivingProof,
-  type HistoryOwnerCoverage,
-} from '../../src/history/receiving.ts';
-import { minimizeHistoryReceipt } from '../../src/history/receipt.ts';
-import { decodeLocator } from '../../src/history/locator.ts';
+} from '../../src/history/adapters/receiving.ts';
+import { minimizeHistoryReceipt } from '../../src/history/adapters/receipt.ts';
+import { decodeLocator } from '../../src/history/contract/locator.ts';
 import { custodyFixture, scope, type CustodyFixture } from './command-custody-fixture.ts';
+import { type HistoryOwnerCoverage } from '../../src/history/contract/receiving-types.ts';
 
 let f: CustodyFixture;
 const route = 0x6a30;

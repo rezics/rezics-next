@@ -4,7 +4,6 @@ import type { Pool, QueryResultRow } from 'pg';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { CommandTransaction } from '../command/command.ts';
-import type { HistoryBarrier } from '../history/registry.ts';
 import type {
   IdentityFrontier,
   IdentityJobRef,
@@ -61,8 +60,6 @@ import progressSQL from './identity-source-consumer-custody-progress.sql';
 import appendSQL from './identity-source-consumer-custody-append.sql';
 import historySQL from './identity-source-consumer-custody-history.sql';
 import type { DBOSClient } from '@dbos-inc/dbos-sdk';
-import type { AgentIdentityRetirementStage } from '../history/agent-identity-retirement.ts';
-import type { AgentIdentitySDKReceivingBinding } from '../history/agent-identity-sdk-fence.ts';
 import {
   lockSdkWorkflowWriterState,
   SDK_TRANSACTION_FENCE_COST,
@@ -88,6 +85,16 @@ import {
   IdentitySourceOriginalUnavailable,
   identitySourceConsumerLibraryWork,
 } from './identity-source-consumer-maintenance.ts';
+import {
+  historyComposition,
+  readAgentIdentitySDKReceivingBinding,
+  verifyAgentIdentityRetirementStage,
+} from '../history/application/index.ts';
+import {
+  type AgentIdentityRetirementStage,
+  type AgentIdentitySDKReceivingBinding,
+  type HistoryBarrier,
+} from '../history/contract/index.ts';
 
 // The selected path does not return arbitrarily large saved intent/sources.
 // Receipt equality is performed on the native row. Its digest, accepted job and
@@ -1970,7 +1977,7 @@ export async function lockIdentitySourceHistoryHandoff(
   sdk: DBOSClient,
 ): Promise<IdentitySourceHistoryHandoffResult> {
   const pending = (gap: string): IdentitySourceHistoryHandoffResult => ({ state: 'pending', gap });
-  const reference = stage.reference;
+  const reference = stage.reference as IdentitySourceConsumerReference;
   if (!valid(reference) || currentCommand(tx).basis !== null)
     return pending('identity-source-history-reference-changed');
   // No receiving-home read may be smuggled into a different Source command. Shared
@@ -2004,14 +2011,14 @@ export async function lockIdentitySourceHistoryHandoff(
   }
   if (!reserveHistoryWork(tx, IDENTITY_SOURCE_HISTORY_RECHECK_COST))
     return pending('identity-source-history-funding-unavailable');
-  const { verifyAgentIdentityRetirementStage } = await import('../history/agent-identity-retirement.ts');
+  const { verifyAgentIdentityRetirementStage } = historyComposition();
   const source = await verifyAgentIdentityRetirementStage(tx, stage);
   if (source.state === 'pending') return source;
   if (source.custodyId !== binding.custodyId || source.workflowId !== binding.workflowId)
     return pending('identity-source-history-association-changed');
   if (!reserveHistoryWork(tx, IDENTITY_SOURCE_HISTORY_RECEIVER_COST))
     return pending('identity-source-history-funding-unavailable');
-  const { readAgentIdentitySDKReceivingBinding } = await import('../history/agent-identity-sdk-fence.ts');
+  const { readAgentIdentitySDKReceivingBinding } = historyComposition();
   const receiver = await readAgentIdentitySDKReceivingBinding(
     tx,
     {
@@ -2023,7 +2030,10 @@ export async function lockIdentitySourceHistoryHandoff(
   );
   if (receiver.state === 'pending') return receiver;
   if (json(receiver.binding) !== json(binding)) return pending('identity-source-history-receiver-changed');
-  const sourceAuthority = await lockIdentitySourceHistoryAuthority(tx, stage.reference);
+  const sourceAuthority = await lockIdentitySourceHistoryAuthority(
+    tx,
+    stage.reference as IdentitySourceConsumerReference,
+  );
   if (!sourceAuthority) return pending('identity-source-history-native-custody-pending');
   // SDK owner cost, including its nested domain/fence locks and return SELECT.
   // Stale, pool, serialization and deadlock failures propagate: roll back the whole

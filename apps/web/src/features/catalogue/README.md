@@ -22,6 +22,8 @@ review projects the current native rank separately so deprecated assertions rema
 editable operands. Current and proposed assertions remain independent, with an explicit absent baseline.
 Review is a projection of the caller's captured draft: it neither prepares commands nor renews caller authority.
 
+Decision: fewest tests pin user-visible publication behaviour and named-state stories only; the grant-controlled workspace is `/catalogue/definitions/publish`. The definition guide does not import kernel exposure; it shows the publication link as ordinary navigation, and the workspace remains the grant gate. Stories cover only review, build continuation, reconciliation and completed publication. Kernel `expansion.test.ts` remains the ten-Type and one-hundred-manifest measurement. The route imports workspace/actions public entries; session uses the existing definition-guide actions port; imported-document inspection stays off the release barrel. Native import preview and extension readback use the generated Kernel client, with a local typed seam until emission publishes those methods.
+
 Recipe creation and correction also consume `StatementSummary` unchanged for ordinary assertions. Recipe keeps
 its field meaning, exact term/row return and authored-document presentation local: the validated `DocumentBody`,
 language and licence appear once per supplied side. Only a supplied proposed originality declaration is shown;
@@ -30,3 +32,17 @@ and retains property identifiers, fallback languages, ordered groups (including 
 Correction lists render the existing `recipeEvidenceChanges` current/next observations independently, including
 replaced and removed groups, without claiming stable citation identities. Returning to a field retires unsent
 review; explicit revised review uses sanitized evidence while an uncertain command retains its original operands.
+
+Decision: publication uses the generated native Kernel client and the existing catalogue session port. Release/source
+imports publish immutable Release1 bodies; an installed versioned catalogue pin starts its native build, continues by
+returned root, and activates against the separately read catalogue head. A missing artifact keeps its exact digest
+visible. An uncertain command locks replacement imports and retains its original body and key for explicit replay.
+Focused tests preserve current profile/route assertions and exercise native transport and mounted publication;
+persona, ten-Type/hundred-manifest growth, installation, independent publication readback and held browser journeys
+remain capability-row acceptance after product landing.
+
+Reading319 receiving uses `catalogueEntries.quotations` as the navigation producer, including its bounded-address
+unsupported result. Graph inspection keeps exact returns when admitted and offers an explicit general quotation
+visit when the combined address exceeds that budget. Album stories consume the editor type from its exporting
+view; Game stories construct statements against the generated native Subject read type. Existing interaction
+assertions remain unchanged; one graph test pins the over-budget return behaviour.

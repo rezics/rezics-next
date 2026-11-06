@@ -1,7 +1,9 @@
 import { AccessDeparture, useAccessDraft } from './departure';
+import { PendingAccessIntent } from './pending-intent';
+import { AccessDraftStore, accessAuthority, grantReference } from './draft';
 import { AuthoringDepartureBoundary } from '../../threads/authoring-departure';
 import { recipientRequest } from './request';
-import { OwnerTransferForm, resourceLabel, IdentityDetails } from './owner-transfer.tsx';
+import { OwnerTransferForm, resourceName, IdentityDetails } from './owner-transfer.tsx';
 import { transferableOwner } from './owner-transfer.ts';
 import { Menu } from '@rezics/ui/menu';
 import { Tombstone } from '@rezics/ui/tombstone';
@@ -89,9 +91,9 @@ function localDate(value: string | null) {
   return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, -1);
 }
 
-function useRecipientLookup(io: AccessIO) {
-  const [recipient, setRecipient] = useState('account');
-  const [handle, setHandle] = useState('');
+function useRecipientLookup(io: AccessIO, draft?: { recipient: string; handle: string }) {
+  const [recipient, setRecipient] = useState(draft?.recipient ?? 'account');
+  const [handle, setHandle] = useState(draft?.handle ?? '');
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [finding, setFinding] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -163,22 +165,27 @@ function GrantForm({
   io,
   onSubmit,
   onCancel,
+  drafts,
 }: {
+  drafts: AccessDraftStore;
   page: AccessSnapshot;
   grant: Grant | null;
   io: AccessIO;
   onSubmit(change: Omit<Change, 'key'>): void;
   onCancel(): void;
 }) {
-  const [kind, setKind] = useState<'role' | 'direct'>(grant?.kind ?? 'role');
-  const [role, setRole] = useState(grant?.role ?? page.roles.find((role) => role.delegable)?.id ?? '');
-  const [action, setAction] = useState(grant?.actions[0] ?? page.actions[0] ?? '');
+  const [retained] = useState(() => drafts.readGrant(page, grant));
+  const [kind, setKind] = useState<'role' | 'direct'>(retained?.kind ?? grant?.kind ?? 'role');
+  const [role, setRole] = useState(
+    retained?.role ?? grant?.role ?? page.roles.find((role) => role.delegable)?.id ?? '',
+  );
+  const [action, setAction] = useState(retained?.action ?? grant?.actions[0] ?? page.actions[0] ?? '');
   const { recipient, handle, identity, finding, error, setError, lookup, retire, changeHandle, changeRecipient } =
-    useRecipientLookup(io);
-  const [groupRole, setGroupRole] = useState<'owner' | 'member'>('member');
-  const [startsAt, setStartsAt] = useState(localDate(grant?.startsAt ?? null));
-  const [endsAt, setEndsAt] = useState(localDate(grant?.endsAt ?? null));
-  const [permissionFilter, setPermissionFilter] = useState('');
+    useRecipientLookup(io, retained);
+  const [groupRole, setGroupRole] = useState<'owner' | 'member'>(retained?.groupRole ?? 'member');
+  const [startsAt, setStartsAt] = useState(retained?.startsAt ?? localDate(grant?.startsAt ?? null));
+  const [endsAt, setEndsAt] = useState(retained?.endsAt ?? localDate(grant?.endsAt ?? null));
+  const [permissionFilter, setPermissionFilter] = useState(retained?.permissionFilter ?? '');
   const [review, setReview] = useState<{
     signature: string;
     advice: string;
@@ -196,7 +203,26 @@ function GrantForm({
     grant,
   ]);
   const [original] = useState(signature);
-  useAccessDraft(signature, signature !== original, retire);
+  const changed = !!retained || signature !== original;
+  useLayoutEffect(() => {
+    drafts.rememberGrant(
+      page,
+      grant,
+      {
+        kind,
+        role,
+        action,
+        recipient,
+        handle,
+        groupRole,
+        startsAt,
+        endsAt,
+        permissionFilter,
+      },
+      changed,
+    );
+  }, [drafts, advice, signature, permissionFilter, changed]);
+  useAccessDraft(signature, changed, retire);
   useLayoutEffect(() => setReview(null), [signature, advice]);
 
   const filter = permissionFilter.trim().toLocaleLowerCase();
@@ -499,13 +525,21 @@ function GrantForm({
     </form>
   );
 }
-export function ResourceAccessPage({ initial, io }: { initial: AccessState; io: AccessIO }) {
+export function ResourceAccessPage({
+  initial,
+  io,
+  recovery,
+}: {
+  initial: AccessState;
+  io: AccessIO;
+  recovery?: AccessRecovery;
+}) {
   // A loader's resource and complete acting authority own all controller and form state.
   const scope =
     initial.status === 'ready' ? JSON.stringify([initial.page.resource, initial.page.authority]) : initial.status;
-  const [lifetime, setLifetime] = useState({ scope, io, version: 0 });
-  if (lifetime.scope !== scope || lifetime.io !== io) {
-    setLifetime({ scope, io, version: lifetime.version + 1 });
+  const [lifetime, setLifetime] = useState({ scope, io, recovery, version: 0 });
+  if (lifetime.scope !== scope || lifetime.io !== io || lifetime.recovery !== recovery) {
+    setLifetime({ scope, io, recovery, version: lifetime.version + 1 });
     return null;
   }
   return (
@@ -520,13 +554,21 @@ export function ResourceAccessPage({ initial, io }: { initial: AccessState; io: 
         discardAction: m.thread_authoring_leave(),
       }}
     >
-      <ResourceAccessEditor key={lifetime.version} initial={initial} io={io} />
+      <ResourceAccessEditor key={lifetime.version} initial={initial} io={io} {...(recovery ? { recovery } : {})} />
     </AuthoringDepartureBoundary>
   );
 }
 
-function ResourceAccessEditor({ initial, io }: { initial: AccessState; io: AccessIO }) {
-  const [controller] = useState(() => new AccessRecovery(initial, io));
+function ResourceAccessEditor({
+  initial,
+  io,
+  recovery,
+}: {
+  initial: AccessState;
+  io: AccessIO;
+  recovery?: AccessRecovery;
+}) {
+  const [controller] = useState(() => recovery ?? new AccessRecovery(initial, io));
   useLayoutEffect(controller.activate, [controller]);
   const currentHeading = useRef<HTMLHeadingElement>(null);
   const focusHandoff = useRef(0);
@@ -540,11 +582,35 @@ function ResourceAccessEditor({ initial, io }: { initial: AccessState; io: Acces
     [controller],
   );
   const state = useSyncExternalStore(controller.subscribe, controller.snapshot, controller.snapshot);
+  const [drafts] = useState(() => new AccessDraftStore());
+  useSyncExternalStore(drafts.subscribe, drafts.snapshot, drafts.snapshot);
   const [form, setForm] = useState<Grant | 'new' | null>(null);
   const [revoke, setRevoke] = useState<{ grant: Grant; advice: string } | null>(null);
   const [transfer, setTransfer] = useState<Grant | null>(null);
+  const [admittedScope, setAdmittedScope] = useState(initial.status === 'ready' ? accessAuthority(initial.page) : null);
   const page = state.page.status === 'ready' ? state.page.page : null;
   const advice = page ? JSON.stringify(page) : '';
+  useLayoutEffect(() => {
+    if (
+      state.page.status === 'denied' ||
+      (page && admittedScope !== accessAuthority(page)) ||
+      (page &&
+        form &&
+        form !== 'new' &&
+        !page.grants.some((grant) => grantReference(grant) === grantReference(form))) ||
+      (page &&
+        transfer &&
+        !page.grants.some(
+          (grant) => grantReference(grant) === grantReference(transfer) && transferableOwner(page, grant),
+        ))
+    ) {
+      drafts.clear();
+      setForm(null);
+      setTransfer(null);
+      setRevoke(null);
+      if (page) setAdmittedScope(accessAuthority(page));
+    }
+  }, [state.page, drafts, admittedScope, form, transfer]);
   const removalReview = revoke?.advice === advice ? revoke.grant : null;
   const notice =
     state.phase === 'saved'
@@ -562,6 +628,7 @@ function ResourceAccessEditor({ initial, io }: { initial: AccessState; io: Acces
                 : null;
   return (
     <AccessDeparture
+      retainedDraft={!page && drafts.changed}
       unresolved={state.page.status !== 'denied' && state.phase !== 'denied' && (!!state.pending || state.reconciling)}
       retire={controller.retire}
       abandon={controller.abandon}
@@ -574,6 +641,7 @@ function ResourceAccessEditor({ initial, io }: { initial: AccessState; io: Acces
           move(
             () => {
               if (!controller.isCurrentLifetime()) return;
+              drafts.clear();
               setForm(null);
               setRevoke(null);
               setTransfer(null);
@@ -616,6 +684,7 @@ function ResourceAccessEditor({ initial, io }: { initial: AccessState; io: Acces
             {state.pending ? (
               <div className="space-y-3">
                 <p className="text-sm text-muted-foreground">{m.access_retry_help()}</p>
+                <PendingAccessIntent intent={state.pending} />
                 <Button type="button" disabled={state.busy} onClick={() => void controller.retry()}>
                   {m.access_retry_operation()}
                 </Button>
@@ -650,7 +719,7 @@ function ResourceAccessEditor({ initial, io }: { initial: AccessState; io: Acces
             ) : (
               <>
                 <section className="min-w-0 space-y-2 [overflow-wrap:anywhere]" aria-label={m.access_resource()}>
-                  <h2 className="text-lg font-semibold">{resourceLabel(page.resource.type)}</h2>
+                  <h2 className="text-lg font-semibold">{resourceName(page)}</h2>
                   <p className="text-sm">
                     {m.access_acting_as({
                       name: identityName(page.identities.find((item) => item.id === page.authority.accountId)),
@@ -687,18 +756,10 @@ function ResourceAccessEditor({ initial, io }: { initial: AccessState; io: Acces
                       type="button"
                       variant="outline"
                       disabled={state.busy}
-                      onClick={() =>
-                        move(
-                          () => {
-                            if (!controller.isCurrentLifetime()) return;
-                            setForm(null);
-                            setRevoke(null);
-                            setTransfer(null);
-                            void controller.reload();
-                          },
-                          { abandon: false, admit: controller.isCurrentLifetime },
-                        )
-                      }
+                      onClick={() => {
+                        setRevoke(null);
+                        void controller.reload();
+                      }}
                     >
                       {m.access_reload()}
                     </Button>
@@ -709,6 +770,7 @@ function ResourceAccessEditor({ initial, io }: { initial: AccessState; io: Acces
                         disabled={state.busy || !!state.pending}
                         onClick={() =>
                           move(() => {
+                            drafts.clear();
                             setTransfer(null);
                             setForm('new');
                           })
@@ -733,15 +795,25 @@ function ResourceAccessEditor({ initial, io }: { initial: AccessState; io: Acces
                   <OwnerTransferForm
                     page={page}
                     grant={transfer}
+                    drafts={drafts}
                     io={io}
-                    onCancel={() => move(() => setTransfer(null))}
+                    onCancel={() =>
+                      move(() => {
+                        drafts.clear();
+                        setTransfer(null);
+                      })
+                    }
                     onConfirm={(input) => {
+                      drafts.clear();
                       setTransfer(null);
                       void controller.submitTransfer(input);
                     }}
                   />
                 ) : null}
-                {form !== null && !state.busy && !state.pending ? (
+                {form !== null &&
+                !state.busy &&
+                !state.pending &&
+                (form === 'new' || page.grants.some((grant) => grantReference(grant) === grantReference(form))) ? (
                   <GrantForm
                     key={JSON.stringify([
                       page.resource.id,
@@ -753,10 +825,17 @@ function ResourceAccessEditor({ initial, io }: { initial: AccessState; io: Acces
                       form === 'new' ? 'new' : [form.subject, form.valid, form.role, form.actions],
                     ])}
                     page={page}
+                    drafts={drafts}
                     grant={form === 'new' ? null : form}
                     io={io}
-                    onCancel={() => move(() => setForm(null))}
+                    onCancel={() =>
+                      move(() => {
+                        drafts.clear();
+                        setForm(null);
+                      })
+                    }
                     onSubmit={(change) => {
+                      drafts.clear();
                       setForm(null);
                       void controller.submit(change);
                     }}
@@ -841,6 +920,7 @@ function ResourceAccessEditor({ initial, io }: { initial: AccessState; io: Acces
                                     onSelect: () =>
                                       move(() => {
                                         setTransfer(null);
+                                        drafts.clear();
                                         setForm(grant);
                                       }),
                                   },
@@ -852,6 +932,7 @@ function ResourceAccessEditor({ initial, io }: { initial: AccessState; io: Acces
                                           onSelect: () =>
                                             move(() => {
                                               setForm(null);
+                                              drafts.clear();
                                               setTransfer(grant);
                                             }),
                                         },

@@ -113,3 +113,8 @@ export function kernelClient(
   }
   throw new Error('KERNEL_ORIGIN is required to read subjects');
 }
+
+export type { ReadCredentialMode } from './credential.ts';
+export type { SessionEnv } from '../session/client.ts';
+export { prepareSession, viewerCredential } from '../session/request.ts';
+export { SESSION_COOKIE, clearCookie } from '../session/cookies.ts';

@@ -14,8 +14,6 @@ import { deadlineClient, within } from './authenticate.ts';
 import { validResource } from './grant-command.ts';
 import { GrantDeniedError } from './grant-commands.ts';
 import { permissionEvidenceDeadline, permissionHistoryAccounts } from './permission.ts';
-import { bindCommandHistoryEvidence } from '../history/record.ts';
-import type { AccountReference } from '../history/locator.ts';
 import type { ResourceEligibility } from './eligibility.ts';
 import {
   resourcePage,
@@ -27,6 +25,8 @@ import {
   type Resource,
 } from '../request/access.ts';
 import { governanceReachUse, recordGovernanceReachUse, type GovernanceReachUse } from './governance-reach.ts';
+import { bindCommandHistoryEvidence } from '../history/application/index.ts';
+import { type AccountReference } from '../history/contract/index.ts';
 
 /** Trusted server binding to the authorization resource. validate checks THAT
  * anchor's existence and domain prerequisites at command T on its supplied client;

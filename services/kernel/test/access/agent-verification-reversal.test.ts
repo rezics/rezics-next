@@ -26,6 +26,7 @@ import { createLifecycleCommands, LIFECYCLE_ACTIONS } from '../../src/access/lif
 import { authenticateAccount } from '../support/admitted-access.ts';
 import { newId } from '../../src/route/route.ts';
 import { createKernel } from '../../src/http/kernel.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { actionCatalogue, IDEMPOTENCY_HEADER, requestDigest } from '../../src/http/request.ts';
 import { EVENT_TYPES } from '../../src/events/log.ts';
 import { migrate } from '../../scripts/database.ts';
@@ -38,6 +39,12 @@ import {
   probeAccountIdentityPublication,
   assertAccountIdentitySource,
 } from '../../src/access/agent-verification-identity.ts';
+import {
+  AGENT_IDENTITY_SDK_RETIREMENT,
+  AGENT_IDENTITY_WORK_OWNER,
+  IDENTITY_HISTORY_HANDOFF_UNAVAILABLE,
+  IDENTITY_SOURCE_MAINTENANCE_UNAVAILABLE,
+} from '../../src/history/contract/identity-types.ts';
 
 const sourceUrl = process.env.DATABASE_URL;
 if (!sourceUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -175,7 +182,8 @@ beforeAll(async () => {
   migrate(databaseUrl);
   pool = createPool(databaseUrl);
   await bootstrapRelease(pool, bundledRelease);
-  const initial = createKernel({ pool, routeKey, tokens, clock });
+  const receiptKeys = testReceiptKeys();
+  const initial = createKernel({ pool, routeKey, tokens, clock, receiptKeys });
   const actions = new Map(actionCatalogue(initial));
   for (const [action, value] of LIFECYCLE_ACTIONS) actions.set(action, value);
   actions.set('account:manage', { anonymous: false });
@@ -185,6 +193,7 @@ beforeAll(async () => {
     routeKey,
     tokens,
     clock,
+    receiptKeys,
     access: () => access,
     writeRate: {
       async spend() {
@@ -720,11 +729,11 @@ test('a retained reversal payload without the original native write basis cannot
 
 test('Original native Account identity writers enroll actual generated receipt outbox and durable copies at serialization before data loss with real full role union and native receiving custody, preserving unknown historical association as pending', async () => {
   const { readAgentIdentityCopies, readAgentIdentityCopyReceiving } =
-    await import('../../src/history/agent-identity-source.ts');
-  const { AGENT_IDENTITY_DURABLE_ASSOCIATION } = await import('../../src/history/durable.ts');
-  const { ACCOUNT_ROLE_BITS } = await import('../../src/history/contracts.ts');
-  const { encodeLocator } = await import('../../src/history/locator.ts');
-  const { commandHistoryKind } = await import('../../src/history/record.ts');
+    await import('../../src/history/adapters/agent-identity-source.ts');
+  const { AGENT_IDENTITY_DURABLE_ASSOCIATION } = await import('../../src/history/adapters/durable.ts');
+  const { ACCOUNT_ROLE_BITS } = await import('../../src/history/contract/contracts.ts');
+  const { encodeLocator } = await import('../../src/history/contract/locator.ts');
+  const { commandHistoryKind } = await import('../../src/history/adapters/record.ts');
   const account = await seedAccount(`copy_${randomUUID().slice(0, 8)}`, { kind: 'organization' });
   await pool.query(
     `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
@@ -848,8 +857,8 @@ test('Original native Account identity writers enroll actual generated receipt o
 
 test('identity source declaration rejects foreign live commands and post-serialization keys without enrolling copies', async () => {
   const { declareAgentIdentitySource, readAgentIdentityCopies } =
-    await import('../../src/history/agent-identity-source.ts');
-  const { beginRecordHistorySerialization } = await import('../../src/history/record-source.ts');
+    await import('../../src/history/adapters/agent-identity-source.ts');
+  const { beginRecordHistorySerialization } = await import('../../src/history/adapters/record-source.ts');
   const { runCommand, noEffect } = await import('../../src/command/command.ts');
   const { partitionOf } = await import('../../src/route/route.ts');
   const key = {
@@ -884,8 +893,8 @@ test('identity source declaration rejects foreign live commands and post-seriali
 });
 
 test('original reversal serializers enroll both actual outbox slots and preserve the genuine undo role union', async () => {
-  const { readAgentIdentityCopies } = await import('../../src/history/agent-identity-source.ts');
-  const { ACCOUNT_ROLE_BITS: roles } = await import('../../src/history/contracts.ts');
+  const { readAgentIdentityCopies } = await import('../../src/history/adapters/agent-identity-source.ts');
+  const { ACCOUNT_ROLE_BITS: roles } = await import('../../src/history/contract/contracts.ts');
   const { account, token } = await verified('organization');
   const released = await post(`/v1/accounts/${account.id}:releaseVerification`, token);
   expect(released.response.status).toBe(200);
@@ -925,14 +934,14 @@ test('original reversal serializers enroll both actual outbox slots and preserve
 
 test('New fully converted original identity source has a genuine sealed finite generated-copy inventory and every current receiving copy is independently verified before source minimization while unknown old copies stay pending', async () => {
   const { readAgentIdentityNativeInventory, readAgentIdentityInventory, verifyAgentIdentityInventory } =
-    await import('../../src/history/agent-identity-inventory.ts');
-  const { readAgentIdentityCopies } = await import('../../src/history/agent-identity-source.ts');
+    await import('../../src/history/adapters/agent-identity-inventory.ts');
+  const { readAgentIdentityCopies } = await import('../../src/history/adapters/agent-identity-source.ts');
   const { partitionOf } = await import('../../src/route/route.ts');
-  const { encodeLocator } = await import('../../src/history/locator.ts');
+  const { encodeLocator } = await import('../../src/history/contract/locator.ts');
   const { withConnection } = await import('../../src/database/pool.ts');
-  const { sealHistoryAccount } = await import('../../src/history/gates.ts');
-  const { recordHistoryReceivingProof } = await import('../../src/history/receiving.ts');
-  const { ACCOUNT_ROLE_BITS } = await import('../../src/history/contracts.ts');
+  const { sealHistoryAccount } = await import('../../src/history/adapters/gates.ts');
+  const { recordHistoryReceivingProof } = await import('../../src/history/adapters/receiving.ts');
+  const { ACCOUNT_ROLE_BITS } = await import('../../src/history/contract/contracts.ts');
   const account = await seedAccount(`inventory_${randomUUID().slice(0, 8)}`, { kind: 'organization' });
   await pool.query(
     `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
@@ -1096,8 +1105,8 @@ test('New fully converted original identity source has a genuine sealed finite g
 });
 
 test('identity inventory rejects foreign source declarations and late native enrollment', async () => {
-  const { declareAgentIdentitySource } = await import('../../src/history/agent-identity-source.ts');
-  const { beginRecordHistorySerialization } = await import('../../src/history/record-source.ts');
+  const { declareAgentIdentitySource } = await import('../../src/history/adapters/agent-identity-source.ts');
+  const { beginRecordHistorySerialization } = await import('../../src/history/adapters/record-source.ts');
   const { partitionOf } = await import('../../src/route/route.ts');
   const sourceKey = {
     route: accountRoute,
@@ -1122,9 +1131,9 @@ test('identity inventory rejects foreign source declarations and late native enr
 
 test('Actual original account identity SDK enqueue and all retained workflow-step copies receive native original-source association before source loss while original IDs steps retry and publication remain unchanged', async () => {
   const { createWorkClient } = await import('../../src/work/client.ts');
-  const { enqueueAgentIdentityVerification } = await import('../../src/history/agent-identity-work.ts');
-  const { lookupAgentIdentityReceivingCopies } = await import('../../src/history/agent-identity-source.ts');
-  const { ACCOUNT_ROLE_BITS } = await import('../../src/history/contracts.ts');
+  const { enqueueAgentIdentityVerification } = await import('../../src/history/adapters/agent-identity-work.ts');
+  const { lookupAgentIdentityReceivingCopies } = await import('../../src/history/adapters/agent-identity-source.ts');
+  const { ACCOUNT_ROLE_BITS } = await import('../../src/history/contract/contracts.ts');
   const account = await seedAccount(`sdk_custody_${randomUUID().slice(0, 8)}`);
   const token = await bearer(account);
   await ensureAccountAgent(pool, { account: account.id, kind: 'person', name: account.displayName, language: 'en' });
@@ -1280,8 +1289,8 @@ test('Actual original account identity SDK enqueue and all retained workflow-ste
 
 test('original reversal SDK custody binds the existing exact source and rejects changed native arguments while uncovered older SDK creation stays pending', async () => {
   const { createWorkClient } = await import('../../src/work/client.ts');
-  const { enqueueAgentIdentityReversal } = await import('../../src/history/agent-identity-work.ts');
-  const { lookupAgentIdentityReceivingCopies } = await import('../../src/history/agent-identity-source.ts');
+  const { enqueueAgentIdentityReversal } = await import('../../src/history/adapters/agent-identity-work.ts');
+  const { lookupAgentIdentityReceivingCopies } = await import('../../src/history/adapters/agent-identity-source.ts');
   const { account, token } = await verified();
   const released = await post(`/v1/accounts/${account.id}:releaseVerification`, token);
   const decision = released.body.reversal as AgentVerificationReversal;
@@ -1442,18 +1451,16 @@ test('accepted original reversal Source recovers without the old Accounts verifi
 
 test('Close genuine identity SDK future writers and receiving retirement', async () => {
   const { createWorkClient } = await import('../../src/work/client.ts');
-  const { enqueueAgentIdentityReversal, AGENT_IDENTITY_WORK_OWNER } =
-    await import('../../src/history/agent-identity-work.ts');
+  const { enqueueAgentIdentityReversal } = await import('../../src/history/adapters/agent-identity-work.ts');
   const {
-    AGENT_IDENTITY_SDK_RETIREMENT,
     readAgentIdentityRetirementStage,
     verifyAgentIdentityRetirementStage,
     agentIdentityRetirementReadiness,
     readAgentIdentitySDKRetirementGap,
-  } = await import('../../src/history/agent-identity-retirement.ts');
-  const { minimizeHistoryWork } = await import('../../src/history/durable.ts');
-  const { HistoryRegistry } = await import('../../src/history/registry.ts');
-  const { encodeLocator } = await import('../../src/history/locator.ts');
+  } = await import('../../src/history/adapters/agent-identity-retirement.ts');
+  const { minimizeHistoryWork } = await import('../../src/history/adapters/durable.ts');
+  const { HistoryRegistry } = await import('../../src/history/contract/registry.ts');
+  const { encodeLocator } = await import('../../src/history/contract/locator.ts');
   const { partitionOf } = await import('../../src/route/route.ts');
   const { account, token } = await verified();
   const released = await post(`/v1/accounts/${account.id}:releaseVerification`, token);
@@ -1603,10 +1610,10 @@ test('Close genuine identity SDK future writers and receiving retirement', async
 
 test('Compose genuine SDK permanent fence into identity receiving retirement', async () => {
   const { createWorkClient } = await import('../../src/work/client.ts');
-  const { enqueueAgentIdentityReversal } = await import('../../src/history/agent-identity-work.ts');
-  const { readAgentIdentityRetirementStage } = await import('../../src/history/agent-identity-retirement.ts');
+  const { enqueueAgentIdentityReversal } = await import('../../src/history/adapters/agent-identity-work.ts');
+  const { readAgentIdentityRetirementStage } = await import('../../src/history/adapters/agent-identity-retirement.ts');
   const { AGENT_IDENTITY_SDK_FENCE_CONSUMER, readAgentIdentitySDKReceivingBinding, retireAgentIdentitySDKWork } =
-    await import('../../src/history/agent-identity-sdk-fence.ts');
+    await import('../../src/history/adapters/agent-identity-sdk-fence.ts');
   const { account, token } = await verified();
   const released = await post(`/v1/accounts/${account.id}:releaseVerification`, token);
   expect(released.response.status).toBe(200);
@@ -1732,13 +1739,10 @@ test('Compose genuine SDK permanent fence into identity receiving retirement', a
 
 test('A copied SDK fence cannot discharge a retained original identity consumer', async () => {
   const { createWorkClient } = await import('../../src/work/client.ts');
-  const {
-    enqueueAgentIdentityReversal,
-    readAgentIdentityRetirementStage,
-    readAgentIdentitySDKReceivingBinding,
-    readAgentIdentitySDKFence,
-    retireAgentIdentitySDKWork,
-  } = await import('../../src/history/agent-identity-work.ts');
+  const { enqueueAgentIdentityReversal } = await import('../../src/history/adapters/agent-identity-work.ts');
+  const { readAgentIdentityRetirementStage } = await import('../../src/history/adapters/agent-identity-retirement.ts');
+  const { readAgentIdentitySDKReceivingBinding, readAgentIdentitySDKFence, retireAgentIdentitySDKWork } =
+    await import('../../src/history/adapters/agent-identity-sdk-fence.ts');
   const { account, token } = await verified();
   const released = await post(`/v1/accounts/${account.id}:releaseVerification`, token);
   expect(released.response.status).toBe(200);
@@ -2190,11 +2194,11 @@ test('Default History maintenance passes one genuinely funded Source native and 
   const { spyOn } = await import('bun:test');
   const { existsSync } = await import('node:fs');
   const { createWorkClient } = await import('../../src/work/client.ts');
-  const { enqueueAgentIdentityReversal } = await import('../../src/history/agent-identity-work.ts');
-  const retirement = await import('../../src/history/agent-identity-retirement.ts');
+  const { enqueueAgentIdentityReversal } = await import('../../src/history/adapters/agent-identity-work.ts');
+  const retirement = await import('../../src/history/adapters/agent-identity-retirement.ts');
   const sourceConsumer = await import('../../src/semantic/identity-source-consumer-custody.ts');
-  const { admitSharedHistory, advanceSharedHistory } = await import('../../src/access/shared-history.ts');
-  const { HistoryRegistry } = await import('../../src/history/registry.ts');
+  const { admitSharedHistory, advanceSharedHistory } = await import('../../src/history/adapters/shared-history.ts');
+  const { HistoryRegistry } = await import('../../src/history/contract/registry.ts');
   const { account, token } = await verified();
   const released = await post(`/v1/accounts/${account.id}:releaseVerification`, token);
   expect(released.response.status).toBe(200);
@@ -2271,7 +2275,7 @@ test('Default History maintenance passes one genuinely funded Source native and 
     if (!existsSync(path)) {
       expect(await advanceSharedHistory(deps, jobId)).toEqual({
         state: 'more',
-        gap: retirement.IDENTITY_SOURCE_MAINTENANCE_UNAVAILABLE,
+        gap: IDENTITY_SOURCE_MAINTENANCE_UNAVAILABLE,
       });
       expect(await cursor()).toEqual(before);
       expect(readSpy).not.toHaveBeenCalled();
@@ -2279,10 +2283,11 @@ test('Default History maintenance passes one genuinely funded Source native and 
     // This outcome requires the original funded producer after integration. No skip,
     // mock frame, allowance snapshot or success fallback stands in for its native body.
     expect(existsSync(path)).toBe(true);
-    const producer: import('../../src/history/agent-identity-retirement.ts').IdentitySourceConsumerMaintenanceModule =
+    const producer: import('../../src/history/adapters/agent-identity-retirement.ts').IdentitySourceConsumerMaintenanceModule =
       await import(path.href);
     const withFrame = producer.withIdentitySourceConsumerMaintenance;
-    type Funded = import('../../src/history/agent-identity-retirement.ts').IdentitySourceConsumerMaintenanceContext;
+    type Funded =
+      import('../../src/history/adapters/agent-identity-retirement.ts').IdentitySourceConsumerMaintenanceContext;
     let active: Funded | null = null;
     const contexts: Funded[] = [];
     let entries = 0;
@@ -2553,10 +2558,10 @@ test("Original Account reversal writer publishes exact native reversal settlemen
 
 test('original identity SDK receiving observation rejects wrong sources and a native fence without Source transfer', async () => {
   const { createWorkClient } = await import('../../src/work/client.ts');
-  const { enqueueAgentIdentityReversal } = await import('../../src/history/agent-identity-work.ts');
-  const { readAgentIdentityNativeInventory } = await import('../../src/history/agent-identity-inventory.ts');
-  const { readAgentIdentitySDKRetirement, readAgentIdentitySDKRetirementGap, AGENT_IDENTITY_SDK_RETIREMENT } =
-    await import('../../src/history/agent-identity-retirement.ts');
+  const { enqueueAgentIdentityReversal } = await import('../../src/history/adapters/agent-identity-work.ts');
+  const { readAgentIdentityNativeInventory } = await import('../../src/history/adapters/agent-identity-inventory.ts');
+  const { readAgentIdentitySDKRetirement, readAgentIdentitySDKRetirementGap } =
+    await import('../../src/history/adapters/agent-identity-retirement.ts');
   const { retireSdkWorkflowWriters, readSdkWorkflowRetirement } =
     await import('../../src/work/sdk-retirement-fence.ts');
   const { account, token } = await verified();
@@ -2649,17 +2654,13 @@ test('original identity SDK receiving observation rejects wrong sources and a na
 
 test('Genuine current source and SDK fences guard distinct History readiness and exact receiving closure', async () => {
   const { createWorkClient } = await import('../../src/work/client.ts');
-  const { enqueueAgentIdentityReversal } = await import('../../src/history/agent-identity-work.ts');
-  const {
-    readAgentIdentitySDKWriterState,
-    lockAgentIdentitySDKWriterState,
-    readAgentIdentitySDKReceivingBinding,
-    IDENTITY_HISTORY_HANDOFF_UNAVAILABLE,
-  } = await import('../../src/history/agent-identity-sdk-fence.ts');
+  const { enqueueAgentIdentityReversal } = await import('../../src/history/adapters/agent-identity-work.ts');
+  const { readAgentIdentitySDKWriterState, lockAgentIdentitySDKWriterState, readAgentIdentitySDKReceivingBinding } =
+    await import('../../src/history/adapters/agent-identity-sdk-fence.ts');
   const { withIdentitySourceConsumerMaintenance, identitySourceConsumerNativeWork } =
     await import('../../src/semantic/identity-source-consumer-maintenance.ts');
   const { readAgentIdentityRetirementStage, agentIdentityRetirementReadiness } =
-    await import('../../src/history/agent-identity-retirement.ts');
+    await import('../../src/history/adapters/agent-identity-retirement.ts');
   const { readSdkWorkflowWriterState, retireSdkWorkflowWriters } =
     await import('../../src/work/sdk-retirement-fence.ts');
   const { account, token } = await verified();
@@ -2711,7 +2712,12 @@ test('Genuine current source and SDK fences guard distinct History readiness and
       gap: 'identity-sdk-current-fence-funding-unavailable',
     });
     await withIdentitySourceConsumerMaintenance({ pool, env: {} }, { deadline }, async (context) => {
-      const balance = () => identitySourceConsumerNativeWork(pool, context.identityConsumerWork, deadline)!;
+      const balance = () =>
+        identitySourceConsumerNativeWork(
+          pool,
+          context.identityConsumerWork as import('../../src/semantic/identity-source-consumer-maintenance.ts').IdentitySourceConsumerMaintenanceWork,
+          deadline,
+        )!;
       const before = balance();
       expect(await readAgentIdentitySDKWriterState(pool, client, source.workflowId, context)).toEqual({
         state: 'observed',
@@ -2819,7 +2825,11 @@ test('Genuine current source and SDK fences guard distinct History readiness and
         expect((await readAgentIdentitySDKWriterState(pool, client, source.workflowId, context)).state).toBe(
           'observed',
         );
-        const exhausted = identitySourceConsumerNativeWork(pool, context.identityConsumerWork, deadline);
+        const exhausted = identitySourceConsumerNativeWork(
+          pool,
+          context.identityConsumerWork as import('../../src/semantic/identity-source-consumer-maintenance.ts').IdentitySourceConsumerMaintenanceWork,
+          deadline,
+        );
         expect(exhausted?.bytes).toBe(0);
         expect(await readAgentIdentitySDKWriterState(pool, client, source.workflowId, context)).toEqual({
           state: 'pending',
@@ -2832,7 +2842,13 @@ test('Genuine current source and SDK fences guard distinct History readiness and
             )
           ).value,
         ).toEqual({ state: 'pending', gap: 'identity-sdk-current-fence-funding-unavailable' });
-        expect(identitySourceConsumerNativeWork(pool, context.identityConsumerWork, deadline)).toEqual(exhausted);
+        expect(
+          identitySourceConsumerNativeWork(
+            pool,
+            context.identityConsumerWork as import('../../src/semantic/identity-source-consumer-maintenance.ts').IdentitySourceConsumerMaintenanceWork,
+            deadline,
+          ),
+        ).toEqual(exhausted);
       },
     );
     const artifact = {
@@ -2861,7 +2877,7 @@ test('Genuine current source and SDK fences guard distinct History readiness and
     ).toEqual({ ready: false, gap: IDENTITY_HISTORY_HANDOFF_UNAVAILABLE });
     const stage = await readAgentIdentityRetirementStage(pool, reference, { deadline });
     if (!stage) throw new Error('Expected genuine native original Source stage');
-    const { retireAgentIdentitySDKWork } = await import('../../src/history/agent-identity-sdk-fence.ts');
+    const { retireAgentIdentitySDKWork } = await import('../../src/history/adapters/agent-identity-sdk-fence.ts');
     expect(await retireAgentIdentitySDKWork(pool, client, stage, { deadline })).toEqual({
       state: 'pending',
       gap: 'identity-source-consumer-custody-pending',
@@ -2969,13 +2985,13 @@ async function verifiedHistoryHomeZero() {
 test('The real default selected identity unit records guarded readiness retires its exact SDK writer and closes physical and receiving copies under current Source and SDK authority in one original frame', async () => {
   const { spyOn } = await import('bun:test');
   const { createWorkClient } = await import('../../src/work/client.ts');
-  const { enqueueAgentIdentityReversal, agentIdentityRetirementReadiness } =
-    await import('../../src/history/agent-identity-work.ts');
+  const { enqueueAgentIdentityReversal } = await import('../../src/history/adapters/agent-identity-work.ts');
+  const { agentIdentityRetirementReadiness } = await import('../../src/history/adapters/agent-identity-retirement.ts');
   const source = await import('../../src/semantic/identity-source-consumer-maintenance.ts');
   const sdk = await import('../../src/work/sdk-retirement-fence.ts');
-  const { HistoryRegistry } = await import('../../src/history/registry.ts');
-  const { admitSharedHistory, advanceSharedHistory } = await import('../../src/access/shared-history.ts');
-  const { encodeLocator } = await import('../../src/history/locator.ts');
+  const { HistoryRegistry } = await import('../../src/history/contract/registry.ts');
+  const { admitSharedHistory, advanceSharedHistory } = await import('../../src/history/adapters/shared-history.ts');
+  const { encodeLocator } = await import('../../src/history/contract/locator.ts');
   const { account, token } = await verifiedHistoryHomeZero();
   const released = await post(`/v1/accounts/${account.id}:releaseVerification`, token);
   expect(released.response.status).toBe(200);
@@ -3325,8 +3341,9 @@ test('native identity retention refuses a foreign root on a source-home command 
 
 test('default native identity cleanup refuses incomplete copies then minimizes the exact original source under real receiving closure while preserving surviving attribution and technical undo', async () => {
   const { createWorkClient } = await import('../../src/work/client.ts');
-  const { enqueueAgentIdentityVerification, enqueueAgentIdentityReversal, agentIdentityRetirementReadiness } =
-    await import('../../src/history/agent-identity-work.ts');
+  const { enqueueAgentIdentityVerification, enqueueAgentIdentityReversal } =
+    await import('../../src/history/adapters/agent-identity-work.ts');
+  const { agentIdentityRetirementReadiness } = await import('../../src/history/adapters/agent-identity-retirement.ts');
   const { reverseDeletedAccountAgent } = await import('../../src/access/agent-verification.ts');
   const {
     openNativeErasure,
@@ -3334,8 +3351,8 @@ test('default native identity cleanup refuses incomplete copies then minimizes t
     NATIVE_ERASURE_GROUPS: NATIVE_ERASURE_GROUPSGetter,
   } = await import('../../src/access/erasure-native.ts');
   const NATIVE_ERASURE_GROUPS = NATIVE_ERASURE_GROUPSGetter();
-  const { admitSharedHistory, advanceSharedHistory } = await import('../../src/access/shared-history.ts');
-  const { HistoryRegistry } = await import('../../src/history/registry.ts');
+  const { admitSharedHistory, advanceSharedHistory } = await import('../../src/history/adapters/shared-history.ts');
+  const { HistoryRegistry } = await import('../../src/history/contract/registry.ts');
   const { readAccountIdentityUndo } = await import('../../src/semantic/identity-epoch-binding.ts');
   const { account } = await verifiedHistoryHomeZero();
   const original = (
@@ -3506,11 +3523,12 @@ test('default native identity cleanup refuses incomplete copies then minimizes t
 test('identity History reuses the original Source frame without replenishing it and rejects foreign or ended frames before dispatch', async () => {
   const source = await import('../../src/semantic/identity-source-consumer-maintenance.ts');
   const { withAgentIdentityHistoryUnit, currentAgentIdentityHistoryUnit } =
-    await import('../../src/history/agent-identity-retirement.ts');
-  const { reserveIdentityHistoryWork, nativeWork } = await import('../../src/history/agent-identity-inventory-work.ts');
+    await import('../../src/history/adapters/agent-identity-retirement.ts');
+  const { reserveIdentityHistoryWork, nativeWork } =
+    await import('../../src/history/adapters/agent-identity-inventory-work.ts');
   const otherPool = new Pool({ connectionString: databaseUrl });
   const deadline = Date.now() + 5000;
-  let ended: import('../../src/history/receiving.ts').HistoryReceivingContext | undefined;
+  let ended: import('../../src/history/contract/receiving-types.ts').HistoryReceivingContext | undefined;
   let calls = 0;
   try {
     await source.withIdentitySourceConsumerMaintenance({ pool, env: {} }, { deadline }, async (funded) => {
@@ -3548,16 +3566,16 @@ test('identity History reuses the original Source frame without replenishing it 
 
 test('released original receipt receiving uses a real command and rechecks current barrier and role union without closing source or SDK custody', async () => {
   const { readAgentIdentityNativeInventory, verifyAgentIdentityInventory } =
-    await import('../../src/history/agent-identity-inventory.ts');
+    await import('../../src/history/adapters/agent-identity-inventory.ts');
   const {
     readHistoryReceivingReceipt,
     recordHistoryReceivingProof,
     verifyHistoryReceivingReceipt,
     historyReceivingGap,
-  } = await import('../../src/history/receiving.ts');
+  } = await import('../../src/history/adapters/receiving.ts');
   const { withConnection } = await import('../../src/database/pool.ts');
-  const { sealHistoryAccount } = await import('../../src/history/gates.ts');
-  const { encodeLocator } = await import('../../src/history/locator.ts');
+  const { sealHistoryAccount } = await import('../../src/history/adapters/gates.ts');
+  const { encodeLocator } = await import('../../src/history/contract/locator.ts');
   const { account, token } = await verifiedHistoryHomeZero();
   const released = await post(`/v1/accounts/${account.id}:releaseVerification`, token);
   expect(released.response.status).toBe(200);
@@ -3652,24 +3670,34 @@ test('released original receipt receiving uses a real command and rechecks curre
 test('SDK identity observations reject an ended explicit token and a foreign Account barrier', async () => {
   const owner = await import('../../src/semantic/identity-source-consumer-maintenance.ts');
   const { readAgentIdentitySDKWriterState, readAgentIdentitySDKReceivingBinding } =
-    await import('../../src/history/agent-identity-sdk-fence.ts');
+    await import('../../src/history/adapters/agent-identity-sdk-fence.ts');
   const { createWorkClient } = await import('../../src/work/client.ts');
-  const { recordHistoryReceivingProof, historyReceivingGap } = await import('../../src/history/receiving.ts');
+  const { recordHistoryReceivingProof, historyReceivingGap } = await import('../../src/history/adapters/receiving.ts');
   const client = await createWorkClient(databaseUrl, pool);
   const deadline = Date.now() + 5000;
-  let ended: import('../../src/history/receiving.ts').HistoryReceivingContext | undefined;
+  let ended: import('../../src/history/contract/receiving-types.ts').HistoryReceivingContext | undefined;
   try {
     await owner.withIdentitySourceConsumerMaintenance({ pool, env: {} }, { deadline }, async (context) => {
       ended = context;
     });
     await owner.withIdentitySourceConsumerMaintenance({ pool, env: {} }, { deadline }, async (context) => {
-      const before = owner.identitySourceConsumerNativeWork(pool, context.identityConsumerWork, deadline);
+      const before = owner.identitySourceConsumerNativeWork(
+        pool,
+        context.identityConsumerWork as import('../../src/semantic/identity-source-consumer-maintenance.ts').IdentitySourceConsumerMaintenanceWork,
+        deadline,
+      );
       expect(await readAgentIdentitySDKWriterState(pool, client, randomUUID(), ended!)).toEqual({
         state: 'pending',
         gap: 'identity-sdk-current-fence-funding-unavailable',
       });
       // An ambient live balance must neither replace the supplied token nor pay for its SDK read.
-      expect(owner.identitySourceConsumerNativeWork(pool, context.identityConsumerWork, deadline)).toEqual(before);
+      expect(
+        owner.identitySourceConsumerNativeWork(
+          pool,
+          context.identityConsumerWork as import('../../src/semantic/identity-source-consumer-maintenance.ts').IdentitySourceConsumerMaintenanceWork,
+          deadline,
+        ),
+      ).toEqual(before);
     });
     const foreign = newId(accountRoute);
     const observed = await runCommand(pool, { partition: 0, deadline }, async (tx) =>
@@ -3708,7 +3736,7 @@ test('recovery snapshot controls and direct Account preparation spend the inheri
   const {
     readAgentIdentityRecoveryInventory,
     AGENT_IDENTITY_RECOVERY_INVENTORY_SNAPSHOT_COST: AGENT_IDENTITY_RECOVERY_INVENTORY_SNAPSHOT_COSTGetter,
-  } = await import('../../src/history/agent-identity-inventory.ts');
+  } = await import('../../src/history/adapters/agent-identity-inventory.ts');
   const AGENT_IDENTITY_RECOVERY_INVENTORY_SNAPSHOT_COST = AGENT_IDENTITY_RECOVERY_INVENTORY_SNAPSHOT_COSTGetter();
   const { prepareAgentIdentityRetention } = await import('../../src/access/agent-verification-identity-retention.ts');
   const key = { route: 0, accountId: newId(0), direction: 'account-agent.verify' as const, receiptId: randomUUID() };
@@ -3725,24 +3753,44 @@ test('recovery snapshot controls and direct Account preparation spend the inheri
     { pool, env: { KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_STATEMENTS: '9' } },
     { deadline },
     async (context) => {
-      const before = owner.identitySourceConsumerNativeWork(pool, context.identityConsumerWork, deadline);
+      const before = owner.identitySourceConsumerNativeWork(
+        pool,
+        context.identityConsumerWork as import('../../src/semantic/identity-source-consumer-maintenance.ts').IdentitySourceConsumerMaintenanceWork,
+        deadline,
+      );
       await expect(readAgentIdentityRecoveryInventory({ pool }, barrier, key, context)).rejects.toThrow(
         'identity-history-native-funding-unavailable',
       );
-      expect(owner.identitySourceConsumerNativeWork(pool, context.identityConsumerWork, deadline)).toEqual(before);
+      expect(
+        owner.identitySourceConsumerNativeWork(
+          pool,
+          context.identityConsumerWork as import('../../src/semantic/identity-source-consumer-maintenance.ts').IdentitySourceConsumerMaintenanceWork,
+          deadline,
+        ),
+      ).toEqual(before);
     },
   );
   await owner.withIdentitySourceConsumerMaintenance(
     { pool, env: { KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_STATEMENTS: '4' } },
     { deadline },
     async (context) => {
-      const before = owner.identitySourceConsumerNativeWork(pool, context.identityConsumerWork, deadline);
+      const before = owner.identitySourceConsumerNativeWork(
+        pool,
+        context.identityConsumerWork as import('../../src/semantic/identity-source-consumer-maintenance.ts').IdentitySourceConsumerMaintenanceWork,
+        deadline,
+      );
       await expect(
         runCommand(pool, { partition: 0, deadline }, async (tx) =>
           noEffect(await prepareAgentIdentityRetention(tx, { barrier, role: 'account_id', keys: [key] })),
         ),
       ).rejects.toThrow('identity-history-native-funding-unavailable');
-      expect(owner.identitySourceConsumerNativeWork(pool, context.identityConsumerWork, deadline)).toEqual(before);
+      expect(
+        owner.identitySourceConsumerNativeWork(
+          pool,
+          context.identityConsumerWork as import('../../src/semantic/identity-source-consumer-maintenance.ts').IdentitySourceConsumerMaintenanceWork,
+          deadline,
+        ),
+      ).toEqual(before);
     },
   );
 });
@@ -3751,7 +3799,7 @@ test('released identity physical inventory refuses insufficient original funding
   const { spyOn } = await import('bun:test');
   const owner = await import('../../src/semantic/identity-source-consumer-maintenance.ts');
   const { readAgentIdentityReceivingArtifact, AGENT_IDENTITY_RECEIVING_ARTIFACT_COST } =
-    await import('../../src/history/agent-identity-sdk-fence.ts');
+    await import('../../src/history/adapters/agent-identity-sdk-fence.ts');
   const deadline = Date.now() + 5000;
   expect(AGENT_IDENTITY_RECEIVING_ARTIFACT_COST).toEqual({
     rows: 69,
@@ -3766,12 +3814,22 @@ test('released identity physical inventory refuses insufficient original funding
       { pool, env: { KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_STATEMENTS: '3' } },
       { deadline },
       async (context) => {
-        const before = owner.identitySourceConsumerNativeWork(pool, context.identityConsumerWork, deadline);
+        const before = owner.identitySourceConsumerNativeWork(
+          pool,
+          context.identityConsumerWork as import('../../src/semantic/identity-source-consumer-maintenance.ts').IdentitySourceConsumerMaintenanceWork,
+          deadline,
+        );
         await expect(readAgentIdentityReceivingArtifact(pool, randomUUID(), context)).rejects.toThrow(
           'identity-history-native-funding-unavailable',
         );
         expect(checkout).not.toHaveBeenCalled();
-        expect(owner.identitySourceConsumerNativeWork(pool, context.identityConsumerWork, deadline)).toEqual(before);
+        expect(
+          owner.identitySourceConsumerNativeWork(
+            pool,
+            context.identityConsumerWork as import('../../src/semantic/identity-source-consumer-maintenance.ts').IdentitySourceConsumerMaintenanceWork,
+            deadline,
+          ),
+        ).toEqual(before);
       },
     );
   } finally {

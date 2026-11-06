@@ -488,12 +488,12 @@ export class ProfileAvatarUpload {
   }
   private async decodeWithinDeadline(file: File, signal: AbortSignal) {
     let retired = false;
-    let decoded: ImageBitmap | null = null;
+    const held: { bitmap: ImageBitmap | null } = { bitmap: null };
     const pending = decodeAvatarCrop(file).then((bitmap) => {
-      decoded = bitmap;
+      held.bitmap = bitmap;
       if (retired) {
         bitmap?.close();
-        decoded = null;
+        held.bitmap = null;
       }
       return bitmap;
     });
@@ -501,8 +501,8 @@ export class ProfileAvatarUpload {
       return await withProfileDeadline(() => pending, signal);
     } catch (error) {
       retired = true;
-      decoded?.close();
-      decoded = null;
+      held.bitmap?.close();
+      held.bitmap = null;
       throw error;
     }
   }

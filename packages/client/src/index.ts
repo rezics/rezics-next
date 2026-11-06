@@ -6,10 +6,26 @@ import type { DefaultMetadata, DefaultSingleton, Elysia } from 'elysia';
 import type { SESSION_HEADER as KernelSessionHeader } from './kernel/http/request.ts';
 import type { ClientKernel as KernelType } from './kernel/http/kernel.ts';
 import type { subjectRoutes } from './kernel/semantic/http/subjects.ts';
+import type { ZoneSubjectListRoutes } from './kernel/zones/subjects.ts';
 
 export type { ClientKernel as Kernel } from './kernel/http/kernel.ts';
-export { zoneCollections } from './zones.ts';
-export type { ZoneCollectionsCall, ZoneCollectionsClient, ZoneCollectionsPage, ZoneCollectionsQuery } from './zones.ts';
+export { zoneCollections, zoneReadPage, zoneSubjects } from './zones.ts';
+export type {
+  ZoneCollectionsCall,
+  ZoneCollectionsClient,
+  ZoneCollectionsPage,
+  ZoneCollectionsQuery,
+  ZoneReadPageBody,
+  ZoneReadPageCall,
+  ZoneReadPageClient,
+  ZoneReadPageResult,
+  ZoneSubjectListItem,
+  ZoneSubjectListPage,
+  ZoneSubjectListProgress,
+  ZoneSubjectsCall,
+  ZoneSubjectsClient,
+  ZoneSubjectsQuery,
+} from './zones.ts';
 export {
   decodePreferenceAdvice,
   decodePreferencePage,
@@ -110,6 +126,7 @@ type InstalledSubjectRoutes = SharedRoutes<
   ReturnType<typeof subjectRoutes>['~Routes']['v1']['subjects']
 >;
 type SubjectRoutes = InstalledSubjectRoutes;
+type InstalledZoneRoutes = SharedRoutes<Routes['zones'] & ZoneSubjectListRoutes, Routes['zones']>;
 
 // Eden derives the wire client from `~Routes`; the remaining Elysia generics
 // describe server composition and are not part of the client's type surface.
@@ -121,7 +138,7 @@ type ClientApp = Elysia<
   DefaultMetadata,
   {
     [Prefix in keyof KernelType['~Routes']]: Prefix extends 'v1'
-      ? Omit<Routes, 'subjects'> & { subjects: SubjectRoutes }
+      ? Omit<Routes, 'subjects' | 'zones'> & { subjects: SubjectRoutes; zones: InstalledZoneRoutes }
       : KernelType['~Routes'][Prefix];
   }
 >;
@@ -296,13 +313,16 @@ export type {
   ReviewedPersonAdmission,
   ReviewedPersonOperation,
 } from './reviewed-person-identity.ts';
-
-export type {
-  SubjectIdentityOperation,
-  SubjectIdentityOperationAdmission,
-  SubjectIdentityOperationRead,
-  SubjectIdentityOperationRoutes,
-} from './kernel/semantic/http/identity-operations.d.ts';
+export type SubjectIdentityOperationRoutes = Routes['subjectIdentityOperations'];
+export type SubjectIdentityOperationRead = SubjectIdentityOperationRoutes[':id']['get']['response'][200];
+export type SubjectIdentityOperation = SubjectIdentityOperationRead['operation'];
+export type SubjectIdentityOperationAdmission = SubjectRoutes['$merge']['post']['response'][202];
+export type { ZoneSubjectListRoutes } from './kernel/zones/subjects.ts';
 
 export type OwnVotesPage = Routes['me']['rating-votes']['get']['response'][200];
 export type OwnVoteEntry = OwnVotesPage['votes'][number];
+export type OwnVoteActions = OwnVoteEntry['actions'];
+export type VoteRead = Routes['subjects'][':id']['ratings'][':questionId']['vote']['get']['response'][200];
+export type PublicFigureRead = Routes['subjects'][':id']['figure']['get']['response'][200]['figure'];
+type RatingQuestionReadCall = ReturnType<ReturnType<KernelClient['rating-questions']>['get']>;
+export type RatingQuestionRead = NonNullable<Awaited<RatingQuestionReadCall>['data']>;

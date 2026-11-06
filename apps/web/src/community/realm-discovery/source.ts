@@ -85,8 +85,12 @@ export async function loadRealmDiscovery(
       fetch: { cache: 'no-store', ...(signal === undefined ? {} : { signal }) },
     });
     signal?.throwIfAborted();
-    if (result.error)
-      return { kind: isPlatformClosedProblem(result.status, result.error.value) ? 'closed' : 'unavailable' };
+    if (result.error) {
+      if (isPlatformClosedProblem(result.status, result.error.value)) return { kind: 'closed' };
+      // A generation/identity change is not a retry of the same cursor; reduce treats this as Restart.
+      if (result.status === 409) return { kind: 'restart' };
+      return { kind: 'unavailable' };
+    }
     const parsed = v.safeParse(page, result.data);
     if (!parsed.success || parsed.output.realms.length > Math.min(request.output.limit ?? 20, 20))
       return { kind: 'unavailable' };

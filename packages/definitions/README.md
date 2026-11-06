@@ -13,6 +13,13 @@ and `/slug` also support browser use. Publication validation/admission (`validat
 and `bundledSources` remain native operations; they are not exposed by the browser
 root or bundled entry. Browser publication callers use the ordinary Definitions API
 so the native validator retains its isolated checker and exact analysis limits.
+Portable publication workspace helpers (`classifyImportedDocument`, `compareReleases`,
+`compareExtensions`, `reconcileActivation` and imported-file diagnostics) live on both root and
+browser entries. Imported-document inspection uses that pure contract plus publication limits; it
+does not import the release barrel. Source compilation admits inspected documents from that module
+and keeps compiler values off the inspection graph. Extension validation stays native.
+Decision: fewest tests pin user-visible publication behaviour and named-state stories only;
+`compile.test.ts` covers imported-document inspection off the release barrel.
 
 ## Semantic language selection
 

@@ -1,10 +1,13 @@
 import type { KernelClient } from '@rezics/client';
-import type { ComponentProps, ReactNode } from 'react';
+import { Link } from '@tanstack/react-router';
+import { useContext, type ComponentProps, type ReactNode } from 'react';
 import { requestLanguages } from '../../kernel/languages.ts';
 import { dataComponents, PageData, type PageMessages } from './data';
 import { homeJsonLd, serializeJsonLd } from './jsonld';
 import { layoutComponents, PageHost, PageRoot, pageDefinitions } from './layout';
 import { CompositionRender } from './render';
+import { PlainLink, type LinkProps } from './shared';
+import { ZoneDestinationsContext, ZoneTypeList, type ZoneDestinations } from './type-list';
 
 type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 type RouteDocument = {
@@ -90,6 +93,9 @@ export function RoutePage({
   personal,
   nonce,
   renderJsonLd = true,
+  currentHref,
+  listHref,
+  memberHref,
 }: {
   page: RoutePageData;
   locale: string;
@@ -99,6 +105,9 @@ export function RoutePage({
   personal?: ReactNode;
   nonce?: string;
   renderJsonLd?: boolean;
+  currentHref?: string;
+  listHref?: (node: string, cursor?: string) => string | undefined;
+  memberHref?: (subject: { id: string; label: string }) => string;
 }) {
   const jsonLd = routePageJsonLd(page, locale);
   return (
@@ -114,6 +123,9 @@ export function RoutePage({
           reads={page.reads}
           messages={messages}
           {...(link ? { link } : {})}
+          {...(currentHref !== undefined ? { currentHref } : {})}
+          {...(listHref !== undefined ? { listHref } : {})}
+          {...(memberHref !== undefined ? { memberHref } : {})}
         >
           <CompositionRender
             document={page.document}
@@ -128,4 +140,98 @@ export function RoutePage({
       )}
     </>
   );
+}
+
+const zoneComponents = { ...layoutComponents, ...dataComponents, TypeList: ZoneTypeList };
+const zoneSubject = /^\/([^/]+)\/zones\/([^/]+)\/subjects\/([^/?#]+)(?:\/([^/?#]+))?$/;
+
+function zoneSubjectHref(locale: string, zoneId: string, subjectId: string, view?: string): string {
+  const base = `/${encodeURIComponent(locale)}/zones/${encodeURIComponent(zoneId)}/subjects/${encodeURIComponent(subjectId)}`;
+  return view && view !== 'overview' ? `${base}/${encodeURIComponent(view)}` : base;
+}
+
+export function ZoneSubjectLink({ href, lang, className, children }: LinkProps) {
+  const destinations = useContext(ZoneDestinationsContext);
+  const match = zoneSubject.exec(href);
+  if (match) {
+    try {
+      const locale = decodeURIComponent(match[1]!);
+      const zoneId = decodeURIComponent(match[2]!);
+      const subjectId = decodeURIComponent(match[3]!);
+      const view = match[4] ? decodeURIComponent(match[4]) : undefined;
+      const target = zoneSubjectHref(locale, zoneId, subjectId, view);
+      return (
+        <Link to={target} lang={lang} className={className}>
+          {children}
+        </Link>
+      );
+    } catch {
+      /* Fall through to a plain localized address. */
+    }
+  }
+  if (destinations && href.startsWith(`/${destinations.locale}/zones/${destinations.zoneId}`))
+    return (
+      <a href={href} lang={lang} className={className}>
+        {children}
+      </a>
+    );
+  return (
+    <PlainLink href={href} lang={lang} className={className}>
+      {children}
+    </PlainLink>
+  );
+}
+
+/** Configured Zone pages keep TypeList continuation and subject cards on the Zone route. */
+export function ZoneRoutePage({
+  page,
+  locale,
+  heading,
+  messages,
+  destinations,
+}: {
+  page: RoutePageData;
+  locale: string;
+  heading: string;
+  messages: PageMessages;
+  destinations: ZoneDestinations;
+  nonce?: string;
+}) {
+  return (
+    <ZoneDestinationsContext.Provider value={destinations}>
+      <PageHost>
+        {!hasPageHeading(page.document.content) && <h1 className="sr-only">{heading}</h1>}
+        <PageData
+          locale={locale}
+          subject={page.subject ?? null}
+          document={page.document}
+          reads={page.reads}
+          messages={messages}
+          link={ZoneSubjectLink}
+        >
+          <CompositionRender
+            document={page.document}
+            definitions={pageDefinitions}
+            components={zoneComponents}
+            root={PageRoot}
+          />
+        </PageData>
+      </PageHost>
+    </ZoneDestinationsContext.Provider>
+  );
+}
+
+export function zonePageDestinations(
+  zoneId: string,
+  locale: string,
+  route: string,
+  search: { cursor?: string; list?: string } = {},
+): ZoneDestinations {
+  return {
+    zoneId,
+    locale,
+    route,
+    ...(search.list ? { list: search.list } : {}),
+    ...(search.cursor ? { cursor: search.cursor } : {}),
+  };
 }

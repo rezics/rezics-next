@@ -11,6 +11,8 @@ const GLOBAL_CONTEXT = '00000000-0000-8000-8000-000000000000';
 /** Offers are created under the platform's Global Context. */
 export const platformRootAnchor: ParentAnchor = Object.freeze({
   resource: Object.freeze({ route: 0, id: GLOBAL_CONTEXT }),
+  // The seeded Global Context is a semantic context; child creation actions declare other types.
+  resourceType: 'semantic.context',
   async validate(_client, time) {
     authoritativeTimeValue(time);
     return true;

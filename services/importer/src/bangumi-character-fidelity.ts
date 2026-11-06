@@ -15,7 +15,7 @@ import {
 import type { ImportConversion, SourceRegistration } from './import-contract.ts';
 import { ImportTransportError, type ReviewedSubjectRead } from './import-client.ts';
 import type { Importer, ImportRunResult } from './importer.ts';
-import type { BangumiCharacterAppearance } from './cross-media-seed.ts';
+import { type BangumiCharacterAppearance } from './showcase-contract.ts';
 import { bangumiAppearanceSource, combineSourceVocabularyRequests } from './cross-media-bindings.ts';
 import { createSourceRegistration, crossMediaBangumiRevision, type SourceAssets } from './source-registry.ts';
 

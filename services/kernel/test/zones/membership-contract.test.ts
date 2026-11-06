@@ -160,11 +160,20 @@ export async function membershipFixture() {
       )
     ).zone;
   }
-  async function page(id: string, cursor: string | null = null, limit = 2, publicRead = true) {
+  async function page(id: string, cursor: string | null = null, limit = 2, publicRead: boolean | 'viewer' = true) {
     const query = new URLSearchParams({ limit: String(limit), ...(cursor ? { cursor } : {}) });
-    const result = await json<ZonePage>(
-      await request('GET', `/v1/zones/${id}/subjects?${query}`, undefined, publicRead),
-    );
+    let response = await request('GET', `/v1/zones/${id}/subjects?${query}`, undefined, publicRead);
+    const seen = new Set<string>();
+    for (let steps = 0; steps < 32 && response.status === 202; steps++) {
+      expect(response.headers.get('cache-control')).toBe('private, no-store');
+      const progress = (await response.json()) as { next?: string };
+      expect(typeof progress.next).toBe('string');
+      expect(seen.has(progress.next!)).toBe(false);
+      seen.add(progress.next!);
+      const continued = new URLSearchParams({ limit: String(limit), cursor: progress.next! });
+      response = await request('GET', `/v1/zones/${id}/subjects?${continued}`, undefined, publicRead);
+    }
+    const result = await json<ZonePage>(response);
     expect(Array.isArray(result.subjects)).toBe(true);
     expect(result.subjects.length).toBeLessThanOrEqual(limit);
     expect(result.next === null || typeof result.next === 'string').toBe(true);
@@ -453,22 +462,21 @@ test('revoking a real private Collection read grant invalidates already issued Z
   };
   await f.json(await f.request('POST', '/v1/grants', input), 201);
   await f.json(await f.request('GET', `/v1/collections/${source.id}`, undefined, 'viewer'));
-  const first = await f.json<ZonePage>(
-    await f.request('GET', `/v1/zones/${z.id}/subjects?limit=1`, undefined, 'viewer'),
-  );
+  const first = await f.page(z.id, null, 1, 'viewer');
   expect(first.subjects).toHaveLength(1);
   expect(first.next).not.toBeNull();
   await f.json(await f.request('POST', '/v1/grants:revoke', input));
   expect((await f.request('GET', `/v1/collections/${source.id}`, undefined, 'viewer')).status).toBe(404);
-  const continued = await f.json<ZonePage>(
-    await f.request(
-      'GET',
-      `/v1/zones/${z.id}/subjects?limit=1&cursor=${encodeURIComponent(first.next!)}`,
-      undefined,
-      'viewer',
-    ),
+  const continued = await f.request(
+    'GET',
+    `/v1/zones/${z.id}/subjects?limit=1&cursor=${encodeURIComponent(first.next!)}`,
+    undefined,
+    'viewer',
   );
-  expect(continued.subjects).toEqual([]);
+  expect(continued.status).toBe(409);
+  expect(((await continued.json()) as { code: string }).code).toBe('stale_cursor');
+  const restarted = await f.page(z.id, null, 1, 'viewer');
+  expect(restarted.subjects).toEqual([]);
   const metadata = await f.json<{ collections: Collection[] }>(
     await f.request('GET', `/v1/zones/${z.id}/collections`, undefined, 'viewer'),
   );

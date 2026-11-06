@@ -329,6 +329,10 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
           location.hash,
         ),
       );
+    const type = subjectPageType(page.page);
+    const typeData = await awaitSubjectRoute(signal, () =>
+      context.queryClient.ensureQueryData(subjectFrameQuery(type ?? '', getLocale())),
+    );
     return {
       ...data,
       shareCard: page.shareCard,
@@ -337,6 +341,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
       reader,
       page: page.page,
       tabs: subjectTabs(page.page),
+      type: typeData,
     };
   },
   head: ({ loaderData, match }) =>
@@ -346,6 +351,8 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
           ...(loaderData.paths ? { paths: loaderData.paths } : {}),
           shareCard: loaderData.shareCard,
           realm: loaderData.realm,
+          ...(loaderData.type.label ? { typeLabel: loaderData.type.label } : {}),
+          ...(loaderData.type.schemaOrgType ? { schemaOrgType: loaderData.type.schemaOrgType } : {}),
         })
       : { meta: [{ title: m.not_found_heading() }] },
   component: SubjectRoute,

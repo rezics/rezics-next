@@ -42,19 +42,43 @@ if (configuredInspectorPort !== undefined) {
 }
 
 /** The Cloudflare plugin denies every dependency of cloudflare.config.ts to browser file serving. The site Worker
- * imports one of those dependencies, so only the Worker environment may load them from disk. The browser
- * environment keeps the deny list, and the loaded file stays watched. */
+ * imports one of those dependencies as `/src/...` module ids, which are not the absolute deny paths, so the
+ * Worker load has to map those ids back onto the denied files. The browser environment keeps the deny list. */
 function workerDeniedDependencies(): Plugin {
   let denied = new Set<string>();
+  const deniedFile = (id: string): string | undefined => {
+    const file = id.split('?', 1)[0]!;
+    const candidates = [
+      file,
+      isAbsolute(file) ? file : resolve(appRoot, file.replace(/^\//, '')),
+      file.startsWith('/src/') ? join(appRoot, file.slice(1)) : undefined,
+    ];
+    for (const candidate of candidates) {
+      if (!candidate) continue;
+      if (denied.has(candidate)) return candidate;
+      try {
+        const real = realpathSync(candidate);
+        if (denied.has(real)) return real;
+      } catch {
+        // The id is not a readable path; try the next candidate.
+      }
+    }
+    return undefined;
+  };
   return {
     name: 'worker-denied-dependencies',
-    enforce: 'post',
+    enforce: 'pre',
     configResolved(resolved) {
-      denied = new Set(resolved.server.fs.deny.filter((entry) => isAbsolute(entry)));
+      denied = new Set();
+      for (const entry of resolved.server.fs.deny) {
+        denied.add(entry);
+        denied.add(isAbsolute(entry) ? entry : resolve(appRoot, entry));
+      }
     },
     load(id) {
-      const file = id.split('?', 1)[0]!;
-      if (this.environment.name !== 'ssr' || !denied.has(file)) return null;
+      if (this.environment?.name === 'client') return null;
+      const file = deniedFile(id);
+      if (!file) return null;
       this.addWatchFile(file);
       return readFileSync(file, 'utf8');
     },

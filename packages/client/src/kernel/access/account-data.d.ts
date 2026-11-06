@@ -1,4 +1,5 @@
-import { type AvatarSummary } from '../content/avatar.ts';
+import type { AvatarSummary } from './contract/index.ts';
+export type { AvatarSummary };
 import type { PublicViews } from './public-views.ts';
 import type { Pool, PoolClient } from 'pg';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -117,4 +118,3 @@ export declare function readAgentPages(client: Queryable, tokens: KeyRing, input
     limit?: number;
     viewer?: string | null;
 }, at?: Date): Promise<AgentPagesPage>;
-export {};

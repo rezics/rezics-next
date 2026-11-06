@@ -130,7 +130,13 @@ function failures() {
     404: problemSchema('not_found'),
     409: problemSchema('conflict'),
     422: problemSchema('idempotency_conflict', 'too_many_events'),
-    503: problemSchema('overloaded', 'partition_unavailable', 'transaction_retry_exhausted', 'deadline_exceeded'),
+    503: problemSchema(
+      'overloaded',
+      'atomic_guard_unavailable',
+      'partition_unavailable',
+      'transaction_retry_exhausted',
+      'deadline_exceeded',
+    ),
   }));
 }
 function aggregateFailures() {
@@ -223,7 +229,10 @@ async function command<T>(run: () => Promise<T>): Promise<T> {
     return await run();
   } catch (error) {
     if (error instanceof VoteReviewStaleError) throw new ProblemError('conflict');
-    if (error instanceof VoteReviewUnavailableError) throw new ProblemError('overloaded', { detail: error.reason });
+    if (error instanceof VoteReviewUnavailableError) {
+      if (error.reason === 'atomic_guard_unavailable') throw new ProblemError('atomic_guard_unavailable');
+      throw new ProblemError('overloaded', { detail: error.reason });
+    }
     if (error instanceof GrantDeniedError) throw new ProblemError('forbidden');
     if (
       error instanceof LibraryNotFoundError ||

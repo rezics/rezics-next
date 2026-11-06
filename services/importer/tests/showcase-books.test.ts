@@ -17,13 +17,9 @@ import {
   type ShowcaseReviewPort,
 } from '../src/showcase-publication.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
-import {
-  importShowcaseBooks,
-  planShowcaseBooks,
-  showcaseBookFamily,
-  showcaseBooksToCrossMediaPlan,
-} from '../src/showcase-books.ts';
+import { planShowcaseBooks, showcaseBookFamily, showcaseBooksToCrossMediaPlan } from '../src/showcase-books.ts';
 import pinned from '../../kernel/test/imports/showcase-books-source.json';
+import { importShowcaseBooks } from '../src/selected-import.ts';
 
 const globalContext = '00000000-0000-8000-8000-000000000000';
 const series = {
@@ -758,7 +754,7 @@ test('pinned real light-novel families publish through the reviewed world and re
       volumes: expect.arrayContaining(['26', '5329', '10862']),
       authors: ['person:6023', 'person:1466'],
       illustrators: expect.arrayContaining(['person:1467']),
-      publishers: expect.arrayContaining(['person:128']),
+      publishers: expect.arrayContaining(['person:128', 'person:1581']),
       anime: ['233'],
     });
     const publication = await publishShowcase({
@@ -785,6 +781,16 @@ test('pinned real light-novel families publish through the reviewed world and re
     expect(first.creditGaps).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
+          path: '/subject-persons/499/6023/position',
+          reason: 'property_not_admitted',
+          property: 'schema:author',
+        }),
+        expect.objectContaining({
+          path: '/subject-persons/499/5839/position',
+          reason: 'property_not_admitted',
+          property: 'schema:illustrator',
+        }),
+        expect.objectContaining({
           path: '/subject-persons/2815/1466/position',
           reason: 'property_not_admitted',
           property: 'schema:author',
@@ -796,6 +802,7 @@ test('pinned real light-novel families publish through the reviewed world and re
         }),
       ]),
     );
+    expect(new Set(first.planned.credits.map((draft) => draft.work))).toEqual(new Set(['499', '2815']));
     expect(contents(series2815, 'schema:publisher')).toContain(first.identities['person:128']!.id);
     expect(contents(series2815, 'schema:name')).toContainEqual({ language: 'und', text: 'THE GARDEN OF SINNERS' });
     // The fake world adopts no relation statements, so volume membership is checked as its exact proposals.

@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { useLocation, createFileRoute } from '@tanstack/react-router';
 import { PeopleProfileSession } from '../../features/catalogue/people-profile-session';
 import { getLocale } from '../../paraglide/runtime';
 import { m } from '../../paraglide/messages.js';
@@ -20,7 +20,7 @@ function PeopleProfileRoute() {
   const id = Route.useParams().id;
   const locale = getLocale();
   const search = Route.useSearch();
-  const location = Route.useLocation();
+  const location = useLocation();
   const hash = location.hash ? `#${location.hash.replace(/^#/, '')}` : '';
   const visit = validatePeopleCurrentVisitSearch(search, id, locale, hash);
   const address = JSON.stringify([location.pathname, location.searchStr, location.hash]);

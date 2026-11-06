@@ -13,7 +13,7 @@ import { bootstrapRelease, GLOBAL_CONTEXT } from '../../../src/semantic/definiti
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { capture, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../../support/growth.ts';
 import { testReceiptKeys } from '../../support/receipt-keys.ts';
-import { createNativeContentSystem, type NativeContentSystem } from '../support/native-system.ts';
+import { createNativeContentSystem, type NativeContentSystem } from './native-system.ts';
 
 export const SALE_AUTHORITY_GROWTH_SCALES = [256, 1024, 4096] as const;
 export type SaleAuthorityAxis =

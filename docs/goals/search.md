@@ -33,12 +33,16 @@ Decision: this increment uses the focused CJK projection, review-readiness, alia
 Decision: typecheck repairs keep those assertions; review-population readiness fixtures pass KernelClock into createDiscoveryProducerEntry; walk `stopSpawned` accepts Bun's numeric or named `signalCode`; Library access-capabilities re-exports work types from kernel-library-contract, not the Source runtime.
 Decision: the default worker child decorates `startWorker`'s live `createKernelWorkModules` list, including Content ambient; a pre-imported substitute list is not the production composition.
 Decision: write-rate-stage Search stubs keep one `savedCatalogueMembers` method and expect the HTTP empty-recovery envelope on an empty text page; duplicate Search/library/strict-JSON fixtures stay with their owners.
+Decision: Search HTTP fixtures keep one `savedCatalogueMembers` and one `releaseGroups`; `context.complete` and `read.complete` stay. Fewest unit tests pin the current predicate, owner revalidation, kind-count proof and useful-page hydration.
 
 Decision: delayed-index disclosure recovers through the same ordinary relay. Withholding an unsafe kind preserves independently current kinds; unsafe combined execution remains withheld through sibling projection and cursor construction.
+Decision: one executed current predicate discloses hits, exclusion, order and live-facet identities after privacy changes while Search is paused; catalogue kind chips are lower bounds from that predicate and never exact totals.
+Decision: query-privacy unit tests pin that predicate for anonymous, editor and suspended readers, hidden, taken-down and withheld subjects, a public-to-private change while indexing is paused, and unready owners as readiness; native persona cells and seeded browser stay unaccepted.
+Decision: nested owner-current disclosure throws a local restart; Search HTTP maps it to search_restart_required so disclosure never imports platform HTTP.
 
 Native Search fixture setup delegates permissions through ordinary grant commands on the requested anchor. Existing real-runtime cases cover setup; a refused delegation records its exact actions and anchor rather than adding a duplicate fixture-only test.
 Search Retry-After recovery keeps the same initial markup through hydration, then settles the deadline on the client; expiry enables only the reader's manual retry. One hydration test covers expiry between server rendering and client attachment, the owning localized message, and settlement of a fresh manual request into useful rendered output. Erasure receiving retains both native tombstone handlers and every default service, controlling only the indexing runner during delayed writes. After those Search assertions the native harness reaps its owned worker; production drain waits for other modules' pending erasure coordinators. Shared-fixture native cases run one at a time. Those two cases are the added regressions; the broad delayed-index privacy matrix stays open until demonstrated.
-Kernel typecheck repairs update SearchService stubs and preparation fixtures to the current saved-catalogue members contract (`savedCatalogueMembers` and Source) without adding behaviour tests. Rebase onto main keeps Catalogue's `catalogue` Source declaration. Catalogue already closed those stub methods and hit `matchEvidence`; this branch does not redeclare them. Hydration expiry (3/3) and the two serial native erasure cases remain the added regressions.
+Kernel typecheck repairs update SearchService stubs and PublicSearchPage hits to the current saved-catalogue members contract (`savedCatalogueMembers` and required `matchEvidence`) without adding behaviour tests. Rebase onto main keeps Catalogue's `catalogue` Source declaration. Catalogue already closed extra stub methods; this branch does not redeclare those methods. Hydration expiry (3/3) and the two serial native erasure cases remain the added regressions.
 Permission-check SQL and policy-core both use `deadlineLive`; the duplicate `live` projection column is gone so SQL analysis can type the row.
 
 Decision: Empty Search recovery drafts bind to the executed request, reader, locale, checkpoint and native page response; valid text uses shared query admission, and explicit retry focuses only the still-current result owner after settlement.
@@ -93,7 +97,11 @@ intention.
 
 Decision: Search, facet and typeahead recovery stays bound to the exact executed request and current reader/locale;
 `ready` requires useful output from an actual current-generation native observation, and Retry-After expiry enables only
-a deliberate retry.
+a deliberate retry. A new or removed resource scope retires prior facet fields and the hit cursor. Installed readers
+share the native HTTP families (invalid, invalid-cursor, session, closed, denied, restart, index-not-ready,
+source-not-ready, unavailable, ready). Decision: the fewest adapter tests pin that journey through createKernelClient
+on Search, suggest, facets and Realm More/Retry/Restart; named stories stay unchanged; native/browser cells remain
+deferred until stack releases land.
 
 Search rating order and population are one pending native GET pair, applied only by Submit in both hydrated and
 unhydrated visits. A field change never dispatches. Application starts a first traversal, retaining every other

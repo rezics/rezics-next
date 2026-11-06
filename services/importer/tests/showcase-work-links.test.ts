@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { converter_revision as entityRevision } from '@rezics/conversion/cross-media-entities';
 import { vndbLimits } from '@rezics/conversion/vndb';
-import { sourceDigest } from '../../../packages/conversion/src/support.ts';
+import { sourceDigest } from '@rezics/conversion/support';
 import { CrossMediaDumpFiles, crossMediaAliases, planCrossMediaSeed } from '../src/cross-media-seed.ts';
 import { vndbWorkLinkConverterRevision } from '../src/showcase-work-links.ts';
 import { createSourceRegistration } from '../src/source-registry.ts';

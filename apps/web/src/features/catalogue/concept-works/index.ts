@@ -1,11 +1,61 @@
+import { pickText } from '@rezics/composition';
 import { FILTER_LIMITS, parseFilter, type FilterDocument, type FilterQualifier } from '@rezics/filter';
 import { conditionTreeAdmission } from '../../../search/condition-editor-model';
 import { discoveryRequest } from '../../../search/search-request';
 import type { SearchLoaderDeps } from '../../../search/search-params';
-import { readDiscovery, type DiscoverySender } from '../../../search/discovery';
+import {
+  readDiscovery,
+  type DiscoveryHit,
+  type DiscoveryKinds,
+  type DiscoveryPage,
+  type DiscoverySender,
+} from '../../../search/discovery';
 import type { ConceptWorksAdmission, ConceptSchemeRef } from '../source-concept-explorer';
 import { isExploreId } from '../../pages/graph-browser';
 import type { DiscoveryRequest, DiscoveryState } from '../../../search/discovery';
+
+/** Search kind metadata is the native label owner; admission type labels are only a pre-page fallback. */
+export function conceptWorksTypeLabel(
+  type: { id: string; labels: Record<string, string> },
+  kinds: DiscoveryKinds['values'] | undefined,
+  locale: string,
+): string {
+  const native = kinds?.find((entry) => entry.id === type.id);
+  const label = pickText(native?.labels ?? type.labels, locale).text.trim() || type.id;
+  const count = native?.count;
+  return count && 'value' in count
+    ? `${label} (${new Intl.NumberFormat(locale).format(count.value)}${count.exact ? '' : '+'})`
+    : label;
+}
+
+export function conceptWorksKindOptions(
+  types: readonly { id: string; labels: Record<string, string> }[],
+  kinds: DiscoveryKinds['values'] | undefined,
+  locale: string,
+): { id: string; label: string }[] {
+  return types.map((type) => ({ id: type.id, label: conceptWorksTypeLabel(type, kinds, locale) }));
+}
+
+/** Native tagged-work hits and kind chips; admission maps never replace recorded labels. */
+export function receiveConceptWorksPage(state: DiscoveryState): {
+  hits: readonly DiscoveryHit[];
+  kinds: DiscoveryKinds['values'] | undefined;
+  next: string | null;
+} {
+  if (state.status !== 'ready') return { hits: [], kinds: undefined, next: null };
+  return { hits: state.page.hits, kinds: state.page.kinds.values, next: state.page.next };
+}
+
+export function conceptWorksNativeKindLabels(
+  page: Pick<DiscoveryPage, 'kinds'> | undefined,
+  type: string,
+  locale: string,
+): string | undefined {
+  const native = page?.kinds.values.find((entry) => entry.id === type);
+  if (!native) return;
+  const label = pickText(native.labels, locale).text.trim();
+  return label || undefined;
+}
 
 export const conceptWorksLimit = 24;
 export const conceptWorksRequestByteLimit = 65_536;

@@ -2,22 +2,18 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { CommandTransaction } from '../../src/command/command.ts';
-import { verifyAgentIdentityRecoveryArtifactReadiness } from '../../src/history/agent-identity-recovery-receiving.ts';
+import { verifyAgentIdentityRecoveryArtifactReadiness } from '../../src/history/adapters/agent-identity-recovery-receiving.ts';
 import {
   activeIdentitySourceConsumerMaintenance,
   identitySourceConsumerNativeWork,
   withIdentitySourceConsumerMaintenance,
   type IdentitySourceConsumerMaintenanceContext,
 } from '../../src/semantic/identity-source-consumer-maintenance.ts';
-import {
-  IdentityHistoryWorkUnavailable,
-  nativeWork,
-  reserveIdentityHistoryWork,
-} from '../../src/history/agent-identity-inventory-work.ts';
-import { minimizeHistoryWork } from '../../src/history/durable.ts';
-import { encodeLocator } from '../../src/history/locator.ts';
-import { HistoryRegistry, type HistoryBarrier } from '../../src/history/registry.ts';
-import { newId, routeOf } from '../../src/route/route.ts';
+import { nativeWork, reserveIdentityHistoryWork } from '../../src/history/adapters/agent-identity-inventory-work.ts';
+import { minimizeHistoryWork } from '../../src/history/adapters/durable.ts';
+import { encodeLocator } from '../../src/history/contract/locator.ts';
+import { HistoryRegistry, type HistoryBarrier } from '../../src/history/contract/registry.ts';
+import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import type { WorkClient } from '../../src/work/client.ts';
 import {
   ORIGINAL_AXES,
@@ -40,9 +36,10 @@ import {
   requireIdentityFxOriginalDispatch,
   IDENTITY_FX_CHILD_DECLARATION_MISSING,
   identityFxSourceIncarnation,
-} from '../../src/history/identity-original-association.ts';
+} from '../../src/history/adapters/identity-original-association.ts';
 import type { CloudEvent, Envelope } from '../../src/events/log.ts';
 import type { Effect } from '../../src/events/effects.ts';
+import { IdentityHistoryWorkUnavailable } from '../../src/history/contract/errors.ts';
 
 function checkoutSentinel(message: string) {
   const failure = new Error(message);
@@ -349,10 +346,11 @@ test('Copied original handles and wrong Pool/client/position refuse before any a
 
 function originalEnvelope(): Envelope {
   const accountId = newId(0x9d10);
+  const partition = partitionOf(routeOf(accountId)!);
   const event: CloudEvent = {
     specversion: '1.0',
     id: randomUUID(),
-    source: 'urn:rezics:log:2513.1',
+    source: `urn:rezics:log:${partition}.1`,
     type: 'com.rezics.access.agent-verification.reversing.v1',
     subject: accountId,
     time: new Date().toISOString(),
@@ -368,7 +366,7 @@ function originalEnvelope(): Envelope {
       reason: null,
     },
   };
-  return { partition: 2513, epoch: 1, position: 1n, events: [event] };
+  return { partition, epoch: 1, position: 1n, events: [event] };
 }
 
 test('Identity fx wrapper rejects wrong native position/epoch/partition before association IO', () => {

@@ -18,8 +18,7 @@ import { progressRoutes } from '../library/progress-routes.ts';
 import { readingInsightsRoutes } from '../library/reading-insights-routes.ts';
 import { yearlyCompletionGoalRoutes } from '../library/yearly-goal-routes.ts';
 import { diaryRoutes } from '../library/diary-routes.ts';
-import { ratingRoutes } from '../rating/routes.ts';
-import { sourceStatisticRoutes } from '../rating/source-statistics.ts';
+import { type RatingCapabilities, type RatingHttpApp } from '../rating/module.ts';
 import type { ContentBoardDependencies } from '../content/boards.ts';
 import { mediaRoutes } from '../content/media-routes.ts';
 import { contentRoutes, subjectReactionRoutes } from '../content/routes.ts';
@@ -55,6 +54,7 @@ import { subjectPageRoutes } from '../semantic/http/subject-pages.ts';
 import { createApp } from './app.ts';
 export type KernelDependencies = Parameters<typeof createApp>[0] & {
     routeKey: Uint8Array;
+    rating?: RatingCapabilities;
     /** Trusted post-catalogue binding; runs before the host admits any request. */
     onAccessReady?: (access: Access, viewerActions: {
         resources: ViewerActionResources;
@@ -120,7 +120,7 @@ type ZoneComposition = Omit<ReturnType<typeof zoneRoutes>, '~Routes'> & {
         v1: Pick<ReturnType<typeof zoneRoutes>['~Routes']['v1'], 'zones'>;
     };
 };
-type KernelComposition = ZoneComposition & ReturnType<typeof recentSearchRoutes> & ReturnType<typeof viewerActionsRoutes> & ReturnType<typeof sourceStatisticRoutes> & ReturnType<typeof ratingRoutes> & ReturnType<typeof collectionRoutes> & ReturnType<typeof continueRoutes> & ReturnType<typeof feedRoutes> & ReturnType<typeof pinRoutes> & ReturnType<typeof personalLabelRoutes> & ReturnType<typeof personalLibraryRoutes> & ReturnType<typeof bangumiImportRoutes> & ReturnType<typeof malImportRoutes> & ReturnType<typeof aniListImportRoutes> & ReturnType<typeof vndbImportRoutes> & ReturnType<typeof libraryExportRoutes> & ReturnType<typeof libraryArchiveMergeRoutes> & ReturnType<typeof copyArchiveRoutes> & ReturnType<typeof libraryArchiveCollectionRecoveryRoutes> & ReturnType<typeof communityRoutes> & ReturnType<typeof exposureRoutes> & ReturnType<typeof subjectPageRoutes> & ReturnType<typeof bulkRoutes> & ReturnType<typeof sourceRecordRoutes> & ReturnType<typeof profileRoutes> & ReturnType<typeof accessRoutes> & ReturnType<typeof erasureStatusRoutes> & ReturnType<typeof mediaRoutes> & ReturnType<typeof contentRoutes> & ReturnType<typeof noticeRoutes> & ReturnType<typeof subjectReactionRoutes> & ReturnType<typeof searchRoutes> & ReturnType<typeof payoutRoutes> & ReturnType<typeof commerceRoutes> & ReturnType<typeof progressRoutes> & ReturnType<typeof readingInsightsRoutes> & ReturnType<typeof yearlyCompletionGoalRoutes> & ReturnType<typeof diaryRoutes> & ReturnType<typeof contextRoutes> & ReturnType<typeof providerReviewQueueRoutes>;
+type KernelComposition = ZoneComposition & ReturnType<typeof recentSearchRoutes> & ReturnType<typeof viewerActionsRoutes> & RatingHttpApp & ReturnType<typeof collectionRoutes> & ReturnType<typeof continueRoutes> & ReturnType<typeof feedRoutes> & ReturnType<typeof pinRoutes> & ReturnType<typeof personalLabelRoutes> & ReturnType<typeof personalLibraryRoutes> & ReturnType<typeof bangumiImportRoutes> & ReturnType<typeof malImportRoutes> & ReturnType<typeof aniListImportRoutes> & ReturnType<typeof vndbImportRoutes> & ReturnType<typeof libraryExportRoutes> & ReturnType<typeof libraryArchiveMergeRoutes> & ReturnType<typeof copyArchiveRoutes> & ReturnType<typeof libraryArchiveCollectionRecoveryRoutes> & ReturnType<typeof communityRoutes> & ReturnType<typeof exposureRoutes> & ReturnType<typeof subjectPageRoutes> & ReturnType<typeof bulkRoutes> & ReturnType<typeof sourceRecordRoutes> & ReturnType<typeof profileRoutes> & ReturnType<typeof accessRoutes> & ReturnType<typeof erasureStatusRoutes> & ReturnType<typeof mediaRoutes> & ReturnType<typeof contentRoutes> & ReturnType<typeof noticeRoutes> & ReturnType<typeof subjectReactionRoutes> & ReturnType<typeof searchRoutes> & ReturnType<typeof payoutRoutes> & ReturnType<typeof commerceRoutes> & ReturnType<typeof progressRoutes> & ReturnType<typeof readingInsightsRoutes> & ReturnType<typeof yearlyCompletionGoalRoutes> & ReturnType<typeof diaryRoutes> & ReturnType<typeof contextRoutes> & ReturnType<typeof providerReviewQueueRoutes>;
 export type Kernel = KernelComposition;
 type ClientRoutes<Routes, Base> = {
     [Key in keyof Routes]: Key extends keyof Base ? Base[Key] extends {

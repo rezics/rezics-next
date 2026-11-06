@@ -174,6 +174,20 @@ export async function createWebPersonalDriver(): Promise<WebPersonalDriver> {
         const pages = new Map<Persona, Promise<Page>>();
         const responses = new Map<Page, BrowserResponse[]>();
         const navigations = new Map<Page, string[]>();
+        const mediaCsrf = new Map<Persona, string>();
+        const rememberMediaCsrf = async (persona: Persona) => {
+          const page = await pageFor(persona);
+          const menu = page.locator('#account-menu-button');
+          if (!(await menu.count())) return;
+          const token = page.locator('input[name="csrf_token"]').first();
+          const opened = !(await token.count());
+          if (opened) await menu.click();
+          await page.waitForFunction(
+            () => !!document.querySelector<HTMLInputElement>('input[name="csrf_token"]')?.value,
+          );
+          mediaCsrf.set(persona, await token.inputValue());
+          if (opened) await page.keyboard.press('Escape');
+        };
         const fixtureRequired = () => {
           if (!fixture) throw new Error('Personal fixture must be provisioned before browser actions');
           return fixture;
@@ -252,10 +266,12 @@ export async function createWebPersonalDriver(): Promise<WebPersonalDriver> {
               return `/en/offers/${target.offerId}`;
             case 'order':
               return `/en/orders/${target.orderId}${target.checkoutReturn ? '?checkout=success' : ''}`;
-            // The original oracle requires a web security return. A missing real
-            // route must remain its 404, never a test-only security page.
+            // Auth owns security; Web's account menu supplies its native link.
             case 'security':
-              return '/en/security';
+            case 'deletion':
+              return '/en/library';
+            case 'preferences':
+              return '/en/settings';
           }
         };
         const visitResponse = async (page: Page, response: BrowserResponse | null): Promise<Visit> => {
@@ -315,9 +331,16 @@ export async function createWebPersonalDriver(): Promise<WebPersonalDriver> {
         };
         const openSecurity = async (page: Page) => {
           await page.locator('#account-menu-button').click();
+          const document = page.waitForResponse(
+            (r) =>
+              r.request().isNavigationRequest() &&
+              new URL(r.url()).origin === auth.origin &&
+              new URL(r.url()).pathname === '/security',
+          );
           await page.locator('[data-account-security-settings]').click();
           await page.waitForURL((url) => url.origin === auth.origin && url.pathname === '/security');
           await hydrated(page);
+          return await document;
         };
         const signIn = async (page: Page, persona: Exclude<Persona, 'anonymous'>, target: string, signup = false) => {
           await page.goto(`${stack.web}/auth/sign-in?return_to=${encodeURIComponent(target)}`, {
@@ -368,7 +391,19 @@ export async function createWebPersonalDriver(): Promise<WebPersonalDriver> {
               throw error;
             }
           },
-          visit: (persona, target) => navigate(persona, pathFor(target)),
+          async visit(persona, target) {
+            const visit = await navigate(persona, pathFor(target));
+            if (target.kind !== 'security' && target.kind !== 'deletion') return visit;
+            const page = await pageFor(persona);
+            const response = await openSecurity(page);
+            if (target.kind === 'security') return visitResponse(page, response);
+            const deletion = page.waitForResponse(
+              (r) => r.request().isNavigationRequest() && new URL(r.url()).pathname === '/account/delete',
+            );
+            await page.locator('a[href="/account/delete"]').click();
+            await hydrated(page);
+            return visitResponse(page, await deletion);
+          },
           async follow(persona, href) {
             const page = await pageFor(persona);
             const allowed = await page
@@ -540,9 +575,7 @@ export async function createWebPersonalDriver(): Promise<WebPersonalDriver> {
                   page.getByRole('button', { name: 'Verify your identity', exact: true }).click(),
                 );
                 await page.waitForURL((url) => url.origin === auth.origin && url.pathname === '/security');
-                // A web return must be emitted by the served Auth security page.
-                // Never repair a lost return target with a driver-made navigation.
-                await page.locator(`a[href="${new URL(path, stack.web).href}"]`).click();
+                // The native security action resumes here after its native step-up.
                 await hydrated(page);
               } else {
                 await navigate(persona, path);
@@ -551,6 +584,7 @@ export async function createWebPersonalDriver(): Promise<WebPersonalDriver> {
                 await page.waitForURL((url) => url.origin === stack.web);
                 await hydrated(page);
               }
+              if (new URL(page.url()).origin === stack.web) await rememberMediaCsrf(persona);
               const network = responses.get(page)!.slice(start);
               const lastDocument = network.findLast((r) => r.request().isNavigationRequest());
               if (!lastDocument) throw new Error(`Auth ${journey} received no document response`);
@@ -642,6 +676,38 @@ export async function createWebPersonalDriver(): Promise<WebPersonalDriver> {
             const url = new URL(href, stack.web);
             if (url.origin !== stack.web) throw new Error(`Download left the owned web origin: ${url.href}`);
             return httpResponse(await (await pageFor(persona)).context().request.get(url.href, { maxRedirects: 0 }));
+          },
+          async media(persona, action) {
+            const page = await pageFor(persona);
+            const context = page.context();
+            const headers = {
+              origin: stack.web,
+              ...(mediaCsrf.has(persona) ? { 'X-CSRF-Token': mediaCsrf.get(persona)! } : {}),
+            };
+            if (action.kind === 'read')
+              return httpResponse(
+                await context.request.get(`${stack.web}/media/${encodeURIComponent(action.id)}`, { maxRedirects: 0 }),
+              );
+            if (action.kind === 'upload')
+              return httpResponse(
+                await context.request.put(`${stack.web}/media/${encodeURIComponent(action.id)}`, {
+                  headers: { ...headers, 'content-type': action.image.mimeType },
+                  data: Buffer.from(action.image.bytes),
+                  maxRedirects: 0,
+                }),
+              );
+            return httpResponse(
+              await context.request.post(`${stack.web}/media`, {
+                headers: { ...headers, 'idempotency-key': JSON.stringify(action.key) },
+                data: {
+                  purpose: 'post-image',
+                  containerId: action.containerId,
+                  mediaType: action.image.mimeType,
+                  byteCount: action.image.bytes.byteLength,
+                },
+                maxRedirects: 0,
+              }),
+            );
           },
           async payment(orderId, outcome) {
             const session = [...stripe.sessions.values()].find((s) => s.client_reference_id === orderId);

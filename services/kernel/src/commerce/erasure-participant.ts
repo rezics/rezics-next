@@ -2,7 +2,6 @@ import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { Pool } from 'pg';
 import { noEffect, runCommand } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
-import { readHistoryOwnerCoverage } from '../history/receiving.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { WorkContext } from '../work/registry.ts';
 // Load the same permanent kind bindings even when Stripe is unconfigured.
@@ -16,6 +15,7 @@ import page from './erasure-page.sql';
 import purge from './erasure-purge.sql';
 import purgeSales from './erasure-creator-sales.sql';
 import checkpoint from './erasure-checkpoint.sql';
+import { readHistoryOwnerCoverage } from '../history/application/index.ts';
 
 export const COMMERCE_ERASURE_WORKFLOW = 'commerce.eraseAccount';
 export const commerceErasureWorkflowId = (accountId: string) => `commerce:erasure:${accountId}:v1`;

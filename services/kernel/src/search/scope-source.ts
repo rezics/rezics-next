@@ -92,6 +92,7 @@ import {
   type ScopeOrderedPrefixRequest,
   type SearchScopeOrderedPrefix,
 } from './scope-ordered.ts';
+import { nativeWork } from '../history/application/index.ts';
 export type {
   ScopeNativeOrder,
   ScopeNameSortTuple,

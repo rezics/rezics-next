@@ -258,9 +258,10 @@ bun services/auth/scripts/dev-stack.ts walk -- <command...>
    Those listeners remain untouched; when all slots are occupied, the launch keeps its queue position.
 3. Runs `db up`, `search up` and `setup`, starts the processes `dev` starts, and waits until Web, the Auth pages and
    Kernel answer, for at most twenty minutes. Readiness first checks that the port accepts TCP, then fetches with the
-   remaining window so a short abort cannot strand Vite's first compile. `db up` and `search up`
-   retry once. The walk `start` process stays up until SIGTERM or SIGINT and restarts a child that exits, so a native
-   host registration timeout or worker database blip does not tear down a ready Web. Teardown SIGKILLs a stack process
+   remaining window so a short abort cannot strand Vite's first compile. A hard request budget also bounds a listener
+   that never writes. `db up` and `search up` retry once; a failed database bring-up first retires this task's containers.
+   The walk `start` process stays up until SIGTERM or SIGINT and restarts a child that exits, so a native host
+   registration timeout or worker database blip does not tear down a ready Web. Teardown SIGKILLs a stack process
    that ignores SIGTERM, then docker-kills and `docker rm -f -v` this task's containers with a bounded wait. Its output
    goes to `.temp/walk/<task>/stack.log`.
 4. Runs `<command>` in the caller's directory with the stack's names, ports and origins. Inside that command, run
@@ -279,7 +280,8 @@ brief lists native or browser acceptance. Local stack-lease and walk-admission t
 missing hosts file before spawn so they exercise the local lease rather than falling back to shared check hosts.
 Admission skips slots whose application or infrastructure ports are already listening, including containers left by
 another interrupted task after its lease was released. It leaves those processes and containers running and queues
-when no slot has free ports; port collisions do not authorize stopping another task's stack.
+when no slot has free ports; port collisions do not authorize stopping another task's stack. A slot is usable only
+when this process can bind its loopback ports, so Docker's later bind cannot discover an allocation `ss` missed.
 Isolated-stack compiler and Kernel databases attach with `container:<id>` and an independent TCP-to-Unix forwarder;
 walk stacks keep published loopback ports. Management walk setup idle-in-transaction is received through that database
 lifetime; Content retains launcher, stack and cleanup. Original walks remain open.

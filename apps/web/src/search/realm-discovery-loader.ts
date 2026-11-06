@@ -140,7 +140,7 @@ export function isAdmittedRealmDiscoveryState(value: unknown): value is RealmDis
     return Object.keys(value).length === 3 && isValidRealmDiscoveryPage(page);
   }
   return (
-    (value.kind === 'loading' || value.kind === 'unavailable' || value.kind === 'closed') &&
+    (value.kind === 'loading' || value.kind === 'unavailable' || value.kind === 'closed' || value.kind === 'restart') &&
     Object.keys(value).length === 1
   );
 }
@@ -177,6 +177,10 @@ export function reduceRealmDiscovery(previous: RealmDiscoveryWindow, incoming: u
         restart: false,
       };
     if (incoming.kind === 'closed') return { state: incoming, pending: false, retry: false, restart: false };
+    if (incoming.kind === 'restart') {
+      if (previous.state.kind === 'ready') return requireRealmDiscoveryRestart(previous);
+      return { state: { kind: 'unavailable' }, pending: false, retry: true, restart: true };
+    }
     return {
       state: previous.state.kind === 'ready' ? previous.state : incoming,
       pending: false,

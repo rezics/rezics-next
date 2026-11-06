@@ -1,12 +1,13 @@
 import { actionDeclarations } from './native-account-bindings-fixture.ts';
 import { Pool } from 'pg';
-import { exportJWK, generateKeyPair, importJWK, SignJWT, decodeJwt } from 'jose';
+import { exportJWK, generateKeyPair } from 'jose';
 import { createAuthService } from '@rezics/auth';
 import { createPool } from '../../src/database/pool.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { newId, routeOf, partitionOf } from '../../src/route/route.ts';
 import { accessCheck } from '../../src/request/access.ts';
+import { readAssignment } from '../../src/access/delegation-commands.ts';
 import { trustedAccessPorts } from '../support/trusted-access.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
@@ -19,7 +20,6 @@ export async function grantFixture(
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL must name the migrated test database');
   const pool = createPool(url);
-  configureTestReceiptKeys(pool);
   pool.options.max = 1;
   configureTestReceiptKeys(pool);
   const reader = new Pool({ connectionString: url, max: 1 });
@@ -61,9 +61,11 @@ export async function grantFixture(
             state: account.state,
             authnEpoch: Number(account.minimumAuthnEpoch),
             automated: account.operatorAccountId !== null,
+            fenced: account.fenced,
           }
         );
       },
+      readAssignment: (reference, actorId) => readAssignment(reader, reference, actorId),
       async authorizeProvisioning(reference) {
         if (!approvals.delete(reference)) throw new Error('No fixture provisioning approval');
         return { accountId: reference };
@@ -125,16 +127,11 @@ export async function grantFixture(
       new Request(`${issuer}/token`, {
         method: 'POST',
         headers: { origin: issuer, 'content-type': 'application/json', cookie },
-        body: '{}',
+        body: JSON.stringify(requestedBy === undefined ? {} : { requested_by: requestedBy }),
       }),
     );
-    let token = ((await issued.json()) as { access_token: string }).access_token;
-    // The trusted requested_by issuance seam is not composed yet. As in the
-    // authenticate tests, only the fixture issuer can add this signed claim.
-    if (requestedBy !== undefined)
-      token = await new SignJWT({ ...decodeJwt<Record<string, unknown>>(token), requested_by: requestedBy })
-        .setProtectedHeader({ alg: 'ES256', kid: signingKey.kid, typ: 'at+jwt' })
-        .sign(await importJWK(signingKey, 'ES256'));
+    if (issued.status !== 200) throw new Error(`Fixture token issuance failed: ${issued.status}`);
+    const token = ((await issued.json()) as { access_token: string }).access_token;
     const boundary = { pool, deadline: Date.now() + 5000 };
     return { ...boundary, actor: await access.authenticate(token, boundary) };
   }

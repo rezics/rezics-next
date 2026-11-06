@@ -1,8 +1,9 @@
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act } from 'react';
+import { act, useLayoutEffect, useState } from 'react';
 import type { AccessIO, AccessState, Change } from '../src/accounts/resource-access/data';
 import { snapshot, managerId } from '../src/stories/pages/accounts-resource-access/fixtures';
+import { AccessRecoveryVisits } from '../src/accounts/resource-access/visits';
 
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -77,6 +78,12 @@ function ioFor(page = structuredClone(snapshot)): AccessIO {
   };
 }
 async function mount(initial: AccessState, io: AccessIO) {
+  const visits = new AccessRecoveryVisits();
+  function AccessVisit() {
+    const [recovery] = useState(() => visits.resume('current-session:resource', initial, io));
+    useLayoutEffect(() => () => visits.release('current-session:resource', recovery), [recovery]);
+    return <ResourceAccessPage initial={initial} io={io} recovery={recovery} />;
+  }
   const parent = createRootRoute({
     component: () => (
       <AuthoringDepartureProvider>
@@ -89,7 +96,7 @@ async function mount(initial: AccessState, io: AccessIO) {
     path: '/access',
     component: () => (
       <>
-        <ResourceAccessPage initial={initial} io={io} />
+        <AccessVisit />
         <Link to="/away">Destination</Link>
       </>
     ),
@@ -152,7 +159,7 @@ test('changed grant draft survives Stay; paging and deliberate Leave retire it t
   expect(host.textContent).toContain('Destination reached');
 });
 
-test('Stay retains the exact unresolved command; Leave never cancels or replays it and ignores its late result', async () => {
+test('Stay and return retain the exact unresolved command; Leave never cancels or replays it and ignores its late result', async () => {
   const page = structuredClone(snapshot);
   page.next = 'next-grants';
   const io = ioFor(page);
@@ -163,9 +170,11 @@ test('Stay retains the exact unresolved command; Leave never cancels or replays 
     commands.push(structuredClone(command));
     signal = caller;
     if (commands.length === 1) return { status: 'uncertain' };
-    return new Promise((resolve) => {
-      finish = resolve;
-    });
+    if (commands.length === 2)
+      return new Promise((resolve) => {
+        finish = resolve;
+      });
+    return { status: 'saved' };
   });
   const router = await mount({ status: 'ready', page: snapshot }, io);
   await click(button(m.access_add_grant()));
@@ -188,13 +197,17 @@ test('Stay retains the exact unresolved command; Leave never cancels or replays 
   await act(async () => {
     await router.navigate({ to: '/access' });
   });
-  await click(button(m.access_add_grant()));
-  await type(within(host).getByLabelText(m.access_handle()), 'replacement');
+  expect(within(host).getByRole('status').textContent).toBe(m.access_uncertain());
+  expect(button(m.access_add_grant(), host).disabled).toBe(true);
   const reads = (io.read as ReturnType<typeof mock>).mock.calls.length;
   await act(async () => finish({ status: 'saved' }));
   expect(commands).toHaveLength(2);
   expect((io.read as ReturnType<typeof mock>).mock.calls).toHaveLength(reads);
-  expect((within(host).getByLabelText(m.access_handle()) as HTMLInputElement).value).toBe('replacement');
+  expect(within(host).getByRole('status').textContent).toBe(m.access_uncertain());
+  await click(button(m.access_retry_operation()));
+  expect(commands).toHaveLength(3);
+  expect(commands[2]).toEqual(commands[0]);
+  expect(within(host).getByRole('status').textContent).toBe(m.access_saved());
 });
 
 test('owner transfer confirmation survives Stay, then completes and leaves normally; caller loss bypasses drafts', async () => {
@@ -317,4 +330,27 @@ test('a ready keyboard page movement returns focus to the current grants heading
   });
 
   expect(document.activeElement).toBe(within(host).getByRole('heading', { name: m.access_current_grants() }));
+});
+
+test('a new grant draft survives unavailable admission and requires fresh recipient review', async () => {
+  let current: AccessState = { status: 'unavailable' };
+  const io = { ...ioFor(), read: mock(async () => structuredClone(current)) };
+  await mount({ status: 'ready', page: structuredClone(snapshot) }, io);
+  await click(button(m.access_add_grant()));
+  await type(within(host).getByLabelText(m.access_handle()), 'aki');
+  await click(button(m.access_find_account()));
+  await click(button(m.access_review_title()));
+  await click(button(m.access_reload()));
+  expect(host.querySelector('#access-handle')).toBeNull();
+  expect(blocked()).toBe(true);
+  current = { status: 'ready', page: structuredClone(snapshot) };
+  await click(button(m.access_retry_page()));
+  expect((within(host).getByLabelText(m.access_handle()) as HTMLInputElement).value).toBe('aki');
+  expect(within(host).queryByRole('button', { name: m.access_review_confirm() })).toBeNull();
+  await click(button(m.access_review_title()));
+  expect(within(host).getByText(m.access_form_invalid())).toBeTruthy();
+  expect(within(host).queryByRole('button', { name: m.access_review_confirm() })).toBeNull();
+  expect(blocked()).toBe(true);
+  expect(io.lookup).toHaveBeenCalledTimes(1);
+  expect(io.save).toHaveBeenCalledTimes(0);
 });

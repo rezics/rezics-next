@@ -8,8 +8,9 @@ import { bundledDigest } from '@rezics/definitions/bundled';
 import { converter_revision } from '@rezics/conversion/cross-media-entities';
 import { CrossMediaDumpFiles, type CrossMediaPort } from '../src/cross-media-seed.ts';
 import { createSourceRegistration } from '../src/source-registry.ts';
-import { importVndbReleaseLanguage, planVndbReleaseLanguage } from '../src/vndb-release-language.ts';
+import { planVndbReleaseLanguage } from '../src/vndb-release-language.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
+import { importVndbReleaseLanguage } from '../src/selected-import.ts';
 
 /** Authored COPY tables. These are not observed public dump evidence. */
 async function authoredCopy(

@@ -1,9 +1,11 @@
+import type { Pool } from 'pg';
 import { createWriteRateLimiter, type WriteRateLimiter } from '../access/write-rate.ts';
 import { createAccess, type AccessConfig } from '../access/index.ts';
 import type { AuthenticationConfig } from '../access/authenticate.ts';
 import { composeAccessApplication } from './access.ts';
 import { composeContentApplication } from './content.ts';
 import { composeWorkApplication } from './work.ts';
+import { installNativeHistory } from './history.ts';
 import { bindOrdinaryContentLifecycle, nativeContentLifecycle } from '../semantic/adapters/index.ts';
 import { ConfigError } from '../commerce/config.ts';
 import { assertReceiptKeyRing, readReceiptKeyRing } from '../command/receipt-key.ts';
@@ -11,6 +13,8 @@ import { systemClock } from '../clock.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { AccessFactory } from '../request/access.ts';
 import type { WriteRateStageOptions } from '../access/write-rate-stage.ts';
+import type { CreditSearchSource } from '../search/credit-search.ts';
+import { createCreditSearchSource } from '../semantic/credit-search.ts';
 
 export type KernelRuntimeDefaults = {
   tokens: KeyRing;
@@ -57,11 +61,18 @@ function readAuthConfig(env: NodeJS.ProcessEnv): AuthenticationConfig | undefine
   return { issuer: issuer ?? '', audience: audience ?? '', jwksUrl: jwksUrl ?? '' };
 }
 
+/** Production CreditSearchSource for the installed Search consumer. */
+export function createKernelCreditSearchSource(pool: Pool, routeKey: Uint8Array): CreditSearchSource {
+  if (!(routeKey instanceof Uint8Array) || routeKey.byteLength !== 32) throw new ConfigError('KERNEL_ROUTE_KEY');
+  return createCreditSearchSource(pool, routeKey);
+}
+
 /** Shared runtime defaults for the HTTP server and Search work factory. */
 export function createKernelRuntimeDefaults(overrides: KernelRuntimeOverrides = {}): KernelRuntimeDefaults {
   composeAccessApplication();
   composeWorkApplication();
   composeContentApplication();
+  installNativeHistory();
   bindOrdinaryContentLifecycle(nativeContentLifecycle());
   const env = overrides.env ?? process.env;
   const tokens = overrides.tokens ?? readTokenKeys(env);

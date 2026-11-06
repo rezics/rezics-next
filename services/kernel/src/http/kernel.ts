@@ -1,5 +1,6 @@
 import { initializeEventTypes } from '../events/catalogue.ts';
 import { ensureContentApplication } from '../content/adapters/index.ts';
+import { bindOrdinaryContentLifecycle, nativeContentLifecycle } from '../semantic/adapters/index.ts';
 import { contentHttpDeclaration, mountContentHttp, type ContentHttpRoutes } from '../content/http.ts';
 import { createOperationCatalogue } from '@rezics/operations';
 import { readCommerceMoneyPolicy, type CommerceMoneyPolicy } from '../commerce/money.ts';
@@ -87,7 +88,6 @@ import type { KeyRing } from '../tokens/seal.ts';
 import type { Pool } from 'pg';
 import { createWorkClient, type WorkClient } from '../work/client.ts';
 import { bindExecutionContract } from '../command/execution-contract.ts';
-import { historyExecutionPort } from '../history/operational-work.ts';
 import { workExecutionPort } from '../work/selected-runtime.ts';
 import { recentSearchRoutes } from '../search/recent-searches.ts';
 import { searchRoutes } from '../search/http/routes.ts';
@@ -109,6 +109,7 @@ import { subjectPageRoutes } from '../semantic/http/subject-pages.ts';
 import { createApp } from './app.ts';
 import { actionCatalogue, type MountedRoute } from './request.ts';
 import { declareKernelWriteRates } from './write-rate-routes.ts';
+import { historyExecutionPort } from '../history/application/index.ts';
 
 function compileGuestSecurity(routes: readonly MountedRoute[]) {
   const result = new Map<string, 'anonymous' | 'authenticated' | 'unknown'>();
@@ -375,6 +376,7 @@ export function createKernelAccessResolver(options: {
 
 /** The route key must stay the same across restarts, or retries lose their receipts. */
 export function createKernel(dependencies: KernelDependencies): Kernel {
+  bindOrdinaryContentLifecycle(nativeContentLifecycle());
   const declared = contentHttpDeclaration();
   const contentRuntime = ensureContentApplication({
     ...(dependencies.clock ? { clock: dependencies.clock } : {}),

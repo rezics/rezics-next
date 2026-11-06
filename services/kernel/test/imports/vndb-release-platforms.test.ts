@@ -12,16 +12,13 @@ import {
   vndbReleasePlatformSchemeUri,
   vndbReleasePlatformTaxonomy,
 } from '../../../../packages/conversion/src/support.ts';
-import {
-  importVndbReleaseFidelity,
-  readVndbReleaseBindings,
-  type VndbReleaseBindingGroup,
-} from '../../../importer/src/vndb-release-fidelity.ts';
+import { readVndbReleaseBindings, type VndbReleaseBindingGroup } from '../../../importer/src/vndb-release-fidelity.ts';
 import { CrossMediaDumpFiles, crossMediaAliases } from '../../../importer/src/cross-media-seed.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { identitySupport } from './identity-fixture.ts';
 import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
+import { importVndbReleaseFidelity } from '../../../importer/src/selected-import.ts';
 
 const source = 'authored-vndb-release';
 const globalContext = GLOBAL_CONTEXT;

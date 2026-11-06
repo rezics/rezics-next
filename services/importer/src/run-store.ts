@@ -32,7 +32,7 @@ import {
   type RetainedClassificationHead,
 } from './source-classification.ts';
 import type { RecordRow } from './record-store.ts';
-import type { SourceVocabularyRequest } from '../../../packages/conversion/src/source-vocabulary.ts';
+import type { SourceVocabularyRequest } from '@rezics/conversion/source-vocabulary';
 import { MAX_DUMP_RECORD_BYTES } from './dumps-bytes.ts';
 import {
   admitStagingCheckpoint,

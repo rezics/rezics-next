@@ -95,7 +95,7 @@ import { initializeRevisionAuthorship, revisionResource } from './authorship.ts'
 import { creationDeclares } from '../access/index.ts';
 import { readSourceRecords } from './source-records.ts';
 import readSourceMembers from './source-records-members.sql';
-import { declareCommandHistory } from '../history/record.ts';
+import { declareCommandHistory } from '../history/application/index.ts';
 
 const NIL_UUID = '00000000-0000-0000-0000-000000000000';
 

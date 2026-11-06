@@ -53,8 +53,13 @@ once, beside `assignmentValid`, and statement-level `live`; `policy-core.ts` map
 `row.deadlineLive`. A second identical alias fails SQL analysis. The adapter evaluates every target at the same native
 snapshot and uses the same core for ordinary and explicit advice. Own-account action metadata binds its existing account target as
 `access.account`. The ordinary formula retains the verified public floor independently of scope. Explicit advice
-excludes that floor and resource-role grants. A core decision reached through registered Global authority still
+excludes that floor and resource-role grants; own-account grants remain explicit advice. A core decision reached through registered Global authority still
 marks the same governance provenance used by command auditing.
+
+The typed native projection passes SQL `deadlineLive` to the core without structural casts.
+Its byte bound also includes the independent transport `live` field returned by SQL; that field does not replace the policy deadline operand.
+Scalar and batched consumers use that same projection; SQL `live` independently checks read freshness.
+The native work bound includes both projected fields.
 
 The exact type operand is deliberately not guessed for point `Resource` checks. Resource-role registrations bind
 `access:grant` to `community.realm`, `semantic.context` and `semantic.zone`; that point action keeps the existing
@@ -770,9 +775,9 @@ same source-local intent before its existing effect; enqueue validates the exact
 Both use the configured WorkClient's transactional SDK enqueue, preserving positional arguments, workflow IDs, step
 names/order/results, durable redrive and publication. Cached step replays recheck native custody outside the checkpoint.
 
-`history/agent-identity-source.ts` exports the native recording/handoff types and lookup bounded to eight keys and
+`history/adapters/agent-identity-source.ts` exports the native recording/handoff types and lookup bounded to eight keys and
 one artifact in total through the
-`lookupAgentIdentityReceivingCopies` port. `history/agent-identity-work.ts` owns the actual enqueue/association wrappers.
+`lookupAgentIdentityReceivingCopies` port. `history/adapters/agent-identity-work.ts` owns the actual enqueue/association wrappers.
 Neither lookup nor initial custody seals a Source inventory or grants erasure authority. Source and receiver owner
 epochs, current History generations, writer versions, role seals and permanent native retirement are checked before
 admission/reuse. The original command's full role manifest, including acting-human and prior Undo roles, is retained
@@ -791,7 +796,7 @@ treated as empty. Account root and shared-copy closure remain independent. Physi
 mapped SDK workflow ID and still requires the SDK's permanent writer fence. No foreign SDK tables are mutated
 directly.
 
-`history/agent-identity-retirement.ts` exports the original module's retirement staging and verification ports through
+`history/adapters/agent-identity-retirement.ts` exports the original module's retirement staging and verification ports through
 `agent-identity-work.ts`. `readAgentIdentityRetirementStage(pool, reference, context)` checks the exact original native
 source tuple/digest, immutable custody UUID, workflow ID, release, writer version, current owner and History generation
 in the source home, then releases that checkout before calling Semantic's exact
@@ -802,7 +807,7 @@ foreign reads while held. Null/false Semantic evidence remains `identity-source-
 result means the exact durable discharge/transfer was revalidated at the original source home; it is still separate
 from the SDK writer receipt, Account root and shared-copy closure.
 
-The default maintenance path is `shared-history-work.ts` → `advanceSharedHistory` → `minimizeHistoryWork` →
+The default maintenance path is `history/adapters/shared-history-work.ts` → `advanceSharedHistory` → `minimizeHistoryWork` →
 `minimizeIdentitySDKWork`. For one selected current mapped identity unit requiring consumer maintenance, it calls
 `advanceAgentIdentityConsumerMaintenance` after releasing the native job and receiving checkouts. The actual
 `semantic/identity-source-consumer-maintenance.ts` export `withIdentitySourceConsumerMaintenance` opens one frame
@@ -851,7 +856,7 @@ for its fence migration, writer/lineage guards, owner-token serialization and re
 shape alone do not establish current installed coverage. Missing native coverage remains unsupported; a technical
 fence never supplies consumer, Source or Account-root cleanup authority.
 
-`history/agent-identity-sdk-fence.ts:retireAgentIdentitySDKWork` consumes the original Source
+`history/adapters/agent-identity-sdk-fence.ts:retireAgentIdentitySDKWork` consumes the original Source
 expected-address handoff, records guarded generation-1 readiness on the original association, releases its
 command, retires the exact original SDK writer once, and records separately guarded generation-2 closure.
 The complete selected-unit composition, its installation prerequisites and charges are described below.
@@ -2112,6 +2117,7 @@ no-candidate. No separate snapshot or mutable transaction-id surrogate is provid
 ### Generic / parent creation authorization
 
 - Touches: `resource-authorization.ts` prepares actor/principal inverses and matched group proofs, validates the trusted authority existence/revision, then runs one Access formula at attempt T on one authority connection, released before target checkout. Fresh proof on every retry; authorization precedes replay. `parent-creation.ts` additionally binds the exact child UUID/partition and unique INSERT provenance, single-use initialization and manifest guard. Reads are the P/Q keys plus exact owning-module validation keys; no writes during authorization.
+- Typed parent: a parent anchor that declares its own `resourceType` (the Global platform root declares `semantic.context`) is authorized as that resource type through the page path. The child action's declared type never selects the parent's profile, so a direct Global grant for `space:create` or `realm:create` authorizes creation under the Global parent.
 - Bound: `P+Q` plus shared command admission and the authority validation seek per attempt: measured constant rows/statements and logarithmic blocks in S at fixed J/output, with permission work at most linear in capped J and V. Target changes add their own indexed writes; creation adds an exact provenance seek per declared child. No ACL/history enumeration or held connection across anchors.
 - Growth check: `test/access/growth-resource-authorization.test.ts`: composed stable tuple and creation commands at three scales
 
@@ -4087,7 +4093,7 @@ capabilities retain all preference-history and Cost qualifications above; full n
 
 ## Original Agent identity serialization associations
 
-`history/agent-identity-source.ts` publishes the data-only declaration
+`history/adapters/agent-identity-source.ts` publishes the data-only declaration
 `declareAgentIdentitySource(tx, key: AgentIdentitySourceKey, digest: string): Promise<void>` and
 `readAgentIdentityCopies(pool, keys, context, after?)` / `readAgentIdentityCopyReceiving(deps, barrier, keys, context, after?)`.
 The exact key is `{route, accountId, direction, receiptId}`; direction retains the original
@@ -4132,7 +4138,7 @@ intact. Neither native association conversion nor new SDK custody claims family 
 
 ### Original identity native inventory
 
-`history/agent-identity-inventory.ts` owns the first finite native inventory declaration. Its key is the original
+`history/adapters/agent-identity-inventory.ts` owns the first finite native inventory declaration. Its key is the original
 `AgentIdentitySourceKey` `{route, accountId, direction, receiptId}`. `AgentIdentityOriginal` adds the original
 `partition`, `epoch`, `position`, `transactionId` and canonical `digest`. No erasure generation or account time is
 substituted for that tuple. `AGENT_IDENTITY_INVENTORY` declares producer version 1, native receipt/outbox conversion,
@@ -4773,7 +4779,7 @@ a no-refill ledger is not an authorization prerequisite. SQL recognition and sma
 
 | Literal SQL / export identity                                                                                         | Home and locked footprint                                                                                                                                                     | Reservation per invocation                                                          |
 | --------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `identityHistoryCommand` in `history/agent-identity-inventory-work.ts`                                                | home0, one attempt; BEGIN, local deadline/config/time, no-effect native fence, COMMIT and failure ROLLBACK slot                                                               | C = 3/1/8/256/0                                                                     |
+| `identityHistoryCommand` in `history/adapters/agent-identity-inventory-work.ts`                                       | home0, one attempt; BEGIN, local deadline/config/time, no-effect native fence, COMMIT and failure ROLLBACK slot                                                               | C = 3/1/8/256/0                                                                     |
 | `prepareNativeRetention` initial and final root/source SELECTs                                                        | exact erasure, Account, active partition, repeated partition and k source keys FOR UPDATE; k <= 8                                                                             | B(k) = (4+k)/(4+k)/(4+k)/16384/0, twice, each plus C                                |
 | `consumerReference` native undo-only `readAccountIdentitySource`                                                      | original source command, technical fallback/role inventory and native command controls                                                                                        | 70/68/25/73984/0                                                                    |
 | `readOriginalAccountAgentIdentity`                                                                                    | original accepted claim/undo job; bounded three command attempts and six RR snapshots including controls/failure slots                                                        | 86/80/59/205920/0                                                                   |
@@ -4884,6 +4890,11 @@ source/target/role custody and native progress facts. Original job/home/phase/cu
 deadline remain bound across replay; operational checkout, callback identity and job lease confer no authority.
 Current native validation surrounds released child work, with committed progress and original receipt identity
 required before settlement. Workflow completion does not establish physical custody.
+
+Access uses History's public application and contract entries for identity-unit admission, source inventory and
+receiving vocabulary. The native History adapter binds Access producer and receiver capabilities in
+`composition/history.ts`; the shared runtime defaults, server, worker and the explicit preload hook install that binding before a History facade
+runs. The original actor, request, Source and absolute deadline remain the operands carried through selected work.
 
 The complete parent formula remains the disjoint inclusive sum:
 
