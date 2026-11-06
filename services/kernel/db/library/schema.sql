@@ -2108,9 +2108,9 @@ END $$;
 -- Name: reading_insights_current_progress_apply(integer, uuid, text, jsonb, numeric, numeric, integer); Type: FUNCTION; Schema: library; Owner: -
 --
 
-CREATE FUNCTION library.reading_insights_current_progress_apply(
-  p_route integer,p_account_id uuid,p_scope text,p_meaning jsonb,p_current numeric,p_total numeric,p_delta integer
-) RETURNS void LANGUAGE plpgsql AS $$
+CREATE FUNCTION library.reading_insights_current_progress_apply(p_route integer, p_account_id uuid, p_scope text, p_meaning jsonb, p_current numeric, p_total numeric, p_delta integer) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
 DECLARE present boolean; remaining bigint;
 BEGIN
   IF p_delta NOT IN (-1,1) THEN RAISE EXCEPTION 'Invalid current-progress delta'; END IF;
