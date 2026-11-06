@@ -487,3 +487,10 @@ try {
   await browser.close();
   stage('closed');
 }
+
+// A failed step fails the walk: the check reports pass only when every recorded step passed.
+const failedSteps = results.filter((result) => !result.ok).map((result) => result.step);
+if (failedSteps.length > 0) {
+  console.log('walk failed steps:', failedSteps.join(' | '));
+  process.exitCode = 1;
+}
