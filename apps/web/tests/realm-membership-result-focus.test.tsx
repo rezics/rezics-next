@@ -20,8 +20,6 @@ mock.module('../src/community/realm-membership-actions', () => ({
     return read();
   },
 }));
-const actualSpaceActions = await import('../src/community/space-actions');
-mock.module('../src/community/space-actions', () => ({ ...actualSpaceActions, changeRealmMembership: () => send() }));
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
 );
@@ -38,6 +36,9 @@ const globals = {
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
 for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+// Modules that read the DOM when they load (the session query gates reads on `window`) must load after the globals.
+const actualSpaceActions = await import('../src/community/space-actions');
+mock.module('../src/community/space-actions', () => ({ ...actualSpaceActions, changeRealmMembership: () => send() }));
 const { createRoot } = await import('react-dom/client');
 const { RealmMembership } = await import('../src/community/realm-membership');
 type Completion = import('../src/community/realm-membership').RealmMembershipCompletion;
