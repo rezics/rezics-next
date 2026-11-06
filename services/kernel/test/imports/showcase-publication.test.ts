@@ -49,7 +49,10 @@ test('local publication accepts only its acknowledged plan after authorization a
       { origin: runtime.origin },
       { providers: ['bangumi'] },
     );
-    const workId = result.readings[0]!.subject.subject!.id!;
+    const workId = journal
+      .acknowledgedCommands()
+      .find((entry) => entry.command.op === 'create' && entry.command.source.external_id === '101')!.subjectId!;
+    expect(result.readings).toHaveLength(0);
     const editor = await openApiObserver(runtime);
     const selectedPage = await runtime.importTransport.reviewedCandidates(workId, {
       property: 'schema:name',

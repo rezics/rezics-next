@@ -219,6 +219,7 @@ export async function openApiRuntime(
     let stageStart = Date.now();
     const identity = await time('identity and Auth setup', () =>
       openImportIdentity({
+        publication: true,
         database: ownedDatabase!,
         authTemplate: prepared.auth.name,
         clock: () => new Date(),
