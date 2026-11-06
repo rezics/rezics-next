@@ -177,6 +177,9 @@ by the controller.
 
 Do not spend allowance merely to exhaust it before a reset. Preserve explicit pauses and spending limits.
 
+Decision: The Claude allowance keeps the resident supermanager running and nothing else. It routes no workers, and it
+holds no reserve beyond that; workers run on Codex and Cursor.
+
 ## Incident method
 
 When work slows or an attempt is lost, enumerate every evidenced cause from task states, attempt records, run logs
