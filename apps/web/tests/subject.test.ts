@@ -75,6 +75,8 @@ function site(): Promise<string> {
       'WORKER_INSPECTOR_PORT',
     ])
       delete env[name];
+    // This anonymous fixture has no OAuth client; satisfy the Worker's declared secret binding.
+    env.WEBSITE_CLIENT_KEY = '{}';
     child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
       cwd: app,
       detached: true,

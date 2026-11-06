@@ -273,9 +273,9 @@ test('Subject discussion and review summaries keep native read destinations and 
           expect(citation.textContent).toContain(m.discussion_provenance_details_rating_units({ units: '0' }, options));
           expect(citation.textContent).not.toContain(m.thread_provenance_current_vote({}, options));
           const reactions = first.querySelector('[data-slot="community-reaction-summary"]')?.textContent;
-          expect(reactions).toContain(m.reaction_upvote());
+          expect(reactions).toContain(m.reaction_upvote({}, options));
           expect(reactions).toContain('4');
-          expect(reactions).toContain(m.reaction_like());
+          expect(reactions).toContain(m.reaction_like({}, options));
           expect(reactions).toContain('2');
           expect(reactions).not.toContain(m.board_feed_reactions({ count: '6' }, options));
           await show(kind, paged, { ...ready, reactionsAsOf: null });
