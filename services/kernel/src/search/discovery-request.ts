@@ -13,6 +13,7 @@ import type { CollectionDirectorySelection, DiscoveryOwnerRegistry, DiscoveryReg
 import type { DiscoveryRequest } from './discovery-api.ts';
 import { discoveryKindDirectory } from './discovery-registry.ts';
 import { admitProperties, validateHitOptions, validateSearchLimit } from './hits.ts';
+import { taggedWorkRemainingHasConcept } from './tagged-work-plan.ts';
 import { parseText, positiveText, textSyntaxProblem, TextSyntaxError } from './text.ts';
 
 export type MixedDiscoveryRequest = DiscoveryRequest & {
@@ -168,7 +169,12 @@ export function admitDiscoveryRequest(
   )
     unsupported('/collectionDirectory');
   const sort = request.sort ?? (text ? 'relevance' : 'name');
-  if (sort !== 'id' && sort !== 'name' && sort !== 'relevance') unsupported('/sort');
+  const taggedRating =
+    sort === 'rating' &&
+    request.kindCountLeaf !== undefined &&
+    filter !== undefined &&
+    taggedWorkRemainingHasConcept(filter, request.kindCountLeaf);
+  if (sort !== 'id' && sort !== 'name' && sort !== 'relevance' && !taggedRating) unsupported('/sort');
   if (sort === 'relevance' && !text) unsupported('/sort');
   if ((text || filter) && !(text && positiveText(text)) && !(filter && positiveDiscoveryFilter(filter)))
     unsupported(text ? '/text' : '/filter');

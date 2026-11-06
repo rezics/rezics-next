@@ -2,10 +2,25 @@ import { FILTER_LIMITS, parseFilter, type FilterDocument, type FilterQualifier }
 import { conditionTreeAdmission } from '../../../search/condition-editor-model';
 import { discoveryRequest } from '../../../search/search-request';
 import type { SearchLoaderDeps } from '../../../search/search-params';
-import { readDiscovery, type DiscoverySender } from '../../../search/discovery';
+import { readDiscovery, type DiscoveryKinds, type DiscoverySender } from '../../../search/discovery';
 import type { ConceptWorksAdmission, ConceptSchemeRef } from '../source-concept-explorer';
 import { isExploreId } from '../../pages/graph-browser';
 import type { DiscoveryRequest, DiscoveryState } from '../../../search/discovery';
+import { localizedLabel } from '../../../search/results';
+
+/** Search kind metadata is the native label owner; admission type labels are only a pre-page fallback. */
+export function conceptWorksTypeLabel(
+  type: { id: string; labels: Record<string, string> },
+  kinds: DiscoveryKinds['values'] | undefined,
+  locale: string,
+): string {
+  const native = kinds?.find((entry) => entry.id === type.id);
+  const label = localizedLabel(native?.labels ?? type.labels, locale).text.trim() || type.id;
+  const count = native?.count;
+  return count && 'value' in count
+    ? `${label} (${new Intl.NumberFormat(locale).format(count.value)}${count.exact ? '' : '+'})`
+    : label;
+}
 
 export const conceptWorksLimit = 24;
 export const conceptWorksRequestByteLimit = 65_536;

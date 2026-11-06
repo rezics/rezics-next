@@ -49,6 +49,9 @@ import type {
 } from './public-filter-consumer-contract.ts';
 import { finishDiscoveryDisclosure } from './disclosure/discovery.ts';
 import { openPublicFilterCoveragePage } from './public-filter-coverage-page.ts';
+import type { KindCountEvidence } from './discovery-api.ts';
+import { admitTaggedWorkPlan, taggedWorkRemainingHasConcept } from './tagged-work-plan.ts';
+import { attachKindCountMetadata, proveCurrentKindCounts } from './type-facet.ts';
 
 const ready = () => new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
 const invalid = (pointer: string) =>
@@ -339,6 +342,19 @@ function executeDiscoverySearch(
     const directoryAfter: import('./cursor.ts').SearchSortValue[] = [];
     let directoryNextAfter: import('./cursor.ts').SearchSortValue[] | null = null;
     const kindDirectory = discoveryKindDirectory(registry);
+    const taggedWork =
+      admitted.kindCountLeaf === undefined ||
+      admitted.filter === undefined ||
+      !taggedWorkRemainingHasConcept(admitted.filter, admitted.kindCountLeaf)
+        ? undefined
+        : admitTaggedWorkPlan({
+            filter: admitted.filter,
+            kindCountLeaf: admitted.kindCountLeaf,
+            sort: admitted.sort,
+            limit: admitted.limit,
+            registeredKinds: new Set(kindDirectory.map((entry) => entry.kind)),
+          });
+    if (taggedWork?.execution === 'preparing') throw ready();
     const registryDigest = createHash('sha256')
       .update(
         canonicalize({
@@ -458,6 +474,7 @@ function executeDiscoverySearch(
       const hits: DiscoveryUnionHit[] = [];
       const seen = new Set<string>();
       const witnesses = new Map<string, number>();
+      let kindCounts: ReadonlyMap<string, KindCountEvidence> | undefined;
       let last: Extract<DiscoveryConsumerQuery, { status: 'queried' }> | undefined;
       let consumed = 0;
       let examined = 0;
@@ -634,7 +651,7 @@ function executeDiscoverySearch(
           let countQueried: PublicFilterQueriedObservation | undefined;
           let countFailed = false;
           try {
-            const countSize = Math.min(200, discoveryCandidateScanBound(admitted.limit));
+            const countSize = Math.min(200, taggedWork?.scanBound ?? discoveryCandidateScanBound(admitted.limit));
             const countSort = admitted.text ? 'relevance' : 'name';
             const countPlan = compileDiscoveryCapture(
               {
@@ -705,15 +722,19 @@ function executeDiscoverySearch(
               ...currentContext,
               ...(matchEvidencePlan ? { matchEvidencePlan } : {}),
             });
-            const distinct = new Map<string, Set<string>>();
+            const subjects: { id: string; type: string }[] = [];
             for (const candidate of selected) {
               const hit = current.get(candidate);
               if (!hit) continue;
-              const ids = distinct.get(hit.key.kind) ?? new Set<string>();
-              ids.add(hit.key.id);
-              distinct.set(hit.key.kind, ids);
+              subjects.push({ id: hit.key.id, type: hit.key.kind });
             }
-            for (const [kind, ids] of distinct) if (ids.size) witnesses.set(kind, ids.size);
+            kindCounts = proveCurrentKindCounts({
+              subjects,
+              directory: kindDirectory.map((entry) => entry.kind),
+              complete: false,
+            });
+            for (const [kind, evidence] of kindCounts)
+              if ('value' in evidence) witnesses.set(kind, evidence.value);
             await countCoverage.consume(countBatch.execution, window.examined);
             await countCoverage.finish();
           } catch (error) {
@@ -740,12 +761,15 @@ function executeDiscoverySearch(
           // Current page rows are positive witnesses for the wider population after removing only
           // the designated top-level kind conjunct. A positive lower bound survives hit and kind
           // continuations; neither page length nor the engine's candidate total is a count.
-          const values = selected.map((entry) => ({
-            ...entry.metadata,
-            ...(!witnesses.get(entry.kind)
-              ? { count: { kind: entry.kind, unavailable: true as const } }
-              : { count: { kind: entry.kind, value: witnesses.get(entry.kind)!, exact: false as const } }),
-          }));
+          const values =
+            kindCounts !== undefined
+              ? attachKindCountMetadata(selected, kindCounts)
+              : selected.map((entry) => ({
+                  ...entry.metadata,
+                  ...(!witnesses.get(entry.kind)
+                    ? { count: { kind: entry.kind, unavailable: true as const } }
+                    : { count: { kind: entry.kind, value: witnesses.get(entry.kind)!, exact: false as const } }),
+                }));
           const observed = await config.asOf(queried);
           const projected: DiscoveryPage = {
             hits: boundMatchEvidencePage(

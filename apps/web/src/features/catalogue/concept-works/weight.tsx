@@ -7,11 +7,13 @@ import { useId } from 'react';
 import { m } from '../../../paraglide/messages.js';
 import { locales } from '../../../paraglide/runtime.js';
 import type { ConditionMetadata } from '../../../search/condition-editor-model';
+import { searchQuantityUnitText } from '../../../search/condition-quantity';
+import { parseConditionRangeDraft } from '../../../search/condition-range-input';
 import { localizedLabel } from '../../../search/results';
 
 const weightProperty = 'rezics:sourceTagWeight';
 
-/** Edit only the released weight qualifier of the fixed tag statement. */
+/** Edit only the released weight qualifier of the fixed tag statement, using Search's numeric grammar. */
 export function ConceptWeightRange({
   metadata,
   property,
@@ -37,23 +39,31 @@ export function ConceptWeightRange({
   const range = current && 'range' in current ? current.range : undefined;
   const options = { locale: locales.find((value) => value === locale) ?? 'en' };
   const label = localizedLabel(definition.labels ?? {}, locale).text || weightProperty;
+  const unitMessages = {
+    missing: () => m.search_quantity_unit_missing({}, options),
+    unitless: () => m.search_quantity_unitless_count({}, options),
+    marker: (unit: string) => m.search_quantity_unit_marker({ unit }, options),
+    notAdmitted: (unit: string) => m.search_quantity_unit_not_admitted({ unit }, options),
+    unavailable: (unit: string) => m.search_quantity_unit_label_unavailable({ unit }, options),
+  };
   return (
     <form
       className="space-y-3 rounded-lg border border-border/60 p-3"
       onSubmit={(event) => {
         event.preventDefault();
         const data = new FormData(event.currentTarget);
-        const lower = String(data.get('gte') ?? '');
-        const upper = String(data.get('lte') ?? '');
+        const lower = parseConditionRangeDraft(String(data.get('gte') ?? ''), 'quantity');
+        const upper = parseConditionRangeDraft(String(data.get('lte') ?? ''), 'quantity');
+        if (!lower.valid || !upper.valid) return;
         const unit = String(data.get('unit'));
         const next = qualifiers.filter((qualifier) => qualifier.property !== weightProperty);
-        if (lower !== '' || upper !== '')
+        if (lower.value !== undefined || upper.value !== undefined)
           next.push({
             property: weightProperty,
             range: {
               unit,
-              ...(lower !== '' ? { gte: Number(lower) } : {}),
-              ...(upper !== '' ? { lte: Number(upper) } : {}),
+              ...(lower.value !== undefined ? { gte: lower.value } : {}),
+              ...(upper.value !== undefined ? { lte: upper.value } : {}),
             },
           });
         onChange(next);
@@ -69,8 +79,7 @@ export function ConceptWeightRange({
             <Input
               id={`${id}-${bound}`}
               name={bound}
-              type="number"
-              step="any"
+              type="text"
               inputMode="decimal"
               defaultValue={range?.[bound] ?? ''}
             />
@@ -81,7 +90,7 @@ export function ConceptWeightRange({
           <NativeSelect id={`${id}-unit`} name="unit" defaultValue={range?.unit ?? definition.units[0]}>
             {definition.units.map((unit) => (
               <NativeSelectOption key={unit} value={unit}>
-                {unit}
+                {searchQuantityUnitText(unit, definition.units ?? [], locale, unitMessages)}
               </NativeSelectOption>
             ))}
           </NativeSelect>
