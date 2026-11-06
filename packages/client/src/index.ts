@@ -94,6 +94,9 @@ export type BanReviewPageQuery = BanReviewRoute['query'];
 export type BanReviewPage = BanReviewRoute['response'][200];
 export type BanReviewPageItem = BanReviewPage['items'][number];
 export type BanReviewIdentity = BanReviewPageItem['account'];
+type QuestionManagementRoute = Routes['realms'][':realmId']['rating-questions']['management']['get'];
+export type QuestionManagementQuery = QuestionManagementRoute['query'];
+export type QuestionManagementPage = QuestionManagementRoute['response'][200];
 
 /** Reuse each shared method's original declaration; retain every other mounted path and method. */
 type SharedRoutes<Mounted, Original> = Original extends { body: unknown; response: unknown }

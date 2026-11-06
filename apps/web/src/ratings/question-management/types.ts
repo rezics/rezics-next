@@ -1,33 +1,8 @@
-import type { QuestionLabelHistory } from '@rezics/client';
+import type { QuestionLabelHistory, QuestionManagementPage } from '@rezics/client';
 
-export type ManagementQuestion = {
-  id: string;
-  realmId: string;
-  meaning: string;
-  canonicalLabel: string;
-  label: string;
-  labelRevision: number;
-  revision: number;
-  grain: 'work' | 'release' | 'episode' | 'character';
-  scale: { min: number; max: number; displayStep: number };
-  lifecycle: { state: 'active' | 'retired'; revision: number };
-};
-
-export type QuestionManagementPageData = {
-  viewer: { accountId: string };
-  realmId: string;
-  directory: { ratingQuestions: ManagementQuestion[]; next: string | null };
-  actions: { create: { method: 'POST'; href: string } | null };
-  selected: {
-    question: ManagementQuestion;
-    readback: string;
-    history: string;
-    actions: {
-      caption: { method: 'PUT'; href: string; expectedLabelRevision: number } | null;
-      lifecycle: { method: 'POST'; href: string; expectedLifecycleRevision: number } | null;
-    };
-  } | null;
-};
+/** Page and selection types are derived from the installed Realm management response, not restated here. */
+export type QuestionManagementPageData = QuestionManagementPage;
+export type ManagementQuestion = QuestionManagementPageData['directory']['ratingQuestions'][number];
 
 export type QuestionManagementAddress = {
   realmId: string;

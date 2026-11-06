@@ -7,6 +7,8 @@ Decision: creation acknowledgements compare scale operands by value; JSON proper
 The existing management reader and commands own admission, immutable definitions, caption compare-and-set,
 lifecycle and authorization. This consumer only navigates their current native windows.
 
+Decision: the management read calls the installed Realm management callable through the bounded client, and page and selection types derive from that installed response. Its closed management and caption-history schemas stay a named Kernel seam in [native](native.ts) until the official client publishes their runtime exports.
+
 Decision: Previous uses admitted predecessors only; First deliberately reads the null cursor. Each independent
 stream commits its staged target only after exact admitted success. Retry reads that same failed target. A direct
 visit has no invented predecessor. A successful return truncates the abandoned branch; First clears it.

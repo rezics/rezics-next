@@ -1,5 +1,7 @@
 import { createKernelClient } from '@rezics/client';
 import { Value } from 'typebox/value';
+// Temporary Kernel seam: the official client publishes the management and label-history callables, but not yet their
+// closed runtime schemas. Replace these two imports with the installed exports when they are published.
 import {
   QuestionManagementResponseSchema,
   RatingQuestionLabelHistorySchema,
@@ -55,15 +57,17 @@ async function boundedBody(response: Response): Promise<ArrayBuffer> {
   return body;
 }
 
+/** Bounded bytes must be exact UTF-8 before the installed client parses them; malformed bytes stay unavailable. */
 async function boundedResponse(response: Response): Promise<Response> {
   const body = await boundedBody(response);
+  new TextDecoder('utf-8', { fatal: true }).decode(body);
   return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
 }
 
 function clientFor(input: {
   origin: string;
   authorization: string;
-  csrfToken: string;
+  csrfToken?: string;
   locale: string;
   fetcher?: typeof fetch;
   signal?: AbortSignal;
@@ -76,7 +80,7 @@ function clientFor(input: {
       'accept-language',
       languages.map((language, index) => `${language}${index ? `;q=${1 - index / 10}` : ''}`).join(', '),
     );
-    headers.set('x-csrf-token', input.csrfToken);
+    if (input.csrfToken !== undefined) headers.set('x-csrf-token', input.csrfToken);
     return boundedResponse(
       await (input.fetcher ?? fetch)(url, {
         ...init,
@@ -91,16 +95,7 @@ function clientFor(input: {
   return createKernelClient(input.origin, { fetch: transport });
 }
 
-function managementPath(address: QuestionManagementAddress): string {
-  const query = new URLSearchParams();
-  if (address.selectedQuestionId) query.set('selectedQuestionId', address.selectedQuestionId);
-  if (address.cursor) query.set('cursor', address.cursor);
-  const encoded = query.toString();
-  const suffix = encoded ? `?${encoded}` : '';
-  return `/v1/realms/${encodeURIComponent(address.realmId)}/rating-questions/management${suffix}`;
-}
-
-/** Minimal local consumer seam for the mounted management source. It checks the mounted closed schema before use. */
+/** Reads the mounted management page through the installed Realm callable, with its status, byte and shape checks. */
 export async function readQuestionManagementSource(input: {
   origin: string;
   authorization: string;
@@ -109,34 +104,25 @@ export async function readQuestionManagementSource(input: {
   fetcher?: typeof fetch;
   signal?: AbortSignal;
 }): Promise<QuestionManagementSourceResult> {
-  const languages = requestLanguages(input.locale);
-  let response: Response;
-  try {
-    response = await (input.fetcher ?? fetch)(new URL(managementPath(input.address), input.origin), {
-      method: 'GET',
-      cache: 'no-store',
-      headers: {
-        authorization: input.authorization,
-        accept: 'application/json',
-        'accept-language': languages
-          .map((language, index) => `${language}${index ? `;q=${1 - index / 10}` : ''}`)
-          .join(', '),
+  const client = clientFor(input);
+  const result = await client
+    .realms({ realmId: input.address.realmId })
+    ['rating-questions'].management.get({
+      query: {
+        ...(input.address.selectedQuestionId ? { selectedQuestionId: input.address.selectedQuestionId } : {}),
+        ...(input.address.cursor ? { cursor: input.address.cursor } : {}),
       },
-      ...(input.signal ? { signal: input.signal } : {}),
-    });
-  } catch {
-    return { state: 'unavailable' };
-  }
+    })
+    .catch(() => undefined);
+  if (!result) return { state: 'unavailable' };
 
-  if (response.status === 401) return { state: 'denied' };
-  if (response.status === 403) return { state: 'denied' };
-  if (response.status === 404) return { state: 'concealed' };
-  if (response.status === 409) return { state: 'stale-cursor' };
-  if (!response.ok) return { state: 'unavailable' };
+  if (result.status === 401 || result.status === 403) return { state: 'denied' };
+  if (result.status === 404) return { state: 'concealed' };
+  if (result.status === 409) return { state: 'stale-cursor' };
+  if (result.status !== 200) return { state: 'unavailable' };
 
   try {
-    const body = await boundedBody(response);
-    const source: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(body));
+    const source: unknown = result.data;
     if (!Value.Check(QuestionManagementResponseSchema(), source)) return { state: 'unavailable' };
     const page = source as QuestionManagementPageData;
     if (
