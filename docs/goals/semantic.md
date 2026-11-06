@@ -31,6 +31,20 @@ erase authored documents through Content's command under an exact document grant
 HTTP fallback retains its actual language and mounted exact-binding cases cover unreadable previews without rewriting
 stored bodies.
 
+Decision: Zone lifecycle through custody is pinned by native kernel journeys (delete/hide/restore, pointer takedown,
+hold/purge) and two web mapping tests; no Storybook stories.
+
+Decision: Semantic issues Zone cleanup admission after the parent lock, then Access grant pages and the existing
+Content, Library, Auth and Search participant reads share that command; a missing owner stays incomplete. Editor
+delete/restore uses the catalogue mapping client. No Storybook stories.
+
+Decision: Zone owner mutations keep compiled page authorization; derived Access forwards preparePage.
+Platform inverse records identity_epoch_native_commit or erasure_source_commit, not fabricated write_basis.
+Source-commit validation accepts that native commit. Account-agent tests use the request deadline, not
+authenticate's short identity expiry. Page coverage rebinds by identity while routes stay in canonical
+order. Native kernel journeys and two web mapping tests pin lifecycle; no Storybook stories or expanded
+served walks.
+
 ## Ownership
 
 Placement decision: each existing owner remains the sole authority for its contract: Definitions for vocabulary, Semantic for native behavior, Conversion for value fidelity, Imports for acquisition and publication, and Web for reading and correction. The [Semantic module](../../services/kernel/src/semantic/README.md), [Definitions](../../packages/definitions/README.md), [Conversion](../../packages/conversion/README.md), [filters](../../packages/filter/README.md), [Zones](../zones.md), [membership](../zone-membership.md), [Collection sources](../collection-source.md), [dynamic Collections](../dynamic-collections.md) and [deletion](../deletion.md) hold their contracts.

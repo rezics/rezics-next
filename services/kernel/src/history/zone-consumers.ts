@@ -18,7 +18,7 @@ function actualEventTypes() {
   return memoizedValue(actualEventTypes, () => Object.keys(ZONE_EVENTS).sort());
 }
 
-/** The current rebuilt producer cut: five receipt codecs and five closed ID/revision events.
+/** The current rebuilt producer cut: Zone receipt codecs and closed ID/revision events.
  * No Zone durable-work producer is registered until its actual native owner exists. */
 export function ZONE_HISTORY_FAMILY_SOURCES(): readonly HistoryFamilySource[] {
   return memoizedValue(ZONE_HISTORY_FAMILY_SOURCES, () =>

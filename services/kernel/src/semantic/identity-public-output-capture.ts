@@ -39,6 +39,7 @@ import { withRequestDeadline } from '../request/deadline.ts';
 import type { IdentityScopeKey } from './identity-scope-types.ts';
 import type * as T from './identity-public-output-types.ts';
 import { outputCaptureFootprint } from './identity-public-output-work.ts';
+import { removePlatformNativeInverse } from './deletion/platform-native-inverse.ts';
 import acceptedSQL from './identity-public-output-accepted.sql';
 import existingSQL from './identity-public-output-existing.sql';
 import dispositionLocatorSQL from './identity-public-output-disposition-locator.sql';
@@ -884,12 +885,18 @@ export function createPublicIdentityOutputCapture(config: Parameters<PublicFilte
           directoryKey,
           a.scope_key,
         ])
-      )
-        return refuse(
-          'foreign_closure_missing',
-          'unavailable',
-          'semantic.identity-epoch.platform-native-inverse-removal',
-        );
+      ) {
+        await removePlatformNativeInverse(tx, {
+          home: c.home,
+          generation: c.generation,
+          original: c.original,
+          sourcePartition: l.partition,
+          captureId: l.captureId,
+          registration: a.binding.holdId,
+          scopeKey: directoryKey,
+          sourceKey: a.scope_key,
+        });
+      }
       const n = await component(tx, 'identity-scope-directory-release');
       await tx.query(settingSQL.sql, [n.transactionId]);
       registerCommandCallback(tx, async () => {
