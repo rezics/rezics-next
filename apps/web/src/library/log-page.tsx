@@ -2,9 +2,11 @@ import { Exposure } from '../kernel/exposure';
 import { RelativeTime } from './logs-relative-time';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
 import { csrfHeaders } from '../threads/composer';
 import { removePublishedLog, restorePublishedLog } from './logs-server';
+import { logsReturnBackClick, logsReturnBackHref } from './logs-return';
 import { UndoNotice } from './copies-undo';
 import type { DeletionEvidence } from './copies-receipt';
 import type { PublishedLog } from './logs-read';
@@ -26,6 +28,20 @@ function SnapshotTime({ label, value }: { label: string; value: string }) {
       <span className="font-medium">{label}: </span>
       <RelativeTime value={value} />
     </p>
+  );
+}
+
+function PublishedLogBack() {
+  const href = logsReturnBackHref(getLocale());
+  if (!href) return null;
+  return (
+    <a
+      href={href}
+      className="inline-flex min-h-11 items-center rounded text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      onClick={(event) => logsReturnBackClick(event)}
+    >
+      {m.library_logs_back()}
+    </a>
   );
 }
 
@@ -253,6 +269,7 @@ export function PublishedLogPageView({
           failure={m.library_logs_write_failed()}
           restore={restore}
         />
+        <PublishedLogBack />
       </article>
     );
   }
@@ -262,6 +279,7 @@ export function PublishedLogPageView({
       <header className="space-y-3">
         <PageHeading>{m.library_logs_page_heading()}</PageHeading>
         <p>{m.library_logs_description()}</p>
+        <PublishedLogBack />
       </header>
       <dl className="space-y-3">
         <div>

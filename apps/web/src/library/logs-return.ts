@@ -117,3 +117,18 @@ export function logsReturnTrigger(root: HTMLElement | null, logId: string): HTML
   if (!root || !uuid.test(logId)) return null;
   return (root as unknown as ParentNode).querySelector(`a[data-published-log="${logId}"]`);
 }
+
+/** Public log Back never carries the private My Logs cursor. */
+export function logsReturnBackHref(locale: string): string | null {
+  return logsListHref(locale, null);
+}
+
+/** Ordinary left-click restores this visit through history. Modified clicks keep the cursor-free list href. */
+export function logsReturnBackClick(event: Pointer): boolean {
+  if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+    return false;
+  if (typeof window === 'undefined' || window.history.length < 2) return true;
+  event.preventDefault();
+  window.history.back();
+  return false;
+}

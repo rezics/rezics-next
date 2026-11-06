@@ -396,7 +396,7 @@ test('same-page uncertain retries keep exact payloads, evidence and deadline; on
       original.log.completedAt!,
       original.log.publishedAt,
     ]);
-    expect(h.host.querySelector('a')?.textContent).toContain('Subject original');
+    expect([...h.host.querySelectorAll('a')].some((node) => node.textContent?.includes('Subject original'))).toBe(true);
     expect(h.host.textContent).toContain('@reader');
     await settle(oldDelete);
     expect(removes).toHaveLength(3); // Restoring also retires the old revision-bound confirmation.
@@ -461,6 +461,23 @@ test('a withheld changed Source still renders the published snapshot', async () 
     expect(h.host.textContent).toContain(props.log.note!);
     expect(h.host.textContent).toContain(m.library_subject_unavailable());
     expect(h.host.querySelector('button')).toBeNull();
+  } finally {
+    await h.close();
+  }
+});
+
+test('mounted public log Back is cursor-free My Logs and remains after retention Undo', async () => {
+  const h = await mount();
+  try {
+    const hrefOf = () =>
+      [...h.host.querySelectorAll('a')].find((node) => node.textContent === m.library_logs_back())?.getAttribute(
+        'href',
+      );
+    expect(hrefOf()).toBe('/en/library/logs');
+    await complete(await h.remove(), 'success');
+    expect(h.host.querySelector('[role="status"]')?.textContent).toBe(m.library_logs_deleted());
+    expect(hrefOf()).toBe('/en/library/logs');
+    expect(typeof undoProps?.deadline).toBe('number');
   } finally {
     await h.close();
   }

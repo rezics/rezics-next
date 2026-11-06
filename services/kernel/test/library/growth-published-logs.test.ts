@@ -18,7 +18,7 @@ function id(prefix: string, route: number, ordinal: number): string {
   return `${prefix}-0000-7000-8000-${route.toString(16).padStart(4, '0')}${ordinal.toString(16).padStart(8, '0')}`;
 }
 
-// Each category receives 500 x scale rows: the owner, another account on its route,
+// Each of three populations receives `scale` rows: the owner, another account on its route,
 // and accounts on a different partition. IDs and timestamps never overlap the probes.
 const source = `WITH placement AS (
   SELECT n, bucket, CASE WHEN bucket = 2 THEN $1::int + 4096 ELSE $1::int END AS route,
@@ -42,7 +42,7 @@ async function grow(
   scale: number,
   previous: number,
 ) {
-  const parameters = [route, 500 * previous, 500 * scale, owner, time, subjectId];
+  const parameters = [route, previous, scale, owner, time, subjectId];
   await database.admin.query(
     `${source}
      INSERT INTO access.account
@@ -154,7 +154,7 @@ async function prepare(route: number) {
        VALUES ($1, $2, $3, $4, 'scalar_amount', 'page', 0, 'active', 1, $5, $2)`,
       [route, sessionId, owner, subjectId, time],
     );
-    const probes = Array.from({ length: 21 }, (_, index) => id('60000000', route, index));
+    const probes = Array.from({ length: 40 }, (_, index) => id('60000000', route, index));
     await database.admin.query(
       `INSERT INTO library.published_log
          (route, log_id, account_id, session_id, subject_id, session_state, started_at, completed_at, note,
@@ -228,7 +228,7 @@ async function check(operation: Operation, route: number, name: string) {
 
     const report = await checkGrowth(database, {
       name,
-      scales: [1, 4, 16],
+      scales: [64, 512, 4096],
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       grow: (db, scale, previous) => grow(db, route, owner, subjectId, scale, previous),
       operation: run,

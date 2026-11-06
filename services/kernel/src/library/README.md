@@ -2883,25 +2883,25 @@ identity/custody and cost proof is pending; source typing does not certify these
 
 - Touches: Own-account `published_log:create`. The body reads the owner's session primary key and inserts one immutable `published_log` in the owner partition. The event subject is the account id. Nothing is written on the subject partition.
 - Bound: Library body `R` `O(1)`, `B` `O(L(N))`, `S` 2, plus authorization and the envelope.
-- Growth check: `test/library/growth-published-logs.test.ts`: `Publish has constant rows and statements as published logs grow`. Whole-operation rows and statements stay constant and blocks stay logarithmic at scales 1, 4 and 16 as the account's own and other accounts' published logs, progress sessions, receipts, outbox, write-basis and Access account rows grow by 500 x scale per population in the owner and other partitions.
+- Growth check: `test/library/growth-published-logs.test.ts`: `Publish has constant rows and statements as published logs grow`. Whole-operation rows and statements stay constant and blocks stay logarithmic at scales 64, 512 and 4096 as the account's own and other accounts' published logs, progress sessions, receipts, outbox, write-basis and Access account rows grow by scale rows per population in the owner and other partitions.
 
 ### Retract
 
 - Touches: Own-account `published_log:delete` and one primary-key delete matched to the owner account. The event subject is the account id. The session is left in place.
 - Bound: Library body `R` `O(1)`, `B` `O(L(N))`, `S` 1, plus authorization and the envelope.
-- Growth check: `test/library/growth-published-logs.test.ts`: `Retract has constant rows and statements as published logs grow`. Whole-operation rows and statements stay constant and blocks stay logarithmic at scales 1, 4 and 16 as the account's own and other accounts' published logs, progress sessions, receipts, outbox, write-basis and Access account rows grow by 500 x scale per population in the owner and other partitions. Each run, including warm-up, retracts a fresh snapshot.
+- Growth check: `test/library/growth-published-logs.test.ts`: `Retract has constant rows and statements as published logs grow`. Whole-operation rows and statements stay constant and blocks stay logarithmic at scales 64, 512 and 4096 as the account's own and other accounts' published logs, progress sessions, receipts, outbox, write-basis and Access account rows grow by scale rows per population in the owner and other partitions. Each run, including warm-up, retracts a fresh snapshot.
 
 ### Published log read
 
 - Touches: A repeatable-read transaction and one `published_log` primary key. The read is public, including anonymous. There is no account admit. A missing row is not found. A live FULL presentation then runs original and terminal Source gates, Follow subject-summary observation and the public-account read inside the original request deadline.
 - Bound: `R` `O(1)`, `B` `O(L(N))`, `S` 1, plus begin and commit. No authorization read. Nested Source/Semantic units are declared on `published-log-bounds.ts` point and page operations.
-- Growth check: `test/library/growth-published-logs.test.ts`: `Published log read has constant rows and statements as published logs grow`. Whole-operation rows and statements stay constant and blocks stay logarithmic at scales 1, 4 and 16 as the account's own and other accounts' published logs, progress sessions, receipts, outbox, write-basis and Access account rows grow by 500 x scale per population in the owner and other partitions.
+- Growth check: `test/library/growth-published-logs.test.ts`: `Published log read has constant rows and statements as published logs grow`. Whole-operation rows and statements stay constant and blocks stay logarithmic at scales 64, 512 and 4096 as the account's own and other accounts' published logs, progress sessions, receipts, outbox, write-basis and Access account rows grow by scale rows per population in the owner and other partitions.
 
 ### Published log page
 
 - Touches: A repeatable-read transaction, one partition-epoch read, and one keyset on `published_log_account_page` `(route, account_id, published_at, log_id)`. Two `LIMIT` branches fetch `s + 1` rows, `s` at most 100. There is no second probe. The cursor is bound to the account. The page is public.
 - Bound: `R` `O(s+1)`, `B` `O(L(N)+s)`, `S` 1 for the page, plus the partition read and begin and commit.
-- Growth check: `test/library/growth-published-logs.test.ts`: `Published log page at a fixed limit has constant rows and statements as published logs grow`. Whole-operation rows and statements stay constant and blocks stay logarithmic at scales 1, 4 and 16 as the account's own and other accounts' published logs, progress sessions, receipts, outbox, write-basis and Access account rows grow by 500 x scale per population in the owner and other partitions. The first page has a fixed limit of 20.
+- Growth check: `test/library/growth-published-logs.test.ts`: `Published log page at a fixed limit has constant rows and statements as published logs grow`. Whole-operation rows and statements stay constant and blocks stay logarithmic at scales 64, 512 and 4096 as the account's own and other accounts' published logs, progress sessions, receipts, outbox, write-basis and Access account rows grow by scale rows per population in the owner and other partitions. The first page has a fixed limit of 20.
 
 ### Member listing effect
 

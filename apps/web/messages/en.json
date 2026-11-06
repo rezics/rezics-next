@@ -1213,6 +1213,7 @@
   "library_layout_list": "List",
   "library_layout_table": "Table",
   "library_logs_account": "Account",
+  "library_logs_back": "Back to My Logs",
   "library_logs_cancel": "Cancel",
   "library_logs_completed": "Completed",
   "library_logs_confirm_delete": "Confirm delete",

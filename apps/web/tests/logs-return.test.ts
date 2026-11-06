@@ -5,6 +5,8 @@ import {
   clearLogsReturn,
   logsDestinationClick,
   logsListHref,
+  logsReturnBackClick,
+  logsReturnBackHref,
   logsReturnFrontier,
   logsReturnFrontierFromState,
   logsReturnLocationState,
@@ -86,4 +88,48 @@ test('My Logs return keeps the private list frontier on this history entry and r
   };
   expect(logsReturnTrigger(root as never, logId)).toBe(open);
   expect(logsReturnTrigger(root as never, '0192f3a0-6c1e-7b2a-9d4e-000000000099')).toBeNull();
+});
+
+test('public log Back is cursor-free My Logs and ordinary click uses history.back', () => {
+  expect(logsReturnBackHref(locale)).toBe('/en/library/logs');
+  expect(logsReturnBackHref(locale)).not.toContain('cursor');
+  expect(logsListHref(locale, cursor)).toContain('cursor=');
+
+  let prevented = false;
+  let backed = 0;
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    value: {
+      history: {
+        length: 3,
+        back() {
+          backed += 1;
+        },
+      },
+    },
+  });
+  try {
+    const event = {
+      defaultPrevented: false,
+      button: 0,
+      metaKey: false,
+      ctrlKey: false,
+      shiftKey: false,
+      altKey: false,
+      preventDefault() {
+        prevented = true;
+      },
+    };
+    expect(logsReturnBackClick(event)).toBe(false);
+    expect(prevented).toBe(true);
+    expect(backed).toBe(1);
+    prevented = false;
+    expect(logsReturnBackClick({ ...event, metaKey: true })).toBe(false);
+    expect(prevented).toBe(false);
+    expect(backed).toBe(1);
+  } finally {
+    if (previous) Object.defineProperty(globalThis, 'window', previous);
+    else Reflect.deleteProperty(globalThis, 'window');
+  }
 });
