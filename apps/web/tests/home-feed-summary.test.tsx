@@ -215,7 +215,8 @@ test('Collection, review and Space rows keep native identity and omit missing en
   expect(html[2]).toContain('Home Reading Room');
   expect(html[2]).toContain('Atlas');
   expect(html[2]).toContain('A quiet room.');
-  expect(html[2]).not.toContain('/realms/');
+  // A supplied Realm stays linked by its native id.
+  expect(html[2]).toContain('href="/en/realms/01a1a000-0000-7000-8000-000000000812"');
   expect(collection.visual).toBeUndefined();
   expect(review.visual).toBeUndefined();
   expect(space.visual).toBeUndefined();
