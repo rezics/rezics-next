@@ -78,9 +78,9 @@ function docker(args: string[]): string {
   if (result.error) spawnDockerError(args, result.error as NodeJS.ErrnoException);
   if (result.status !== 0)
     throw new Error(
-      `docker ${args.join(' ')} failed with status ${result.status}: ${result.stderr?.trim() || '(no stderr)'}`,
+      `docker ${args.join(' ')} failed with status ${result.status}: ${String(result.stderr ?? '').trim() || '(no stderr)'}`,
     );
-  return result.stdout.trim();
+  return String(result.stdout).trim();
 }
 
 export function newCompilerNonce(pid = process.pid, now = Date.now): string {
