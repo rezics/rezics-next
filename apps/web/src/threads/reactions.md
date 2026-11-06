@@ -91,3 +91,7 @@ declared startup secret without authenticating a persona; they remain separate f
 Mounted regressions flush native completion through the React consumer before inspecting its DOM, and await
 Follow's enabled control before asserting its independent read count after a session replacement. Public reaction
 totals use their accessible names, and overflow entries use their menuitem roles across presentation modes.
+
+Provider replacement regressions retain the same delivered Zone page, isolating private reaction retirement from
+a separate page replacement. Actual session loss withdraws the action host; recovery requires a fresh Follow read
+and enabled controls, with subsequent independent read costs measured from that recovered mount's baseline.
