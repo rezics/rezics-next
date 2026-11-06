@@ -1,17 +1,18 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { dirname } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { act } from 'react';
-import { HomeFeed } from '../src/features/pages/home-feed';
 import { ContentItem } from '@rezics/ui/content-item';
-import { homeFeedItemPresentation } from '../src/features/feed/home-feed-item';
-import { homeFeedDestination, homeFeedResume } from '../src/features/pages/home-feed-destination';
 import type { FeedItem } from '../src/features/pages/home-feed-read';
-import { preparedFeedCardReading } from '../src/kernel/fake/feed-card-reading';
-import { feedCardTime } from '../src/features/feed/card-attribution';
-import { m } from '../src/paraglide/messages.js';
-import { locales } from '../src/paraglide/runtime.js';
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { HomeFeed } = await import('../src/features/pages/home-feed');
+const { homeFeedItemPresentation } = await import('../src/features/feed/home-feed-item');
+const { homeFeedDestination, homeFeedResume } = await import('../src/features/pages/home-feed-destination');
+const { preparedFeedCardReading } = await import('../src/kernel/fake/feed-card-reading');
+const { feedCardTime } = await import('../src/features/feed/card-attribution');
+const { m } = await import('../src/paraglide/messages.js');
+const { locales } = await import('../src/paraglide/runtime.js');
 
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
