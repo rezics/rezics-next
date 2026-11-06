@@ -18,7 +18,8 @@ type CommunityEnvironment = {
  * Cache the external-store snapshot until a subscription fires. React compares getSnapshot with
  * Object.is on every paired read; a fresh object or a mutating sourceCurrent() tears and loops.
  * Standalone ReviewList/ThreadList mounts have no QueryClient, so both client and server reads
- * reuse the same cached unknown snapshot.
+ * reuse the same cached unknown snapshot. Origin away is fenced by sourceCurrent/isCurrent, never
+ * by baking that fence into the snapshot string.
  */
 function observeCommunityEnvironment(client: QueryClient | undefined, queryKey?: readonly unknown[]): CommunityEnvironment {
   const observation = client ? browserObservation(client) : undefined;
@@ -47,12 +48,12 @@ function observeCommunityEnvironment(client: QueryClient | undefined, queryKey?:
       current.state,
       current.state === 'signed-in' ? current.observation.subject : null,
       current.state === 'signed-in' ? current.observation.id : null,
-      sourceCurrent(),
+      retired,
     ]);
   };
-  const snapshot = () => (cached ??= compute());
+  const snapshot = () => cached ?? (cached = compute());
   const invalidate = (notify: () => void) => {
-    cached = undefined;
+    cached = observation ? undefined : STANDALONE_SNAPSHOT;
     notify();
   };
   return {
@@ -128,15 +129,17 @@ export function useSubjectCommunityReading(input: {
   useSyncExternalStore(environment.subscribe, environment.snapshot, environment.snapshot);
   const observation = environment.observation?.getSnapshot() ?? UNKNOWN_SNAPSHOT;
   const [binding, setBinding] = useState(() => initialBinding(input, environment));
+  const identityMatches =
+    binding.source === input.source &&
+    binding.descriptor === input.descriptor &&
+    binding.reader === input.reader &&
+    binding.environment === environment;
 
   if (binding.source !== input.source) {
     setBinding({ ...initialBinding(input, environment), generation: binding.generation + 1 });
   } else if (
     !binding.retired &&
-    (binding.descriptor !== input.descriptor ||
-      binding.reader !== input.reader ||
-      binding.environment !== environment ||
-      !environment.sourceCurrent())
+    (!identityMatches || !environment.sourceCurrent())
   ) {
     setBinding({ ...binding, retired: true, generation: binding.generation + 1 });
   } else if (!binding.retired && input.reader !== null) {
@@ -179,7 +182,13 @@ export function useSubjectCommunityReading(input: {
   }, []);
 
   const isBoundCurrent = () => {
-    if (!mounted.current || current.current !== binding || binding.retired || !environment.sourceCurrent())
+    if (
+      !mounted.current ||
+      current.current !== binding ||
+      binding.retired ||
+      !identityMatches ||
+      !environment.sourceCurrent()
+    )
       return false;
     if (binding.observation) {
       const now = environment.observation?.getSnapshot() ?? UNKNOWN_SNAPSHOT;
@@ -204,7 +213,7 @@ export function useSubjectCommunityReading(input: {
   };
 
   return {
-    available: !binding.retired && environment.sourceCurrent(),
+    available: !binding.retired && identityMatches && environment.sourceCurrent(),
     key: String(binding.generation),
     isCurrent: isBoundCurrent,
     privateActionsCurrent,

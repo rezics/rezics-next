@@ -28,8 +28,9 @@ A supplied Board travels as one exact `board` operand: the Subject page URL, the
 its closed `entry`, decoded against the exact request it answers.
 
 Decision: omission never selects a Board. Without one the entry is `not_selected`; the region offers no creation
-control and makes no unavailable claim. A row's Board link proves navigation only, and no row, public link or empty
-region selects a creation Board.
+control and makes no unavailable claim. The composer query is withheld. A row's Board link proves navigation only,
+and no row, public link or empty region selects a creation Board. Subject review and discussion tabs follow the open
+composition read, not account publicViews.
 
 With a supplied Board each native state renders distinctly:
 
@@ -51,9 +52,10 @@ reading until a new source observation arrives, even when its full-list destinat
 
 Decision: bind each mounted region to the shared browser observation and its exact composition query; use cached
 external-store snapshots for standalone ReviewList/ThreadList mounts, returning that same cached value for client and
-server reads until a subscription fires. Fetching, invalidation and equal successful source replacement retire the old
-reading before a queued click can use it. Unrelated cache keys supply no authority. Standalone lists without a source
-observation key treat equal descriptors as one visit.
+server reads until a subscription fires. Origin away is fenced by sourceCurrent/isCurrent, never by pairing that fence
+into getSnapshot. Fetching, invalidation and equal successful source replacement retire the old reading before a queued
+click can use it. Unrelated cache keys supply no authority. Standalone lists without a source observation key treat equal
+descriptors as one visit.
 
 The exact showcase `community.source.subjectId` / `community.board.id` pair is passed in the Subject URL as `board`.
 An explicit Global Board read prepares the current viewer just like a Realm read; ordinary unselected public reads

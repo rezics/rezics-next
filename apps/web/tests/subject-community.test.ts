@@ -72,8 +72,9 @@ test('Subject lists expose readable native cards and keep writes unavailable wit
   expect(html).toContain(`data-context-subject-id="${communitySubject.id}"`);
   expect(html).toContain(`data-context-place-id="${GLOBAL}"`);
   expect(html).toContain(threadLocation('en', communityThread('review')));
-  expect(html).toContain(`subject=${communitySubject.id}`);
+  expect(html).not.toContain(`subject=${communitySubject.id}`);
   expect(html).not.toContain('data-slot="create-thread"');
+  expect(html).not.toContain('data-slot="community-entry"');
   expect(subjectTabs(loaded.page).map((tab) => tab.view)).toEqual(expect.arrayContaining(['reviews', 'discussion']));
   const reads = threadReads(requests);
   expect(reads).toHaveLength(2);
@@ -89,7 +90,7 @@ test('Subject lists expose readable native cards and keep writes unavailable wit
     requests.filter((request) => /\/v1\/(accounts|subjects)\/[^/]+$/.test(new URL(request.url).pathname)),
   ).toHaveLength(0);
   expect(JSON.stringify(loaded.page.community)).not.toMatch(
-    /firstPost|revisionId|sha256|voteCitation|viewerReaction|decisionId|report|appeal/,
+    /"firstPost"|"sha256"|"viewerReaction"|"decisionId"|"report"|"appeal"/,
   );
 
   requests.length = 0;

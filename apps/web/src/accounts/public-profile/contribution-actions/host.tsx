@@ -342,7 +342,8 @@ export function ContributionActionsHost({
   }
 
   const receiver = visit.receiver;
-  const state = useSyncExternalStore(receiver?.subscribe ?? noSubscribe, receiver?.snapshot ?? noSnapshot, noSnapshot);
+  const snapshot = receiver?.snapshot ?? noSnapshot;
+  const state = useSyncExternalStore(receiver?.subscribe ?? noSubscribe, snapshot, snapshot);
   useEffect(() => setHydrated(true), []);
   useClientLayoutEffect(() => visit.address?.attach(), [visit]);
   useEffect(() => {
