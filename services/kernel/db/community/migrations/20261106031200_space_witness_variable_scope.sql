@@ -1,3 +1,4 @@
+-- migrate:up
 CREATE OR REPLACE FUNCTION community.refresh_space_discovery_tuple_witness(r integer, id uuid) RETURNS void
     LANGUAGE plpgsql
     AS $$
@@ -63,3 +64,6 @@ END;
 $$;
 
 
+
+-- migrate:down
+-- The previous function is invalid for native space creation; retain the correction.
