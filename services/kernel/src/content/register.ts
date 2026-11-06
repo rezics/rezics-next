@@ -146,8 +146,6 @@ function unavailableConsent(): CurrentConsentReader {
 /** Network access is an explicit operand supplied by the composition root. */
 export type ContentWorkAmbient = Readonly<{ fetch: (request: Request) => Promise<Response> }>;
 
-/** Content's worker registration, constructed from the composition's explicit operands. Configuration comes
- * from the shared work context; nothing here reads the process environment, the network or the clock at load. */
 /** Content's declared surfaces, read by the composition root. Events, operations and permissions are data;
  * the worker is a factory over explicit operands. HTTP routes are mounted by the HTTP composition. */
 export function contentDeclaration() {
@@ -160,6 +158,8 @@ export function contentDeclaration() {
   });
 }
 
+/** Content's worker registration, constructed from the composition's explicit operands. Configuration comes
+ * from the shared work context; nothing here reads the process environment, the network or the clock at load. */
 export function createContentWorkModule(ambient: ContentWorkAmbient): WorkModule {
   return {
     name: 'content',

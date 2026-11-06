@@ -40,7 +40,8 @@ const accountsWorkModule: WorkModule = {
   },
 };
 
-/** Trusted composition supplies the process network capability; the default is the platform fetch. */
+/** Add each module's registration here, in dependency order, once. The process network capability is supplied
+ * by trusted composition; the default is the platform fetch. */
 export function createKernelWorkModules(
   composeDiscovery: Parameters<typeof createSearchWorkModule>[0],
   composeRuntimeDefaults: Parameters<typeof createSearchWorkModule>[1],
