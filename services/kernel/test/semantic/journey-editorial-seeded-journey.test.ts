@@ -465,9 +465,9 @@ test('cited competing proposals complete through acceptance, adoption and indepe
     adoptRevisions.map((row) => get(null, `/v1/subjects/${created.id}/revisions/${row.revision}`)),
   );
   for (const detail of adoptionDetails) expect(detail.status, JSON.stringify(detail.body)).toBe(200);
-  expect(
-    adoptionDetails.map((detail) => (detail.body as { change: { kind: string; mode?: string } }).change),
-  ).toEqual(expect.arrayContaining([expect.objectContaining({ kind: 'adoption', mode: 'replace' })]));
+  expect(adoptionDetails.map((detail) => (detail.body as { change: { kind: string; mode?: string } }).change)).toEqual(
+    expect.arrayContaining([expect.objectContaining({ kind: 'adoption', mode: 'replace' })]),
+  );
 }, 180_000);
 
 test('anonymous, outsider, delegated editor and suspended bearers keep editorial authorization at the native boundary', async () => {
