@@ -40,14 +40,21 @@ const threadReads = (requests: Request[]) =>
 const isCommunity = (request: Request) =>
   new URL(request.url).pathname === `/v1/subjects/${communitySubject.id}/threads`;
 function pageHtml(page: SubjectPageData) {
+  const router = createRouter({
+    routeTree: createRootRoute(),
+    history: createMemoryHistory({ initialEntries: [`/en/subjects/${page.subject}/work`] }),
+  });
   return renderToStaticMarkup(
-    createElement(QueryClientProvider, {
-      client: new QueryClient(),
-      children: createElement(SubjectPage, {
-        page,
-        locale: 'en',
-        messages: subjectPageMessages(),
-        renderJsonLd: false,
+    createElement(RouterContextProvider, {
+      router,
+      children: createElement(QueryClientProvider, {
+        client: new QueryClient(),
+        children: createElement(SubjectPage, {
+          page,
+          locale: 'en',
+          messages: subjectPageMessages(),
+          renderJsonLd: false,
+        }),
       }),
     }),
   );
