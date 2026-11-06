@@ -1,6 +1,5 @@
 import type { Pool } from 'pg';
-import { readIdentityBasis } from '../semantic/identity-basis.ts';
-import { readIdentityMappings } from '../semantic/identity-adapters/read.ts';
+import { readIdentityBasis, readIdentityMappings } from '../semantic/identity-adapters/read.ts';
 import {
   admitCanonicalKeyset,
   type CanonicalKeysetAdmission,
