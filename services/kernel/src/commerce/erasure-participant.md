@@ -29,7 +29,7 @@ Commerce acknowledgement does not close other participants or unknown custody.
 Seller/creator copies on buyer homes cannot be disproved by these local probes. Commerce does not add creator-leading
 cross-home indexes or query all Core receipts, Access operator slots, workflow inputs or JSON payloads. Accounts owns
 shared-history evidence for admission/apply receipts, outbox, write-basis, operational intents and DBOS copies,
-including acting-human/operator attribution. The delivered `history/receiving.ts` owner-coverage port is consulted
+including acting-human/operator attribution. The delivered History application owner-coverage port is consulted
 after local cleanup commits and releases its connection. Its actual Commerce registry/progress gaps are persisted
 for accounts without observed local data. This consumes the shared runtime without treating registration, an empty
 prefix or a pending result as full coverage. Commerce command/outbox/durable producer conversion, write-basis and

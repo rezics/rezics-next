@@ -1026,9 +1026,10 @@ revisionless. The native suite is that one journey plus unused-actor operator hi
 
 The [financial lifecycle and cost review](../../../../docs/research/commerce-cost-lifecycle-quality.md)
 retains its recorded source bindings and unavailable measurements. Local emptiness cannot prove absence of
-historical financial roles. Commerce consults the actual History owner coverage before a `none` acknowledgement.
-Until that family coverage exists, the unused-account fixture asserts `pending` with an explicit history gap rather
-than inventing `none`. Complete native History coverage must precede a safe `none`.
+historical financial roles. Commerce consults the actual History owner coverage after local cleanup and records
+its registry gaps on unused accounts. Complete shared-history coverage still leaves Commerce `pending`: foreign
+financial-role inventory and the production field/expiry schedule remain. The unused-account fixture therefore
+asserts `pending` with an explicit history gap rather than inventing `none`.
 The bounded local Checkout
 retention journey is implemented; production financial field expiry and external-payment attestation still require
 their owners' decisions.
