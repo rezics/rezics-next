@@ -66,8 +66,11 @@ relocated to a hashed `/tmp/rs<uid>-<digest>` that still names one socket per ho
 master. Completing a run releases its channels and never `-O exit`s a master other runs still use; ControlPersist reaps
 idle sockets. Acquisition retries never stop an answering master: `-O exit` would cut every run multiplexed through
 it (their rsync sessions end with exit 255). A placement-probe timeout checks the master and may recover it with
-`-O exit` before a fresh auto connection, at most once per host per minute across processes and never while a run
-holds its lease and the master answers. Placement probes retry after recovery; five minutes of consecutive
+`-O exit` before a fresh auto connection, at most once per host per minute across processes. A timed-out master check
+is uncertainty; it does not prove that a leased master is dead. Recovery and run-lease acquisition coordinate
+atomically through retirement so another process cannot acquire a shared lease between inspection and `-O exit`.
+An answering leased master remains available to its runs; a refused or missing listener supplies affirmative dead-master
+evidence. Placement probes retry after recovery; five minutes of consecutive
 probe-timeout skips report one environment event naming the host and error. A socket file left by a killed master is
 removed when `-O check` reports a refused or missing listener; while it remains, OpenSSH prints `already exists,
 disabling multiplexing` and every connection pays a full handshake.
@@ -199,7 +202,10 @@ bun scripts/check-run-settlement.ts reconcile <invocation-id> [--hosts <absolute
 Reconciliation without `--hosts` handles a prepared/queued invocation with no physical run: it durably cancels the
 start, then removes only the recorded snapshot and records that custody. If a physical host/run was already recorded,
 reconciliation requires the host file and observes only that run; unavailable proof keeps the exact snapshot. While the
-invocation is still uploading, a placement move may replace that physical identity; once running it stays fixed. A final
+invocation is still uploading, a placement move may change its destination, retaining every allocated upload identity
+until cleanup of that exact host/run is durable. Allocation of the destination does not settle the source. Destination
+upload failure, source cleanup failure, cancellation and crash reconciliation retain both identities until their
+resources settle. The admitted execution keeps its fixed identity and original source, selection and argv. A final
 record is replayed by `status`; `run-prepared` rejects its descriptor after the one claim and never starts a replacement.
 For a preparation process lost before a registration record exists, use
 `bun scripts/check-run-settlement.ts reconcile --descriptor <absolute-private-json> [--state-dir <absolute-dir>]`.

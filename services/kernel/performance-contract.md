@@ -73,6 +73,11 @@ the application growth claim. A failed or unavailable native run is neither deni
 module and native evidence distinct; use [verification](../../docs/development/verification.md#native-growth-evidence)
 for evidence handling and check placement.
 
+Deferred callback admission counts callbacks and composes their complete producer work separately. A dispatch
+component with zero local SQL does not make a callback body free: actual native work remains charged exactly once
+through its producer within the original actor, request, deadline and admitted frame. Native callback failure,
+rollback, replay and terminal authorization evidence belong to the owning operation's growth check.
+
 Library follow create/list/remove growth remains the existing personal-writes, personal-reads, follows,
 following-kind-growth, follow-discovery, personal-http and full-views suites with the five Search scope/work-context
 suites. Native/browser/growth walks for a real followed private edge stay open until those owning checks pass after
