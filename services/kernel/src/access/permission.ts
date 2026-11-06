@@ -410,7 +410,7 @@ async function checkPreparedPermission(
       const resourceType = policyResourceType!;
       const hasPrincipal = facts.principalId !== null;
       const canEvaluateExplicit = includeExplicit && !facts.anonymous && facts.scope;
-      const project = (row: (typeof rows)[number]) => row as unknown as NativePermissionProjection;
+      const project = (row: (typeof rows)[number]): NativePermissionProjection => row;
       const ordinary = rows.map((row) =>
         decideNativePermission(
           facts.policyCatalogue,
@@ -1263,7 +1263,7 @@ export function createAccess(config: PermissionConfig): Access {
                     scope,
                     floor: floor?.[id] === true,
                   };
-                  const projection = row as unknown as NativePermissionProjection;
+                  const projection: NativePermissionProjection = row;
                   const ordinary = decideNativePermission(policyCatalogue, { ...input, mode: 'ordinary' }, projection);
                   const explicit =
                     scope && identity.kind === 'account'
