@@ -43,10 +43,10 @@ scale, Content's current standard question/revision/meaning and owner-selected 0
 an explicit native clear separately. Apply needs a separate `confirmNativeVoteEffects:true`; source privacy,
 upload confirmation, state import and the score value do not provide that consent.
 
-Decision: native import tests keep the platform steward identity on the original governance scopes. Extra
-account grants reuse that actor when the action is already consented or covered by `gate:any`. `subject:merge`
-is added only on that grant's freshly authenticated actor because it is a `platform.governance` action the
-identity did not consent. Scopes outside the role, including `gate:personal_library`, stay off the grantor token.
+Decision: native import tests keep the platform steward identity on the original governance scopes, including
+`gate:any`. Extra account grants authenticate a sibling grantor onto the command deadline with only `access:grant`
+and the granted actions. Library-gate grants keep the original actor so `gate:any` still covers them. Copying the
+original token onto that deadline, or putting `gate:personal_library` on the steward identity, drops coverage.
 
 Decision: compose Rating's complete native review observation and exact guarded command for the selected
 same-logical-home target in the existing AniList row; foreign-home support remains deferred. Confirmation

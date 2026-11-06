@@ -269,12 +269,7 @@ export async function createProfileEntryFixture(
     const owner = await identity([...entryScopes, ...(options.ownerScopes ?? [])]);
     const other = await identity(entryScopes);
     await bootstrapGovernance(pool, steward.actor.accountId);
-    const grants = createGrantCommands({
-      pool,
-      access,
-      managementAction: 'access:grant',
-      ...(options.clock === undefined ? {} : { clock: options.clock }),
-    });
+    const grants = createGrantCommands({ pool, access, managementAction: 'access:grant', ...options });
     const grant = (resource: Resource, subject: string, actions: string[]) =>
       grants.create(context(steward.actor), {
         resource,
@@ -293,44 +288,28 @@ export async function createProfileEntryFixture(
       valid: '(,)',
       key: entryKey(),
     });
-    // Extra grants reuse the original steward actor when those actions are already
-    // on the token or covered by gate:any. Actions in platform.governance that the
-    // identity did not consent (subject:merge) are added only on that command's
-    // freshly authenticated actor. Scopes outside the role, including
-    // gate:personal_library, stay off the grantor token.
-    async function grantAccount(
-      subject: { kind: 'account'; id: string },
-      actions: readonly string[],
-      revoke = false,
-    ) {
-      const extra = [...new Set(actions)].filter(
-        (action) => !steward.actor.scopes.includes(action) && !/^gate:[a-z][a-z_]{0,62}$/.test(action),
-      );
+    // Extra action grants authenticate a sibling grantor onto this command
+    // deadline with only access:grant and the granted actions. Copying the
+    // original governance token onto that deadline, or putting gate:personal_library
+    // on the steward identity, drops coverage. Library-gate grants keep the
+    // original actor so gate:any still covers them.
+    async function grantAccountActions(accountId: string, actions: readonly string[]) {
       const deadline = deadlineFor(30_000);
-      const actor =
-        extra.length === 0
-          ? steward.actor
-          : await authenticateAccount(
-              access,
-              { pool, deadline },
-              {
-                accountId: steward.actor.accountId,
-                clientId: steward.actor.clientId,
-                scopes: [...steward.actor.scopes, ...extra],
-                authnEpoch: steward.actor.authnEpoch,
-                requestedBy: steward.actor.requestedBy,
-              },
-            );
-      const command = extra.length === 0 ? context(steward.actor) : { pool, actor, deadline };
-      const input = {
-        resource: global,
-        subject,
-        actions: [...actions],
-        valid: '(,)',
-        key: entryKey(),
-      };
-      if (revoke) await grants.revoke(command, input);
-      else await grants.create(command, input);
+      const actor = await authenticateAccount(
+        access,
+        { pool, deadline },
+        { ...steward.actor, scopes: ['access:grant', ...actions] },
+      );
+      await grants.create(
+        { pool, actor, deadline },
+        {
+          resource: global,
+          subject: { kind: 'account', id: accountId },
+          actions: [...actions],
+          valid: '(,)',
+          key: entryKey(),
+        },
+      );
     }
 
     async function sendWithHeaders(
@@ -524,13 +503,17 @@ export async function createProfileEntryFixture(
       },
       setLibraryOpen,
       async grantLibraryGate(accountId: string) {
-        await grantAccount({ kind: 'account', id: accountId }, ['gate:personal_library']);
+        await grant(global, accountId, ['gate:personal_library']);
       },
-      async grantAccountActions(accountId: string, actions: readonly string[]) {
-        await grantAccount({ kind: 'account', id: accountId }, actions);
-      },
+      grantAccountActions,
       async revokeLibraryGate(accountId: string) {
-        await grantAccount({ kind: 'account', id: accountId }, ['gate:personal_library'], true);
+        await grants.revoke(context(steward.actor), {
+          resource: global,
+          subject: { kind: 'account', id: accountId },
+          actions: ['gate:personal_library'],
+          valid: '(,)',
+          key: entryKey(),
+        });
       },
       unknownSubject: () => newId(0x6e31),
       async suspend(accountId: string) {
