@@ -177,7 +177,7 @@ test('platform and Context editors publish, resume, activate and use a compiled 
   expect(independent.body.digest).toBe(digest);
 
   const stale = await call('editor', 'POST', `/v1/definitions/releases/${digest}:activate`, {
-    expected_head: previousHead === 0 ? 1 : previousHead - 1,
+    expected_head: previousHead + 1,
   });
   expect(stale.status, JSON.stringify(stale.body)).toBe(409);
   const refreshed = await call('editor', 'GET', '/v1/definitions/active');
