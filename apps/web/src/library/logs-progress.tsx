@@ -1,12 +1,12 @@
 import { Exposure, useOperation } from '../kernel/exposure';
 import { getLocale } from '../paraglide/runtime.js';
-import { fullDateTime } from '../threads/byline';
 import { Link, useRouter } from '@tanstack/react-router';
 import { useId, useLayoutEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
 import type { ProgressDetailOrigin } from './progress-session';
 import { m } from '../paraglide/messages.js';
 import { csrfHeaders } from '../threads/composer';
 import { publishProgressLog } from './logs-server';
+import { RelativeTime } from './logs-relative-time';
 import type { PublishedLogPage } from './logs-read';
 import {
   beginPublication,
@@ -21,31 +21,10 @@ import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { Button } from '@rezics/ui/shadcn/button';
 import { ContentItem } from '@rezics/ui/content-item';
 
-const buttonClass =
-  'inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted';
+export { RelativeTime } from './logs-relative-time';
 
-export function RelativeTime({ value }: { value: string }) {
-  const locale = getLocale();
-  const delta = new Date(value).getTime() - Date.now();
-  const distance = Math.abs(delta);
-  const [unit, size] =
-    distance < 60_000
-      ? (['second', 1_000] as const)
-      : distance < 3_600_000
-        ? (['minute', 60_000] as const)
-        : distance < 86_400_000
-          ? (['hour', 3_600_000] as const)
-          : distance < 2_592_000_000
-            ? (['day', 86_400_000] as const)
-            : distance < 31_536_000_000
-              ? (['month', 2_592_000_000] as const)
-              : (['year', 31_536_000_000] as const);
-  return (
-    <time dateTime={value} title={fullDateTime(value, locale)}>
-      {new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }).format(Math.round(delta / size), unit)}
-    </time>
-  );
-}
+const buttonClass =
+  'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal rounded-lg border border-border px-4 py-2 text-start text-primary underline-offset-4 [overflow-wrap:anywhere] hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 // Private same-owner intent survives a retired read/operation view. This is never authority.
 const publications = new WeakMap<object, PublicationDraft>();
@@ -191,7 +170,11 @@ function PublishLog({
                     : m.library_logs_write_failed()}
               </p>
             ) : null}
-            <Button type="submit" disabled={!!lifetime.flight}>
+            <Button
+              type="submit"
+              disabled={!!lifetime.flight}
+              className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal"
+            >
               {m.library_logs_publish()}
             </Button>
           </form>

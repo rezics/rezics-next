@@ -75,12 +75,13 @@ export async function admitComposedEntryProgress(input: {
   at?: unknown;
 }): Promise<void> {
   const domain = peekLibraryDomain();
-  if (!domain) return;
+  // putEntry/readEntry call this before a command time exists; native admission follows.
+  if (!domain || input.at === undefined) return;
   const result = await domain.entryProgress.admit({
     actor: libraryActorOf(input.actor),
     subjectId: input.subjectId,
     deadline: input.deadline,
-    ...(input.at === undefined ? {} : { at: input.at }),
+    at: input.at,
   });
   if (result.admitted) return;
   const reason = result.admission.terms[0]?.name;
@@ -171,6 +172,20 @@ export type LibraryCommandExecutionBinding = <T>(
   dispatch: () => Promise<T>,
   plan?: LibraryCommandExecutionPlan,
 ) => Promise<T>;
+
+/** Published Log commands bind the native interceptor when a caller has not supplied its own execution wrap. */
+function publishedLogCommandExecution(
+  kind: string,
+  deadline: number,
+  bind?: LibraryCommandExecutionBinding,
+): LibraryCommandExecutionBinding | undefined {
+  if (bind) return bind;
+  if (!kind.startsWith('published_log.')) return;
+  return async (dispatch) => {
+    const { withPublishedLogNativeWork } = await import('./published-log-native.ts');
+    return withPublishedLogNativeWork(deadline, dispatch);
+  };
+}
 
 export function runLibraryCommand<T>(
   dispatch: () => Promise<T>,
@@ -311,7 +326,8 @@ export function createLibraryCommandRunner(config: {
           {
             pool,
             deadline,
-            ...(request.followOperation && currentCommandWorkAssociation()
+            ...((request.followOperation || request.kind.startsWith('published_log.')) &&
+            currentCommandWorkAssociation()
               ? { work: currentCommandWorkAssociation()!.access }
               : {}),
           },
@@ -408,7 +424,7 @@ export function createLibraryCommandRunner(config: {
               ? withSessionCommandPlan(plan, execute)
               : execute(),
         ),
-      request.execution,
+      publishedLogCommandExecution(request.kind, deadline, request.execution),
       request.executionPlan,
     );
   }
@@ -545,7 +561,7 @@ export function createLibraryCommandRunner(config: {
           );
         return followPlan ? withFollowCommandWork(followPlan, execute) : execute();
       },
-      request.execution,
+      publishedLogCommandExecution(request.kind, deadline, request.execution),
       request.executionPlan,
     );
   }

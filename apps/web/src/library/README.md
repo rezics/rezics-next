@@ -331,6 +331,12 @@ withhold a changed Source (`target: null`) while keeping the own edge. Return fr
 list cursor, kind and row from this visit's history state with the current session; the destination URL never carries
 the private cursor. Command replay resends the original credential, idempotency key and body. Fewest tests: one typed
 transport bind and one return-frontier pin; native/browser/growth walks remain later integration.
+Decision: a published snapshot is independently readable after later private session edits. Owner retract confirmation,
+publish open, session-log paging and Undo use 44px (`min-h-11`) targets with visible keyboard focus; confirmation
+receives focus. Exact Undo restores the original snapshot, not the current private session. Ordinary 720-hour
+retention removes expired output from API and pages. Return from a public log restores the original My Logs cursor
+and row from this visit's history state; the public log URL never carries the private cursor. Official client
+publication stays with its owner.
 
 # Progress return navigation
 

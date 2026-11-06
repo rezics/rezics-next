@@ -61,6 +61,11 @@ application facades. Native adapters import owner facade leaves rather than the 
 producer declarations still own the admitted cost. Test choice: use the focused causal History regressions for
 application/native composition, prepaid identity, identity-history recording, Zone receiving, record purge, agent
 verification reversal and receipt-key cutover, plus `scripts/architecture.test.ts`; avoid a duplicate synthetic suite.
+Decision: Library Published Log operations compose nested original/terminal Source, Follow FULL disclosure and
+public-account work from those producers, bind remaining original deadlines into retries, and pin zero
+`engineRequests`/`witnessKeys` on SQL leaves. Reached producers receive Access work and the original absolute
+deadline; the native interceptor skips consume inside the reserved envelope. FULL public snapshots withhold a
+changed Source. Native 64/512/4096 receiving stays deferred.
 
 ## Finite bounds
 

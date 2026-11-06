@@ -34,6 +34,14 @@ import {
 import { readMyPublishedLogHistoryForViewer, type MyLogsViewerHistory } from './logs-server';
 import { SubjectCover, rowRatio } from './subject-row';
 import { displayLibraryTitle } from './title';
+import {
+  clearLogsReturn,
+  logsDestinationClick,
+  logsReturnFrontier,
+  logsReturnMatchesWindow,
+  logsReturnTrigger,
+  readLogsReturn,
+} from './logs-return';
 
 const logOperations = ['published_log.list'] as const;
 const emptyWindowsSnapshot: MyLogsWindowSnapshot = {
@@ -201,6 +209,8 @@ export function MyLogsCurrentViewer({
       windows={windows}
       windowSnapshot={windowSnapshot}
       windowAuthorityKey={windowAuthorityKey}
+      returnSubject={origin.subject}
+      returnCursor={address.cursor}
       onRetry={
         origin.subject && origin.allowed[0]
           ? () => {
@@ -230,6 +240,8 @@ export function MyLogsPageView({
   windows,
   windowSnapshot = emptyWindowsSnapshot,
   windowAuthorityKey,
+  returnSubject,
+  returnCursor,
 }: {
   page: MyLogsPage;
   cursor?: string | undefined;
@@ -238,9 +250,12 @@ export function MyLogsPageView({
   windows?: MyLogsWindowNavigation;
   windowSnapshot?: MyLogsWindowSnapshot;
   windowAuthorityKey?: string | null;
+  returnSubject?: string | null;
+  returnCursor?: string | null;
 }) {
   const router = useRouter({ warn: false });
   const listHeading = useRef<HTMLHeadingElement>(null);
+  const listRoot = useRef<HTMLElement>(null);
   const locale = getLocale();
   const routeHref = router?.state.location.href ?? '/library/logs';
   const effectiveCursor = page.state === 'loaded' && page.restarted ? null : (cursor ?? null);
@@ -259,6 +274,15 @@ export function MyLogsPageView({
   const canNewest = acceptedCurrent && !windowSnapshot.movement && effectiveCursor !== null;
   const canNext = acceptedCurrent && !windowSnapshot.movement && admittedNext !== null;
   const ratio = rowRatio(page.state === 'loaded' ? page.logs.map((log) => log.subject) : []);
+  useLayoutEffect(() => {
+    if (page.state !== 'loaded' || !returnSubject || !origin?.isCurrent()) return;
+    const frontier = readLogsReturn(locale, returnSubject);
+    if (!frontier || !logsReturnMatchesWindow(frontier, returnCursor ?? null)) return;
+    const trigger = logsReturnTrigger(listRoot.current, frontier.logId);
+    if (!trigger) return;
+    trigger.focus();
+    clearLogsReturn();
+  }, [page, locale, returnSubject, returnCursor, origin]);
   useEffect(() => {
     if (page.state !== 'loaded' || !windows || !windowAuthorityKey || !windowSnapshot.focusReady) return;
     if (!origin?.isCurrent()) {
@@ -313,7 +337,7 @@ export function MyLogsPageView({
   const windowControlClass =
     'inline-flex min-h-11 min-w-11 max-w-full items-center justify-center rounded-lg border border-border px-4 py-2 text-start whitespace-normal text-primary hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
   return (
-    <article className="min-w-0 max-w-4xl space-y-6 text-foreground [overflow-wrap:anywhere]">
+    <article ref={listRoot} className="min-w-0 max-w-4xl space-y-6 text-foreground [overflow-wrap:anywhere]">
       <header className="space-y-2">
         <PageHeading ref={listHeading} tabIndex={-1}>
           {m.library_my_logs_heading()}
@@ -398,11 +422,21 @@ export function MyLogsPageView({
                       <Exposure operation="published_log.read">
                         <a
                           href={`/${getLocale()}/logs/${encodeURIComponent(log.id)}`}
+                          data-published-log={log.id}
                           aria-label={m.library_my_logs_read({
                             title: title.text,
                             date: fullDateTime(log.publishedAt, getLocale()),
                           })}
                           className="inline-flex min-h-11 items-center rounded text-sm text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                          onClick={(event) =>
+                            logsDestinationClick(
+                              event,
+                              () => origin?.isCurrent() !== false,
+                              returnSubject
+                                ? logsReturnFrontier(locale, returnSubject, returnCursor ?? null, log.id)
+                                : null,
+                            )
+                          }
                         >
                           {m.library_my_logs_open_log()}
                         </a>

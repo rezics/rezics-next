@@ -11,6 +11,16 @@ This file owns acceptance scenarios and evidence limits, not durable bounds or p
 and Profile owners are linked from the [Performance Goal](performance.md). This is an acceptance specification,
 not evidence that the capabilities have passed.
 
+Decision: Published Log public lifecycle acceptance stays on the seven existing Log operation/growth/retention/source
+suites and the five retained Search scope/work-context suites, plus affected Web log tests. FULL withhold of a changed
+Source and the My Logs history-state return frontier are pinned on those suites. Full native Auth walk,
+64/512/4096 growth and rendered 720-hour retention remain open until observed passing. Verification.md keeps general
+check policy; these suites and the deferred native walk live here and in Library owners. Fewest tests: extend
+operation-bounds and retract causal, plus one FULL withhold and one My Logs return-frontier pin. A retired completed
+session clears `completedAt` (`progress_session_check3`). FULL publication keeps the current public-account and
+`targetFields` unions, including deleted/pending curator/log-account cases; Accounts optional contribution-attribution
+producer is not in this checkout.
+
 Executable scenarios, user-case acceptance and promotion require separate evidence. A scenario name alone proves
 nothing; it becomes frozen with its executable acceptance. Existing frozen tests remain unchanged. Promotion requires
 every applicable cell and exact scenario execution, zero skips/todos, real native Access, production HTTP/default

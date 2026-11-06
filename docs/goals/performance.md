@@ -187,3 +187,9 @@ acceptance remains open.
 Decision: keep the existing placement composition tests; inject a refusing recognizer into `runOnCheckHost` and skip
 nested-candidate refusal for injected remotes so those tests still relocate on an admitted checkout. Type repairs for
 bulk write payloads and the ratings-walk assert import add no new tests. Original native acceptance remains open.
+Decision: Published Log nested Source/Semantic units come from reached `sessionSourceWork` and Follow summary
+producers with actual/ceiling subject IDs and the original remaining deadline; aborted attempts keep that envelope;
+SQL leaves stay at zero engine/witness axes. FULL public snapshots withhold a changed Source. My Logs return uses
+history-state frontier so the public log URL never carries the private cursor. Seven Log suites plus five Search
+scope/work-context suites own the check; 64/512/4096 growth remains deferred. Fewest tests: extend operation-bounds
+and retract causal, plus one FULL withhold and one return-frontier pin.

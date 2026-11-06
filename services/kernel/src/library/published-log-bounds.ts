@@ -9,10 +9,12 @@ import receiptRead from '../command/read-receipt.sql';
 import timeRead from '../command/time.sql';
 import partitionRead from '../partition/read.sql';
 import { sessionReadPlan, sessionSourceWork, sessionPartitionWork } from './session-operation-bounds.ts';
+import { followSubjectSummaryObservationWork } from './follow-operation-bounds.ts';
 import type { PublishedLogDueKey } from './published-log-retention.ts';
 import { routeOf } from '../route/route.ts';
 import { runLibraryBoundedStep } from './command-support.ts';
 import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
+import publicAccountRead from '../access/account-public-read.sql';
 import read from './published-log-read.sql';
 import lock from './published-log-lock.sql';
 import page from './published-log-page.sql';
@@ -83,7 +85,9 @@ const bytes = (value: number): Bound =>
 // at most 1000 PostgreSQL characters. Six-byte JSON escaping bounds both control
 // characters and four-byte supplementary Unicode in the native JSON encoding.
 // PostgreSQL timestamp text reserves 64 characters including range/zone/BC suffix.
-const uuid = 'f'.repeat(36);
+// Same routable ceiling the session Source producer uses. A 36-f string is not a UUID
+// and cannot price item-type or partition binds.
+const uuid = 'ffffffff-ffff-8fff-bfff-ffffffffffff';
 const timestamp = '\u0000'.repeat(64);
 const pageProjection = {
   route: 65535,
@@ -314,6 +318,58 @@ function zero() {
     }),
   );
 }
+
+/** Remaining original deadline; aborted retries keep this same absolute cutoff. */
+export function publishedLogRemainingMs(deadline: number): number {
+  return Math.max(1, Math.floor(deadline - Date.now()));
+}
+
+const SQL_ZERO_AXES = Object.freeze({
+  witnessKeys: 0,
+  engineRequests: 0,
+});
+
+function sqlAxes(bound: Bound): Bound {
+  return declareBound({ ...bound, ...SQL_ZERO_AXES });
+}
+
+/** One original-and-terminal Source gate. The session producer already repeats both homes. */
+export function publishedLogSourceGateWork(subjectId: string): Bound {
+  return sqlAxes(sessionSourceWork(subjectId, false));
+}
+
+/** FULL presentation: gate, final currentness, Semantic summary/cover, public account. */
+export function publishedLogFullDisclosureWork(subjectId: string, accountId: string, count = 1): Bound {
+  return sqlAxes(
+    sumBounds(
+      publishedLogSourceGateWork(subjectId),
+      publishedLogSourceGateWork(subjectId),
+      followSubjectSummaryObservationWork(count),
+      publishedLogPublicAccountWork(accountId),
+    ),
+  );
+}
+
+export function publishedLogPublicAccountWork(accountId: string): Bound {
+  const route = routeOf(accountId) ?? 65535;
+  return sqlAxes(
+    leaf(
+      publicAccountRead.sql,
+      { route, account_id: accountId },
+      1,
+      1,
+      1,
+      {
+        accountId: uuid,
+        kind: 'organization',
+        state: 'deleted',
+        handle: '\0'.repeat(64),
+        displayName: '\0'.repeat(200),
+      },
+      1,
+    ),
+  );
+}
 const byteBound = (value: number): Bound => declareBound({ ...zero(), bytes: value });
 const jsonBytes = (value: unknown) => byteBound(Buffer.byteLength(JSON.stringify(value) ?? 'null'));
 const sqlOnly = (sql: string, input: object = {}) => leaf(sql, input, 0, 0, 0, {}, 0);
@@ -539,7 +595,7 @@ function ownAccountCommandPlan(input: {
     ...(input.logId === undefined ? {} : { logId: input.logId }),
     withBasis: true,
   });
-  const commonAttempt = sumBounds(
+  const abortedAttempt = sumBounds(
     commandControls(input.prepared !== zero(), durationMs),
     accountAuthorization,
     commandReceiptReadBound(input.accountId, input.commandKind, input.receiptKeyCount, input.response),
@@ -547,17 +603,16 @@ function ownAccountCommandPlan(input: {
     commandInputBytes,
   );
   // Current authorization and the complete original preparation precede receipt
-  // lookup. Only a fresh receipt runs the body, fence/outbox and response path.
-  const perAttempt = sumBounds(
-    commonAttempt,
-    alternative(zero(), sumBounds(input.body, eventAndReceipt, jsonBytes(input.response))),
-  );
+  // lookup. An aborted attempt still spends that envelope; only a fresh receipt
+  // runs the body, fence/outbox and response path. Original remaining ms bound retries.
+  const successfulAttempt = sumBounds(abortedAttempt, input.body, eventAndReceipt, jsonBytes(input.response));
+  const perAttempt = alternative(abortedAttempt, successfulAttempt);
   const partitionNo = Math.floor(route / 16);
   const recovery = repeatBound(writableRecoveryBound(partitionNo, durationMs), Math.ceil(durationMs / 25));
   return operationPlan(
     input.kind,
     {
-      commandAttempts: repeatBound(perAttempt, attempts),
+      abortedOrSuccessfulAttempts: repeatBound(perAttempt, attempts),
       writableRecovery: recovery,
     },
     {
@@ -566,6 +621,8 @@ function ownAccountCommandPlan(input: {
       durationMs,
       receiptKeyCount: input.receiptKeyCount,
       rawRequestKeyBytes: 765,
+      witnessKeys: 0,
+      engineRequests: 0,
     },
   );
 }
@@ -576,8 +633,11 @@ export function publishedLogPublishOperationPlan(input: {
   note: string | null;
   requestKey: string;
   receiptKeyCount: number;
+  subjectId?: string;
+  durationMs?: number;
 }): PublishedLogOperationPlan {
   const route = routeOf(input.accountId)!;
+  const subjectId = input.subjectId ?? uuid;
   const sessionRead = sessionReadPlan({ route, session_id: input.sessionId }).total;
   return ownAccountCommandPlan({
     kind: 'published-log.publish',
@@ -585,7 +645,7 @@ export function publishedLogPublishOperationPlan(input: {
     accountId: input.accountId,
     requestInput: { sessionId: input.sessionId, note: input.note },
     receiptKeyCount: input.receiptKeyCount,
-    prepared: sumBounds(sessionRead, sessionSourceWork(uuid, false)),
+    prepared: sumBounds(sessionRead, publishedLogSourceGateWork(subjectId)),
     body: sumBounds(
       sessionRead,
       publishedLogInsertPlan({
@@ -593,7 +653,7 @@ export function publishedLogPublishOperationPlan(input: {
         log_id: uuid,
         account_id: input.accountId,
         session_id: input.sessionId,
-        subject_id: uuid,
+        subject_id: subjectId,
         session_state: 'abandoned',
         started_at: timestamp,
         completed_at: timestamp,
@@ -605,6 +665,7 @@ export function publishedLogPublishOperationPlan(input: {
     response: { publishedLog: publicLog, revision: 2_147_483_646 },
     eventType: 'com.rezics.library.published_log.updated.v1',
     hasAccountAuthorization: true,
+    ...(input.durationMs === undefined ? {} : { durationMs: input.durationMs }),
   });
 }
 
@@ -614,6 +675,7 @@ export function publishedLogRetractOperationPlan(input: {
   requestKey: string;
   revision?: number;
   receiptKeyCount: number;
+  durationMs?: number;
 }): PublishedLogOperationPlan {
   const route = routeOf(input.accountId)!;
   const lockBound = publishedLogLockPlan({ route, account_id: input.accountId, log_id: input.logId, time: timestamp });
@@ -639,6 +701,7 @@ export function publishedLogRetractOperationPlan(input: {
     eventType: 'com.rezics.library.published_log.deleted.v1',
     logId: input.logId,
     hasAccountAuthorization: true,
+    ...(input.durationMs === undefined ? {} : { durationMs: input.durationMs }),
   });
 }
 
@@ -649,8 +712,11 @@ export function publishedLogRestoreOperationPlan(input: {
   revision: number;
   requestKey: string;
   receiptKeyCount: number;
+  subjectId?: string;
+  durationMs?: number;
 }): PublishedLogOperationPlan {
-  const route = Number.parseInt(input.accountId.slice(24, 28), 16);
+  const route = routeOf(input.accountId)!;
+  const subjectId = input.subjectId ?? uuid;
   const preparedRow = publishedLogReadPlan({ route, log_id: input.logId }).total;
   const lockBound = publishedLogLockPlan({ route, account_id: input.accountId, log_id: input.logId, time: timestamp });
   const restoreBound = publishedLogRestorePlan({
@@ -668,28 +734,39 @@ export function publishedLogRestoreOperationPlan(input: {
     accountId: input.accountId,
     requestInput: { logId: input.logId, deletionId: input.deletionId, revision: input.revision },
     receiptKeyCount: input.receiptKeyCount,
-    prepared: sumBounds(preparedRow, sessionSourceWork(uuid, false)),
+    prepared: sumBounds(preparedRow, publishedLogSourceGateWork(subjectId)),
     body: sumBounds(lockBound.total, restoreBound.total),
     response: { publishedLog: publicLog, revision: 2_147_483_646 },
     eventType: 'com.rezics.library.published_log.updated.v1',
     logId: input.logId,
     hasAccountAuthorization: true,
+    ...(input.durationMs === undefined ? {} : { durationMs: input.durationMs }),
   });
 }
 
-export function publishedLogPointReadOperationPlan(input: { route: number; logId: string }): PublishedLogOperationPlan {
+export function publishedLogPointReadOperationPlan(input: {
+  route: number;
+  logId: string;
+  accountId?: string;
+  subjectId?: string;
+}): PublishedLogOperationPlan {
+  const accountId = input.accountId ?? uuid;
+  const subjectId = input.subjectId ?? uuid;
   const logRead = publishedLogReadPlan({ route: input.route, log_id: input.logId }).total;
-  const ownerState = readAccountStateBound(input.route, uuid);
+  const ownerState = readAccountStateBound(input.route, accountId);
   const publicOutput = jsonBytes({ publishedLog: publicLog, revision: 2_147_483_646 });
   const tombstoneOutput = jsonBytes({ publishedLog: { id: uuid, deleted: true } });
-  return operationPlan('published-log.point-read', {
-    readTransaction: readTransactionBound('REPEATABLE READ'),
-    logPoint: logRead,
-    liveOwnerDisclosureAndResponse: alternative(
-      tombstoneOutput,
-      sumBounds(ownerState, sessionSourceWork(uuid, false), publicOutput),
-    ),
-  });
+  const live = sumBounds(publishedLogFullDisclosureWork(subjectId, accountId), publicOutput);
+  return operationPlan(
+    'published-log.point-read',
+    {
+      readTransaction: readTransactionBound('REPEATABLE READ'),
+      logPoint: logRead,
+      ownerState,
+      tombstoneOrLiveDisclosure: alternative(tombstoneOutput, live),
+    },
+    { witnessKeys: 0, engineRequests: 0, originalAndTerminalGates: 2 },
+  );
 }
 
 export function publishedLogPageReadOperationPlan(input: {
@@ -718,11 +795,22 @@ export function publishedLogPageReadOperationPlan(input: {
       partitionEpoch: sessionPartitionWork(Math.floor(input.route / 16)),
       ownerStateAndFloor: readAccountStateBound(input.route, input.accountId),
       firstAndNextPageStreams: alternative(zero(), pageBound.total),
-      originalAndTerminalDisclosure: repeatBound(sessionSourceWork(uuid, false), input.limit),
+      originalAndTerminalDisclosure: repeatBound(publishedLogSourceGateWork(uuid), input.limit),
+      fullPresentation: sumBounds(
+        repeatBound(publishedLogSourceGateWork(uuid), 2 * input.limit),
+        followSubjectSummaryObservationWork(input.limit),
+        repeatBound(publishedLogPublicAccountWork(input.accountId), input.limit),
+      ),
       signedCursorInput: byteBound(input.hasCursor ? maximumCursorBytes : 0),
       serializedResponse: serialized,
     },
-    { rawLimit, disclosureMaximum: input.limit, pageSentinel: 1 },
+    {
+      rawLimit,
+      disclosureMaximum: input.limit,
+      pageSentinel: 1,
+      witnessKeys: 0,
+      engineRequests: 0,
+    },
   );
 }
 
