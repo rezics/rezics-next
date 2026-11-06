@@ -1702,7 +1702,7 @@ native CLI failure, and stored on the attempt. A usage-limit refusal with a fres
 is retried on the same pool; a spent window, a stale reading, or three refusals within an hour routes the retry to a
 different allowed pool. A provider capacity refusal continues after a short pause, however often it repeats.
 
-A running worker is stalled only when none of these move for `silenceMs` (40 minutes): run-log growth, the worktree branch HEAD, newest mtime of tracked or untracked worktree files (skipping `node_modules` and `.temp`), and CPU time of the worker's process group. Grok and Cursor write their log only on exit, so log silence alone is not a stall. Check-wait time is still subtracted from idle time.
+A running worker is stalled only when none of these move for `silenceMs` (40 minutes): run-log growth, the worktree branch HEAD, newest mtime of tracked or untracked worktree files (skipping `node_modules` and `.temp`), and CPU time of the worker's process group. Grok and Cursor write their log only on exit, so log silence alone is not a stall. Check-wait time is still subtracted from idle time. Each log event records growth at once, but the HEAD, worktree walk and CPU samples run at most once per `min(silenceCheckMs, silenceMs)`, one at a time per worker, off the host event loop: git runs asynchronously and the walk and process scan yield between entries.
 
 Every other tool failure, including a CLI that fails before a session, a silent worker and a check-host transport
 failure, resumes the same session after a backoff by its fingerprint: the failure's first line with worktree paths,
@@ -2422,9 +2422,12 @@ than a second wake scheduler.
 the host persists until stopped and exits when its 60-second sweep finds its state directory missing. An untracked
 `<managerDirectory>/<goal>.json` can select a local `pool`, `objective`, `brief`, `effort`, `supermanager` and `limits`;
 otherwise scoped task briefs and a matching local manager pool supply the defaults. Termspaces owns the tmux windows.
-Each manager host starts a loopback WebSocket app-server for its Codex pool and records the process identity. The host
-stops those app-servers on shutdown, and a replacement host stops any surviving app-server before resuming persisted
-threads. Recovery reopens each Codex viewer on the current endpoint with `codex resume <thread> --remote <endpoint>`.
+Each manager host starts a loopback WebSocket app-server for its Codex pool and records the process identity. The
+app-server leads its own process group, so its helpers and thread writers share that group. The host stops the group on
+shutdown; a replacement host reclaims every surviving recorded group and waits until it is empty before resuming
+persisted threads, so resume never meets a writer left by the previous host. A record written before this change names a
+shared group, so only its process is stopped. Recovery reopens each Codex viewer on the current endpoint with
+`codex resume <thread> --remote <endpoint>`.
 The neutral host and shared app-server start with inherited provider session markers removed. Each manager launch then
 uses its selected provider account: Codex pool processes receive that pool's `CODEX_HOME`, while Claude receives its
 configured `CLAUDE_CONFIG_DIR`. Managed manager recovery follows the normal host code-version handoff: after Goal code
@@ -2822,9 +2825,14 @@ including `CLAUDE_*` and `CODEX_THREAD_ID`, cannot reach the services. Re-run in
 changing its environment configuration.
 
 `rezics-goal-host.service` runs `_manager-host` with `Restart=always` and a 60-second watchdog. The host signals
-readiness after binding its socket and sends heartbeats from its event loop every half watchdog interval. A crash,
-kill or stopped event loop therefore causes systemd to restart it. `KillMode=process` limits host termination to the
-main PID; worker scopes in `rezics-workers.slice` beneath `rezics.slice` and the merge train survive.
+readiness and starts its heartbeats right after binding its socket, before manager recovery begins; it sends them from its
+event loop every half watchdog interval. A crash, kill or stopped event loop therefore causes systemd to restart it, and
+no scheduler pass can delay a heartbeat. `KillMode=process` limits host termination to the main PID; worker scopes in
+`rezics-workers.slice` beneath `rezics.slice` and the merge train survive.
+Decision: the host event loop never waits on git, Docker, a worktree walk or a full task load. Each scheduled step runs as
+a background command or yields between bounded batches: the reaper runs Docker asynchronously and reads running attempts
+from the current-attempt index; the daily audit reads unsettled tasks and removal reads finished tasks through the
+state index; the worktree and CPU samples yield between entries; removal commands run asynchronously.
 Decision: `manager-host.ts` owns the socket server, registry, shutdown and scheduling; `integration-cli.ts` keeps outbound RPC and CLI dispatch and re-exports `integration-runtime.ts` types.
 An ordinary CLI can ask systemd to start an absent host; it cannot spawn a detached fallback. The verifier runs independently in `rezics-goal-verifier.service`.
 

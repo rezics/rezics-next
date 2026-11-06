@@ -8,8 +8,10 @@ import {
   refreshHistoricalProofAdmission,
 } from './verification.ts';
 import { taskCommits } from './workspace.ts';
-import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, lstatSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { execFile } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { lstat, readdir } from 'node:fs/promises';
+import { promisify } from 'node:util';
 import { watchOrPoll, type Watching } from './watch-or-poll.ts';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { observeWorkerChecks } from './worker-check-observation.ts';
@@ -139,27 +141,34 @@ export const SILENCE_WINDOW_MS = defaults.silenceMs;
 /** Run-log activity is checked at most once a minute when the filesystem watcher is unavailable. */
 const SKIP_WORKTREE_ACTIVITY = new Set(['node_modules', '.temp']);
 const WORKTREE_SAMPLE_TIMEOUT_MS = 1000;
+/** Directory entries a worktree walk visits before yielding to the event loop. */
+const WORKTREE_WALK_CHUNK = 256;
+const execFileAsync = promisify(execFile);
 
-function gitSample(worktree: string, args: string[]): string | undefined {
+/** Activity samples run for every running worker each minute; they run git and walk the worktree off the host loop. */
+async function gitSample(worktree: string, args: string[]): Promise<string | undefined> {
   try {
-    const result = spawnSync('git', args, { cwd: worktree, encoding: 'utf8', timeout: WORKTREE_SAMPLE_TIMEOUT_MS });
-    if (result.status !== 0) return undefined;
-    const text = result.stdout.trim();
-    return text || undefined;
+    const { stdout } = await execFileAsync('git', args, {
+      cwd: worktree,
+      encoding: 'utf8',
+      timeout: WORKTREE_SAMPLE_TIMEOUT_MS,
+    });
+    return stdout.trim() || undefined;
   } catch {
     return undefined;
   }
 }
 
 /** Newest file or directory mtime under the worktree, skipping `node_modules` and `.temp` at every level. */
-export function newestWorktreeMtime(root: string): number {
+export async function newestWorktreeMtime(root: string): Promise<number> {
   let newest = 0;
+  let visited = 0;
   const stack = [root];
   while (stack.length) {
     const dir = stack.pop()!;
     let names: string[];
     try {
-      names = readdirSync(dir);
+      names = await readdir(dir);
     } catch {
       continue;
     }
@@ -167,20 +176,23 @@ export function newestWorktreeMtime(root: string): number {
       if (SKIP_WORKTREE_ACTIVITY.has(name)) continue;
       const path = join(dir, name);
       try {
-        const st = lstatSync(path);
+        const st = await lstat(path);
         if (st.mtimeMs > newest) newest = st.mtimeMs;
         if (st.isDirectory()) stack.push(path);
       } catch {
         /* vanished between readdir and lstat */
       }
+      if (++visited % WORKTREE_WALK_CHUNK === 0) await new Promise<void>((resolve) => setImmediate(resolve));
     }
   }
   return newest;
 }
 
-function worktreeHeadSample(worktree: string): { head?: string; committedAt?: number } {
-  const head = gitSample(worktree, ['rev-parse', 'HEAD']);
-  const committed = gitSample(worktree, ['log', '-1', '--format=%ct']);
+async function worktreeHeadSample(worktree: string): Promise<{ head?: string; committedAt?: number }> {
+  const [head, committed] = await Promise.all([
+    gitSample(worktree, ['rev-parse', 'HEAD']),
+    gitSample(worktree, ['log', '-1', '--format=%ct']),
+  ]);
   const seconds = committed && /^\d+$/.test(committed) ? Number(committed) : undefined;
   return { ...(head ? { head } : {}), ...(seconds !== undefined ? { committedAt: seconds * 1000 } : {}) };
 }
@@ -655,7 +667,19 @@ export class WorkerJob implements GateOutcomeSink {
     let lastNewestMtime = 0;
     let lastCpu: bigint | undefined;
     let sampledWork = false;
+    // Every log event wakes the checks, but the worktree walk, git and CPU samples run at most once per check interval.
+    const sampleEveryMs = Math.max(1, Math.min(this.policy.worker.silenceCheckMs, silenceMs));
+    let sampledAt = 0;
+    let steppedAt = 0;
+    // One sample per attempt is in flight at a time, so a slow git call or worktree walk never queues behind the timer.
+    let sampling: Promise<void> | undefined;
     const checkSilence = () => {
+      if (sampling || silenceStopping || silenceFailure) return;
+      sampling = sampleSilence().finally(() => {
+        sampling = undefined;
+      });
+    };
+    const sampleSilence = async () => {
       if (silenceStopping || silenceFailure) return;
       try {
         store.assertCurrent(ref);
@@ -674,9 +698,11 @@ export class WorkerJob implements GateOutcomeSink {
           lastLogMtime = mtime;
           noteNow();
         }
-        const headSample = worktreeHeadSample(task.worktree);
-        const newest = newestWorktreeMtime(task.worktree);
-        const cpu = processGroupCpuTicks(attempt.process ?? null);
+        if (now - sampledAt < sampleEveryMs) return;
+        sampledAt = now;
+        const headSample = await worktreeHeadSample(task.worktree);
+        const newest = await newestWorktreeMtime(task.worktree);
+        const cpu = await processGroupCpuTicks(attempt.process ?? null);
         if (sampledWork) {
           if (headSample.head !== undefined && lastHead !== undefined && headSample.head !== lastHead) noteNow();
           if (newest > lastNewestMtime) noteNow();
@@ -796,6 +822,9 @@ export class WorkerJob implements GateOutcomeSink {
         ref.logPath,
         () => {
           checkSilence();
+          // Reading the measurement scans the attempt log; step limits move slowly, so they are checked once per interval.
+          if (Date.now() - steppedAt < sampleEveryMs) return;
+          steppedAt = Date.now();
           stopIfStalled(false);
         },
         this.policy.worker.activityPollMs,

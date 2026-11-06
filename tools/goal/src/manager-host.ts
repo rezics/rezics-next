@@ -4,14 +4,14 @@ import { chmodSync, closeSync, existsSync, openSync, readFileSync, renameSync, r
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
-import { reapContainers } from './containers.ts';
+import { reapContainersAsync } from './containers.ts';
 import { completedUtcHour } from './efficiency-report-time.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import type { HostRequest, IntegrationRuntime } from './integration-runtime.ts';
 import { acquireDirectoryLease } from './lease.ts';
 import { ManagerSessions } from './managers.ts';
 import { defaultPolicy } from './policy.ts';
-import { sameProcess, type ProcessIdentity } from './process.ts';
+import { sameProcess, terminateProcessGroup, type ProcessIdentity } from './process.ts';
 import { currentCodeVersion } from './runtime-version.ts';
 import { startHostHeartbeat } from './service.ts';
 
@@ -106,6 +106,13 @@ async function waitForProcessExit(identity: ProcessIdentity, timeoutMs: number, 
 }
 
 async function stopRecordedAppServer(identity: ProcessIdentity, policy: typeof defaultPolicy.appServer): Promise<void> {
+  // An app-server that leads its own process group (connectPool) takes its helpers and thread writers with it. Reclaim
+  // the whole group and wait until it is empty, so resuming threads never meets a writer from the previous host.
+  if (identity.group === identity.pid) {
+    await terminateProcessGroup(identity, policy.terminationGraceMs);
+    return;
+  }
+  // Records from before the group change name a shared group: only the recorded process can be signalled.
   if (!sameProcess(identity)) return;
   try {
     process.kill(identity.pid, 'SIGTERM');
@@ -124,7 +131,7 @@ async function stopRecordedAppServer(identity: ProcessIdentity, policy: typeof d
     throw new Error(`App-server process did not exit: ${identity.pid}`);
 }
 
-async function stopRecordedAppServers(path: string, policy: typeof defaultPolicy.appServer): Promise<void> {
+export async function stopRecordedAppServers(path: string, policy: typeof defaultPolicy.appServer): Promise<void> {
   const identities = readAppServerRegistry(path);
   for (const identity of identities) await stopRecordedAppServer(identity, policy);
   rmSync(path, { force: true });
@@ -274,6 +281,8 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
     });
     chmodSync(runtime.managerSocket, 0o600);
     if (stopRequested) return;
+    // Readiness and the watchdog start with the socket: no recovery or scheduler pass can delay the heartbeat.
+    stopHeartbeat = await startHostHeartbeat(undefined, undefined, policy.service);
     let reportRecoveryProgress!: () => void;
     const recoveryProgress = new Promise<void>((resolve) => (reportRecoveryProgress = resolve));
     void managers.recover(reportRecoveryProgress).catch((error) => {
@@ -290,7 +299,6 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
     if (readinessTimer) clearTimeout(readinessTimer);
     // The socket is already accepting requests. Yield once so a submitted recovery RPC reaches its provider first.
     await new Promise<void>((resolve) => setImmediate(resolve));
-    stopHeartbeat = await startHostHeartbeat(undefined, undefined, policy.service);
     console.log('ready');
     const remind = () => {
       try {
@@ -335,14 +343,21 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
     };
     // Containers that workers and checks leave running are removed every ten minutes, per <state>/containers.json.
     let reapedAt = 0;
+    let reaping: Promise<unknown> | undefined;
     const reap = () => {
-      if (Date.now() - reapedAt < policy.containers.cleanupIntervalMs) return;
+      if (reaping || Date.now() - reapedAt < policy.containers.cleanupIntervalMs) return;
       reapedAt = Date.now();
-      try {
-        reapContainers(runtime.db, runtime.stateDirectory, Date.now(), runtime.managerServices.policy?.containers);
-      } catch (error) {
-        console.error(error);
-      }
+      // Docker runs in the background: a slow daemon must not hold the manager socket or the scheduler.
+      reaping = reapContainersAsync(
+        runtime.db,
+        runtime.stateDirectory,
+        Date.now(),
+        runtime.managerServices.policy?.containers,
+      )
+        .catch((error) => console.error(error))
+        .finally(() => {
+          reaping = undefined;
+        });
     };
     let widthSweepRunning = false;
     const scheduleWidthSweep = () => {
