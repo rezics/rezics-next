@@ -30,7 +30,7 @@ test('local setup and launch carry the complete real mounted host scope composit
       'library_pin:list',
       'progress_session:list',
       'progress_session:create',
-      'progress_session:record',
+      'progress_session:update',
       'rating:vote',
       'follow:list',
       'recent_search:read',

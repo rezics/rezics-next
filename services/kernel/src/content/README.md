@@ -2906,6 +2906,9 @@ Decision: the supported local site reads the native worker's file store through 
 using the existing uploader-bound site writer and current download admission. Its focused transport acceptance
 checks external credentials, keys, byte limits, ranges and deletion of the exact failed original; the native media
 outcomes retain lifecycle, claim, disclosure, collection and growth acceptance.
+Native receiving keeps parent/Board statement getters, one-client routing assertions and committed linked
+fixtures. The mounted website scope probe follows the installed Progress action `progress_session:update`
+while retaining media completion and post creation assertions.
 
 Post-image download and document media presentation inherit the permanent
 `claimed_item_id` post's current disclosure chain, including its reservation

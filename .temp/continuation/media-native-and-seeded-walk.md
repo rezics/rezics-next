@@ -64,3 +64,11 @@ The post-merge inbox notification cannot start: `error: Cannot find package 'oxc
 `scripts/architecture.ts`. The dependency-private command was attempted before receiving dependency
 changes and failed with the retained controller-policy error recorded above. No shared dependency files
 were written manually.
+
+Native Performance receiving check `7cc91e23-5534-4aa9-b78a-be736aa254c9` exited 1.
+Local HTTP, local storage, image transforms and image jobs passed. Mounted scopes expected obsolete
+`progress_session:record`; the installed route uses `progress_session:update`, now asserted instead.
+Parent fixtures now configure dedicated receipt keys and commit linked Realm/Space revisions and growth
+thread/post/revision rows together. Routing, transaction, growth and authorization assertions are unchanged.
+Media lifecycle still fails initial Global grant provisioning with the exact Accounts projection defect above.
+Full log: `.temp/check-logs/7cc91e23-5534-4aa9-b78a-be736aa254c9.log`.

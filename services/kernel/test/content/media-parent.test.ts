@@ -19,6 +19,7 @@ import { createHash } from 'node:crypto';
 import anchor from '../../src/partition/read.sql';
 import { checkGrowth, seed, openGrowthDatabase } from '../support/growth.ts';
 import { observeSql, permissionResourceId, type SqlExecution } from './support/sql-observer.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 
 let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
 const containerRoute = 0x4312;
@@ -76,32 +77,43 @@ async function realm(visibility: 'public' | 'protected') {
   const time = (await db.admin.query<{ at: string }>('SELECT clock_timestamp()::text AS at')).rows[0];
   if (!time) throw new Error('Could not read fixture database time');
   const at = time.at;
-  await db.admin.query(
-    `INSERT INTO community.space(route,space_id,state,head_revision_id,created_at,creator)
-     VALUES ($1,$2,'active',$3,$4,$5)`,
-    [boardRoute, spaceId, spaceRevisionId, at, actor.accountId],
-  );
-  await db.admin.query(
-    `INSERT INTO community.space_revision(route,space_id,revision_id,predecessor,address,title,summary,created_at,author)
-     VALUES ($1,$2,$3,NULL,NULL,'Media parent host','Media parent host',$4,$5)`,
-    [boardRoute, spaceId, spaceRevisionId, at, actor.accountId],
-  );
-  await db.admin.query(
-    `INSERT INTO community.realm(route,realm_id,space_id,state,visibility,context_id,head_revision_id,created_at,creator,votes)
-     VALUES ($1,$2,$3,'active',$4,$5,$6,$7,$8,'{"upvote":1,"downvote":-1}'::jsonb)`,
-    [boardRoute, realmId, spaceId, visibility, GLOBAL_CONTEXT, realmRevisionId, at, actor.accountId],
-  );
-  await db.admin.query(
-    `INSERT INTO community.realm_revision(route,realm_id,revision_id,predecessor,title,summary,visibility,context_id,created_at,author,votes)
-     VALUES ($1,$2,$3,NULL,'Media parent Realm','Media parent Realm',$4,$5,$6,$7,'{"upvote":1,"downvote":-1}'::jsonb)`,
-    [boardRoute, realmId, realmRevisionId, visibility, GLOBAL_CONTEXT, at, actor.accountId],
-  );
+  const client = await db.admin.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `INSERT INTO community.space(route,space_id,state,head_revision_id,created_at,creator)
+       VALUES ($1,$2,'active',$3,$4,$5)`,
+      [boardRoute, spaceId, spaceRevisionId, at, actor.accountId],
+    );
+    await client.query(
+      `INSERT INTO community.space_revision(route,space_id,revision_id,predecessor,address,title,summary,created_at,author)
+       VALUES ($1,$2,$3,NULL,NULL,'Media parent host','Media parent host',$4,$5)`,
+      [boardRoute, spaceId, spaceRevisionId, at, actor.accountId],
+    );
+    await client.query(
+      `INSERT INTO community.realm(route,realm_id,space_id,state,visibility,context_id,head_revision_id,created_at,creator,votes)
+       VALUES ($1,$2,$3,'active',$4,$5,$6,$7,$8,'{"upvote":1,"downvote":-1}'::jsonb)`,
+      [boardRoute, realmId, spaceId, visibility, GLOBAL_CONTEXT, realmRevisionId, at, actor.accountId],
+    );
+    await client.query(
+      `INSERT INTO community.realm_revision(route,realm_id,revision_id,predecessor,title,summary,visibility,context_id,created_at,author,votes)
+       VALUES ($1,$2,$3,NULL,'Media parent Realm','Media parent Realm',$4,$5,$6,$7,'{"upvote":1,"downvote":-1}'::jsonb)`,
+      [boardRoute, realmId, realmRevisionId, visibility, GLOBAL_CONTEXT, at, actor.accountId],
+    );
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
   return realmId;
 }
 
 beforeAll(async () => {
   db = await openGrowthDatabase();
   db.pool.options.max = 1;
+  configureTestReceiptKeys(db.pool);
   await db.admin.query(
     `INSERT INTO access.account(route,account_id,kind,state,transaction_id)
     VALUES ($1,$2,'actor','active',$2)`,
@@ -595,7 +607,7 @@ test('checkGrowth keeps fixed ancestry and one media effect constant across popu
         {
           name: 'media parent storage and formula',
           hotPartition: partitionOf(containerRoute),
-          rows({ ordinal, hot }) {
+          async write({ admin }, { ordinal, hot }) {
             const r = hot ? containerRoute : containerRoute + 16;
             const board = newId(boardRoute),
               thread = newId(r),
@@ -604,7 +616,7 @@ test('checkGrowth keeps fixed ancestry and one media effect constant across popu
               media = newId(r);
             const account = newId(routeOf(actor.accountId)!);
             const principal = { subject_id: account, valid: '(,)', transaction_id: account };
-            return {
+            const tables = {
               'content.board': [
                 {
                   route: boardRoute,
@@ -646,8 +658,8 @@ test('checkGrowth keeps fixed ancestry and one media effect constant across popu
                   thread_id: thread,
                   post_id: post,
                   revision_id: revision,
-                  body,
-                  body_sha256: digest,
+                  body: `\\x${body.toString('hex')}`,
+                  body_sha256: `\\x${digest.toString('hex')}`,
                   search_text: '',
                   licence: 'CC0-1.0',
                   subject_ids: [],
@@ -733,7 +745,7 @@ test('checkGrowth keeps fixed ancestry and one media effect constant across popu
                   principal_id: actor.accountId,
                   command_kind: 'content.media.reserve',
                   idempotency_key: `seed-${ordinal}`,
-                  request_digest: digest,
+                  request_digest: `\\x${digest.toString('hex')}`,
                   epoch: 1,
                   position: 1,
                   transaction_id: account,
@@ -741,6 +753,24 @@ test('checkGrowth keeps fixed ancestry and one media effect constant across popu
                 },
               ],
             };
+            // Keep each linked thread/post/revision population in one transaction.
+            const client = await admin.connect();
+            try {
+              await client.query('BEGIN');
+              for (const [table, rows] of Object.entries(tables)) {
+                const columns = Object.keys(rows[0]!).join(', ');
+                await client.query(
+                  `INSERT INTO ${table} (${columns}) SELECT ${columns} FROM jsonb_populate_recordset(NULL::${table}, $1::jsonb)`,
+                  [JSON.stringify(rows)],
+                );
+              }
+              await client.query('COMMIT');
+            } catch (error) {
+              await client.query('ROLLBACK');
+              throw error;
+            } finally {
+              client.release();
+            }
           },
         },
         { from: previous, to: scale },
