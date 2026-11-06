@@ -1,4 +1,4 @@
-import { bundledDigest } from '@rezics/definitions/bundled';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { BATCH_LIMIT, SourceSchema } from '@rezics/definitions/bulk';
 import type { MediaImportRequest } from '@rezics/definitions/media-import';
 import {
@@ -29,6 +29,7 @@ import {
 import { mapBangumiVocabulary } from '@rezics/conversion/bangumi-vocabulary';
 import { mapVndbVocabulary } from '@rezics/conversion/vndb-vocabulary';
 import type {
+  ConversionDiagnostic,
   NativeIdentity,
   SourceVocabularyGap,
   SourceVocabularyInput,
@@ -360,4 +361,41 @@ export function createSelectedFamilySourceRegistration(
   return sourceKind === 'bangumi'
     ? createSourceRegistration('bangumi', { source, converterRevision: selectedBangumiRevision })
     : createSourceRegistration('vndb', { source, converterRevision: crossMediaRevision });
+}
+
+/**
+ * A bound conversion sends only the statements that the released profile of its native subject type admits. A
+ * statement outside that profile is withheld with a property_not_admitted diagnostic instead of being sent to be
+ * refused by Kernel. Unknown native types leave the conversion unchanged, and the converter output and revision stay
+ * as converted.
+ */
+export function admitBoundProposals<Extra extends object>(
+  registration: SourceRegistration<Extra>,
+  nativeTypeOf: (externalId: string) => string | undefined,
+): SourceRegistration<Extra> {
+  return {
+    ...registration,
+    convert(input, context) {
+      const result = registration.convert(input, context);
+      const nativeType = context.subjectId === undefined ? undefined : nativeTypeOf(input.external_id);
+      const profile = nativeType === undefined ? undefined : bundledRelease.types[nativeType];
+      if (!profile) return result;
+      const withheld: ConversionDiagnostic[] = [];
+      const proposals = result.proposals.filter((command, index) => {
+        if (command.op !== 'propose' || profile.properties.includes(command.statement.property.id)) return true;
+        withheld.push({ pointer: `/proposals/${index}/statement/property/id`, code: 'property_not_admitted' });
+        return false;
+      });
+      if (withheld.length === 0) return result;
+      return { ...result, proposals, diagnostics: [...result.diagnostics, ...withheld] };
+    },
+  };
+}
+
+/**
+ * The released BookSeries profile admits no Bangumi identifier, so a numeric BookSeries key is identified by its durable
+ * source tuple (configured alias plus exact external ID), as Organizations are, instead of by wdt:P5732.
+ */
+export function isBookSeriesSourceTuple(key: string, nativeType: string | undefined): boolean {
+  return /^[1-9][0-9]*$/u.test(key) && nativeType === 'schema:BookSeries';
 }

@@ -106,6 +106,8 @@ import type { BangumiCoverSource, BangumiPersonCareerSource, CrossMediaMediaOutc
 import { acquireBangumiCoverSources } from './showcase-media.ts';
 import { acquireBangumiPersonCareerSources, bangumiPersonCareerAdmission } from './showcase-bangumi-careers.ts';
 import {
+  admitBoundProposals,
+  isBookSeriesSourceTuple,
   createSelectedFamilySourceRegistration,
   createSourceRegistration,
   crossMediaBangumiRevision,
@@ -2362,6 +2364,8 @@ function currentBangumiRelationEndpoint(
   // proposal ownership and target operands remain on the original claim, checked separately by the journal.
   if (!/^[1-9][0-9]*$/u.test(externalId) && subject.id !== nativeSubjectId) return 'identity_mismatch';
   if (expectedType === undefined || subject.type !== expectedType) return 'wrong_type';
+  if (isBookSeriesSourceTuple(externalId, expectedType))
+    return subject.id === nativeSubjectId ? 'current' : 'identity_mismatch';
   const identity = bangumiSourceIdentity(externalId, expectedType);
   if (!identity) return 'wrong_type';
   const statements = subject.statements?.[identity.property];
@@ -2408,7 +2412,8 @@ function bangumiSourceIdentity(key: string, nativeType?: string): { property: st
       : { property: 'wdt:P6298', value: key.slice('person:'.length) };
   if (key.startsWith('character:')) return { property: 'wdt:P6296', value: key.slice('character:'.length) };
   if (key.startsWith('episode:')) return { property: 'schema:url', value: bangumiRecordUrl(key) };
-  if (/^[1-9][0-9]*$/u.test(key)) return { property: 'wdt:P5732', value: key };
+  if (/^[1-9][0-9]*$/u.test(key))
+    return isBookSeriesSourceTuple(key, nativeType) ? undefined : { property: 'wdt:P5732', value: key };
   return undefined;
 }
 
@@ -2749,13 +2754,20 @@ export async function seedCrossMedia(
     };
     for (const provider of providers) {
       if (!plan.records[provider].length && !plan.entities[provider].length) continue;
-      const registration = createSourceRegistration(provider, {
+      const created = createSourceRegistration(provider, {
         source: crossMediaAliases[provider],
         converterRevision: provider === 'bangumi' ? crossMediaBangumiRevision : entityRevision,
         ...(provider === 'vndb' && extras?.sourceSnapshotAsOf !== undefined
           ? { sourceSnapshotAsOf: extras.sourceSnapshotAsOf }
           : {}),
       });
+      // Bound Bangumi statements are limited to the released profile of each record's native subject type.
+      const registration =
+        provider === 'bangumi'
+          ? admitBoundProposals(created, (externalId) =>
+              nativeTypes.get(`${crossMediaAliases[provider]}\u0000${externalId}`),
+            )
+          : created;
       for (const record of [...plan.records[provider], ...plan.entities[provider]]) {
         const conversion = registration.convert(
           {
@@ -2988,7 +3000,8 @@ export async function seedCrossMedia(
         const identity = bangumiSourceIdentity(record.key, expectedType);
         const matches =
           identity === undefined
-            ? record.key.startsWith('person:') && expectedType === 'schema:Organization'
+            ? (record.key.startsWith('person:') && expectedType === 'schema:Organization') ||
+              (isBookSeriesSourceTuple(record.key, expectedType) && subject?.id === claim.subject)
             : (subject?.statements?.[identity.property]?.some(
                 (statement) => statement.value?.type === 'value' && statement.value.content === identity.value,
               ) ?? false);

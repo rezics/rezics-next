@@ -36,7 +36,7 @@ import {
 } from './showcase-manifest.ts';
 import type { PublicBulkClient } from './public-bulk-client.ts';
 import { GLOBAL_CONTEXT, admitSelectedSynopsisSupport, selectedSynopsisQueryFromPublic } from './public-bulk-client.ts';
-import { createSourceRegistration, crossMediaBangumiRevision } from './source-registry.ts';
+import { createSourceRegistration, crossMediaBangumiRevision, isBookSeriesSourceTuple } from './source-registry.ts';
 import {
   bangumiRecordUrl,
   converter_revision as entityRevision,
@@ -715,7 +715,8 @@ function statementOnPublicRead(value: unknown, expected: BatchStatement): boolea
 
 function sourceIdentity(record: ShowcaseRecord): { property: string; value: string } | null {
   if (record.provider === 'vndb') return { property: 'wdt:P3180', value: record.sourceKey };
-  if (record.kind === 'work') return { property: 'wdt:P5732', value: record.sourceKey };
+  if (record.kind === 'work' && !isBookSeriesSourceTuple(record.sourceKey, record.nativeType ?? undefined))
+    return { property: 'wdt:P5732', value: record.sourceKey };
   if (record.kind === 'character' && record.sourceKey.startsWith('character:'))
     return { property: 'wdt:P6296', value: record.sourceKey.slice('character:'.length) };
   if (record.kind === 'person' && record.sourceKey.startsWith('person:'))
@@ -724,14 +725,19 @@ function sourceIdentity(record: ShowcaseRecord): { property: string; value: stri
   return null;
 }
 
+/** Bangumi Organizations and BookSeries admit no provider identifier, so their identity is their cited schema:name. */
+function nameIdentified(record: ShowcaseRecord): boolean {
+  return (
+    record.provider === 'bangumi' &&
+    ((record.kind === 'organization' && /^person:[1-9][0-9]*$/u.test(record.sourceKey)) ||
+      isBookSeriesSourceTuple(record.sourceKey, record.nativeType ?? undefined))
+  );
+}
+
 function sourceIdentityProperty(record: ShowcaseRecord): string | null {
   const identity = sourceIdentity(record);
   if (identity) return identity.property;
-  return record.provider === 'bangumi' &&
-    record.kind === 'organization' &&
-    /^person:[1-9][0-9]*$/u.test(record.sourceKey)
-    ? 'schema:name'
-    : null;
+  return nameIdentified(record) ? 'schema:name' : null;
 }
 
 function phase(record: ShowcaseRecord, assertion: ShowcaseAssertion): number {
@@ -1184,12 +1190,7 @@ function publicVocabularySourceEvidence(read: ReviewedSubjectRead, record: Showc
 }
 
 function publicHasSourceIdentity(read: ReviewedSubjectRead, record: ShowcaseRecord): boolean {
-  if (
-    record.provider === 'bangumi' &&
-    record.kind === 'organization' &&
-    /^person:[1-9][0-9]*$/u.test(record.sourceKey) &&
-    record.sourceUri
-  ) {
+  if (nameIdentified(record) && record.sourceUri) {
     return record.assertions.some(
       (assertion) =>
         assertion.property === 'schema:name' &&
@@ -1209,12 +1210,7 @@ function publicHasSourceIdentity(read: ReviewedSubjectRead, record: ShowcaseReco
 }
 
 function recordHasSourceIdentity(record: ShowcaseRecord): boolean {
-  if (
-    record.provider === 'bangumi' &&
-    record.kind === 'organization' &&
-    /^person:[1-9][0-9]*$/u.test(record.sourceKey) &&
-    record.sourceUri
-  ) {
+  if (nameIdentified(record) && record.sourceUri) {
     return record.assertions.some(
       (assertion) =>
         assertion.property === 'schema:name' &&

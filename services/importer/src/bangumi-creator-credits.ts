@@ -16,7 +16,7 @@ import type { Claim } from './record-bindings.ts';
 import { observePersonIdentity, personIdentityForSource } from './showcase-person-identity.ts';
 import { createImporter } from './importer.ts';
 import { createImportTransport } from './import-client.ts';
-import { createSourceRegistration } from './source-registry.ts';
+import { createSourceRegistration, isBookSeriesSourceTuple } from './source-registry.ts';
 
 export type BangumiCreatorCreditPort = Pick<
   ReturnType<typeof createImportTransport>,
@@ -266,18 +266,20 @@ export async function deliverBangumiCreatorCredits(input: {
         continue;
       }
       const organizationTupleIdentity = /^person:[1-9][0-9]*$/u.test(key) && expectedType === 'schema:Organization';
+      const bookSeriesTupleIdentity = isBookSeriesSourceTuple(key, expectedType);
       const identityProperty =
         /^person:[1-9][0-9]*$/u.test(key) && expectedType === 'schema:Person'
           ? 'wdt:P6298'
           : /^character:[1-9][0-9]*$/u.test(key)
             ? 'wdt:P6296'
-            : /^[1-9][0-9]*$/u.test(key)
+            : /^[1-9][0-9]*$/u.test(key) && !bookSeriesTupleIdentity
               ? 'wdt:P5732'
               : undefined;
       const sourceId =
         key.startsWith('person:') || key.startsWith('character:') ? key.slice(key.indexOf(':') + 1) : key;
       const hasIdentity =
         organizationTupleIdentity ||
+        bookSeriesTupleIdentity ||
         (identityProperty !== undefined &&
           (subject?.statements?.[identityProperty]?.some(
             (statement) => statement.value?.type === 'value' && statement.value.content === sourceId,
