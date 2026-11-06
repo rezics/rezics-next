@@ -45,13 +45,24 @@ export type MineFollowingPage = {
   cursorReset?: true;
 };
 
+function presentTarget(target: RawFollow['target']): LibrarySubject | null {
+  if (!target || !('id' in target) || !('type' in target)) return null;
+  return subjectOf({
+    id: target.id,
+    type: target.type,
+    ...('types' in target ? { types: target.types } : {}),
+    label: 'label' in target ? target.label : null,
+    ...('cover' in target ? { cover: target.cover } : {}),
+  });
+}
+
 function present(follow: RawFollow): MineFollow {
   return {
     targetId: follow.targetId,
     targetType: follow.targetType,
     state: follow.state,
     reason: follow.reason,
-    target: follow.target ? subjectOf(follow.target) : null,
+    target: presentTarget(follow.target),
     ...(follow.destination ? { destination: follow.destination } : {}),
     ...(follow.actions ? { actions: follow.actions } : {}),
     idempotencyKey: crypto.randomUUID(),
