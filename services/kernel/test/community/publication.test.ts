@@ -92,7 +92,35 @@ async function fixture(pool: Pool, admin: Pool) {
     },
   });
   const actors: AccountActor[] = [];
-  const tokens: string[] = [];
+  async function issueActors() {
+    actors.length = 0;
+    for (const id of ids) {
+      const signin = await auth.handler(
+        new Request(`${issuer}/signin`, {
+          method: 'POST',
+          headers: { origin: issuer, 'content-type': 'application/json' },
+          body: JSON.stringify({ email: `${id}@community.test`, password, client_id: 'community-test', scope: actions }),
+        }),
+      );
+      expect(signin.status).toBe(200);
+      const cookie = signin.headers
+        .getSetCookie()
+        .map((value) => value.split(';')[0])
+        .join('; ');
+      const issued = await auth.handler(
+        new Request(`${issuer}/token`, {
+          method: 'POST',
+          headers: { origin: issuer, 'content-type': 'application/json', cookie },
+          body: '{}',
+        }),
+      );
+      expect(issued.status).toBe(200);
+      const token = ((await issued.json()) as { access_token: string }).access_token;
+      const actor = await access.authenticate(token, { pool, deadline: Date.now() + 600_000 });
+      if (actor.kind !== 'account') throw new Error('Auth did not issue an account actor');
+      actors.push(actor);
+    }
+  }
   for (const id of ids) {
     await admin.query(
       "INSERT INTO access.account (route, account_id, kind, state, transaction_id) VALUES ($1,$2,'actor','pending',$2)",
@@ -100,32 +128,8 @@ async function fixture(pool: Pool, admin: Pool) {
     );
     await auth.internal.provisionPassword({ authorization: id, email: `${id}@community.test`, password });
     await admin.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [routeOf(id), id]);
-    const signin = await auth.handler(
-      new Request(`${issuer}/signin`, {
-        method: 'POST',
-        headers: { origin: issuer, 'content-type': 'application/json' },
-        body: JSON.stringify({ email: `${id}@community.test`, password, client_id: 'community-test', scope: actions }),
-      }),
-    );
-    expect(signin.status).toBe(200);
-    const cookie = signin.headers
-      .getSetCookie()
-      .map((value) => value.split(';')[0])
-      .join('; ');
-    const issued = await auth.handler(
-      new Request(`${issuer}/token`, {
-        method: 'POST',
-        headers: { origin: issuer, 'content-type': 'application/json', cookie },
-        body: '{}',
-      }),
-    );
-    expect(issued.status).toBe(200);
-    const token = ((await issued.json()) as { access_token: string }).access_token;
-    tokens.push(token);
-    const actor = await access.authenticate(token, { pool, deadline: Date.now() + 600_000 });
-    if (actor.kind !== 'account') throw new Error('Auth did not issue an account actor');
-    actors.push(actor);
   }
+  await issueActors();
   async function grant(id: string, target = root, action = 'space:create') {
     await admin.query(
       "INSERT INTO access.resource_grant (route,resource_id,subject_id,action,valid,transaction_id) VALUES ($1,$2,$3,$4,'(,)'::tstzrange,$3) ON CONFLICT DO NOTHING",
@@ -144,15 +148,11 @@ async function fixture(pool: Pool, admin: Pool) {
     async restoreAccounts() {
       await admin.query(
         `UPDATE access.account
-         SET state='active', minimum_authn_epoch=1, authn_fenced=false, fence_receipt_id=NULL, suspension_reason=NULL
+         SET state='active', authn_fenced=false, fence_receipt_id=NULL, suspension_reason=NULL
          WHERE account_id=ANY($1::uuid[])`,
         [ids],
       );
-      for (const [index, token] of tokens.entries()) {
-        const actor = await access.authenticate(token, { pool, deadline: Date.now() + 600_000 });
-        if (actor.kind !== 'account') throw new Error('Auth did not issue an account actor');
-        actors[index] = actor;
-      }
+      await issueActors();
     },
     async close() {
       await authPool.end();

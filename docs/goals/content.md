@@ -94,7 +94,8 @@ declared receipt keys before setup and grants; `createKernel` reuses a pool ring
 Policy catalogues drop resource types that did not resolve for the mounted action subset. JSON-array readers bind
 keys as text so `jsonb_to_recordset` never sees a non-array. Composition tests compare installed roles with
 `accessActionCatalogue` of the mounted routes. The Realm minting test records `preparePage` for the Global parent
-and `prepare` for Space/Context extras; sequential fixtures restore authn epoch and fence after suspension.
+and `prepare` for Space/Context extras; sequential fixtures unfence and re-issue tokens at the current
+authentication floor after suspension and never decrease `minimum_authn_epoch`.
 
 Type compatibility repairs preserve outcome assertions and align callers with producer-owned contracts without
 changing behavior. Community domain clocks stay required on holders that already have one; deadlineNow is a
