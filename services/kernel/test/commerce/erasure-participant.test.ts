@@ -369,7 +369,10 @@ describe('native genuine-order retention', () => {
     provider.fake.pay(firstNative.checkoutSessionId!);
     await finish(await event('checkout.session.completed', firstNative.checkoutSessionId!));
     const entitlement = (
-      await waitUntil(async () => entitlementRows(buyer.accountId), (rows) => rows.length === 1)
+      await waitUntil(
+        async () => entitlementRows(buyer.accountId),
+        (rows) => rows.length === 1,
+      )
     )[0]!.entitlement_id as string;
     const second = (
       await accepted(buyer, '/v1/orders', { offerId: lateOffer.id, expectedOfferRevision: lateOffer.revision })
