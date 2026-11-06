@@ -1,24 +1,30 @@
 import type { WorkClient } from '../work/client.ts';
-import type { AgentIdentityRetirementStage } from '../history/agent-identity-retirement.ts';
-import type { HistoryReceivingContext } from '../history/receiving.ts';
-import { lookupAgentIdentityReceivingCopies } from '../history/agent-identity-source.ts';
-import type { HistoryArtifact } from '../history/registry.ts';
-import { reserveIdentityHistoryWork, nativeWork } from '../history/agent-identity-inventory-work.ts';
 import type { Pool } from 'pg';
-import { readAgentIdentityCopyReceiving, type AgentIdentitySourceKey } from '../history/agent-identity-source.ts';
+import { currentCommandResources, type CommandTransaction } from '../command/command.ts';
 import {
+  historyComposition,
+  lookupAgentIdentityReceivingCopies,
+  nativeWork,
+  readAgentIdentityCopyReceiving,
   readAgentIdentityInventory,
-  readAgentIdentityRecoveryInventoryInTransaction,
+  readAgentIdentityReceivingArtifact,
   readAgentIdentityRecoveryInventory,
+  readAgentIdentityRecoveryInventoryInTransaction,
+  readAgentIdentitySDKRetirementGap,
+  reserveIdentityHistoryWork,
   verifyAgentIdentityInventory,
   verifyAgentIdentityRecoveryInventory,
+  verifyHistoryReceivingReceipt,
+} from '../history/application/index.ts';
+import {
   type AgentIdentityInventoryVerification,
   type AgentIdentityRecoveryInventoryVerification,
-} from '../history/agent-identity-inventory.ts';
-import { readAgentIdentitySDKRetirementGap } from '../history/agent-identity-retirement.ts';
-import type { HistoryBarrier } from '../history/registry.ts';
-import { currentCommandResources, type CommandTransaction } from '../command/command.ts';
-import { verifyHistoryReceivingReceipt } from '../history/receiving.ts';
+  type AgentIdentityRetirementStage,
+  type AgentIdentitySourceKey,
+  type HistoryArtifact,
+  type HistoryBarrier,
+  type HistoryReceivingContext,
+} from '../history/contract/index.ts';
 
 export type AgentIdentityCopyRetention =
   | Readonly<{
@@ -119,7 +125,7 @@ export async function prepareAgentIdentityCopyRetention(
     lookup?.state === 'associated' && lookup.artifact.locator.artifactType === 'durable-work/v1'
       ? lookup.artifact.locator.workId
       : null;
-  const { readAgentIdentityReceivingArtifact } = await import('../history/agent-identity-sdk-fence.ts');
+  const { readAgentIdentityReceivingArtifact } = historyComposition();
   const durable = custodyId ? await readAgentIdentityReceivingArtifact(pool, custodyId, context) : null;
   return {
     ...point,

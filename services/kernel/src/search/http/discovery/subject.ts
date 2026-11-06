@@ -8,7 +8,7 @@ import { SubjectSummarySchema } from '../../../semantic/http/summaries.ts';
 import { PublicFigureSchema } from '../../../rating/public-figure-http.ts';
 import { STANDARD_QUESTION_ID } from '../../../rating/votes.ts';
 import { GLOBAL_CONTEXT } from '../../../access/gates/catalogue.ts';
-import { MatchEvidenceSchema } from '../../http/match-evidence-schema.ts';
+import { MatchEvidenceSchema } from '../match-evidence-schema.ts';
 import { closed, id, key, unavailable, evidenceOrDefault, admitIdentity } from './primitives.ts';
 function characterPersonContexts() {
   return memoizedValue(characterPersonContexts, () =>

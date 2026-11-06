@@ -1,5 +1,36 @@
 # History
 
+## Layers, ports and native composition
+
+History is split into four architecture modules. `kernel-history-contract` owns locators, scopes, record and identity
+vocabulary, receiving and operational types, error classes, and the typed `HistoryComposition` capability in
+`contract/ports.ts`. `kernel-history-core` owns pure operational cost declarations. `kernel-history-application`
+exports the receiving, record, operational, shared-work and identity facades; they invoke only the installed contract
+capability. `kernel-history-adapters` implements that capability with native Postgres operations, command execution,
+and Access, Semantic, Search, Zones and Work owner bindings.
+
+Foreign Kernel modules import the declared History application and contract entries. The composition root in
+`composition/history.ts` binds every capability method to its native adapter. Server and worker startup install that
+composition before use; `composition/preload.ts` exposes the same binding through an explicit preload hook used by
+`test/support/native-history-composition.ts`. Calling a facade before installation throws; there is no fallback
+implementation. Fake `HistoryComposition` capabilities exercise the application facades independently, while
+`native-composition.test.ts` exercises the installed native binding. Opaque handles
+represent foreign nominal values (`HistoryTransaction`, `HistoryPool`, `HistoryWorkClient`, `HistoryWorkContext` and
+`HistoryHandle`); adapters narrow them in `adapters/handles.ts` or at the owner-specific read boundary.
+
+Contract, core and application contain no foreign implementation imports. Adapters own native bindings and depend on
+the typed History contract; they reach other owner implementations only from this native layer. Application facade
+modules have no behavior edges to implementations. The architecture manifest records the four layers and their
+allowed dependency direction.
+
+Measured with `scripts/architecture.ts` against base `99558bc8f6`: rule 2 violations fell from 7,067 to 6,457 and
+rule 3 from 2,414 to 1,893; full-graph unbaselined errors fell from 986 to 907. The changed-base check passes. Kernel
+files in value cycles fell from 398 to 345; the largest component fell from 381 to 326 files, and History cycle
+membership fell from 24 to zero. Baseline entries fell from 8,519 to 7,464 by removing 1,055 obsolete entries.
+History source paths have 102 outgoing value edges at base and 109 at final; the final total includes 34 native owner
+bindings. Those bindings are confined to adapters; contract, core and application expose zero behavior edges. The
+full graph still reports 907 inherited errors outside the History slice, so its absolute baseline is not clean.
+
 ## Zone receipts, outbox events and current closure boundary
 
 The delivered Zone producer cut is the five native command receipts `zone.create`, `zone.configure`,

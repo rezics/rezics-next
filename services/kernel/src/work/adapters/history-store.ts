@@ -1,11 +1,13 @@
 import canonicalize from 'canonicalize';
-import { jsonParameter } from '../../database/json.ts';
 import { withConnection } from '../../database/pool.ts';
 import { currentCommand, currentCommandResources, type CommandTransaction } from '../../command/command.ts';
-import { beginRecordHistorySerialization, recordRecordHistoryCopy } from '../../history/record-source.ts';
-import { guardHistoryAccounts } from '../../history/gates.ts';
-import { encodeLocator, validateLocator, validateScope, type HistoryScope } from '../../history/locator.ts';
-import record from '../../history/record.sql';
+import {
+  beginRecordHistorySerialization,
+  guardHistoryAccounts,
+  recordDurableWorkLocator,
+  recordRecordHistoryCopy,
+} from '../../history/application/index.ts';
+import { encodeLocator, validateLocator, validateScope, type HistoryScope } from '../../history/contract/index.ts';
 import type { Pool } from 'pg';
 import type { HistoryAssociationPort, WorkPool, WorkQueryClient, WorkScopedRequest } from '../contract/index.ts';
 
@@ -51,12 +53,7 @@ async function persist(
     throw new TypeError('Conflicting scoped work request');
   if (row.state === 'retired') return { retired: true, admitted: true };
   if (result.rows.length)
-    await record.run(tx, {
-      partition_no: partition,
-      artifact_type: 'durable-work/v1',
-      locator: Buffer.from(encodeLocator({ artifactType: 'durable-work/v1', workId: custodyId })),
-      accounts: jsonParameter(request.scope.accounts),
-    });
+    await recordDurableWorkLocator(asTx(tx), { partition, custodyId, scope: request.scope as HistoryScope });
   return { retired: false, admitted: row.admitted as boolean };
 }
 

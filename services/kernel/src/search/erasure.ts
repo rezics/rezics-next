@@ -5,7 +5,6 @@ import { readMembershipRouteKey } from '../access/membership-work-config.ts';
 import { runCommand } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import type { CloudEvent } from '../events/log.ts';
-import type { HistoryBarrier } from '../history/registry.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import {
   createSubjectErasureSource,
@@ -28,6 +27,7 @@ import type { PublicFilterSourceFactory } from '../semantic/public-filter-source
 import { createSearchWriterGuard } from './writer-guard.ts';
 import { subjectConsumer } from './runner.ts';
 import { subjectListingSource } from '../library/listing-counts.ts';
+import { type HistoryBarrier } from '../history/contract/index.ts';
 
 const eventType = 'com.rezics.access.account-tombstoned.v1';
 const workflowName = 'search.erasure';

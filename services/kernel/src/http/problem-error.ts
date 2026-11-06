@@ -1,3 +1,4 @@
+import { type Pending } from '../history/contract/index.ts';
 // Error identities must initialize without loading native commands or HTTP handlers.
 export const PROBLEM_TYPE_BASE = 'https://rezics.com/problems/';
 

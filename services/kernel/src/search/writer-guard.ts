@@ -7,7 +7,6 @@ import {
   readAccountDiscoveryRepairObservation,
   type AccountDiscoveryRepairObservation,
 } from '../access/account-discovery-source.ts';
-import type { HistoryBarrier } from '../history/registry.ts';
 import { readSubjectErasureSourceProof, verifySubjectErasureSourceProof } from '../semantic/account-erasure-source.ts';
 import { drainGenerationPublicationProofCopy, hasRetainedWriterPublicationCopies } from './public-filter-custody.ts';
 import type { PublicFilterConsumer, PublicFilterCost } from '../semantic/public-filter-source-contract.ts';
@@ -50,6 +49,7 @@ import { discoveryIndexName } from './indices.ts';
 import { parseDiscoveryDocumentId } from './discovery-documents.ts';
 import { validateDiscoveryWriteReceipt } from './write-actions.ts';
 import { assertCompleteSearch } from './complete-search.ts';
+import { type HistoryBarrier } from '../history/contract/index.ts';
 
 /** Durable native evidence retained by the existing writer, never supplied by Source callers. */
 export type SearchRepairWriterReceipt = Readonly<{

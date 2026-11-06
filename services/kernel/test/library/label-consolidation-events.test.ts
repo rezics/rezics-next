@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { Value } from 'typebox/value';
-import { classifyEvent } from '../../src/history/contracts.ts';
+import { classifyEvent } from '../../src/history/contract/contracts.ts';
 import { LIBRARY_EVENTS } from '../../src/library/events.ts';
 
 test('consolidation facts identify the private plan without disclosing review evidence', () => {

@@ -8,4 +8,5 @@ export {
 } from './account-agent-identity-recovery.ts';
 export { withReadTransaction } from './read.ts';
 export { activeIdentitySourceConsumerMaintenance } from './identity-source-consumer-maintenance.ts';
+export type { IdentitySourceConsumerMaintenanceContext } from './identity-source-consumer-maintenance.ts';
 export { IdentityEpochStoreError } from './identity-adapters/index.ts';

@@ -8,26 +8,17 @@ import {
   type OperationalOptions,
   type OperationalTransaction,
 } from '../../src/command/operational.ts';
-import {
-  registerOperationalHistoryWork,
-  reserveOperationalWorkTransfer,
-  resolveCommittedOperationalWork,
-  receiveCommittedOperationalWork,
-  operationalWorkSource,
-  validateOperationalMembersBinding,
-  type OperationalMembersBinding,
-  type OperationalWorkRegistration,
-  type OperationalWorkTransfer,
-} from '../../src/history/operational-work.ts';
-import { verifyOperationalWorkReplay } from '../../src/history/operational-work-receiving.ts';
-import { minimizeHistoryWork } from '../../src/history/durable.ts';
-import { HistoryRegistry } from '../../src/history/registry.ts';
-import { OPERATIONAL_WORK_LOCAL_DECLARATION } from '../../src/history/operational-work-budget.ts';
+import { registerOperationalHistoryWork, reserveOperationalWorkTransfer, resolveCommittedOperationalWork, receiveCommittedOperationalWork, operationalWorkSource, validateOperationalMembersBinding } from '../../src/history/adapters/operational-work.ts';
+import { verifyOperationalWorkReplay } from '../../src/history/adapters/operational-work-receiving.ts';
+import { minimizeHistoryWork } from '../../src/history/adapters/durable.ts';
+import { HistoryRegistry } from '../../src/history/contract/registry.ts';
 import { SELECTED_LOCAL_DECLARATION } from '../../src/work/selected-runtime-cost.ts';
-import { encodeLocator } from '../../src/history/locator.ts';
+import { encodeLocator } from '../../src/history/contract/locator.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import type { WorkIntent } from '../../src/work/client.ts';
 import { operationalFixture } from '../command/support/operational-fixture.ts';
+import { type OperationalMembersBinding, type OperationalWorkRegistration, type OperationalWorkTransfer } from '../../src/history/contract/operational-types.ts';
+import { OPERATIONAL_WORK_LOCAL_DECLARATION } from '../../src/history/core/operational-work-budget.ts';
 
 // Deliberately UNRUN at delivery: the controller owns native database acceptance.
 let native: Awaited<ReturnType<typeof operationalFixture>>;

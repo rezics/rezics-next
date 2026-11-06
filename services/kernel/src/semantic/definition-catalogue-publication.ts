@@ -54,6 +54,7 @@ import {
   CATALOGUE_ARTIFACT,
   CATALOGUE_ACTIVATION_REQUESTED,
 } from './events.ts';
+import { type Pending } from '../history/contract/index.ts';
 
 export type CatalogueArtifactKind = 'root' | 'node' | 'release' | 'declaration';
 export type CatalogueBuildStatus = {

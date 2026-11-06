@@ -3,6 +3,7 @@ import { withConnection } from '../database/pool.ts';
 import { routeOf } from '../route/route.ts';
 import { readOrder } from './store.ts';
 import type { StripeCheckoutLocatorPort, StripeEventRef, StripePort } from './model.ts';
+import { type Pending } from '../history/contract/index.ts';
 
 /** Private routing references only. Never persist/enqueue without Accounts' typed history scope. */
 export type CheckoutAnchor = Readonly<{ orderId: string; sessionId: string }>;

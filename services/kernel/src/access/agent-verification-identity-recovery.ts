@@ -12,7 +12,13 @@ import {
 } from './agent-verification-identity.ts';
 import { tryAccessApplication } from './adapters/bind.ts';
 import type { OriginalAccountAgentIdentity } from '../semantic/access-capabilities.ts';
-import { declareAgentIdentitySource, type AgentIdentitySourceKey } from '../history/agent-identity-source.ts';
+import { declareAgentIdentitySource } from '../history/application/index.ts';
+import {
+  ACCOUNT_ROLE_BITS,
+  IdentityHistoryWorkUnavailable,
+  unionHistoryScope,
+  type AgentIdentitySourceKey,
+} from '../history/contract/index.ts';
 import insertOriginal from './agent-verification-identity-recovery-source.sql';
 import originalReversal from './agent-verification-identity-recovery-read.sql';
 import insertRecovery from './agent-verification-identity-recovery-insert.sql';
@@ -240,7 +246,6 @@ export async function recoverMissingAccountIdentitySource(
   // recovery writer. Do not dispatch them from a Source frame on the earlier partial
   // allocation; ordinary Access recovery keeps its own command owner and deadline.
   if (identityPort().activeIdentitySourceConsumerMaintenance?.(pool)) {
-    const { IdentityHistoryWorkUnavailable } = await import('../history/agent-identity-inventory-work.ts');
     throw new IdentityHistoryWorkUnavailable();
   }
   const partition = partitionOf(routeOf(receipt.account)!);
@@ -393,8 +398,7 @@ async function declareRecovery(
   priorRoles: readonly { account_id: string; role: string }[] = [],
 ) {
   const command = currentCommand(tx);
-  const { ACCOUNT_ROLE_BITS: roles } = await import('../history/contracts.ts');
-  const { unionHistoryScope } = await import('../history/record.ts');
+  const roles = ACCOUNT_ROLE_BITS;
   const ref = (accountId: string, mask: number) => ({ accountRoute: routeOf(accountId)!, accountId, roles: mask });
   const key: AgentIdentitySourceKey = Object.freeze({
     route: routeOf(receipt.account)!,

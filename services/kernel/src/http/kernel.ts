@@ -88,7 +88,6 @@ import type { KeyRing } from '../tokens/seal.ts';
 import type { Pool } from 'pg';
 import { createWorkClient, type WorkClient } from '../work/client.ts';
 import { bindExecutionContract } from '../command/execution-contract.ts';
-import { historyExecutionPort } from '../history/operational-work.ts';
 import { workExecutionPort } from '../work/selected-runtime.ts';
 import { recentSearchRoutes } from '../search/recent-searches.ts';
 import { searchRoutes } from '../search/http/routes.ts';
@@ -110,6 +109,7 @@ import { subjectPageRoutes } from '../semantic/http/subject-pages.ts';
 import { createApp } from './app.ts';
 import { actionCatalogue, type MountedRoute } from './request.ts';
 import { declareKernelWriteRates } from './write-rate-routes.ts';
+import { historyExecutionPort } from '../history/application/index.ts';
 
 function compileGuestSecurity(routes: readonly MountedRoute[]) {
   const result = new Map<string, 'anonymous' | 'authenticated' | 'unknown'>();

@@ -54,6 +54,7 @@ import agentPageDelete from './agent-verification-page-delete.sql';
 import agentPageInsert from './agent-verification-page-insert.sql';
 import requestApproved from './agent-verification-request-approved.sql';
 import requestFailed from './agent-verification-request-failed.sql';
+import { type Pending } from '../history/contract/index.ts';
 
 export type AccountVerificationLink = { label: string; url: string };
 export type AgentVerificationRequestInput = {

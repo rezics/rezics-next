@@ -215,7 +215,12 @@
         "services/kernel/src/access/membership-work.ts",
         "services/kernel/src/access/durable-initiator.ts",
         "services/kernel/src/access/erasure.ts",
-        "services/kernel/src/access/adapters/index.ts"
+        "services/kernel/src/access/adapters/index.ts",
+        "services/kernel/src/access/agent-verification-identity.ts",
+        "services/kernel/src/access/agent-verification.ts",
+        "services/kernel/src/access/events.ts",
+        "services/kernel/src/access/identity-original-admission.ts",
+        "services/kernel/src/access/shared-history-context.ts"
       ],
       "allowedDependencies": [
         "access-policy",
@@ -226,8 +231,11 @@
         "kernel-commerce",
         "kernel-community",
         "kernel-content",
+        "kernel-history-application",
+        "kernel-history-contract",
         "kernel-library",
         "kernel-library-contract",
+        "kernel-memoized",
         "kernel-platform",
         "kernel-search",
         "kernel-semantic"
@@ -271,7 +279,16 @@
       "owner": "commerce",
       "paths": ["services/kernel/src/commerce/**", "services/kernel/db/commerce/**"],
       "publicEntries": ["services/kernel/src/commerce/config.ts", "services/kernel/src/commerce/work-module.ts"],
-      "allowedDependencies": ["kernel-access", "kernel-content", "kernel-platform", "kernel-semantic", "money"],
+      "allowedDependencies": [
+        "kernel-access",
+        "kernel-content",
+        "kernel-history-application",
+        "kernel-history-contract",
+        "kernel-memoized",
+        "kernel-platform",
+        "kernel-semantic",
+        "money"
+      ],
       "capabilities": ["commerce"],
       "postgresPaths": ["services/kernel/src/commerce/**"]
     },
@@ -314,8 +331,11 @@
         "kernel-content-community-projection",
         "kernel-content-contract",
         "kernel-content-core",
+        "kernel-history-application",
+        "kernel-history-contract",
         "kernel-library",
         "kernel-library-contract",
+        "kernel-memoized",
         "kernel-platform",
         "kernel-rating",
         "kernel-search",
@@ -380,7 +400,9 @@
         "kernel-access",
         "kernel-commerce",
         "kernel-content",
+        "kernel-history-contract",
         "kernel-library",
+        "kernel-memoized",
         "kernel-platform",
         "kernel-rating",
         "kernel-semantic"
@@ -403,11 +425,13 @@
         "kernel-access",
         "kernel-community",
         "kernel-content",
+        "kernel-history-contract",
+        "kernel-identity-core",
         "kernel-library",
+        "kernel-memoized",
         "kernel-platform",
         "kernel-search",
-        "kernel-semantic",
-        "kernel-identity-core"
+        "kernel-semantic"
       ],
       "capabilities": ["rating"],
       "postgresPaths": ["services/kernel/src/rating/**"]
@@ -444,7 +468,11 @@
         "kernel-access",
         "kernel-community",
         "kernel-content",
+        "kernel-history-application",
+        "kernel-history-contract",
+        "kernel-history-core",
         "kernel-library-contract",
+        "kernel-memoized",
         "kernel-platform",
         "kernel-rating",
         "kernel-search",
@@ -487,7 +515,8 @@
         "services/kernel/src/search/identity-epoch-participant.ts",
         "services/kernel/src/search/opensearch.ts",
         "services/kernel/src/search/access-capabilities.ts",
-        "services/kernel/src/search/credit-search.ts"
+        "services/kernel/src/search/credit-search.ts",
+        "services/kernel/src/search/account-erasure-source.ts"
       ],
       "allowedDependencies": [
         "bounds",
@@ -500,8 +529,11 @@
         "kernel-commerce",
         "kernel-community",
         "kernel-content",
+        "kernel-history-application",
+        "kernel-history-contract",
         "kernel-library",
         "kernel-library-contract",
+        "kernel-memoized",
         "kernel-platform",
         "kernel-rating",
         "kernel-semantic",
@@ -524,7 +556,14 @@
         "services/kernel/src/semantic/access-capabilities.ts",
         "services/kernel/src/semantic/adapters/native-domain.ts",
         "services/kernel/src/semantic/adapters/index.ts",
-        "services/kernel/src/semantic/credit-search.ts"
+        "services/kernel/src/semantic/credit-search.ts",
+        "services/kernel/src/semantic/account-agent-identity-recovery.ts",
+        "services/kernel/src/semantic/identity-epoch-contract.ts",
+        "services/kernel/src/semantic/identity-source-consumer-custody.ts",
+        "services/kernel/src/semantic/identity-source-consumer-maintenance.ts",
+        "services/kernel/src/semantic/record-purge-authority.ts",
+        "services/kernel/src/semantic/record-purge-custody.ts",
+        "services/kernel/src/semantic/record-source-set.ts"
       ],
       "allowedDependencies": [
         "composition",
@@ -533,16 +572,19 @@
         "filter",
         "kernel-access",
         "kernel-content",
+        "kernel-history-application",
+        "kernel-history-contract",
         "kernel-identity-core",
         "kernel-library",
         "kernel-library-contract",
+        "kernel-memoized",
         "kernel-platform",
         "kernel-rating",
         "kernel-search",
-        "kernel-zones",
         "kernel-semantic-application",
         "kernel-semantic-contract",
-        "kernel-semantic-core"
+        "kernel-semantic-core",
+        "kernel-zones"
       ],
       "capabilities": ["semantic", "canonical-identity-native"],
       "postgresPaths": ["services/kernel/src/semantic/**"],
@@ -558,13 +600,17 @@
       "kind": "adapter",
       "owner": "semantic",
       "paths": ["services/kernel/src/zones/**", "services/kernel/db/zones/**"],
-      "publicEntries": [],
+      "publicEntries": [
+        "services/kernel/src/zones/events.ts",
+        "services/kernel/src/zones/resource-store.ts"
+      ],
       "allowedDependencies": [
         "composition",
         "filter",
         "kernel-access",
         "kernel-library",
         "kernel-library-contract",
+        "kernel-memoized",
         "kernel-platform",
         "kernel-search",
         "kernel-semantic"
@@ -596,7 +642,13 @@
       "excludes": [
         "services/kernel/src/work/contract/**",
         "services/kernel/src/work/core/**",
-        "services/kernel/src/work/application/**"
+        "services/kernel/src/work/application/**",
+        "services/kernel/src/history/contract/**",
+        "services/kernel/src/history/core/**",
+        "services/kernel/src/history/application/**",
+        "services/kernel/src/history/adapters/**",
+        "services/kernel/src/memoized.ts",
+        "services/kernel/src/route/contract.ts"
       ],
       "publicEntries": [
         "services/kernel/src/command/receipt-key.ts",
@@ -604,7 +656,6 @@
         "services/kernel/src/database/statement-bytes.ts",
         "services/kernel/src/events/catalogue.ts",
         "services/kernel/src/clock.ts",
-        "services/kernel/src/memoized.ts",
         "services/kernel/src/request/access.ts",
         "services/kernel/src/route/route.ts",
         "services/kernel/src/tokens/seal.ts",
@@ -625,7 +676,11 @@
         "services/kernel/src/work/retries.ts",
         "services/kernel/src/work/sdk-retirement-fence.ts",
         "services/kernel/src/work/selected-runtime-cost.ts",
-        "services/kernel/src/work/selected-runtime.ts"
+        "services/kernel/src/work/selected-runtime.ts",
+        "services/kernel/src/command/dispatch-lifetime.ts",
+        "services/kernel/src/command/execution-contract.ts",
+        "services/kernel/src/command/operational.ts",
+        "services/kernel/src/database/pool.ts"
       ],
       "allowedDependencies": [
         "auth-contract",
@@ -635,9 +690,13 @@
         "kernel-commerce",
         "kernel-community",
         "kernel-content",
+        "kernel-history-application",
+        "kernel-history-contract",
         "kernel-library",
         "kernel-library-contract",
+        "kernel-memoized",
         "kernel-rating",
+        "kernel-route-contract",
         "kernel-search",
         "kernel-semantic",
         "kernel-work-application",
@@ -675,11 +734,14 @@
         "kernel-access-contract",
         "kernel-access-core",
         "kernel-commerce",
+        "kernel-community",
         "kernel-content",
         "kernel-content-application",
         "kernel-content-contract",
         "kernel-content-core",
-        "kernel-community",
+        "kernel-history-adapters",
+        "kernel-history-application",
+        "kernel-history-contract",
         "kernel-library",
         "kernel-platform",
         "kernel-rating",
@@ -1345,6 +1407,127 @@
       "publicEntries": ["packages/search-text/src/index.ts"],
       "allowedDependencies": [],
       "capabilities": ["text-query-grammar"]
+    },
+    {
+      "id": "kernel-history-contract",
+      "kind": "contract",
+      "owner": "platform",
+      "paths": [
+        "services/kernel/src/history/contract/**"
+      ],
+      "publicEntries": [
+        "services/kernel/src/history/contract/contracts.ts",
+        "services/kernel/src/history/contract/errors.ts",
+        "services/kernel/src/history/contract/identity-types.ts",
+        "services/kernel/src/history/contract/identity-vocabulary.ts",
+        "services/kernel/src/history/contract/index.ts",
+        "services/kernel/src/history/contract/locator.ts",
+        "services/kernel/src/history/contract/operational-types.ts",
+        "services/kernel/src/history/contract/ports.ts",
+        "services/kernel/src/history/contract/receiving-types.ts",
+        "services/kernel/src/history/contract/record-types.ts",
+        "services/kernel/src/history/contract/record-vocabulary.ts",
+        "services/kernel/src/history/contract/registry.ts",
+        "services/kernel/src/history/contract/transaction.ts"
+      ],
+      "allowedDependencies": [
+        "kernel-route-contract"
+      ],
+      "capabilities": []
+    },
+    {
+      "id": "kernel-history-core",
+      "kind": "core",
+      "owner": "platform",
+      "paths": [
+        "services/kernel/src/history/core/**"
+      ],
+      "publicEntries": [
+        "services/kernel/src/history/core/operational-work-axes.ts",
+        "services/kernel/src/history/core/operational-work-budget.ts"
+      ],
+      "allowedDependencies": [
+        "bounds",
+        "kernel-history-contract",
+        "kernel-memoized"
+      ],
+      "capabilities": []
+    },
+    {
+      "id": "kernel-history-application",
+      "kind": "application",
+      "owner": "platform",
+      "paths": [
+        "services/kernel/src/history/application/**"
+      ],
+      "publicEntries": [
+        "services/kernel/src/history/application/composition.ts",
+        "services/kernel/src/history/application/identity.ts",
+        "services/kernel/src/history/application/index.ts",
+        "services/kernel/src/history/application/operational.ts",
+        "services/kernel/src/history/application/receiving.ts",
+        "services/kernel/src/history/application/records.ts",
+        "services/kernel/src/history/application/shared.ts"
+      ],
+      "allowedDependencies": [
+        "kernel-history-contract"
+      ],
+      "capabilities": []
+    },
+    {
+      "id": "kernel-history-adapters",
+      "kind": "adapter",
+      "owner": "platform",
+      "paths": [
+        "services/kernel/src/history/adapters/**"
+      ],
+      "publicEntries": [
+        "services/kernel/src/history/adapters/index.ts"
+      ],
+      "allowedDependencies": [
+        "kernel-access",
+        "kernel-history-application",
+        "kernel-history-contract",
+        "kernel-history-core",
+        "kernel-library-contract",
+        "kernel-memoized",
+        "kernel-platform",
+        "kernel-search",
+        "kernel-semantic",
+        "kernel-zones"
+      ],
+      "capabilities": [
+        "history"
+      ],
+      "postgresPaths": [
+        "services/kernel/src/history/adapters/**"
+      ]
+    },
+    {
+      "id": "kernel-memoized",
+      "kind": "contract",
+      "owner": "platform",
+      "paths": [
+        "services/kernel/src/memoized.ts"
+      ],
+      "publicEntries": [
+        "services/kernel/src/memoized.ts"
+      ],
+      "allowedDependencies": [],
+      "capabilities": []
+    },
+    {
+      "id": "kernel-route-contract",
+      "kind": "contract",
+      "owner": "platform",
+      "paths": [
+        "services/kernel/src/route/contract.ts"
+      ],
+      "publicEntries": [
+        "services/kernel/src/route/contract.ts"
+      ],
+      "allowedDependencies": [],
+      "capabilities": []
     }
   ]
 }

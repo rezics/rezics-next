@@ -93,6 +93,17 @@ implementations. Native adapters are bound by ordinary `createKernel`/`server`/`
 assembly in `composition/work-modules.ts` using `ratingNativeWorkModule`. The split adds no query or extra
 statement; observed cost stays the existing admitted-path declarations.
 
+## Kernel History domain inversion
+
+Decision: `history-complete-current-architecture-receiving` keeps History contract/core/application implementation-free
+and binds its typed native capability in `composition/history.ts`. Server and worker install it during startup;
+`composition/preload.ts` exposes that binding for test and command preloads. Compatibility callers use the declared
+History application and contract entries, including Work registry, selected-runtime, receiving and durable-locator
+paths. Test choice: use the focused causal History regressions for application/native composition, prepaid identity,
+identity-history recording, Zone receiving, record purge, agent verification reversal and receipt-key cutover, plus
+the architecture test; do not add a duplicate synthetic suite. Original native acceptance remains open after
+land-first verification.
+
 ## Kernel Access domain inversion
 
 Decision: Compact causal tests pin Access allow/deny, identity recovery with the original actor/request/deadline, and

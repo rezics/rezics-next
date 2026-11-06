@@ -7,6 +7,7 @@ import { createWorkClient } from '../work/client.ts';
 import { routeOf, partitionOf } from '../route/route.ts';
 import type { LiveCopyRole } from './live-copy.ts';
 import { LiveCopyPendingError } from './live-copy.ts';
+import { type Pending } from '../history/contract/index.ts';
 
 type Client = Pick<PoolClient, 'query'>;
 /** The actual source effects-admission transaction enrolls its own disposable intents.

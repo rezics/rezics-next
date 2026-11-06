@@ -10,20 +10,15 @@ import {
 import { appendAuthoredField, eraseAuthoredField, readAuthoredField } from '../../src/content/authored-fields.ts';
 import { readAuthoredFieldHistorySource } from '../../src/content/authored-fields-history.ts';
 import { ContentNotFoundError } from '../../src/content/commands.ts';
-import { ACCOUNT_ROLE_BITS, type HistoryArtifactType } from '../../src/history/contracts.ts';
-import { decodeLocator } from '../../src/history/locator.ts';
-import { declareCommandHistory, registerCommandHistoryKind } from '../../src/history/record.ts';
-import {
-  beginRecordHistorySerialization,
-  commandRecordSources,
-  declareCommandRecordSources,
-  recordHistorySourceKey,
-  type RecordHistorySourceReference,
-} from '../../src/history/record-source.ts';
+import { ACCOUNT_ROLE_BITS, type HistoryArtifactType } from '../../src/history/contract/contracts.ts';
+import { decodeLocator } from '../../src/history/contract/locator.ts';
+import { declareCommandHistory, registerCommandHistoryKind } from '../../src/history/adapters/record.ts';
+import { beginRecordHistorySerialization, commandRecordSources, declareCommandRecordSources } from '../../src/history/adapters/record-source.ts';
 import { accessCommandAuthorization, type AccountActor } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import { openGrowthDatabase } from '../support/growth.ts';
+import { type RecordHistorySourceReference, recordHistorySourceKey } from '../../src/history/contract/record-vocabulary.ts';
 
 setDefaultTimeout(120_000);
 

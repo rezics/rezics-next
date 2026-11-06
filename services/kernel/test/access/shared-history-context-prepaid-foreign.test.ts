@@ -8,15 +8,15 @@ import {
   type HistoryOriginalDependencies,
   type IdentityOriginalSourceContext,
 } from '../../src/access/identity-original-admission.ts';
-import { admitSharedHistory } from '../../src/access/shared-history.ts';
+import { admitSharedHistory } from '../../src/history/adapters/shared-history.ts';
 import { noEffect, runCommand } from '../../src/command/command.ts';
-import { identityHistoryCommand } from '../../src/history/agent-identity-inventory-work.ts';
+import { identityHistoryCommand } from '../../src/history/adapters/agent-identity-inventory-work.ts';
 import {
   assertAgentIdentityHistoryUnit,
   withPrepaidAgentIdentityHistoryUnit,
   type IdentitySourceConsumerMaintenanceContext,
-} from '../../src/history/agent-identity-retirement.ts';
-import { HistoryRegistry } from '../../src/history/registry.ts';
+} from '../../src/history/adapters/agent-identity-retirement.ts';
+import { HistoryRegistry } from '../../src/history/contract/registry.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { observeSql } from '../content/support/sql-observer.ts';

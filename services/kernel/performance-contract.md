@@ -38,6 +38,17 @@ fake-port and ordinary composition tests pin the domain; cost stays on the exist
 contracts. Native identity-epoch, actor/request/deadline, proof identity, Source custody, original/terminal admission
 and architecture acceptance remain the later capability repair.
 
+## History domain composition
+
+Decision: `history-complete-current-architecture-receiving` keeps History contract, core and application inward and
+binds the native capability in `composition/history.ts`. Server and worker install it during startup; the explicit
+`composition/preload.ts` hook supplies the same native composition to test/command preloads. Work compatibility
+facades route receiving and durable-locator recording through History's application entry and import registry,
+selected-work and locator vocabulary from its contract entry. The adapters add no query or extra statement; existing
+producer declarations still own the admitted cost. Test choice: use the focused causal History regressions for
+application/native composition, prepaid identity, identity-history recording, Zone receiving, record purge, agent
+verification reversal and receipt-key cutover, plus `scripts/architecture.test.ts`; avoid a duplicate synthetic suite.
+
 ## Finite bounds
 
 Producer bounds are immutable, closed declarations over all nine axes. Composition uses overflow-safe sums, applies

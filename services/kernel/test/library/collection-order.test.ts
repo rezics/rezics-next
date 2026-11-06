@@ -2,7 +2,6 @@ import { expect, test } from 'bun:test';
 import { BOUND_AXES, sumBounds, withinCeiling } from '@rezics/bounds';
 import type { Pool } from 'pg';
 import type { CloudEvent } from '../../src/events/log.ts';
-import { COMMAND_HISTORY_KINDS } from '../../src/history/record.ts';
 import {
   COLLECTION_ORDER_COMMAND_KINDS,
   COLLECTION_ORDER_DECLARATION,
@@ -16,6 +15,7 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { composeWork } from '../../src/work/registry.ts';
 import { createCollectionBatchFixture, entryKey } from './support/collection-batch-fixture.ts';
+import { COMMAND_HISTORY_KINDS } from '../../src/history/contract/record-vocabulary.ts';
 
 // One maintained native outcome using the existing HTTP fixture, default Library
 // composition, real outbox effect and DBOS maintenance queue. No alternate rank

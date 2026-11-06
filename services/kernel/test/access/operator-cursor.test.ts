@@ -7,6 +7,7 @@ import { newId, partitionOf } from '../../src/route/route.ts';
 import { encodeListCursor, decodeListCursor } from '../../src/tokens/list-cursor.ts';
 import { decodeCursor } from '../../src/tokens/cursor.ts';
 import { openGrowthDatabase, capture, type GrowthDatabase } from '../support/growth.ts';
+import { type Pending } from '../../src/history/contract/identity-types.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');

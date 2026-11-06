@@ -17,6 +17,7 @@ import {
 } from './identity-native-planner-selected-pricing.ts';
 import { LIBRARY_IDENTITY_SELECTED_STATEMENTS } from './identity-native-planner-projection.ts';
 import { COMMAND_DISPATCH_ALLOWANCE } from '../command/dispatch-lifetime.ts';
+import { type Pending } from '../history/contract/index.ts';
 
 /** Producer composition only. A component is neither an allowance nor an original grant. */
 export type LibraryIdentityStatementOwner = 'planner' | 'native-collection' | 'native-custody' | 'native-public-output';

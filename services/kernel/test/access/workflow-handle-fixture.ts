@@ -22,6 +22,7 @@ import { createCommittedContinuations } from '../../src/access/committed-continu
 import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 import { nativeReceiptKeyCandidates } from '../../src/command/receipt-key.ts';
 import { trustedAccessPorts } from '../support/trusted-access.ts';
+import { type Pending } from '../../src/history/contract/identity-types.ts';
 
 export type FixtureConfiguration = {
   kernelUrl: string;

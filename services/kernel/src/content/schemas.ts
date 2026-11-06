@@ -33,6 +33,7 @@ import { FeedAuthorSchema } from './feed-contract.ts';
 import { FeedParentContextSchema } from './feed-context-schema.ts';
 import type { SubjectThreadCard, SubjectThreadCardEntry } from './subject-threads-cards.ts';
 import type { SubjectThreadEntry } from './subject-entry.ts';
+import { type Pending } from '../history/contract/index.ts';
 
 type ViewerReactionKind = (typeof REACTION_KINDS)[number];
 type ViewerReactionSlot = { readonly viewerReaction?: ViewerReactionKind | null };

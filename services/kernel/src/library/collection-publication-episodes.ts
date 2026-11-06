@@ -30,8 +30,6 @@ import { hasLiveOperationalTransaction, type OperationalTransaction } from '../c
 import erasureScope from './erasure-scope.sql';
 import { admitCollectionPublicationStep } from './collection-publication-work-admission.ts';
 import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
-import { encodeRoles } from '../history/contracts.ts';
-import { commandHistoryIdentityAccounts, unionHistoryScope } from '../history/record.ts';
 import { ProblemError } from '../http/problem.ts';
 import { accessCheck, type Access, type AccountActor, type Actor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
@@ -64,6 +62,8 @@ import type { NativeSourceIdentity } from './native-source-custody.ts';
 import headQuery from './collection-source-output-head.sql';
 import operationQuery from './collection-publication-episode-read.sql';
 import receiptQuery from './collection-publication-episode-receipt.sql';
+import { commandHistoryIdentityAccounts } from '../history/application/index.ts';
+import { type Pending, encodeRoles, unionHistoryScope } from '../history/contract/index.ts';
 
 export const COLLECTION_PUBLICATION_COMMAND = 'library.collection.publication.begin';
 export const COLLECTION_PUBLICATION_WORKFLOW = 'library.collectionPublication';

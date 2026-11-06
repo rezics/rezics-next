@@ -4,6 +4,7 @@ import { noteAccountErasureFound, recordAccountErasureStatementExpiry } from './
 import statementPage from './account-erasure-statements-page.sql';
 import statementAfterPage from './account-erasure-statements-after-page.sql';
 import deleteStatement from './account-erasure-statements-delete.sql';
+import { type Pending } from '../history/contract/index.ts';
 
 type Key = { kind: 'decision' | 'operation'; due_at: string; owner_route: number; owner_id: string };
 type Cursor = Pick<Key, 'kind' | 'due_at' | 'owner_id'>;

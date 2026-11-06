@@ -4891,6 +4891,11 @@ deadline remain bound across replay; operational checkout, callback identity and
 Current native validation surrounds released child work, with committed progress and original receipt identity
 required before settlement. Workflow completion does not establish physical custody.
 
+Access uses History's public application and contract entries for identity-unit admission, source inventory and
+receiving vocabulary. The native History adapter binds Access producer and receiver capabilities in
+`composition/history.ts`; server, worker and the explicit preload hook install that binding before a History facade
+runs. The original actor, request, Source and absolute deadline remain the operands carried through selected work.
+
 The complete parent formula remains the disjoint inclusive sum:
 
 ```

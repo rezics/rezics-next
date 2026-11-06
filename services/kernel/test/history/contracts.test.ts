@@ -19,14 +19,14 @@ import {
   assertEventClassifications,
   type AccountRole,
   type HistoryArtifactType,
-} from '../../src/history/contracts.ts';
+} from '../../src/history/contract/contracts.ts';
 import {
   encodeLocator,
   decodeLocator,
   validateLocator,
   validateScope,
   type HistoryLocator,
-} from '../../src/history/locator.ts';
+} from '../../src/history/contract/locator.ts';
 
 const id = '00000000-0000-8000-8000-002a00000001';
 const types = ['command-receipt/v1', 'outbox-event/v1', 'durable-work/v1'] as const;

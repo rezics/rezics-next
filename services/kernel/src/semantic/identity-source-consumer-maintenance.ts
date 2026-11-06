@@ -2,7 +2,6 @@ import type { Pool } from 'pg';
 import { randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { WorkClient } from '../work/client.ts';
-import type { HistoryRegistry } from '../history/registry.ts';
 import type { KernelClock } from '../clock.ts';
 import type { NativeStepWork } from './identity-epoch-contract.ts';
 import type { WorkDimensions, WorkAllowance } from '../library/contract/work-dimensions.ts';
@@ -36,6 +35,8 @@ import {
   type IdentitySourceLibraryOperation,
   type IdentitySourceScheduledOperation,
 } from './identity-source-maintenance-config.ts';
+import { historyComposition, withPrepaidAgentIdentityHistoryUnit } from '../history/application/index.ts';
+import { HistoryRegistry } from '../history/contract/index.ts';
 
 const identitySourceConsumerMaintenance: unique symbol = Symbol('identity-source-consumer-maintenance');
 export type IdentitySourceConsumerMaintenanceWork = Readonly<{
@@ -595,8 +596,8 @@ export async function readIdentitySourceOriginalCostDisposition() {
   const IDENTITY_SOURCE_LOCAL_MUTATION_COMPONENTS = IDENTITY_SOURCE_LOCAL_MUTATION_COMPONENTSGetter();
   const IDENTITY_SOURCE_LOCAL_CALLS = IDENTITY_SOURCE_LOCAL_CALLSGetter();
   const { scopeConsumerFootprint } = await import('./identity-scoped-observations.ts');
-  const history = await import('../history/agent-identity-inventory-work.ts');
-  const retirement = await import('../history/agent-identity-retirement.ts');
+  const history = historyComposition();
+  const retirement = historyComposition();
   const library = await import('../library/collection-source-work.ts');
   const effects = await import('../library/identity-scope-effects.ts');
   const ownValue = (module: object, name: string): unknown => {

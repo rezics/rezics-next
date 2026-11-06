@@ -56,6 +56,7 @@ import openingConsume from './operator-opening-consume.sql';
 import fenceSubject from './operator-fence-subject.sql';
 import nativeFence from './lifecycle-fence.sql';
 import { lifecycleExecutor } from './lifecycle-20261025094010-command.ts';
+import { type Pending } from '../history/contract/index.ts';
 
 export const OPERATOR_RECEIPT_TTL_MS = 60_000;
 const NAMESPACE = '134e9749-1120-8a0c-97d0-71287a629cef';

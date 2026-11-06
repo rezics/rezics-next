@@ -7,26 +7,15 @@ import {
   type OperationalTransaction,
   type OperationalOptions,
 } from '../../src/command/operational.ts';
-import {
-  OPERATIONAL_WORK_DOMAIN,
-  registerPositionedOperationalHistoryWork,
-  registerOperationalHistoryWork,
-  reserveOperationalWorkTransfer,
-  resolveCommittedOperationalWork,
-  verifyCommittedOperationalWorkOrigin,
-  receiveCommittedOperationalWork,
-  operationalWorkSource,
-  type OperationalMembersBinding,
-  type OperationalWorkRegistration,
-  type OperationalWorkTransfer,
-} from '../../src/history/operational-work.ts';
+import { OPERATIONAL_WORK_DOMAIN, registerPositionedOperationalHistoryWork, registerOperationalHistoryWork, reserveOperationalWorkTransfer, resolveCommittedOperationalWork, verifyCommittedOperationalWorkOrigin, receiveCommittedOperationalWork, operationalWorkSource } from '../../src/history/adapters/operational-work.ts';
 import {
   inspectOperationalWorkRetirement,
   verifyOperationalWorkReplay,
-} from '../../src/history/operational-work-receiving.ts';
+} from '../../src/history/adapters/operational-work-receiving.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import type { WorkIntent } from '../../src/work/client.ts';
 import { operationalFixture } from '../command/support/operational-fixture.ts';
+import { type OperationalMembersBinding, type OperationalWorkRegistration, type OperationalWorkTransfer } from '../../src/history/contract/operational-types.ts';
 
 // UNRUN: native acceptance is owned by the integration controller.
 let native: Awaited<ReturnType<typeof operationalFixture>>;

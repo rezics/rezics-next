@@ -4,7 +4,7 @@ import { isBound } from '@rezics/bounds';
 import type { Pool, PoolClient, QueryResult } from 'pg';
 import { systemClock } from '../../clock.ts';
 import type { OperationalOptions, OperationalTransaction } from '../../command/operational.ts';
-import { HistoryRegistry } from '../../history/registry.ts';
+import { HistoryRegistry } from '../../history/contract/index.ts';
 import { partitionOf, routeOf } from '../../route/route.ts';
 import { assertSelectedWorkClient } from './client-binding.ts';
 import type { HistoryAssociationPort } from '../contract/index.ts';

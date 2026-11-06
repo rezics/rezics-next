@@ -9,6 +9,7 @@ import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions
 import { tupleRoute } from '../../src/content/imported-contract.ts';
 import { createRealAccess } from './real-access.ts';
 import { itemFacts } from '../../src/semantic/item.ts';
+import { type Pending } from '../../src/history/contract/identity-types.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');

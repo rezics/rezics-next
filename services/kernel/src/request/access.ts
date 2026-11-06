@@ -16,9 +16,9 @@ import {
 import type { ResourceEligibility } from '../access/eligibility.ts';
 import { routeOf } from '../route/route.ts';
 import { permissionHistoryAccounts } from '../access/permission.ts';
-import { bindCommandHistoryEvidence } from '../history/record.ts';
-import type { AccountReference } from '../history/locator.ts';
 import type { KindAudienceAccess } from '../access/kind-audience.ts';
+import { bindCommandHistoryEvidence } from '../history/application/index.ts';
+import { type AccountReference } from '../history/contract/index.ts';
 export type * from '../access/kind-audience.ts';
 
 export type AccountActor = {

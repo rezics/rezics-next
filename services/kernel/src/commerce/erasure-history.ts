@@ -1,8 +1,7 @@
 import type { CommandTransaction } from '../command/command.ts';
-import { ACCOUNT_ROLE_BITS } from '../history/contracts.ts';
-import type { AccountReference } from '../history/locator.ts';
-import { declareCommandHistory, unionHistoryScope } from '../history/record.ts';
 import { routeOf } from '../route/route.ts';
+import { declareCommandHistory } from '../history/application/index.ts';
+import { ACCOUNT_ROLE_BITS, type AccountReference, unionHistoryScope } from '../history/contract/index.ts';
 
 // Permanent owner-assigned IDs, shared by API producers and the default worker.
 type CommerceHistoryKind =

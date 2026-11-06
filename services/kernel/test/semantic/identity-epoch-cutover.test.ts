@@ -943,6 +943,7 @@ test('reclamation refuses active immutable inputs and crash replay reclaims firs
 import { createRealAccess } from './real-access.ts';
 import { createLifecycleCommands, LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
 import { ERASURE_PARTICIPANTS, readErasureStatus } from '../../src/access/erasure.ts';
+import { type Pending } from '../../src/history/contract/identity-types.ts';
 
 test('account bearing native identity custody remains one semantic erasure obligation when its control locator is unavailable', async () => {
   await isolatedCutover(async (f) => {

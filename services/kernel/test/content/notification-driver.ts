@@ -18,6 +18,7 @@ import { createNotificationEffectHost } from './support/notification-effect-host
 import { createNotificationFixture } from './support/notification-fixtures.ts';
 import { afterInboxActorProfile } from './support/notice-inbox-interleaving.ts';
 import type { GrowthDatabase } from '../support/growth.ts';
+import { type Pending } from '../../src/history/contract/identity-types.ts';
 
 const AUDIENCE = 'https://content.test';
 type Raw = Record<string, unknown>;

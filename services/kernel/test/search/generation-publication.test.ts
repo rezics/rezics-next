@@ -24,6 +24,7 @@ import { writeIndexActions } from '../../src/search/write-actions.ts';
 import type { PublicFilterSource } from '../../src/semantic/public-filter-source-contract.ts';
 import type { PublicFilterSourceBinding } from '../../src/semantic/public-filter-source-binding.ts';
 import type { SubjectSourceKeyPages } from '../../src/semantic/subject-source-key-pages.ts';
+import { type Pending } from '../../src/history/contract/identity-types.ts';
 
 const databaseUrl = process.env.DATABASE_URL,
   searchUrl = process.env.OPENSEARCH_URL;

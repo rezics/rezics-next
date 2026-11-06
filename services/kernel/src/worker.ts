@@ -4,13 +4,14 @@ import type { KernelClock } from './clock.ts';
 import { ConfigError } from './commerce/config.ts';
 import { createWorkClient } from './work/client.ts';
 import { bindExecutionContract } from './command/execution-contract.ts';
-import { historyExecutionPort } from './history/operational-work.ts';
+import { historyExecutionPort } from './history/application/index.ts';
 import { workExecutionPort } from './work/selected-runtime.ts';
 import { createDiscoveryProducerEntry } from './composition/discovery.ts';
 import { createKernelRuntimeDefaults } from './composition/runtime-defaults.ts';
 import { composeSemanticDomain } from './composition/semantic.ts';
 import { composeAccessApplication } from './composition/access.ts';
 import { composeWorkApplication } from './composition/work.ts';
+import { installNativeHistory } from './composition/history.ts';
 import { startContentApplication } from './composition/content.ts';
 import { createKernelWorkModules } from './composition/work-modules.ts';
 import { composeWork, type WorkModule } from './work/registry.ts';
@@ -78,6 +79,7 @@ export async function startWorker(
 ) {
   composeAccessApplication();
   composeWorkApplication();
+  installNativeHistory();
   const content = startContentApplication(config.clock ? { clock: config.clock } : undefined);
   const composed = () =>
     createKernelWorkModules(createDiscoveryProducerEntry, createKernelRuntimeDefaults, composeSemanticDomain, {

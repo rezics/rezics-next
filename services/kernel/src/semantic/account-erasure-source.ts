@@ -11,7 +11,6 @@ import {
   type CommandTransaction,
 } from '../command/command.ts';
 import { withReadTransaction } from './read.ts';
-import type { HistoryBarrier } from '../history/registry.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 import { readIdentityMappings } from './identity-adapters/identity-epoch-read.ts';
@@ -29,6 +28,7 @@ import type {
   SubjectErasureSourceRecord,
   SubjectErasureSourceProof,
 } from './account-erasure-source-contract.ts';
+import { type HistoryBarrier } from '../history/contract/index.ts';
 
 export type { SubjectErasureSourceProof } from './account-erasure-source-contract.ts';
 

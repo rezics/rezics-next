@@ -5,8 +5,8 @@ import { createDeletionFixture } from '../semantic/support/deletion-fixture.ts';
 import { createWorkClient, type WorkClient } from '../../src/work/client.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { noEffect, runCommand } from '../../src/command/command.ts';
-import { admitSharedHistory } from '../../src/access/shared-history.ts';
-import { HistoryRegistry } from '../../src/history/registry.ts';
+import { admitSharedHistory } from '../../src/history/adapters/shared-history.ts';
+import { HistoryRegistry } from '../../src/history/contract/registry.ts';
 import {
   consumeSelectedHistoryOriginal,
   currentIdentityOriginalTransfer,
@@ -24,14 +24,14 @@ import {
   currentAgentIdentityHistoryUnit,
   withPrepaidAgentIdentityHistoryUnit,
   type IdentitySourceConsumerMaintenanceContext,
-} from '../../src/history/agent-identity-retirement.ts';
+} from '../../src/history/adapters/agent-identity-retirement.ts';
 import {
   IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK,
   identityHistoryCommand,
   identityHistoryConnection,
   addNativeWork,
   reserveIdentityHistoryWork,
-} from '../../src/history/agent-identity-inventory-work.ts';
+} from '../../src/history/adapters/agent-identity-inventory-work.ts';
 import { identitySourceConsumerLibraryWork } from '../../src/semantic/identity-source-consumer-maintenance.ts';
 
 // These are native integration oracles, deliberately UNRUN in the source-only delivery.

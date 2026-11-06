@@ -3,18 +3,18 @@ import { registerEffects } from '../../src/events/effects.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { CommandResultErasedError, noEffect, principalCommandIdentity, runCommand } from '../../src/command/command.ts';
-import { declareCommandHistory } from '../../src/history/record.ts';
-import {
-  declareCommandRecordSources,
-  recordHistorySourceKey,
-  type RecordHistorySourceReference,
-} from '../../src/history/record-source.ts';
-import { minimizeRecordHistoryPurge, prepareRecordHistoryPurge } from '../../src/history/record-purge.ts';
+import { declareCommandHistory } from '../../src/history/adapters/record.ts';
+import { declareCommandRecordSources } from '../../src/history/adapters/record-source.ts';
+import { minimizeRecordHistoryPurge, prepareRecordHistoryPurge } from '../../src/history/adapters/record-purge.ts';
 import { prepareRecordPurgeAuthority, type RecordPurgeReference } from '../../src/semantic/record-purge-authority.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { custodyFixture, digest, kind, scope, type CustodyFixture, type Person } from './command-custody-fixture.ts';
 import { createDeletionFixture } from '../semantic/support/deletion-fixture.ts';
 import { stageHistoryWork } from '../../src/work/history-enqueue.ts';
+import {
+  type RecordHistorySourceReference,
+  recordHistorySourceKey,
+} from '../../src/history/contract/record-vocabulary.ts';
 
 let f: CustodyFixture;
 let native: Awaited<ReturnType<typeof createDeletionFixture>>;

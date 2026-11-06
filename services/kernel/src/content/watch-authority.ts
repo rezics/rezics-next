@@ -3,13 +3,13 @@ import type { Pool } from 'pg';
 import { resourceAuthorization } from '../access/index.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { principalCommandIdentity, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
-import { ACCOUNT_ROLE_BITS } from '../history/contracts.ts';
-import { declareCommandHistory } from '../history/record.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { accessCheck, type Access, type Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { KeyRing } from '../tokens/seal.ts';
+import { declareCommandHistory } from '../history/application/index.ts';
+import { ACCOUNT_ROLE_BITS } from '../history/contract/index.ts';
 
 export type WatchDependencies = Readonly<{ pool: Pool; access: Access; tokens: KeyRing; clock: () => Date }>;
 export type WatchKind = 'thread' | 'board';

@@ -1,18 +1,13 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { noEffect, principalCommandIdentity, runCommand } from '../../src/command/command.ts';
-import { declareCommandHistory } from '../../src/history/record.ts';
-import {
-  beginRecordHistorySerialization,
-  declareCommandRecordSources,
-  declareCommandRecordSourceSet,
-  type RecordHistorySourceReference,
-} from '../../src/history/record-source.ts';
+import { declareCommandHistory } from '../../src/history/adapters/record.ts';
+import { beginRecordHistorySerialization, declareCommandRecordSources, declareCommandRecordSourceSet } from '../../src/history/adapters/record-source.ts';
 import {
   type SemanticRecordSourceSet,
   validateRecordSourceSetCommitment,
-} from '../../src/history/record-source-set.ts';
-import { RecordSourceSetUnavailableError } from '../../src/history/record-source-set-native.ts';
+} from '../../src/history/adapters/record-source-set.ts';
+import { RecordSourceSetUnavailableError } from '../../src/history/adapters/record-source-set-native.ts';
 import { routeOf, partitionOf } from '../../src/route/route.ts';
 import { createDeletionFixture } from '../semantic/support/deletion-fixture.ts';
 import { custodyFixture, digest, kind, scope, type CustodyFixture, type Person } from './command-custody-fixture.ts';
@@ -129,13 +124,14 @@ test('the compact transport boundary retains 512 and opaque term-capable members
 // These are the original owner type, not a structurally compatible History brand.
 import type { SemanticRecordSourceSet as OwnerSourceSet } from '../../src/semantic/record-source-set.ts';
 import { currentCommand } from '../../src/command/command.ts';
-import { nativeRecordSourceSetProducer } from '../../src/history/record-source-set-native.ts';
+import { nativeRecordSourceSetProducer } from '../../src/history/adapters/record-source-set-native.ts';
 import { stageHistoryWork } from '../../src/work/history-enqueue.ts';
-import { decodeLocator, encodeLocator } from '../../src/history/locator.ts';
+import { decodeLocator, encodeLocator } from '../../src/history/contract/locator.ts';
 import {
   recordSourceSetStorageKey,
   validateNativeRecordSourceSetSnapshot,
-} from '../../src/history/record-source-set.ts';
+} from '../../src/history/adapters/record-source-set.ts';
+import { type RecordHistorySourceReference } from '../../src/history/contract/record-vocabulary.ts';
 
 type SameType<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 const originalType: SameType<SemanticRecordSourceSet, OwnerSourceSet> = true;

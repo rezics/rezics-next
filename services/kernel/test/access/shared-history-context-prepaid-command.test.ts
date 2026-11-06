@@ -21,22 +21,22 @@ import {
   withSelectedHistoryOriginal,
   type IdentityOriginalSourceContext,
 } from '../../src/access/identity-original-admission.ts';
-import { admitSharedHistory } from '../../src/access/shared-history.ts';
+import { admitSharedHistory } from '../../src/history/adapters/shared-history.ts';
 import {
   assertAgentIdentityHistoryUnit,
   currentAgentIdentityHistoryUnit,
   withAgentIdentityHistoryUnit,
   withPrepaidAgentIdentityHistoryUnit,
   type IdentitySourceConsumerMaintenanceContext,
-} from '../../src/history/agent-identity-retirement.ts';
+} from '../../src/history/adapters/agent-identity-retirement.ts';
 import {
   addNativeWork,
   IDENTITY_HISTORY_ACCOUNTS_DECLARATION,
   IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK,
   identityHistoryCommand,
   reserveIdentityHistoryWork,
-} from '../../src/history/agent-identity-inventory-work.ts';
-import { HistoryRegistry } from '../../src/history/registry.ts';
+} from '../../src/history/adapters/agent-identity-inventory-work.ts';
+import { HistoryRegistry } from '../../src/history/contract/registry.ts';
 import type { WorkDimensions } from '../../src/library/contract/work-dimensions.ts';
 import { identitySourceConsumerNativeWork } from '../../src/semantic/identity-source-consumer-maintenance.ts';
 import { createWorkClient } from '../../src/work/client.ts';
