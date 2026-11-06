@@ -1,7 +1,8 @@
 import { ProblemError } from '../http/problem.ts';
 import { parseStrictJson } from '../http/strict-json.ts';
 import { routeOf } from '../route/route.ts';
-import { exportSections, exportSectionsV2, LIBRARY_EXPORT_FORMAT } from './library-export-format.ts';
+import { sectionsForVersion, LIBRARY_EXPORT_FORMAT } from './library-export-format.ts';
+import { decodeLibraryArchive, ArchiveValidationError } from './library-archive.ts';
 import { decodeLibraryProfilePin } from './profile-pin.ts';
 import type { LibraryProfilePin } from './profile.ts';
 
@@ -50,13 +51,18 @@ type CopyArchiveManifestBase = {
   rows: number;
   recordBytes: number;
 };
-/** V3 has the V2 inventory; its journal assessment is unsupported evidence here. */
+/** Original manifests and all section totals remain evidence, including unsupported provider rows. */
 export type CopyArchiveManifest = CopyArchiveManifestBase &
   (
     | { version: 1 }
     | {
         version: 2;
         coverage: 'private-library-owner-facts-v2';
+        sectionTotals: Record<string, { rows: number; recordBytes: number }>;
+      }
+    | {
+        version: 4;
+        coverage: 'private-library-owner-facts-v4';
         sectionTotals: Record<string, { rows: number; recordBytes: number }>;
       }
     | {
@@ -326,7 +332,7 @@ function progressUnit(value: Record<string, unknown>): ArchivedProgressUnit {
 }
 
 /** Recognize current envelopes without retaining or adopting their private payloads. */
-function unsupportedCurrentRecord(value: Record<string, unknown>, version: 2 | 3) {
+function unsupportedCurrentRecord(value: Record<string, unknown>, version: 2 | 3 | 4) {
   switch (value.section) {
     case 'annotations':
       exact(value, [
@@ -395,7 +401,7 @@ function unsupportedCurrentRecord(value: Record<string, unknown>, version: 2 | 3
         'startDate',
         'finishDate',
         'reflection',
-        ...(version === 3 ? ['assessment'] : []),
+        ...(version >= 3 ? ['assessment'] : []),
       ]);
       if (!uuid(value.sessionId) || journal.sessionId !== value.sessionId) invalid();
       if (
@@ -413,7 +419,7 @@ function unsupportedCurrentRecord(value: Record<string, unknown>, version: 2 | 3
         !(journal.reflection === null || text(journal.reflection, 4096))
       )
         invalid();
-      if (version === 3) {
+      if (version >= 3) {
         const assessment = object(journal.assessment);
         exact(assessment, ['meaningRevision', 'units']);
         if (
@@ -444,9 +450,18 @@ export function parseCopyArchive(bytes: Uint8Array): ParsedCopyArchive {
   const archive = object(raw);
   exact(archive, ['manifest', 'records']);
   const m = object(archive.manifest);
-  if (m.version !== 1 && m.version !== 2 && m.version !== 3) invalid();
-  const version = m.version as 1 | 2 | 3;
-  const installedSections: readonly string[] = version === 1 ? exportSections : exportSectionsV2;
+  if (m.version !== 1 && m.version !== 2 && m.version !== 3 && m.version !== 4) invalid();
+  const version = m.version as 1 | 2 | 3 | 4;
+  // Current external files reach the common strict boundary before any supported-row selection.
+  if (version === 4) {
+    try {
+      decodeLibraryArchive(bytes);
+    } catch (error) {
+      if (error instanceof ArchiveValidationError) return invalid();
+      throw error;
+    }
+  }
+  const installedSections: readonly string[] = sectionsForVersion(version);
   exact(m, [
     'format',
     'version',

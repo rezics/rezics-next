@@ -119,9 +119,9 @@ export function clientDeclarationCacheDirectory(repositoryRoot = ROOT, kernelDir
 
 function declarationPath(sourcePath: string, specifier: string): string {
   const path = resolve(dirname(sourcePath), specifier);
+  if (path.endsWith('.d.ts')) return path;
   if (path.endsWith('.ts')) return `${path.slice(0, -3)}.d.ts`;
   if (path.endsWith('.js')) return `${path.slice(0, -3)}.d.ts`;
-  if (path.endsWith('.d.ts')) return path;
   return `${path}.d.ts`;
 }
 
@@ -182,8 +182,10 @@ export function clientDeclarations(
   if (existsSync(clientIndex)) {
     // Public type exports can be independent of the mounted route closure.
     for (const specifier of declarationSpecifiers(readFileSync(clientIndex, 'utf8'))) {
-      if (specifier.startsWith('./kernel/'))
-        pending.push(`${specifier.slice('./kernel/'.length).replace(/\.ts$/, '')}.d.ts`);
+      if (specifier.startsWith('./kernel/')) {
+        const path = declarationPath(resolve(sourceRoot, 'index.d.ts'), specifier.slice('./kernel/'.length));
+        pending.push(relative(sourceRoot, path).split(sep).join('/'));
+      }
     }
   }
   const declarations = new Map<string, string>();

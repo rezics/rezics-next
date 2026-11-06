@@ -12,6 +12,7 @@ import {
 } from '../src/library/saved-query-results.tsx';
 import {
   admitSavedQueryResultsWindow,
+  cancelSavedQueryResultsWindowFocus,
   failSavedQueryResultsWindowMove,
   hasPendingSavedQueryResultsWindowTarget,
   readSavedQueryResultsWindow,
@@ -30,6 +31,7 @@ const { DynamicCollectionPage } = await import('../src/library/dynamic-collectio
 const { loadEditableCollectionPage } = await import('../src/library/collection-load.ts');
 const { libraryNavigationQuery } = await import('../src/library/pins-read');
 const { sessionQuery, exposureQuery } = await import('../src/session/query');
+const { viewerExposureLifetime, viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
 const { getLocale } = await import('../src/paraglide/runtime.js');
 
 const source = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
@@ -39,6 +41,11 @@ const savedPage = {
   description: null,
   curator: null,
   curatorAccountId: 'owner',
+  // The authenticated owner's detail read carries this admitted action beside the page.
+  viewerActions: {
+    state: 'ready' as const,
+    actions: [{ action: 'collection:update', operations: ['collection_rule.update'] }],
+  },
   members: [{ subject: { id: 'book-1', type: 'book', types: ['book'], label: 'A book', cover: null } }],
   next: null as string | null,
   preparing: false,
@@ -58,18 +65,31 @@ function renderPage(page: typeof savedPage & Record<string, unknown>, viewerId?:
   });
   queries.setQueryData(exposureQuery.queryKey, []);
   queries.setQueryData(libraryNavigationQuery(locale, 100).queryKey, { pins: { state: 'closed' }, collections: [] });
-  const router = createRouter({ routeTree: createRootRoute(), history: createMemoryHistory() });
-  return renderToStaticMarkup(
-    createElement(
-      QueryClientProvider,
-      { client: queries },
+  // The signed-in viewer's admitted groups are read under the session observation, as the browser does.
+  // The observation exists only while the lifetime is connected, so connect it for this synchronous render.
+  const stop = viewerExposureLifetime(queries).subscribe(() => {});
+  try {
+    const exposure = viewerExposureLifetime(queries).getSnapshot();
+    if (viewerId && exposure.state === 'signed-in')
+      queries.setQueryData(viewerExposureQuery(exposure.observation).queryKey, {
+        subject: viewerId,
+        admitted: ['collections'],
+      });
+    const router = createRouter({ routeTree: createRootRoute(), history: createMemoryHistory() });
+    return renderToStaticMarkup(
       createElement(
-        RouterContextProvider,
-        { router },
-        createElement(DynamicCollectionPage, { page, ...(viewerId === undefined ? {} : { viewerId }) }),
+        QueryClientProvider,
+        { client: queries },
+        createElement(
+          RouterContextProvider,
+          { router },
+          createElement(DynamicCollectionPage, { page, ...(viewerId === undefined ? {} : { viewerId }) }),
+        ),
       ),
-    ),
-  );
+    );
+  } finally {
+    stop();
+  }
 }
 
 function client(id: string, members: (url: URL) => Response) {
@@ -363,4 +383,10 @@ test('restarted cursors and named stories keep recovery, empty, denied and unava
     ])
       expect(messages[key]?.trim().length).toBeGreaterThan(0);
   }
+});
+
+test('first result window can cancel focus without a staged movement', () => {
+  const queries = new QueryClient();
+  admitSavedQueryResultsWindow(queries, 'base', 'session', 'scope', undefined, false);
+  expect(cancelSavedQueryResultsWindowFocus(queries, 'base', 'session', 'scope', undefined)).toBe(false);
 });

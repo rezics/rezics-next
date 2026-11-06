@@ -372,3 +372,15 @@ acknowledges an uncertain command. No DTO proof means unavailable, while a compl
 complete empty set. Owner/account/address retirement removes old controls and ignores late work. Browser/native
 receiving acceptance is deferred to the controller verifier; missing Source or original-reference evidence stays
 unavailable.
+
+## Source landing state
+
+Private Library, Collection, Copies, archive and own-rating typed receiving is landed as source on current main; native, browser, visual and Goal acceptance stay open, and unfinished mounted adoption, save and readback and archive byte-rewrite behaviour is not accepted: incoming server Copy is readback and baseline only, local edits merge into the dirty draft and save against the incoming revision.
+
+Decision: this source landing keeps the named Kernel, Web and Client tests only and adds no stories, because it receives already-implemented contracts rather than new user-visible states.
+
+Decision: receive Catalogue 3e85da05fe saved-query consumer as pageObservation lifetime binding in DynamicRuleResultsReview and results-window focus correction; keep the original cancel-focus assertion; Search remains the sole http-json-body-strict fixture writer except the returned duplicate savedCatalogueMembers removal. Commerce retains publication and permission-bound producer files.
+
+Decision: typecheck repairs keep NativePermissionProjection.deadlineLive, one savedCatalogueMembers fixture method, shelf hrefs that omit a null cursor, and received-entry incarnation identity as null rather than undefined.
+
+Decision: Kernel typecheck keeps SearchHit.matchEvidence on the saved-catalogue page fixture, one unused savedCatalogueMembers method on SearchService test doubles, and removes the duplicate second-scope method.

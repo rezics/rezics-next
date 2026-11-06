@@ -10,7 +10,7 @@ import {
 } from '../../../../packages/definitions/test/support/library-profiles.ts';
 import { createLifecycleCommands } from '../../src/access/lifecycle.ts';
 import { parseCopyArchive, COPY_ARCHIVE_LIMITS } from '../../src/library/copy-archive-format.ts';
-import { exportSections, exportSectionsV2 } from '../../src/library/library-export-format.ts';
+import { exportSections, exportSectionsV2, exportSectionsV4 } from '../../src/library/library-export-format.ts';
 import { createCopyArchive } from '../../src/library/copy-archive.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { purgeOwnedGraphPage } from '../../src/library/erasure-owned-graph.ts';
@@ -181,7 +181,7 @@ function archiveRelease(statuses: string[], legacyUnit = false, changedProfile =
     isPartOf: {
       slot_uri: 'schema:isPartOf',
       range: 'Child',
-      annotations: { datatype: 'wikibase-item', relation_group: 'membership' },
+      annotations: { datatype: 'wikibase-item', relation_group: 'membership', inverse: 'none' },
     },
   };
   sources.schemas['fixture.yaml'] = JSON.stringify(schema);
@@ -454,7 +454,7 @@ test('installed final manifest, counts, envelopes and admission bounds are manda
 function artifactVersion(version: number) {
   const a = structuredClone(artifact);
   a.manifest.version = version;
-  a.manifest.sections = [...(version === 1 ? exportSections : exportSectionsV2)];
+  a.manifest.sections = [...(version === 1 ? exportSections : version === 4 ? exportSectionsV4 : exportSectionsV2)];
   a.records = a.records.filter((row) => a.manifest.sections.includes(row.section));
   if (version === 1) {
     delete a.manifest.coverage;
@@ -467,13 +467,23 @@ function artifactVersion(version: number) {
       ordinal: 0,
       evidence: { private_note: 'unsupported provider evidence' },
     });
-    if (version === 3)
+    if (version >= 3)
       for (const row of a.records.filter((record) => record.section === 'journals')) {
         if (!isRecord(row.journal)) throw new Error('Missing journal payload in exported journal record');
         row.journal.assessment = { meaningRevision: 1, units: 17 };
       }
+    if (version === 4)
+      a.records.push({
+        section: 'vndbEvidence',
+        upload_id: a.manifest.exportId,
+        ordinal: 0,
+        evidence: { score: '0', progress: 'unknown' },
+      });
+    a.records.sort(
+      (aRow, bRow) => a.manifest.sections.indexOf(aRow.section) - a.manifest.sections.indexOf(bRow.section),
+    );
     a.manifest.sectionTotals = Object.fromEntries(
-      exportSectionsV2.map((section) => {
+      a.manifest.sections.map((section) => {
         const rows = a.records.filter((row) => row.section === section);
         return [section, { rows: rows.length, recordBytes: rows.reduce((n, row) => n + bytes(row).length, 0) }];
       }),
@@ -484,9 +494,9 @@ function artifactVersion(version: number) {
   return a;
 }
 
-test('fixed V1 and current V2/V3 preserve exact accounting and unsupported facts stay unretained', () => {
+test('fixed V1 and current V2/V3/V4 preserve exact accounting and unsupported facts stay unretained', () => {
   expect(artifact.manifest.version).toBe(2); // Actual installed producer, not a synthetic upload format.
-  for (const version of [1, 2, 3]) {
+  for (const version of [1, 2, 3, 4]) {
     const a = artifactVersion(version);
     const parsed = parseCopyArchive(bytes(a));
     expect(parsed.coverage.reduce((n, section) => n + section.recordBytes, 0)).toBe(a.manifest.recordBytes);
@@ -520,7 +530,7 @@ test('fixed V1 and current V2/V3 preserve exact accounting and unsupported facts
           archiveSectionTotal(manifest, 'journals').extra = 1;
         },
         (manifest) => {
-          manifest.coverage = 'private-library-owner-facts-v4';
+          manifest.coverage = 'unsupported-coverage';
         },
         (manifest) => {
           manifest.sections.reverse();
@@ -874,8 +884,8 @@ test('checkpoint replay preserves the original create and revision-sensitive mea
   expect(await json(await send('DELETE', `/${measureUpload.uploadId}`))).toMatchObject({ complete: true });
 }, 120000);
 
-test('V1 and declared V3 use the existing native upload/review/apply/result journey', async () => {
-  for (const version of [1, 3]) {
+test('V1 and declared V3/V4 use the existing native upload/review/apply/result journey', async () => {
+  for (const version of [1, 3, 4]) {
     const a = artifactVersion(version);
     a.manifest.capturedAt = '2000-01-01T00:00:00.000001Z';
     a.manifest.expiresAt = '2000-01-01T00:15:00.000001Z'; // A completed local file outlives capture delivery.

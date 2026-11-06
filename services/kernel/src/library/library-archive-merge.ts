@@ -1,3 +1,4 @@
+import { LABEL_SUBJECT_RESERVATIONS } from './label-operation-bounds.ts';
 import { memoizedValue } from '../memoized.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
@@ -1327,12 +1328,13 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
             review: { ...reviewBase, labelId: targetLabelId, labelRevision },
           };
         const page = await assignments().listAssignments(actor, {
-          labelId: targetLabelId,
           subjectId: anchor.subjectId,
-          limit: 1,
+          limit: LABEL_SUBJECT_RESERVATIONS,
         });
         return {
-          status: page.assignments.length ? 'already_equal' : 'create',
+          status: page.assignments.some((assignment) => assignment.labelId === targetLabelId)
+            ? 'already_equal'
+            : 'create',
           review: { ...reviewBase, labelId: targetLabelId, labelRevision },
         };
       } catch (error) {

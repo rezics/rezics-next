@@ -11225,5 +11225,9 @@
   "library_archive_progress_open_session": "打开当前的 Session",
   "library_archive_progress_restart": "用原始归档再开始一次恢复",
   "exposure_grants_link": "Review tester grants",
-  "exposure_grants_help": "Use Resource access to grant or revoke gate permissions on the Global Context. That page checks your current grant authority. Closing a capability preserves tester grants; revoke a grant to end that tester’s access."
+  "exposure_grants_help": "Use Resource access to grant or revoke gate permissions on the Global Context. That page checks your current grant authority. Closing a capability preserves tester grants; revoke a grant to end that tester’s access.",
+  "library_archive_observation_correct": "保留或修正现有观察记录",
+  "library_archive_observation_admit": "录入新的观察记录",
+  "library_archive_observation_revision": "当前观察记录修订版本",
+  "library_archive_observation_admit_help": "录入会使用归档中的所有字段，包括明确清除的值。原生审核会确认没有现有记录。"
 }

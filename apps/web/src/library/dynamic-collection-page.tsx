@@ -386,8 +386,8 @@ function DynamicCollectionPageLifetime({
         {current.cursorRestarted ? <p role="status">{m.library_collections_cursor_reset()}</p> : null}
         {saved && viewerId && current.curatorAccountId === viewerId ? (
           <DynamicRuleResultsReview
-            key={observation}
             page={current}
+            pageObservation={observation}
             viewerId={viewerId}
             resultsHref={resultsHref}
             {...(propsReadRule === undefined ? {} : { read: propsReadRule })}

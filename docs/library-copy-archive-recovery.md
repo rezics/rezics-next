@@ -1,12 +1,12 @@
 # Native personal archive recovery
 
-The installed owner admits the actual personal Library V1, V2 and V3 artifacts and privately inspects retained holdings and
+The installed owner admits the actual personal Library V1, V2, V3 and V4 artifacts and privately inspects retained holdings and
 supported progress evidence. Holdings remain evidence-only. Progress can be explicitly reviewed and applied as a
 fresh native Session through the existing Session and episode commands. This is not account restoration.
 
 Decision: recovery is per occurrence: the owner maps the source Subject to its current canonical Subject, and each
 review creates a distinct fresh Session. Validate the installed manifest's total `rows` and `recordBytes` and exact
-section inventory; V1 has no per-section counters. V2/V3 require exact per-section row and byte totals. The progress flow and its supported/unsupported matrix are in
+section inventory; V1 has no per-section counters. V2/V3/V4 require exact per-section row and byte totals. The progress flow and its supported/unsupported matrix are in
 [native progress recovery](library-archive-progress-recovery.md).
 
 ## Installed interface
@@ -33,7 +33,7 @@ entry, entitlement, copy, repeat-history or publication effects. Client declarat
 routes. Web activates the adjacent recovery interface only after those installed types are available; Web319 remains
 the episode checklist, Web320 the measure editor, and Web323 the export interface.
 
-The only accepted format is `https://rezics.com/formats/library-export`, versions 1, 2 and 3, assembled as `{manifest,records}`
+The only accepted format is `https://rezics.com/formats/library-export`, versions 1, 2, 3 and 4, assembled as `{manifest,records}`
 from the [installed export's final page](library-export.md). Unfinished pages, null manifests, missing sections,
 duplicate JSON names, invalid UTF-8, unsupported versions, inconsistent totals and malformed holdings are rejected.
 Expired export capture timestamps do not invalidate a previously completed local file. They never set command time.
@@ -57,9 +57,9 @@ search or current-copy enumeration. Archive UUIDs, pins, timestamps and revision
 
 Decision: the copy adapter uses the shared V2 section vocabulary for V3, with coverage
 `private-library-owner-facts-v3` and journal-local `assessment:{meaningRevision:1,units:0..20|null}`;
-V4 provider additions remain refused. This is a decoder seam, not a producer or assessment-adoption writer.
-The installed producer defaults to V4. Recovery fixtures complete an installed V2 capture selected before paging;
-completed V4 artifacts cannot be relabeled as a supported version.
+V4 validates the original 21-section artifact at the shared native boundary before selecting holdings and progress.
+Provider rows remain unsupported coverage, with their original totals. No completed artifact is relabeled or rebuilt
+in the browser. This decoder does not adopt journal assessments.
 
 V2/V3 require exactly the original 14 sections followed by `annotations`, `provenance`, `journals`,
 `coverage:"private-library-owner-facts-v2"` or `"private-library-owner-facts-v3"`, and `sectionTotals` with

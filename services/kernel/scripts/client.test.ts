@@ -130,7 +130,7 @@ test('incremental client declarations match a clean emit after one source file c
     mkdirSync(resolve(fixture, 'packages/client/src'), { recursive: true });
     writeFileSync(
       resolve(fixture, 'packages/client/src/index.ts'),
-      "export type { PublicOnly } from './kernel/http/public-only';\nexport type { SearchNode } from './kernel/search/text';\n",
+      "export type { PublicOnly } from './kernel/http/public-only.d.ts';\nexport type { SearchNode } from './kernel/search/text';\n",
     );
     writeFileSync(resolve(kernel, 'src/http/public-only.ts'), 'export interface PublicOnly { revision: number }\n');
     const response = resolve(kernel, 'src/http/response.ts');

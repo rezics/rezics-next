@@ -2,7 +2,7 @@ import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import { type AuthoritativeTime, type CommandTransaction } from '../command/command.ts';
 import { NativeCollectionWork } from './collection-source-work.ts';
-import type { WorkAllowance, WorkReceipt } from './collection-source.ts';
+import type { WorkAllowance, WorkReceipt } from './contract/work-dimensions.ts';
 import { nativeSourceCustodyFootprint } from './native-source-custody-bounds.ts';
 export { nativeSourceCustodyFootprint };
 export { declareNativeIdentitySourceBasisStatements } from './identity-native-planner-selected-pricing.ts';

@@ -609,8 +609,9 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
         },
         detail: detail('progress_session.record_episodes', 'progress_session:update'),
       },
-      async ({ params, body, headers, actor, admission, job, session }) => {
+      async ({ params, body, headers, actor, admission, job, session, set }) => {
         requireAccount(actor);
+        set.headers['cache-control'] = 'private, no-store';
         const result = await admission.run('normal', job, () =>
           mapped(() =>
             episodeCommands().recordEpisodes(
@@ -658,6 +659,7 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
       },
       async ({ body, headers, actor, admission, job, session, set }) => {
         requireAccount(actor);
+        set.headers['cache-control'] = 'private, no-store';
         const requestKey = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const result = await admission.run('normal', job, () =>
           mapped(() => sessionCommands().startSession(actor, body, requestKey)),
@@ -685,8 +687,9 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
         },
         detail: detail('progress_session.list', 'progress_session:list'),
       },
-      async ({ query, actor, admission, job }) => {
+      async ({ query, actor, admission, job, set }) => {
         requireAccount(actor);
+        set.headers['cache-control'] = 'private, no-store';
         return admission.run('normal', job, () =>
           mapped(async () => {
             // One shared subject plus up to 99 distinct versions stays within 100 anchored reads.
@@ -919,8 +922,9 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
           'x-body-limit': MAX_JOURNAL_PATCH_BODY_BYTES,
         },
       },
-      async ({ params, body, headers, actor, admission, job, session }) => {
+      async ({ params, body, headers, actor, admission, job, session, set }) => {
         requireAccount(actor);
+        set.headers['cache-control'] = 'private, no-store';
         const requestKey = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const result = await admission.run('normal', job, () =>
           mapped(() => sessionCommands().patchSessionJournal(actor, params.sessionId, body, requestKey)),
@@ -929,15 +933,20 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
         return { journal: result.value };
       },
     )
-    .post(recordPath, recordOperation.options, async ({ params, body, headers, actor, admission, job, session }) => {
-      requireAccount(actor);
-      const requestKey = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
-      const result = await admission.run('normal', job, () =>
-        mapped(() => sessionCommands().recordProgress(actor, params.sessionId, body, requestKey)),
-      );
-      session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
-      return { progressSession: sessionView(result.value) };
-    })
+    .post(
+      recordPath,
+      recordOperation.options,
+      async ({ params, body, headers, actor, admission, job, session, set }) => {
+        requireAccount(actor);
+        set.headers['cache-control'] = 'private, no-store';
+        const requestKey = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        const result = await admission.run('normal', job, () =>
+          mapped(() => sessionCommands().recordProgress(actor, params.sessionId, body, requestKey)),
+        );
+        session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
+        return { progressSession: sessionView(result.value) };
+      },
+    )
     .post(
       customMethod('/v1/progressSessions/:sessionId', 'complete'),
       {
@@ -956,8 +965,9 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
         },
         detail: detail('progress_session.complete', 'progress_session:update'),
       },
-      async ({ params, body, headers, actor, admission, job, session }) => {
+      async ({ params, body, headers, actor, admission, job, session, set }) => {
         requireAccount(actor);
+        set.headers['cache-control'] = 'private, no-store';
         const requestKey = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const result = await admission.run('normal', job, () =>
           mapped(() => sessionCommands().completeSession(actor, params.sessionId, body, requestKey)),
@@ -984,8 +994,9 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
         },
         detail: detail('progress_session.abandon', 'progress_session:update'),
       },
-      async ({ params, body, headers, actor, admission, job, session }) => {
+      async ({ params, body, headers, actor, admission, job, session, set }) => {
         requireAccount(actor);
+        set.headers['cache-control'] = 'private, no-store';
         const requestKey = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const result = await admission.run('normal', job, () =>
           mapped(() => sessionCommands().abandonSession(actor, params.sessionId, body, requestKey)),
@@ -1012,8 +1023,9 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
         },
         detail: detail('progress_session.reopen', 'progress_session:update'),
       },
-      async ({ params, body, headers, actor, admission, job, session }) => {
+      async ({ params, body, headers, actor, admission, job, session, set }) => {
         requireAccount(actor);
+        set.headers['cache-control'] = 'private, no-store';
         const requestKey = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const result = await admission.run('normal', job, () =>
           mapped(() => sessionCommands().reopenSession(actor, params.sessionId, body, requestKey)),
@@ -1040,8 +1052,9 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
         },
         detail: detail('progress_session.retire', 'progress_session:update'),
       },
-      async ({ params, body, headers, actor, admission, job, session }) => {
+      async ({ params, body, headers, actor, admission, job, session, set }) => {
         requireAccount(actor);
+        set.headers['cache-control'] = 'private, no-store';
         const requestKey = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const result = await admission.run('normal', job, () =>
           mapped(() => sessionCommands().retireSession(actor, params.sessionId, body, requestKey)),
@@ -1058,9 +1071,10 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
         response: { 200: unitPageResponse, 400: invalid(), 404: notFound(), 409: conflict(), 503: unavailable() },
         detail: detail('progress_session.units', 'progress_session:read'),
       },
-      async ({ params, query, actor, admission, job }) =>
+      async ({ params, query, actor, admission, job, set }) =>
         admission.run('normal', job, () =>
           mapped(async () => {
+            set.headers['cache-control'] = 'private, no-store';
             const result = await sessionCommands().listUnits(actor, params.sessionId, basicQuery(query));
             return { completedUnits: result.units.map((unit) => unit.unitId), next: result.next };
           }, 'not_found'),
@@ -1074,9 +1088,10 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
         response: { 200: changePageResponse(), 400: invalid(), 404: notFound(), 409: conflict(), 503: unavailable() },
         detail: detail('progress_session.changes', 'progress_session:read'),
       },
-      async ({ params, query, actor, admission, job }) =>
+      async ({ params, query, actor, admission, job, set }) =>
         admission.run('normal', job, () =>
           mapped(async () => {
+            set.headers['cache-control'] = 'private, no-store';
             const result = await sessionCommands().listChanges(actor, params.sessionId, basicQuery(query));
             return { changes: result.changes.map(changeView), next: result.next };
           }, 'not_found'),
@@ -1106,6 +1121,7 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
       },
       async ({ body, headers, actor, admission, job, session, set }) => {
         requireAccount(actor);
+        set.headers['cache-control'] = 'private, no-store';
         const requestKey = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const result = await admission.run('normal', job, () =>
           mapped(() => publishedCommands().publishLog(actor, body, requestKey)),
@@ -1113,7 +1129,6 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
         session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
         set.status = 201;
         if (result.revision !== undefined) set.headers['Library-Published-Log-Revision'] = String(result.revision);
-        set.headers['cache-control'] = 'private, no-store';
         return { publishedLog: result.value };
       },
     )
@@ -1251,7 +1266,6 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
         );
         session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
         if (result.revision !== undefined) set.headers['Library-Published-Log-Revision'] = String(result.revision);
-        set.headers['cache-control'] = 'private, no-store';
         return { publishedLog: result.value };
       },
     );
