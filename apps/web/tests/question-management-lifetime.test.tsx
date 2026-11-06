@@ -136,9 +136,6 @@ mock.module('../src/ratings/question-management/intent', () => ({
     return typeof body.label === 'string' && body.label.trim().length > 0;
   },
 }));
-mock.module('../src/session/query', () => ({
-  useSession: () => ({ state: 'signed-in', subject: viewerId, csrfToken }),
-}));
 mock.module('../src/ratings/own-votes/departure', () => ({
   OwnVotesDeparture: (props: { dirty: boolean; locked: boolean; onLeave?: () => void }) => {
     departures.push(props);
@@ -216,6 +213,8 @@ function mount({ focusTicket: initialTicket = null }: { focusTicket?: QuestionMa
   externalFocus.textContent = 'Outside the question page';
   window.document.body.append(externalFocus);
   const root = createRoot(host);
+  // The route memoizes its address; a fresh literal per render would be a new read address.
+  const address = { selectedQuestionId: questionId, cursor: null };
   const render = (key: string, source = initial) => {
     const currentObservation = observationStore.getSnapshot();
     const currentAddressToken = addressToken;
@@ -226,7 +225,7 @@ function mount({ focusTicket: initialTicket = null }: { focusTicket?: QuestionMa
         createElement(QuestionManagementPage, {
           key,
           initial: source,
-          address: { selectedQuestionId: questionId, cursor: null },
+          address,
           locale: 'en',
           navigate: () => {},
           onSelectQuestion: () => {},

@@ -76,8 +76,6 @@ type HistoryRequest = {
 const reads: ReadRequest[] = [];
 const histories: HistoryRequest[] = [];
 const sends: unknown[] = [];
-mock.module('../src/session/query', () => ({ useSession: () => ({ state: 'signed-in', subject: viewer, csrfToken }) }));
-mock.module('../src/session/guard', () => ({ requireSignedIn: () => {} }));
 mock.module('../src/ratings/question-management/actions', () => ({
   prepareQuestionManagementVisit: async ({ data }: { data: Partial<QuestionManagementVisit> }) => ({
     ...visit,
