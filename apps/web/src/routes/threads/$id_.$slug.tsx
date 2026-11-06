@@ -4,7 +4,7 @@ import { draftFetch, InlinePostEditor, SignInPrompt } from '../../threads/compos
 import { erasePost, restorePost as restorePostAction, revisePost, type WriteFailure } from '../../threads/actions';
 import type { ThreadSubject } from '../../threads/subjects';
 import type { VoteCitation } from '../../threads/post-writes';
-import { publishedCitationForPost } from '../../threads/thread-page-context';
+import { publishedCitationForPost } from '../../threads/thread-reading-context';
 import { RevisionProvenance } from '../../threads/revision-provenance-view';
 import { exactRevisionHref, exactRevisionRoute } from '../../threads/exact-revision-href';
 import { PostHistory } from '../../threads/post-history';
