@@ -133,16 +133,24 @@ test.serial(
       if (clients.has(client)) return;
       const query = client.query;
       clients.set(client, query);
-      client.query = new Proxy(query, {
-        apply(target, receiver, args) {
-          const sql = typeof args[0] === 'string' ? args[0] : args[0].text;
-          if (!failed && sql === advance.sql) {
-            failed = true;
-            return Promise.reject(new Error('interrupt after native counter insert'));
-          }
-          return Reflect.apply(target, receiver, args);
-        },
-      });
+      // Core binds client.query onto the command transaction. A Proxy apply trap
+      // is skipped by that bind; a function wrapper stays on the bound call.
+      client.query = function (this: PoolClient, ...args: unknown[]) {
+        const sent = typeof args[0] === 'string' ? args[0] : ((args[0] as { text?: string } | undefined)?.text ?? '');
+        const sql = sent
+          .replace(/\/\*[\s\S]*?\*\//g, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+        if (
+          !failed &&
+          (sql === advance.sql.replace(/\s+/g, ' ').trim() ||
+            sql.includes('UPDATE library.shelf_maintenance_run SET epoch='))
+        ) {
+          failed = true;
+          return Promise.reject(new Error('interrupt after native counter insert'));
+        }
+        return (query as (...values: unknown[]) => unknown).apply(this, args);
+      } as PoolClient['query'];
     };
     f.db.pool.on('acquire', interrupt);
     try {
