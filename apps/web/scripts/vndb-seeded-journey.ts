@@ -101,12 +101,33 @@ async function capture(page: Page, name: string): Promise<void> {
   await writeFile(text, await page.locator('main').innerText(), { mode: 0o600 });
 }
 
+const chromiumArgs = [
+  '--disable-dev-shm-usage',
+  '--mute-audio',
+  '--no-first-run',
+  '--disable-gpu',
+  '--disable-software-rasterizer',
+  '--renderer-process-limit=1',
+  '--disable-site-isolation-trials',
+  '--disable-extensions',
+  '--disable-background-networking',
+  '--disable-sync',
+  '--disable-default-apps',
+  '--disable-hang-monitor',
+  '--disable-popup-blocking',
+  '--disable-prompt-on-repost',
+  '--metrics-recording-only',
+  '--no-default-browser-check',
+  '--disable-component-update',
+  '--js-flags=--max-old-space-size=192',
+];
+
 async function launchBrowser(): Promise<Browser> {
   await mkdir('/tmp/rw', { recursive: true, mode: 0o700 });
   return chromium.launch({
     headless: true,
     env: { ...process.env, TMPDIR: '/tmp/rw' },
-    args: ['--disable-dev-shm-usage', '--mute-audio', '--no-first-run'],
+    args: chromiumArgs,
   });
 }
 
@@ -188,13 +209,13 @@ try {
   assert.equal(unselected.entry.state, 'not_selected');
   report.phases.push('actual-publication-and-native-entry');
 
-  await withBrowser(async (browser) => {
-    for (const locale of locales) {
-      for (const [width, theme] of [
-        [390, 'light'],
-        [1440, 'dark'],
-      ] as const) {
-        await withPage(browser, { width, theme, blockMedia: true }, async (page) => {
+  for (const locale of locales) {
+    for (const [width, theme] of [
+      [390, 'light'],
+      [1440, 'dark'],
+    ] as const) {
+      await withBrowser((browser) =>
+        withPage(browser, { width, theme, blockMedia: true }, async (page) => {
           const response = await page.goto(`${stack.web}${workPath.replace('/en/', `/${locale}/`)}`, {
             waitUntil: 'domcontentloaded',
           });
@@ -202,13 +223,13 @@ try {
           await expect(page.locator('[data-slot="community-entry"][data-state="sign-in"]').first()).toBeVisible();
           await capture(page, `anonymous-${locale}-${width}-${theme}`);
           report.visits.push({ url: page.url(), locale, width, theme });
-        });
-      }
+        }),
+      );
     }
-  });
+  }
 
   await withBrowser(async (browser) =>
-    withPage(browser, { width: 1440, theme: 'light' }, async (page) => {
+    withPage(browser, { width: 1440, theme: 'light', blockMedia: true }, async (page) => {
       const errors: string[] = [];
       page.on('pageerror', (error) => {
         if (errors.length < 20) errors.push(error.message.slice(0, 1_000));

@@ -734,6 +734,10 @@ async function launch(action: 'pages' | 'web', args: string[]) {
   }
 }
 
+function bunProcess(args: string[]): string[] {
+  return process.env.REZICS_WALK_SMOL === '1' ? [process.execPath, '--smol', ...args] : ['bun', ...args];
+}
+
 async function start() {
   const env = {
     ...process.env,
@@ -741,11 +745,11 @@ async function start() {
     ...developmentKernelBindings(),
   };
   const children = [
-    ['bun', 'services/auth/scripts/dev-stack.ts', 'host'],
+    bunProcess(['services/auth/scripts/dev-stack.ts', 'host']),
     ['bun', 'services/auth/scripts/dev-stack.ts', 'pages'],
     ['bun', 'services/auth/scripts/dev-stack.ts', 'web'],
-    ['bun', 'run', '--cwd', 'services/kernel', 'dev'],
-    ['bun', 'run', '--cwd', 'services/kernel', 'worker'],
+    bunProcess(['run', '--cwd', 'services/kernel', 'dev']),
+    bunProcess(['run', '--cwd', 'services/kernel', 'worker']),
   ].map((command) => Bun.spawn(command, { cwd: root, env, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' }));
   let stopping = false;
   const stop = () => {

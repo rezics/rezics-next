@@ -242,7 +242,8 @@ hosts a and b.
 Decision: walk stacks are a bounded, queued replacement for the local-container refusal, granted only to workers whose
 brief lists native or browser acceptance. Remote placement forwards the original launcher `GOAL_TASK_ID`,
 `GOAL_ATTEMPT` and `GOAL_ACCEPTANCE_REQUIRES` into the walk command without rewriting recorded argv. Walk search
-nodes use a 256m heap without mmap so seeded indexes do not consume the host run MemoryMax.
+nodes use a 128m heap without mmap, Postgres 32MB shared_buffers, and docker memory ceilings (search 512m, database
+384m) so seeded volume file cache cannot fill the 6 GiB run slice. Kernel and the worker start with bun --smol.
 
 Decision: keep one causal binding regression and the existing launcher assertions. Kernel setup persists the selected
 loopback Auth issuer, audience, JWKS URL, Kernel host and API port in `services/kernel/.env`; start applies the same
@@ -264,7 +265,8 @@ Inside `<command>`, provision with `bun services/auth/scripts/dev-stack.ts perso
 stack beside the admitted slot. Ordinary member personas use actual signup; privileged roles come from native
 admission. Browser launch sets `TMPDIR` to a short root such as `/tmp/rw` when the inherited root is missing, so
 Chromium Unix socket paths fit; the controller supplies a healthy connector if that root is unavailable.
-Each capture owns one viewport-sized context and the locale matrix relaunches Chromium before the signed-in session.
+Each anonymous locale/viewport capture owns one Chromium and context; the signed-in session is a second browser.
+Chromium runs one renderer without GPU or media so capture buffers do not accumulate across visits.
 
 Execute real pages through the production BFF, API and native commands for every served persona. Trace and repair
 defects where they occur, then rerun the complete area journey. Record secret-free source, seed and persona

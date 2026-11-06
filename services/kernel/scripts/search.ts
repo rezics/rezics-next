@@ -80,12 +80,21 @@ export function cgroupArgs(env: NodeJS.ProcessEnv = process.env): string[] {
     : [];
 }
 
-/** Walk stacks set a smaller heap; mmap of seeded indexes is what blows the 6 GiB run slice. */
+/** Docker memory pair so a walk volume's file cache cannot fill the host run slice. */
+export function containerMemoryArgs(value: string | undefined, name: string): string[] {
+  if (!value) return [];
+  if (!/^[1-9][0-9]{0,3}m$/.test(value))
+    throw new Error(`${name} must be 1-9999m, received ${JSON.stringify(value)}`);
+  return ['--memory', value, '--memory-swap', value];
+}
+
+/** Walk stacks set a smaller heap; mmap and unbounded file cache of seeded indexes blow the 6 GiB run slice. */
 export function searchRunArgs(image: string, env: NodeJS.ProcessEnv = process.env): string[] {
   return [
     'run',
     '-d',
     ...cgroupArgs(env),
+    ...containerMemoryArgs(env.KERNEL_SEARCH_MEMORY, 'KERNEL_SEARCH_MEMORY'),
     '--name',
     container,
     '-p',

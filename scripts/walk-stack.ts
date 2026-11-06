@@ -85,9 +85,14 @@ export function walkStackEnvironment(task: string, index: number): Record<string
     REZICS_LOCAL_STACK_NATIVE_ORIGIN: origin(ports.native),
     REZICS_LOCAL_STACK_KERNEL_ORIGIN: origin(ports.kernel),
     REZICS_WALK_STACK_SLOT: String(index),
-    // Seeded indexes stay on niofs so Lucene mmap does not consume the host run MemoryMax.
-    OPENSEARCH_JAVA_OPTS: '-Xms256m -Xmx256m',
+    // Seeded indexes stay on niofs; docker memory ceilings stop volume file cache filling the 6 GiB run slice.
+    OPENSEARCH_JAVA_OPTS: '-Xms128m -Xmx128m',
     KERNEL_SEARCH_ALLOW_MMAP: '0',
+    KERNEL_SEARCH_MEMORY: '512m',
+    KERNEL_DATABASE_MEMORY: '384m',
+    KERNEL_DATABASE_BOUNDED: '1',
+    KERNEL_WORKER_POOL_SIZE: '4',
+    REZICS_WALK_SMOL: '1',
   };
 }
 
