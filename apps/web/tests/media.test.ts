@@ -177,7 +177,8 @@ function site(): Promise<string> {
       try {
         // The fixture implements media APIs, so readiness must not depend on home-page discovery or rendering.
         const response = await fetch(missingMedia, { redirect: 'manual', signal: AbortSignal.timeout(5000) });
-        const ready = response.status === 404 && response.headers.get('content-type')?.includes('application/problem+json');
+        const ready =
+          response.status === 404 && response.headers.get('content-type')?.includes('application/problem+json');
         probe = `HTTP ${response.status} ${response.headers.get('content-type') ?? 'no content type'}`;
         await response.body?.cancel();
         if (ready) return origin;

@@ -86,7 +86,6 @@ to exit 1 before tests (`dbmate requires each migration to define an up block wi
 Added the required up/down envelope. The latest authenticated Content decision retains this narrowed
 bridge outcome, original behavior acceptance and controller retry/landing custody.
 
-
 Latest native receiving: `a79e70c3-0d73-46ae-855a-31dbc226b51f`, exit 1, ran
 `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/content/media-parent.test.ts test/content/media-dev-stack-configuration.test.ts test/content/local-media-http.test.ts`.
 Migration and schema consistency pass. Local HTTP passes 15 assertions and mounted scopes pass 5.

@@ -11,7 +11,9 @@ async function storageBindings(local: boolean) {
   }
   const child = Bun.spawn(
     [
-      'bun', '-e', `
+      'bun',
+      '-e',
+      `
       import configuration from './cloudflare.config.ts';
       const { MEDIA, LOCAL_MEDIA_ORIGIN, LOCAL_MEDIA_TOKEN } = configuration.worker.env;
       process.stdout.write(JSON.stringify({ MEDIA, LOCAL_MEDIA_ORIGIN, LOCAL_MEDIA_TOKEN }));
