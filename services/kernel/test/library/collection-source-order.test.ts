@@ -13,8 +13,8 @@ import {
   type CollectionSource,
   type CollectionSourceCall,
   type CollectionSourceObservation,
-  type WorkReceipt,
 } from '../../src/library/collection-source.ts';
+import { type WorkReceipt } from '../../src/library/contract/work-dimensions.ts';
 
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 type Assert<T extends true> = T;

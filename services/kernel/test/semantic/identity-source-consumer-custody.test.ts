@@ -928,7 +928,7 @@ test('one Source Library remainder cumulatively pays the page receiving and both
       const amount = (
         rows: number,
         statements: number,
-      ): import('../../src/library/collection-source.ts').WorkDimensions => ({
+      ): import('../../src/library/contract/work-dimensions.ts').WorkDimensions => ({
         candidateKeys: 0,
         identityMetadataRows: 0,
         nativeRows: rows,

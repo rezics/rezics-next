@@ -25,7 +25,8 @@ import {
 } from '../search/current-filter-plan.ts';
 import { holdsCurrentStatements, holdsCurrentType } from '../search/current-leaf.ts';
 import type { LeafEvidence } from '../semantic/scope-leaf-evidence.ts';
-import { createCollectionSource, type PrepareCollectionSource, type WorkDimensions } from './collection-source.ts';
+import { createCollectionSource, type PrepareCollectionSource } from './collection-source.ts';
+import { type WorkDimensions } from './contract/work-dimensions.ts';
 import { NativeCollectionWork } from './collection-source-work.ts';
 import type { AdmittedCollectionRule, CollectionRuleSource } from './collection-rules.ts';
 import { decodeLibraryProfilePin } from './profile-pin.ts';

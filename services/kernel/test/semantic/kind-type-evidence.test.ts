@@ -3,7 +3,7 @@ import type { Pool } from 'pg';
 import type { Access } from '../../src/request/access.ts';
 import type { OperationalTransaction } from '../../src/command/operational.ts';
 import type { CollectionKindPreparationLocator } from '../../src/library/collection-kind-work-admission.ts';
-import type { WorkAllowance } from '../../src/library/collection-source.ts';
+import type { WorkAllowance } from '../../src/library/contract/work-dimensions.ts';
 import { createNativeKindTypeEvidence } from '../../src/semantic/kind-type-evidence.ts';
 import { newId } from '../../src/route/route.ts';
 import { createCollectionKindFixture, type CollectionKindFixture } from '../library/support/collection-kind-fixture.ts';

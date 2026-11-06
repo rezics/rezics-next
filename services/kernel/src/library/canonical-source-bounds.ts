@@ -15,7 +15,7 @@ import {
   SELECTED_COST,
   WORK_EXECUTION_ATTEMPT_BOUND,
 } from '../work/selected-runtime-cost.ts';
-import type { WorkDimensions, WorkReceipt } from './collection-source.ts';
+import type { WorkDimensions, WorkReceipt } from './contract/work-dimensions.ts';
 import ownerFactsSql from './collection-source-native-facts.sql';
 import labelOriginalsSql from './owner-index-native-label-originals.sql';
 import { CANONICAL_SOURCE_RAW_KEY_LIMIT } from './canonical-source-limits.ts';

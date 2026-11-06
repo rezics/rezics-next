@@ -18,7 +18,8 @@ import {
   type PreparationLocator,
   type PreparationStepState,
 } from './members-preparation.ts';
-import type { CollectionSourceObservation, WorkReceipt } from './collection-source.ts';
+import type { CollectionSourceObservation } from './collection-source.ts';
+import type { WorkReceipt } from './contract/work-dimensions.ts';
 import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
 import type { SearchScopeOrder } from '../search/service-scope-order.ts';
 import { createSearchScopeSource } from '../search/scope-source.ts';
@@ -61,7 +62,7 @@ import {
   type SelectedChildren,
 } from '../work/selected-runtime.ts';
 import type { SelectedOutcome } from '../history/operational-work-selected.ts';
-import type { WorkDimensions } from './collection-source.ts';
+import type { WorkDimensions } from './contract/work-dimensions.ts';
 
 type Dependencies = Pick<WorkContext, 'pool' | 'client' | 'clock'> & {
   runtime?: () => ReturnType<typeof collectionPublicationScopeRuntime>;

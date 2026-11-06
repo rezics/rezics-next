@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { AccessWorkAccounting } from '../access/work.ts';
-import type { WorkDimensions, WorkReceipt } from '../library/collection-source.ts';
+import type { WorkDimensions, WorkReceipt } from '../library/contract/work-dimensions.ts';
 
 /** Accounting-only request context, kept free of runtime SQL dependencies. */
 export type CommandWorkReservation = Readonly<{

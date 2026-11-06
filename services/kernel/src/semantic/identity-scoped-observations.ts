@@ -28,7 +28,7 @@ import {
   type LibraryExpectedEffectAfter,
   type LibraryScopeEffectsKey,
 } from '../library/identity-scope-effects.ts';
-import type { WorkAllowance, WorkDimensions, WorkReceipt } from '../library/collection-source.ts';
+import type { WorkAllowance, WorkDimensions, WorkReceipt } from '../library/contract/work-dimensions.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
 import type * as S from './identity-scope-types.ts';

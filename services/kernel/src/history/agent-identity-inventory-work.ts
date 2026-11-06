@@ -5,7 +5,7 @@ import type { CommandTransaction } from '../command/command.ts';
 import type { NativeStepWork } from '../semantic/identity-epoch-contract.ts';
 import type { HistoryReceivingContext } from './receiving.ts';
 import type { IdentitySourceConsumerMaintenanceContext } from '../semantic/identity-source-consumer-maintenance.ts';
-import type { WorkDimensions } from '../library/collection-source.ts';
+import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
 import { COMMAND_DISPATCH_ALLOWANCE } from '../command/dispatch-lifetime.ts';
 
 const declarations = new WeakMap<NativeStepWork, WorkDimensions>();

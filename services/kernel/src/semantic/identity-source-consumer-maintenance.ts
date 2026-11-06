@@ -5,7 +5,7 @@ import type { WorkClient } from '../work/client.ts';
 import type { HistoryRegistry } from '../history/registry.ts';
 import type { KernelClock } from '../clock.ts';
 import type { NativeStepWork } from './identity-epoch-contract.ts';
-import type { WorkDimensions, WorkAllowance } from '../library/collection-source.ts';
+import type { WorkDimensions, WorkAllowance } from '../library/contract/work-dimensions.ts';
 import {
   withCommandDispatchLifetime,
   COMMAND_DISPATCH_ALLOWANCE,

@@ -12,7 +12,7 @@ import {
   OPERATIONAL_WORK_REGISTRATION,
 } from '../../src/history/operational-work-budget.ts';
 import { ProblemError } from '../../src/http/problem.ts';
-import type { WorkDimensions } from '../../src/library/collection-source.ts';
+import type { WorkDimensions } from '../../src/library/contract/work-dimensions.ts';
 import {
   MEMBERS_PREPARATION_CHILDREN,
   declareMembersPreparationParent,

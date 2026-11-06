@@ -4,7 +4,7 @@ import type {
   CollectionKindWorkDefinition,
 } from '../library/collection-kind-work-admission.ts';
 import type { CollectionKindInputBinding } from '../library/collection-kind-input.ts';
-import type { WorkAllowance, WorkDimensions, WorkReceipt } from '../library/collection-source.ts';
+import type { WorkAllowance, WorkDimensions, WorkReceipt } from '../library/contract/work-dimensions.ts';
 import type { AccessContext, AccountActor, Actor } from '../request/access.ts';
 import type { CollectionKindPreparationWorkContext } from '../search/scope-work-context.ts';
 import type { AccessWork, AccessWorkAccounting } from './work.ts';

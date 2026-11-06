@@ -23,7 +23,8 @@ import {
   type CollectionPublicationWorkDefinition,
 } from './collection-publication-work-admission.ts';
 import type { CollectionOutputRef } from './collection-source-output.ts';
-import type { CollectionSourceObservation, WorkAllowance, WorkReceipt } from './collection-source.ts';
+import type { CollectionSourceObservation } from './collection-source.ts';
+import type { WorkAllowance, WorkReceipt } from './contract/work-dimensions.ts';
 import { readCollectionSourceWorkState } from './collection-source-work-native.ts';
 import { NativeCollectionWork } from './collection-source-work.ts';
 import { createNativeLibrarySourceCustody, type NativeSourceIdentity } from './native-source-custody.ts';

@@ -6,7 +6,7 @@ import {
   COLLECTION_SOURCE_DRIVER_COUNT,
   COLLECTION_SOURCE_WORK_GROUP_LIMIT,
 } from './canonical-source-limits.ts';
-import type { WorkDimensions } from './collection-source.ts';
+import type { WorkDimensions } from './contract/work-dimensions.ts';
 
 export const ORDINARY_COLLECTION_PAGE_LIMIT = 100;
 export const ORDINARY_COLLECTION_PREFIX_ROUNDS = 3;

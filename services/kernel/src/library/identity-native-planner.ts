@@ -48,7 +48,7 @@ import {
 } from './collection-source-native.ts';
 import { readOwnerNativeFactPage, type OwnerNativeFactDriver } from './owner-index.ts';
 import type { CanonicalBasis, CanonicalRawKey } from './canonical-source-store.ts';
-import type { WorkAllowance, WorkReceipt } from './collection-source.ts';
+import type { WorkAllowance, WorkReceipt } from './contract/work-dimensions.ts';
 import type { LibraryScopeEffectsKey } from './identity-scope-effects.ts';
 import type {
   LibraryIdentityPlan,

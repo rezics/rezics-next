@@ -1,6 +1,6 @@
 import { receivePublicIdentityOutputCapturePrearm } from './identity-public-output-capture.ts';
 import type { PublicIdentityOutputWork } from './identity-public-output-types.ts';
-import type { WorkReceipt } from '../library/collection-source.ts';
+import type { WorkReceipt } from '../library/contract/work-dimensions.ts';
 import type { Pool } from 'pg';
 import type { IdentityNativeReceipt } from './identity-epoch-contract.ts';
 import type { IdentityPrearmTicketLocator } from './identity-epoch-prearm-contract.ts';

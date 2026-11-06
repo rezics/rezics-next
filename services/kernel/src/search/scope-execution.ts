@@ -7,7 +7,7 @@ import { NativeCollectionWork } from '../library/collection-source-work.ts';
 import { readOwnerFilterCandidate, readOwnerFilterCandidateClosure } from '../library/owner-filter-plan.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { ProblemError } from '../http/problem.ts';
-import type { WorkAllowance, WorkDimensions, WorkReceipt } from '../library/collection-source.ts';
+import type { WorkAllowance, WorkDimensions, WorkReceipt } from '../library/contract/work-dimensions.ts';
 import { readScopeLeafEvidence, type LeafOptions, type LeafWork } from '../semantic/scope-leaf-evidence.ts';
 import type { IdentityScopeWork } from '../semantic/identity-scope-types.ts';
 import type { PublicFilterCost } from '../semantic/public-filter-source-contract.ts';

@@ -11,7 +11,8 @@ import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import { isDeepStrictEqual } from 'node:util';
 import { systemClock, type KernelClock } from '../clock.ts';
-import type { CollectionSourceObservation, WorkAllowance, WorkReceipt } from '../library/collection-source.ts';
+import type { CollectionSourceObservation } from '../library/collection-source.ts';
+import type { WorkAllowance, WorkReceipt } from '../library/contract/work-dimensions.ts';
 import type { NativeSourceIdentity } from '../library/native-source-custody.ts';
 import { admitCollectionMemberQuery } from '../library/owner-filter.ts';
 import { bindOwnerFilterRead } from '../library/owner-filter-plan.ts';
@@ -164,7 +165,7 @@ export type SearchScopePrefix = {
   exhausted: boolean;
   usage: {
     candidates: number;
-    work?: import('../library/collection-source.ts').WorkReceipt;
+    work?: import('../library/contract/work-dimensions.ts').WorkReceipt;
   };
 };
 

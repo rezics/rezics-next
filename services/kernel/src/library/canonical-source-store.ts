@@ -209,7 +209,7 @@ import {
   readNativeCollectionRawPage,
   type NativeCollectionMetadata,
 } from './collection-source-native.ts';
-import type { WorkAllowance } from './collection-source.ts';
+import type { WorkAllowance } from './contract/work-dimensions.ts';
 import { readOwnerNativeFactPage, type OwnerNativeFactDriver } from './owner-index.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import { creationDeclares } from '../access/parent-creation.ts';

@@ -11,7 +11,8 @@ import { commandTime } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { IdentityNativeReceipt } from '../semantic/identity-epoch-contract.ts';
 import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
-import type { CollectionSourceObservation, WorkAllowance } from './collection-source.ts';
+import type { CollectionSourceObservation } from './collection-source.ts';
+import type { WorkAllowance } from './contract/work-dimensions.ts';
 import { NativeCollectionWork } from './collection-source-work.ts';
 import {
   createNativeLibrarySourceCustody,

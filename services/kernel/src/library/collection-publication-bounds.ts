@@ -3,7 +3,7 @@ import { memoizedValue } from '../memoized.ts';
  * These values describe work only; native admission, transaction lifetime and dispatch remain in Library.
  */
 import { declareBound, repeatBound, sumBounds, withinCeiling, type Bound } from '@rezics/bounds';
-import type { WorkDimensions } from './collection-source.ts';
+import type { WorkDimensions } from './contract/work-dimensions.ts';
 
 type PrivatePublicationBound = Omit<Bound, 'engineRequests'> & Readonly<{ engineRequests: 0 }>;
 

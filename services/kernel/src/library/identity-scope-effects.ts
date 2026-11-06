@@ -30,7 +30,7 @@ import type {
   IdentityReceivingDisposition,
 } from '../semantic/identity-receiving-effects-types.ts';
 import type { NativeSourceIdentity } from './native-source-custody.ts';
-import type { WorkAllowance, WorkReceipt } from './collection-source.ts';
+import type { WorkAllowance, WorkReceipt } from './contract/work-dimensions.ts';
 
 export type LibraryScopeEffectsKey = Readonly<{
   job: IdentityJobRef;

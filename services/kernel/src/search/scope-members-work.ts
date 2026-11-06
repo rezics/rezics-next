@@ -15,7 +15,7 @@ import {
 import type { MembersPreparationWorkDefinition } from '../library/members-preparation.ts';
 import type { CollectionPublicationWorkDefinition } from '../library/collection-publication-work-admission.ts';
 import type { NativeOrdinalKey } from '../library/collection-source-order.ts';
-import type { WorkDimensions } from '../library/collection-source.ts';
+import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
 import { leafProvider, type CollectionMemberAdmission, type OwnerFilterFactLocator } from '../library/owner-filter.ts';
 import { readOwnerFilterCandidate, type OwnerFilterCandidateClosure } from '../library/owner-filter-plan.ts';
 import factsQuery from '../library/owner-filter-native-closure-facts.sql';

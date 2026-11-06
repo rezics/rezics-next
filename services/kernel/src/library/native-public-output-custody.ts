@@ -336,7 +336,7 @@ export async function lockNativePublicCollectionOutput(
   context: PublicOutputCommandContext,
 ): Promise<
   | PublicOutputRefusal
-  | Readonly<{ status: 'locked'; tuple: PublicOutputTuple; work: import('./collection-source.ts').WorkReceipt }>
+  | Readonly<{ status: 'locked'; tuple: PublicOutputTuple; work: import('./contract/work-dimensions.ts').WorkReceipt }>
 > {
   return frame(context, async (work) => {
     validateIdentity(identity);
@@ -361,7 +361,7 @@ export async function bindAndHoldNativePublicCollectionOutput(
   | Readonly<{
       status: 'bound';
       binding: NativePublicOutputBinding;
-      work: import('./collection-source.ts').WorkReceipt;
+      work: import('./contract/work-dimensions.ts').WorkReceipt;
     }>
 > {
   const ref = selection.publication;
@@ -497,7 +497,7 @@ export async function revalidateNativePublicCollectionOutputHold(
   | Readonly<{
       status: 'locked';
       binding: NativePublicOutputBinding;
-      work: import('./collection-source.ts').WorkReceipt;
+      work: import('./contract/work-dimensions.ts').WorkReceipt;
     }>
 > {
   return frame(context, async (work) => {

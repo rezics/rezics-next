@@ -29,7 +29,7 @@ import type {
   LibraryExpectedEffectAfter,
 } from '../../src/library/identity-scope-effects.ts';
 import type { IdentityJobRef } from '../../src/semantic/identity-epoch-contract.ts';
-import type { WorkReceipt } from '../../src/library/collection-source.ts';
+import type { WorkReceipt } from '../../src/library/contract/work-dimensions.ts';
 import { createProfileEntryFixture, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 import { epochFixture, digest, release, type EpochFixture } from '../semantic/support/identity-epoch.ts';
 

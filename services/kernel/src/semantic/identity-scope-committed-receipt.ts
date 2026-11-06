@@ -13,7 +13,7 @@ import {
 import { currentOperationalResources, hasLiveOperationalTransaction } from '../command/operational.ts';
 import { classifyUnavailability } from '../access/unavailable.ts';
 import { instrumentNativeCollectionWork, type NativeCollectionWork } from '../library/collection-source-work.ts';
-import type { WorkDimensions, WorkReceipt } from '../library/collection-source.ts';
+import type { WorkDimensions, WorkReceipt } from '../library/contract/work-dimensions.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { identityScopeAddress } from './identity-scoped-observations.ts';
 import type { IdentityNativeReceipt } from './identity-epoch-contract.ts';

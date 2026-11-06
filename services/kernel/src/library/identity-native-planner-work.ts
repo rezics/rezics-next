@@ -9,7 +9,7 @@ import {
   identitySourceConsumerScheduleReceipt,
 } from '../semantic/identity-source-consumer-maintenance.ts';
 import { NativeCollectionWork, instrumentNativeCollectionWork } from './collection-source-work.ts';
-import type { WorkAllowance, WorkDimensions } from './collection-source.ts';
+import type { WorkAllowance, WorkDimensions } from './contract/work-dimensions.ts';
 import {
   isLibraryIdentityFullPartitionSQL,
   libraryIdentityNativeOperationFootprint,

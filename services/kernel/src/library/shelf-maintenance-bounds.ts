@@ -10,7 +10,7 @@ import commandFence from '../command/fence.sql';
 import commandNoEffect from '../command/no-effect-fence.sql';
 import commandReceipt from '../command/read-receipt.sql';
 import { currentCommandWorkAssociation } from '../command/work-context.ts';
-import type { WorkDimensions } from './collection-source.ts';
+import type { WorkDimensions } from './contract/work-dimensions.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { PreparationSourceExecution } from './preparation-source.ts';
 import sourceSize from './shelf-maintenance-source-size.sql';

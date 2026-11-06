@@ -52,7 +52,7 @@ const unavailable = (): never => {
 function lifecycleBodyWork<T>(
   tx: CommandTransaction,
   work: NativeCollectionWork,
-  cost: import('../library/collection-source.ts').WorkDimensions,
+  cost: import('../library/contract/work-dimensions.ts').WorkDimensions,
   operation: () => Promise<T>,
 ) {
   const resources = hasLiveOperationalTransaction(tx) ? currentOperationalResources(tx) : currentCommandResources(tx);

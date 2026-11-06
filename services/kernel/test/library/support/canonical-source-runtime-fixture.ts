@@ -4,7 +4,7 @@ import { resourceAuthorization } from '../../../src/access/resource-authorizatio
 import { principalCommandIdentity, runCommand, type CommandTransaction } from '../../../src/command/command.ts';
 import { withConnection } from '../../../src/database/pool.ts';
 import { partitionOf, routeOf } from '../../../src/route/route.ts';
-import type { WorkAllowance } from '../../../src/library/collection-source.ts';
+import type { WorkAllowance } from '../../../src/library/contract/work-dimensions.ts';
 import { createProfileEntryFixture } from './profile-entry-fixture.ts';
 
 export const sourceAllowance = (keys = 100): WorkAllowance => ({

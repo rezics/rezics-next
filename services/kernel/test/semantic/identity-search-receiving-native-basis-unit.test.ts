@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { PoolClient } from 'pg';
-import type { WorkDimensions } from '../../src/library/collection-source.ts';
+import type { WorkDimensions } from '../../src/library/contract/work-dimensions.ts';
 import {
   prepareSearchReceivingCaptures,
   searchReceivingCaptureCost,

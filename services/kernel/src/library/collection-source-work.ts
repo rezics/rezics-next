@@ -2,7 +2,7 @@ import { discardConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Pool, PoolClient, QueryConfig, QueryResult } from 'pg';
-import type { WorkAllowance, WorkDimensions, WorkReceipt } from './collection-source.ts';
+import type { WorkAllowance, WorkDimensions, WorkReceipt } from './contract/work-dimensions.ts';
 
 const axes = [
   'candidateKeys',

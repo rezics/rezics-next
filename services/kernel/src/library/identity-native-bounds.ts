@@ -1,6 +1,6 @@
 import { memoizedValue } from '../memoized.ts';
 import { declareBound, repeatBound, sumBounds, withinCeiling, type Bound } from '@rezics/bounds';
-import type { WorkDimensions } from './collection-source.ts';
+import type { WorkDimensions } from './contract/work-dimensions.ts';
 import type { NativeCollectionWork } from './collection-source-work.ts';
 import { libraryIdentitySQL } from './identity-native-planner-statements.ts';
 import plan from './identity-native-planner-read.sql';

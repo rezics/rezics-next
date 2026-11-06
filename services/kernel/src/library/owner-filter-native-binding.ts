@@ -29,9 +29,8 @@ import {
   createCollectionSource,
   createOrdinaryCollectionPageSource,
   type CollectionSourceObservation,
-  type WorkAllowance,
-  type WorkDimensions,
 } from './collection-source.ts';
+import { type WorkAllowance, type WorkDimensions } from './contract/work-dimensions.ts';
 import { readNativeCollectionMetadata, type NativeCollectionMetadata } from './collection-source-native.ts';
 import { NativeCollectionWork } from './collection-source-work.ts';
 import {

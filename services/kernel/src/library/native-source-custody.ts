@@ -19,7 +19,7 @@ import {
   revalidateBoundLibraryIdentityWork,
   withLibraryIdentityWork,
 } from './identity-native-planner-work.ts';
-import type { WorkAllowance, WorkReceipt } from './collection-source.ts';
+import type { WorkAllowance, WorkReceipt } from './contract/work-dimensions.ts';
 import {
   nativeSourceCustodyExecutionBound,
   nativeSourceCustodyFootprint,

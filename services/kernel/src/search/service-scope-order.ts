@@ -9,10 +9,9 @@ import {
   type CollectionSourceObservation,
   type CollectionAliasProgress,
   type PreparedCollectionSource,
-  type WorkAllowance,
-  type WorkReceipt,
   type CollectionSourceContext,
 } from '../library/collection-source.ts';
+import { type WorkAllowance, type WorkReceipt } from '../library/contract/work-dimensions.ts';
 import { nativeCollectionOrdinalPageBound } from '../library/collection-source-native.ts';
 import { CANONICAL_SOURCE_RECEIVING_COST } from '../library/canonical-source-bounds.ts';
 import type {

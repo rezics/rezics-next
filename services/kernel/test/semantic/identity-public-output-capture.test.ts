@@ -40,7 +40,7 @@ import type {
   PublicIdentityOutputWork,
 } from '../../src/semantic/identity-public-output-types.ts';
 import type { NativePublicOutputBinding } from '../../src/library/native-public-output-contract.ts';
-import type { WorkReceipt } from '../../src/library/collection-source.ts';
+import type { WorkReceipt } from '../../src/library/contract/work-dimensions.ts';
 import type { PoolClient } from 'pg';
 
 let f: SourceRuntimeFixture;

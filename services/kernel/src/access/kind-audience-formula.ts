@@ -2,7 +2,7 @@
  * This computes work, never role evidence, membership, a decision or a closure.
  */
 import type { Actor, AccessContext, ActionCatalogue } from '../request/access.ts';
-import type { WorkDimensions } from '../library/collection-source.ts';
+import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
 import { accessNativeDeclaration, addAccessWork, EMPTY_ACCESS_WORK, type AccessWork } from './work.ts';
 import { MEMBERSHIP_LIMIT } from './membership-inverse.ts';
 import { resolveResourceRoles, type ResourceRoleCatalogue } from './resource-roles.ts';

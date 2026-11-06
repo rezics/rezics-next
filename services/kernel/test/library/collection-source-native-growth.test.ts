@@ -10,7 +10,7 @@ import {
   type NativeCollectionMetadata,
   type CanonicalRangeKey,
 } from '../../src/library/collection-source-native.ts';
-import type { WorkReceipt } from '../../src/library/collection-source.ts';
+import type { WorkReceipt } from '../../src/library/contract/work-dimensions.ts';
 import factsQuery from '../../src/library/collection-source-native-facts.sql';
 import { capture, checkGrowth, costOf, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';

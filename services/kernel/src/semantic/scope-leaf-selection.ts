@@ -31,7 +31,7 @@ import releaseBody from './scope-leaf-selection-release.sql';
 import kindTypeAnchor from './scope-leaf-selection-kind-type.sql';
 import kindTypeLock from './scope-leaf-selection-kind-type-lock.sql';
 import type { NativeCollectionWork } from '../library/collection-source-work.ts';
-import type { WorkDimensions } from '../library/collection-source.ts';
+import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
 import { isDeepStrictEqual } from 'node:util';
 
 export const sourceObject = (value: unknown): value is Record<string, unknown> =>

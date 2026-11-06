@@ -22,7 +22,7 @@ import {
   type NativeCollectionMetadata,
 } from './collection-source-native.ts';
 import { CollectionSourceLedger, NativeCollectionWork } from './collection-source-work.ts';
-import type { WorkAllowance, WorkReceipt } from './collection-source.ts';
+import type { WorkAllowance, WorkReceipt } from './contract/work-dimensions.ts';
 import {
   COLLECTION_KIND_PREPARATION_OBSERVATION,
   COLLECTION_KIND_PREPARATION_TERMS,

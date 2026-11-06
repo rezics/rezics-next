@@ -1,6 +1,6 @@
 import { memoizedValue } from '../memoized.ts';
 import { BOUND_AXES, declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
-import type { WorkDimensions } from '../library/collection-source.ts';
+import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
 import { CANONICAL_SOURCE_RECEIVING_COST } from '../library/canonical-source-bounds.ts';
 import { COLLECTION_SOURCE_WORK_GROUP_LIMIT } from '../library/canonical-source-limits.ts';
 import {

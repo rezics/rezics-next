@@ -3,7 +3,7 @@ import type { AuthoritativeTime, CommandTransaction } from '../command/command.t
 import type { IdentityNativeReceipt } from '../semantic/identity-epoch-contract.ts';
 import type { CanonicalRangeKey } from './collection-source-native.ts';
 import type { CollectionOutputPublication, CollectionOutputRef } from './collection-source-output.ts';
-import type { WorkAllowance, WorkReceipt } from './collection-source.ts';
+import type { WorkAllowance, WorkReceipt } from './contract/work-dimensions.ts';
 import type { ListingStamp } from './listing-freshness-contract.ts';
 import type { NativeOutputActivation, NativePublicOutputIdentity } from './native-source-output-types.ts';
 

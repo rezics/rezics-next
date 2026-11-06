@@ -59,7 +59,7 @@ import type {
 } from './collection-publication-episode-contract.ts';
 import type { CollectionPublicationLocator } from './collection-publication-work-admission.ts';
 import type { CollectionOutputPublication } from './collection-source-output.ts';
-import type { WorkAllowance } from './collection-source.ts';
+import type { WorkAllowance } from './contract/work-dimensions.ts';
 import type { NativeSourceIdentity } from './native-source-custody.ts';
 import headQuery from './collection-source-output-head.sql';
 import operationQuery from './collection-publication-episode-read.sql';

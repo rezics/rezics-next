@@ -10,7 +10,7 @@ import { isDeepStrictEqual } from 'node:util';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
 import { ProblemError } from '../http/problem.ts';
-import type { WorkAllowance, WorkReceipt } from '../library/collection-source.ts';
+import type { WorkAllowance, WorkReceipt } from '../library/contract/work-dimensions.ts';
 import type { LeafOptions } from '../semantic/scope-leaf-evidence.ts';
 import {
   compileCurrentOwnerFilter,

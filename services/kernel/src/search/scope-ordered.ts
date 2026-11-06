@@ -1,4 +1,4 @@
-import type { WorkAllowance, WorkReceipt } from '../library/collection-source.ts';
+import type { WorkAllowance, WorkReceipt } from '../library/contract/work-dimensions.ts';
 import type { PublicFilterCost } from '../semantic/public-filter-source-contract.ts';
 import { routeOf } from '../route/route.ts';
 import { MAX_NAME_SORT_CHARACTERS } from './document.ts';

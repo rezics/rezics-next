@@ -9,7 +9,7 @@ import {
   withSingleCommandAttempt,
   type CommandTransaction,
 } from '../command/command.ts';
-import type { WorkDimensions } from '../library/collection-source.ts';
+import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
 import type { HistoryRegistry } from '../history/registry.ts';
 import type { WorkClient } from '../work/client.ts';
 import { routeOf } from '../route/route.ts';
@@ -1052,8 +1052,8 @@ function guardedOriginalLibrary(frame: Frame, ledger: NativeCollectionWork): Nat
           });
         };
       if (key === 'compose')
-        return <T extends { readonly work: import('../library/collection-source.ts').WorkReceipt }>(
-          operation: (allowance: import('../library/collection-source.ts').WorkAllowance) => Promise<T>,
+        return <T extends { readonly work: import('../library/contract/work-dimensions.ts').WorkReceipt }>(
+          operation: (allowance: import('../library/contract/work-dimensions.ts').WorkAllowance) => Promise<T>,
           ceiling?: WorkDimensions,
         ) => {
           assertLive();

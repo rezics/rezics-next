@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { NativeCollectionWork } from '../../src/library/collection-source-work.ts';
-import { createCollectionSource, type WorkDimensions } from '../../src/library/collection-source.ts';
+import { createCollectionSource } from '../../src/library/collection-source.ts';
+import { type WorkDimensions } from '../../src/library/contract/work-dimensions.ts';
 import { runOperationalTransaction } from '../../src/command/operational.ts';
 import {
   COLLECTION_SOURCE_WORK_COST,
