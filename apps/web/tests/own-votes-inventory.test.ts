@@ -3,7 +3,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { resolve } from 'node:path';
 import { createServer } from 'vite';
 import { Value } from 'typebox/value';
-import type { OwnVoteEntry, OwnVotesPage } from '../../../services/kernel/src/rating/own-votes-page.ts';
+import type { OwnVoteEntry, OwnVotesPage } from '../src/ratings/own-votes/types';
 import {
   indexOwnVotes,
   ownVotesCursor,
@@ -136,12 +136,13 @@ test('the real own-votes consumer loads in the Web module runner without Content
   const leaf = await runner.ssrLoadModule(
     resolve(import.meta.dir, '../../../services/kernel/src/rating/vote-response-schemas.ts'),
   );
-  const rowSchema = schemas.OwnVotesPageSchema.properties.votes.items;
+  const pageSchema = schemas.OwnVotesPageSchema();
+  const rowSchema = pageSchema.properties.votes.items;
   expect(rowSchema.properties.question).toBe(leaf.RatingQuestionResponseSchema);
   expect(rowSchema.properties.own).toBe(leaf.RatingVoteResponseSchema);
   const vote = entry('b1b1b1b1-b1b1-41b1-81b1-b1b1b1b1b1b1', accountId);
-  expect(Value.Check(schemas.OwnVotesPageSchema, page([vote]))).toBe(true);
-  expect(Value.Check(schemas.OwnVotesPageSchema, page(Array(21).fill(vote)))).toBe(false);
+  expect(Value.Check(pageSchema, page([vote]))).toBe(true);
+  expect(Value.Check(pageSchema, page(Array(21).fill(vote)))).toBe(false);
   expect(Value.Check(schemas.OwnVoteActionsSchema, { ...vote.actions, unexpected: true })).toBe(false);
   expect(Value.Check(leaf.RatingQuestionResponseSchema, { ...vote.question, revision: 0 })).toBe(false);
 });
@@ -164,6 +165,8 @@ test('native denied/admitted responses keep strict page admission and the origin
   );
   const read = () => actions.readOwnVotesForViewer({ data: { cursor: 'original/+sealed=' } });
   expect(await read()).toMatchObject({ state: 'denied', page: null });
+  const pageRequest = calls.find((call) => new URL(call.url).pathname === '/v1/me/rating-votes');
+  expect(new URL(pageRequest!.url).searchParams.get('cursor')).toBe('original/+sealed=');
   status = 200;
   expect(await read()).toMatchObject({ state: 'ready', page: response, cursor: 'original/+sealed=' });
   for (const malformed of [
@@ -188,7 +191,7 @@ test('native denied/admitted responses keep strict page admission and the origin
     ['PUT', intent.path],
     ['GET', intent.path],
   ]);
-  expect(calls[0]!.headers.get('idempotency-key')).toBe(intent.key);
+  expect(calls[0]!.headers.get('idempotency-key')).toBe(JSON.stringify(intent.key));
   expect(await calls[0]!.json()).toEqual({ units: 2 });
   expect(calls[1]!.headers.get('rezics-session-token')).toBe('readback-session');
   expect(calls.every((call) => call.headers.get('authorization') === 'Bearer admitted')).toBe(true);

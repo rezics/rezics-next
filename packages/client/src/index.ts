@@ -323,3 +323,8 @@ export type { ZoneSubjectListRoutes } from './kernel/zones/subjects.ts';
 
 export type OwnVotesPage = Routes['me']['rating-votes']['get']['response'][200];
 export type OwnVoteEntry = OwnVotesPage['votes'][number];
+export type OwnVoteActions = OwnVoteEntry['actions'];
+export type VoteRead = Routes['subjects'][':id']['ratings'][':questionId']['vote']['get']['response'][200];
+export type PublicFigureRead = Routes['subjects'][':id']['figure']['get']['response'][200]['figure'];
+type RatingQuestionReadCall = ReturnType<ReturnType<KernelClient['rating-questions']>['get']>;
+export type RatingQuestionRead = NonNullable<Awaited<RatingQuestionReadCall>['data']>;

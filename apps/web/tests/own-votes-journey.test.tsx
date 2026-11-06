@@ -2,7 +2,7 @@ import { subjectSummary } from './factories/subjects';
 import { afterAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createContext, useContext, useRef, useState } from 'react';
-import type { OwnVoteEntry, OwnVotesPage } from '../../../services/kernel/src/rating/own-votes-page.ts';
+import type { OwnVoteEntry, OwnVotesPage } from '../src/ratings/own-votes/types';
 import type { OwnVoteIntent } from '../src/ratings/own-votes/intent';
 import type { OwnVoteCommandResult, OwnVotesRead } from '../src/ratings/own-votes/actions';
 import type { OwnVoteReadback } from '../src/ratings/own-votes/readback';
@@ -10,6 +10,7 @@ import { m } from '../src/paraglide/messages.js';
 import { getLocale, setLocale } from '../src/paraglide/runtime.js';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
+const kernel = await import('../src/kernel/client');
 
 const viewer = 'f6f6f6f6-f6f6-46f6-86f6-f6f6f6f6f6f6';
 const terminal = 'a1a1a1a1-a1a1-41a1-81a1-a1a1a1a1a1a1';
@@ -51,7 +52,7 @@ for (const [key, value] of Object.entries(globals))
 const start = await import('../.storybook/react-start');
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
-mock.module('../src/kernel/client', () => ({ configured: () => false }));
+mock.module('../src/kernel/client', () => ({ ...kernel, configured: () => false }));
 mock.module('../src/ratings/own-votes/actions', () => ({
   readOwnVotesForViewer: async () => ({
     state: 'unavailable',

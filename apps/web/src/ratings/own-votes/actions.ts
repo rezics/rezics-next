@@ -103,16 +103,17 @@ async function readPage(address: { cursor: string | null; valid: boolean }): Pro
   if (refused || !subject || !authorization) return emptyRead('signed-out', null, address.cursor, locale);
   const origin = (env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN;
   if (!origin) return emptyRead('unavailable', subject, address.cursor, locale);
-  const url = new URL('/v1/me/rating-votes', origin);
-  if (address.cursor !== null) url.searchParams.set('cursor', address.cursor);
   try {
-    const { transport } = createNativeTransport(origin, authorization);
-    const response = await transport(url, { method: 'GET', signal: request.signal });
+    const { client } = createNativeTransport(origin, authorization);
+    const response = await client.me['rating-votes'].get({
+      query: address.cursor === null ? {} : { cursor: address.cursor },
+      fetch: { cache: 'no-store', redirect: 'manual', signal: request.signal },
+    });
     if (response.status === 401) return emptyRead('signed-out', null, address.cursor, locale);
     if (response.status === 403) return emptyRead('denied', subject, address.cursor, locale);
     if (response.status === 400) return emptyRead('invalid-cursor', subject, address.cursor, locale);
     if (response.status !== 200) return emptyRead('unavailable', subject, address.cursor, locale);
-    const value: unknown = await response.json();
+    const value: unknown = response.data;
     if (!isOwnVotesPage(value) || value.viewer.accountId !== subject || !ownVotesCursor(value.next).valid)
       return emptyRead('unavailable', subject, address.cursor, locale);
     try {
@@ -170,7 +171,8 @@ async function currentCommand(intent: OwnVoteIntent): Promise<OwnVoteCommandResu
   if (!origin) return { kind: 'uncertain' };
   const { client } = createNativeTransport(origin, authorization);
   const vote = client.subjects({ id: intent.targetId }).ratings({ questionId: intent.questionId }).vote;
-  const headers = { authorization, 'idempotency-key': intent.key };
+  // The kernel reads Idempotency-Key as a structured-field string, so the UUID travels quoted.
+  const headers = { authorization, 'idempotency-key': JSON.stringify(intent.key) } as { 'idempotency-key': string };
   try {
     const response =
       intent.method === 'PUT'

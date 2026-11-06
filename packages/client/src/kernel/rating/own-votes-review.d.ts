@@ -1,5 +1,5 @@
 import type { CommandTransaction } from '../command/command.ts';
-import type { IdentityRatingReviewOperand } from '../semantic/index.ts';
+import type { IdentityRatingReviewOperand } from '../semantic/identity-core/index.ts';
 export declare const VOTE_SCOPE = "rating:vote";
 export declare class VoteInvalidError extends Error {
     readonly field: string;
