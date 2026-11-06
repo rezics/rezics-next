@@ -6,6 +6,7 @@ import { createFileRoute, notFound, redirect, useLocation } from '@tanstack/reac
 import type { PageContinuation } from '@rezics/composition';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest } from '@tanstack/react-start/server';
+import { RelationHistoryPane } from '../../features/pages/relation-history-pane';
 import { RelationsView } from '../../features/pages/relations-view';
 import { SubjectLink, subjectPageMessages, viewTabLabels } from '../../features/pages/route-support';
 import { SubjectFrame, subjectFrame, SubjectViewPage } from '../../features/pages/subject-frame';
@@ -349,6 +350,24 @@ function RelationsRoute() {
         selectedStreamProperty={data.configured ? data.streamProperty : undefined}
         selectedStreamDirection={data.configured ? data.streamDirection : undefined}
         selectedCursor={data.cursor}
+        after={
+          // Global windows only: a Realm reading's history is a separate reader.
+          !realm && data.node && data.streamProperty && data.streamDirection ? (
+            <RelationHistoryPane
+              selection={{
+                subject: frame.id,
+                label: frame.title.text,
+                locale: getLocale(),
+                view: 'relations',
+                node: data.node,
+                property: data.streamProperty,
+                direction: data.streamDirection,
+                cursor: data.cursor ?? null,
+              }}
+              reader={data.reader}
+            />
+          ) : undefined
+        }
         onWorkContinue={onWorkContinue}
         finiteWorkRegionReader={WorkFranchiseReading}
         subjectLabel={frame.title.text}
