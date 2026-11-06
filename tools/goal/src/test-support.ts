@@ -168,9 +168,16 @@ const CHECK_SCRIPT_PATHS = [
   'scripts/check-host/docker',
 ] as const;
 
-function cloneSharedGit(template: string, destination: string): void {
+function cloneSharedGit(
+  template: string,
+  destination: string,
+  identity = { name: 'Test', email: 'test@example.invalid' },
+): void {
   mkdirSync(destination, { recursive: true });
   repositoryGit(destination, 'clone', '--quiet', '--shared', '--no-hardlinks', template, '.');
+  // Clone does not copy the template's user.name/user.email. Check hosts have no global identity.
+  repositoryGit(destination, 'config', 'user.name', identity.name);
+  repositoryGit(destination, 'config', 'user.email', identity.email);
   try {
     repositoryGit(destination, 'remote', 'remove', 'origin');
   } catch {
@@ -522,7 +529,7 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:120,cached
   disposeAsync(options?: { beforeRemove?: () => void | Promise<void> }): Promise<void>;
 } {
   const root = tempDirectory();
-  cloneSharedGit(harnessGitTemplate(), root);
+  cloneSharedGit(harnessGitTemplate(), root, { name: 'Fixture', email: 'fixture@example.invalid' });
   const state = join(root, '.temp/goal');
   mkdirSync(state, { recursive: true });
   const command = join(state, 'codex');

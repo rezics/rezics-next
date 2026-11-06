@@ -40,8 +40,9 @@ Attempt inspection only retrieves the requested data; the manager host handles o
 
 `bun tools/goal/scripts/test-timings.ts` runs this package's tests in isolated processes, at most sixteen files at
 once (`GOAL_TEST_PARALLEL` raises or lowers that). It prints wall time per file and per test, slowest first, and the
-total. Git fixtures are built once per file and cloned with `git clone --shared`. Tests that wait for time to pass use
-an injected clock. `--fast` skips the integration files that still drive real worker processes and silence windows.
+total. Git fixtures are built once per file and cloned with `git clone --shared`. Each clone sets a local author
+identity so later commits do not depend on the host's git config. Tests that wait for time to pass use an injected
+clock. `--fast` skips the integration files that still drive real worker processes and silence windows.
 
 Before this runner the suite took about 15 minutes or more; three files for one change took 5 to 8 minutes. After, the
 full suite completes in under 4 minutes on this host. `bun run --cwd tools/goal test:fast` is the seconds-scale set for
