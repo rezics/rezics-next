@@ -1,10 +1,11 @@
 import { expect, test } from 'bun:test';
-import { admittedFeedWorkId, homeWorkLibraryRow } from '../src/features/feed/home-work-library/contract';
 import {
+  admittedFeedWorkId,
   homeWorkLibraryFeedProjection,
   homeWorkLibraryPage,
+  homeWorkLibraryRow,
   type HomeNativePersonalPage,
-} from '../src/features/feed/home-work-library/page';
+} from '../src/features/feed/home-work-library/contract';
 import { homeFeedStoryPage } from '../src/kernel/fake/home-feed-stories';
 
 const standardQuestion = {

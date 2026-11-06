@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../../paraglide/messages.js';
 import type { Locale } from '../../../paraglide/runtime.js';
-import { collectionComparisonHref } from '../../../library/collection-comparison/model';
+import { homeCollectionMemberHref } from './member-destination';
 import { accountHref } from '../../../subject/subject-href';
 import type { FeedItem } from '../../pages/home-feed-read';
 import { homeFeedDestination, homeFeedRealmDestination, homeFeedTitle } from '../../pages/home-feed-destination';
@@ -119,7 +119,7 @@ function HomeCollectionPreview({
             <li key={member.id} data-collection-member-id={member.id} className="min-w-0">
               <a
                 lang={member.subject.label?.language}
-                href={collectionComparisonHref(member.subject.id, label, locale, href, member.id)}
+                href={homeCollectionMemberHref({ id: member.subject.id, label, locale, collectionHref: href, memberId: member.id })}
                 className="inline-flex min-h-11 max-w-full items-center text-primary underline underline-offset-4 [overflow-wrap:anywhere]"
               >
                 <bdi>{label || m.subject_value_unlabelled({}, options)}</bdi>
