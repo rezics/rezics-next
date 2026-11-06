@@ -221,6 +221,26 @@ test('inspect stays scan-free on an unrecovered pre-column journal and reopen re
   }
 });
 
+function kindRow(path: string, source: string, id: string) {
+  const database = new Database(path, { strict: true });
+  try {
+    return database
+      .query(
+        'SELECT kind_new,kind_changed,kind_unchanged,kind_vanished,kind_backfill_cursor,kind_backfill_done FROM run_generations WHERE source=? AND id=?',
+      )
+      .get(source, id) as {
+      kind_new: number;
+      kind_changed: number;
+      kind_unchanged: number;
+      kind_vanished: number;
+      kind_backfill_cursor: string;
+      kind_backfill_done: number;
+    };
+  } finally {
+    database.close();
+  }
+}
+
 test('interrupted kind recovery resumes from the stored cursor', async () => {
   const fixture = temporaryState();
   try {
@@ -237,28 +257,28 @@ test('interrupted kind recovery resumes from the stored cursor', async () => {
     fixture.store.close();
     dropKindColumns(fixture.path);
 
+    // Generation 1 is the completed baseline (one classified key). One page finishes it;
+    // the second page starts the active generation at Q1/Q2.
     const partial = new RunStore<SourceProjection>(fixture.path, {
       projectionMode: 'source-record',
       kindBackfillPageSize: 2,
-      kindBackfillMaxPages: 1,
+      kindBackfillMaxPages: 2,
     });
-    const paused = partial.database
-      .query(
-        'SELECT kind_new,kind_changed,kind_unchanged,kind_vanished,kind_backfill_cursor,kind_backfill_done FROM run_generations WHERE source=? AND id=?',
-      )
-      .get(source, '2') as {
-      kind_new: number;
-      kind_changed: number;
-      kind_unchanged: number;
-      kind_vanished: number;
-      kind_backfill_cursor: string;
-      kind_backfill_done: number;
-    };
+    partial.close();
+    const recoveredBaseline = kindRow(fixture.path, source, '1');
+    expect(recoveredBaseline.kind_backfill_done).toBe(1);
+    expect(recoveredBaseline.kind_new).toBe(1);
+    const paused = kindRow(fixture.path, source, '2');
     expect(paused.kind_backfill_done).toBe(0);
     expect(paused.kind_backfill_cursor).toBe('Q2');
-    expect(paused.kind_new + paused.kind_changed + paused.kind_unchanged + paused.kind_vanished).toBe(2);
-    partial.close();
-    expect(await inspectCounts(fixture.path, source)).toMatchObject({ classified: 5, new: 2, unchanged: 0 });
+    expect(paused).toMatchObject({ kind_new: 1, kind_changed: 0, kind_unchanged: 1, kind_vanished: 0 });
+    expect(await inspectCounts(fixture.path, source)).toMatchObject({
+      classified: 5,
+      new: 1,
+      changed: 0,
+      unchanged: 1,
+      vanished: 0,
+    });
 
     const resumed = new RunStore<SourceProjection>(fixture.path, { projectionMode: 'source-record' });
     resumed.close();
@@ -284,7 +304,7 @@ test('classification interleaves with partial kind recovery without double-count
     for (const key of prior) fixture.store.stage(baseline, staged(source, key));
     complete(fixture.store, baseline, prior);
 
-    const run = fixture.store.begin(source);
+    const run = fixture.store.begin(source, { disappearanceThreshold: 1 });
     if (run === 'busy') throw new Error('Expected an active generation');
     fixture.store.stage(run, staged(source, 'Q-STABLE'));
     fixture.store.stage(run, staged(source, 'Q-CHANGED', 'b'.repeat(64)));
