@@ -2,16 +2,7 @@ import type { Release } from '@rezics/definitions';
 import { pageDocumentReferences, pickLanguage } from '@rezics/composition';
 import { originalLanguage } from './jsonld';
 import { defaultReader, type Reader } from '../../subject/reader';
-import {
-  bestRank,
-  isRecord,
-  pageText,
-  spoilerLevel,
-  webUrl,
-  type Related,
-  type Stmt,
-  type Subject,
-} from './shared';
+import { bestRank, isRecord, pageText, spoilerLevel, webUrl, type Related, type Stmt, type Subject } from './shared';
 
 export type PublicationDefinitions = Pick<Release, 'types' | 'properties'>;
 export type PublicationKind = 'book' | 'recipe' | 'game' | 'release' | 'agent';

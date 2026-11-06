@@ -49,11 +49,7 @@ import { recipePublicationReading } from './recipe-publication/model';
 import { releasePublicationReading } from './release-publication/model';
 import { agentPublicationReading } from './agent-publication/model';
 import { gamePublicationReading } from './game-publication/model';
-import {
-  publicationOverlayKind,
-  publicPublicationStatements,
-  type PublicationDefinitions,
-} from './subject-metadata';
+import { publicationOverlayKind, publicPublicationStatements, type PublicationDefinitions } from './subject-metadata';
 import { PeopleProfileEntry } from '../catalogue/people-profile-entry';
 import { PersonOverview } from '../catalogue/person-reader/reader';
 import { CharacterOverview } from './showcase-people/character';
