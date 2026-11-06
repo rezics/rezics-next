@@ -35,6 +35,11 @@ export {
   retentionSweepStatementCount,
   retentionSweepWork,
   workflowRetentionInventory,
+  WORKFLOW_RETENTION_BATCH_SIZE,
+  WORKFLOW_RETENTION_CASCADE_TABLES,
+  WORKFLOW_RETENTION_EXPLICIT_DELETE_TABLES,
+  WORKFLOW_RETENTION_MAX_BATCHES,
+  WORKFLOW_RETENTION_PAYLOAD_FAMILIES,
 } from './retention.ts';
 export type {
   WorkflowRetentionBatchWork,

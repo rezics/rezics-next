@@ -104,9 +104,9 @@ test('a two-batch sweep charges each nonempty delete plus the empty reselection'
 
 test('statement classification names the selector tag and the four exact-ID deletes', () => {
   expect(classifyRetentionStatement(`/* ${WORKFLOW_RETENTION_SELECT_TAG} */ SELECT workflow_uuid`)).toBe('select');
-  expect(classifyRetentionStatement('SELECT workflow_uuid FROM dbos.workflow_status ORDER BY completed_at, workflow_uuid')).toBe(
-    'select',
-  );
+  expect(
+    classifyRetentionStatement('SELECT workflow_uuid FROM dbos.workflow_status ORDER BY completed_at, workflow_uuid'),
+  ).toBe('select');
   expect(classifyRetentionStatement('BEGIN ISOLATION LEVEL READ COMMITTED')).toBe('begin');
   expect(classifyRetentionStatement('COMMIT')).toBe('commit');
   expect(classifyRetentionStatement('ROLLBACK')).toBe('rollback');
