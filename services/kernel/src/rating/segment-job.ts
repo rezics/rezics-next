@@ -1,15 +1,16 @@
-import { createHash } from 'node:crypto';
-import canonicalize from 'canonicalize';
-import { DBOS } from '@dbos-inc/dbos-sdk';
-import type { Pool, PoolClient } from 'pg';
-import { Value } from 'typebox/value';
+import { nativeRatingWorkflows } from './adapters/workflows.ts';
 import {
-  authoritativeTimeValue,
   runCommand,
+  authoritativeTimeValue,
   type AuthoritativeTime,
   type CommandEvent,
   type CommandTransaction,
 } from '../command/command.ts';
+import type { RatingCapabilities } from './contract/capabilities.ts';
+import { createHash } from 'node:crypto';
+import canonicalize from 'canonicalize';
+import type { Pool, PoolClient } from 'pg';
+import { Value } from 'typebox/value';
 import type { RatingCounter } from '../access/rating-counter.ts';
 import { applyRatingSegmentPageEvent } from './aggregate-effect.ts';
 import { withConnection } from '../database/pool.ts';
@@ -221,14 +222,20 @@ function populationsForJob(job: RatingSegmentJob): string[] {
   return isRatingEligibilityJob(job) || isRatingRekeyJob(job) ? job.populations : [job.realmId];
 }
 
-async function changePopulationPending(pool: Pool, job: RatingSegmentJob, populationId: string, start: boolean) {
+async function changePopulationPending(
+  pool: Pool,
+  job: RatingSegmentJob,
+  populationId: string,
+  start: boolean,
+  capabilities?: RatingCapabilities,
+) {
   const route = routeOf(populationId);
   if (route === null) throw new TypeError('Invalid rating population address');
   const action = start ? 'rating.segment.pending.start' : 'rating.segment.pending.finish';
   const digest = createHash('sha256')
     .update(JSON.stringify([action, populationId, job.transitionId]))
     .digest();
-  const outcome = await runCommand(
+  const outcome = await (capabilities?.command ?? runCommand)(
     pool,
     {
       partition: partitionOf(route),
@@ -263,9 +270,14 @@ async function changePopulationPending(pool: Pool, job: RatingSegmentJob, popula
 }
 
 /** Mark each affected population as updating once for this durable transition. */
-export async function beginRatingPopulationJob(pool: Pool, job: RatingSegmentJob): Promise<void> {
+export async function beginRatingPopulationJob(
+  pool: Pool,
+  job: RatingSegmentJob,
+  capabilities?: RatingCapabilities,
+): Promise<void> {
   validateJob(job);
-  for (const populationId of populationsForJob(job)) await changePopulationPending(pool, job, populationId, true);
+  for (const populationId of populationsForJob(job))
+    await changePopulationPending(pool, job, populationId, true, capabilities);
 }
 
 /** Complete a Realm job once; replacement jobs are counted before the old transition is removed. */
@@ -273,12 +285,14 @@ export async function finishRatingPopulationJob(
   pool: Pool,
   job: RatingSegmentJob,
   nextJobs: readonly RatingSegmentJob[] = [],
+  capabilities?: RatingCapabilities,
 ): Promise<void> {
   for (const next of new Map(nextJobs.map((item) => [item.transitionId, item])).values())
-    await beginRatingPopulationJob(pool, next);
+    await beginRatingPopulationJob(pool, next, capabilities);
 
   validateJob(job);
-  for (const populationId of populationsForJob(job)) await changePopulationPending(pool, job, populationId, false);
+  for (const populationId of populationsForJob(job))
+    await changePopulationPending(pool, job, populationId, false, capabilities);
 }
 
 /** Page in the voter home; production receipts replay the committed page until its aggregate delivery completes. */
@@ -286,6 +300,7 @@ export async function processRatingSegmentPage(
   pool: Pool,
   input: RatingSegmentJob & { after: SegmentCursor | null },
   ratingCounter?: RatingCounter,
+  capabilities?: RatingCapabilities,
 ): Promise<SegmentPageResult> {
   const { voterRoute } = validateJob(input);
   validateCursor(input.after);
@@ -581,30 +596,39 @@ export async function processRatingSegmentPage(
       ],
     };
   };
-  const outcome = await runCommand(pool, options, async (tx, command) => {
+  const outcome = await (capabilities?.command ?? runCommand)(pool, options, async (tx, command) => {
     // A crash before foreground delivery replays the exact page and its native source position.
     const result = await producePage(tx, command);
     return { ...result, value: { ...result.value, eventTime: authoritativeTimeValue(command.time) } };
   });
   if (!outcome) throw new Error('Voter partition is unavailable while paging rating votes');
   if (ratingCounter) {
-    await applyRatingSegmentPageEvent(pool, ratingCounter, {
-      specversion: '1.0',
-      id: outcome.transactionId,
-      source: `urn:rezics:log:${outcome.partition}.${outcome.epoch}`,
-      sequence: outcome.position.toString().padStart(19, '0'),
-      type: SEGMENT_PAGE,
-      subject: input.voterId,
-      time: outcome.value.eventTime!,
-      datacontenttype: 'application/json',
-      data: outcome.value.eventData,
-    });
+    await applyRatingSegmentPageEvent(
+      pool,
+      ratingCounter,
+      {
+        specversion: '1.0',
+        id: outcome.transactionId,
+        source: `urn:rezics:log:${outcome.partition}.${outcome.epoch}`,
+        sequence: outcome.position.toString().padStart(19, '0'),
+        type: SEGMENT_PAGE,
+        subject: input.voterId,
+        time: outcome.value.eventTime!,
+        datacontenttype: 'application/json',
+        data: outcome.value.eventData,
+      },
+      capabilities,
+    );
   }
   return outcome.value;
 }
 
 /** Start the current row's durable workflow from its transition id, which prevents duplicate join events from forking jobs. */
-export function createRatingSegmentJobEffect(pool: Pool, client: WorkContext['client']): Effect {
+export function createRatingSegmentJobEffect(
+  pool: Pool,
+  client: WorkContext['client'],
+  capabilities?: RatingCapabilities,
+): Effect {
   return {
     name: 'rating_segment_job',
     types: [REALM_CHANGED, 'com.rezics.rating.eligibility.changed.v1', COUNTER_CHANGED],
@@ -636,7 +660,7 @@ export function createRatingSegmentJobEffect(pool: Pool, client: WorkContext['cl
       } else throw new TypeError('Invalid rating segment transition event');
       if (!job) return;
       const { voterRoute } = validateJob(job);
-      await beginRatingPopulationJob(pool, job);
+      await beginRatingPopulationJob(pool, job, capabilities);
       await client.enqueue(
         {
           workflowName: RATING_SEGMENT_WORKFLOW,
@@ -666,18 +690,23 @@ export function ratingSegmentWorkflowId(job: RatingSegmentJob): string {
 }
 
 /** Register page and finish steps plus the membership-change starter effect. */
-export function registerRatingSegmentWork(context: WorkContext, ratingCounter?: RatingCounter): void {
-  const processPage = DBOS.registerStep(
+export function registerRatingSegmentWork(
+  context: WorkContext,
+  ratingCounter?: RatingCounter,
+  capabilities?: RatingCapabilities,
+  installEffect = true,
+): void {
+  const processPage = (capabilities?.workflows ?? nativeRatingWorkflows).registerStep(
     async (job: RatingSegmentJob, after: SegmentCursor | null) =>
-      processRatingSegmentPage(context.pool, { ...job, after }, ratingCounter),
+      processRatingSegmentPage(context.pool, { ...job, after }, ratingCounter, capabilities),
     { name: 'rating.processSegmentPage', ...COMMAND_STEP_RETRIES },
   );
-  const finishJob = DBOS.registerStep(
+  const finishJob = (capabilities?.workflows ?? nativeRatingWorkflows).registerStep(
     async (job: RatingSegmentJob, nextJobs: RatingSegmentJob[]) =>
-      finishRatingPopulationJob(context.pool, job, nextJobs),
+      finishRatingPopulationJob(context.pool, job, nextJobs, capabilities),
     { name: 'rating.finishSegmentJob', ...COMMAND_STEP_RETRIES },
   );
-  DBOS.registerWorkflow(
+  (capabilities?.workflows ?? nativeRatingWorkflows).registerWorkflow(
     async (job: RatingSegmentJob) => {
       let after: SegmentCursor | null = null;
       for (;;) {
@@ -691,5 +720,5 @@ export function registerRatingSegmentWork(context: WorkContext, ratingCounter?: 
     },
     { name: RATING_SEGMENT_WORKFLOW },
   );
-  context.addEffects([createRatingSegmentJobEffect(context.pool, context.client)]);
+  if (installEffect) context.addEffects([createRatingSegmentJobEffect(context.pool, context.client, capabilities)]);
 }

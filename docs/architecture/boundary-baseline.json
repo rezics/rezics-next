@@ -20882,22 +20882,7 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/rating/aggregate-effect.ts",
-          "edge": "type import \"../events/effects.ts\" #1 => services/kernel/src/events/effects.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/aggregate-effect.ts",
-          "edge": "type import \"../events/log.ts\" #1 => services/kernel/src/events/log.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/aggregate-effect.ts",
           "edge": "value import \"../access/gates/catalogue.ts\" #1 => services/kernel/src/access/gates/catalogue.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/aggregate-effect.ts",
-          "edge": "value import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts"
         },
         {
           "rule": "rule 2",
@@ -20987,32 +20972,7 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/rating/classification-ballot-projector.ts",
-          "edge": "type import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/classification-ballot-projector.ts",
-          "edge": "type import \"../events/log.ts\" #1 => services/kernel/src/events/log.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/classification-ballot-projector.ts",
-          "edge": "type import \"../events/relays.ts\" #1 => services/kernel/src/events/relays.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/classification-ballot-projector.ts",
           "edge": "value import \"../access/events.ts\" #1 => services/kernel/src/access/events.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/classification-ballot-projector.ts",
-          "edge": "value import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/classification-ballot-projector.ts",
-          "edge": "value import \"../events/log.ts\" #1 => services/kernel/src/events/log.ts"
         },
         {
           "rule": "rule 2",
@@ -21028,16 +20988,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/rating/classification-ballot.ts",
           "edge": "value import \"../access/unavailable.ts\" #1 => services/kernel/src/access/unavailable.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/classification-ballot.ts",
-          "edge": "value import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/classification-ballot.ts",
-          "edge": "value import \"../command/command.ts\" #2 => services/kernel/src/command/command.ts"
         },
         {
           "rule": "rule 2",
@@ -21062,16 +21012,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/rating/eligibility.ts",
-          "edge": "type import \"../events/effects.ts\" #1 => services/kernel/src/events/effects.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/eligibility.ts",
-          "edge": "type import \"../events/log.ts\" #1 => services/kernel/src/events/log.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/eligibility.ts",
           "edge": "value import \"../access/events.ts\" #1 => services/kernel/src/access/events.ts"
         },
         {
@@ -21082,17 +21022,7 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/rating/eligibility.ts",
-          "edge": "value import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/eligibility.ts",
           "edge": "value import \"../database/pool.ts\" #1 => services/kernel/src/database/pool.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/erasure-status.ts",
-          "edge": "value import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts"
         },
         {
           "rule": "rule 2",
@@ -21107,27 +21037,7 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/rating/identity-repair.ts",
-          "edge": "value import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/identity-repair.ts",
           "edge": "value import \"../library/command-support.ts\" #1 => services/kernel/src/library/command-support.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/identity-work-frame.ts",
-          "edge": "type import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/merge-job.ts",
-          "edge": "type import \"../events/effects.ts\" #1 => services/kernel/src/events/effects.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/merge-job.ts",
-          "edge": "type import \"../events/log.ts\" #1 => services/kernel/src/events/log.ts"
         },
         {
           "rule": "rule 2",
@@ -21137,17 +21047,7 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/rating/merge-job.ts",
-          "edge": "type import \"../work/registry.ts\" #1 => services/kernel/src/work/registry.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/merge-job.ts",
           "edge": "value import \"../access/gates/catalogue.ts\" #1 => services/kernel/src/access/gates/catalogue.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/merge-job.ts",
-          "edge": "value import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts"
         },
         {
           "rule": "rule 2",
@@ -21276,11 +21176,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/rating/own-votes-review.ts",
-          "edge": "type import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/rating/own-votes-schemas.ts",
           "edge": "value import \"../semantic/http/summaries.ts\" #1 => services/kernel/src/semantic/http/summaries.ts"
         },
@@ -21307,22 +21202,7 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/rating/population-total.ts",
-          "edge": "type import \"../events/effects.ts\" #1 => services/kernel/src/events/effects.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/population-total.ts",
-          "edge": "type import \"../events/log.ts\" #1 => services/kernel/src/events/log.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/population-total.ts",
           "edge": "value import \"../access/gates/catalogue.ts\" #1 => services/kernel/src/access/gates/catalogue.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/population-total.ts",
-          "edge": "value import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts"
         },
         {
           "rule": "rule 2",
@@ -21348,21 +21228,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/rating/public-figure-http.ts",
           "edge": "value import \"../database/pool.ts\" #1 => services/kernel/src/database/pool.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/public-figure.ts",
-          "edge": "type import \"../events/effects.ts\" #1 => services/kernel/src/events/effects.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/public-figure.ts",
-          "edge": "type import \"../events/log.ts\" #1 => services/kernel/src/events/log.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/public-figure.ts",
-          "edge": "value import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts"
         },
         {
           "rule": "rule 2",
@@ -21398,11 +21263,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/rating/question-authoring.ts",
           "edge": "value import \"../access/grant-commands.ts\" #1 => services/kernel/src/access/grant-commands.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/question-authoring.ts",
-          "edge": "value import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts"
         },
         {
           "rule": "rule 2",
@@ -21472,11 +21332,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/rating/question-label.ts",
-          "edge": "value import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/question-label.ts",
           "edge": "value import \"../community/realm-read.sql\" #1 => services/kernel/src/community/realm-read.sql"
         },
         {
@@ -21503,11 +21358,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/rating/question-lifecycle.ts",
           "edge": "value import \"../access/grant-commands.ts\" #1 => services/kernel/src/access/grant-commands.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/question-lifecycle.ts",
-          "edge": "value import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts"
         },
         {
           "rule": "rule 2",
@@ -21563,21 +21413,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/rating/question-vote-admission.ts",
           "edge": "value import \"../access/unavailable.ts\" #1 => services/kernel/src/access/unavailable.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/question-vote-admission.ts",
-          "edge": "value import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/realm-rank-delivery.ts",
-          "edge": "type import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/realm-rank-delivery.ts",
-          "edge": "type import \"../events/log.ts\" #1 => services/kernel/src/events/log.ts"
         },
         {
           "rule": "rule 2",
@@ -21686,16 +21521,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/rating/segment-identity-guard.ts",
-          "edge": "type import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/segment-identity.ts",
-          "edge": "type import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/rating/segment-identity.ts",
           "edge": "value import \"../access/gates/catalogue.ts\" #1 => services/kernel/src/access/gates/catalogue.ts"
         },
@@ -21707,32 +21532,12 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/rating/segment-job.ts",
-          "edge": "type import \"../events/effects.ts\" #1 => services/kernel/src/events/effects.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/segment-job.ts",
-          "edge": "type import \"../events/log.ts\" #1 => services/kernel/src/events/log.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/segment-job.ts",
-          "edge": "type import \"../work/registry.ts\" #1 => services/kernel/src/work/registry.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/segment-job.ts",
           "edge": "value import \"../access/events.ts\" #1 => services/kernel/src/access/events.ts"
         },
         {
           "rule": "rule 2",
           "file": "services/kernel/src/rating/segment-job.ts",
           "edge": "value import \"../access/gates/catalogue.ts\" #1 => services/kernel/src/access/gates/catalogue.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/segment-job.ts",
-          "edge": "value import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts"
         },
         {
           "rule": "rule 2",
@@ -21836,18 +21641,8 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/rating/source-classification-store.ts",
-          "edge": "type import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/rating/source-classification.ts",
           "edge": "value import \"../access/grant-commands.ts\" #1 => services/kernel/src/access/grant-commands.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/source-classification.ts",
-          "edge": "value import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts"
         },
         {
           "rule": "rule 2",
@@ -21912,17 +21707,7 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/rating/source-provider-observation.ts",
-          "edge": "type import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/source-provider-observation.ts",
           "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/source-statistics.ts",
-          "edge": "type import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts"
         },
         {
           "rule": "rule 2",
@@ -21933,11 +21718,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/rating/source-statistics.ts",
           "edge": "value import \"../access/grant-commands.ts\" #1 => services/kernel/src/access/grant-commands.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/source-statistics.ts",
-          "edge": "value import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts"
         },
         {
           "rule": "rule 2",
@@ -21997,17 +21777,7 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/rating/voter-realms.ts",
-          "edge": "type import \"../events/effects.ts\" #1 => services/kernel/src/events/effects.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/voter-realms.ts",
           "edge": "value import \"../access/gates/catalogue.ts\" #1 => services/kernel/src/access/gates/catalogue.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/voter-realms.ts",
-          "edge": "value import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts"
         },
         {
           "rule": "rule 2",
@@ -22032,11 +21802,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/rating/votes.ts",
-          "edge": "value import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/votes.ts",
           "edge": "value import \"../database/pool.ts\" #1 => services/kernel/src/database/pool.ts"
         },
         {
@@ -22052,11 +21817,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/rating/votes.ts",
-          "edge": "value import \"../request/deadline.ts\" #1 => services/kernel/src/request/deadline.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/votes.ts",
           "edge": "value import \"../semantic/identity-rating-admission.ts\" #1 => services/kernel/src/semantic/identity-rating-admission.ts"
         },
         {
@@ -22067,17 +21827,7 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/rating/work-module.ts",
-          "edge": "type import \"../work/registry.ts\" #1 => services/kernel/src/work/registry.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/work-module.ts",
           "edge": "value import \"../access/rating-counter.ts\" #1 => services/kernel/src/access/rating-counter.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/work-module.ts",
-          "edge": "value import \"../events/relays.ts\" #1 => services/kernel/src/events/relays.ts"
         },
         {
           "rule": "rule 3",
@@ -22121,11 +21871,6 @@
         },
         {
           "rule": "rule 3",
-          "file": "services/kernel/src/rating/personal-score.ts",
-          "edge": "value import \"./votes.ts\" #1 => services/kernel/src/rating/votes.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
           "file": "services/kernel/src/rating/population-total.ts",
           "edge": "value import \"../access/gates/catalogue.ts\" #1 => services/kernel/src/access/gates/catalogue.ts (value-import cycle)"
         },
@@ -22138,11 +21883,6 @@
           "rule": "rule 3",
           "file": "services/kernel/src/rating/population-total.ts",
           "edge": "value import \"../semantic/read.ts\" #1 => services/kernel/src/semantic/read.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/rating/population-total.ts",
-          "edge": "value import \"./votes.ts\" #1 => services/kernel/src/rating/votes.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -22166,11 +21906,6 @@
         },
         {
           "rule": "rule 3",
-          "file": "services/kernel/src/rating/public-figure.ts",
-          "edge": "value import \"./votes.ts\" #1 => services/kernel/src/rating/votes.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
           "file": "services/kernel/src/rating/public-rating-source.ts",
           "edge": "value import \"../access/gates/catalogue.ts\" #1 => services/kernel/src/access/gates/catalogue.ts (value-import cycle)"
         },
@@ -22178,11 +21913,6 @@
           "rule": "rule 3",
           "file": "services/kernel/src/rating/public-rating-source.ts",
           "edge": "value import \"./public-figure.ts\" #1 => services/kernel/src/rating/public-figure.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/rating/public-rating-source.ts",
-          "edge": "value import \"./votes.ts\" #1 => services/kernel/src/rating/votes.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",

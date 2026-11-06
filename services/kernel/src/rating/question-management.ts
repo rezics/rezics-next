@@ -1,3 +1,5 @@
+import type { RatingCapabilities } from './contract/capabilities.ts';
+import { ratingCapabilities } from './adapters/ambient.ts';
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import { deadlineClient } from '../access/authenticate.ts';
@@ -22,7 +24,13 @@ import {
 import generationRead from './question-lifecycle-generation-read.sql';
 import questionRead from './question-read.sql';
 
-type Dependencies = { pool: Pool; access: Access; tokens: KeyRing; clock?: KernelClock };
+type Dependencies = {
+  pool: Pool;
+  access: Access;
+  tokens: KeyRing;
+  capabilities?: RatingCapabilities;
+  clock?: KernelClock;
+};
 type ManagementInput = { realmId: string; selectedQuestionId?: string; cursor?: string };
 const PAGE_SIZE = 20;
 const MAX_CURSOR = 4096;
@@ -90,7 +98,7 @@ export async function readQuestionManagementPage(
       authority: createHash('sha256').update(JSON.stringify(authority)).digest('hex'),
     },
   };
-  const now = () => (deps.clock?.() ?? new Date()).getTime();
+  const now = () => ratingCapabilities(deps).clock().getTime();
   let after: string | null = null;
   let lifecycleGeneration: string | undefined;
   if (cursor !== undefined) {

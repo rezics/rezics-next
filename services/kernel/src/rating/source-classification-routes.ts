@@ -1,3 +1,5 @@
+import type { RatingCapabilities } from './contract/capabilities.ts';
+import { ratingCapabilities } from './adapters/ambient.ts';
 import { memoizedValue } from '../memoized.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
@@ -36,6 +38,7 @@ export type SourceClassificationRouteDependencies = {
   pool: Pool;
   access: () => Access;
   routeKey: Uint8Array;
+  capabilities?: RatingCapabilities;
   clock?: KernelClock;
 };
 const closed = { additionalProperties: false } as const;
@@ -97,9 +100,48 @@ function currentProjection(items: readonly SourceClassificationRead[]) {
   });
 }
 /** Only supplied exact Semantic identities are accepted. No classification inventory or retained-history route. */
+/** HTTP registrations are data; composition inspects these before mounting handlers. */
+export function sourceClassificationRouteDeclarations() {
+  return {
+    route1: {
+      method: 'POST' as const,
+      path: customMethod('/v1/subjects/:id/source-classifications', 'read'),
+      options: {
+        params,
+        body: SourceClassificationBatchInputSchema(),
+        response: { 200: SourceClassificationBatchSchema(), ...failures() },
+        detail: detail('rating.source_classifications_read'),
+      },
+    },
+    route2: {
+      method: 'POST' as const,
+      path: customMethod('/v1/subjects/:id/source-classifications', 'put'),
+      options: {
+        params,
+        headers: headers(),
+        body: SourceClassificationPutInputSchema(),
+        response: { 200: withHeaders(SourceClassificationPutSchema(), sessionHeaders()), ...failures() },
+        detail: detail('rating.source_classification_put', true),
+      },
+    },
+    route3: {
+      method: 'POST' as const,
+      path: customMethod('/v1/subjects/:id/source-classifications', 'clear'),
+      options: {
+        params,
+        headers: headers(),
+        body: SourceClassificationClearInputSchema(),
+        response: { 200: withHeaders(SourceClassificationClearResultSchema, sessionHeaders()), ...failures() },
+        detail: detail('rating.source_classification_clear', true),
+      },
+    },
+  };
+}
+
 export function sourceClassificationRoutes(
   app: ReturnType<typeof definitionRoutes>,
   dependencies: SourceClassificationRouteDependencies,
+  declarations = sourceClassificationRouteDeclarations(),
 ) {
   const config = () => ({ ...dependencies, access: dependencies.access() });
   async function actions(actor: Actor, deadline: number): Promise<('put' | 'clear')[]> {
@@ -116,13 +158,8 @@ export function sourceClassificationRoutes(
   }
   return app
     .post(
-      customMethod('/v1/subjects/:id/source-classifications', 'read'),
-      {
-        params,
-        body: SourceClassificationBatchInputSchema(),
-        response: { 200: SourceClassificationBatchSchema(), ...failures() },
-        detail: detail('rating.source_classifications_read'),
-      },
+      declarations.route1.path,
+      declarations.route1.options,
       async ({ actor, params, body, admission, job, request, set }) => {
         validate(params.id, body.associations, body);
         set.headers['cache-control'] = 'no-store';
@@ -164,14 +201,8 @@ export function sourceClassificationRoutes(
       },
     )
     .post(
-      customMethod('/v1/subjects/:id/source-classifications', 'put'),
-      {
-        params,
-        headers: headers(),
-        body: SourceClassificationPutInputSchema(),
-        response: { 200: withHeaders(SourceClassificationPutSchema(), sessionHeaders()), ...failures() },
-        detail: detail('rating.source_classification_put', true),
-      },
+      declarations.route2.path,
+      declarations.route2.options,
       async ({ actor, params, body, headers, admission, job, session, set }) => {
         validate(params.id, [body.association], body);
         await translate(async () => validateClassificationObservation(body.value));
@@ -192,14 +223,8 @@ export function sourceClassificationRoutes(
       },
     )
     .post(
-      customMethod('/v1/subjects/:id/source-classifications', 'clear'),
-      {
-        params,
-        headers: headers(),
-        body: SourceClassificationClearInputSchema(),
-        response: { 200: withHeaders(SourceClassificationClearResultSchema, sessionHeaders()), ...failures() },
-        detail: detail('rating.source_classification_clear', true),
-      },
+      declarations.route3.path,
+      declarations.route3.options,
       async ({ actor, params, body, headers, admission, job, session, set }) => {
         validate(params.id, [body.association], body);
         await translate(async () => validateClassificationClear(body.value));

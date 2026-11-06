@@ -1,3 +1,4 @@
+import { createNativeRatingCapabilities } from './rating/module.ts';
 import { readCommerceMoneyPolicy, type CommerceMoneyPolicy } from './commerce/money.ts';
 import type { WriteRateLimiter } from './access/write-rate.ts';
 import { createWriteRateStage, type WriteRateStageOptions } from './access/write-rate-stage.ts';
@@ -161,6 +162,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
     await client;
     const rated = searchConfig === undefined ? undefined : createRatedSubjectSource(pool, config.routeKey);
     app = createKernel({
+      rating: createNativeRatingCapabilities({ clock: defaults.clock }),
       moneyPolicy,
       pool,
       routeKey: config.routeKey,

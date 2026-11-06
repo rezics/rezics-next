@@ -1,3 +1,5 @@
+import type { RatingCapabilities } from './contract/capabilities.ts';
+import { ratingCapabilities } from './adapters/ambient.ts';
 import type { Pool, PoolClient } from 'pg';
 import { readAccount } from '../access/account-data.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
@@ -44,6 +46,7 @@ type Dependencies = {
   access: Access;
   tokens: KeyRing;
   routeKey: Uint8Array;
+  capabilities?: RatingCapabilities;
   clock?: KernelClock;
 };
 type Key = { subjectId: string; associationId: string };
@@ -332,7 +335,7 @@ export function createClassificationBallotOwnPageReader(deps: Dependencies) {
     ): Promise<ClassificationBallotOwnPage> {
       const owner = ownerOf(actor);
       const actorRoute = routeOf(owner.accountId)!;
-      const now = () => (deps.clock?.() ?? new Date()).getTime();
+      const now = () => ratingCapabilities(deps).clock().getTime();
       const selected = input.selected ?? null;
       if (selected) validateKey(selected);
       const initial = await readAccountSnapshot(deps, owner, deadline, async (_client, state, homeEpoch) => ({

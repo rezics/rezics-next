@@ -12,7 +12,7 @@ import type {
 } from '../search/rating-source.ts';
 import { readPublicFigures } from './public-figure.ts';
 import readPublicRatingEpochSql from './public-rating-source-epoch.sql';
-import { STANDARD_QUESTION_ID } from './votes.ts';
+import { STANDARD_QUESTION_ID } from './standard-question.ts';
 
 const MAX_SUBJECTS = 256;
 

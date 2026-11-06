@@ -1,3 +1,6 @@
+import { runCommand, authoritativeTimeValue, commandTime, principalCommandIdentity } from '../command/command.ts';
+import type { RatingCapabilities } from './contract/capabilities.ts';
+import { ratingCapabilities } from './adapters/ambient.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
@@ -7,7 +10,6 @@ import { GrantDeniedError } from '../access/grant-commands.ts';
 import { CommandUnavailableError } from '../access/unavailable.ts';
 import { resourceAuthorization } from '../access/index.ts';
 import type { KernelClock } from '../clock.ts';
-import { authoritativeTimeValue, commandTime, principalCommandIdentity, runCommand } from '../command/command.ts';
 import realmRead from '../community/realm-read.sql';
 import { partitionReadClientObservation } from '../database/read-snapshot.ts';
 import { ProblemError } from '../http/problem.ts';
@@ -26,7 +28,7 @@ import exactRead from './question-label-read.sql';
 import questionRead from './question-read.sql';
 
 export const QUESTION_LABEL_CHANGED = 'com.rezics.rating.question.label-changed.v1';
-type Dependencies = { pool: Pool; access: Access; clock?: KernelClock };
+type Dependencies = { pool: Pool; access: Access; capabilities?: RatingCapabilities; clock?: KernelClock };
 export type QuestionLabelInput = Readonly<{ questionId: string; expectedLabelRevision: number; label: string }>;
 export type QuestionLabel = {
   questionId: string;
@@ -84,7 +86,7 @@ export async function updateQuestionLabel(
     },
     context: { pool: deps.pool, deadline: context.deadline, partition: partitionOf(route) },
   });
-  return runCommand(
+  return (ratingCapabilities(deps).command ?? runCommand)(
     deps.pool,
     {
       ...identity,
@@ -264,7 +266,7 @@ async function observeLabelPage(
     let after = selection?.after ?? 0;
     let ceiling = selection?.ceiling ?? question.labelRevision ?? 1;
     if (cursor !== undefined) {
-      const decoded = decodeCursor(deps.tokens, binding, cursor, (deps.clock?.() ?? new Date()).getTime());
+      const decoded = decodeCursor(deps.tokens, binding, cursor, ratingCapabilities(deps).clock().getTime());
       if (
         !decoded.ok ||
         decoded.after.length !== 2 ||
@@ -388,7 +390,7 @@ export async function readQuestionLabelHistory(
       authority: createHash('sha256').update(JSON.stringify(authority)).digest('hex'),
     },
   };
-  const now = () => (deps.clock?.() ?? new Date()).getTime();
+  const now = () => ratingCapabilities(deps).clock().getTime();
   const initial = await observeLabelPage(deps, input, deadline, binding, input.cursor);
   if (!sameQuestionDefinition(question, initial.question)) throw new ProblemError('not_found');
   const consumed = initial.rows.slice(0, input.limit);
