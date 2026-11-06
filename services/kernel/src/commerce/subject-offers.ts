@@ -32,6 +32,7 @@ type Dependencies = {
   routeKey: Uint8Array;
   tokens: KeyRing;
   readConsent?: NonNullable<SaleDependencies['readConsent']>;
+  clock: () => Date;
 };
 
 /** Native creator-home point. This never consults directory prices or permission copies. */

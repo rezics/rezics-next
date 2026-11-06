@@ -655,9 +655,13 @@ roles and consent, evidence no older than 1,000 ms, and known-nonce/current-oper
 Image processing, URL imports, collection and purge retain their committed source, state, ownership and hold
 checks and existing queues, retention and page bounds. These mechanical jobs do not restore a person initiator.
 
-Ambient operands: cursor and document-read deadlines take the supplied clock (`cursorNow`, `now`), authored-field
-transactions take the command's own transaction id, and edition consent is never read from the environment or a
-pool-keyed registry at use time.
+Declared surfaces: `contentDeclaration()` (`register.ts`) names Content's events, operations, permissions and worker
+factory, which the kernel composition consumes; `mountContentHttp` (`http.ts`) is the one HTTP mount, in the order
+content, notices, subject reactions, media. Ambient operands are explicit and required: every use case takes its
+domain `clock`, board cursors take `cursorNow` (the composition defaults it to the domain clock), document reads take the
+wall-clock `now` that request budgets use, the worker takes `fetch`, and edition consent is the reader that
+`readContentConfig` builds. Authored-field transactions take the command's transaction id. Request budgets stay on wall
+time per the kernel clock policy.
 
 Cost per operation: authorization composition adds one memoized context-port lookup and passes existing object
 references. It adds no source SQL, pool checkout, permission allowance or per-step work; the existing Access,

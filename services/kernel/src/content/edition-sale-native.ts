@@ -31,11 +31,11 @@ export function readContentEditionConsent(
   return config === null ? undefined : createAuthConsentReader(config);
 }
 
-type Dependencies = Readonly<{ pool: Pool; access: Access; clock?: () => Date; readConsent?: CurrentConsentReader }>;
+type Dependencies = Readonly<{ pool: Pool; access: Access; clock: () => Date; readConsent?: CurrentConsentReader }>;
 
 /** Server-only Commerce eligibility port. It never authorizes delivery to a buyer. */
 export function readContentEditionMechanicalSaleAuthority(
-  dependencies: Readonly<{ pool: Pool; access: Access; clock?: () => Date }>,
+  dependencies: Readonly<{ pool: Pool; access: Access; clock: () => Date }>,
   editionId: string,
   context: Readonly<{ deadline: number }>,
 ): Promise<ContentEditionSaleAuthority | null> {
@@ -224,7 +224,7 @@ async function prepareNativeContentEditionSale(
 }
 
 export function readContentEditionSaleAuthority(
-  dependencies: Readonly<{ pool: Pool; access: Access; clock?: () => Date }>,
+  dependencies: Readonly<{ pool: Pool; access: Access; clock: () => Date }>,
   editionId: string,
   context: ReadContext,
 ): Promise<ContentEditionSaleAuthority | null> {

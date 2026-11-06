@@ -57,7 +57,7 @@ export async function readSpaceDiscoveryEntryBatch(
     for (let offset = 0; offset < refs.length; offset += 100) {
       try {
         const batch = await readViewerActions(
-          { ...deps, ...runtime, clock: deps.clock ?? (() => new Date()) },
+          { ...deps, ...runtime, clock: deps.clock },
           actor,
           refs.slice(offset, offset + 100),
           deadline,

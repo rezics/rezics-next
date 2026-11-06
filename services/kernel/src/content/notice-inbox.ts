@@ -22,7 +22,7 @@ export type InboxDependencies = Readonly<{
   actor: Actor;
   routeKey: Uint8Array;
   deadline?: number;
-  now?: () => Date;
+  now: () => Date;
 }>;
 
 export const INBOX_SELECTIONS = ['all', 'unread'] as const;
@@ -132,6 +132,7 @@ function dependenciesForDisclosure(dependencies: InboxDependencies) {
     access: dependencies.access,
     tokens: dependencies.tokens,
     routeKey: dependencies.routeKey,
+    clock: dependencies.now,
     actor: dependencies.actor,
     deadline: dependencies.deadline ?? Date.now() + 3_000,
   };
@@ -213,12 +214,7 @@ export async function listNoticeInbox(
   } as const;
   let after: [string, string] | null = null;
   if (input.cursor !== undefined) {
-    const value = await decodeListCursor(
-      dependencies.tokens,
-      binding,
-      input.cursor,
-      dependencies.now?.() ?? new Date(),
-    );
+    const value = await decodeListCursor(dependencies.tokens, binding, input.cursor, dependencies.now());
     if (
       !value.ok ||
       value.epoch !== LIST_CURSOR_EPOCH ||
@@ -274,7 +270,7 @@ export async function listNoticeInbox(
           dependencies.tokens,
           binding,
           { epoch: LIST_CURSOR_EPOCH, after: [lastScanned.created_at_key, lastScanned.notice_id] },
-          dependencies.now?.() ?? new Date(),
+          dependencies.now(),
         )
       : null;
   return {
@@ -377,7 +373,7 @@ export async function countUnreadNotices(
     count,
     capped,
     basis: truncated ? 'current-visible-lower-bound' : 'current-visible-unread',
-    witness: { kind: 'current-disclosure', at: (dependencies.now?.() ?? new Date()).toISOString() },
+    witness: { kind: 'current-disclosure', at: dependencies.now().toISOString() },
   };
 }
 

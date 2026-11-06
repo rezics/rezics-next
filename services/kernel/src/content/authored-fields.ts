@@ -44,7 +44,7 @@ export type AuthoredFieldInput = Readonly<{
 
 export type AuthoredFieldResult = Readonly<{ id: string; digest: string }>;
 
-export type AuthoredFieldDependencies = Readonly<{ pool: Pool; access: Access; clock?: () => Date }>;
+export type AuthoredFieldDependencies = Readonly<{ pool: Pool; access: Access; clock: () => Date }>;
 
 type ErasedAuthoredField = Readonly<{ id: string; subject: string; authorId: string }>;
 

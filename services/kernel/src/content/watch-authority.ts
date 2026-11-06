@@ -11,7 +11,7 @@ import { accessCheck, type Access, type Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 
-export type WatchDependencies = Readonly<{ pool: Pool; access: Access; tokens: KeyRing; clock?: () => Date }>;
+export type WatchDependencies = Readonly<{ pool: Pool; access: Access; tokens: KeyRing; clock: () => Date }>;
 export type WatchKind = 'thread' | 'board';
 
 /** The acting account owns the range, including when an operator opened the session. */

@@ -46,7 +46,7 @@ export function nativeEditionAuthorityAvailability(): NativeEditionAuthorityUnav
 export type SaleDependencies = Readonly<{
   pool: Pool;
   access: Access;
-  clock?: () => Date;
+  clock: () => Date;
   readConsent?: ContentEditionConsentReader;
 }>;
 

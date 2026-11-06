@@ -58,7 +58,7 @@ async function decodePosition(
     dependencies.tokens,
     binding(feed),
     cursor,
-    new Date((dependencies.cursorNow ?? Date.now)()),
+    new Date(dependencies.cursorNow()),
   );
   if (!decoded.ok || decoded.epoch !== CURSOR_EPOCH || decoded.after.length !== 4)
     throw new InvalidSitemapCursorError();
@@ -199,7 +199,7 @@ async function listSitemap(
                 position.thread?.id ?? '',
               ],
             },
-            new Date((dependencies.cursorNow ?? Date.now)()),
+            new Date(dependencies.cursorNow()),
           ),
   };
 }

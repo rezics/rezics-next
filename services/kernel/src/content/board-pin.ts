@@ -31,7 +31,7 @@ import advanceRevision from './board-pin-advance.sql';
 import { MAX_BOARD_PINS } from './board-projection.ts';
 
 export type BoardPinDependencies = Pick<ContentReadDependencies, 'pool' | 'access'> & {
-  clock?: () => Date;
+  clock: () => Date;
 };
 export type BoardPinInput = Readonly<{ boardId: string; threadId: string; pinned: boolean }>;
 export type BoardPinValue = Readonly<{

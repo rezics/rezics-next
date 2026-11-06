@@ -49,7 +49,10 @@ function response() {
   );
 }
 
-export function documentRoutes(app: ReturnType<typeof mediaImportRoutes>, dependencies: DocumentReadDependencies) {
+export function documentRoutes(
+  app: ReturnType<typeof mediaImportRoutes>,
+  dependencies: DocumentReadDependencies & { clock: () => Date },
+) {
   return app
     .onRequest(({ request, set }) => {
       if (/^\/v1\/documents\/[^/]+$/.test(new URL(request.url).pathname))

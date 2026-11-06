@@ -27,7 +27,7 @@ export type EditionRow = {
   created_at: string;
   inserted_here: boolean;
 };
-export type EditionDependencies = Readonly<{ pool: Pool; clock?: () => Date }>;
+export type EditionDependencies = Readonly<{ pool: Pool; clock: () => Date }>;
 
 /** Released, home-anchored bounded snapshots, including the final byte guard. */
 export async function editionSnapshot<T>(

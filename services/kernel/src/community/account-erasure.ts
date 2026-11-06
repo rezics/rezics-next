@@ -244,7 +244,7 @@ async function phasePage(context: WorkContext, accountId: string, progress: Prog
   if (progress.phase === 'revisions')
     return eraseAccountRevisionsPage({ pool }, accountId, stringCursor(progress.cursor, 'revision'));
   if (progress.phase === 'records') {
-    const result = await eraseAccountCommunityRecordsPage({ pool }, accountId, {
+    const result = await eraseAccountCommunityRecordsPage({ pool, clock }, accountId, {
       erasedAt: progress.erased_at.toISOString(),
       after: recordsCursor(progress.cursor),
     });
@@ -510,7 +510,7 @@ export function registerCommunityAccountErasureWork(context: WorkContext): void 
 
   const purge = DBOS.registerStep(
     async (accountId: string, asOf: string, after: CommunityRecordsCursor | null) =>
-      purgeAccountBanReasonsPage({ pool: context.pool }, accountId, { asOf, after }),
+      purgeAccountBanReasonsPage({ pool: context.pool, clock: context.clock }, accountId, { asOf, after }),
     { name: 'community.account-erasure.retention-page', retriesAllowed: true, maxAttempts: 10, intervalSeconds: 1 },
   );
   const resolve = DBOS.registerStep(

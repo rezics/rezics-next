@@ -33,7 +33,7 @@ export const PARTY_LOCATOR_TYPES = [
 /** Read the authoritative source first, releasing it before any account-partition command.
  * Replays read current attribution, so a late event cannot recreate an erased identity.
  */
-export function createPartyLocatorEffect(pool: Pool): Effect {
+export function createPartyLocatorEffect(pool: Pool, clock: () => Date): Effect {
   return {
     name: 'community_party_locator',
     types: [...PARTY_LOCATOR_TYPES],
@@ -134,7 +134,13 @@ export function createPartyLocatorEffect(pool: Pool): Effect {
             key: row.key,
           };
           for (;;) {
-            const disposition = await eraseAccountCommunityRecordItem({ pool }, row.account_id, key, status.at, true);
+            const disposition = await eraseAccountCommunityRecordItem(
+              { pool, clock },
+              row.account_id,
+              key,
+              status.at,
+              true,
+            );
             if (!disposition.pending) break;
             await DBOS.sleep(600_000);
           }

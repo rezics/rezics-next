@@ -211,11 +211,15 @@ export function createCommerceCommands(config: {
   pool: Pool;
   access: Access;
   readConsent?: SaleDependencies['readConsent'];
+  clock: () => Date;
   royaltyBasisPoints?: number;
   moneyPolicy?: CommerceMoneyPolicy;
 }) {
   const { pool, access } = config;
-  const saleConsent = config.readConsent === undefined ? {} : { readConsent: config.readConsent };
+  const saleConsent = {
+    clock: config.clock,
+    ...(config.readConsent === undefined ? {} : { readConsent: config.readConsent }),
+  };
   const moneyPolicy = config.moneyPolicy ?? readCommerceMoneyPolicy(process.env);
   const royaltyBasisPoints = config.royaltyBasisPoints ?? 9000;
   // Never written to a receipt or workflow result. Only this physical invocation's
@@ -473,7 +477,11 @@ export function createCommerceCommands(config: {
     const { parent, authorization } = admission();
     const sale = withSalePreparation(authorization, async (attempt, deadline) => {
       const offer = parent.at(attempt.time);
-      return requireCurrentContentEdition(offer.contentEdition, { pool, access }, { actor, deadline });
+      return requireCurrentContentEdition(
+        offer.contentEdition,
+        { pool, access, clock: config.clock },
+        { actor, deadline },
+      );
     });
     try {
       return await runCommand(
@@ -585,7 +593,11 @@ export function createCommerceCommands(config: {
       if (!current || current.buyerAccountId !== order.buyerAccountId) throw new GrantDeniedError();
       return {
         order: current,
-        contentEdition: await requireMechanicalContentEdition(current.contentEdition, { pool, access }, { deadline }),
+        contentEdition: await requireMechanicalContentEdition(
+          current.contentEdition,
+          { pool, access, clock: config.clock },
+          { deadline },
+        ),
       };
     });
     const result = await runCommand<CheckoutCreationAdmission>(
@@ -928,7 +940,11 @@ export function createCommerceCommands(config: {
       try {
         return {
           order: current,
-          contentEdition: await requireMechanicalContentEdition(current.contentEdition, { pool, access }, { deadline }),
+          contentEdition: await requireMechanicalContentEdition(
+            current.contentEdition,
+            { pool, access, clock: config.clock },
+            { deadline },
+          ),
         };
       } catch (error) {
         if (!isContentEditionUnavailable(error)) throw error;

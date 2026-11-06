@@ -88,7 +88,7 @@ function sameIntent(stored: unknown, intent: JoinIntent): boolean {
 export type MembershipDependencies = Readonly<{
   pool: Pool;
   access: Access;
-  clock?: () => Date;
+  clock: () => Date;
   tokens: KeyRing;
   client: WorkClient;
 }>;

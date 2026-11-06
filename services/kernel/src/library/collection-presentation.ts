@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import { deadlineClient } from '../access/authenticate.ts';
-import type { KernelClock } from '../clock.ts';
+import { systemClock, type KernelClock } from '../clock.ts';
 import { checkMediaObject } from '../content/cover-reference.ts';
 import { decideDownload } from '../content/media.ts';
 import { withConnection } from '../database/pool.ts';
@@ -56,7 +56,11 @@ export async function readablePresentationCover(
   if (!reference || !variant || !reference.width || !reference.height || !reference.placeholder || !reference.credit)
     return null;
   const decision = await decideDownload(
-    { ...dependencies, downloadContext: { deadline, routeKey: dependencies.routeKey } },
+    {
+      ...dependencies,
+      clock: dependencies.clock ?? systemClock,
+      downloadContext: { deadline, routeKey: dependencies.routeKey },
+    },
     id,
     actor,
     `${variant.format}-${variant.width}`,

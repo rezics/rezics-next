@@ -164,7 +164,7 @@ async function readMedia(
     pool: dependencies.pool,
     access: dependencies.access,
     ...(dependencies.realmParticipation ? { realmParticipation: dependencies.realmParticipation } : {}),
-    ...(dependencies.clock ? { clock: dependencies.clock } : {}),
+    clock: dependencies.clock,
   };
   const images = new Map<string, DocumentImagePresentation>();
   for (let offset = 0; offset < ids.length; offset += 32) {
@@ -312,7 +312,7 @@ export function createBoardPageReader(dependencies: BoardOpeningDependencies) {
       return dependencies.access;
     },
     tokens: dependencies.tokens,
-    ...(dependencies.clock ? { clock: dependencies.clock } : {}),
+    clock: dependencies.clock,
   });
   return async function readBoardOpeningPage(
     boardId: string,

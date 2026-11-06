@@ -1,7 +1,6 @@
 import { initializeEventTypes } from '../events/catalogue.ts';
-import { contentViewerActionResources } from '../content/viewer-actions.ts';
+import { contentDeclaration } from '../content/register.ts';
 import { createOperationCatalogue } from '@rezics/operations';
-import { FEED_OPERATION_DECLARATIONS } from '../content/feed-operation-declarations.ts';
 import { readCommerceMoneyPolicy, type CommerceMoneyPolicy } from '../commerce/money.ts';
 import type { CurrentConsentReader } from '../access/auth-consent.ts';
 import { createContentEditionBuyerFactReader } from '../commerce/content-edition-buyer-fact.ts';
@@ -58,9 +57,7 @@ import { ratingRoutes } from '../rating/routes.ts';
 import { sourceStatisticRoutes } from '../rating/source-statistics.ts';
 import type { ContentBoardDependencies } from '../content/boards.ts';
 import { currentRealmDisclosureScope } from '../content/reads.ts';
-import { mediaRoutes } from '../content/media-routes.ts';
-import { contentRoutes, subjectReactionRoutes } from '../content/routes.ts';
-import { noticeRoutes } from '../content/notice-routes.ts';
+import { mountContentHttp, type ContentHttpRoutes } from '../content/http.ts';
 import { realmOfItem } from '../content/realm-of-item.ts';
 import type { TurnstileVerifier } from '../content/turnstile.ts';
 import type { ContentRuntime } from '../content/runtime.ts';
@@ -374,7 +371,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
   initializeEventTypes();
   const operationCatalogue = createOperationCatalogue([
     ...LIBRARY_OPERATION_DECLARATIONS,
-    ...FEED_OPERATION_DECLARATIONS,
+    ...contentDeclaration().operations,
   ]);
   const sourceClock = dependencies.clock ?? systemClock;
   const clock = () => {
@@ -496,6 +493,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
   profileRoutes(app, {
     ...dependencies,
     tokens,
+    clock,
     access: (config) => resolveAccess({ ...config, realmRoleReader }),
   });
   erasureStatusRoutes(app, {
@@ -512,6 +510,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     routeKey: dependencies.routeKey,
     pool: dependencies.pool,
     tokens,
+    clock,
     access: () => resolveAccess({ actions: actionCatalogue(app), realmRoleReader }),
     ...(dependencies.content?.readConsent === undefined ? {} : { readConsent: dependencies.content.readConsent }),
     ...(dependencies.commerce === undefined ? {} : { commerce: dependencies.commerce }),
@@ -613,10 +612,11 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
   const cursorNow = dependencies.content?.cursorNow ?? (() => clock().getTime());
   let contentAccess: Access | undefined;
   let realmParticipation: RealmParticipationCheck | undefined;
-  let content: ReturnType<typeof contentRoutes>;
+  let content: ReturnType<typeof mountContentHttp>['content'];
   const checkRealmParticipation: RealmParticipationCheck = (client, input, time) => {
     realmParticipation ??= createRealmParticipationCheck({
       pool: dependencies.pool,
+      clock,
       access: resolveAccess({
         actions: actionCatalogue(content),
         realmRoleReader,
@@ -644,30 +644,37 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
       return contentAccess;
     },
   };
-  content = contentRoutes(searched as unknown as ReturnType<typeof definitionRoutes>, contentDependencies);
-  noticeRoutes(content as unknown as ReturnType<typeof definitionRoutes>, {
-    pool: dependencies.pool,
-    tokens,
-    routeKey: dependencies.routeKey,
-    get access() {
-      return contentDependencies.access;
+  const mounted = mountContentHttp(
+    searched as unknown as Parameters<typeof mountContentHttp>[0],
+    app as unknown as Parameters<typeof mountContentHttp>[1],
+    {
+      content: contentDependencies,
+      notice: {
+        pool: dependencies.pool,
+        tokens,
+        routeKey: dependencies.routeKey,
+        get access() {
+          return contentDependencies.access;
+        },
+        clock,
+      },
+      media: {
+        pool: dependencies.pool,
+        tokens,
+        clock,
+        routeKey: dependencies.routeKey,
+        realmParticipation: checkRealmParticipation,
+        get access() {
+          return resolveAccess({
+            actions: actionCatalogue(granted),
+            realmRoleReader,
+          });
+        },
+      },
     },
-    clock,
-  });
-  subjectReactionRoutes(app as unknown as ReturnType<typeof createApp>, contentDependencies);
-  const media = mediaRoutes(content as unknown as ReturnType<typeof definitionRoutes>, {
-    pool: dependencies.pool,
-    tokens,
-    clock,
-    routeKey: dependencies.routeKey,
-    realmParticipation: checkRealmParticipation,
-    get access() {
-      return resolveAccess({
-        actions: actionCatalogue(granted),
-        realmRoleReader,
-      });
-    },
-  });
+  );
+  content = mounted.content;
+  const media = mounted.media;
   const granted = accessRoutes(media as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
     clock,
@@ -872,7 +879,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
   });
   const mountedViewerResources = new Map<string, ViewerActionResource>([
     ...subjectViewerActionResources(),
-    ...contentViewerActionResources,
+    ...contentDeclaration().permissions,
     ['semantic.context', contextViewerActionResource],
     ['access.account', accountViewerActionResource],
     ['library.collection', collectionViewerActionResource],
@@ -989,10 +996,7 @@ type KernelComposition = ZoneComposition &
   ReturnType<typeof profileRoutes> &
   ReturnType<typeof accessRoutes> &
   ReturnType<typeof erasureStatusRoutes> &
-  ReturnType<typeof mediaRoutes> &
-  ReturnType<typeof contentRoutes> &
-  ReturnType<typeof noticeRoutes> &
-  ReturnType<typeof subjectReactionRoutes> &
+  ContentHttpRoutes &
   ReturnType<typeof searchRoutes> &
   ReturnType<typeof payoutRoutes> &
   ReturnType<typeof commerceRoutes> &

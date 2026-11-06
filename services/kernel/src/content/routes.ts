@@ -2141,7 +2141,12 @@ export function subjectReactionRoutes(routes: ReturnType<typeof createApp>, depe
         });
         const viewer = await admission.run('normal', job, () =>
           withViewerReactions(
-            { pool: dependencies.pool, access: dependencies.access, tokens: dependencies.tokens },
+            {
+              pool: dependencies.pool,
+              access: dependencies.access,
+              tokens: dependencies.tokens,
+              clock: dependencies.clock,
+            },
             actor,
             [{ id }],
             job.deadline,
@@ -2173,7 +2178,7 @@ async function writeReaction(
     pool: dependencies.pool,
     access: dependencies.access,
     ...(dependencies.realmParticipation === undefined ? {} : { realmParticipation: dependencies.realmParticipation }),
-    ...(dependencies.clock === undefined ? {} : { clock: dependencies.clock }),
+    clock: dependencies.clock,
   };
   const target = { targetKind, targetId };
   await contentOperation(() =>

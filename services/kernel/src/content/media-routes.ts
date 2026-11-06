@@ -41,7 +41,7 @@ import {
   strictContentSchema,
 } from './schemas.ts';
 
-type Dependencies = MediaDependencies & OwnMediaDependencies & { routeKey: Uint8Array };
+export type Dependencies = MediaDependencies & OwnMediaDependencies & { routeKey: Uint8Array };
 const params = t.Object({ id: t.String() }, { additionalProperties: false });
 function readFailures() {
   return memoizedValue(readFailures, () => ({

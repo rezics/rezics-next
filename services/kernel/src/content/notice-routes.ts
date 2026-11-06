@@ -21,12 +21,12 @@ import {
 } from './notice-inbox.ts';
 import { AvatarSummarySchema, strictContentSchema } from './schemas.ts';
 
-type Dependencies = {
+export type Dependencies = {
   pool: import('pg').Pool;
   access: Access;
   tokens: KeyRing;
   routeKey: Uint8Array;
-  clock?: () => Date;
+  clock: () => Date;
 };
 const params = t.Object({ accountId: t.String() }, { additionalProperties: false });
 const noticeParams = t.Object({ accountId: t.String(), noticeId: t.String() }, { additionalProperties: false });
@@ -241,7 +241,7 @@ export function noticeRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
                 routeKey: dependencies.routeKey,
                 actor,
                 deadline: job.deadline,
-                ...(dependencies.clock === undefined ? {} : { now: dependencies.clock }),
+                now: dependencies.clock,
               },
               accountId,
               {
@@ -282,7 +282,7 @@ export function noticeRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
                 routeKey: dependencies.routeKey,
                 actor,
                 deadline: job.deadline,
-                ...(dependencies.clock === undefined ? {} : { now: dependencies.clock }),
+                now: dependencies.clock,
               },
               accountId,
               noticeId,
@@ -319,7 +319,7 @@ export function noticeRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
                 routeKey: dependencies.routeKey,
                 actor,
                 deadline: job.deadline,
-                ...(dependencies.clock === undefined ? {} : { now: dependencies.clock }),
+                now: dependencies.clock,
               },
               accountId,
             ),
@@ -363,10 +363,11 @@ export function noticeRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
                 routeKey: dependencies.routeKey,
                 actor,
                 deadline: job.deadline,
+                now: dependencies.clock,
               },
               accountId,
             );
-            await markNoticesSeen(dependencies.pool, accountId, body.through, dependencies.clock?.());
+            await markNoticesSeen(dependencies.pool, accountId, body.through, dependencies.clock());
           });
         } catch (error) {
           if (error instanceof RangeError) throw new ProblemError('not_found');
@@ -408,10 +409,11 @@ export function noticeRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
                 routeKey: dependencies.routeKey,
                 actor,
                 deadline: job.deadline,
+                now: dependencies.clock,
               },
               accountId,
             );
-            await acknowledgeNotice(dependencies.pool, accountId, noticeId, dependencies.clock?.());
+            await acknowledgeNotice(dependencies.pool, accountId, noticeId, dependencies.clock());
           });
         } catch (error) {
           if (error instanceof RangeError) throw new ProblemError('not_found');

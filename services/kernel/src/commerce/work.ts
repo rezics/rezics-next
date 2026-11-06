@@ -76,7 +76,7 @@ export function createCommerceWork(deps: CommerceWorkDependencies): WorkModule {
       const authorizedContext = context as WorkContext & { getAuthorization(): WorkerAuthorization };
       if (typeof authorizedContext.getAuthorization !== 'function') throw new AccessUnavailableError('overloaded');
       const { access, readConsent } = authorizedContext.getAuthorization();
-      const commands = createCommerceCommands({ pool, access, readConsent });
+      const commands = createCommerceCommands({ pool, access, readConsent, clock: authorizedContext.clock });
       const stripeRetries = {
         retriesAllowed: true,
         intervalSeconds: 1,

@@ -50,10 +50,14 @@ type Dependencies = {
   tokens: KeyRing;
   access: () => Access;
   readConsent?: SaleDependencies['readConsent'];
+  clock: () => Date;
   commerce?: CommerceDependencies;
   moneyPolicy?: CommerceMoneyPolicy;
 };
-const saleConsent = (deps: Dependencies) => (deps.readConsent === undefined ? {} : { readConsent: deps.readConsent });
+const saleConsent = (deps: Dependencies) => ({
+  clock: deps.clock,
+  ...(deps.readConsent === undefined ? {} : { readConsent: deps.readConsent }),
+});
 const object = { additionalProperties: false } as const;
 const id = t.String();
 const nullableId = t.Union([id, t.Null()]);

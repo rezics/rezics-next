@@ -172,7 +172,7 @@ function sameInspection(left: InspectionRow | null | undefined, right: Inspectio
  * Accounts' approval command remains the only writer and grant producer.
  */
 export async function listRealmClaimRequests(
-  deps: { pool: Pool; access: Access; clock?: () => Date },
+  deps: { pool: Pool; access: Access; clock: () => Date },
   actor: Actor,
   input: { realmId: string; cursor?: string; limit?: number; inspectRequestId?: string },
   context: { deadline: number },
@@ -188,7 +188,7 @@ export async function listRealmClaimRequests(
     input.inspectRequestId !== undefined && routeOf(input.inspectRequestId) === route
       ? input.inspectRequestId
       : undefined;
-  const clock = deps.clock ?? accessClock(deps.access);
+  const clock = deps.clock;
   const accessContext = { pool: deps.pool, deadline: context.deadline };
   const binding = {
     operation: 'community.realm.claim-review',
@@ -255,7 +255,7 @@ export async function listRealmClaimRequests(
         {
           pool: deps.pool,
           access: deps.access,
-          ...(deps.clock === undefined ? {} : { clock: deps.clock }),
+          clock: deps.clock,
         },
         realmId,
         { actor, deadline: context.deadline },
