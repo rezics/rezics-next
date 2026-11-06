@@ -93,9 +93,11 @@ test('mounted installed route and session retain canonical origin, acquire fresh
       value: name === 'window' ? window : name === 'IS_REACT_ACT_ENVIRONMENT' ? true : Reflect.get(window, name),
     });
   const { createRoot } = await import('react-dom/client');
-  const { waitFor, within } = await import(
+  const { waitFor: waitForCondition, within } = await import(
     createRequire(require.resolve('storybook/test')).resolve('@testing-library/dom')
   );
+  // Route transitions and native reads settle after the default second on a loaded check host.
+  const waitFor = (callback: () => unknown) => waitForCondition(callback, { timeout: 8000 });
   const { createRootRoute, createRouter, createMemoryHistory, RouterProvider } = await import('@tanstack/react-router');
   const { mangaFixture } = await import('../src/kernel/fake/catalogue-manga-profile');
   const fixture = mangaFixture();
