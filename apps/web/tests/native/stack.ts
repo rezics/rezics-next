@@ -19,10 +19,7 @@ import {
   type NativeProcessIdentity,
   type NativeProcessOwnership,
 } from './lifecycle.ts';
-import { createCommerceWork } from '../../../../services/kernel/src/commerce/enqueue.ts';
-import { readCommerceConfig } from '../../../../services/kernel/src/commerce/config.ts';
-import { createStripePort } from '../../../../services/kernel/src/commerce/stripe.ts';
-import { createWorkClient, type WorkClient } from '../../../../services/kernel/src/work/client.ts';
+import type { WorkClient } from '../../../../services/kernel/src/work/client.ts';
 import type { OpenSearch } from '../../../../services/kernel/src/search/opensearch.ts';
 
 export type NativeCredentials = { authorization: string; cookie?: string };
@@ -556,6 +553,13 @@ async function startStack(): Promise<
     reportStackProgress('Native web stack startup: registering kernel SQL modules');
     // Match the kernel test preload before evaluating anything that imports SQL.
     await import(new URL('../../../../services/kernel/node_modules/reylo/src/register.js', import.meta.url).href);
+    const [{ createCommerceWork }, { readCommerceConfig }, { createStripePort }, { createWorkClient }] =
+      await Promise.all([
+        import('../../../../services/kernel/src/commerce/enqueue.ts'),
+        import('../../../../services/kernel/src/commerce/config.ts'),
+        import('../../../../services/kernel/src/commerce/stripe.ts'),
+        import('../../../../services/kernel/src/work/client.ts'),
+      ]);
     reportStackProgress('Native web stack startup: kernel SQL modules registered');
     if (!process.env.DATABASE_URL) {
       reportStackProgress('Native web stack startup: starting PostgreSQL');

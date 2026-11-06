@@ -359,22 +359,22 @@ test('native paging history and UTF-8 continuations are bounded; origin validati
     await click('Retry this page');
     await pending.complete(1, { next: 'page-1', state: 'lagging' });
     expect(hierarchy(host).textContent).toContain('may be behind');
-    for (let index = 1; index <= 6; index++) {
+    for (let index = 1; index <= 9; index++) {
       await click('More hierarchy');
       await pending.complete(index + 1, { next: `page-${index + 1}` });
     }
-    expect(hierarchy(host).textContent).toContain('Only the last 5 page addresses');
-    expect(hierarchy(host).textContent).toContain('Retained page 5 of 5');
-    for (let index = 0; index < 4; index++) {
+    expect(hierarchy(host).textContent).toContain('Only the last 8 page addresses');
+    expect(hierarchy(host).textContent).toContain('Retained page 8 of 8');
+    for (let index = 0; index < 7; index++) {
       await click('Previous page');
-      await pending.complete(8 + index, { next: 'later' });
+      await pending.complete(11 + index, { next: 'later' });
     }
-    expect(pending.calls[11]!.input.cursor).toBe('page-2');
+    expect(pending.calls[17]!.input.cursor).toBe('page-2');
     expect([...host.querySelectorAll('button')].find((node) => node.textContent === 'Previous page')!.disabled).toBe(
       true,
     );
     await click('More hierarchy');
-    await pending.complete(12, { next: '界'.repeat(1366) });
+    await pending.complete(18, { next: '界'.repeat(1366) });
     expect(hierarchy(host).textContent).toContain('exceeds the reader limit');
     expect([...host.querySelectorAll('button')].find((node) => node.textContent === 'More hierarchy')!.disabled).toBe(
       true,
