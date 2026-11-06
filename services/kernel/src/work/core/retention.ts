@@ -4,7 +4,9 @@ import {
   MIN_WORKFLOW_RETENTION_DAYS,
   TERMINAL_WORKFLOW_STATUSES,
   WORKFLOW_RETENTION_BATCH_SIZE,
+  WORKFLOW_RETENTION_BYTE_SCALES,
   WORKFLOW_RETENTION_CASCADE_TABLES,
+  WORKFLOW_RETENTION_COUNT_SCALES,
   WORKFLOW_RETENTION_DAY_MS,
   WORKFLOW_RETENTION_DELETE_CONTROL_STATEMENTS,
   WORKFLOW_RETENTION_DELETE_STATEMENTS,
@@ -201,6 +203,12 @@ export function admitRetentionFamilyCopies(table: WorkflowRetentionPayloadFamily
 export function admitRetentionPayloadBytes(bytes: number): number {
   if (!Number.isSafeInteger(bytes) || bytes < 0) throw new RangeError('payloadBytes');
   return Math.min(bytes, WORKFLOW_RETENTION_PAYLOAD_BYTES);
+}
+
+export function retentionAdmittedByteScale(countScale: number): number {
+  const index = (WORKFLOW_RETENTION_COUNT_SCALES as readonly number[]).indexOf(countScale);
+  if (index < 0) throw new RangeError('countScale');
+  return WORKFLOW_RETENTION_BYTE_SCALES[index]!;
 }
 
 export function admitRetentionMetadataBytes(bytes: number): number {
@@ -678,7 +686,9 @@ export function inventoriesMatch(
 export {
   WORKFLOW_RETENTION_BATCH_ATTEMPTS,
   WORKFLOW_RETENTION_BATCH_SIZE,
+  WORKFLOW_RETENTION_BYTE_SCALES,
   WORKFLOW_RETENTION_CASCADE_TABLES,
+  WORKFLOW_RETENTION_COUNT_SCALES,
   WORKFLOW_RETENTION_EXPLICIT_DELETE_TABLES,
   WORKFLOW_RETENTION_FAMILY_LIMITS,
   WORKFLOW_RETENTION_MAX_BATCHES,

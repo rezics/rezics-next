@@ -75,8 +75,11 @@ application statements plus BEGIN/ROLLBACK; replay repeats that envelope on the 
 history units (16 rows each) with selected work and unit payload fixed; eligible-application backlog with the
 returned batch fixed at 1,000; the already-passing `operation_outputs` fanout 1/8/64; independent copy axes for
 every variable family within owner limits (operations/history/notifications/streams 1/8/64, events 1/8 capped at
-8); payload-byte axis 1,024/8,192/65,536 with single-copy families held at one row; mixed maximum admitted
-neighbourhoods; unrelated payload history; sparse/deep selected identities; and a 1,010-row two-batch sweep.
+8); payload-byte axis 1,024/8,192/65,536 on harness scales 1/8/64 (`retentionAdmittedByteScale`) with single-copy
+families held at one row; mixed maximum admitted neighbourhoods; unrelated payload history; sparse/deep selected
+identities; and a 1,010-row two-batch sweep. Inventory before deletion is unmeasured `prepare`; after deletion is
+`verify` on the admin pool so owned-row/byte/fence readback is not product cost. Growth scales cannot exceed 4,096,
+so the admitted 65,536-byte axis cannot be the harness scale.
 Each check uses `captureMode: 'cost-folded'` so nested SDK-delete auto_explain notices stay inside the 32 MiB
 and 20,000-entry telemetry caps; raw retention of those notices overflowed on eligible-backlog, payload-fanout and
 two-batch sweep. Folded captures recycle each notice envelope and plan-walk occupancy after charging summaries;
@@ -121,6 +124,10 @@ payload. Growth capture is folded; a selected 1,000-id delete cannot keep every 
 the shared 32 MiB or 20,000 retained-entry caps. Payload-family planner floors are part of that pin: fanout 1/8/64
 must remain an indexed equality delete of owned copies, not a sequential scan of a tiny selected-only table.
 Cascade copies are packed by parent; packing residuals stay in the affine envelope and relation-page evidence.
+Installed `retireWorkflow` uses unlimited `withDbRetry`; the funded one-attempt producer is `maintainWorkflowOnce`
+with `SDK_MAINTENANCE_DISPATCH`. Finite invocation and same-identity recovery stay open until Accounts SDK owner
+e18b admits attempt/deadline. This complete cleanup outcome measures healthy deletion and cascade fanout, not
+retry closure. Do not reproduce SDK SQL or infer that bound from a timeout.
 
 A selected workflow count cannot bound deletion: owned payload/cascade rows are the deletion operand. The installed
 SDK `listWorkflows` path stays creation-ordered and is unused by scheduled retention. No custom scheduler or
@@ -185,10 +192,13 @@ transaction, including otherwise empty or terminal no-ops.
 Retirement joins the original native workflow-owner lock and the permanent control-row lock. It revokes the current
 execution token before closing the control row in the same transaction, without changing status or payload. This
 also fences the unchanged old `sendFromStep` path: its native owner check shares that lock through notification
-COMMIT, so a message to a different live destination must either commit before closure or roll back. SDK deadlock
-retry applies to the entire retirement statement. No process shutdown, global mutex or application callback supplies
-the fence. Running JavaScript and application side effects still require their owners' admission; the receipt
-establishes SDK writer closure only.
+COMMIT, so a message to a different live destination must either commit before closure or roll back. Installed
+`retireWorkflow` wraps that statement in unlimited `withDbRetry`; complete cost includes those failed native
+attempts once a funded attempt/deadline producer is admitted. `maintainWorkflowOnce` is the received one-attempt
+path (`SDK_MAINTENANCE_DISPATCH` rollback/begin/settings/lock/retire-or-delete/commit). Finite invocation
+acceptance stays open with Accounts SDK owner e18b. No process shutdown, global mutex or application callback
+supplies the fence. Running JavaScript and application side effects still require their owners' admission; the
+receipt establishes SDK writer closure only.
 
 The native guards are `ENABLE ALWAYS`, including control-row immutability guards. Ordinary COPY/restore replay into
 the live schema cannot recreate a retired ID. Database recovery must preserve the permanent control table and

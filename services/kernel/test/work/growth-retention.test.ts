@@ -6,11 +6,13 @@ import {
   emptyWorkflowRetentionInventory,
   inventoriesMatch,
   isRetentionCascadeDelete,
+  retentionAdmittedByteScale,
   retentionBatchWork,
   retentionCompleteBatchWork,
   retentionIndexProbes,
   retentionPayloadFanoutInventory,
   retentionSweepWork,
+  WORKFLOW_RETENTION_COUNT_SCALES,
   WORKFLOW_RETENTION_FAMILY_LIMITS,
   WORKFLOW_RETENTION_VARIABLE_FAMILIES,
   type WorkflowRetentionSelection,
@@ -42,7 +44,7 @@ const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 
 const scales = [64, 512, 4096] as const;
-const payloadScales = [1, 8, 64] as const;
+const payloadScales = WORKFLOW_RETENTION_COUNT_SCALES;
 const historyRowsPerUnit = 16;
 const shortBatch = 10;
 const fullBatch = 1000;
@@ -83,13 +85,13 @@ beforeAll(async () => {
     `ANALYZE dbos.workflow_status, dbos.workflow_input, dbos.workflow_output, dbos.operation_outputs,
             dbos.workflow_events, dbos.workflow_events_history, dbos.notifications, dbos.streams`,
   );
-});
+}, 180_000);
 
 afterAll(async () => {
   await deleteOwnedRetentionRows(db.admin, `${prefix}%`);
   await client.close();
   await db.close();
-});
+}, 300_000);
 
 function isSelectorNotice(message: string): boolean {
   return message.includes(WORKFLOW_RETENTION_SELECT_TAG) || message.includes('ORDER BY completed_at, workflow_uuid');
@@ -406,7 +408,6 @@ function expectDerivedStatements(
 }
 
 const foldedCapture = { captureMode: 'cost-folded' as const, includeBackends: true, rule: 'series' as const };
-const byteScales = [1_024, 8_192, 65_536] as const;
 const prepared = new Map<string, string[]>();
 
 function expectOwnedInventory(
@@ -416,10 +417,21 @@ function expectOwnedInventory(
   expect(inventoriesMatch(actual.rows, expected), JSON.stringify({ actual: actual.rows, expected })).toBe(true);
 }
 
+async function verifyEmptyOwned(growth: GrowthDatabase, seriesName: string): Promise<void> {
+  expectOwnedInventory(
+    await readWorkflowRetentionOwned(growth.admin, prepared.get(seriesName) ?? []),
+    emptyWorkflowRetentionInventory(),
+  );
+}
+
+function relationTableName(name: string): string {
+  return name.replaceAll('"', '').split('.').at(-1) ?? name;
+}
+
 function expectCascadeRelations(report: GrowthReport, family: string, selected: number): void {
   if (selected === 0) return;
   for (const sample of report.samples) {
-    const match = Object.entries(sample.cost.relations).find(([name]) => name.includes(family));
+    const match = Object.entries(sample.cost.relations).find(([name]) => relationTableName(name) === family);
     expect(match, `${family} relation at scale ${sample.scale}`).toBeDefined();
     expect(match![1]!.rows, `${family} rows at scale ${sample.scale}`).toBeGreaterThan(0);
   }
@@ -482,7 +494,7 @@ async function seedSparseEligible(
   fanout: RetentionPayloadFanout = UNIT_RETENTION_PAYLOAD,
 ): Promise<string[]> {
   const ids = idsFor(`${series}-${kind}`, amount, offset);
-  for (const [index, id] of ids.entries()) {
+  for (let index = 0; index < amount; index += 1) {
     await seed(growth, `${series}-${kind}`, 1, offset + index, {
       application: applicationFor(series),
       status: 'SUCCESS',
@@ -769,7 +781,7 @@ for (const family of WORKFLOW_RETENTION_VARIABLE_FAMILIES) {
         );
         prepared.set(seriesName, ids);
         expectOwnedInventory(
-          await readWorkflowRetentionOwned(growth.pool, ids),
+          await readWorkflowRetentionOwned(growth.admin, ids),
           expectedRetentionInventory(
             shortBatch,
             familyFanout(family, Math.min(scale, WORKFLOW_RETENTION_FAMILY_LIMITS[family])),
@@ -777,14 +789,10 @@ for (const family of WORKFLOW_RETENTION_VARIABLE_FAMILIES) {
         );
       },
       async operation(_growth, scale, repetition) {
-        const removed = await measureBatch(shortBatch, seriesName, scale, repetition, runs);
-        expect(
-          inventoriesMatch(
-            (await readWorkflowRetentionOwned(db.pool, prepared.get(seriesName) ?? [])).rows,
-            emptyWorkflowRetentionInventory(),
-          ),
-        ).toBe(true);
-        return removed;
+        return measureBatch(shortBatch, seriesName, scale, repetition, runs);
+      },
+      async verify(growth) {
+        await verifyEmptyOwned(growth, seriesName);
       },
     });
     expectSelectorIndex(runs);
@@ -818,35 +826,50 @@ test('a short retention batch stays bounded as admitted payload bytes grow', asy
   const report = await checkGrowth(db, {
     name: 'payload byte workflow retention batch',
     ...foldedCapture,
-    scales: byteScales,
+    scales: payloadScales,
     repetitions: 1,
     indexProbes: retentionIndexProbes(shortBatch),
     bounds: { statements: 'constant', rows: 'constant', blocks: 'linear' },
     byteBounds: { requestBytes: 'constant' },
     counted: {
-      read: (value, scale) => ({ selected: Number(value), payloadBytes: scale }),
+      read: (value, scale) => ({ selected: Number(value), payloadBytes: retentionAdmittedByteScale(scale) }),
       bounds: { selected: 'constant', payloadBytes: 'linear' },
     },
     async grow(growth, scale) {
       await deleteOwnedRetentionRows(growth.pool, `${prefix}${seriesName}-%`);
-      await seedEligible(growth, seriesName, 'warmup', shortBatch, 0, UNIT_RETENTION_PAYLOAD, scale);
+      await seedEligible(
+        growth,
+        seriesName,
+        'warmup',
+        shortBatch,
+        0,
+        UNIT_RETENTION_PAYLOAD,
+        retentionAdmittedByteScale(scale),
+      );
     },
     async warmup() {
       expect(await runWorkflowRetentionBatch(30, client, now, select, applicationFor(seriesName))).toBe(shortBatch);
     },
     async prepare(growth, scale) {
-      const ids = await seedEligible(growth, seriesName, 'eligible', shortBatch, 0, UNIT_RETENTION_PAYLOAD, scale);
+      const ids = await seedEligible(
+        growth,
+        seriesName,
+        'eligible',
+        shortBatch,
+        0,
+        UNIT_RETENTION_PAYLOAD,
+        retentionAdmittedByteScale(scale),
+      );
       prepared.set(seriesName, ids);
-      const owned = await readWorkflowRetentionOwned(growth.pool, ids);
-      expect(owned.rows).toEqual(expectedRetentionInventory(shortBatch));
+      const owned = await readWorkflowRetentionOwned(growth.admin, ids);
+      expectOwnedInventory(owned, expectedRetentionInventory(shortBatch));
       expect(owned.bytes.workflow_input).toBeGreaterThan(0);
     },
     async operation(_growth, scale, repetition) {
-      const removed = await measureBatch(shortBatch, seriesName, scale, repetition, runs);
-      expect((await readWorkflowRetentionOwned(db.pool, prepared.get(seriesName) ?? [])).rows).toEqual(
-        emptyWorkflowRetentionInventory(),
-      );
-      return removed;
+      return measureBatch(shortBatch, seriesName, scale, repetition, runs);
+    },
+    async verify(growth) {
+      await verifyEmptyOwned(growth, seriesName);
     },
   });
   expectSelectorIndex(runs);
@@ -892,16 +915,15 @@ test('a mixed-maximum neighbourhood stays bounded as unrelated workflow and payl
       );
       prepared.set(seriesName, ids);
       expectOwnedInventory(
-        await readWorkflowRetentionOwned(growth.pool, ids),
+        await readWorkflowRetentionOwned(growth.admin, ids),
         expectedRetentionInventory(shortBatch, MIXED_MAX_RETENTION_PAYLOAD),
       );
     },
     async operation(_growth, scale, repetition) {
-      const removed = await measureBatch(shortBatch, seriesName, scale, repetition, runs);
-      expect((await readWorkflowRetentionOwned(db.pool, prepared.get(seriesName) ?? [])).rows).toEqual(
-        emptyWorkflowRetentionInventory(),
-      );
-      return removed;
+      return measureBatch(shortBatch, seriesName, scale, repetition, runs);
+    },
+    async verify(growth) {
+      await verifyEmptyOwned(growth, seriesName);
     },
   });
   expectSelectorIndex(runs);
@@ -944,14 +966,13 @@ test('a short retention batch stays bounded as unrelated payload history grows',
     async prepare(growth, scale) {
       const ids = await seedEligible(growth, seriesName, 'eligible', shortBatch, scale * shortBatch);
       prepared.set(seriesName, ids);
-      expectOwnedInventory(await readWorkflowRetentionOwned(growth.pool, ids), expectedRetentionInventory(shortBatch));
+      expectOwnedInventory(await readWorkflowRetentionOwned(growth.admin, ids), expectedRetentionInventory(shortBatch));
     },
     async operation(_growth, scale, repetition) {
-      const removed = await measureBatch(shortBatch, seriesName, scale, repetition, runs);
-      expect((await readWorkflowRetentionOwned(db.pool, prepared.get(seriesName) ?? [])).rows).toEqual(
-        emptyWorkflowRetentionInventory(),
-      );
-      return removed;
+      return measureBatch(shortBatch, seriesName, scale, repetition, runs);
+    },
+    async verify(growth) {
+      await verifyEmptyOwned(growth, seriesName);
     },
   });
   expectSelectorIndex(runs);
@@ -990,14 +1011,13 @@ test('sparse and deep selected identities stay bounded as unrelated workflow his
     async prepare(growth, scale) {
       const ids = await seedSparseEligible(growth, seriesName, 'eligible', shortBatch, scale * shortBatch);
       prepared.set(seriesName, ids);
-      expectOwnedInventory(await readWorkflowRetentionOwned(growth.pool, ids), expectedRetentionInventory(shortBatch));
+      expectOwnedInventory(await readWorkflowRetentionOwned(growth.admin, ids), expectedRetentionInventory(shortBatch));
     },
     async operation(_growth, scale, repetition) {
-      const removed = await measureBatch(shortBatch, seriesName, scale, repetition, runs);
-      expect((await readWorkflowRetentionOwned(db.pool, prepared.get(seriesName) ?? [])).rows).toEqual(
-        emptyWorkflowRetentionInventory(),
-      );
-      return removed;
+      return measureBatch(shortBatch, seriesName, scale, repetition, runs);
+    },
+    async verify(growth) {
+      await verifyEmptyOwned(growth, seriesName);
     },
   });
   expectSelectorIndex(runs);
