@@ -4641,6 +4641,21 @@ CREATE TABLE public.auth_workflow_request (
 
 
 --
+-- Name: auth_workflow_retention; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_workflow_retention (
+    singleton boolean DEFAULT true NOT NULL,
+    cutoff bigint,
+    through_key text,
+    after_key text,
+    CONSTRAINT auth_workflow_retention_check CHECK (((cutoff IS NOT NULL) OR ((through_key IS NULL) AND (after_key IS NULL)))),
+    CONSTRAINT auth_workflow_retention_check1 CHECK (((after_key IS NULL) OR ((through_key IS NOT NULL) AND (after_key <= through_key)))),
+    CONSTRAINT auth_workflow_retention_singleton_check CHECK (singleton)
+);
+
+
+--
 -- Name: jwks; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -5426,6 +5441,14 @@ ALTER TABLE ONLY public.auth_signing_key
 
 ALTER TABLE ONLY public.auth_workflow_request
     ADD CONSTRAINT auth_workflow_request_pkey PRIMARY KEY (workflow_id);
+
+
+--
+-- Name: auth_workflow_retention auth_workflow_retention_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_workflow_retention
+    ADD CONSTRAINT auth_workflow_retention_pkey PRIMARY KEY (singleton);
 
 
 --

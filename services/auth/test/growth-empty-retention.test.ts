@@ -1,196 +1,116 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { DBOS, DBOSClient } from '@dbos-inc/dbos-sdk';
-import { testDatabase } from '../scripts/database.ts';
-import { AUTH_SYSTEM_SCHEMA } from '../src/maintenance.ts';
-import {
-  AUTH_WORKFLOW_APPLICATION,
-  installWorkflowRequestRetention,
-  runWorkflowRetentionBatch,
-  TERMINAL_WORKFLOW_STATUSES,
-} from '../src/retention.ts';
+import { DBOS } from '@dbos-inc/dbos-sdk';
+import { AUTH_MAINTENANCE_SCHEDULE } from '../src/maintenance.ts';
+import { WORKFLOW_RETENTION_SCHEDULE } from '../src/retention.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../../kernel/test/support/growth.ts';
+import { nativeFixture, runNativeRetentionTick } from './support/erasure-native.ts';
+import {
+  consumableGrowth,
+  prepareRetentionPage,
+  retentionAxes,
+  retentionScales,
+  seedRetentionAxes,
+} from './support/consumable-growth.ts';
 
-const scales = [256, 1024, 4096] as const;
-const fixture = testDatabase();
-const now = new Date();
-const cutoff = now.getTime() - 30 * 86400000;
 let db: GrowthDatabase;
-let client: DBOSClient;
-
+let f: Awaited<ReturnType<typeof nativeFixture>>;
+const now = Date.now();
 beforeAll(async () => {
-  await DBOS.migrate(fixture.url, { schemaName: AUTH_SYSTEM_SCHEMA });
-  db = await openGrowthDatabase(fixture.url);
-  client = await DBOSClient.create({
-    systemDatabaseUrl: fixture.url,
-    systemDatabaseSchemaName: AUTH_SYSTEM_SCHEMA,
-    applicationName: AUTH_WORKFLOW_APPLICATION,
-    systemDatabasePool: db.pool,
-    logger: { info() {}, debug() {}, warn: console.warn, error: console.error },
+  f = await nativeFixture({
+    openPool: async (url) => {
+      db = await openGrowthDatabase(url);
+      return db.openPool();
+    },
   });
-  await installWorkflowRequestRetention(db.pool);
+  await DBOS.pauseSchedule(AUTH_MAINTENANCE_SCHEDULE);
+  await DBOS.pauseSchedule(WORKFLOW_RETENTION_SCHEDULE);
 });
-
 afterAll(async () => {
-  await client.destroy();
+  await f.close({ keepPool: true });
   await db.close();
-  fixture.close();
 });
 
-async function reset(growth: GrowthDatabase) {
-  await growth.pool.query("DELETE FROM auth_dbos.workflow_status WHERE workflow_uuid LIKE 'retention-empty:%'");
-  await growth.pool.query("DELETE FROM auth_workflow_request WHERE workflow_id LIKE 'retention-empty:%'");
-}
-
-async function seedRetainedWorkflows(growth: GrowthDatabase, count: number, prefix: string) {
-  await growth.pool.query(
-    `INSERT INTO auth_dbos.workflow_status
-      (workflow_uuid,status,name,authenticated_roles,recovery_attempts,created_at,updated_at,completed_at,application_name)
-     SELECT $3||item,CASE WHEN item%2=0 THEN 'SUCCESS' ELSE 'PENDING' END,'retention.growth','[]',0,
-       $1::bigint,$1::bigint,CASE WHEN item%2=0 THEN $1::bigint ELSE NULL END,$2
-     FROM generate_series(1,$4::integer) item`,
-    [now.getTime(), AUTH_WORKFLOW_APPLICATION, prefix, count],
-  );
-}
-
-async function seedRequestHistory(growth: GrowthDatabase, count: number, prefix: string) {
-  await growth.pool.query(
-    `INSERT INTO auth_workflow_request (workflow_id,digest,request)
-     SELECT $1||item,decode('00','hex'),'{}'::jsonb FROM generate_series(1,$2::integer) item`,
-    [prefix, count],
-  );
-}
-
-function assertMeasuredCost(
-  report: Awaited<ReturnType<typeof checkGrowth>>,
-  { requests, removedRows }: { requests: boolean; removedRows: number },
-) {
-  expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
-  for (const { scale, cost } of report.samples) {
-    expect(cost.statements).toBeGreaterThan(0);
-    expect(cost.plans).toBeGreaterThan(0);
-    expect(cost.rows).toBeGreaterThanOrEqual(removedRows);
-    expect(cost.blocks).toBeGreaterThan(0);
-    expect(cost.sharedHit + cost.sharedRead).toBe(cost.blocks);
-    expect(Object.values(cost.relations).some(({ identity }) => identity?.name === 'workflow_status')).toBe(true);
-    if (requests)
-      expect(Object.values(cost.relations).some(({ identity }) => identity?.name === 'auth_workflow_request')).toBe(
-        true,
+async function emptyGrowth(drain: boolean) {
+  for (const axis of retentionAxes) {
+    const pages = drain ? 4 : 1;
+    const targets = consumableGrowth({
+      name: `retention-empty-${drain ? 'drain' : 'zero'}-${axis}`,
+      setup: (current, _scale, id) => prepareRetentionPage(current, id, drain ? 1 : 0, false, now, 1000 * pages),
+      async run(current, _scale, id, tag) {
+        // Charge the initial drain and every repeated-empty page in this capture.
+        // No warm-up consumes any of these raw candidates.
+        for (let page = 0; page < pages; page++)
+          await runNativeRetentionTick(current.admin, `z:empty-tick:${id}:${page}`);
+        return { tag, id };
+      },
+    });
+    const report = await checkGrowth(db, {
+      name: `${drain ? 'post-drain repeated-empty' : 'zero-eligible'} Auth retention: ${axis}`,
+      scales: retentionScales,
+      repetitions: 1,
+      bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+      byteBounds: { requestBytes: 'constant', responseBytes: 'constant' },
+      indexProbes: 100 * pages,
+      grow: (current, scale) => seedRetentionAxes(current, axis, scale, now),
+      ...targets.hooks,
+      async verify(current, _scale, _repetition, value) {
+        const { tag, id } = value as { tag: string; id: string };
+        expect(
+          (
+            await current.admin.query(
+              'SELECT count(*)::int AS n FROM auth_dbos.workflow_status WHERE workflow_uuid LIKE $1',
+              [`${tag}%`],
+            )
+          ).rows[0].n,
+        ).toBe(1000 * pages - (drain ? 1 : 0));
+        expect(
+          (
+            await current.admin.query(
+              'SELECT count(*)::int AS n FROM auth_workflow_request WHERE workflow_id LIKE $1',
+              [`${tag}%`],
+            )
+          ).rows[0].n,
+        ).toBe(1000 * pages);
+        for (let page = 0; page < pages; page++) {
+          const output = (
+            await current.admin.query(
+              'SELECT output FROM auth_dbos.operation_outputs WHERE workflow_uuid=$1 ORDER BY function_id',
+              [`z:empty-tick:${id}:${page}`],
+            )
+          ).rows;
+          // The count-only step records one retirement followed by genuine zeros.
+          expect(output.map(({ output }) => JSON.parse(output).json)).toEqual([drain && page === 0 ? 1 : 0]);
+        }
+        const saved = (await current.admin.query('SELECT after_key FROM auth_workflow_retention')).rows[0].after_key;
+        expect(saved).toBe(`${tag}${String(1000 * pages).padStart(6, '0')}`);
+      },
+    });
+    for (const sample of report.samples) {
+      expect(sample.cost.rows).toBeGreaterThanOrEqual(1000 * pages);
+      const workflowPlans = Object.values(sample.cost.relations).filter(
+        ({ identity }) => identity?.schema === 'auth_dbos' && identity.name === 'workflow_status',
       );
-    console.info(
-      `Auth retention scale ${scale}: ${JSON.stringify({
-        statements: cost.statements,
-        examinedRows: cost.rows,
-        removedRows,
-        bufferHits: cost.sharedHit,
-        bufferReads: cost.sharedRead,
-      })}`,
-    );
+      expect(workflowPlans.length).toBeGreaterThan(0);
+      expect(workflowPlans.every(({ sequentialScans }) => sequentialScans === 0)).toBe(true);
+      expect(sample.cost.requestBytes).toBeGreaterThan(0);
+      expect(sample.cost.responseBytes).toBeGreaterThan(0);
+      console.info(
+        JSON.stringify({
+          revision: Bun.spawnSync(['git', 'rev-parse', 'HEAD']).stdout.toString().trim(),
+          axis,
+          scale: sample.scale,
+          pages,
+          cost: sample.cost,
+          native: sample.occurrenceRepetitions,
+        }),
+      );
+    }
   }
 }
 
 test('zero-eligible Auth retention examines bounded workflow history and preserves recent requests', async () => {
-  const report = await checkGrowth(db, {
-    name: 'zero-eligible Auth workflow retention batch',
-    scales,
-    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
-    // DBOS selects across the configured terminal status keys; each adds at most one owner-key seek.
-    indexProbes: TERMINAL_WORKFLOW_STATUSES.length,
-    grow: async (growth, scale) => {
-      await reset(growth);
-      await seedRetainedWorkflows(growth, scale, 'retention-empty:zero:');
-      await seedRequestHistory(growth, 256, 'retention-empty:zero:');
-    },
-    warmup: async () => expect(await runWorkflowRetentionBatch(30, client, now)).toBe(0),
-    async operation() {
-      expect(await runWorkflowRetentionBatch(30, client, now)).toBe(0);
-    },
-  });
-  assertMeasuredCost(report, { requests: false, removedRows: 0 });
-  const workflows = await db.pool.query<{ status: string; count: string }>(
-    `SELECT status,count(*)::text AS count FROM auth_dbos.workflow_status
-     WHERE workflow_uuid LIKE 'retention-empty:zero:%' GROUP BY status`,
-  );
-  expect(Object.fromEntries(workflows.rows.map(({ status, count }) => [status, Number(count)]))).toEqual({
-    PENDING: scales[2]! / 2,
-    SUCCESS: scales[2]! / 2,
-  });
-  const requests = await db.pool.query<{ count: string }>(
-    "SELECT count(*)::text AS count FROM auth_workflow_request WHERE workflow_id LIKE 'retention-empty:zero:%'",
-  );
-  expect(Number(requests.rows[0]!.count)).toBe(256);
-}, 180000);
-
+  await emptyGrowth(false);
+}, 360000);
 test('Auth retention charges the drain and bounds repeated empty batches as request history grows', async () => {
-  let previousControl: string | undefined;
-  const controls = new Set<string>();
-  const report = await checkGrowth(db, {
-    name: 'post-drain repeated-empty Auth workflow retention batches',
-    scales,
-    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
-    // Only the Auth request workflow_id primary-key lookup grows in this scenario.
-    indexProbes: 1,
-    grow: async (growth, scale) => {
-      await reset(growth);
-      await seedRetainedWorkflows(growth, 4096, 'retention-empty:post:');
-      await seedRequestHistory(growth, scale, 'retention-empty:post:');
-    },
-    warmup: async () => expect(await runWorkflowRetentionBatch(30, client, now)).toBe(0),
-    async prepare(_growth, scale, repetition) {
-      if (previousControl !== undefined) {
-        const prior = await db.pool.query<{ count: string }>(
-          `SELECT count(*)::text AS count FROM auth_dbos.workflow_status
-           WHERE workflow_uuid=$1`,
-          [previousControl],
-        );
-        expect(Number(prior.rows[0]!.count)).toBe(0);
-        const priorRequest = await db.pool.query<{ count: string }>(
-          'SELECT count(*)::text AS count FROM auth_workflow_request WHERE workflow_id=$1',
-          [previousControl],
-        );
-        expect(Number(priorRequest.rows[0]!.count)).toBe(0);
-      }
-      const id = `retention-empty:control:${scale}:${repetition}`;
-      previousControl = id;
-      controls.add(id);
-      await db.pool.query(
-        `INSERT INTO auth_dbos.workflow_status
-          (workflow_uuid,status,name,authenticated_roles,recovery_attempts,created_at,updated_at,completed_at,application_name)
-         VALUES ($1,'SUCCESS','retention.growth','[]',0,$2,$2,$3,$4)`,
-        [id, cutoff - 86400000, cutoff - 86400000, AUTH_WORKFLOW_APPLICATION],
-      );
-      await db.pool.query(
-        `INSERT INTO auth_workflow_request (workflow_id,digest,request)
-         VALUES ($1,decode('00','hex'),'{}'::jsonb)`,
-        [id],
-      );
-    },
-    async operation() {
-      expect(await runWorkflowRetentionBatch(30, client, now)).toBe(1);
-      for (let batch = 0; batch < 3; batch++) expect(await runWorkflowRetentionBatch(30, client, now)).toBe(0);
-    },
-  });
-  assertMeasuredCost(report, { requests: true, removedRows: 1 });
-  const remaining = await db.pool.query<{ count: string }>(
-    `SELECT count(*)::text AS count FROM auth_dbos.workflow_status
-     WHERE workflow_uuid LIKE 'retention-empty:control:%'`,
-  );
-  expect(Number(remaining.rows[0]!.count)).toBe(0);
-  const requestBindings = await db.pool.query<{ count: string }>(
-    `SELECT count(*)::text AS count FROM auth_workflow_request
-     WHERE workflow_id LIKE 'retention-empty:control:%'`,
-  );
-  expect(Number(requestBindings.rows[0]!.count)).toBe(0);
-  const retainedWorkflows = await db.pool.query<{ status: string; count: string }>(
-    `SELECT status,count(*)::text AS count FROM auth_dbos.workflow_status
-     WHERE workflow_uuid LIKE 'retention-empty:post:%' GROUP BY status`,
-  );
-  expect(Object.fromEntries(retainedWorkflows.rows.map(({ status, count }) => [status, Number(count)]))).toEqual({
-    PENDING: 2048,
-    SUCCESS: 2048,
-  });
-  const retainedRequests = await db.pool.query<{ count: string }>(
-    "SELECT count(*)::text AS count FROM auth_workflow_request WHERE workflow_id LIKE 'retention-empty:post:%'",
-  );
-  expect(Number(retainedRequests.rows[0]!.count)).toBe(scales[2]);
-  expect(controls.size).toBeGreaterThan(0);
-}, 180000);
+  await emptyGrowth(true);
+}, 360000);

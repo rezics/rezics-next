@@ -134,3 +134,101 @@ export async function protocolRows(db: GrowthDatabase, tag: string, from: number
     range,
   );
 }
+
+export const retentionScales = [256, 1024, 4096] as const;
+export const retentionAxes = ['workflows', 'long-lived', 'requests', 'accounts'] as const;
+export type RetentionAxis = (typeof retentionAxes)[number];
+
+/** Replace independent history populations, keeping every other axis at 256. All
+ * workflow keys sort beyond the fixed raw target page. The long-lived axis would
+ * precede targets under the former creation-ordered completion-filtered SDK plan.
+ */
+export async function seedRetentionAxes(db: GrowthDatabase, axis: RetentionAxis, scale: number, now: number) {
+  for (const current of retentionAxes) {
+    const tag = `z:retention-history:${current}:`;
+    const count = current === axis ? scale : 256;
+    await db.admin.query('DELETE FROM auth_dbos.workflow_status WHERE workflow_uuid LIKE $1', [`${tag}%`]);
+    await db.admin.query('DELETE FROM auth_workflow_request WHERE workflow_id LIKE $1', [`${tag}%`]);
+    if (current === 'requests') {
+      await db.admin.query(
+        `INSERT INTO auth_workflow_request(workflow_id,digest,request)
+        SELECT $1||lpad(i::text,6,'0'),decode('00','hex'),'{}' FROM generate_series(1,$2::int) i`,
+        [tag, count],
+      );
+    } else if (current === 'accounts') {
+      await db.admin.query('DELETE FROM auth_copy_role WHERE workflow_id LIKE $1', [`${tag}%`]);
+      await db.admin.query('DELETE FROM auth_copy_work WHERE workflow_id LIKE $1', [`${tag}%`]);
+      await db.admin.query('DELETE FROM "user" WHERE id LIKE $1', [`${tag}%`]);
+      await db.admin.query(
+        `INSERT INTO "user"(id,name,"emailVerified")
+        SELECT $1||lpad(i::text,6,'0'),'',false FROM generate_series(1,$2::int) i`,
+        [tag, count],
+      );
+      await db.admin.query(
+        `INSERT INTO auth_copy_work(workflow_id,name,digest,scope_count)
+        SELECT $1||lpad(i::text,6,'0'),'accounts.operation',decode(repeat('00',32),'hex'),1
+        FROM generate_series(1,$2::int) i`,
+        [tag, count],
+      );
+      await db.admin.query(
+        `INSERT INTO auth_copy_role(account_id,workflow_id,role)
+        SELECT id,id,'subject' FROM "user" WHERE id LIKE $1`,
+        [`${tag}%`],
+      );
+    } else {
+      await db.admin.query(
+        `INSERT INTO auth_dbos.workflow_status
+        (workflow_uuid,status,name,created_at,updated_at,completed_at,application_name)
+        SELECT $1||lpad(i::text,6,'0'),'SUCCESS','auth.maintenance.tick',$3,$4,$4,'rezics-auth-accounts'
+        FROM generate_series(1,$2::int) i`,
+        [tag, count, current === 'long-lived' ? now - 90 * 86400000 : now, now],
+      );
+    }
+  }
+}
+
+/** One fresh raw page, with either 1000 or 10 eligible copies. Preparation is
+ * outside the capture, but cutoff/upper-key initialization is part of retention.
+ * Personal targets are real registrations prepared by the native host.
+ */
+export async function prepareRetentionPage(
+  db: GrowthDatabase,
+  id: string,
+  eligible: number,
+  personal: boolean | number,
+  now: number,
+  rawCount = 1000,
+) {
+  for (const table of ['workflow_input', 'workflow_output', 'operation_outputs'])
+    await db.admin.query(`DELETE FROM auth_dbos.${table} WHERE workflow_uuid LIKE '!retention-page:%'`);
+  await db.admin.query("DELETE FROM auth_dbos.workflow_status WHERE workflow_uuid LIKE '!retention-page:%'");
+  await db.admin.query("DELETE FROM auth_workflow_request WHERE workflow_id LIKE '!retention-page:%'");
+  await db.admin.query('UPDATE auth_workflow_retention SET cutoff=NULL,through_key=NULL,after_key=NULL');
+  const tag = `!retention-page:${id}:`;
+  await db.admin.query(
+    `INSERT INTO auth_dbos.workflow_status
+    (workflow_uuid,status,name,created_at,updated_at,completed_at,application_name)
+    SELECT $1||lpad(i::text,6,'0'),'SUCCESS','auth.maintenance.tick',$3,$3,
+      CASE WHEN i<=$4 THEN $3::bigint ELSE $5::bigint END,'rezics-auth-accounts'
+    FROM generate_series(1,$2::int) i`,
+    [tag, rawCount - Number(personal), now - 90 * 86400000, eligible - Number(personal), now],
+  );
+  await db.admin.query(
+    `INSERT INTO auth_workflow_request(workflow_id,digest,request)
+    SELECT workflow_uuid,decode('00','hex'),'{}'::jsonb FROM auth_dbos.workflow_status WHERE workflow_uuid LIKE $1`,
+    [`${tag}%`],
+  );
+  for (const [table, columns, values] of [
+    ['workflow_input', 'inputs', "'[]'"],
+    ['workflow_output', 'output', "'null'"],
+    ['operation_outputs', 'function_id,function_name,output', "1,'retention-fixture','null'"],
+    ['workflow_events', 'key,value', "'fixture','null'"],
+    ['workflow_events_history', 'function_id,key,value', "1,'fixture','null'"],
+  ])
+    await db.admin.query(
+      `INSERT INTO auth_dbos.${table}(workflow_uuid,${columns})
+      SELECT workflow_uuid,${values} FROM auth_dbos.workflow_status WHERE workflow_uuid LIKE $1`,
+      [`${tag}%`],
+    );
+  return tag;
+}
