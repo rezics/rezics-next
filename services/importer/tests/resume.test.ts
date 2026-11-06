@@ -498,35 +498,31 @@ test('CLI resume of VNDB and Wikidata sealed work does not open the original dum
   }
 });
 
-test(
-  'finalization interrupted mid-cursor resumes without duplicate native effects or source input',
-  async () => {
-    const dir = directory();
-    const state = join(dir, 'state.sqlite');
-    const f = fake();
-    const rows = Array.from({ length: 140 }, (_, i) => row(i + 1, `Title ${i + 1}`));
-    let importer = new Importer({ path: state, transport: f.transport });
-    try {
-      expect((await importer.runRecords(registration, records(...rows))).status).toBe('committed');
-      const generation = importer.session.store.source('wikidata').generation!;
-      const writes = f.requests.length;
-      importer.session.store.database
-        .prepare("UPDATE run_sources SET lease_run=?, generation=NULL WHERE source='wikidata'")
-        .run(generation);
-      importer.session.store.database
-        .prepare("UPDATE run_generations SET status='finalizing', cursor=? WHERE source=? AND id=?")
-        .run(rows[99]!.key, 'wikidata', generation);
-      await importer.close();
-      importer = new Importer({ path: state, transport: f.transport, existing: true });
-      const resumed = await importer.resumeExisting(registration);
-      expect(resumed.status, resumed.diagnostic).toBe('committed');
-      expect(f.requests.length).toBe(writes);
-      expect(importer.session.store.source('wikidata').generation).toBe(generation);
-      expect(importer.session.store.activeRun('wikidata')).toBeNull();
-    } finally {
-      await importer.close().catch(() => {});
-      rmSync(dir, { recursive: true, force: true });
-    }
-  },
-  120_000,
-);
+test('finalization interrupted mid-cursor resumes without duplicate native effects or source input', async () => {
+  const dir = directory();
+  const state = join(dir, 'state.sqlite');
+  const f = fake();
+  const rows = Array.from({ length: 140 }, (_, i) => row(i + 1, `Title ${i + 1}`));
+  let importer = new Importer({ path: state, transport: f.transport });
+  try {
+    expect((await importer.runRecords(registration, records(...rows))).status).toBe('committed');
+    const generation = importer.session.store.source('wikidata').generation!;
+    const writes = f.requests.length;
+    importer.session.store.database
+      .prepare("UPDATE run_sources SET lease_run=?, generation=NULL WHERE source='wikidata'")
+      .run(generation);
+    importer.session.store.database
+      .prepare("UPDATE run_generations SET status='finalizing', cursor=? WHERE source=? AND id=?")
+      .run(rows[99]!.key, 'wikidata', generation);
+    await importer.close();
+    importer = new Importer({ path: state, transport: f.transport, existing: true });
+    const resumed = await importer.resumeExisting(registration);
+    expect(resumed.status, resumed.diagnostic).toBe('committed');
+    expect(f.requests.length).toBe(writes);
+    expect(importer.session.store.source('wikidata').generation).toBe(generation);
+    expect(importer.session.store.activeRun('wikidata')).toBeNull();
+  } finally {
+    await importer.close().catch(() => {});
+    rmSync(dir, { recursive: true, force: true });
+  }
+}, 120_000);
