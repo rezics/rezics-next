@@ -1,10 +1,9 @@
-import { deadlineClient, within } from '../access/authenticate.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
 import { decodeListCursor, encodeListCursor, type ListCursorBinding } from '../tokens/list-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import ownerFence from './owner-filter-native-binding-fence.sql';
-import { compileCurrentOwnerFilter } from '../search/current-filter-plan.ts';
+import { peekLibraryDomain } from './domain-binding.ts';
 import readHeader from './members-preparation-read.sql';
 import readResults from './members-preparation-results.sql';
 import step from './members-preparation-step.sql';
@@ -43,13 +42,13 @@ import {
   DEFAULT_REQUEST_DEADLINE_MS,
   principalCommandIdentity,
   type AuthoritativeTime,
+  type CommandAuthorization,
 } from '../command/command.ts';
 import { enqueueIntent, runOperationalTransaction, type OperationalTransaction } from '../command/operational.ts';
 import { deadlineFor } from '../request/deadline.ts';
-import { accessCommandAuthorization, type Access, type Actor } from '../request/access.ts';
+import type { Access, Actor } from '../request/access.ts';
 import { ProblemError } from '../http/problem.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
-import { readRelease } from '../semantic/definitions.ts';
 import type { WorkClient } from '../work/client.ts';
 import type { WorkExecutionOriginal } from '../command/execution-contract.ts';
 import { openWorkExecutionOriginal } from '../work/selected-runtime.ts';
@@ -61,6 +60,12 @@ import {
   type OperationalWorkRegistration,
 } from '../history/operational-work.ts';
 import { type OperationalWorkTransfer } from '../history/operational-work-budget.ts';
+
+function libraryCapabilities() {
+  const domain = peekLibraryDomain();
+  if (!domain) throw new ProblemError('dependency_unavailable');
+  return domain;
+}
 
 const LIVE_LIMIT = 32;
 const IDLE_MS = 24 * 60 * 60 * 1000;
@@ -408,6 +413,7 @@ export function createMembersPreparation(config: {
             digest,
             filter: item.definition.filter,
             sort: item.definition.sort,
+            source: item.definition.source,
             releaseDigest: item.definition.release.digest,
             release: item.definition.release.value,
           }),
@@ -423,14 +429,14 @@ export function createMembersPreparation(config: {
           history: openWorkExecutionOriginal(config.pool, deadline, config.workClient),
         };
       }
-      const authorization = await accessCommandAuthorization(
+      const authorization = (await libraryCapabilities().authorization.commandAuthorization(
         config.access,
         actor,
         'collection:read',
         { route, id: collectionId },
         { pool: config.pool, deadline },
         notFound,
-      );
+      )) as CommandAuthorization;
       return runOperationalTransaction(
         config.pool,
         {
@@ -471,7 +477,7 @@ export function createMembersPreparation(config: {
           const releases = new Map<string, FilterRelease>();
           for (const basis of byBasis.values()) {
             if (releases.has(basis.releaseDigest)) continue;
-            const actual = await readRelease(tx, basis.releaseDigest);
+            const actual = await libraryCapabilities().identityDisclosure.readRelease(tx, basis.releaseDigest);
             if (!actual || canonicalize(actual) !== canonicalize(basis.release)) throw unsupported();
             releases.set(basis.releaseDigest, basis.release);
           }
@@ -659,14 +665,14 @@ export function createMembersPreparation(config: {
       const identity = principalCommandIdentity(actor);
       if (identity.principal.kind !== 'account') return false;
       const deadline = options.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
-      const authorization = await accessCommandAuthorization(
+      const authorization = (await libraryCapabilities().authorization.commandAuthorization(
         config.access,
         actor,
         'collection:read',
         { route: locator.route, id: locator.collectionId },
         { pool: config.pool, deadline },
         notFound,
-      );
+      )) as CommandAuthorization;
       return runOperationalTransaction(
         config.pool,
         {
@@ -803,8 +809,8 @@ export function createMembersPreparation(config: {
         )
       ).rows;
       if (!retained) return null;
-      return restorePreparationDefinition(locator.ownerAccountId, locator.collectionId, retained, (digest) =>
-        readRelease(tx, digest),
+      return restorePreparationDefinition(locator.ownerAccountId, locator.collectionId, retained, async (digest) =>
+        (await libraryCapabilities().identityDisclosure.readRelease(tx, digest)) as FilterRelease | null,
       );
     },
 
@@ -837,7 +843,8 @@ export function createMembersPreparation(config: {
         locator.ownerAccountId,
         locator.collectionId,
         retained,
-        (digest) => readRelease(tx, digest),
+        async (digest) =>
+          (await libraryCapabilities().identityDisclosure.readRelease(tx, digest)) as FilterRelease | null,
       );
       const current = await readPreparationSource(tx, locator);
       const identity = current?.scope.key.source.kind === 'library' ? current.scope.key.source.identity : null;
@@ -1010,7 +1017,7 @@ export async function readPreparationOwnerFence(
   locator: PreparationLocator,
   definition: PreparationDefinition,
 ): Promise<string | null> {
-  if (!compileCurrentOwnerFilter(definition.filter).leaves.some((leaf) => leaf.kind === 'owner')) return null;
+  if (!libraryCapabilities().searchPreparation.ownerFilterHasOwnerLeaf(definition.filter)) return null;
   const row = await ownerFence.run(tx, { route: locator.route, account_id: locator.ownerAccountId });
   if (!row) throw new ProblemError('dependency_unavailable');
   return row.generation;
@@ -1074,11 +1081,16 @@ async function bindPreparationRead(
   deps: ReaderDependencies,
   input: ReadInput,
 ): Promise<Readonly<{ status: 'unavailable' }> | Readonly<{ status: 'bound'; binding: ReadBinding }>> {
-  const release = await within(input.deadline, () =>
-    readRelease(deps.pool, input.definition.release.digest, { composed: false }),
+  const release = await libraryCapabilities().authorization.within(input.deadline, () =>
+    libraryCapabilities().identityDisclosure.readRelease(deps.pool, input.definition.release.digest, {
+      composed: false,
+    }),
   );
   if (!release) return { status: 'unavailable' };
-  const filter = admitFilter(parseFilter(input.definition.filter), release, { saved: true, owner: true });
+  const filter = admitFilter(parseFilter(input.definition.filter), release as FilterRelease, {
+    saved: true,
+    owner: true,
+  });
   const admission = await admitSavedCollectionMemberQuery(
     deps,
     input.actor,
@@ -1150,7 +1162,12 @@ async function revalidatePreparationRead(
       let match;
       try {
         match = await withReadTransaction(deps.pool, (client) =>
-          readOwnerFilterCandidate(deadlineClient(client, input.deadline), admission, closure.closure, work),
+          readOwnerFilterCandidate(
+            libraryCapabilities().authorization.deadlineClient(client, input.deadline),
+            admission,
+            closure.closure,
+            work,
+          ),
         );
       } finally {
         control.settle();
@@ -1258,7 +1275,7 @@ export async function readPreparedMembers(
     const observation = preparationObservation(source, scope, current.binding.ownerFence);
     const observationDigest = createHash('sha256').update(observation).digest('hex');
     const read = await withReadTransaction(deps.pool, async (client) => {
-      const query = deadlineClient(client, input.deadline);
+      const query = libraryCapabilities().authorization.deadlineClient(client, input.deadline);
       const [header] = await readHeader.run(query, { ...key, digest, at: authoritativeTimeValue(time) });
       if (!header) return null;
       if (header.basis !== basis) throw unsupported();

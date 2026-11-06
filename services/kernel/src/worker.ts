@@ -11,6 +11,7 @@ import { createDiscoveryProducerEntry } from './composition/discovery.ts';
 import { createKernelRuntimeDefaults } from './composition/runtime-defaults.ts';
 import { composeSemanticIdentityParticipants } from './composition/semantic.ts';
 import { composeAccessApplication } from './composition/access.ts';
+import { composeLibraryDomain } from './composition/library.ts';
 import { composeWork, type WorkModule } from './work/registry.ts';
 import { effectsRelay } from './events/effects.ts';
 import { startRelays } from './events/relays.ts';
@@ -82,6 +83,7 @@ export async function startWorker(
     : new pg.Pool({ connectionString: config.databaseUrl, max: config.poolSize });
   if (receiptKeys) configureReceiptKeys(pool, receiptKeys);
   pool.on('error', () => {});
+  composeLibraryDomain({ pool });
   let client: Awaited<ReturnType<typeof createWorkClient>>;
   try {
     client = await createWorkClient(config.databaseUrl, pool);

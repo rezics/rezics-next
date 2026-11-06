@@ -1,3 +1,4 @@
+import { composeLibraryDomain } from './library.ts';
 import { createWriteRateLimiter, type WriteRateLimiter } from '../access/write-rate.ts';
 import { createAccess, type AccessConfig } from '../access/index.ts';
 import type { AuthenticationConfig } from '../access/authenticate.ts';
@@ -57,6 +58,7 @@ function readAuthConfig(env: NodeJS.ProcessEnv): AuthenticationConfig | undefine
 /** Shared runtime defaults for the HTTP server and Search work factory. */
 export function createKernelRuntimeDefaults(overrides: KernelRuntimeOverrides = {}): KernelRuntimeDefaults {
   composeAccessApplication();
+  composeLibraryDomain();
   const env = overrides.env ?? process.env;
   const tokens = overrides.tokens ?? readTokenKeys(env);
   const receiptKeys = readReceiptKeyRing(env, overrides.receiptKeys);

@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test';
+import { composeLibraryDomain } from '../../src/composition/library.ts';
 import { EventEmitter } from 'node:events';
+composeLibraryDomain();
 import type { Pool, PoolClient } from 'pg';
 import * as installed from '../../src/library/collection-source-work.ts';
 import {

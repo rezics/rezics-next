@@ -1032,6 +1032,7 @@ export function access(): Access {
 export { visibleOperations, type VisibleOperation } from './gates/visibility.ts';
 
 export { ACTIVE_ACCOUNTS, type GrantSubject } from './grant-subject.ts';
+export { fenceOperationalAccount } from './account-share.ts';
 export {
   captureDurableInitiator,
   durableInitiatorCommitment,

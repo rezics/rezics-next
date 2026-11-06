@@ -3,6 +3,14 @@
 This leaf owns Library operation bounds and caller custody. Operation-specific SQL and growth suites remain in
 [Library Cost](README.md#cost); the [Kernel contract](../../performance-contract.md) owns shared finite bounds.
 
+Layer ownership: `kernel-library-contract` (vocabulary and ports), `kernel-library-core` (pure arithmetic),
+`kernel-library-application` (use cases over ports), `kernel-library` adapters (native SQL and foreign
+Access/Search/Semantic/Content), and `composition/library.ts` (ordinary server/worker/`createKernelRuntimeDefaults`
+binding). Application result types stay in the contract. Compatibility Source, member, publication and identity
+entries reach the composed implementation. Selected identity seal declarations use the selected bind vector;
+transform fixtures use routable job IDs. Fewest tests: one domain-composition suite; native and publication
+growth cases keep their existing assertions.
+
 ## Collection operation costs
 
 Decision: saved catalogue rules page through the registered Search scope using their pinned release; owner rules keep the private Library Source path.

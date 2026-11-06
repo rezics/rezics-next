@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { composeLibraryDomain } from '../../src/composition/library.ts';
 import { createHash, randomUUID } from 'node:crypto';
+composeLibraryDomain();
 import { principalCommandIdentity, noEffect, runCommand, type CommandTransaction } from '../../src/command/command.ts';
 import { resourceAuthorization } from '../../src/access/resource-authorization.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';

@@ -80,24 +80,32 @@ slot, parallel reader, route, writer, score cache or GET repair is introduced.
 
 ## Module layers and measured boundary
 
-The manifest splits Library by layer. The first contract module is the work-dimension vocabulary:
-`kernel-library-contract` owns `library/contract/**`, and its public entry `contract/work-dimensions.ts` declares
-`WorkDimensions`, `WorkAllowance` and `WorkReceipt` as pure types. Access, Platform, Search, Semantic, Content and
-Zones import these shapes from that entry, not from the Source runtime. `account-grant.ts` is a leaf: `grantCapable`
-takes the account fields structurally and imports only the route helper, so native Source no longer reads the
-Collection read module.
+The manifest splits Library by layer. `kernel-library-contract` owns `library/contract/**`: work dimensions, actors,
+Source, membership, ordering, capability ports and application result types. Access, Platform, Search, Semantic,
+Content and Zones import those shapes from the contract entries, not from the Source runtime. `kernel-library-core`
+owns pure route/grant, page-plan, work-ledger, Source classification, membership accounting, identity-native matching
+and publication admission. `kernel-library-application` owns Source capture, owner-query, member preparation,
+publication admission, identity-native and Entry/progress use cases; they load without Access, Search, Semantic or
+Content and run with fake capabilities. Native SQL catalogs and foreign Access/Search/Semantic/Content adapters live
+in `library/adapters/**` and are bound only from `composition/library.ts`. `createKernelRuntimeDefaults`, the HTTP
+server and the worker call `composeLibraryDomain`. Compatibility entries (`identity-native-bounds.ts`,
+`account-grant.ts`, `ordinary-read-bounds.ts`, `builtin-runtime-query.ts`, `members-preparation.ts`,
+`collection-publication-work-admission.ts`) reach the composed implementation.
 
-Measured with `bun scripts/architecture.ts` against the Kernel value-import graph (base, then candidate): the largest
-value SCC has 388 then 385 files, of which Library has 90 then 88; all value-cycle files are 405 then 402, Library
-98 then 96. Architecture errors are 1020 then 1017, none new. The boundary baseline drops 178 entries (9,714 to 9,536)
-that no longer match a violation.
+`account-grant.ts` remains a leaf: `grantCapable` takes account fields structurally. Owner-query Search preparation
+uses the Library `searchPreparation` capability through existing dependency objects; `CollectionWorkLedger` replaces
+Search `ScopeWork` subclassing.
 
-Not yet done: application ports and composition bindings for Search preparation, identity/disclosure, authorization
-and Content publication. Porting only `builtin-runtime-query.ts`'s foreign value calls (Search scope preparation and
-the ordinary work ledger) would take the largest SCC to 362 files on the same graph. The next cut must avoid
-reintroducing `builtin-runtime-query.ts` edges from the owner-index and builtin callers, because the publication
-admission chain (`collection-publication-work-admission.ts` → `collection-publication-episodes.ts` →
-`builtin-materialization.ts` → `builtin-runtime.ts`) closes that cycle.
+Fewest tests: one `domain-composition.test.ts` suite covering fake-capability applications plus Source, member,
+publication and Entry/progress edges (actor, deadline, private working versus activated public, repeated ordered
+occurrences, nested admission, original/terminal disclosure). Selected identity seal cases keep the selected bind
+vector; transform fixtures use routable job IDs. Existing native and publication growth cases keep their unchanged
+assertions.
+
+Measured with `bun scripts/architecture.ts` against the Kernel value-import graph after this domain composition:
+record largest SCC, Library membership, all cycle files and architecture errors on the integrated base, then the
+candidate; obsolete baseline entries disappear. Preceding contract extraction measured largest SCC 388 to 385,
+Library membership 90 to 88, and all cycle files 405 to 402.
 
 ## Scope and implementation boundary
 

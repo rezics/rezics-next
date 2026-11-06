@@ -364,22 +364,49 @@
       "kind": "contract",
       "owner": "commerce",
       "paths": ["services/kernel/src/library/contract/**"],
-      "publicEntries": ["services/kernel/src/library/contract/work-dimensions.ts"],
+      "publicEntries": [
+        "services/kernel/src/library/contract/work-dimensions.ts",
+        "services/kernel/src/library/contract/index.ts"
+      ],
       "allowedDependencies": [],
       "capabilities": []
+    },
+    {
+      "id": "kernel-library-core",
+      "kind": "core",
+      "owner": "commerce",
+      "paths": ["services/kernel/src/library/core/**"],
+      "publicEntries": ["services/kernel/src/library/core/index.ts"],
+      "allowedDependencies": ["bounds", "kernel-library-contract"],
+      "capabilities": ["library-rules"]
+    },
+    {
+      "id": "kernel-library-application",
+      "kind": "application",
+      "owner": "commerce",
+      "paths": ["services/kernel/src/library/application/**"],
+      "publicEntries": ["services/kernel/src/library/application/index.ts"],
+      "allowedDependencies": ["kernel-library-contract", "kernel-library-core"],
+      "capabilities": ["library-use-cases"]
     },
     {
       "id": "kernel-library",
       "kind": "adapter",
       "owner": "commerce",
       "paths": ["services/kernel/src/library/**", "services/kernel/db/library/**"],
-      "excludes": ["services/kernel/src/library/contract/**"],
+      "excludes": [
+        "services/kernel/src/library/contract/**",
+        "services/kernel/src/library/core/**",
+        "services/kernel/src/library/application/**"
+      ],
       "publicEntries": [
         "services/kernel/src/library/index.ts",
         "services/kernel/src/library/collection-discovery-source.ts",
         "services/kernel/src/library/collection-discovery-summaries.ts",
         "services/kernel/src/library/identity-epoch-participant.ts",
-        "services/kernel/src/library/access-capabilities.ts"
+        "services/kernel/src/library/access-capabilities.ts",
+        "services/kernel/src/library/adapters/index.ts",
+        "services/kernel/src/library/domain-binding.ts"
       ],
       "allowedDependencies": [
         "access-policy",
@@ -391,6 +418,7 @@
         "kernel-community",
         "kernel-content",
         "kernel-library-contract",
+        "kernel-library-core",
         "kernel-platform",
         "kernel-rating",
         "kernel-search",
@@ -432,7 +460,9 @@
         "services/kernel/src/search/catalogue-publication.ts",
         "services/kernel/src/search/identity-epoch-participant.ts",
         "services/kernel/src/search/opensearch.ts",
-        "services/kernel/src/search/access-capabilities.ts"
+        "services/kernel/src/search/access-capabilities.ts",
+        "services/kernel/src/search/service-scope.ts",
+        "services/kernel/src/search/current-filter-plan.ts"
       ],
       "allowedDependencies": [
         "bounds",
@@ -600,6 +630,9 @@
         "kernel-content",
         "kernel-community",
         "kernel-library",
+        "kernel-library-application",
+        "kernel-library-contract",
+        "kernel-library-core",
         "kernel-platform",
         "kernel-search",
         "kernel-semantic",

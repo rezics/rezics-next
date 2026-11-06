@@ -32,6 +32,7 @@ import { createDefaultPublicFilterRuntime, type DefaultPublicFilterRuntime } fro
 import { createPublicPreparationStore } from './search/public-preparation-store.ts';
 import { createDefaultDiscoverySearch, type DefaultDiscoverySearch } from './search/default-discovery.ts';
 import { createDiscoveryProducerEntry } from './composition/discovery.ts';
+import { composeLibraryDomain } from './composition/library.ts';
 import { MAX_HTTP_BODY_LIMIT } from './http/body.ts';
 
 export { createKernelRuntimeDefaults };
@@ -161,6 +162,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
     const client = workClient;
     await client;
     const rated = searchConfig === undefined ? undefined : createRatedSubjectSource(pool, config.routeKey);
+    composeLibraryDomain({ pool, routeKey: config.routeKey });
     app = createKernel({
       rating: createNativeRatingCapabilities({ clock: defaults.clock }),
       moneyPolicy,
