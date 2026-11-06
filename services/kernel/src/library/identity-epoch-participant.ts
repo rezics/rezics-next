@@ -1253,24 +1253,15 @@ export const stepLibraryIdentityEpoch: IdentityEpochStep = (pool, job) =>
     }
     const funded = activeIdentitySourceConsumerMaintenance(pool);
     if (funded) {
-      const source = resolveLiveLibrarySource(
-        { libraryWork: identitySourceConsumerLibraryWork },
-        pool,
-        funded,
-      );
+      const source = resolveLiveLibrarySource({ libraryWork: identitySourceConsumerLibraryWork }, pool, funded);
       const advanced = await stepLibraryIdentityEpochWithSource(pool, job, source);
       if (advanced.state !== 'closed') throw unavailable(`${sixDriverPending} (${advanced.state})`);
     }
     const coverage = await withReadTransaction(
       pool,
       async (tx) =>
-        (
-          await tx.query<{ building: boolean; affected: boolean }>(scanSql.sql, [
-            home,
-            job.jobId,
-            job.epoch.toString(),
-          ])
-        ).rows[0],
+        (await tx.query<{ building: boolean; affected: boolean }>(scanSql.sql, [home, job.jobId, job.epoch.toString()]))
+          .rows[0],
       deadline,
     );
     if (!coverage || coverage.building || coverage.affected) throw unavailable(sixDriverPending);

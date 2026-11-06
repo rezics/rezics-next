@@ -225,9 +225,7 @@ function validateEvidenceString(
     exactKeys(row, pendingKeys) &&
     isPartition(row.partition_no) &&
     isUuid(row.terminal) &&
-    (row.pending_job === null
-      ? row.pending_epoch === null
-      : isUuid(row.pending_job) && isU64(row.pending_epoch));
+    (row.pending_job === null ? row.pending_epoch === null : isUuid(row.pending_job) && isU64(row.pending_epoch));
   const validCurrent = (row: unknown) =>
     record(row) &&
     exactKeys(row, currentRowKeys) &&

@@ -110,13 +110,14 @@ export async function readIdentityEpochCutover(tx: CommandTransaction) {
   const installation = (await tx.query('SELECT valid FROM semantic.read_identity_epoch_installation()')).rows[0] as
     | { valid: boolean }
     | undefined;
-  const cut = (
-    await tx.query('SELECT 1 FROM semantic.identity_epoch_installation_cut WHERE partition_no=0 LIMIT 1')
-  ).rowCount;
+  const cut = (await tx.query('SELECT 1 FROM semantic.identity_epoch_installation_cut WHERE partition_no=0 LIMIT 1'))
+    .rowCount;
   const interrupted = (cut ?? 0) > 0 && installation?.valid !== true;
   return {
     state:
-      owner?.writeState === 'active' && row?.remaining === 0 && !interrupted ? ('ready' as const) : ('blocked' as const),
+      owner?.writeState === 'active' && row?.remaining === 0 && !interrupted
+        ? ('ready' as const)
+        : ('blocked' as const),
   };
 }
 

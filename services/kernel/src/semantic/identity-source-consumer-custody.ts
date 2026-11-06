@@ -457,7 +457,11 @@ export function IDENTITY_SOURCE_OWNED_REACHED_DECLARATIONS(): readonly IdentityS
         calls: schedule.retainedDiscovery,
         declaration: sourceCallWork('retainedDiscovery'),
       },
-      { name: 'Source.acceptedBinding', calls: schedule.acceptedBinding, declaration: sourceCallWork('acceptedBinding') },
+      {
+        name: 'Source.acceptedBinding',
+        calls: schedule.acceptedBinding,
+        declaration: sourceCallWork('acceptedBinding'),
+      },
       { name: 'Source.published', calls: schedule.published, declaration: sourceCallWork('published') },
       { name: 'Source.terminalVerify', calls: schedule.terminalVerify, declaration: sourceCallWork('terminalVerify') },
       { name: 'Source.progress', calls: schedule.progress, declaration: sourceCallWork('progress') },
@@ -515,13 +519,21 @@ export function IDENTITY_SOURCE_OWNED_REACHED_DECLARATIONS(): readonly IdentityS
         calls: schedule.checkpoint,
         declaration: IDENTITY_SOURCE_COMMIT_DECLARATION(),
       },
-      { name: 'Source.prepareRoles', calls: schedule.prepare, declaration: IDENTITY_SOURCE_PRODUCER_ROLE_DECLARATION() },
+      {
+        name: 'Source.prepareRoles',
+        calls: schedule.prepare,
+        declaration: IDENTITY_SOURCE_PRODUCER_ROLE_DECLARATION(),
+      },
       {
         name: 'Source.checkpointRoles',
         calls: schedule.checkpoint,
         declaration: IDENTITY_SOURCE_PRODUCER_ROLE_DECLARATION(),
       },
-      { name: 'Source.finishBindingCut', calls: schedule.finish, declaration: IDENTITY_SOURCE_BINDING_CUT_DECLARATION() },
+      {
+        name: 'Source.finishBindingCut',
+        calls: schedule.finish,
+        declaration: IDENTITY_SOURCE_BINDING_CUT_DECLARATION(),
+      },
       {
         name: 'Source.finishAccountReceiver',
         calls: schedule.finish,

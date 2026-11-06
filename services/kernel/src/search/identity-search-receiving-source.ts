@@ -52,9 +52,9 @@ export async function commitSearchIdentityReceivingPlans(
     pool,
     async (tx) =>
       new Set(
-        (
-          await tx.query<{ original: string }>(existingPlansSql.sql, [job.jobId, job.epoch.toString()])
-        ).rows.map((row) => row.original),
+        (await tx.query<{ original: string }>(existingPlansSql.sql, [job.jobId, job.epoch.toString()])).rows.map(
+          (row) => row.original,
+        ),
       ),
     context.deadline,
   );
@@ -95,7 +95,7 @@ export async function commitSearchIdentityReceivingPlans(
   for (const original of ids) fences.set(original, await guard.fenceOriginal(job, original));
   const barrier = await guard.closeGeneration(partition);
   const copies: Awaited<ReturnType<typeof guard.readRetainedCopies>>['copies'][number][] = [];
-  for (let cursor: string | null = null; ; ) {
+  for (let cursor: string | null = null; ;) {
     const page = await guard.readRetainedCopies(barrier.locator, cursor);
     copies.push(...page.copies);
     if (!page.next) break;
@@ -106,14 +106,12 @@ export async function commitSearchIdentityReceivingPlans(
     index: configuration.index,
     consumer: configuration.consumer,
   });
-  const scopeDigest = (
-    await withReadTransaction(
-      pool,
-      async (tx) =>
-        (await tx.query<{ scope_digest: string }>(jobScopeSql.sql, [home, job.jobId, job.epoch.toString()])).rows[0]
-          ?.scope_digest,
-      context.deadline,
-    )
+  const scopeDigest = await withReadTransaction(
+    pool,
+    async (tx) =>
+      (await tx.query<{ scope_digest: string }>(jobScopeSql.sql, [home, job.jobId, job.epoch.toString()])).rows[0]
+        ?.scope_digest,
+    context.deadline,
   );
   if (!scopeDigest) throw unavailable('Search receiving plans lost the admitted job scope');
   for (const change of cohort) {
