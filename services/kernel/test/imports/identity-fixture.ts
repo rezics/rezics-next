@@ -568,6 +568,8 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
       const body = (await response.json()) as { grant: GrantInput };
       if (path === '/v1/grants') grantLocators.push(body.grant);
     }
+    // Acquire current session authority after the account and credential setup above.
+    await renewManagement();
     await grant('/v1/grants', robot.accountId, importerScopes);
     if (statisticScopes.length) await grant('/v1/grants', robot.accountId, statisticScopes);
     await grant('/v1/grants', comparison.accountId, COMMON_ACTIONS);
