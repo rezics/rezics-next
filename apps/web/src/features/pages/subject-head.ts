@@ -4,7 +4,6 @@ import { coverImagePreload } from '@rezics/ui/cover';
 import { coverSrc } from '../../media/cover-src';
 import { publicCardImage, publicCover } from '../../media/public-card';
 import { originalLanguage } from '../../subject/language';
-import { timePresentation } from '../../subject/time-presentation';
 import { locales, type Locale } from '../../paraglide/runtime.js';
 import { pageHead, type PagePaths } from '../../shell/head';
 import { shareCardImage } from '../../shell/share-card';
@@ -12,7 +11,7 @@ import type { ShareCardProjection } from '../../media/share-card';
 import { subjectBody, subjectDisplayLabel, subjectPageJsonLd, type SubjectPageData } from './subject';
 import { bestRank, pageText, spoilerLevel, type Stmt } from './shared';
 import { chosenSummary } from './overview';
-import { publicDocumentText } from './jsonld';
+import { publicDocumentText, timePresentation } from './jsonld';
 
 type SubjectHeadContext = {
   origin: string;

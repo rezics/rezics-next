@@ -16,6 +16,8 @@ import { subjectHref } from '../../subject/subject-href';
 import { timePresentation } from '../../subject/time-presentation';
 import type { Related, Subject, Summary } from '../../subject/types.ts';
 
+export { originalLanguage, timePresentation };
+
 type JsonValue = string | number | JsonValue[] | { [key: string]: JsonValue };
 // The kernel client infers statement values as one union. Indexing it is too large for the compiler,
 // and every field below is checked again at run time.

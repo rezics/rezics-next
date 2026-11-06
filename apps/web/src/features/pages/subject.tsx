@@ -5,7 +5,7 @@ import { subjectCatalogueTagDefinitions } from './subject-catalogue-metadata/ind
 import { WorkNamesEntry } from '../catalogue/work-names/entry';
 import { GameProfileEntry, gameProfileEntry } from '../catalogue/game-profile-entry';
 import { GameOverview } from '../catalogue/game-reader/entry';
-import { gameReaderEntry } from '../catalogue/game-reader/model';
+import { gameReaderEntry, type GameReaderRead, type GameStatement } from '../catalogue/game-reader/model';
 import { EditorialEntry } from '../catalogue/editorial-entry';
 import { AddonProfileEntry } from '../catalogue/addon-profile-entry';
 import { SubjectFactsEntry } from '../catalogue/subject-facts-entry';
@@ -45,14 +45,15 @@ import { LiteraryProfileEntry } from '../catalogue/literary-profile-entry';
 import { LiteraryReaderEntry } from '../catalogue/literary-reader/entry';
 import { literaryGrain, literaryReaderType } from '../catalogue/literary-reader/model';
 import { literaryAddress } from '../catalogue/literary-reader/navigation';
-import { RecipePublicationEntry } from './recipe-publication';
 import { recipePublicationReading } from './recipe-publication/model';
-import { ReleasePublicationEntry } from './release-publication';
 import { releasePublicationReading } from './release-publication/model';
-import { AgentPublicationEntry } from './agent-publication';
 import { agentPublicationReading } from './agent-publication/model';
-import { GamePublicationEntry, gamePublicationInitial } from './game-publication';
 import { gamePublicationReading } from './game-publication/model';
+import {
+  publicationOverlayKind,
+  publicPublicationStatements,
+  type PublicationDefinitions,
+} from './subject-metadata';
 import { PeopleProfileEntry } from '../catalogue/people-profile-entry';
 import { PersonOverview } from '../catalogue/person-reader/reader';
 import { CharacterOverview } from './showcase-people/character';
@@ -76,6 +77,7 @@ import {
   planReads,
   documentRead,
   platformRegistry,
+  pickText,
   type CompositionDocument,
   type View,
   type SelectedContext,
@@ -100,7 +102,15 @@ import type { RelationDefinition } from '../../subject/relations';
 import type { Related, Subject, Summary } from '../../subject/types';
 import { accountHref, canonicalRedirect, subjectHref } from '../../subject/subject-href';
 import { m } from '../../paraglide/messages.js';
-import { dataComponents, PageData, pageText, SubjectSources, SubjectSourcesLink, type PageMessages } from './data';
+import {
+  dataComponents,
+  PageData,
+  pageText,
+  PublicationOverlayView,
+  SubjectSources,
+  SubjectSourcesLink,
+  type PageMessages,
+} from './data';
 import { statementDocument } from './documents';
 import { publicSubjectReference, serializeJsonLd, subjectJsonLd } from './jsonld';
 import { holderItems } from './overview';
@@ -133,7 +143,7 @@ import {
   gameClassificationReturnStorageKey,
   type GameClassificationReturn,
 } from '../catalogue/game-current-visit-descriptor';
-import { gameGroups } from '../catalogue/game-profile';
+import { gameGroups, gameType, type GameGroup } from '../catalogue/game-profile';
 
 const subjectIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -701,6 +711,99 @@ function gameReturnMessage(status: GameReturnStatus, locale: string) {
                 : m.game_visit_selection_unsupported({}, o);
 }
 
+function catalogueTypeIsA(
+  definitions: PublicationDefinitions,
+  type: string,
+  base: string,
+  seen = new Set<string>(),
+): boolean {
+  if (type === base) return true;
+  if (!definitions.types[type] || seen.has(type)) return false;
+  seen.add(type);
+  return (definitions.types[type]?.bases ?? []).some((parent) => catalogueTypeIsA(definitions, parent, base, seen));
+}
+
+const expectedGameKinds = {
+  platform: ['schema:gamePlatform'],
+  engine: ['wdt:P408'],
+  language: ['schema:inLanguage'],
+  status: ['schema:creativeWorkStatus', 'wdt:P5804', 'rezics:releaseStatus'],
+} as const;
+
+/** Feed GameReader from the current anonymous page; editions stay a later continuation. */
+export function gamePageInitial(
+  subject: Subject,
+  related: Related,
+  summary: Summary | null | undefined,
+  definitions: PublicationDefinitions,
+  digest: string,
+  locale: string,
+  reader: Reader = defaultReader,
+): GameReaderRead | undefined {
+  if (!gameReaderEntry(subject.type, summary?.types) && publicationOverlayKind(subject.type, definitions) !== 'game')
+    return;
+  const admitted =
+    gameType(definitions, subject.type) &&
+    !catalogueTypeIsA(definitions, subject.type, 'wd:Q20631656') &&
+    !catalogueTypeIsA(definitions, subject.type, 'wd:Q209163');
+  const groups = admitted
+    ? (Object.entries(gameGroups(definitions, subject.type)) as [GameGroup, string[]][]).map(([id, properties]) => ({
+        id,
+        fields: properties.flatMap((property) => {
+          const statements = publicPublicationStatements(subject, property, reader, locale);
+          if (!statements.length && definitions.properties[property]?.datatype !== 'time') return [];
+          return [
+            {
+              property,
+              label: pickText(definitions.properties[property]?.labels ?? {}, locale),
+              date: definitions.properties[property]?.datatype === 'time',
+              statements: statements as GameStatement[],
+            },
+          ];
+        }),
+      }))
+    : [];
+  const grouped: Extract<GameReaderRead, { ok: true }>['groups'] = [];
+  for (const id of ['facts', 'classification', 'credits', 'relations'] as const) {
+    const group = groups.find((entry) => entry.id === id);
+    if (group?.fields.length) grouped.push({ id, fields: group.fields });
+  }
+  const unsupported: Extract<GameReaderRead, { ok: true }>['unsupported'] = [];
+  for (const kind of ['platform', 'engine', 'language', 'status'] as const)
+    if (
+      admitted &&
+      !expectedGameKinds[kind].some(
+        (property) =>
+          definitions.types[subject.type]?.properties.includes(property) && definitions.properties[property],
+      )
+    )
+      unsupported.push(kind);
+  const publicRead: SubjectRead = composedSubjectRead({
+    subject,
+    related,
+    summary: summary ?? null,
+  });
+  return {
+    ok: true,
+    public: publicRead,
+    digest,
+    admitted,
+    grain: pickText(definitions.types[subject.type]?.labels ?? {}, locale),
+    groups: grouped,
+    unsupported,
+    editions: [],
+    editionTypes: Object.keys(definitions.types).filter(
+      (type) => type === 'wd:Q20631656' || (definitions.types[type]?.bases ?? []).includes('wd:Q20631656'),
+    ),
+    editionsAdmitted: false,
+    next: null,
+    caughtUp: true,
+    labels: Object.fromEntries(
+      Object.entries(definitions.properties).map(([id, property]) => [id, pickText(property.labels, locale)]),
+    ),
+  };
+}
+
 /**
  * The template document for one view of a subject, then schema.org JSON-LD for the overview. The host places the
  * view tabs right after the overview's header, or under the view's own heading, and invites the first facts when the
@@ -1046,16 +1149,29 @@ export function SubjectPage({
     };
   }, [link, locale, literaryReturn, mangaReturn, realm, visitReturn]);
   const releasedDefinitions = page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined;
+  const publicationReader = reader ?? defaultReader;
+  const recipeReading = read
+    ? recipePublicationReading(read.subject, releasedDefinitions, locale, publicationReader)
+    : undefined;
+  const releaseReading = read
+    ? releasePublicationReading(read.subject, releasedDefinitions, locale, publicationReader)
+    : undefined;
+  const gameReading = read
+    ? gamePublicationReading(read.subject, releasedDefinitions, locale, publicationReader)
+    : undefined;
+  const agentReading = read
+    ? agentPublicationReading(read.subject, releasedDefinitions, locale, publicationReader)
+    : undefined;
   const gameInitial =
     read && releasedDefinitions && page.catalogue?.digest
-      ? gamePublicationInitial(
+      ? gamePageInitial(
           read.subject,
           read.related,
           read.summary,
           releasedDefinitions,
           page.catalogue.digest,
           locale,
-          reader ?? defaultReader,
+          publicationReader,
         )
       : undefined;
   const factsContext = read ? (page.context?.id ?? read.subject.context) : undefined;
@@ -1420,31 +1536,23 @@ export function SubjectPage({
                 viewer={page.requestedReader ?? null}
               />
             ) : null}
-            {overview &&
-            read &&
-            !page.account &&
-            recipePublicationReading(read.subject, releasedDefinitions, locale, reader ?? defaultReader) ? (
-              <RecipePublicationEntry
+            {overview && read && !page.account && recipeReading ? (
+              <PublicationOverlayView
+                reading={{ kind: 'recipe', fields: recipeReading.fields }}
                 subject={read.subject}
                 related={read.related}
                 locale={locale}
-                reader={reader ?? defaultReader}
                 link={ContextLink}
                 {...(read.documents !== undefined ? { documents: read.documents } : {})}
-                {...(releasedDefinitions ? { definitions: releasedDefinitions } : {})}
               />
             ) : null}
-            {overview &&
-            read &&
-            !page.account &&
-            releasePublicationReading(read.subject, releasedDefinitions, locale, reader ?? defaultReader) ? (
-              <ReleasePublicationEntry
+            {overview && read && !page.account && releaseReading ? (
+              <PublicationOverlayView
+                reading={{ kind: 'release', fields: releaseReading.fields }}
                 subject={read.subject}
                 related={read.related}
                 locale={locale}
-                reader={reader ?? defaultReader}
                 link={ContextLink}
-                {...(releasedDefinitions ? { definitions: releasedDefinitions } : {})}
               />
             ) : null}
             {!overview && heading && (
@@ -1626,14 +1734,13 @@ export function SubjectPage({
             read &&
             !page.account &&
             !gameReaderEntry(read.subject.type, read.summary?.types) &&
-            gamePublicationReading(read.subject, releasedDefinitions, locale, reader ?? defaultReader) ? (
-              <GamePublicationEntry
+            gameReading ? (
+              <PublicationOverlayView
+                reading={{ kind: 'game', fields: gameReading.fields }}
                 subject={read.subject}
                 related={read.related}
                 locale={locale}
-                reader={reader ?? defaultReader}
                 link={ContextLink}
-                {...(releasedDefinitions ? { definitions: releasedDefinitions } : {})}
               />
             ) : null}
             {overview &&
@@ -1641,14 +1748,13 @@ export function SubjectPage({
             !page.account &&
             read.subject.type !== 'schema:Person' &&
             read.subject.type !== 'schema:Organization' &&
-            agentPublicationReading(read.subject, releasedDefinitions, locale, reader ?? defaultReader) ? (
-              <AgentPublicationEntry
+            agentReading ? (
+              <PublicationOverlayView
+                reading={{ kind: 'agent', fields: agentReading.fields }}
                 subject={read.subject}
                 related={read.related}
                 locale={locale}
-                reader={reader ?? defaultReader}
                 link={ContextLink}
-                {...(releasedDefinitions ? { definitions: releasedDefinitions } : {})}
               />
             ) : null}
             {overview && read && !page.account && read.subject.type === 'schema:MusicAlbum' ? (

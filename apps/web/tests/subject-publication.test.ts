@@ -10,18 +10,15 @@ import recorded from '../src/kernel/recorded/subject-page.json';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 type SubjectPageData = import('../src/features/pages/subject').SubjectPageData;
-const { RecipePublicationEntry } = await import('../src/features/pages/recipe-publication');
 const { recipePublicationReading } = await import('../src/features/pages/recipe-publication/model');
-const { ReleasePublicationEntry } = await import('../src/features/pages/release-publication');
 const { releasePublicationReading } = await import('../src/features/pages/release-publication/model');
-const { GamePublicationEntry } = await import('../src/features/pages/game-publication');
-const { gamePageInitial, gamePublicationReading } = await import('../src/features/pages/game-publication/model');
-const { AgentPublicationEntry } = await import('../src/features/pages/agent-publication');
+const { gamePublicationReading } = await import('../src/features/pages/game-publication/model');
 const { agentPublicationReading } = await import('../src/features/pages/agent-publication/model');
 const { literarySelected } = await import('../src/features/catalogue/literary-reader/model');
 const { publicationPropertiesFor, publicPublicationStatements, relatedSameAs, subjectPublicationFields } =
   await import('../src/features/pages/subject-metadata');
-const { subjectPageJsonLd } = await import('../src/features/pages/subject');
+const { gamePageInitial, subjectPageJsonLd } = await import('../src/features/pages/subject');
+const { PublicationOverlayView } = await import('../src/features/pages/data');
 
 const diet = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e11';
 const platform = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e21';
@@ -104,11 +101,11 @@ test('released Recipe overlay projects cook time, diet, ingredients and instruct
   ]);
   expect(relatedSameAs(recipeRelated[diet])).toBe('https://schema.org/VegetarianDiet');
   const html = renderToString(
-    createElement(RecipePublicationEntry, {
+    createElement(PublicationOverlayView, {
+      reading: { kind: 'recipe', fields: reading!.fields },
       subject,
       related: recipeRelated,
       documents: recipeDocuments,
-      definitions,
       locale: 'en',
     }),
   );
@@ -181,10 +178,10 @@ test('software-release overlay publishes platform, date and language from the cu
     'schema:inLanguage',
   ]);
   const html = renderToString(
-    createElement(ReleasePublicationEntry, {
+    createElement(PublicationOverlayView, {
+      reading: { kind: 'release', fields: releasePublicationReading(subject, definitions, 'en')!.fields },
       subject,
       related: { [platform]: { type: 'skos:Concept', labels: { en: 'Nintendo Switch' } } },
-      definitions,
       locale: 'en',
     }),
   );
@@ -207,10 +204,10 @@ test('released Game overlay and reader seed publish platform from the current pa
     'schema:gamePlatform',
   ]);
   const html = renderToString(
-    createElement(GamePublicationEntry, {
+    createElement(PublicationOverlayView, {
+      reading: { kind: 'game', fields: gamePublicationReading(subject, definitions, 'en')!.fields },
       subject,
       related: { [platform]: { type: 'skos:Concept', labels: { en: 'Nintendo Switch' } } },
-      definitions,
       locale: 'en',
     }),
   );
@@ -261,10 +258,10 @@ test('automated agent overlay publishes sameAs and omits withheld identity links
     'schema:url',
   ]);
   const html = renderToString(
-    createElement(AgentPublicationEntry, {
+    createElement(PublicationOverlayView, {
+      reading: { kind: 'agent', fields: agentPublicationReading(subject, definitions, 'en')!.fields },
       subject,
       related: {},
-      definitions,
       locale: 'en',
     }),
   );

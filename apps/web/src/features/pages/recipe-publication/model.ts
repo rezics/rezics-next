@@ -1,7 +1,6 @@
-import type { Related, Subject } from '../../../subject/types';
 import type { Reader } from '../../../subject/reader';
 import { defaultReader } from '../../../subject/reader';
-import { pageText, type Stmt } from '../shared';
+import { pageText, type Related, type Stmt, type Subject } from '../shared';
 import {
   RECIPE_PUBLICATION_PROPERTIES,
   publicationOverlayKind,

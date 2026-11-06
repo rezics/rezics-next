@@ -28,6 +28,7 @@ import type { Operation } from './operation-contract.ts';
 import type { DocumentMediaPage } from './media-presentation.ts';
 import type { OwnDraftEntry } from './own-drafts.ts';
 import { RealmPresentationImageSchema } from './realm-presentation-image.ts';
+export { RealmPresentationImageSchema };
 import { FeedAuthorSchema } from './feed-contract.ts';
 import { FeedParentContextSchema } from './feed-context-schema.ts';
 import type { SubjectThreadCard, SubjectThreadCardEntry } from './subject-threads-cards.ts';

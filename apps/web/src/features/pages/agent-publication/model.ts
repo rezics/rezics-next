@@ -1,7 +1,6 @@
-import type { Subject } from '../../../subject/types';
 import type { Reader } from '../../../subject/reader';
 import { defaultReader } from '../../../subject/reader';
-import { pageText } from '../shared';
+import { pageText, type Subject } from '../shared';
 import {
   AGENT_PUBLICATION_PROPERTIES,
   publicationOverlayKind,
