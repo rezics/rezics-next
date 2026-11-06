@@ -17,9 +17,12 @@ import {
 } from '../../src/commerce/erasure-participant.ts';
 import { createCommerceWork } from '../../src/commerce/enqueue.ts';
 import { createStripePort } from '../../src/commerce/stripe.ts';
+import { readBoard } from '../../src/content/reads.ts';
 import { createPool } from '../../src/database/pool.ts';
+import { accessCheck } from '../../src/request/access.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
+import { subjectReadEligibility } from '../../src/semantic/eligibility.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { nativeFixture } from '../access/native-account-bindings-fixture.ts';
 import { deletePersona, drainEffects } from '../support/account-deletion.ts';
@@ -212,18 +215,57 @@ beforeAll(async () => {
   for (const group of ['personal_library', 'purchases', 'selling'])
     await accepted(personas.staff, `/v1/platform/exposure/${group}:open`, {});
   const editionPublisher = await createNativeEditionFixture(async (method, path, body, headers = {}) => {
+    let conceptId: string | undefined;
     if (method === 'POST' && path === '/v1/boards') {
-      const conceptId = (body as { conceptId: string }).conceptId;
+      conceptId = (body as { conceptId: string }).conceptId;
       // The trusted fixture grants the exact read needed by Global board creation.
       await seedGovernanceAuthority(pool, routeOf(conceptId)!, conceptId, seller.accountId, ['subject:read']);
     }
-    return kernel.handle(
+    const response = await kernel.handle(
       new Request(`http://kernel.test${path}`, {
         method,
         headers: { authorization: `Bearer ${seller.bearer}`, ...headers },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       }),
     );
+    if (conceptId && response.status !== 201) {
+      const title = (body as { title: string }).title;
+      const result = await pool.query(
+        `SELECT b.route,b.board_id,b.subject_id,b.realm_id,b.visibility,b.availability,b.title,
+          b.security_revision::text,b.purpose,b.created_at,
+          (SELECT json_agg(json_build_object('role',r.grant_role,'valid',r.valid::text,'current',r.valid @> clock_timestamp()))
+           FROM access.resource_role_grant r
+           WHERE r.route=b.route AND r.resource_id=b.board_id AND r.subject_id=$2) AS roles,
+          (SELECT array_agg(g.action) FROM access.resource_grant g
+           WHERE g.route=b.route AND g.resource_id=b.board_id AND g.subject_id=$2) AS actions,
+          (SELECT array_agg(d.action) FROM access.resource_denial d
+           WHERE d.route=b.route AND d.resource_id=b.board_id AND d.subject_id=$2) AS denials
+         FROM content.board b WHERE b.title=$1 ORDER BY b.created_at DESC LIMIT 1`,
+        [title, seller.accountId],
+      );
+      const actor = await kernel.testAccess.authenticate(seller.bearer, { pool, deadline: Date.now() + 30_000 });
+      const resource = { route: routeOf(conceptId)!, id: conceptId, eligibility: subjectReadEligibility({ route: routeOf(conceptId)!, id: conceptId }) };
+      const subjectAllowed = await (
+        await accessCheck(kernel.testAccess, actor, 'subject:read', resource, { pool, deadline: Date.now() + 30_000 })
+      )(pool);
+      const row = result.rows[0];
+      const board = row
+        ? await readBoard({ pool, access: kernel.testAccess }, row.board_id, { actor, deadline: Date.now() + 30_000 })
+        : null;
+      console.error(
+        'Native board visibility diagnostic',
+        JSON.stringify({
+          response: response.status,
+          conceptId,
+          subjectReadScope: actor.kind === 'account' && actor.scopes.includes('subject:read'),
+          boardReadScope: actor.kind === 'account' && actor.scopes.includes('board:read'),
+          subjectAllowed,
+          row,
+          boardRead: board?.value ?? null,
+        }),
+      );
+    }
+    return response;
   });
   contentEdition = await editionPublisher.publish({
     title: 'Native erasure book',
