@@ -226,6 +226,8 @@ no service bypass.
 Decision: compose the bounded native transfer acknowledgement with retained exact-attempt recovery. Approval
 expiry uses the native canonical timestamp; execution acknowledges the exact subject UUID. Protocol fixtures
 retain immutable snapshots through the persistence callback, separately from native and browser acceptance.
+Explicit transfer step-up starts a fresh read lifetime after retiring the former view; successful sign-in restores
+readiness only. The retained command still requires a separate review and confirmation before exact retry.
 Unknown-result handoff inputs stay concealed until an explicit current recovery review; review never sends a command.
 
 Imported transfer tuples are unverified source data. Proposed destination review establishes neither the source

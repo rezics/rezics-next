@@ -1,4 +1,4 @@
-import { expect, spyOn, test } from 'bun:test';
+import { expect, test } from 'bun:test';
 import { nativeSignInProof } from './sign-in-fixture';
 import { act } from 'react';
 import { creationFixture, button, dom, fill, open } from './creation-page-fixture';
@@ -215,6 +215,8 @@ test('step-up restoration does not disclose or unlock the saved source command b
   await settle(() => {
     fill(page.host.querySelector<HTMLInputElement>('#transfer-email')!, 'operator@example.test');
     fill(page.host.querySelector<HTMLInputElement>('#transfer-password')!, 'password-value');
+  });
+  await settle(() => {
     page.host.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
   });
   const signIn = page.calls.find(({ path }) => path === '/signin')!;
@@ -286,12 +288,15 @@ test.each(['failed-read', 'conflicting-read', 'replaced', 'retired', 'failed-sav
     const replacement = { ...unknown, request: { ...request, sourceOperationKey: 'newer-view' } };
     if (mode === 'replaced') storeTransferAttempt(replacement);
     if (mode === 'retired') await settle(() => window.dispatchEvent(new dom.Event('pagehide') as unknown as Event));
-    const save =
-      mode === 'failed-save'
-        ? spyOn(Object.getPrototypeOf(window.sessionStorage) as Storage, 'setItem').mockImplementation(() => {
-            throw new Error('storage unavailable');
-          })
-        : null;
+    const storage = window.sessionStorage;
+    const setItem = storage.setItem;
+    if (mode === 'failed-save')
+      Object.defineProperty(storage, 'setItem', {
+        configurable: true,
+        value: () => {
+          throw new Error('storage unavailable');
+        },
+      });
     try {
       await settle(() => execution.resolve(Response.json({ accountId: request.previous.subjectAccountId })));
       if (mode === 'failed-read' || mode === 'conflicting-read') {
@@ -318,7 +323,7 @@ test.each(['failed-read', 'conflicting-read', 'replaced', 'retired', 'failed-sav
       expect(page.calls.filter(({ path }) => path.endsWith('/execute'))).toHaveLength(1);
       expect(page.calls.some(({ path }) => path.endsWith('/approve'))).toBe(false);
     } finally {
-      save?.mockRestore();
+      if (mode === 'failed-save') Object.defineProperty(storage, 'setItem', { configurable: true, value: setItem });
     }
   },
 );

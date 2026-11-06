@@ -898,6 +898,10 @@ export function OperatorTransferPage({
     event.preventDefault();
     const started = view.current;
     void perform(async () => {
+      // Explicit sign-in starts a new read lifetime after step-up retired the old one.
+      // Native readiness and saved-command review remain locked until it completes.
+      lifetime.current = new AbortController();
+      retired.current = false;
       const caller = session?.kind === 'ready' ? session : await loadAccountSession(lifetime.current.signal);
       if (started !== view.current) return;
       if (caller.kind !== 'ready') {
