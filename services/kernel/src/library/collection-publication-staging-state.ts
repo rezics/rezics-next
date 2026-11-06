@@ -24,6 +24,36 @@ export const initialCollectionPublicationFrontier = (): CollectionPublicationFro
 const unavailable = () => new ProblemError('dependency_unavailable');
 const uuid = (value: string) => /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(value);
 
+/** Matching catalogue subjects are already the admitted population; Search applied the predicate. */
+export function enterCataloguePublicationMembers(
+  frontier: CollectionPublicationFrontier,
+  subjects: readonly string[],
+  exhausted: boolean,
+): CollectionPublicationFrontier {
+  if (frontier.pending || frontier.exhausted) throw unavailable();
+  let previous = frontier.after;
+  for (const subject of subjects) {
+    if (!uuid(subject) || (previous !== null && subject <= previous)) throw unavailable();
+    previous = subject;
+  }
+  const candidate = subjects[0];
+  if (!candidate) {
+    if (!exhausted) throw unavailable();
+    return { after: frontier.after, pending: null, exhausted: true };
+  }
+  return {
+    after: frontier.after,
+    exhausted: false,
+    pending: {
+      subject: candidate,
+      coveredThrough: subjects.at(-1)!,
+      lastInPage: subjects.length === 1,
+      sourceExhausted: exhausted,
+      progress: null,
+    },
+  };
+}
+
 /** Consume a genuine unfiltered canonical Source prefix. Unused suffix/lookahead is charged but not settled.
  * A later step seeks again after the last settled key; no population array is retained in a work intent.
  */

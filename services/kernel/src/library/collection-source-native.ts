@@ -549,9 +549,17 @@ async function observe(client: QueryClient, ref: Ref): Promise<NativeCollectionM
 /** Structural producer read only. Maintenance/custody do not obtain reader authority from this result. */
 async function observeWorking(client: QueryClient, ref: Ref) {
   const metadata = await observe(client, ref);
-  if (!metadata || metadata.membershipKind !== 'dynamic' || metadata.visibility === 'private') return metadata;
-  // A catalogue save has no owner working population to publish; its complete output needs the catalogue producer.
-  if (metadata.ruleSource === 'catalogue') return null;
+  if (!metadata || metadata.membershipKind !== 'dynamic') return metadata;
+  // Catalogue membership is Search-owned. Working observation stays unavailable_output and carries
+  // the curator fence so publication can snapshot public A without an owner capture.
+  if (metadata.ruleSource === 'catalogue') {
+    const factFence =
+      (await client.query<{ generation: string }>(fenceSQL, [ref.route, metadata.curatorAccountId])).rows[0]
+        ?.generation ?? null;
+    if (!factFence || !metadata.curatorAccountId) return null;
+    return Object.freeze({ ...metadata, factFence });
+  }
+  if (metadata.visibility === 'private') return metadata;
   if (
     !metadata.curatorAccountId ||
     !(metadata.ruleReady || (metadata.builtinKind !== null && metadata.releaseDigest !== null))
