@@ -28,6 +28,7 @@ type BoardShelfRead = Awaited<ReturnType<RealmRoute['boardShelf']['get']>>;
 type PublicationShelfRead = Awaited<ReturnType<RealmRoute['publicationShelf']['get']>>;
 export type NativeRealmBoardPage = NonNullable<BoardShelfRead['data']>;
 export type NativeRealmPublicationPage = NonNullable<PublicationShelfRead['data']>;
+type NativeRealmBoardWindow = NativeRealmHomePage['boards'] | NativeRealmBoardPage;
 
 export type NativeRealmHomeOperations = {
   home(input: { realmId: string; languages: string[] }): Promise<Result<NativeRealmHomePage>>;
@@ -59,7 +60,7 @@ export function bindNativeRealmHomeOperations(
   };
 }
 
-function boards(page: NativeRealmBoardPage, realmId: string): RealmBoard[] {
+function boards(page: NativeRealmBoardWindow, realmId: string): RealmBoard[] {
   if (page.items.length > 20 || page.items.some((item) => item.realmId !== realmId))
     throw new Error('Realm home board source changed');
   return page.items.flatMap((item) =>
@@ -70,7 +71,7 @@ function boards(page: NativeRealmBoardPage, realmId: string): RealmBoard[] {
             title: item.title,
             purpose: item.purpose,
             visibility: item.visibility,
-            recent: presentRealmBoardRecent((item as { recent?: unknown }).recent, item.id),
+            recent: presentRealmBoardRecent(item.recent, item.id),
           },
         ]
       : [],

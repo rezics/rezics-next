@@ -13,7 +13,7 @@ function purposeLabel(purpose: RealmBoard['purpose']): string {
 }
 
 function commentsLabel(comments: RealmBoardRecentThread['comments']): string | null {
-  if (comments.state !== 'current') return null;
+  if (comments.state !== 'current') return m.realm_board_recent_replies_unavailable();
   const count = new Intl.NumberFormat(getLocale()).format(comments.value);
   return comments.kind === 'lower-bound'
     ? m.realm_board_recent_replies_more({ count })
@@ -30,14 +30,19 @@ function recentRegion(board: RealmBoard, boardHref: string, current: () => boole
       </p>
     );
   }
-  if (!recent.threads.length) return null;
+  if (!recent.threads.length)
+    return recent.complete ? (
+      <p className="text-sm text-muted-foreground" data-slot="realm-board-recent-empty">
+        {m.realm_board_recent_empty()}
+      </p>
+    ) : null;
   return (
     <ul
       className="space-y-1 border-s border-border ps-4"
       data-slot="realm-board-recent"
       aria-label={m.realm_board_recent()}
     >
-      {recent.threads.map((thread) => {
+      {recent.threads.slice(0, 3).map((thread) => {
         const href = threadLocation(
           getLocale(),
           { id: thread.id, title: thread.title },
