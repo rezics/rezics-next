@@ -1,9 +1,9 @@
 import { viteNonceMarker } from './src/security/headers.ts';
-import { realpathSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { readFileSync, realpathSync } from 'node:fs';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { tanstackStart } from '@tanstack/react-start/plugin/vite';
 import { cloudflare } from '@cloudflare/vite-plugin';
@@ -39,6 +39,26 @@ if (configuredInspectorPort !== undefined) {
     );
   }
   inspectorPort = parsedInspectorPort;
+}
+
+/** The Cloudflare plugin denies every dependency of cloudflare.config.ts to browser file serving. The site Worker
+ * imports one of those dependencies, so only the Worker environment may load them from disk. The browser
+ * environment keeps the deny list, and the loaded file stays watched. */
+function workerDeniedDependencies(): Plugin {
+  let denied = new Set<string>();
+  return {
+    name: 'worker-denied-dependencies',
+    enforce: 'post',
+    configResolved(resolved) {
+      denied = new Set(resolved.server.fs.deny.filter((entry) => isAbsolute(entry)));
+    },
+    load(id) {
+      const file = id.split('?', 1)[0]!;
+      if (this.environment.name !== 'ssr' || !denied.has(file)) return null;
+      this.addWatchFile(file);
+      return readFileSync(file, 'utf8');
+    },
+  };
 }
 
 export default defineConfig((context) => {
@@ -93,6 +113,7 @@ export default defineConfig((context) => {
         ...(persistence.directory ? { persistState: { path: persistence.directory } } : {}),
       }),
       ...(persistence.cleanupPlugin ? [persistence.cleanupPlugin] : []),
+      workerDeniedDependencies(),
     ],
   };
 });
