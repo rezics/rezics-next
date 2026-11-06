@@ -1753,7 +1753,8 @@ async function advanceConsumers(
                 { partition: identityScopeAddress(ticket.scope).partition, deadline },
                 async (tx) => {
                   claimIdentitySourceLibraryCall(pool, 'currentVerifications');
-                  const verify = () => identitySourceConsumerRuntime().verifyLibraryScopeEffectsSeal(tx, key, page.seal);
+                  const verify = () =>
+                    identitySourceConsumerRuntime().verifyLibraryScopeEffectsSeal(tx, key, page.seal);
                   if (!(await (prepaid ? observe(verify, tx) : verify()))) return noEffect(null);
                   if (!page.exhausted) return noEffect({ fence: null });
                   const fence = await ports.scope.retainIdentityScopeConsumerFence!(tx, ticket, page.seal);

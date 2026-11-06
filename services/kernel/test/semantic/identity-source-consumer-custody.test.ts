@@ -45,10 +45,7 @@ import type { LibraryScopeEffectSeal } from '../../src/library/identity-scope-ef
 import { IdentityHistoryWorkUnavailable } from '../../src/history/contract/errors.ts';
 
 /** Publish the original Accounts job through installed Search and Library participants. */
-async function publishOriginalAccountIdentity(
-  pool: Pool,
-  workflow: Parameters<typeof mergeVerifiedAgent>[1],
-) {
+async function publishOriginalAccountIdentity(pool: Pool, workflow: Parameters<typeof mergeVerifiedAgent>[1]) {
   const receipt = { kind: 'account-agent.verify' as const, account: workflow.accountId, receipt: workflow.receiptId };
   const until = Date.now() + 120_000;
   let last: unknown;

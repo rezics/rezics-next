@@ -224,7 +224,9 @@ test('foreign homes prepare and handoff then hold exact terminals', async () => 
       expect(authority.events?.some((event) => event.type === IDENTITY_RATING_REPAIR_CONTINUATION)).toBe(true);
       return {
         value: authority.obligationId!,
-        events: authority.events ?? [{ type: IDENTITY_EPOCH_PROGRESS, data: { partition: homePartition, generation: '1' } }],
+        events: authority.events ?? [
+          { type: IDENTITY_EPOCH_PROGRESS, data: { partition: homePartition, generation: '1' } },
+        ],
       };
     });
     const prepared = await runCommand(db.pool, { partition: foreignPartition }, async (tx) => {
@@ -321,10 +323,7 @@ test('later mapping writes and later votes drain through bounded owner receipts'
         };
       })
     ).value;
-    await db.admin.query(
-      `UPDATE semantic.identity_epoch_mapping SET epoch = epoch + 1 WHERE original=$1`,
-      [original],
-    );
+    await db.admin.query(`UPDATE semantic.identity_epoch_mapping SET epoch = epoch + 1 WHERE original=$1`, [original]);
     expect(
       (
         await db.admin.query(
@@ -410,10 +409,9 @@ test('mapping later_change trigger marks at most 64 obligations then drain conti
     expect(marked).toBe(64);
     expect(
       (
-        await db.admin.query(
-          `SELECT overflow FROM semantic.identity_rating_repair_drain_head WHERE partition_no=$1`,
-          [homePartition],
-        )
+        await db.admin.query(`SELECT overflow FROM semantic.identity_rating_repair_drain_head WHERE partition_no=$1`, [
+          homePartition,
+        ])
       ).rows[0]?.overflow,
     ).toBe(true);
     const commandProducer = createIdentityRatingRepairProducer();

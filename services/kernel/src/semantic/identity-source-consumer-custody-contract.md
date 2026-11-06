@@ -482,7 +482,7 @@ The exact optional overrides and defaults are:
 | `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_WITNESS_KEYS`           |       1 | One effect selection.                                                                                                                                    |
 | `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_STATEMENTS`             |     128 | Existing Collection Source one-page statement ceiling.                                                                                                   |
 | `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_BYTES`                  | 1048576 | Existing Collection Source one-page byte ceiling.                                                                                                        |
-| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_EMPTY_SEEKS`            |     128 | Statement-axis bound so Search publication readJob and participant SQL can dispatch; page-end/sealed-empty probes still use two seeks. |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_EMPTY_SEEKS`            |     128 | Statement-axis bound so Search publication readJob and participant SQL can dispatch; page-end/sealed-empty probes still use two seeks.                   |
 
 Overrides are canonical non-negative safe integers no higher than the named
 existing ceilings; invalid values fail at frame creation. Required work dimensions

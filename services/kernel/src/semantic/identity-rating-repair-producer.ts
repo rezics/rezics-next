@@ -304,11 +304,7 @@ async function obligationById(
   ).rows[0];
 }
 
-async function handoffsOf(
-  tx: CommandTransaction,
-  partition: number,
-  obligationId: string,
-): Promise<HandoffRow[]> {
+async function handoffsOf(tx: CommandTransaction, partition: number, obligationId: string): Promise<HandoffRow[]> {
   return (
     await tx.query<HandoffRow>(
       `SELECT home, mappings, later_change
@@ -358,9 +354,9 @@ function prepareEvents(
   homes: readonly number[],
   originalsByHome: ReadonlyMap<number, readonly string[]>,
 ): CommandEvent[] {
-  return homes.slice(0, IDENTITY_RATING_REPAIR_MAX_CONTINUATION).map((home) =>
-    continuation(home, voterPartition, obligationId, 'prepare', originalsByHome.get(home) ?? []),
-  );
+  return homes
+    .slice(0, IDENTITY_RATING_REPAIR_MAX_CONTINUATION)
+    .map((home) => continuation(home, voterPartition, obligationId, 'prepare', originalsByHome.get(home) ?? []));
 }
 
 function originalsByHomeOf(originals: readonly string[]): Map<number, string[]> {
@@ -437,8 +433,7 @@ export function createIdentityRatingRepairProducer(): IdentityRatingRepairProduc
       const command = currentCommand(tx);
       const { deadline } = currentCommandResources(tx);
       const voterRoute = routeOf(page.voterId);
-      if (voterRoute === null || command.partition !== partitionOf(voterRoute))
-        return pending('voter-home-mismatch');
+      if (voterRoute === null || command.partition !== partitionOf(voterRoute)) return pending('voter-home-mismatch');
       const originals = originalsOf(page)!;
       const owner = await lockPartition(tx, command.partition, deadline);
       if (!owner || owner.writeState !== 'active')
@@ -664,8 +659,7 @@ export function createIdentityRatingRepairProducer(): IdentityRatingRepairProduc
       const command = currentCommand(tx);
       const { deadline } = currentCommandResources(tx);
       const owner = await lockPartition(tx, command.partition, deadline);
-      if (!owner || owner.writeState !== 'active')
-        return { drained: 0, continuing: false, events: [] };
+      if (!owner || owner.writeState !== 'active') return { drained: 0, continuing: false, events: [] };
       mutate(tx);
       const overflow = (
         await tx.query<{ overflow: boolean; overflow_original: string | null }>(
@@ -758,8 +752,7 @@ export function createIdentityRatingRepairProducer(): IdentityRatingRepairProduc
         const missing = uniqueHomes(jsonArray<number>(row.prepare_homes)).filter((home) => !have.has(home));
         events.push(...prepareEvents(command.partition, row.obligation_id, missing, grouped));
       }
-      if (remaining)
-        events.push(continuation(command.partition, command.partition, command.transactionId, 'drain'));
+      if (remaining) events.push(continuation(command.partition, command.partition, command.transactionId, 'drain'));
       return {
         drained,
         continuing: Boolean(remaining) || events.length > 0,
