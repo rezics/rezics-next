@@ -2,6 +2,7 @@ import { defaultPolicy } from './policy.ts';
 import { spawnSync } from 'node:child_process';
 import type { AttemptRef, ManagerInbox, ManagerEvent } from './contracts.ts';
 import { blockerFingerprint } from './attempt-progress.ts';
+import { TRANSPORT_FAILURE_EVENT } from './agents/shared.ts';
 import type { WorkerStore } from './store.ts';
 import type { Attempt, RetryIntent, Settings, Task } from './types.ts';
 
@@ -108,12 +109,47 @@ export function projectToolIncidentStatus(store: WorkerStore, tasks: readonly Ta
       .map((incident) => structuredClone(incident))
       .sort((a, b) => a.openedAt.localeCompare(b.openedAt)),
     forAttempt(task: Task, attempt: Attempt): ToolIncident | null {
-      if (attempt.failureKind !== 'tool') return null;
-      const fingerprint = blockerFingerprint(attempt, task.worktree, store.policy.worker);
+      const fingerprint = incidentFingerprint(store, task, attempt);
       const incident = fingerprint ? active.get(fingerprint) : undefined;
       return incident ? structuredClone(incident) : null;
     },
   };
+}
+
+export type TransportFailure = {
+  sequence: number;
+  count: number;
+  line: string;
+  nextResumeAt: string;
+  delayMs: number;
+};
+
+export function lastTransportFailure(
+  store: WorkerStore,
+  ref: Pick<AttemptRef, 'taskId' | 'attempt'>,
+): TransportFailure | null {
+  const event = store
+    .events(ref.taskId, ref.attempt)
+    .filter((candidate) => candidate.kind === TRANSPORT_FAILURE_EVENT)
+    .at(-1);
+  if (!event) return null;
+  const body = parse<{ count?: unknown; line?: unknown; nextResumeAt?: unknown; delayMs?: unknown }>(event.body);
+  if (!body || typeof body.line !== 'string' || typeof body.nextResumeAt !== 'string') return null;
+  return {
+    sequence: event.sequence,
+    count: typeof body.count === 'number' ? body.count : 0,
+    line: body.line,
+    nextResumeAt: body.nextResumeAt,
+    delayMs: typeof body.delayMs === 'number' ? body.delayMs : 0,
+  };
+}
+
+function incidentFingerprint(store: WorkerStore, task: Task, attempt: Attempt): string {
+  if (attempt.failureKind === 'tool') return blockerFingerprint(attempt, task.worktree, store.policy.worker);
+  const transport = lastTransportFailure(store, attempt);
+  return transport
+    ? blockerFingerprint({ blocker: transport.line, result: '' }, task.worktree, store.policy.worker)
+    : '';
 }
 
 function openIncidentForFingerprint(store: WorkerStore, fingerprint: string): ToolIncident | null {
@@ -232,6 +268,7 @@ export function recordToolBlockerFailure(
   settings: Settings,
   inbox: ManagerInbox,
   now = Date.now(),
+  options: { queueRetries?: boolean } = {},
 ): { incident: ToolIncident | null; opened: boolean } {
   const policy = (settings.policy ?? defaultPolicy).toolIncidents;
   const ref = { taskId: task.id, attempt: attempt.attempt };
@@ -293,7 +330,8 @@ export function recordToolBlockerFailure(
     .immediate();
 
   if (incident) {
-    ensureIncidentRetries(store, incident, new Date(Date.parse(incident.openedAt) - policy.windowMs).toISOString());
+    if (options.queueRetries !== false)
+      ensureIncidentRetries(store, incident, new Date(Date.parse(incident.openedAt) - policy.windowMs).toISOString());
     if (!incident.noticeDelivered) {
       try {
         incident = deliverIncident(store, inbox, settings, incident) ?? incident;
@@ -303,6 +341,30 @@ export function recordToolBlockerFailure(
     }
   }
   return { incident, opened };
+}
+
+/**
+ * Record a provider transport drop against the shared environment incident whose fingerprint is the transport line.
+ * Held peers stay on their current attempt; only the probe resumes until it gets past the drop.
+ */
+export function recordTransportFailure(
+  store: WorkerStore,
+  task: Task,
+  attempt: Attempt,
+  settings: Settings,
+  inbox: ManagerInbox,
+  line: string,
+  now = Date.now(),
+): { incident: ToolIncident | null; opened: boolean } {
+  const viewed: Attempt = { ...attempt, failureKind: 'tool', blocker: line, result: line };
+  const result = recordToolBlockerFailure(store, task, viewed, settings, inbox, now, { queueRetries: false });
+  const nextResumeAt = lastTransportFailure(store, { taskId: task.id, attempt: attempt.attempt })?.nextResumeAt;
+  if (result.incident && nextResumeAt && result.incident.probe.taskId === task.id) {
+    const updated = { ...result.incident, nextProbeAt: nextResumeAt };
+    saveState(store, { taskId: task.id, attempt: attempt.attempt }, 'open', updated);
+    return { incident: updated, opened: result.opened };
+  }
+  return result;
 }
 
 /** Retry saved notices during the host's existing recovery sweep without changing incident or probe state. */
@@ -326,10 +388,25 @@ export function toolIncidentForRetry(store: WorkerStore, ref: AttemptRef): ToolI
   try {
     const task = store.task(ref.taskId);
     const attempt = store.attempt(ref);
-    if (attempt.failureKind !== 'tool') return null;
-    return openIncidentForFingerprint(store, blockerFingerprint(attempt, task.worktree, store.policy.worker));
+    const fingerprint = incidentFingerprint(store, task, attempt);
+    return fingerprint ? openIncidentForFingerprint(store, fingerprint) : null;
   } catch {
     return null;
+  }
+}
+
+/** Waiting transport resumes only the incident probe, after its own backoff. */
+export function transportIncidentResumeAllowed(store: WorkerStore, ref: AttemptRef, now = Date.now()): boolean {
+  const transport = lastTransportFailure(store, ref);
+  if (!transport) return true;
+  try {
+    const task = store.task(ref.taskId);
+    const fingerprint = blockerFingerprint({ blocker: transport.line, result: '' }, task.worktree, store.policy.worker);
+    const incident = fingerprint ? openIncidentForFingerprint(store, fingerprint) : null;
+    if (!incident) return true;
+    return incident.probe.taskId === ref.taskId;
+  } catch {
+    return true;
   }
 }
 
@@ -367,7 +444,7 @@ export function resolveToolIncidentsAfterAttempt(
   for (const incident of listOpenToolIncidents(store)) {
     if (
       incident.probe.taskId !== ref.taskId ||
-      ref.attempt <= incident.probe.attempt ||
+      ref.attempt < incident.probe.attempt ||
       fingerprint === incident.fingerprint
     )
       continue;

@@ -95,6 +95,8 @@ export function noProgressTwice(store: WorkerStore, task: Task, ref: AttemptRef)
   return recordedProgress(store, { taskId: ref.taskId, attempt: ref.attempt - 1 }) === false;
 }
 
+const EMPTY_WORKER_ENDED = /^worker ended without a success report \((?:killed|exit #)\):\s*$/;
+
 /** A tool blocker's identity: its first line with its worktree and volatile numbers, hashes and identifiers removed. */
 export function blockerFingerprint(
   attempt: Pick<Attempt, 'blocker' | 'result'>,
@@ -108,19 +110,19 @@ export function blockerFingerprint(
         '<worktree>',
       )
     : line;
-  return (
-    withoutWorktree
-      .replace(/\x1b\[[0-9;]*m/g, '')
-      // Temporary directory names are random per run; the same failure must keep one fingerprint.
-      .replace(/(\/(?:tmp|var\/tmp|run\/user\/\d+)\/[A-Za-z0-9._-]*?)[-.]?[A-Za-z0-9]{6,}(?=[\/'"\s]|$)/g, '$1<tmp>')
-      .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '#')
-      .replace(/\b[0-9a-f]{7,}\b/gi, '#')
-      .replace(/\d+/g, '#')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .toLowerCase()
-      .slice(0, policy.blockerFingerprintCharacters)
-  );
+  const fingerprint = withoutWorktree
+    .replace(/\x1b\[[0-9;]*m/g, '')
+    // Temporary directory names are random per run; the same failure must keep one fingerprint.
+    .replace(/(\/(?:tmp|var\/tmp|run\/user\/\d+)\/[A-Za-z0-9._-]*?)[-.]?[A-Za-z0-9]{6,}(?=[\/'"\s]|$)/g, '$1<tmp>')
+    .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '#')
+    .replace(/\b[0-9a-f]{7,}\b/gi, '#')
+    .replace(/\d+/g, '#')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
+    .slice(0, policy.blockerFingerprintCharacters);
+  // The generic prefix with no detail grouped 11 tasks behind one probe on 2026-11-06.
+  return EMPTY_WORKER_ENDED.test(fingerprint) ? '' : fingerprint;
 }
 
 function escapeRegExp(value: string): string {
