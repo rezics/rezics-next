@@ -287,7 +287,7 @@ test('a missing required primitive remains unavailable even when the grant facts
   const catalogue = nativePolicyCatalogueForAccess(access)!;
   const projection = {
     assignmentValid: null,
-    deadlineLive: true,
+    live: true,
     localDenied: false,
     actorActionGrant: true,
     actorResourceRoleGrant: false,
