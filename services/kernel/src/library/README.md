@@ -772,7 +772,9 @@ retains the capture identity/receipt and exact hold. The Library queue accepts o
 receiving/control work, under the actual account barrier; foreign homes are retained as precise owner handoffs and
 public/frozen outputs remain owner-qualified work. The Source adapter must invoke the receiver inside its existing
 live maintenance frame and carry its opaque prepaid context through all pages. Ordinary destination disposition is
-separate from identity hold release.
+separate from identity hold release. Library receives that live frame as an injected `LibrarySourceFrame` accessor
+(`libraryWork(pool, token, deadline)`) in `createLibraryIdentityEpochReceiver` and `createLibraryIdentityNativePlanner`;
+the participant never imports the frame module, so the adapter index keeps only type re-exports and adds no value cycle.
 
 Remaining integration is Semantic's prepaid schedule and Source/coordinator composition: it must account for all
 planner steps, source discovery, page/verification and transitive receiving/control operations; drive every saved
