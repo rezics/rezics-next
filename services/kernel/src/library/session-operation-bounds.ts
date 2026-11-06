@@ -1,6 +1,6 @@
 import { memoizedValue } from '../memoized.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
+import { BOUND_AXES, declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
 import { RELEASE_LIMITS } from '@rezics/definitions';
 import type { PoolClient } from 'pg';
 import { currentCommandWorkAssociation, currentLibraryOperationAccounting } from '../command/work-context.ts';
@@ -642,6 +642,89 @@ function sqlWork(sql: string, input: unknown, rows: number, points: number, outp
     bytes: Buffer.byteLength(sql) + size(input) + outputBytes,
     engineRequests: 0,
   });
+}
+
+function alternative(...branches: readonly Bound[]): Bound {
+  const values = branches.length ? branches : [sqlWork('', [], 0, 0, 0)];
+  return declareBound(
+    Object.fromEntries(BOUND_AXES.map((axis) => [axis, Math.max(...values.map((value) => value[axis]))])),
+  );
+}
+
+/** Core one-attempt scaffold: time, receipt, fence, rollback and partition. Access owns account rows. */
+export function sessionCoreCommandAttemptWork(
+  kind: string,
+  accountId: string,
+  receiptKeys: number,
+  response: object,
+): Bound {
+  const keys = Math.max(1, receiptKeys);
+  const receipt = {
+    principal: { kind: 'account', id: accountId },
+    kind,
+    key: 'rk1.2147483647.' + 'f'.repeat(64),
+    digest: 'f'.repeat(44),
+    response,
+  };
+  const controls = [
+    'BEGIN ISOLATION LEVEL SERIALIZABLE',
+    "SET LOCAL lock_timeout = '200ms'",
+    "SET LOCAL statement_timeout = '5000ms'",
+    "SET LOCAL statement_timeout = '5000ms'",
+  ].map((sql) => sqlWork(sql, [], 0, 0, 0));
+  const readOnly = boundedCommandReadWork();
+  const receiptBound = sqlWork(
+    receiptRead.sql,
+    {
+      partition_no: 4095,
+      principal_kind: 'account',
+      principal_id: accountId,
+      command_kind: kind,
+      idempotency_keys: Array(keys).fill(receipt.key),
+    },
+    keys,
+    keys,
+    size({
+      requestDigest: 'f'.repeat(64),
+      epoch: 2_147_483_647,
+      position: '-9223372036854775808',
+      transactionId: uuid,
+      response: null,
+      payloadState: 'retained',
+    }) + size(response),
+  );
+  const fenceBound = sqlWork(
+    eventFence.sql,
+    {
+      partition_no: 4095,
+      transaction_id: uuid,
+      receipt,
+      basis: { principal: { kind: 'account', id: accountId }, clientId: uuid, requestedBy: uuid },
+      events: [{ type: 'com.rezics.library.label.changed.v1', subject: accountId, id: uuid, data: { labelId: uuid } }],
+    },
+    4 + 6 + 4 + 4,
+    1 + 5 + 3 + 3,
+    size({ epoch: 2_147_483_647, position: '-9223372036854775808' }),
+  );
+  const noEffect = sqlWork(
+    noEffectFence.sql,
+    { partition_no: 4095, transaction_id: uuid, receipt },
+    1 + 4,
+    1 + 3,
+    size({ epoch: 2_147_483_647, position: '-9223372036854775808' }),
+  );
+  const terminal = alternative(
+    sqlWork('COMMIT', [], 0, 0, 0),
+    sumBounds(sqlWork('ROLLBACK', [], 0, 0, 0), sessionPartitionWork(4095)),
+  );
+  return sumBounds(
+    ...controls,
+    readOnly,
+    sessionReadTimeWork(),
+    receiptBound,
+    alternative(sumBounds(fenceBound, sessionBytesWork(size(response))), noEffect),
+    terminal,
+  );
 }
 
 /** One command attempt, including replay, rollback and the no-effect fence.

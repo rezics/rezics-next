@@ -4,9 +4,11 @@ import {
   type ShelfMaintenanceBinding,
 } from '../../src/library/shelf-maintenance-ops-contract.ts';
 import { createLibraryCommandRunner } from '../../src/library/command-support.ts';
+import { createEntryCommands } from '../../src/library/entries.ts';
 import { noEffect } from '../../src/command/command.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { readErasureStatus } from '../../src/access/erasure.ts';
+import { testTokens } from '../support/test-kernel.ts';
 import { createOwnedErasureFixture } from './support/erasure-worker.ts';
 import { deletePersona } from '../support/account-deletion.ts';
 import { observePreparationSource, observePreparationIdentity } from '../../src/library/preparation-source.ts';
@@ -170,7 +172,11 @@ test('source change before type work preserves the native boundary and advanced 
     as = await actor(person),
     account = owner(person.accountId);
   const subjectId = await f.subject();
-  await f.json(person, 'PUT', `/v1/libraryEntries/${subjectId}`, 201, { state: 'planned' });
+  await createEntryCommands({
+    pool: f.db.pool,
+    access: f.kernel.testAccess,
+    tokens: testTokens(),
+  }).putEntry(as, subjectId, { state: 'planned' }, crypto.randomUUID());
   let binding = await ops().requestRebuild(as, { owner: account, kind: 'backfill', requestKey: crypto.randomUUID() });
   for (;;) {
     const step = await ops().page(binding);
@@ -275,4 +281,107 @@ test('terminal native tombstone rejects fabricated envelopes and late writers; p
   expect((await readErasureStatus(f.db.pool, account.accountId))?.state).toBe('pending');
   const recovered = await ops().recover({ after: null, limit: 100 });
   expect(recovered.enqueued.some((b) => b.runId === requested.runId)).toBe(false);
+}, 30000);
+
+test('counter-only rebuild serves the last complete generation while field backfill withholds until publication', async () => {
+  const person = f.people.operator;
+  const as = await actor(person),
+    account = owner(person.accountId);
+  const runner = createLibraryCommandRunner({ pool: f.db.pool });
+  await runner.ownAccount(
+    as,
+    { action: 'library_entry:update', kind: 'library.shelf.init.probe', requestKey: crypto.randomUUID(), input: {} },
+    async (tx) => noEffect(await ops().initialize(tx, account)),
+  );
+  const published = await finish(
+    await ops().requestRebuild(as, { owner: account, kind: 'backfill', requestKey: crypto.randomUUID() }),
+  );
+  expect(published.terminal).toBe(true);
+  expect((await f.request(person, 'GET', '/v1/libraryShelfSummary')).status).toBe(200);
+  const subjectId = await f.subject();
+  const created = await f.json(person, 'POST', '/v1/libraryLabels', 201, { name: 'Published shelf' });
+  const labelId = created.label.id as string;
+  expect((await f.request(person, 'POST', `/v1/libraryLabels/${labelId}:assign`, { subjectId })).status).toBe(200);
+  const assignmentsPath = `/v1/libraryLabelAssignments?labelId=${labelId}&view=FULL`;
+  const full = await f.request(person, 'GET', assignmentsPath);
+  expect(full.status).toBe(200);
+  const fullPage = await full.json();
+  expect(fullPage.label).toEqual({ id: labelId, name: 'Published shelf', revision: created.label.revision });
+  expect(fullPage.assignments).toHaveLength(1);
+  expect(fullPage.assignments[0]).toMatchObject({ subjectId, labelId });
+  expect(fullPage.assignments[0]).toHaveProperty('subject');
+  const generation = (
+    await f.db.admin.query('SELECT active_generation FROM library.shelf_maintenance WHERE route=$1 AND account_id=$2', [
+      account.route,
+      account.accountId,
+    ])
+  ).rows[0]!.active_generation;
+  const counters = await ops().requestRebuild(as, {
+    owner: account,
+    kind: 'counters',
+    requestKey: crypto.randomUUID(),
+  });
+  const counting = await ops().page(counters);
+  expect(
+    (
+      await f.db.admin.query(
+        'SELECT mode,ready,active_generation FROM library.shelf_maintenance WHERE route=$1 AND account_id=$2',
+        [account.route, account.accountId],
+      )
+    ).rows[0],
+  ).toMatchObject({ mode: 'rebuilding', ready: true, active_generation: generation });
+  const lastComplete = await f.request(person, 'GET', '/v1/libraryShelfSummary');
+  expect(lastComplete.status).toBe(200);
+  expect((await lastComplete.json()).tabs.all).toEqual({ total: 0, shown: 0 });
+  expect((await f.request(person, 'GET', assignmentsPath)).status).toBe(200);
+  const blocked = await f.request(person, 'POST', '/v1/libraryLabels', { name: 'During rebuild' });
+  expect(blocked.status).toBe(503);
+  expect(await blocked.json()).toMatchObject({ code: 'transaction_retry_exhausted' });
+  if (!counting.terminal) await finish(counting.next!);
+  const backfill = await ops().requestRebuild(as, {
+    owner: account,
+    kind: 'backfill',
+    requestKey: crypto.randomUUID(),
+  });
+  const draining = await ops().page(backfill);
+  expect(
+    (
+      await f.db.admin.query('SELECT mode,ready FROM library.shelf_maintenance WHERE route=$1 AND account_id=$2', [
+        account.route,
+        account.accountId,
+      ])
+    ).rows[0],
+  ).toMatchObject({ mode: 'rebuilding', ready: false });
+  const withheld = await f.request(person, 'GET', '/v1/libraryShelfSummary');
+  expect(withheld.status).toBe(503);
+  expect(await withheld.json()).toMatchObject({ code: 'dependency_unavailable' });
+  const withheldShelf = await f.request(person, 'GET', assignmentsPath);
+  expect(withheldShelf.status).toBe(503);
+  expect(await withheldShelf.json()).toMatchObject({ code: 'dependency_unavailable' });
+  expect((await f.request(person, 'GET', '/v1/libraryLabels?limit=100')).status).toBe(200);
+  const completed = draining.terminal ? draining : await finish(draining.next!);
+  expect(completed.terminal).toBe(true);
+  expect(
+    (
+      await f.db.admin.query('SELECT mode,ready FROM library.shelf_maintenance WHERE route=$1 AND account_id=$2', [
+        account.route,
+        account.accountId,
+      ])
+    ).rows[0],
+  ).toMatchObject({ mode: 'open', ready: true });
+  expect((await f.request(person, 'GET', '/v1/libraryShelfSummary')).status).toBe(200);
+  const publishedFull = await f.request(person, 'GET', assignmentsPath);
+  expect(publishedFull.status).toBe(200);
+  expect((await publishedFull.json()).assignments).toHaveLength(1);
+  const renamed = await f.json(person, 'PATCH', `/v1/libraryLabels/${labelId}`, 200, {
+    name: 'After publication',
+    revision: created.label.revision,
+  });
+  expect(renamed.label).toEqual({ id: labelId, revision: created.label.revision + 1 });
+  const listed = await f.json(person, 'GET', '/v1/libraryLabels?limit=100', 200);
+  expect(listed.labels.find((label: { id: string }) => label.id === labelId)).toEqual({
+    id: labelId,
+    name: 'After publication',
+    revision: created.label.revision + 1,
+  });
 }, 30000);

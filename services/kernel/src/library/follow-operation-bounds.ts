@@ -1,4 +1,4 @@
-import { declareBound, sumBounds, type Bound } from '@rezics/bounds';
+import { declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
 import pg, { type PoolClient } from 'pg';
 import { currentCommandWorkAssociation, withNativeCommandAccounting } from '../command/work-context.ts';
 import type { WorkDimensions } from './contract/work-dimensions.ts';
@@ -663,6 +663,60 @@ export function followAccountAuthorizationWork(accountId: string): Bound {
   return sumBounds(
     followAccountWork(accountId),
     sqlWork(accountShare.sql, [routeOf(accountId)!, accountId], point(size({ state: 'suspended', fenced: false }))),
+  );
+}
+
+function queryOperands(query: { params: readonly string[] }, values: Record<string, unknown>): unknown[] {
+  return query.params.map((name) => values[name]);
+}
+
+/** Semantic summary/observation SQL already priced for FULL Follow, reused by Label tiles. */
+export function followSubjectSummaryObservationWork(count: number): Bound {
+  const n = Math.max(0, count);
+  if (n === 0) return followBytes(0);
+  const subjects = Array.from({ length: n }, () => uuid);
+  const subjectRecords = subjects.map((id) => ({ route: 65535, id }));
+  const summarySubjects = subjects.map((id) => ({ route: 65535, id, image: uuid, original: uuid }));
+  const selected = subjects.map((id) => ({ id, slot_id: uuid }));
+  const tuples = subjects.map((id) => ({ route: 65535, source: id, external_id: id, field_group: 'image' }));
+  const requireBound = (sql: string, operands: readonly unknown[], view: boolean): Bound => {
+    const bound = view ? viewStatement(sql, operands) : targetStatement(sql, operands);
+    if (!bound) throw new TypeError(`Missing Follow bound for ${sql.slice(0, 48)}`);
+    return bound;
+  };
+  return sumBounds(
+    repeatBound(requireBound(reference.sql, [65535, uuid], false), 4 * n),
+    requireBound(mappingOwners.sql, [subjects], false),
+    requireBound(mappingSources.sql, [subjects], false),
+    requireBound(mappingPending.sql, [subjects], false),
+    requireBound(mappingCurrent.sql, [subjects], false),
+    requireBound(
+      representatives.sql,
+      queryOperands(representatives, { partition_no: 4095, subjects: subjectRecords }),
+      true,
+    ),
+    requireBound(
+      summaries.sql,
+      queryOperands(summaries, {
+        partition_no: 4095,
+        context_id: uuid,
+        subjects: summarySubjects,
+        representatives: selected,
+        label_languages: ['en'],
+        display_fallback: true,
+      }),
+      true,
+    ),
+    requireBound(
+      coverReferences.sql,
+      queryOperands(coverReferences, {
+        partition: 4095,
+        routes: Array.from({ length: n }, () => 65535),
+        media_ids: subjects,
+      }),
+      true,
+    ),
+    requireBound(sourceFences.sql, queryOperands(sourceFences, { partition: 4095, tuples }), true),
   );
 }
 

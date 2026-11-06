@@ -1,7 +1,17 @@
 import { declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { currentCommandWorkAssociation } from '../command/work-context.ts';
+import { currentCommandWorkAssociation, currentLibraryOperationAccounting } from '../command/work-context.ts';
 import type { WorkDimensions } from './contract/work-dimensions.ts';
+import {
+  followAccountAuthorizationWork,
+  followAccountWork,
+  followSubjectSummaryObservationWork,
+} from './follow-operation-bounds.ts';
+import {
+  sessionCoreCommandAttemptWork,
+  sessionPartitionWork,
+  sessionSnapshotWork,
+} from './session-operation-bounds.ts';
 import labelInsert from './label-store-insert.sql';
 import labelRead from './label-store-read.sql';
 import labelRename from './label-store-rename.sql';
@@ -19,6 +29,7 @@ import assignmentLabelPage from './label-assignment-label-page.sql';
 import assignmentSubjectPage from './label-assignment-subject-page.sql';
 import entryTiles from './library-entry-tiles.sql';
 import activeSessions from './shelf-active.sql';
+import generationRead from './shelf-maintenance-gate-read.sql';
 
 /** Public page and storage ceilings remain owned by the label contracts. */
 export const LABEL_PAGE_DEFAULT = 20;
@@ -240,7 +251,8 @@ export function labelSqlPlan<I>(
 
 /** Execute and consume the exact detached operands on the existing native request ledger. */
 export function executeLabelSql<I, T>(plan: LabelSqlPlan<I>, run: (input: Readonly<I>) => Promise<T>): Promise<T> {
-  if (activeLabelOperation.getStore()) return run(plan.input);
+  if (activeLabelOperation.getStore() || enclosingLabelAttempt.getStore() || currentLibraryOperationAccounting())
+    return run(plan.input);
   const association = currentCommandWorkAssociation();
   return association
     ? association.run(`library.${plan.kind}`, labelWorkDimensions(plan.bound), () => run(plan.input))
@@ -249,6 +261,7 @@ export function executeLabelSql<I, T>(plan: LabelSqlPlan<I>, run: (input: Readon
 
 export type LabelOperationComponent = Readonly<{ kind: string; bound: Bound }>;
 const activeLabelOperation = new AsyncLocalStorage<LabelOperationPlan>();
+const enclosingLabelAttempt = new AsyncLocalStorage<Bound>();
 
 export type LabelOperationPlan = Readonly<{
   kind: string;
@@ -287,9 +300,105 @@ function component(kind: string, bound: Bound): LabelOperationComponent {
   return Object.freeze({ kind, bound });
 }
 
+/** Name a bound supplied by the owner that executes the corresponding branch. */
+export function labelOperationComponent(kind: string, bound: Bound): LabelOperationComponent {
+  return component(kind, declareBound(bound));
+}
+
+/** Compose owner declarations without changing the operation's immutable SQL operands. */
+export function composeLabelOperation(
+  base: LabelOperationPlan,
+  owners: readonly LabelOperationComponent[],
+  complete: boolean,
+): LabelOperationPlan {
+  const components = Object.freeze([...base.components, ...owners]);
+  return Object.freeze({
+    ...base,
+    components,
+    complete,
+    total: sumBounds(...components.map((item) => item.bound)),
+  });
+}
+
+/** One native command attempt: preparation, authorization, receipt, body, fence, rollback and serialization.
+ * Deadline-scoped retries are counted in request evidence; they are not a finite request envelope.
+ * Core SQL is the session scaffold; Access account rows are the existing Follow authorization bound.
+ */
+export function labelCommandAttemptComponent(
+  kind: string,
+  input: unknown,
+  response: object,
+  receiptKeys = 1,
+): LabelOperationComponent {
+  const responseBytes = encoded(response);
+  return component(
+    'command.attempt',
+    sumBounds(
+      sessionCoreCommandAttemptWork(kind, uuid, receiptKeys, response),
+      followAccountAuthorizationWork(uuid),
+      bytes(encoded(input) + 2 * responseBytes),
+    ),
+  );
+}
+
+/** Read-snapshot owner work around a page's native storage leaves. */
+export function labelSnapshotComponent(kind: string, input: unknown, responseBytes: number): LabelOperationComponent {
+  return component(
+    kind,
+    sumBounds(
+      sessionSnapshotWork(uuid),
+      sessionPartitionWork(4095),
+      followAccountWork(uuid),
+      bytes(encoded(input) + responseBytes),
+    ),
+  );
+}
+
+/** Inline owner queries that already execute on the operation's native client. */
+export function labelOwnerSqlComponent(
+  kind: string,
+  input: unknown,
+  output: object,
+  statements: number,
+  rows: number,
+): LabelOperationComponent {
+  return component(
+    kind,
+    work({
+      candidateKeys: rows,
+      nativeRows: rows,
+      emptySeeks: rows,
+      nativePoints: rows,
+      statements,
+      bytes: encoded(input) + encoded(output) + statements * 1024,
+    }),
+  );
+}
+
+/** Bounded Semantic summary/observation producer for at most `count` displayed Subjects. */
+export function labelSummaryObservationBound(count: number): Bound {
+  return followSubjectSummaryObservationWork(count);
+}
+
+/** Keep one attempt declaration across Core retries so nested SQL does not reserve again. */
+export function withLabelCommandAttempt<T>(total: Bound | undefined, dispatch: () => Promise<T>): Promise<T> {
+  if (!total || enclosingLabelAttempt.getStore()) return dispatch();
+  return enclosingLabelAttempt.run(total, dispatch);
+}
+
+/** Charge one complete attempt at native prepare. Reached retries are counted separately in request evidence. */
+export function consumeLabelCommandAttempt(plan: Readonly<{ operation: string; total: Bound }>): Promise<void> {
+  if (currentLibraryOperationAccounting()) return Promise.resolve();
+  const association = currentCommandWorkAssociation();
+  return association
+    ? association.run(plan.operation, labelWorkDimensions(plan.total), async () => undefined)
+    : Promise.resolve();
+}
+
 /** Reserve one closed operation once, then execute its leaves on the caller's existing native resources. */
 export async function executeLabelOperation<T>(plan: LabelOperationPlan, body: () => Promise<T>): Promise<T> {
-  if (activeLabelOperation.getStore()) return body();
+  if (activeLabelOperation.getStore() || enclosingLabelAttempt.getStore() || currentLibraryOperationAccounting())
+    return activeLabelOperation.getStore() ? body() : activeLabelOperation.run(plan, body);
   const association = currentCommandWorkAssociation();
   const reservation = association?.reserve(`library.${plan.kind}.${plan.branch}`, labelWorkDimensions(plan.total));
   let settled = false;
@@ -442,11 +551,21 @@ export function labelCataloguePlan(input: {
       outputRows: input.limit,
     },
   );
+  const continuation =
+    input.prefix !== undefined && input.afterLabelId !== '00000000-0000-0000-0000-000000000000'
+      ? [
+          component(
+            'label.catalogue.continuation-name',
+            labelPoint(input.route, input.accountId, input.afterLabelId).bound,
+          ),
+        ]
+      : [];
   return operation(
     'label.catalogue',
     input.prefix === undefined ? 'page' : input.afterName ? 'next-prefix' : 'prefix',
     input,
     [leaf],
+    continuation,
   );
 }
 
@@ -772,16 +891,38 @@ export function labelAssignmentPagePlan(input: {
         ),
       ),
     );
+    extras.push(
+      component(
+        'assignment.full.generation',
+        sqlBound(
+          generationRead.sql,
+          { route: input.route, account_id: input.accountId },
+          {
+            candidateKeys: 1,
+            nativeRows: 1,
+            points: 1,
+            emptySeeks: 1,
+            output: {
+              initialized: true,
+              mode: 'rebuilding',
+              ready: false,
+              epoch: '9223372036854775807',
+              activeGeneration: uuid,
+              runId: uuid,
+            },
+            outputRows: 1,
+          },
+        ),
+      ),
+    );
+    extras.push(component('assignment.full.summary-observation', labelSummaryObservationBound(input.limit)));
   }
-  // FULL's semantic summary owner has a separate multi-owner read contract. Keep
-  // this page declaration open until that exact disclosure plan is composed.
   return operation(
     'assignment.page',
     `${input.view.toLowerCase()}-${byLabel ? 'label' : 'subject'}`,
     input,
     leaves,
     extras,
-    false,
   );
 }
 
