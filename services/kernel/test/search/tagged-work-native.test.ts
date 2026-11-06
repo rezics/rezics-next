@@ -57,7 +57,7 @@ async function usefulPage(fixture: ReleasedDiscoveryFixture, body: Record<string
     last = await fixture.request('anonymous', 'POST', '/v1/subjects:search', body);
     if (last.status === 200) return last;
     expect(last.status, JSON.stringify(last.body)).toBe(503);
-    expect(['index_not_ready', 'semantic_not_ready']).toContain(last.body.code);
+    expect(['index_not_ready', 'semantic_not_ready']).toContain(String(last.body.code));
     expect(last.headers.get('retry-after')).toBeTruthy();
     await Bun.sleep(25);
   } while (Date.now() < deadline);
@@ -197,8 +197,11 @@ test('released tagged discovery agrees across native direct and resumed prepared
     expect(retired.status).toBe(409);
     expect(retired.body.code).toBe('search_restart_required');
     const fresh = await usefulPage(fixture, idRequest);
-    expect(ids(fresh)).toHaveLength(1);
-    expect([exactA.id, exactB.id]).toContain(ids(fresh)[0]);
+    const recovered = ids(fresh);
+    const recoveredId = recovered[0];
+    if (recovered.length !== 1 || recoveredId === undefined)
+      throw new Error(`Recovered tagged-work page omitted its hit: ${JSON.stringify(fresh.body)}`);
+    expect([exactA.id, exactB.id]).toContain(recoveredId);
   } finally {
     await fixture.close();
   }
