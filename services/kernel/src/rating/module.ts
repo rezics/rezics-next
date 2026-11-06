@@ -3,6 +3,7 @@ import type { Access } from '../request/access.ts';
 import type { WorkModule } from '../work/registry.ts';
 import type { RatingCapabilities } from './contract/capabilities.ts';
 import { createNativeRatingCapabilities } from './adapters/native.ts';
+import { createNativeIdentityRepairHost } from './adapters/identity-repair.ts';
 import { ratingRoutes, ratingRouteDeclarations } from './routes.ts';
 import {
   sourceStatisticRoutes,
@@ -13,7 +14,8 @@ import { sourceClassificationRouteDeclarations } from './source-classification-r
 import { createSourceClassificationProducer } from './source-classification.ts';
 import { createRatingWorkModule, ratingWorkDeclarations } from './work-module.ts';
 import { createRatingIdentityRepairCommands } from './identity-repair.ts';
-import { ratingIdentityProducer, type RatingIdentityProducer } from './segment-identity-guard.ts';
+import { createIdentityRepairRead } from './identity-repair-read.ts';
+import type { RatingIdentityProducer } from './segment-identity-guard.ts';
 import { createVoteCommands } from './votes.ts';
 import { createClassificationBallotCommands } from './classification-ballot.ts';
 import { createRealmRatingQuestion } from './question-authoring.ts';
@@ -28,6 +30,16 @@ import { createRealmRankSource, createRealmRankOrderSource } from './realm-rank.
 import { RATING_EVENTS } from './events.ts';
 
 export { createNativeRatingCapabilities } from './adapters/native.ts';
+export {
+  createInstalledIdentityRepairCommands,
+  createNativeIdentityRepairHost,
+} from './adapters/identity-repair.ts';
+export { createIdentityRepairRead } from './identity-repair-read.ts';
+export {
+  admitIdentityRepairGeneration,
+  continueIdentityRepairGeneration,
+  runIdentityRepairGeneration,
+} from './identity-repair-run.ts';
 export type { RatingCapabilities, RatingAmbient } from './contract/capabilities.ts';
 export { bindRatingIdentityProducer, ratingIdentityProducer } from './segment-identity-guard.ts';
 
@@ -90,12 +102,16 @@ export function createRatingModule(options: {
     /** Commands share the same supplied effects as their HTTP and durable adapters. */
     application(config: ApplicationDependencies) {
       const supplied = dependencies(config);
+      const identity = options.producer
+        ? {
+            commands: createRatingIdentityRepairCommands({ ...supplied, producer: options.producer }),
+            read: createIdentityRepairRead(pool),
+          }
+        : createNativeIdentityRepairHost(supplied);
       return {
         votes: createVoteCommands(supplied),
-        identityRepair: createRatingIdentityRepairCommands({
-          ...supplied,
-          producer: options.producer ?? ratingIdentityProducer(),
-        }),
+        identityRepair: identity.commands,
+        identityRepairRead: identity.read,
         classifications: createClassificationBallotCommands(supplied),
         providers: createSourceStatisticCommands(supplied),
         sourceClassifications: createSourceClassificationProducer(supplied),

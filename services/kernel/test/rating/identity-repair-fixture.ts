@@ -12,7 +12,7 @@ import { type GrowthDatabase } from '../support/growth.ts';
 export const route = 0x3a07;
 export const at = '2026-11-03T08:00:00Z';
 
-// Shared outcome fixtures; the injected producer proves only Rating's native transaction/page seam.
+// Injected producer proves Rating's transaction/page seam. Installed Semantic hold/complete is identity-repair-native.test.ts.
 export function ratingIdentityFixture(getDatabase: () => GrowthDatabase) {
   const key = () => randomUUID();
 

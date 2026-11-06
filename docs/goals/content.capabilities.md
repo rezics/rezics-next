@@ -143,6 +143,11 @@ Scenarios:
 
 - Existing native vote and aggregate cases in `test/rating/vote-http.test.ts` and `test/rating/aggregate-http.test.ts`
   remain the producer acceptance; stage **implementation exposed**. They are reused, not duplicated.
+- Installed Rating identity repair uses Semantic `hold/complete` through ordinary module/host composition, with
+  independent counted-identity, outbox, receipt obligation/mapping-digest and checkpoint readback in
+  `test/rating/identity-repair-native.test.ts`; stage **implementation exposed**. Seam measurements stay in
+  `test/rating/identity-repair.test.ts` and `test/rating/growth-identity-repair.test.ts`. Performance owns nested-cost
+  review and 256/1024/4096 growth.
 - `review-from-vote`, stage **specified red**, has three literal cases in the new suite: PUT vote then POST review
   and change vote while anonymous reads all relay continuations; publication-time citation survives vote changes;
   hidden/protected posts stay out while immutable revisions and licences survive. All writes use the existing content
@@ -157,7 +162,7 @@ Scenarios:
 Native acceptance commands:
 
 ```sh
-bun run --cwd services/kernel check test/rating/vote-http.test.ts test/rating/aggregate-http.test.ts
+bun run --cwd services/kernel check test/rating/vote-http.test.ts test/rating/aggregate-http.test.ts test/rating/identity-repair-native.test.ts
 CONTENT_USER_CASES_DRIVER=/absolute/path/to/native-driver.ts bun test specs/content-user-cases-outcomes.test.ts --test-name-pattern 'review-from-vote|subject-rating-context'
 ```
 

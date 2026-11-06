@@ -52,6 +52,7 @@ test('native repair receipts converge both rank homes and old source events cann
     expect((await rank(original)).rows).toEqual([{ count: '5', score: '5.0000', prior_epoch: 1 }]);
     const producer = fixture.producer((id) => (id === original ? terminal : id));
     const commands = createRatingIdentityRepairCommands({ pool: db.pool, producer: producer.port });
+    // Rank convergence uses the injected page seam; installed Semantic mappings are identity-repair-native.test.ts.
     const events: CloudEvent[] = [];
     for (const actor of voters) {
       const ref = await fixture.admit(commands, actor);

@@ -20,6 +20,7 @@ import {
 } from '../semantic/adapters/index.ts';
 import { searchReceivingProductionDeclaration } from '../semantic/identity-search-receiving-statements.ts';
 import { installIdentitySourceConsumerRuntime } from './identity-source-consumer.ts';
+import { installIdentityRatingRepairProducer } from './identity-rating-repair.ts';
 
 type SemanticCompositionContext = {
   readonly env: Readonly<Record<string, string | undefined>>;
@@ -69,6 +70,7 @@ export function composeSemanticIdentityParticipants(
 export function composeSemanticAdapters(): void {
   bindOrdinaryContentLifecycle(nativeContentLifecycle());
   installIdentitySourceConsumerRuntime();
+  installIdentityRatingRepairProducer();
 }
 
 /** Ordinary process composition: identity participants plus Rating review and Content lifecycle adapters. */
