@@ -549,6 +549,14 @@ when the database committed. Cleanup failure discards that client and preserves 
 new payer, second checkout or deadline extension is available. Ordinary command retry/moved routing, principal
 and denied-replay ordering retain their existing paths.
 
+### Cost: selected Source association controls
+
+`SOURCE_ASSOCIATION_COMMAND_DISPATCH_ALLOWANCE` exports `profile: 'event-callback-source-association'`.
+It is the Source fence total plus `callbackAdmission` (72 bytes) and a zero `sourceAssociation`
+term. Maxima keep one event and admit two Source callbacks. History record-sources,
+record-source-set and agent-identity source stay refused. Prepare, checkpoint and finish
+reserve this complete total from the original Source partition before checkout.
+
 The authored [focused outcomes](../../test/command/dispatch-lifetime-source-fence.test.ts) use the genuine executor,
 private native context and actual native component writer, plus independent literal prices. Existing stronger
 no-effect and ordinary fixtures remain unchanged; no obsolete assertion required removal. These native tests,

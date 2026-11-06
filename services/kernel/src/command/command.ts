@@ -361,9 +361,13 @@ export function registerCommandCallback(tx: CommandTransaction, callback: Comman
   const state = (tx as CallbackTransaction)[transactionCallbacks];
   if (!state?.active) throw new TypeError('No live command transaction');
   assertSelectedCallback(tx);
-  // This optional profile never admits callbacks, including descendants that try
-  // to register while final controls await after the body's association check.
-  if (selectedCallbacks.has(state)) throw new TypeError('Unsupported dispatch lifetime callback profile');
+  // Selected no-effect and fence profiles never admit callbacks. Association
+  // admits at most two Source callbacks on the live dispatch transaction.
+  if (selectedCallbacks.has(state)) {
+    const selected = selectedCallbacks.get(state)!;
+    if (!selected.dispatch.admitsCallbacks() || state.callbacks.length >= selected.dispatch.callbackLimit())
+      throw new TypeError('Unsupported dispatch lifetime callback profile');
+  }
   if (publisherCallbacks.has(state)) throw new TypeError('Publisher coordination registers no callbacks');
   if (typeof callback !== 'function') throw new TypeError('Command callback must be a function');
   state.callbacks.push(callback);
@@ -771,7 +775,7 @@ async function executeCommand<T>(
             dispatch?.checkpoint();
             if (
               (dispatch && !noEffect && !dispatch.admitsEvents()) ||
-              callbackState.callbacks.length ||
+              (callbackState.callbacks.length > 0 && !dispatch?.admitsCallbacks()) ||
               commandRecordSources(tx).length ||
               hasCommandRecordSourceSet(tx) ||
               commandAgentIdentitySource(tx)
@@ -803,8 +807,12 @@ async function executeCommand<T>(
           dispatch?.checkpoint();
           if (noEffect && callbackState.callbacks.length > 0)
             throw new TypeError('A no-effect command registers no work');
-          for (let index = 0; index < callbackState.callbacks.length; index++)
-            await callbackState.callbacks[index]!(transactionId);
+          const runCallbacks = async () => {
+            for (let index = 0; index < callbackState.callbacks.length; index++)
+              await callbackState.callbacks[index]!(transactionId);
+          };
+          if (dispatch?.admitsCallbacks()) await dispatch.callbacks(runCallbacks);
+          else await runCallbacks();
           let receipt: Record<string, unknown> | null = null;
           let value = response.value;
           if (options.receipt && receiptDigest) {

@@ -898,6 +898,10 @@ export function identityEpochStore(): IdentityEpochStore {
   }));
 }
 
+export {
+  IDENTITY_EPOCH_JOB_READ_DECLARATION,
+  IDENTITY_EPOCH_STEP_RECONCILE_DECLARATION,
+} from '../identity-epoch-participant-cost.ts';
 export { readIdentityMappings, readIdentityRatingReview };
 export type { IdentityReceivingSelection } from '../identity-receiving-effects-types.ts';
 export type {

@@ -30,8 +30,11 @@ import type {
   IdentityReceipt,
 } from '../semantic/identity-epoch-contract.ts';
 import { IdentityEpochStoreError } from '../semantic/identity-adapters/index.ts';
+import { memoizedValue } from '../memoized.ts';
+import { statementBytes } from '../database/statement-bytes.ts';
 import insert from './agent-verification-identity-insert.sql';
 import read from './agent-verification-identity-read.sql';
+import technicalRead from './agent-verification-identity-technical-read.sql';
 import {
   recoverMissingAccountIdentitySource,
   originalRecoveredAccountIdentitySource,
@@ -397,6 +400,33 @@ export async function readAccountIdentitySource(
   });
   nativeSources.set(source, { time, key: keyOf(receipt), deadline: currentCommandResources(tx).deadline, undoOnly });
   return source;
+}
+
+const accountShareSql = `SELECT kind,state,authn_fenced FROM access.account WHERE route=$1 AND account_id=$2 FOR SHARE`;
+
+/** In-command undo-only original source: account SHARE, intent, technical fallback.
+ * Command controls are composed by the caller. Released History wrapping is a separate term. */
+export function ACCOUNT_IDENTITY_ORIGINAL_SOURCE_DECLARATION() {
+  return memoizedValue(ACCOUNT_IDENTITY_ORIGINAL_SOURCE_DECLARATION, () =>
+    Object.freeze({
+      engineRequests: 0 as const,
+      work: Object.freeze({
+        candidateKeys: 0,
+        nativeRows: 7,
+        identityMetadataRows: 0,
+        nativePoints: 7,
+        witnessKeys: 0,
+        statements: 3,
+        bytes:
+          statementBytes(accountShareSql) +
+          statementBytes(read) +
+          statementBytes(technicalRead) +
+          6 * (8 + 36 * 4 + 9) +
+          16384,
+        emptySeeks: 3,
+      }),
+    }),
+  );
 }
 
 /** Opaque source custody from a released native read; JSON or a raw CommandAuthorization cannot mint it. */

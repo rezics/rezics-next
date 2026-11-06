@@ -1735,11 +1735,26 @@ test('complete child composition repeats every reached term and exposes missing 
       (count) => Number.isSafeInteger(count) && Number(count) >= 1,
     ),
   ).toBeTrue();
-  expect(disposition.state).toBe('missing');
   expect(disposition.missing.some((term) => term.includes('History'))).toBeFalse();
   expect(
     disposition.missing.some((term) => term.includes('event-callback') || term.includes('wider executor')),
-  ).toBeTrue();
+  ).toBeFalse();
+  expect(disposition.widerExecutor.profile).toBe('event-callback-source-association');
+  expect(disposition.accessOriginal?.engineRequests).toBe(0);
+  expect(disposition.jobRead?.engineRequests).toBe(0);
+  expect(disposition.stepReconcile?.engineRequests).toBe(0);
+  expect(disposition.bindingConsumer?.engineRequests).toBe(0);
+  expect(disposition.local.association.engineRequests).toBe(0);
+  if (
+    disposition.accessOriginal &&
+    disposition.jobRead &&
+    disposition.stepReconcile &&
+    disposition.bindingConsumer &&
+    disposition.nativeHold &&
+    disposition.libraryDeclaration
+  )
+    expect(disposition.state).toBe('complete');
+  else expect(disposition.state).toBe('missing');
 });
 
 test('scope literal accounting rejects malformed unbounded and receipt-writing operands before transport', async () => {

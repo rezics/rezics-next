@@ -537,9 +537,11 @@ Library descendants use only the authentic parent's cumulative ledger.
 
 Source exports `IDENTITY_HISTORY_ORIGINAL_SOURCE_DECLARATION` for its owned schedule
 bodies. Library exports `IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION`. History's
-typed getter publishes eight-axis children and reached multiplicities; Core's
-event-callback profile remains unnamed as a complete child, so original admission
-still cannot supply the whole parent. The known Accounts declaration remains
+typed getter publishes eight-axis children and reached multiplicities. Core's
+`event-callback-source-association` profile is the complete prepare/checkpoint/finish
+child (the fence event plus two Source callbacks). Original admission composes that
+profile with Access original-source, participant reconcile, binding consumer and
+Library hold from those owners' declarations. The known Accounts declaration remains
 independently available for owner composition.
 Its named remaining terms are:
 

@@ -86,9 +86,19 @@ import {
   claimIdentitySourceLibraryCall,
   withIdentitySourceNoEffectCommand,
   withIdentitySourceFenceCommand,
+  withIdentitySourceAssociationCommand,
   IdentitySourceOriginalUnavailable,
   identitySourceConsumerLibraryWork,
 } from './identity-source-consumer-maintenance.ts';
+import { ACCOUNT_IDENTITY_ORIGINAL_SOURCE_DECLARATION } from '../access/agent-verification-identity.ts';
+import {
+  IDENTITY_EPOCH_JOB_READ_DECLARATION,
+  IDENTITY_EPOCH_STEP_RECONCILE_DECLARATION,
+} from './identity-epoch-participant-cost.ts';
+import storeSelectStep from './identity-epoch-store-select-step.sql';
+import storeSelectJob from './identity-epoch-store-select-job.sql';
+import storeSelectEffectReceipt from './identity-epoch-store-select-effect-receipt.sql';
+import storeSelectAck2 from './identity-epoch-store-select-ack-2.sql';
 import {
   historyComposition,
   readAgentIdentitySDKReceivingBinding,
@@ -543,9 +553,10 @@ export function IDENTITY_SOURCE_OWNED_REACHED_DECLARATIONS(): readonly IdentityS
   });
 }
 
-/** Installed Source child only. Whole-parent admission still needs Access original-source,
- * participant-reconcile and Core's event-callback profile. History's typed getter
- * already supplies eight-axis children and reached multiplicities. */
+/** Installed Source child only. Whole-parent admission composes Access original-source,
+ * participant-reconcile, Library hold, binding consumer and Core's event-callback profile
+ * from those owners' declarations. History's typed getter already supplies eight-axis
+ * children and reached multiplicities. */
 export function IDENTITY_HISTORY_ORIGINAL_SOURCE_DECLARATION() {
   return memoizedValue(IDENTITY_HISTORY_ORIGINAL_SOURCE_DECLARATION, () => {
     const composed = composeIdentitySourceReachedCosts(IDENTITY_SOURCE_OWNED_REACHED_DECLARATIONS());
@@ -684,21 +695,52 @@ function sourceNoEffectCommand<T>(
   );
 }
 
-/** These are precise dependent executor gaps, not prices. Preserve the event and
- * callback semantics rather than relabeling them single-no-effect. */
+/** Installed Core profiles for event-bearing Source commands. Association admits
+ * SEMANTIC_ERASURE_PROGRESS plus two Source callbacks; fence admits the event alone. */
 export const IDENTITY_SOURCE_WIDER_COMMAND_REQUIREMENTS = Object.freeze({
   prepare: 'custody insert + recordSemanticSourceCommit + producer roles + SEMANTIC_ERASURE_PROGRESS',
   checkpoint: 'terminal append + recordSemanticSourceCommit + producer roles + SEMANTIC_ERASURE_PROGRESS',
   exhaustedReceiving:
     'single-source-fence: retainIdentityScopeConsumerFence + native commit SQL + SEMANTIC_ERASURE_PROGRESS',
   finish: 'terminal append + binding cut + Account technical receiver + SEMANTIC_ERASURE_PROGRESS',
+  profile: 'event-callback-source-association',
 });
-function requireWiderSourceCommand(
+function withWiderSourceCommand<T>(
   pool: Pool,
-  operation: keyof typeof IDENTITY_SOURCE_WIDER_COMMAND_REQUIREMENTS,
+  deadline: number,
+  accountId: string,
+  operation: 'prepare' | 'checkpoint' | 'finish',
+  body: () => Promise<T>,
+): Promise<T> {
+  if (!isPrepaidIdentitySourceConsumerMaintenance(pool)) return body();
+  claimIdentitySourceScheduledCall(pool, operation);
+  return withIdentitySourceAssociationCommand(pool, deadline, accountId, body);
+}
+function chargeDeclared(
+  pool: Pool,
+  deadline: number,
+  declaration: Readonly<{ work: WorkDimensions; engineRequests: 0 }>,
+  detail: string,
 ): void {
-  if (isPrepaidIdentitySourceConsumerMaintenance(pool))
-    throw new IdentitySourceOriginalUnavailable(`identity-source-wider-executor-profile-missing:${operation}`);
+  if (!isPrepaidIdentitySourceConsumerMaintenance(pool)) return;
+  const token = currentIdentitySourceConsumerMaintenance(pool, deadline);
+  const cost = declaration.work;
+  if (
+    !token ||
+    !reserveIdentitySourceConsumerNativeWork(
+      pool,
+      token,
+      {
+        rows: cost.nativeRows,
+        points: cost.nativePoints,
+        statements: cost.statements,
+        bytes: cost.bytes,
+        engineRequests: 0,
+      },
+      cost,
+    )
+  )
+    throw new IdentitySourceOriginalUnavailable(detail);
 }
 
 /** Exact additive receiving ABI. The ordinary Library entry constructs its own
@@ -908,7 +950,23 @@ function sameSource(reference: IdentitySourceConsumerReference, source: AccountI
 async function original(pool: Pool, reference: IdentitySourceConsumerReference, deadline: number) {
   if (isPrepaidIdentitySourceConsumerMaintenance(pool)) {
     claimIdentitySourceScheduledCall(pool, 'original');
-    throw new IdentitySourceOriginalUnavailable('identity-source-original-Account-reader-declaration-missing');
+    chargeDeclared(
+      pool,
+      deadline,
+      ACCOUNT_IDENTITY_ORIGINAL_SOURCE_DECLARATION(),
+      'identity-source-original-Account-reader-declaration-missing',
+    );
+  }
+  const prepaid = isPrepaidIdentitySourceConsumerMaintenance(pool);
+  if (prepaid) {
+    const source = (
+      await withIdentitySourceNoEffectCommand(pool, deadline, () =>
+        runCommand(pool, { partition: reference.source.partition, deadline }, async (tx) =>
+          noEffect(await readAccountIdentitySource(tx, reference.receipt, undefined, true)),
+        ),
+      )
+    ).value;
+    return sameSource(reference, source) ? source : null;
   }
   let source: AccountIdentitySource;
   if (reference.receipt.kind === 'account-agent.verify') {
@@ -977,43 +1035,50 @@ async function published(
   deadline: number,
 ): Promise<boolean> {
   const home = identityJobPartition(reference.job);
-  if (isPrepaidIdentitySourceConsumerMaintenance(pool)) {
-    const native = (
-      await sourceNoEffectCommand(
-        pool,
-        home,
-        deadline,
-        'published',
-        async (tx) =>
-          (
+  const prepaid = isPrepaidIdentitySourceConsumerMaintenance(pool);
+  const read = () =>
+    prepaid
+      ? sourceNoEffectCommand(pool, home, deadline, 'published', async (tx) => {
+          const native = (
             await sourceQuery<{ scope_digest: string }>(tx, selectedPublishedSQL, [
               home,
               reference.job.jobId,
               reference.job.epoch.toString(),
             ])
-          ).rows[0],
-      )
-    ).value;
-    if (native?.scope_digest !== scope) return false;
-    throw new IdentitySourceOriginalUnavailable(
-      'identity-source-published-native-job-and-participant-declarations-missing',
-    );
-  }
-  const read = () =>
-    runCommand(pool, { partition: home, deadline }, async (tx) => {
-      const saved = await identityEpochStore().readJob(tx, reference.job);
-      const native = (
-        await tx.query<{ scope_digest: string }>(job.sql, [home, reference.job.jobId, reference.job.epoch.toString()])
-      ).rows[0];
-      return noEffect(
-        saved &&
-          native?.scope_digest === scope &&
-          json(saved.receipt) === json(reference.receipt) &&
-          json(saved.intent) === json(source.input.intent)
-          ? saved
-          : null,
-      );
-    });
+          ).rows[0];
+          if (native?.scope_digest !== scope) return null;
+          chargeDeclared(
+            pool,
+            deadline,
+            IDENTITY_EPOCH_JOB_READ_DECLARATION(),
+            'identity-source-published-native-job-and-participant-declarations-missing',
+          );
+          const saved = await identityEpochStore().readJob(tx, reference.job);
+          return saved &&
+            saved.state === 'published' &&
+            json(saved.receipt) === json(reference.receipt) &&
+            json(saved.intent) === json(source.input.intent)
+            ? saved
+            : null;
+        })
+      : runCommand(pool, { partition: home, deadline }, async (tx) => {
+          const saved = await identityEpochStore().readJob(tx, reference.job);
+          const native = (
+            await tx.query<{ scope_digest: string }>(job.sql, [
+              home,
+              reference.job.jobId,
+              reference.job.epoch.toString(),
+            ])
+          ).rows[0];
+          return noEffect(
+            saved &&
+              native?.scope_digest === scope &&
+              json(saved.receipt) === json(reference.receipt) &&
+              json(saved.intent) === json(source.input.intent)
+              ? saved
+              : null,
+          );
+        });
   const saved = (await read()).value;
   if (!saved || saved.state !== 'published') return false;
   for (const [step, progress] of [
@@ -1031,8 +1096,49 @@ async function published(
       progress.receipt.job.epoch !== reference.job.epoch
     )
       return false;
-    const reconciled = await identityEpochStore().reconcileStepReceipt(pool, progress.receipt);
-    if (reconciled.state !== 'complete' || json(reconciled) !== json(progress)) return false;
+    const reconciled = prepaid
+      ? (
+          await sourceNoEffectCommand(pool, home, deadline, 'participantReconcile', async (tx) => {
+            chargeDeclared(
+              pool,
+              deadline,
+              IDENTITY_EPOCH_STEP_RECONCILE_DECLARATION(),
+              'identity-source-published-native-job-and-participant-declarations-missing',
+            );
+            const native = progress.receipt.native;
+            const stepRow = (
+              await tx.query<{ state: string; scope_digest: string }>(storeSelectStep.sql, [
+                native.partition,
+                native.transactionId,
+                native.epoch,
+                native.position.toString(),
+                reference.job.jobId,
+                reference.job.epoch.toString(),
+                step,
+              ])
+            ).rows[0];
+            if (!stepRow || stepRow.state !== 'complete') return null;
+            const jobRow = (
+              await tx.query<{ state: string }>(storeSelectJob.sql, [
+                reference.job.jobId,
+                reference.job.epoch.toString(),
+                home,
+              ])
+            ).rows[0];
+            if (!jobRow || jobRow.state !== 'published') return null;
+            const outstanding = await tx.query(storeSelectEffectReceipt.sql, [
+              reference.job.jobId,
+              step,
+              home,
+            ]);
+            if (outstanding.rowCount) return null;
+            const ack = (await tx.query<{ progress: unknown }>(storeSelectAck2.sql, [reference.job.jobId, step, home]))
+              .rows[0];
+            return ack && json(ack.progress) === json(progress) ? progress : null;
+          })
+        ).value
+      : await identityEpochStore().reconcileStepReceipt(pool, progress.receipt);
+    if (!reconciled || reconciled.state !== 'complete' || json(reconciled) !== json(progress)) return false;
   }
   return (await read()).value?.state === 'published';
 }
@@ -1104,11 +1210,13 @@ export async function readIdentitySourceConsumerCustody(
       // Every foreign Source/receiver/control checkout has been released. Re-resolve the native
       // claim, source and current owner in this single original-home command. Retention alone
       // grants no cleanup, and does not assert that released foreign observations stay current.
-      requireWiderSourceCommand(pool, 'prepare');
-      const retained = await runCommand(
+      const retained = await withWiderSourceCommand(
         pool,
-        { partition: reference.source.partition, deadline: context.deadline },
-        async (tx) => {
+        context.deadline,
+        reference.barrier.accountId,
+        'prepare',
+        () =>
+          runCommand(pool, { partition: reference.source.partition, deadline: context.deadline }, async (tx) => {
           const current = await acceptedClaim(tx, reference);
           if (
             !current ||
@@ -1118,6 +1226,12 @@ export async function readIdentitySourceConsumerCustody(
             json(current.sources) !== json(binding.sources)
           )
             return noEffect(null);
+          chargeDeclared(
+            pool,
+            context.deadline,
+            ACCOUNT_IDENTITY_ORIGINAL_SOURCE_DECLARATION(),
+            'identity-source-original-Account-reader-declaration-missing',
+          );
           const live = await readAccountIdentitySource(tx, reference.receipt, undefined, true);
           const owner = await readPartition(tx, reference.source.partition);
           if (!sameSource(reference, live) || !owner || owner.writeState !== 'active') return noEffect(null);
@@ -1146,7 +1260,7 @@ export async function readIdentitySourceConsumerCustody(
               },
             ],
           };
-        },
+        }),
       );
       // A newly inserted retained receipt is deliberately not used before its native commit.
       // No foreign home is held while the bounded consumer continuation runs.
@@ -1272,8 +1386,6 @@ async function verifiedTerminal(
 ): Promise<IdentitySourceConsumerCustody | null> {
   let reversal: AccountIdentityReversalSettlement | null = null;
   if (row.state === 'discharged') {
-    if (isPrepaidIdentitySourceConsumerMaintenance(pool))
-      throw new IdentitySourceOriginalUnavailable('identity-source-Account-reversal-settlement-declaration-missing');
     if (reference.erasedRole !== 'subject') return null;
     reversal =
       (await (
@@ -1384,7 +1496,6 @@ async function checkpoint(
   roles: AccountIdentitySource['roles'],
   deadline: number,
 ): Promise<boolean> {
-  requireWiderSourceCommand(pool, 'checkpoint');
   if (
     (next.directory && !boundedFrontier(next.directory)) ||
     (next.directory?.after.length ?? 0) + (next.directory ? 1 : 0) + (next.after ? 2 : 0) > 8 ||
@@ -1392,13 +1503,20 @@ async function checkpoint(
   )
     return false;
   return (
-    await runCommand(pool, { partition: reference.source.partition, deadline }, async (tx) => {
+    await withWiderSourceCommand(pool, deadline, reference.barrier.accountId, 'checkpoint', () =>
+      runCommand(pool, { partition: reference.source.partition, deadline }, async (tx) => {
       const claim = await acceptedClaim(tx, reference);
       if (!claim || claim.generation !== retained.binding_generation) return noEffect(false);
       const current = await latest(tx, retained);
       if ((current?.sequence ?? null) !== (previous?.sequence ?? null) || (current && terminal(current.state)))
         return noEffect(false);
       const owner = await readPartition(tx, reference.source.partition);
+      chargeDeclared(
+        pool,
+        deadline,
+        ACCOUNT_IDENTITY_ORIGINAL_SOURCE_DECLARATION(),
+        'identity-source-original-Account-reader-declaration-missing',
+      );
       const source = await readAccountIdentitySource(tx, reference.receipt, undefined, true);
       if (!owner || owner.writeState !== 'active' || !sameSource(reference, source)) return noEffect(false);
       bindSemanticProducerRoles(tx, roles);
@@ -1439,7 +1557,8 @@ async function checkpoint(
           },
         ],
       };
-    })
+    }),
+    )
   ).value;
 }
 
@@ -1460,8 +1579,6 @@ async function advanceConsumers(
   if (saved && terminal(saved.state)) {
     return verifiedTerminal(pool, reference, saved, deadline, identityConsumerWork);
   }
-  if (isPrepaidIdentitySourceConsumerMaintenance(pool))
-    throw new IdentitySourceOriginalUnavailable('identity-source-binding-consumer-eight-axis-declaration-missing');
   const work = await ports.binding.readIdentitySourceConsumerWork?.(pool, reference, {
     deadline,
     identityConsumerWork,
@@ -1590,13 +1707,39 @@ async function advanceConsumers(
           const receiveCurrent = async () => {
             for (const selection of page.rows) {
               claimIdentitySourceScheduledCall(pool, 'receivingSelection');
-              if (prepaid)
-                throw new IdentitySourceOriginalUnavailable(
+              if (prepaid) {
+                chargeDeclared(
+                  pool,
+                  deadline,
+                  IDENTITY_SOURCE_RECEIVING_SELECTION_DECLARATION(),
                   'identity-source-receiving-selection-native-hold-declaration-missing',
                 );
-              const record = await readIdentityReceivingSelection(pool, selection, { deadline });
+                const hold = (await import('../library/identity-original-work.ts')).declareLibraryIdentityCustodyOperation(
+                  'revalidateHold',
+                );
+                chargeDeclared(
+                  pool,
+                  deadline,
+                  hold,
+                  'identity-source-receiving-selection-native-hold-declaration-missing',
+                );
+              }
+              const record = prepaid
+                ? await withIdentitySourceNoEffectCommand(pool, deadline, () =>
+                    readIdentityReceivingSelection(pool, selection, { deadline }),
+                  )
+                : await readIdentityReceivingSelection(pool, selection, { deadline });
               if (!record || !matchesReceiving(ticket, selection, record) || !record.applied) return null;
               claimIdentitySourceScheduledCall(pool, 'receivingReconcile');
+              if (prepaid) {
+                chargeDeclared(
+                  pool,
+                  deadline,
+                  IDENTITY_SOURCE_RECEIVING_RECONCILE_DECLARATION(),
+                  'identity-source-receiving-selection-native-hold-declaration-missing',
+                );
+                continue;
+              }
               const applied = await reconcileIdentityReceivingEffect(pool, {
                 kind: 'receiving',
                 job: reference.job,
@@ -1766,7 +1909,6 @@ async function finishConsumers(
   deadline: number,
   identityConsumerWork: IdentitySourceConsumerMaintenanceWork,
 ): Promise<IdentitySourceConsumerCustody | null> {
-  requireWiderSourceCommand(pool, 'finish');
   if (!ports.binding.lockIdentitySourceConsumerCut || !ports.binding.verifyIdentitySourceConsumerCut) return null;
   let reversal: AccountIdentityReversalSettlement | null = null;
   if (reference.erasedRole === 'subject') {
@@ -1784,7 +1926,8 @@ async function finishConsumers(
     return null;
   // Last foreign probe is released. The local binding lock also belongs to every later
   // original-source admission/replay/undo/restore consumer, as required of the owner hook.
-  const result = await runCommand(pool, { partition: reference.source.partition, deadline }, async (tx) => {
+  const result = await withWiderSourceCommand(pool, deadline, reference.barrier.accountId, 'finish', () =>
+    runCommand(pool, { partition: reference.source.partition, deadline }, async (tx) => {
     const claim = await acceptedClaim(tx, reference);
     const saved = await latest(tx, retained);
     if (
@@ -1794,6 +1937,12 @@ async function finishConsumers(
     )
       return noEffect(false);
     const owner = await readPartition(tx, reference.source.partition);
+    chargeDeclared(
+      pool,
+      deadline,
+      ACCOUNT_IDENTITY_ORIGINAL_SOURCE_DECLARATION(),
+      'identity-source-original-Account-reader-declaration-missing',
+    );
     const source = await readAccountIdentitySource(tx, reference.receipt, undefined, true);
     if (!owner || owner.writeState !== 'active' || !sameSource(reference, source)) return noEffect(false);
     const disposition = await ports.binding.lockIdentitySourceConsumerCut!(
@@ -1876,7 +2025,8 @@ async function finishConsumers(
         },
       ],
     };
-  });
+  }),
+  );
   if (!result.value) return null;
   const proof = Object.freeze({
     [locator]: Object.freeze({
@@ -1891,8 +2041,10 @@ async function finishConsumers(
   }) as LocalProof;
   // Re-enter only this home after commit. The brand cannot replace durable live revalidation.
   return (
-    await runCommand(pool, { partition: reference.source.partition, deadline }, async (tx) =>
-      noEffect(await verifyIdentitySourceConsumerCustody(tx, reference, proof)),
+    await withIdentitySourceNoEffectCommand(pool, deadline, () =>
+      runCommand(pool, { partition: reference.source.partition, deadline }, async (tx) =>
+        noEffect(await verifyIdentitySourceConsumerCustody(tx, reference, proof)),
+      ),
     )
   ).value
     ? proof
@@ -1910,6 +2062,9 @@ export const IDENTITY_SOURCE_CONSUMER_VERIFY_COST: NativeStepWork = Object.freez
   bytes: 139264,
   engineRequests: 0,
 });
+export function IDENTITY_SOURCE_CONSUMER_VERIFY_DECLARATION() {
+  return memoizedValue(IDENTITY_SOURCE_CONSUMER_VERIFY_DECLARATION, () => classified(100, 100, 22, 139264, 22));
+}
 
 /** Same genuine live original-home command, fixed indexed points, no foreign checkout. */
 export async function verifyIdentitySourceConsumerCustody(
@@ -1919,11 +2074,11 @@ export async function verifyIdentitySourceConsumerCustody(
 ): Promise<boolean> {
   const resources = currentCommandResources(tx);
   const frame = currentIdentitySourceConsumerMaintenance(resources.pool, resources.deadline);
+  const prepaid = isPrepaidIdentitySourceConsumerMaintenance(resources.pool);
   if (
     !frame ||
     !isLiveIdentitySourceConsumerMaintenance(resources.pool, frame, resources.deadline) ||
-    (!isPrepaidIdentitySourceConsumerMaintenance(resources.pool) &&
-      !reserveIdentitySourceConsumerNativeWork(resources.pool, frame, IDENTITY_SOURCE_CONSUMER_VERIFY_COST))
+    (!prepaid && !reserveIdentitySourceConsumerNativeWork(resources.pool, frame, IDENTITY_SOURCE_CONSUMER_VERIFY_COST))
   )
     return false;
   if (
@@ -1933,8 +2088,15 @@ export async function verifyIdentitySourceConsumerCustody(
     resources.deadline <= Date.now()
   )
     return false;
-  if (isPrepaidIdentitySourceConsumerMaintenance(resources.pool))
+  if (prepaid) {
     claimIdentitySourceScheduledCall(resources.pool, 'terminalVerify');
+    chargeDeclared(
+      resources.pool,
+      resources.deadline,
+      IDENTITY_SOURCE_CONSUMER_VERIFY_DECLARATION(),
+      'identity-source-terminal-verify-eight-axis-declaration-missing',
+    );
+  }
   const local = (proof as LocalProof | null)?.[locator];
   const native = local?.source;
   if (!native || native.partition !== reference.source.partition) return false;
@@ -1957,7 +2119,6 @@ export async function verifyIdentitySourceConsumerCustody(
       row.state !== 'transferred')
   )
     return false;
-  if (isPrepaidIdentitySourceConsumerMaintenance(resources.pool)) return false; // Binding/Account child declarations are absent.
   const ports = await owners();
   if (
     !(await ports.binding.verifyIdentitySourceConsumerCut?.(
@@ -2072,10 +2233,31 @@ export type IdentitySourceHistoryHandoffResult =
   | Readonly<{ state: 'pending'; gap: string }>
   | Readonly<{ state: 'guarded'; handoff: IdentitySourceHistoryHandoff }>;
 
+function historyWorkDeclaration(cost: NativeStepWork): WorkDimensions {
+  return Object.freeze({
+    candidateKeys: 0,
+    nativeRows: cost.rows,
+    identityMetadataRows: 0,
+    nativePoints: cost.points,
+    witnessKeys: 0,
+    statements: cost.statements,
+    bytes: cost.bytes,
+    emptySeeks: cost.statements,
+  });
+}
 function reserveHistoryWork(tx: CommandTransaction, cost: NativeStepWork, declaration?: WorkDimensions): boolean {
   const resources = currentCommandResources(tx);
   const frame = currentIdentitySourceConsumerMaintenance(resources.pool, resources.deadline);
-  return !!frame && reserveIdentitySourceConsumerNativeWork(resources.pool, frame, cost, declaration);
+  const prepaid = isPrepaidIdentitySourceConsumerMaintenance(resources.pool);
+  return (
+    !!frame &&
+    reserveIdentitySourceConsumerNativeWork(
+      resources.pool,
+      frame,
+      cost,
+      prepaid ? (declaration ?? historyWorkDeclaration(cost)) : declaration,
+    )
+  );
 }
 
 /** Resolve durable ORIGINAL Source state, not a copied terminal receipt. This same
@@ -2203,10 +2385,8 @@ export async function lockIdentitySourceHistoryHandoff(
   stage = { reference: structuredClone(reference), handoff: structuredClone(stage.handoff), consumer: stage.consumer };
   binding = structuredClone(binding);
   expectedWriter = structuredClone(expectedWriter);
-  if (isPrepaidIdentitySourceConsumerMaintenance(currentCommandResources(tx).pool)) {
+  if (isPrepaidIdentitySourceConsumerMaintenance(currentCommandResources(tx).pool))
     claimIdentitySourceScheduledCall(currentCommandResources(tx).pool, 'historyHandoff');
-    return pending('identity-source-History-SDK-reached-eight-axis-declarations-missing');
-  }
   if (!reserveHistoryWork(tx, IDENTITY_SOURCE_HISTORY_RECHECK_COST))
     return pending('identity-source-history-funding-unavailable');
   const { verifyAgentIdentityRetirementStage } = historyComposition();
@@ -2236,15 +2416,14 @@ export async function lockIdentitySourceHistoryHandoff(
   // SDK owner cost, including its nested domain/fence locks and return SELECT.
   // Stale, pool, serialization and deadlock failures propagate: roll back the whole
   // command. Every repeated entry pre-reserves again in the SAME live frame.
-  if (
-    !reserveHistoryWork(tx, {
-      rows: SDK_TRANSACTION_FENCE_COST.rows,
-      points: SDK_TRANSACTION_FENCE_COST.points,
-      statements: SDK_TRANSACTION_FENCE_COST.statements,
-      bytes: SDK_TRANSACTION_FENCE_COST.bytes,
-      engineRequests: SDK_TRANSACTION_FENCE_COST.engineWork,
-    })
-  )
+  const sdkFence: NativeStepWork = Object.freeze({
+    rows: SDK_TRANSACTION_FENCE_COST.rows,
+    points: SDK_TRANSACTION_FENCE_COST.points,
+    statements: SDK_TRANSACTION_FENCE_COST.statements,
+    bytes: SDK_TRANSACTION_FENCE_COST.bytes,
+    engineRequests: SDK_TRANSACTION_FENCE_COST.engineWork,
+  });
+  if (!reserveHistoryWork(tx, sdkFence, historyWorkDeclaration(sdkFence)))
     return pending('identity-source-history-funding-unavailable');
   let writer: SdkWriterState;
   try {
