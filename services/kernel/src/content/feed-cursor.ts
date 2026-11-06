@@ -49,7 +49,7 @@ export async function encodeFeedCursor(
   const json = JSON.stringify(position);
   const digest = fingerprint(position);
   const bytes = Buffer.from(json).toString('base64url');
-  const parts = bytes.match(/.{1,1800}/g)!;
+  const parts: string[] = bytes.match(/.{1,1800}/g)!;
   if (parts.length > 12) throw new ProblemError('dependency_unavailable');
   const encoded = await Promise.all(
     parts.map((part, index) =>

@@ -38,7 +38,7 @@
  *   feed continuation to its end; served shard traversal is bounded by its inventory.
  * - Growth check: None here; the binding task measures served requests per page.
  */
-export type Persona = 'anonymous' | 'alice' | 'bob' | 'editor' | 'suspended';
+export type Persona = 'anonymous' | 'alice' | 'bob' | 'editor' | 'verified-agent' | 'suspended';
 export type RelationView = 'editions' | 'contents' | 'cast' | 'crew' | 'inverse' | 'relations';
 export type PublishedSubject = 'book' | 'recipe' | 'game' | 'release' | 'person' | 'organization' | 'automated';
 export type SitemapKind = 'subject' | 'collection' | 'realm' | 'space' | 'board' | 'thread';

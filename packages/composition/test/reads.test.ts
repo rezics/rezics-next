@@ -130,3 +130,26 @@ test('statements shown by the page are listed once in document order', () => {
   expect(shownProperties(document)).toEqual(['schema:author', 'schema:datePublished', 'schema:isbn']);
   expect(shownProperties(page(node('MoreStatements', 'more')))).toEqual([]);
 });
+
+test('forward credit previews reuse the current factual Subject while full credit windows read native relations', () => {
+  const doc = page(
+    node('SubjectHeader', 'header'),
+    node('Credits', 'directors', { direction: 'forward', property: 'schema:director', limit: 4 }),
+    node('Credits', 'writers', { direction: 'forward', property: 'schema:author', limit: 4 }),
+    node('OutgoingRelations', 'related', { property: 'rezics:bangumiRelatedTo', limit: 4 }),
+    node('Credits', 'all-directors', { direction: 'forward', property: 'schema:director', limit: 8, paged: true }),
+    node('Credits', 'works', { direction: 'inverse', property: 'schema:director', limit: 8, paged: true }),
+  );
+  expect(validateComposition(platformRegistry, doc)).toEqual([]);
+  const plan = planReads(platformRegistry, doc, { subject });
+  expect(plan.nodes.directors).toBe(plan.nodes.header);
+  expect(plan.nodes.writers).toBe(plan.nodes.header);
+  expect(plan.nodes.related).toBe(plan.nodes.header);
+  expect(plan.reads[plan.nodes['all-directors']!]).toEqual({
+    kind: 'relations',
+    id: subject,
+    property: 'schema:director',
+    limit: 8,
+  });
+  expect(plan.reads[plan.nodes.works!]).toEqual(inverse('schema:director', 8));
+});

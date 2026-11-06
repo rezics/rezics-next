@@ -65,6 +65,9 @@ type Props = {
 };
 
 const loading: DiscoveryState = { status: 'loading' };
+const worksActionClass =
+  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const worksSelectClass = 'w-full min-w-0 max-w-full [&_select]:h-auto [&_select]:min-h-11 [&_select]:max-w-full';
 
 function requestCondition(value: string | undefined): FilterDocument | undefined {
   if (!value) return;
@@ -218,6 +221,7 @@ function ConceptWorksVisit({
           <FieldLabel htmlFor="concept-work-property">{m.concept_tagged_works_property({}, options)}</FieldLabel>
           <NativeSelect
             id="concept-work-property"
+            className={worksSelectClass}
             value={
               route.property ??
               (read.requestedRole && read.works?.properties.some((entry) => entry.id === read.requestedRole)
@@ -246,6 +250,7 @@ function ConceptWorksVisit({
           <FieldLabel htmlFor="concept-work-scheme">{m.concept_tagged_works_scheme({}, options)}</FieldLabel>
           <NativeSelect
             id="concept-work-scheme"
+            className={worksSelectClass}
             value={route.scheme ?? ''}
             onChange={(event) => onChange?.({ scheme: event.currentTarget.value || undefined, cursor: undefined })}
           >
@@ -263,6 +268,7 @@ function ConceptWorksVisit({
           <FieldLabel htmlFor="concept-work-type">{m.concept_tagged_works_type({}, options)}</FieldLabel>
           <NativeSelect
             id="concept-work-type"
+            className={worksSelectClass}
             value={route.type ?? ''}
             disabled={!route.property && !read.requestedRole}
             onChange={(event) => onChange?.({ type: event.currentTarget.value || undefined, cursor: undefined })}
@@ -294,6 +300,7 @@ function ConceptWorksVisit({
           <FieldLabel htmlFor="concept-work-sort">{m.search_sort_label({}, options)}</FieldLabel>
           <NativeSelect
             id="concept-work-sort"
+            className={worksSelectClass}
             value={route.sort ?? 'name'}
             onChange={(event) => {
               const value = event.currentTarget.value;
@@ -308,6 +315,7 @@ function ConceptWorksVisit({
           <FieldLabel htmlFor="concept-work-spoiler">{m.concept_tagged_works_spoiler({}, options)}</FieldLabel>
           <NativeSelect
             id="concept-work-spoiler"
+            className={worksSelectClass}
             value={String(route.spoilerThreshold ?? 0)}
             onChange={(event) =>
               onChange?.({ spoilerThreshold: Number(event.currentTarget.value) as 0 | 1 | 2, cursor: undefined })
@@ -387,7 +395,12 @@ function ConceptWorksVisit({
           {continuationFailure && (
             <div role="alert" tabIndex={-1} className="space-y-2">
               <p>{m.concept_tagged_works_continuation_failed({}, options)}</p>
-              <Button type="button" variant="outline" onClick={() => setRetryNumber((value) => value + 1)}>
+              <Button
+                type="button"
+                variant="outline"
+                className={worksActionClass}
+                onClick={() => setRetryNumber((value) => value + 1)}
+              >
                 {m.concept_tagged_works_retry({}, options)}
               </Button>
             </div>
@@ -411,6 +424,7 @@ function ConceptWorksVisit({
             <Button
               type="button"
               variant="outline"
+              className={worksActionClass}
               disabled={display.status !== 'ready'}
               onClick={() => onChange?.({ cursor: page.next ?? undefined })}
             >

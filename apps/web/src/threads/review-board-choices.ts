@@ -47,10 +47,14 @@ function parseContext(value: unknown): ReviewDestinationContext | null {
   const realm = value.realm;
   const source = parseSource(subject.source);
   const label = subject.label;
+  let receivedLabel: ReviewDestinationContext['subject']['label'] = null;
+  if (label !== null) {
+    if (!record(label) || typeof label.value !== 'string' || typeof label.language !== 'string') return null;
+    receivedLabel = { value: label.value, language: label.language };
+  }
   if (
     typeof subject.id !== 'string' ||
     source === null ||
-    (label !== null && (!record(label) || typeof label.value !== 'string' || typeof label.language !== 'string')) ||
     typeof realm.id !== 'string' ||
     typeof realm.title !== 'string' ||
     typeof realm.spaceId !== 'string' ||
@@ -60,7 +64,7 @@ function parseContext(value: unknown): ReviewDestinationContext | null {
   return {
     subject: {
       id: subject.id,
-      label: label === null ? null : { value: label.value, language: label.language },
+      label: receivedLabel,
       source,
     },
     realm: {

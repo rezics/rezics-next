@@ -13,8 +13,11 @@ import {
 } from '../../../src/library/members-preparation.ts';
 import { actorOf } from '../../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
+import { bindExecutionContract } from '../../../src/command/execution-contract.ts';
+import { historyExecutionPort } from '../../../src/history/operational-work.ts';
 import { createWorkClient } from '../../../src/work/client.ts';
 import { WORK_QUEUES } from '../../../src/work/queues.ts';
+import { workExecutionPort } from '../../../src/work/selected-runtime.ts';
 import { cookies, nativeFixture, password } from '../../access/native-account-bindings-fixture.ts';
 import { deletePersona as deleteNativePersona } from '../../support/account-deletion.ts';
 import { capture, openGrowthDatabase, type GrowthDatabase } from '../../support/growth.ts';
@@ -26,7 +29,12 @@ export async function membersPreparationRuntime() {
   const db = await openGrowthDatabase();
   db.pool.options.max = 1;
   const auth = await nativeFixture(db.pool);
-  const workClient = await createWorkClient(db.url, db.pool);
+  // Operational transactions run only through the Kernel's bound execution contract, as the composed kernel binds it.
+  const workClient = bindExecutionContract(
+    await createWorkClient(db.url, db.pool),
+    workExecutionPort(),
+    historyExecutionPort,
+  );
   await workClient.registerQueue('workflows', WORK_QUEUES.workflows);
   let now = Date.now();
   const clock = () => new Date(now);

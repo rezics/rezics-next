@@ -1,3 +1,4 @@
+import type { RatingCapabilities } from './contract/capabilities.ts';
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import type { SessionComponent } from '../tokens/session.ts';
@@ -74,6 +75,7 @@ export declare class RatingQuestionRetiredError extends Error {
 type Dependencies = {
     pool: Pool;
     access: Access;
+    capabilities?: RatingCapabilities;
     clock?: KernelClock;
 };
 /** Shared native command preparation for a selected exact slot. Advice retains no authorization. */

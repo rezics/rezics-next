@@ -1,4 +1,4 @@
-import type { WorkAllowance, WorkReceipt } from '../library/collection-source.ts';
+import type { WorkAllowance, WorkReceipt } from '../library/contract/work-dimensions.ts';
 import type { CollectionOutputRef } from '../library/collection-source-output.ts';
 import type { NativeOutputActivation } from '../library/native-source-output-types.ts';
 import type { IdentityNativeReceipt } from './identity-epoch-contract.ts';

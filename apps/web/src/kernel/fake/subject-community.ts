@@ -91,6 +91,35 @@ export function communityThread(
     },
     reactions: { upvote: 3, like: 2, insightful: 1 },
     viewerReaction: 'like',
+    card: {
+      state: 'current',
+      authors: {
+        thread: {
+          state: 'current',
+          identity: { handle: communityAuthor.handle, displayName: communityAuthor.displayName, avatar: null },
+        },
+        openingPost: {
+          state: 'current',
+          identity: { handle: communityAuthor.handle, displayName: communityAuthor.displayName, avatar: null },
+        },
+      },
+      presentation: { state: 'current', language: 'en', spoiler: false },
+      media: { state: 'none', images: [] },
+      comments: { state: 'unavailable' },
+      actions: { state: 'unavailable', retryable: true, references: [] },
+      reply: { state: 'unavailable' },
+      watch: { state: 'unavailable', retryable: true },
+      currentness: {
+        source: 'current',
+        place: 'current',
+        authors: 'current',
+        reactions: 'current',
+        actions: 'unavailable',
+        watch: 'unavailable',
+        media: 'not_applicable',
+        comments: 'unavailable',
+      },
+    },
   };
 }
 

@@ -67,13 +67,26 @@ const IDLE_MS = 24 * 60 * 60 * 1000;
 const MAX_DEFINITIONS = 16;
 const BASIS_VERSION = 1;
 
-/** Internal admitted meaning, never an HTTP DTO or an execution/disclosure certificate. */
+/** Saved population selector. Owner keys keep the retained six-part basis; a catalogue key adds one element. */
+export type PreparationSource = Readonly<{ kind: 'owner' | 'catalogue' }>;
+const OWNER_SOURCE: PreparationSource = Object.freeze({ kind: 'owner' });
+/** Omitted source is owner-compatible execution; every admitted basis carries the selector it resolves to. */
+function sourceOf(definition: { readonly source?: PreparationSource }): PreparationSource {
+  return definition.source ?? OWNER_SOURCE;
+}
+/** Admitted meaning, never an HTTP DTO or an execution/disclosure certificate. Its source is always resolved. */
 export type PreparationDefinition = Readonly<{
   filter: FilterDocument;
   sort: 'id' | 'ordinal';
   release: Readonly<{ digest: string; value: FilterRelease }>;
-  /** Saved population selector. Owner keys keep the retained six-part basis; a catalogue key adds one element. */
-  source: Readonly<{ kind: 'owner' | 'catalogue' }>;
+  source: PreparationSource;
+}>;
+/** A caller's definition at the boundary. An omitted source is owner-compatible execution. */
+export type PreparationDefinitionInput = Readonly<{
+  filter: FilterDocument;
+  sort: 'id' | 'ordinal';
+  release: Readonly<{ digest: string; value: FilterRelease }>;
+  source?: PreparationSource;
 }>;
 export type PreparationDefinitionBasis = Readonly<{
   definition: PreparationDefinition;
@@ -85,7 +98,7 @@ export type PreparationDefinitionBasis = Readonly<{
 export function preparationDefinitionBases(
   ownerAccountId: string,
   collectionId: string,
-  definitions: readonly PreparationDefinition[],
+  definitions: readonly PreparationDefinitionInput[],
 ): readonly PreparationDefinitionBasis[] {
   const unique = new Map<string, PreparationDefinitionBasis>();
   for (const input of definitions) {
@@ -151,7 +164,7 @@ export interface MembersPreparation {
   reserve(
     actor: Actor,
     collectionId: string,
-    definitions: readonly PreparationDefinition[],
+    definitions: readonly PreparationDefinitionInput[],
     options?:
       | { deadline?: number; history?: never; runtime?: boolean }
       | { deadline: number; history: WorkExecutionOriginal; runtime?: boolean },
@@ -183,7 +196,7 @@ type Basis = Readonly<{
   digest: Buffer;
   filter: FilterDocument;
   sort: PreparationDefinition['sort'];
-  source: PreparationDefinition['source'];
+  source: PreparationSource;
   releaseDigest: string;
   release: FilterRelease;
 }>;
@@ -210,8 +223,10 @@ function notFound(): ProblemError {
   return new ProblemError('not_found');
 }
 
-function prepareBasis(ownerAccountId: string, collectionId: string, input: PreparationDefinition): Basis {
+function prepareBasis(ownerAccountId: string, collectionId: string, input: PreparationDefinitionInput): Basis {
   try {
+    // An omitted source is owner-compatible execution: the owner's private population, six-part basis.
+    const source = input?.source ?? { kind: 'owner' as const };
     if (
       !input ||
       !input.filter ||
@@ -220,8 +235,7 @@ function prepareBasis(ownerAccountId: string, collectionId: string, input: Prepa
       typeof input.release.digest !== 'string' ||
       !/^sha256:[0-9a-f]{64}$/.test(input.release.digest) ||
       !input.release.value ||
-      !input.source ||
-      (input.source.kind !== 'owner' && input.source.kind !== 'catalogue') ||
+      (source.kind !== 'owner' && source.kind !== 'catalogue') ||
       releaseDigest(input.release.value as Release) !== input.release.digest
     )
       throw unsupported();
@@ -229,7 +243,7 @@ function prepareBasis(ownerAccountId: string, collectionId: string, input: Prepa
     const filter = admitFilter(parseFilter(input.filter), release, { owner: true });
     // Owner keys keep the six-part basis; a catalogue source adds one element.
     const basis = canonicalize(
-      input.source.kind === 'catalogue'
+      source.kind === 'catalogue'
         ? [BASIS_VERSION, ownerAccountId, collectionId, filter, input.sort, input.release.digest, 'catalogue']
         : [BASIS_VERSION, ownerAccountId, collectionId, filter, input.sort, input.release.digest],
     );
@@ -239,7 +253,7 @@ function prepareBasis(ownerAccountId: string, collectionId: string, input: Prepa
       digest: createHash('sha256').update(basis).digest(),
       filter,
       sort: input.sort,
-      source: { kind: input.source.kind },
+      source: { kind: source.kind },
       releaseDigest: input.release.digest,
       release,
     });
@@ -875,7 +889,7 @@ export function createMembersPreparation(config: {
 }
 
 /** Canonical definition identity only; never current Source authority. */
-export function preparationBasis(owner: string, collection: string, definition: PreparationDefinition): string {
+export function preparationBasis(owner: string, collection: string, definition: PreparationDefinitionInput): string {
   return prepareBasis(owner, collection, definition).basis;
 }
 export const validPreparationLocator = validLocator;
@@ -1083,7 +1097,7 @@ async function bindPreparationRead(
   const admission = await admitSavedCollectionMemberQuery(
     deps,
     input.actor,
-    { filter, sort: 'id', source: input.definition.source, releaseDigest: input.definition.release.digest },
+    { filter, sort: 'id', source: sourceOf(input.definition), releaseDigest: input.definition.release.digest },
     {},
     input.deadline,
   );

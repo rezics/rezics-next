@@ -81,7 +81,7 @@
     "countPerView": 105,
     "maximumPageSize": 100,
     "views": ["editions", "contents", "cast", "crew", "inverse", "relations"],
-    "targetKeys": "<view>-001 through <view>-105, API-written in reverse order with explicit ascending positions; inverse credits target works from person",
+    "targetKeys": "<view>-001 through <view>-105, API-written in reverse order; editions use ascending released dates, names are zero-padded, credits have ascending released positions; inverse credits target works from person",
     "excludedKey": "<view>-withheld",
     "credit": {
       "character": "Keeper Neri",

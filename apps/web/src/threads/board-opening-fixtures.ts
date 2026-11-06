@@ -106,6 +106,7 @@ export function boardOpeningExample(state: BoardOpeningExample = 'current', size
         join: { membership: 'nonmember', action: 'sign-in' },
       },
     },
+    pinRevision: '1',
     pinnedThreads: cards.slice(0, Math.min(5, size)),
     threads: cards.slice(5),
     next: boardOpeningCursor,

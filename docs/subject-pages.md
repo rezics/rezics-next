@@ -2801,3 +2801,61 @@ uncertain command recovery remain under their original owners. Return uses exist
 focus owner; no inner return effect or focus scheduler is added. Exact Sources receiving remains unsupported.
 Cost is one bounded descriptor and the existing chosen profile or public return read: no menu read, extra native
 window, membership scan, hydration, history retention or SQL.
+
+## Complete Subject stream composition
+
+Full Credits and Works views declare every released credit property, preserving each role's original native order,
+qualified names, Character, position and spoiler disclosure. Forward credit previews reuse the bounded current
+Subject facts and their native relation counts. Large role directories select one window at a time rather than
+spending the page budget on every role. The native page response identifies the selected node and its declared
+property/direction; another role starts its first window. `node` and `cursor` retain the exact selected full view,
+locale and Context across destination/return links. The immutable profile remains the read-plan authority.
+For an initial large forward directory, the existing native Subject counts choose the first populated declared role;
+an explicit node or continuation always wins. This adds no discovery read and never reorders rows.
+
+Decision: the Concept control and return corrections and the public metadata date correction are supporting source;
+the existing Person correction lifetime is kept. Native stream selection and public rendering are pinned by focused
+tests, and the existing 105-target fixture is written as native statements with current hidden-target moderation. Editions
+use released dates, contents use native names, and credits retain released position qualifiers. Recipe and game
+release templates expose their released descriptive properties. Relation previews reuse the current Subject, while
+full views retain separate forward and inverse windows. Unsupported calendars, precision and uncertainty no longer
+produce a Gregorian date in the public title or compact frame. Forward relation previews are declared on work-like
+templates only, and the stream directory reads the relation labels it needs without importing Subject internals.
+
+Dates remain single-valued: a competing sourced candidate never replaces the selected date. Candidate comparison opens
+only after a current signed-in reading; Changes shows the native revision trail without putting private review data
+into public HTML. A static public response does not show both candidates.
+An occupation target whose current related summary withholds its Type remains unavailable; a disclosed label alone
+does not establish the released Concept meaning. Public identity-operation types derive from installed Subject routes
+and travel through normal declaration generation.
+
+Decision: the shared traversal fixture provisions its automated reader through native operator approval and the Auth
+creation workflow, then signs in with that account's own credentials; its Subject reads carry its own Auth-issued
+bearer and current viewer, separately from the operator. Its catalogue identity is verified through the native request
+and approval commands. Fixture governance uses in-process receipt keys and exact
+action consent. Native projection, served persona traversal and promoted/browser acceptance remain separate evidence.
+
+Decision: page receiving retains the mounted response's viewer and action variants. Catalogue correction controls
+require the catalogue's current statement advice; a quotation viewer identity alone supplies no proposal authority.
+Graph destinations use the declared entry result, and an unrepresentable quotation address supplies no link.
+
+Decision: Subject route receiving preserves the typed descriptor even when no Type is available, retains the admitted
+account shape during public operator redaction, and omits absent return parameters. Concept and Person destinations
+read the router's current location; the native page client keeps the mounted `pages:read` transport address.
+
+Receiving keeps the installed native DTOs authoritative: current Library, Copies, provider-import and account navigation adapters are received from their owning commits; duplicate Search fixture methods are normalized without changing completion hooks or assertions. Subject fixtures use the declared deadline liveness field, and focused native checks execute named script tests. Shared workspace typing is checked alongside the focused Subject cases; promoted acceptance remains a separate integration gate.
+
+Receiving uses current native viewer and recovery fields in shared page fixtures, retains exact command headers,
+and keeps validated imported JSON serializable across server functions. Unknown notification kinds such as
+`invented_kind` are refused at the native response boundary. A formatter that consumes Realm inventory labels
+accepts those labels without requiring unrelated current-entry authority. Byte accounting and native error
+projection keep their existing meaning when compiled with the Web consumer.
+
+Receiving retains the returned saved-query page-observation binding and native publication Source semantics, including
+the final permission liveness projection. Combined checks reserve the generated client output before preparation even
+when the emitter option is immediately followed by a shell operator; the physical source receipt remains required.
+
+Receiving keeps the current native item adapter, routable session-bound placeholder and direct deletion of a final
+progress occurrence. The shared native preparation uses the governor for omitted and explicit platform grant targets;
+subject-specific grants retain the editor. The current progress migration owns the correction without a duplicate
+receiving migration.

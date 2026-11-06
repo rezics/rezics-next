@@ -163,7 +163,7 @@ export type CanonicalPublication = CanonicalNotReady | {
 import type { WorkContext } from '../work/registry.ts';
 import { type NativeSourceIdentity } from './native-source-custody.ts';
 import { type NativeCollectionMetadata } from './collection-source-native.ts';
-import type { WorkAllowance } from './collection-source.ts';
+import type { WorkAllowance } from './contract/work-dimensions.ts';
 import { type CommandTransaction } from '../command/command.ts';
 export declare const CANONICAL_SOURCE_WORKFLOW = "library.canonicalSource";
 /** Bound once by the sole default Library WorkModule, using its real client and queues. */

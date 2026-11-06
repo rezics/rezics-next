@@ -66,6 +66,7 @@ const LIST_VIEWS: Readonly<Record<string, View>> = {
   'schema:workExample': 'editions',
   'rezics:representativeEdition': 'editions',
   'schema:isPartOf': 'contents',
+  'wdt:P361': 'contents',
   'wdt:P179': 'contents',
   'schema:author': 'works',
   'schema:illustrator': 'works',

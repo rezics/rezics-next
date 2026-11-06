@@ -403,11 +403,12 @@ function responseValue<S extends TSchema>(_schema: S, value: unknown): Static<S>
 function detail(operationId: string, write = false) {
   return {
     operationId: `library_archive_collection_recovery.${operationId}`,
-    'x-action': 'collection:read',
+    // Owner-account admission. collection:read keeps its resource authority for every Collection read, so this
+    // route uses its own action; the owner gate rejects anonymous actors.
+    'x-action': 'library_archive:read',
     'x-exposure': 'gate:collections',
     'x-authority-anchor': 'own-account',
     'x-authority-resource-types': exportAuthorityTypes(),
-    // collection:read is shared with optionally anonymous collection reads; the owner gate rejects anonymous actors.
     security: [{ bearerAuth: [] }, {}],
     ...(operationId === 'create'
       ? { 'x-body-limit': Math.ceil(LIBRARY_ARCHIVE_LIMITS().uploadBytes / 3) * 4 + 128 }

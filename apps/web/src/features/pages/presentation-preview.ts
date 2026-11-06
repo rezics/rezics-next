@@ -141,7 +141,7 @@ export async function loadPresentationPreview(
     signal?.throwIfAborted();
     const response = await client.pages.$read.post(
       { target: input.target, languages: requestLanguages(input.locale) },
-      { fetch: { signal, redirect: 'manual', credentials: 'omit', cache: 'no-store' } },
+      { fetch: { ...(signal ? { signal } : {}), redirect: 'manual', credentials: 'omit', cache: 'no-store' } },
     );
     if (response.status === 308) {
       const body: unknown = response.data ?? response.error?.value;
@@ -200,9 +200,10 @@ export async function loadPresentationPreview(
     }
     // An aggregate transport may ignore abort. Retirement still forbids starting later control reads.
     signal?.throwIfAborted();
+    const controlFetch = { ...(signal ? { signal } : {}), cache: 'no-store' as const };
     const [pinned, active] = await Promise.all([
-      client.presentation.profiles({ digest: page.profile }).get({ fetch: { signal, cache: 'no-store' } }),
-      client.presentation.active.get({ fetch: { signal, cache: 'no-store' } }),
+      client.presentation.profiles({ digest: page.profile }).get({ fetch: controlFetch }),
+      client.presentation.active.get({ fetch: controlFetch }),
     ]);
     if (pinned.status !== 200 || !pinned.data) return failure(pinned.status);
     if (active.status !== 200 || !active.data) return failure(active.status);

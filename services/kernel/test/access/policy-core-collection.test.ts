@@ -29,6 +29,7 @@ function projection(overrides: Partial<NativePermissionProjection> = {}): Native
   return {
     assignmentValid: true,
     deadlineLive: true,
+    live: true,
     localDenied: false,
     actorActionGrant: false,
     actorResourceRoleGrant: false,

@@ -305,7 +305,7 @@ export function checkPlan(args: string[], moduleDirectory: string): CheckPlan {
   }
 
   const sortedFiles = Array.from(files).sort();
-  return { files: sortedFiles, tests: sortedFiles.filter((file) => testFiles.has(file)) };
+  return { files: sortedFiles, tests: sortedFiles.filter((file) => file.endsWith('.test.ts')) };
 }
 
 /** Repository-relative paths changed since `revision`: committed, staged, unstaged and untracked. */

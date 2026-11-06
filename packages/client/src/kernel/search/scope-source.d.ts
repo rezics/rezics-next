@@ -1,7 +1,8 @@
 import { type FilterDocument, type FilterRelease } from '@rezics/filter';
 import type { Pool } from 'pg';
 import { type KernelClock } from '../clock.ts';
-import type { CollectionSourceObservation, WorkAllowance, WorkReceipt } from '../library/collection-source.ts';
+import type { CollectionSourceObservation } from '../library/collection-source.ts';
+import type { WorkAllowance, WorkReceipt } from '../library/contract/work-dimensions.ts';
 import type { NativeSourceIdentity } from '../library/native-source-custody.ts';
 import type { NativeOrdinalKey } from '../library/collection-source-order.ts';
 import { type SearchScopeOrder, type SearchScopeOrdinalPrefix } from './service-scope-order.ts';
@@ -75,7 +76,7 @@ export type SearchScopePrefix = {
     exhausted: boolean;
     usage: {
         candidates: number;
-        work?: import('../library/collection-source.ts').WorkReceipt;
+        work?: import('../library/contract/work-dimensions.ts').WorkReceipt;
     };
 };
 export type SearchScopeEvaluation = {
@@ -185,13 +186,13 @@ export declare function createSearchScopeSource({ pool, client, prefix, source: 
         allowance: WorkAllowance;
         candidateLimit?: number;
     }): Promise<{
-        basis: ScopeBasis;
-        work: WorkReceipt;
         kind: 'canonical_subject_prefix';
         candidates: readonly import("../library/collection-source.ts").CanonicalCollectionCandidate[];
         coveredThrough: string | null;
         exhausted: boolean;
         observation: CollectionSourceObservation;
+        basis: ScopeBasis;
+        work: WorkReceipt;
     }>;
     /** Raw native ordinal input, CURRENT canonical membership and native fact evidence are
      * consumed in order. This direct preview never truncates raw rows then post-sorts them.

@@ -1,7 +1,6 @@
-import { Cover, type CoverSummary } from '@rezics/ui/cover';
+import type { CoverSummary } from '@rezics/ui/cover';
 import { LanguageTag, SpoilerGate } from '../pages/values';
 import { accountHref, subjectHref } from '../../subject/subject-href';
-import { coverSrc } from '../../media/cover-src';
 import { exactRevisionHref } from '../../threads/exact-revision-href';
 import { threadLocation } from '../../threads/thread-href';
 import { m } from '../../paraglide/messages.js';
@@ -44,23 +43,10 @@ function readableHandle(handle: string | null | undefined): handle is string {
 function FeedCardAuthor({ item, locale }: { item: FeedItem; locale: string }) {
   const summary = item.summary;
   const author = 'author' in summary ? summary.author : undefined;
-  const authorAvatar = author && 'avatar' in author ? author.avatar : null;
   const options = { locale: locale as Locale };
   const name = author?.displayName || (author?.handle ? `@${author.handle}` : m.thread_author_unknown({}, options));
   const identity = (
     <span className="inline-flex min-w-0 max-w-full items-center gap-2 [overflow-wrap:anywhere]">
-      {authorAvatar ? (
-        <span className="block w-8 shrink-0 overflow-hidden rounded-full">
-          <Cover
-            subject={{ id: item.id, title: name, types: [] }}
-            cover={{ ...authorAvatar, variants: [...authorAvatar.variants] }}
-            ratio="1:1"
-            size="fill"
-            src={coverSrc}
-            decorative
-          />
-        </span>
-      ) : null}
       <span className="min-w-0">
         <bdi>{name}</bdi>
         {author?.displayName && author.handle ? (

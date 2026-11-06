@@ -191,7 +191,13 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
       busy = false;
     }
     if (!live()) return;
-    if (command.kind !== 'admit-source') cost.recordCall(command.kind, retry);
+    if (
+      command.kind !== 'admit-source' &&
+      command.kind !== 'tags' &&
+      command.kind !== 'review-labels' &&
+      command.kind !== 'apply-labels'
+    )
+      cost.recordCall(command.kind, retry);
     if (response.kind === 'unknown') {
       unknown = (response as BangumiUnknown).command;
       notice = response as BangumiUnknown;
@@ -533,8 +539,10 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
       }
       return snapshot();
     }
-    await run(command, () => port.delete(command), true);
-    if (!notice) clearPrivate('removed');
+    if (command.kind === 'delete') {
+      await run(command, () => port.delete(command), true);
+      if (!notice) clearPrivate('removed');
+    }
     return snapshot();
   }
 

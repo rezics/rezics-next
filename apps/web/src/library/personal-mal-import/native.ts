@@ -267,8 +267,8 @@ export function kernelMalPort(
       if (result.error) return failure(result.status, result.error.value);
       return { kind: 'assignments', assignments: result.data.assignments };
     },
-    async preview(command) {
-      const result = await call(
+    async preview(command): Promise<MalPreviewResult> {
+      return call(
         command,
         (mal, authorization) => {
           return mal.$preview.post({ xml: command.xml }, { headers: headers(authorization, command.key) });
@@ -278,7 +278,6 @@ export function kernelMalPort(
           return id ? ({ kind: 'previewed', id } as const) : undefined;
         },
       );
-      return result;
     },
     async page(command) {
       const result = await call(
@@ -341,22 +340,25 @@ export function kernelMalPort(
     async admitSource(command) {
       const session = await withSession(request, sessionEnv, originConfigured);
       if ('kind' in session) return session;
-      const authorization = await originalAuthorization(command, session, request, sessionEnv);
+      const working = (await retainedCommand(command, session, request, sessionEnv)) as Extract<
+        MalCommand,
+        { kind: 'admit-source' }
+      >;
+      const authorization = await originalAuthorization(working, session, request, sessionEnv);
       if (!authorization) return { kind: 'denied' };
       try {
         const result = await admitPrivateSourceObservation(client, {
-          subjectId: command.subjectId,
-          body: command.body,
-          key: command.key,
+          subjectId: working.subjectId,
+          body: working.body,
+          key: working.key,
           authorization,
         });
-        const mapped = mapSourceAdmissionPort(result, command);
+        const mapped = mapSourceAdmissionPort(result, working);
         if (mapped.kind !== 'unknown' || command.custody) return mapped;
-        return { kind: 'unknown', command: await retainedCommand(command, session, request, sessionEnv) };
+        return { kind: 'unknown', command: working };
       } catch (error) {
         if (isPlatformClosedError(error)) return { kind: 'unavailable' };
-        if (archiveTransportLost(error))
-          return { kind: 'unknown', command: await retainedCommand(command, session, request, sessionEnv) };
+        if (archiveTransportLost(error)) return { kind: 'unknown', command: working };
         throw error;
       }
     },

@@ -168,6 +168,7 @@ export const CancelledFocus: Story = {
   },
 };
 export const AllLocalesUnsupported: Story = {
+  args: { state: 'unsupported' },
   render: () => <AllLocales />,
   globals: { locale: 'en', viewport: { value: 'desktop1280' }, theme: 'light' },
 };

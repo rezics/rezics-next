@@ -1,6 +1,6 @@
 import { m } from '../paraglide/messages.js';
 import { displayRating, QUESTION } from '../features/pages/subject-ratings';
-import type { CollectionViewerFacts } from './reads';
+import type { KernelClient } from '@rezics/client';
 
 export type LibraryScoreQuestion = {
   id: string;
@@ -14,7 +14,11 @@ export type LibraryScoreQuestion = {
   lifecycleRevision: number;
 };
 
-export type LibraryViewerFacts = CollectionViewerFacts;
+type NativeLibraryPage = Extract<
+  NonNullable<Awaited<ReturnType<KernelClient['libraryEntries']['get']>>['data']>,
+  { libraryEntries: unknown[] }
+>;
+export type LibraryViewerFacts = NonNullable<NativeLibraryPage['viewerFacts']>;
 
 const displayScale = (question: LibraryScoreQuestion | { scale: { min: number; max: number; displayStep: number } }) =>
   'scale' in question
@@ -29,10 +33,10 @@ export function formatOwnScore(units: number, question: Parameters<typeof displa
 
 export function ownScoreUnits(input: {
   subjectId: string;
-  rowKey?: string;
-  personalScore?: number | null;
-  scoreQuestion?: LibraryScoreQuestion | null;
-  viewerFacts?: LibraryViewerFacts;
+  rowKey?: string | undefined;
+  personalScore?: number | null | undefined;
+  scoreQuestion?: LibraryScoreQuestion | null | undefined;
+  viewerFacts?: LibraryViewerFacts | undefined;
 }):
   | {
       units: number | null;

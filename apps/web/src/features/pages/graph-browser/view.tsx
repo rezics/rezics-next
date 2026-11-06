@@ -572,6 +572,13 @@ export function GraphBrowserPage({
   const baseRead = active?.read;
   const keepDetail = active?.status === 'success' || active?.kind === 'expansion';
   const read = baseRead && !keepDetail ? { ...baseRead, detail: null } : baseRead;
+  const quotationEntry = read?.detail
+    ? catalogueEntries.quotations({
+        id: read.detail.subject.subject.id,
+        label: pickText(read.detail.subject.subject.labels, locale).text,
+        locale,
+      })
+    : undefined;
   const selection = requestedSelection(activeRoute);
   const selected = selectedKey(selection);
   const selectionConfirmed = active?.status === 'success' && !!selection;
@@ -832,19 +839,11 @@ export function GraphBrowserPage({
                 >
                   {m.graph_explore_open_subject({}, o)}
                 </a>
-                <a
-                  className={linkClass}
-                  href={appendReturnTo(
-                    catalogueEntries.quotations({
-                      id: read.detail.subject.subject.id,
-                      label: pickText(read.detail.subject.subject.labels, locale).text,
-                      locale,
-                    }).href,
-                    returnTo,
-                  )}
-                >
-                  {m.graph_explore_quotations({}, o)}
-                </a>
+                {quotationEntry && 'href' in quotationEntry ? (
+                  <a className={linkClass} href={appendReturnTo(quotationEntry.href, returnTo)}>
+                    {m.graph_explore_quotations({}, o)}
+                  </a>
+                ) : null}
                 <a
                   className={linkClass}
                   href={appendReturnTo(

@@ -1,10 +1,5 @@
-import type { Static } from 'typebox';
+import type { OwnVotesPage as NativeOwnVotesPage } from '@rezics/client';
 
-type NativeOwnVotesPageSchema =
-  typeof import('../../../../../services/kernel/src/rating/own-votes-schemas.ts').OwnVotesPageSchema;
-type NativeOwnVoteActionsSchema =
-  typeof import('../../../../../services/kernel/src/rating/own-votes-schemas.ts').OwnVoteActionsSchema;
-
-export type OwnVotesPage = Static<NativeOwnVotesPageSchema>;
+export type OwnVotesPage = NativeOwnVotesPage;
 export type OwnVoteEntry = OwnVotesPage['votes'][number];
-export type OwnVoteActions = Static<NativeOwnVoteActionsSchema>;
+export type OwnVoteActions = OwnVoteEntry['actions'];

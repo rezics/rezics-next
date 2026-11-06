@@ -1,4 +1,4 @@
-import type { WorkAllowance, WorkReceipt } from '../library/collection-source.ts';
+import type { WorkAllowance, WorkReceipt } from '../library/contract/work-dimensions.ts';
 import type { PublicFilterCost } from '../semantic/public-filter-source-contract.ts';
 import type { SearchHit } from './query.ts';
 import type { ScopeBasis } from './scope-source.ts';

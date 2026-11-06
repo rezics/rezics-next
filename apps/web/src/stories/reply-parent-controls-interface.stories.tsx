@@ -87,6 +87,7 @@ function Controls() {
       </Button>
       <section aria-label={m.thread_reply_label()} className="min-w-0">
         <ThreadReplyComposer
+          credentialMode="session"
           {...target}
           parents={currentParents}
           pending={pending}

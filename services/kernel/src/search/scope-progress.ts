@@ -79,13 +79,13 @@ export function unpackScopeLeafProgress(record: unknown, limits: ScopeLeafLimits
     const wirePhase = bytes[1]! >>> 6;
     let after: string | null = null;
     if (wirePhase < 2) {
-      if (bytes.subarray(10).some((byte) => byte !== 0)) return { ok: false, reason: 'invalid' };
+      if (bytes.subarray(10).some((byte: number) => byte !== 0)) return { ok: false, reason: 'invalid' };
       const sequence = bytes.readBigUInt64BE(2);
       after = sequence === 0n ? null : (sequence - 1n).toString();
     } else if (wirePhase === 2) {
       const hex = bytes.subarray(2).toString('hex');
       after = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-    } else if (bytes.subarray(2).some((byte) => byte !== 0)) return { ok: false, reason: 'invalid' };
+    } else if (bytes.subarray(2).some((byte: number) => byte !== 0)) return { ok: false, reason: 'invalid' };
     const position: NonNullable<ScopeLeafPosition> = {
       leafOrdinal: bytes[0]! & 31,
       phase: wirePhase === 0 ? 'compact' : wirePhase === 1 ? 'selection' : 'witness',

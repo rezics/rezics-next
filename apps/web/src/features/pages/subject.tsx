@@ -1,3 +1,4 @@
+import { selectedStreamDocument, type SubjectStreams } from './subject-streams';
 import { mangaObservedOrigin } from '../catalogue/manga-public-visit';
 import { SubjectArtworkSession } from '../catalogue/subject-artwork/session';
 import { supportsReleasedWorkNames } from '../catalogue/work-names/model';
@@ -61,7 +62,7 @@ import {
 import { AlbumCurrentVisitReturn } from '../catalogue/album-current-visit';
 import { SubjectTermsEntry } from '../catalogue/subject-terms-entry';
 import { PublicationEditorEntry } from '../catalogue/publication-editor-entry';
-import type { SubjectRead, KernelClient } from '@rezics/client';
+import type { SubjectRead, SubjectPageResponse, KernelClient } from '@rezics/client';
 import { assertSubjectPageReadActive, type SubjectPageReadLifetime } from './subject-page-read-lifetime';
 import type { Release, ReleasedRelationDirectionResult } from '@rezics/definitions';
 import {
@@ -155,6 +156,7 @@ export type SubjectPageData = {
   /** BFF cache identity of this reading; never native read authority. */
   requestedReader?: string | null | undefined;
   continuation?: PageContinuation | undefined;
+  streams?: SubjectStreams | undefined;
   community?: SubjectCommunity;
   profile: string;
   template: { scope: 'base' | 'generic' | 'route' | 'type'; key: string | null };
@@ -170,18 +172,9 @@ export type SubjectPageData = {
     directions?: ReleasedRelationDirectionResult[];
   };
   /** Caller-bound native action state; page responses containing it are private and no-store. */
-  viewer?: {
-    state: 'anonymous' | 'account';
-    account?: string;
-    context: string;
-    actions: { statementPropose: 'allowed' | 'denied' | 'unavailable' };
-  };
+  viewer?: SubjectPageResponse['viewer'];
   /** Native Access envelope for the selected subject; private and no-store with viewer. */
-  actions?:
-    | { status: 'ready'; viewerActions: { action: string; operations: string[] }[] }
-    | { status: 'withheld' }
-    | { status: 'unavailable' }
-    | { status: 'denied' };
+  actions?: SubjectPageResponse['actions'];
   /** Optional current Terms operation advice, independent of public names and subject-level actions. */
   termsAuthority?: import('../catalogue/subject-terms').TermsPageAuthority;
   reads: Record<string, { status: number; body: unknown; retryAt?: number; headers?: Record<string, string> }>;
@@ -301,6 +294,7 @@ export async function loadSubjectPage(
   options: {
     realm?: string | undefined;
     continuation?: PageContinuation | undefined;
+    stream?: string | undefined;
     authorization?: string | undefined;
     signal?: SubjectPageReadLifetime | undefined;
   } = {},
@@ -311,6 +305,7 @@ export async function loadSubjectPage(
     {
       target: { subject: id, ...(view ? { view } : {}), ...(options.realm ? { realm: options.realm } : {}) },
       ...(options.continuation ? { continuation: options.continuation } : {}),
+      ...(options.stream ? { stream: options.stream } : {}),
       languages: requestLanguages(locale),
     },
     {
@@ -1087,10 +1082,10 @@ export function SubjectPage({
               realm={page.context?.population.kind === 'realm' ? page.context.population.id : undefined}
               definition={page.catalogue?.digest}
               via={storyArcPublicOrigin({
-                currentHref,
+                ...(currentHref ? { currentHref } : {}),
                 id: read.subject.id,
                 locale,
-                realm: page.context?.population.kind === 'realm' ? page.context.population.id : undefined,
+                ...(page.context?.population.kind === 'realm' ? { realm: page.context.population.id } : {}),
               })}
             />
           )}
@@ -1155,7 +1150,7 @@ export function SubjectPage({
               label={subjectPageTitle(page, locale)}
               locale={locale}
               context={page.context?.id ?? read.subject.context}
-              realm={realm}
+              {...(realm ? { realm } : {})}
               type={read.subject.type}
               definition={read.subject.release}
               {...(currentHref ? { source: currentHref } : {})}
@@ -1245,7 +1240,8 @@ export function SubjectPage({
       </Empty>
     ) : null;
   const header = placesSlot(page.document.content, 'header');
-  const composition = overview && !framed ? splitHeaderDocument(page.document) : { remaining: page.document };
+  const renderedDocument = selectedStreamDocument(page.document, page.streams);
+  const composition = overview && !framed ? splitHeaderDocument(renderedDocument) : { remaining: renderedDocument };
   const afterHeader = overview ? (
     <>
       {bar}
@@ -1303,7 +1299,7 @@ export function SubjectPage({
           reads={page.reads}
           context={page.context}
           realm={realm}
-          {...(page.viewer ? { viewer: page.viewer } : {})}
+          {...(page.viewer && 'state' in page.viewer ? { viewer: page.viewer } : {})}
           {...(page.catalogue?.digest ? { releaseDigest: page.catalogue.digest } : {})}
           cacheReader={page.requestedReader}
           continuation={page.continuation}
@@ -1437,7 +1433,7 @@ export function SubjectPage({
                 {...(workRelationsHref ? { relationsHref: workRelationsHref } : {})}
                 readerSpoiler={reader?.spoilerLevel ?? 0}
                 link={ContextLink}
-                onContinue={onWorkContinue}
+                {...(onWorkContinue ? { onContinue: onWorkContinue } : {})}
               />
             ) : null}
             {mangaSubject && (view === 'overview' || view === 'contents' || view === 'editions') ? (
@@ -1517,7 +1513,7 @@ export function SubjectPage({
                     className={`${linkClass} ${linkColor} inline-flex min-h-11 items-center underline underline-offset-4`}
                     href={gameRestart.href}
                   >
-                    {m.game_visit_restart({}, { locale: locale as never })}
+                    {m.game_visit_return({}, { locale: locale as never })}
                   </a>
                 ) : null}
               </div>

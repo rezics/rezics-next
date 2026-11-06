@@ -12,6 +12,7 @@ import type { RealmSubjectSource } from '../content/realm-subject-source.ts';
 import type { RealmSubjectCapabilities } from './realm-scope.ts';
 import type { LeafOptions } from '../semantic/scope-leaf-evidence.ts';
 import type { ScopeBasis } from './scope-source.ts';
+import { type SavedCatalogueMembers } from './service-saved-collection.ts';
 import type { SubjectSource } from './source.ts';
 import type { SubjectCanonicalNames } from '../semantic/subject-source-key-pages.ts';
 import { type DefaultPublicFilterRuntime } from './public-runtime.ts';
@@ -59,6 +60,17 @@ export type PublicSearchReadContext = Readonly<{
     /** The verified request context used only by the service-bound native Scope. */
     scope?: LeafOptions;
     realmAuthority?: RealmRatingQuery['authority'];
+    /** Internal saved Collection read: retain its admitted meaning and bind continuation to its native identity. */
+    savedCollection?: Readonly<{
+        id: string;
+        revision: number;
+        ruleRevision: number;
+        sourceGeneration: string;
+        reader: Readonly<{
+            minimumAuthnEpoch: string;
+            operator: string;
+        }>;
+    }>;
     complete: (page: PublicSearchPage) => Promise<void>;
 }>;
 type Result = {
@@ -110,6 +122,7 @@ export declare function createSearchService({ pool, client, prefix, source, rati
         next: string | null;
         as_of: string;
     }>;
+    savedCatalogueMembers: SavedCatalogueMembers;
     search(principal: 'anonymous' | `account:${string}`, request: SearchRequest, now?: number, active?: {
         digest: string;
         head?: number;

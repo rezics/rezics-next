@@ -2,7 +2,7 @@ export { ScopeWork, scopeAllowance, scopeWorkAxes, zeroScopeWork } from './scope
 import { ScopeWork } from './scope-work.ts';
 import type { Pool } from 'pg';
 import { readOwnerFilterCandidate, readOwnerFilterCandidateClosure } from '../library/owner-filter-plan.ts';
-import type { WorkAllowance, WorkDimensions, WorkReceipt } from '../library/collection-source.ts';
+import type { WorkAllowance, WorkDimensions, WorkReceipt } from '../library/contract/work-dimensions.ts';
 import { type LeafOptions, type LeafWork } from '../semantic/scope-leaf-evidence.ts';
 import type { IdentityScopeWork } from '../semantic/identity-scope-types.ts';
 import type { PublicFilterCost } from '../semantic/public-filter-source-contract.ts';

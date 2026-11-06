@@ -9,6 +9,8 @@ import { zeroScopeWork } from '../../src/search/scope-work.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import type { WorkAllowance } from '../../src/library/contract/work-dimensions.ts';
 
+const record = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
+
 const first = '018f0000-0000-7000-8000-00a000000001';
 const second = '018f0000-0000-7000-8000-00a000000002';
 const third = '018f0000-0000-7000-8000-00a000000003';
@@ -71,8 +73,7 @@ function catalogueClient(options: {
       if (path.endsWith('/_settings')) {
         return { status: 200, body: { [index]: { settings: { index: { uuid } } } } as T };
       }
-      const after =
-        record(_body) && record(_body.params) && Array.isArray(_body.params.after) ? _body.params.after[0] : undefined;
+      const after = (_body as { params?: { after?: readonly unknown[] } } | undefined)?.params?.after?.[0];
       const selected = typeof after === 'string' ? ids.filter((id) => id > after) : ids;
       return {
         status: 200,

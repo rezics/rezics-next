@@ -217,7 +217,12 @@ function CollectionContent({ initialPage }: { initialPage?: CollectionPageResult
     navigate({
       to: '/collections/$id',
       params: { id },
-      search: (previous) => ({ ...previous, cursor }),
+      search: (previous) => {
+        const next = { ...previous };
+        if (cursor === undefined) delete next.cursor;
+        else next.cursor = cursor;
+        return next;
+      },
     });
   return (
     <CollectionContentLifetime

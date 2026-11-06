@@ -154,7 +154,12 @@ export function CreatorEditionsOriginView({ page, cursor }: { page: CreatorEditi
       if (sameAddress) {
         preserveOriginOnLeave.current = true;
         event.preventDefault();
-        void router.navigate({ href: addCreatorEditionOriginToken(anchor.getAttribute('href') ?? href, originToken) });
+        void router.navigate({
+          href: addCreatorEditionOriginToken(
+            anchor.getAttribute('href') ?? destination.pathname + destination.search,
+            originToken,
+          ),
+        });
         return;
       }
       // A new page or a changed cursor is a new inventory occurrence. Do not carry
@@ -186,12 +191,12 @@ export function CreatorEditionsOriginView({ page, cursor }: { page: CreatorEditi
       {origin ? (
         <CreatorEditionOriginPanel
           resolution={origin}
-          occurrence={returnedEdition}
+          {...(returnedEdition ? { occurrence: returnedEdition } : {})}
           onRestart={restartInventory}
-          editionId={origin.kind === 'current' ? origin.receipt.editionId : undefined}
+          {...(origin.kind === 'current' ? { editionId: origin.receipt.editionId } : {})}
         />
       ) : null}
-      <CreatorEditionsView page={page} cursor={cursor} />
+      <CreatorEditionsView page={page} {...(cursor ? { cursor } : {})} />
     </div>
   );
 }

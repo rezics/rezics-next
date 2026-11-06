@@ -68,7 +68,7 @@ export type ShelfRow = {
   conflict: boolean;
   failure: ShelfFailure | null;
   unknownIntent?: ShelfStateIntent;
-  unknownRemove?: ShelfRemoveCommand;
+  unknownRemove?: ShelfRemoveCommand | undefined;
   unknownLabelIntent?: ShelfLabelIntent;
 };
 

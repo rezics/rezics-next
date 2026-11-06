@@ -81,11 +81,11 @@ const access: Access = {
   },
 };
 const search: SearchService = {
+  async savedCatalogueMembers() {
+    throw new Error('Unexpected saved catalogue members call');
+  },
   async releaseGroups() {
     throw new Error('grouped release search is not used by this fixture');
-  },
-  async savedCatalogueMembers() {
-    throw new Error('saved membership is not used by this fixture');
   },
   async search(_principal, _request, _now, _release, context) {
     executions++;

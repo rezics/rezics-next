@@ -1,3 +1,4 @@
+import type { RatingCapabilities } from './contract/capabilities.ts';
 import type { Pool, PoolClient } from 'pg';
 import type { Effect } from '../events/effects.ts';
 export type Queryable = Pick<Pool | PoolClient, 'query'>;
@@ -33,21 +34,21 @@ export type SubjectPriorInput = {
 /** Finish each source snapshot before checking out any subject command connection. */
 export declare function capturePublicFigurePriorInputs(pool: Pool, keys: readonly PendingPopulation[]): Promise<SubjectPriorInput[]>;
 /** Resume retained custom totals through the existing durable epoch/republish work. */
-export declare function resumeRealmRankPublication(pool: Pool): Promise<void>;
+export declare function resumeRealmRankPublication(pool: Pool, capabilities?: RatingCapabilities): Promise<void>;
 /** Internal subject-home command for a captured republish page, also safe to redeliver after an epoch change. */
 export declare function markPublicFigurePriorPage(pool: Pool, input: {
     partition: number;
     subjectIds: readonly string[];
     prior: SubjectPriorInput;
     requiredGeneration: string;
-}): Promise<void>;
+}, capabilities?: RatingCapabilities): Promise<void>;
 /** Exact native erasure obligation; unrelated figure pages never extend this call. */
 export declare function drainErasedFigureTargets(pool: Pool, input: {
     partition: number;
     questionId: string;
     populationId: string;
     subjectIds: readonly string[];
-}): Promise<boolean>;
+}, capabilities?: RatingCapabilities): Promise<boolean>;
 /** Compute consumer readiness from the published count, never from pending votes or shard totals. */
 export declare function publicFigureState(figure: Pick<PublicFigure, 'count'> | null, grain: string, pending: boolean): 'ready' | 'insufficient_data' | 'updating';
 /** Point-read the pending mark, including an unpublished row; no vote or aggregate data is read. */
@@ -72,7 +73,7 @@ export declare function pagePublicFigures(client: Queryable, input: {
     limit: number;
 }): Promise<PublicFigure[]>;
 /** Publish at most one event per pending figure in a serial anchor-partition page. */
-export declare function drainPublicFigures(pool: Pool, partition: number, limit?: number): Promise<number>;
+export declare function drainPublicFigures(pool: Pool, partition: number, limit?: number, capabilities?: RatingCapabilities): Promise<number>;
 /** Drain the aggregate partition's pending figures after the aggregate-applied event commits. */
-export declare function createPublicFigureDrainEffect(pool: Pool): Effect;
+export declare function createPublicFigureDrainEffect(pool: Pool, capabilities?: RatingCapabilities): Effect;
 export {};

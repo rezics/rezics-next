@@ -577,6 +577,17 @@ export function statementItems(
             }
           : {}),
         notes: [],
+        ...(property === WORK_VOICE_PROPERTY && value.subject
+          ? {
+              credit: creditAssertion({
+                subject: value.subject,
+                property,
+                statement: statement.id,
+                assertion: statement,
+                related: qualifierRelated,
+              }),
+            }
+          : {}),
         qualified: qualifiedNotes(statement, qualifierRelated, value.locale),
         gated: spoilerLevel(statement) > value.reader.spoilerLevel,
       },

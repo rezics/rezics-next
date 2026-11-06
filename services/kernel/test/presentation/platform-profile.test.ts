@@ -14,6 +14,7 @@ import { admitFilter, parseFilter, type FilterRelease } from '@rezics/filter';
 import { createPool } from '../../src/database/pool.ts';
 import { activeProfile } from '../../src/presentation/profiles.ts';
 import { platformProfile, setupPresentation } from '../../src/presentation/setup.ts';
+import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 
 const presentation = new URL('../../../../packages/definitions/presentation/', import.meta.url);
 const verticals = readdirSync(presentation, { withFileTypes: true })
@@ -33,14 +34,21 @@ test('the platform profile is valid and gives every bundled type a default page'
   expect(platformProfile().types.map(({ type }) => type)).toEqual([
     'schema:Organization',
     'schema:Person',
+    'schema:Recipe',
     'skos:Concept',
+    'wd:Q20631656',
     'wd:Q95074',
   ]);
   expect(platformProfile().routes.map(({ route }) => route)).toEqual(['/']);
   for (const [type, definition] of Object.entries(bundledRelease.types)) {
     const { scope, key } = resolveTemplate(platformProfile(), { type, bases: definition.bases });
     const typeKey =
-      type === 'schema:Organization' || type === 'schema:Person' || type === 'skos:Concept' || type === 'wd:Q95074'
+      type === 'schema:Organization' ||
+      type === 'schema:Person' ||
+      type === 'schema:Recipe' ||
+      type === 'wd:Q20631656' ||
+      type === 'skos:Concept' ||
+      type === 'wd:Q95074'
         ? type
         : null;
     const baseKey = definition.bases.find(
@@ -95,6 +103,7 @@ const pool = createPool(url);
 afterAll(() => pool.end());
 
 test('setup activates the platform profile once', async () => {
+  await bootstrapRelease(pool, bundledRelease);
   const digest = profileDigest(platformProfile());
   expect(await setupPresentation(pool)).toBe(digest);
   expect(await setupPresentation(pool)).toBe(digest);

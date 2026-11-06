@@ -115,7 +115,7 @@ export async function sendModerationAppealResolution(
     if (result.error)
       throw Object.assign(new Error('Appeal resolution failed'), {
         status: result.status,
-        code: result.error.value.code,
+        code: 'code' in result.error.value ? result.error.value.code : undefined,
       });
     // A receipt for a different appeal cannot acknowledge this retained command.
     if (result.data.id !== data.id) throw new Error('Appeal resolution acknowledgement does not match');

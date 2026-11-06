@@ -1,5 +1,5 @@
 import { type Bound } from '@rezics/bounds';
-import type { WorkDimensions } from './collection-source.ts';
+import type { WorkDimensions } from './contract/work-dimensions.ts';
 type Query = Readonly<{
     sql: string;
     params: readonly string[];

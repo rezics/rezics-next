@@ -1,6 +1,6 @@
 import type { AccessContext, Actor, PrepareReadDecisionsInput, ReadDecisions } from '../request/access.ts';
 import type { KindAudienceAccess } from './kind-audience.ts';
-import type { WorkDimensions } from '../library/collection-source.ts';
+import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
 import { type AuthoritativeTime } from '../command/command.ts';
 import { type AccessWork, type AccessWorkAccounting } from './work.ts';
 export type KindOriginalIdentity = Readonly<{

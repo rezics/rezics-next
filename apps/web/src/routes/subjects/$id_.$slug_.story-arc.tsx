@@ -87,7 +87,7 @@ function StoryArcRoute() {
       definition={definition}
       via={via}
       address={JSON.stringify([definition, via])}
-      globalChoiceHref={storyArcGlobalChoiceHref({ id, slug, locale, via })}
+      globalChoiceHref={storyArcGlobalChoiceHref({ id, slug, locale, ...(via ? { via } : {}) })}
       {...(classificationHandoff ? { classificationHandoffToken: classificationHandoff } : {})}
     />
   );

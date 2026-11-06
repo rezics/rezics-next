@@ -1,56 +1,10 @@
 import type { Pool, PoolClient } from 'pg';
-import type { WorkDimensions } from '../library/collection-source.ts';
+import type { AccessWorkDimensions as WorkDimensions } from './contract/index.ts';
 import type { HistoryRegistry } from '../history/registry.ts';
 import type { WorkClient } from '../work/client.ts';
 import { NativeCollectionWork } from '../library/collection-source-work.ts';
-export declare const IDENTITY_ORIGINAL_DEADLINE_MS = 5000;
-export declare const ORIGINAL_AXES: readonly ["candidateKeys", "nativeRows", "identityMetadataRows", "nativePoints", "witnessKeys", "statements", "bytes", "emptySeeks"];
-/** A local SQL declaration. An absent child declaration is represented separately, never by zero. */
-export declare function originalControlWork(rows: number, points: number, statements: number, bytes: number, emptySeeks?: number): WorkDimensions;
-export declare function originalWorkVector(work: WorkDimensions): readonly number[];
-export declare function sumOriginalControl(...parts: readonly WorkDimensions[]): WorkDimensions;
-export declare const ORIGINAL_NATIVE_CONTROL: WorkDimensions;
-export declare const HISTORY_ORIGINAL_CONTROL: Readonly<{
-    discovery: WorkDimensions;
-    native: WorkDimensions;
-    registry: WorkDimensions;
-    select: WorkDimensions;
-    barrier: WorkDimensions;
-    previous: WorkDimensions;
-    insert: WorkDimensions;
-    lease: WorkDimensions;
-}>;
-export declare const HISTORY_ORIGINAL_SELECTION: WorkDimensions;
-export declare const HISTORY_ORIGINAL_VALIDATION: WorkDimensions;
-export declare const HISTORY_ORIGINAL_SETTLEMENT: WorkDimensions;
-/** Closed local part of advanceSharedHistory, ending BEFORE any minimizer/readiness/receiving
- * child. Alternative local branches are reserved inclusively. The eight-row page still selects
- * only its first artifact. History seal's family trigger has its own fixed nine-family bound. */
-export declare const HISTORY_SELECTED_LOCAL_CONTROL: Readonly<{
-    transaction: WorkDimensions;
-    job: WorkDimensions;
-    dispatchPosition: WorkDimensions;
-    barrier: WorkDimensions;
-    partition: WorkDimensions;
-    seal: WorkDimensions;
-    progressInsert: WorkDimensions;
-    progressLock: WorkDimensions;
-    epochReset: WorkDimensions;
-    gapReset: WorkDimensions;
-    page: WorkDimensions;
-    applicable: WorkDimensions;
-    classify: WorkDimensions;
-    unavailableHome: WorkDimensions;
-    emptyProgress: WorkDimensions;
-    emptySeal: WorkDimensions;
-    nextHome: WorkDimensions;
-    phaseChange: WorkDimensions;
-    verifyHome: WorkDimensions;
-    verifyTransition: WorkDimensions;
-    authProof: WorkDimensions;
-    pending: WorkDimensions;
-}>;
-export declare const HISTORY_ORIGINAL_LOCAL_ALLOWANCE: WorkDimensions;
+export { IDENTITY_ORIGINAL_DEADLINE_MS, ORIGINAL_WORK_AXES as ORIGINAL_AXES } from './contract/index.ts';
+export { ADDITIONAL_ORIGINAL_TRANSFER_CONTROL, HISTORY_ORIGINAL_CONTROL, HISTORY_ORIGINAL_LOCAL_ALLOWANCE, HISTORY_ORIGINAL_SELECTION, HISTORY_ORIGINAL_SETTLEMENT, HISTORY_ORIGINAL_TRANSFER_CONTROL, HISTORY_ORIGINAL_VALIDATION, HISTORY_SELECTED_LOCAL_CONTROL, ORIGINAL_NATIVE_CONTROL, originalControlWork, originalWorkVector, sumOriginalControl, } from './core/index.ts';
 export declare const IDENTITY_ORIGINAL_SOURCE_TRANSFER_MISSING = "identity-history-original-source-transfer-unavailable";
 export declare class IdentityOriginalUnavailable extends Error {
     readonly gap: string;
@@ -105,21 +59,6 @@ export declare function withSelectedHistoryOriginal<T>(deps: HistoryOriginalDepe
 /** A separate committed debit precedes affected dispatch. The following body may roll back,
  * throw, or fail to dispatch; none of those paths restore this original's capacity. */
 export declare function consumeSelectedHistoryOriginal(deps: HistoryOriginalDependencies, token: IdentityOriginalTransfer, jobId: string): Promise<void>;
-/** The additive controls are separate from every retained local component. All branches
- * are inclusive: even a refused/failed callback retains its entire prepaid reservation.
- * Reads use full original/job keys; the only fanout is the four fixed vector partitions.
- * Zero candidate/identity-metadata/witness axes mean these SQL bodies have none of those
- * operations; they are not conversions from the legacy five-axis child declarations. */
-export declare const HISTORY_ORIGINAL_TRANSFER_CONTROL: Readonly<{
-    discoveryControls: WorkDimensions;
-    allocationInsert: WorkDimensions;
-    entryBarrier: WorkDimensions;
-    progress: WorkDimensions;
-    settlementAllocation: WorkDimensions;
-    grant: WorkDimensions;
-    finish: WorkDimensions;
-}>;
-export declare const ADDITIONAL_ORIGINAL_TRANSFER_CONTROL: WorkDimensions;
 /** Owner-installed body declarations, not grants. Accounts reads these ONLY from the
  * actual Source and Library modules before admission. Public call sites supply no price.
  * The source declaration includes all reached History, inventory, receiving, H/G/A,
@@ -173,4 +112,3 @@ export declare function withSelectedHistoryOriginalChild<T>(deps: HistoryOrigina
  * This wrapper deliberately creates no currentCommand/currentCommandResources entry.
  * Failure ROLLBACK remains possible after expiry and is prepaid by the local envelope. */
 export declare function guardSelectedHistoryOriginalTransaction(deps: HistoryOriginalDependencies, token: IdentityOriginalTransfer, jobId: string, client: PoolClient): PoolClient;
-export {};

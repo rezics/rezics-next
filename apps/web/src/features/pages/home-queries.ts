@@ -143,7 +143,9 @@ export const readHomeKinds = createServerFn({ method: 'GET' })
       data.cursor !== undefined
         ? await readDiscoveryKinds(request, data.cursor, send)
         : await readDiscovery(request, send).then(({ discovery }) =>
-            discovery.status === 'ready' ? { status: 'ready' as const, kinds: discovery.page.kinds } : discovery,
+            discovery.status === 'ready'
+              ? { status: 'ready' as const, kinds: discovery.page.kinds, asOf: discovery.page.as_of }
+              : discovery,
           );
     if (result.status === 'ready') {
       try {

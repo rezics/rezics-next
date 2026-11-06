@@ -2,7 +2,7 @@ import type { Pool } from 'pg';
 import type { WorkContext } from '../work/registry.ts';
 import { type CommandTransaction } from '../command/command.ts';
 import { type LibraryScopeEffectSeal } from '../library/identity-scope-effects.ts';
-import type { WorkDimensions } from '../library/collection-source.ts';
+import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
 import type * as S from './identity-scope-types.ts';
 import type { IdentityNativeReceipt } from './identity-epoch-contract.ts';
 import type { IdentityPrearmTicketData } from './identity-epoch-prearm-contract.ts';

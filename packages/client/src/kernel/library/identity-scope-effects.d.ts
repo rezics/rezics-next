@@ -4,7 +4,7 @@ import { NativeCollectionWork } from './collection-source-work.ts';
 import type { IdentityJobRef, IdentityFrontier, IdentityNativeReceipt } from '../semantic/identity-epoch-contract.ts';
 import type { IdentityReceivingSelection, IdentityReceivingDisposition } from '../semantic/identity-receiving-effects-types.ts';
 import type { NativeSourceIdentity } from './native-source-custody.ts';
-import type { WorkAllowance, WorkReceipt } from './collection-source.ts';
+import type { WorkAllowance, WorkReceipt } from './contract/work-dimensions.ts';
 export type LibraryScopeEffectsKey = Readonly<{
     job: IdentityJobRef;
     sourceIdentity: NativeSourceIdentity;

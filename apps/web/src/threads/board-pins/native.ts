@@ -82,7 +82,7 @@ export async function changeBoardPinRequest(
   try {
     result = await resource.post(
       { pinned: action === 'pin' },
-      { headers: { authorization, 'idempotency-key': JSON.stringify(command.key) } },
+      { headers: { 'idempotency-key': JSON.stringify(command.key) }, fetch: { headers: { authorization } } },
     );
   } catch (error) {
     if (isPlatformClosedError(error)) return { state: 'unavailable' };

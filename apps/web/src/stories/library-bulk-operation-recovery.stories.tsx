@@ -64,6 +64,7 @@ function operation(phase: BulkOperation['phase'], counts: BulkOperation['counts'
     state: null,
     collectionId: null,
     selectionKind: 'explicit',
+    selectionSource: null,
     phase,
     selectionComplete: true,
     occurrencesComplete: true,

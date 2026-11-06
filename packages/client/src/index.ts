@@ -71,6 +71,18 @@ export type EntryAnnotationCorrectionCancelResult =
   AnnotationCorrectionRoute[':reviewId']['cancel']['post']['response'][200];
 
 type NativePostHistoryPage = Routes['posts'][':id']['revisions']['get']['response'][200]['page'];
+export type {
+  BangumiChoice,
+  BangumiOutcome,
+  BangumiReview,
+  BangumiScoreChoice,
+  BangumiScoreCurrentVote,
+  BangumiScoreOutcome,
+  BangumiScoreReview,
+  BangumiScoreSelection,
+} from './kernel/library/list-import-bangumi-model.ts';
+export type { BangumiTag, BangumiTagPage } from './kernel/library/list-import-bangumi-label-model.ts';
+
 type Routes = KernelType['~Routes']['v1'];
 export type RealmClaimReviewOperation = Routes['realms'][':realmId']['claimRequests']['get'];
 export type RealmClaimReviewQuery = RealmClaimReviewOperation['query'];
@@ -128,6 +140,8 @@ type ClientApp = Elysia<
 
 /** Each group is derived from the complete mounted kernel, including routes contributed by other modules. */
 type GeneratedKernelClient = ReturnType<typeof treaty<ClientApp>>['v1'];
+/** Response declared by the mounted POST /v1/pages/$read route. */
+export type SubjectPageResponse = Routes['pages']['$read']['post']['response'][200];
 type ReadingPageCall = ReturnType<ReturnType<GeneratedKernelClient['threads']>['reading-page']['get']>;
 /** Response declared by the mounted thread reading route. */
 export type ReadingPageResponse = NonNullable<Awaited<ReadingPageCall>['data']>;
@@ -297,12 +311,12 @@ export type {
   ReviewedPersonOperation,
 } from './reviewed-person-identity.ts';
 
-export type {
-  SubjectIdentityOperation,
-  SubjectIdentityOperationAdmission,
-  SubjectIdentityOperationRead,
-  SubjectIdentityOperationRoutes,
-} from './kernel/semantic/http/identity-operations.d.ts';
+export type SubjectIdentityOperationRoutes = ReturnType<
+  typeof subjectRoutes
+>['~Routes']['v1']['subjectIdentityOperations'];
+export type SubjectIdentityOperationRead = SubjectIdentityOperationRoutes[':id']['get']['response'][200];
+export type SubjectIdentityOperation = SubjectIdentityOperationRead['operation'];
+export type SubjectIdentityOperationAdmission = SubjectRoutes['$merge']['post']['response'][202];
 
 export type OwnVotesPage = Routes['me']['rating-votes']['get']['response'][200];
 export type OwnVoteEntry = OwnVotesPage['votes'][number];

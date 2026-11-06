@@ -119,9 +119,9 @@ export function clientDeclarationCacheDirectory(repositoryRoot = ROOT, kernelDir
 
 function declarationPath(sourcePath: string, specifier: string): string {
   const path = resolve(dirname(sourcePath), specifier);
+  if (path.endsWith('.d.ts')) return path;
   if (path.endsWith('.ts')) return `${path.slice(0, -3)}.d.ts`;
   if (path.endsWith('.js')) return `${path.slice(0, -3)}.d.ts`;
-  if (path.endsWith('.d.ts')) return path;
   return `${path}.d.ts`;
 }
 
@@ -182,8 +182,10 @@ export function clientDeclarations(
   if (existsSync(clientIndex)) {
     // Public type exports can be independent of the mounted route closure.
     for (const specifier of declarationSpecifiers(readFileSync(clientIndex, 'utf8'))) {
-      if (specifier.startsWith('./kernel/'))
-        pending.push(`${specifier.slice('./kernel/'.length).replace(/\.ts$/, '')}.d.ts`);
+      if (specifier.startsWith('./kernel/')) {
+        const target = declarationPath(resolve(sourceRoot, 'index.d.ts'), specifier.slice('./kernel/'.length));
+        pending.push(relative(sourceRoot, target).split(sep).join('/'));
+      }
     }
   }
   const declarations = new Map<string, string>();
@@ -214,7 +216,8 @@ export function committedDeclarations(): Map<string, string> {
 
 if (import.meta.main) {
   const declarations = clientDeclarations();
-  console.log(`Kernel client declaration closure: ${declarations.size} members`);
+  const bytes = [...declarations.values()].reduce((total, content) => total + Buffer.byteLength(content), 0);
+  console.log(`Kernel client declaration closure: ${declarations.size} members, ${bytes} bytes`);
   rmSync(CLIENT_DECLARATIONS, { recursive: true, force: true });
   mkdirSync(CLIENT_DECLARATIONS, { recursive: true });
   for (const [key, content] of declarations) {

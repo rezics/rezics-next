@@ -62,6 +62,12 @@ function port(): BangumiImportPort {
     async admitSource() {
       return { kind: 'unavailable' as const };
     },
+    async inspect() {
+      return {
+        entry: { status: 'absent' as const },
+        vote: null,
+      };
+    },
     async cancel() {
       return { kind: 'unavailable' as const };
     },
@@ -98,7 +104,10 @@ function port(): BangumiImportPort {
         assignments: [{ id: assignmentId, labelId, name: 'role-playing', revision: 3 }],
       };
     },
-  };
+    async inspect() {
+      return { entry: { status: 'unavailable' as const, reason: 'not_read_in_label_story' }, vote: null };
+    },
+  } satisfies BangumiImportPort;
   return fake;
 }
 

@@ -1,13 +1,13 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import { MyRealmsPageView } from '../community/my-realms-page';
-import { formatMyRealmsInventory, type MyRealmsNativePage } from '../community/my-realms-native';
+import { formatMyRealmsInventory } from '../community/my-realms-native';
 import recording from '../kernel/recorded/my-realms.json';
 import { m } from '../paraglide/messages.js';
 
 // These stories use only installed native inventory; they do not establish expanded native admission.
-const inventory: MyRealmsNativePage = {
-  items: recording.items.map(({ realmId, name }) => ({ realmId, name, role: 'member' })),
+const inventory = {
+  items: recording.items.map(({ realmId, name }) => ({ realmId, name })),
   next: null,
 };
 const meta = {

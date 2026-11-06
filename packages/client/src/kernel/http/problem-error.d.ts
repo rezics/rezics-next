@@ -310,6 +310,11 @@ export declare const PROBLEMS: {
         readonly title: 'Partition Unavailable';
         readonly retryable: true;
     };
+    readonly atomic_guard_unavailable: {
+        readonly status: 503;
+        readonly title: 'Atomic Guard Unavailable';
+        readonly retryable: true;
+    };
     readonly transaction_retry_exhausted: {
         readonly status: 503;
         readonly title: 'Transaction Retry Exhausted';

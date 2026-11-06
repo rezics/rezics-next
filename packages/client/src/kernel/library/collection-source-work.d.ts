@@ -1,5 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
-import type { WorkAllowance, WorkDimensions, WorkReceipt } from './collection-source.ts';
+import type { WorkAllowance, WorkDimensions, WorkReceipt } from './contract/work-dimensions.ts';
 /** Constrain dispatch on the SAME Accounts-owned object without closing its counters.
  * This adds a restriction, never original authority or a replacement allocation. */
 export declare function bindNativeCollectionWorkLifetime(work: NativeCollectionWork, assertLive: () => void): void;

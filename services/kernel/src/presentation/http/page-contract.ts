@@ -40,6 +40,24 @@ export const PageResponseSchema = t.Object(
       ),
     ),
     continuation: t.Optional(t.Object({ node: t.String(), cursor: t.String() }, closed)),
+    streams: t.Optional(
+      t.Object(
+        {
+          selected: t.Optional(t.String()),
+          entries: t.Array(
+            t.Object(
+              {
+                node: t.String(),
+                property: t.String(),
+                direction: t.Union([t.Literal('forward'), t.Literal('inverse')]),
+              },
+              closed,
+            ),
+          ),
+        },
+        closed,
+      ),
+    ),
     profile: t.String(),
     template: t.Object(
       {

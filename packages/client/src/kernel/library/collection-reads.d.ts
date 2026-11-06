@@ -1,8 +1,7 @@
 import { type AccessWorkAccounting } from '../access/work.ts';
 import { type BuiltinCollectionView } from './builtin-runtime.ts';
 import { type AuthoritativeTime, type CommandAttempt } from '../command/command.ts';
-import { type Account } from '../access/account-data.ts';
-import { type AccountActor, type Actor } from '../request/access.ts';
+import { type Actor } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { type CollectionPresentation } from './collection-presentation.ts';
 import { type CollectionMetadataHistoryDetail, type CollectionMetadataHistoryPage } from './collection-metadata-history.ts';
@@ -133,8 +132,6 @@ type PagePresentation<Page, Result = Page> = {
     deadline: number;
     present(page: Page): Promise<Result>;
 };
-/** Live account authority for a private Collection. A token cached before suspension is not enough. */
-export declare function grantCapable(account: Pick<Account, 'route' | 'accountId' | 'kind' | 'state' | 'fenced' | 'minimumAuthnEpoch'>, viewer: AccountActor): boolean;
 export declare function createCollectionReads(dependencies: PreviewPreparationDependencies & {
     tokens: KeyRing;
     search?: SearchService;
@@ -177,13 +174,13 @@ export declare function createCollectionReads(dependencies: PreviewPreparationDe
         members: MemberView[];
         next: string | null;
     }>;
-    readMembers: (viewer: Actor, collectionId: string, options?: CollectionMemberQuery, deadline?: number) => Promise<{
-        members: {
+    readMembers: (viewer: Actor, collectionId: string, options?: CollectionMemberQuery, deadline?: number) => Promise<Readonly<{
+        members: readonly Readonly<{
             kind: 'dynamic';
             subjectId: string;
-        }[];
-        next: string | null;
-    } | {
+        }>[];
+        next: import("../search/service.ts").PublicSearchPage['next'];
+    }> | {
         preparing: true;
     } | {
         members: MemberView[];

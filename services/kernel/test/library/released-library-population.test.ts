@@ -356,7 +356,8 @@ native(
 native(
   'Bundled Book game Recipe and record choices are actual release bindings without a universal active state or synthetic pin',
   async (f) => {
-    for (const type of ['schema:Book', 'schema:VideoGame', 'schema:Recipe', 'schema:MusicAlbum']) {
+    // MusicAlbum is a work without a Library profile binding (its semantic definition has no library entry).
+    for (const type of ['schema:Book', 'schema:VideoGame', 'schema:Recipe']) {
       const accepted = f.profile(type);
       expect(accepted.profile.id).toBe(accepted.pin.profileId);
       expect(accepted.pin.releaseDigest).toBe(f.base.release.digest);

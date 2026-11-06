@@ -5,7 +5,7 @@ import { type CommandTransaction, type AuthoritativeTime } from '../command/comm
 import { type Access, type Actor } from '../request/access.ts';
 import type { CanonicalRawKey } from './canonical-source-store.ts';
 import type { NativeSourceIdentity } from './native-source-custody.ts';
-import type { WorkAllowance, WorkDimensions, WorkReceipt } from './collection-source.ts';
+import type { WorkAllowance, WorkDimensions, WorkReceipt } from './contract/work-dimensions.ts';
 import { NativeCollectionWork } from './collection-source-work.ts';
 import type { ListingStamp } from './listing-freshness-contract.ts';
 import type { NativeOrdinalKey } from './collection-source-order.ts';
@@ -40,6 +40,7 @@ type Header = Ref & {
     stateId: string | null;
     ruleRevision?: string | null;
     ruleReleaseDigest?: string | null;
+    ruleSource?: 'owner' | 'catalogue' | null;
     ruleReady?: boolean;
 };
 /** Private observation only. Possession grants no source or subject access. */
@@ -107,6 +108,7 @@ export declare function readNativeCollectionWorkingMetadata(pool: Pool, ref: Ref
         stateId: string | null;
         ruleRevision?: string | null;
         ruleReleaseDigest?: string | null;
+        ruleSource?: 'owner' | 'catalogue' | null;
         ruleReady?: boolean;
     } & {
         incarnation: string;
@@ -138,6 +140,7 @@ export declare function readNativeCollectionMetadata(pool: Pool, ref: Ref, optio
         stateId: string | null;
         ruleRevision?: string | null;
         ruleReleaseDigest?: string | null;
+        ruleSource?: 'owner' | 'catalogue' | null;
         ruleReady?: boolean;
     } & {
         incarnation: string;
@@ -167,6 +170,7 @@ export declare function readNativeCollectionMetadataWithWork(pool: Pool, ref: Re
         stateId: string | null;
         ruleRevision?: string | null;
         ruleReleaseDigest?: string | null;
+        ruleSource?: 'owner' | 'catalogue' | null;
         ruleReady?: boolean;
     } & {
         incarnation: string;

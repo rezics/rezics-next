@@ -106,7 +106,7 @@ test('cyclic and high-degree returned windows stay bounded without expanding the
       {
         label: property,
         forwardLabel: property,
-        group: 'derivation',
+        group: 'derivation' as const,
         symmetric: false,
       },
     ]),

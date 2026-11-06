@@ -89,6 +89,7 @@ export type SessionSqlPlan<I, R> = Readonly<{
 }>;
 
 export const SESSION_LIMITS = Object.freeze({ page: 100, ownerPage: 50, measures: 8, unitWrite: 100, units: 20_000 });
+// Canonical routable placeholder for subject-routed source plans.
 const uuid = 'ffffffff-ffff-8fff-bfff-ffffffffffff';
 const timestamp = '\0'.repeat(64);
 // PostgreSQL unconstrained numeric: 131072 digits before and 16383 after the

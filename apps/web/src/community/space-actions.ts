@@ -5,7 +5,7 @@ import { validateRealmClaimStatusRead, type RealmClaimStatusInput } from './real
 import { readRealmClaimStatus, type RealmClaimStatusEnv } from './realm-claim-status-native';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
-import { kernelClient, requestLocale } from '../kernel/client';
+import { acceptLanguage, kernelClient, requestLocale } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import type { ReadCredentialMode } from '../kernel/credential';
 import * as v from 'valibot';
@@ -515,7 +515,7 @@ export const readRealmRulesAuthoring = createServerFn({ method: 'GET' })
       input,
     ),
   )
-  .handler(async ({ data, signal }) => {
+  .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();
     await prepareSession(request, env as Partial<SessionEnv>);
@@ -533,7 +533,7 @@ export const readRealmRulesAuthoring = createServerFn({ method: 'GET' })
         headers,
         cache: 'no-store',
         redirect: 'manual',
-        signal: signal ? AbortSignal.any([signal, request.signal]) : request.signal,
+        signal: request.signal,
       });
       if (response.status === 401 || response.status === 403 || response.status === 404)
         return { kind: 'denied' as const };

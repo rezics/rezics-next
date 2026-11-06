@@ -27,7 +27,7 @@ export const KERNEL_CLIENT_OUTPUT = Object.freeze({
   profile: 'kernel-client-v1',
   root: 'packages/client/src/kernel',
   transport: '.temp/check-output-tree/kernel-client-v1.bin',
-  maxMembers: 512,
+  maxMembers: 1024,
   maxBytes: 32 * 1024 * 1024,
   maxMemberBytes: 2 * 1024 * 1024,
   maxDepth: 16,
@@ -530,7 +530,7 @@ export async function withKernelClientOutput(
   }
 }
 
-/** Normal transport inventory stays schema 1: the tree is one real bounded regular file, not 512 generic returns. */
+/** Normal transport inventory stays schema 1: the tree is one real bounded regular file. */
 export type OutputTreeTransportManifest = {
   status: string;
   entries: Array<{ path: string; size: number; sha256: string; kind: 'file' | 'directory' }>;

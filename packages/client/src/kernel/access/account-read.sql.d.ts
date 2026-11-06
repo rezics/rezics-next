@@ -1,4 +1,4 @@
-import type { Query } from "reylo";
+import type { Json, Query } from "reylo";
 export type Params = {
     route: number;
     account_id: string;
@@ -15,7 +15,7 @@ export type Row = {
     operatorAccountId: string | null;
     controllerId: string | null;
     birthDate: string | null;
-    contentPreferences: unknown;
+    contentPreferences: Json;
     suspensionReason: string | null;
     minimumAuthnEpoch: string;
     fenced: boolean;
@@ -24,37 +24,7 @@ export type Row = {
     transactionId: string;
 };
 export type QueryError = import("reylo").QueryError<"postgres">;
-/**
- * ```sql
- * SELECT route, account_id AS "accountId", kind, handle, display_name AS "displayName",
- *        avatar_url AS "avatarUrl", biography, state, operator_account_id AS "operatorAccountId",
- *        controller_id AS "controllerId", to_char(birth_date, 'YYYY-MM-DD') AS "birthDate",
- *        content_preferences AS "contentPreferences", suspension_reason AS "suspensionReason",
- *        minimum_authn_epoch::text AS "minimumAuthnEpoch", authn_fenced AS fenced,
- *        (extract(epoch FROM created_at) * 1000)::double precision AS "createdAt",
- *        rate_tier AS "rateTier", transaction_id AS "transactionId"
- * FROM access.account
- * WHERE route = $1 AND account_id = $2;
- * ```
- *
- * The statement as Reylo sends it to the database, as the module's `sql` export: `:id` is `$1` on Postgres and `?` on MySQL and SQLite, each cast is the dialect's own, and a comment naming the file ends it.
- */
-export declare const sql: "SELECT route, account_id AS \"accountId\", kind, handle, display_name AS \"displayName\",\n       avatar_url AS \"avatarUrl\", biography, state, operator_account_id AS \"operatorAccountId\",\n       controller_id AS \"controllerId\", to_char(birth_date, 'YYYY-MM-DD') AS \"birthDate\",\n       content_preferences AS \"contentPreferences\", suspension_reason AS \"suspensionReason\",\n       minimum_authn_epoch::text AS \"minimumAuthnEpoch\", authn_fenced AS fenced,\n       (extract(epoch FROM created_at) * 1000)::double precision AS \"createdAt\",\n       rate_tier AS \"rateTier\", transaction_id AS \"transactionId\"\nFROM access.account\nWHERE route = $1 AND account_id = $2 /*file='..%2F..%2F..%2F..%2Fservices%2Fkernel%2Fsrc%2Faccess%2Faccount-read.sql'*/;";
-/**
- * ```sql
- * SELECT route, account_id AS "accountId", kind, handle, display_name AS "displayName",
- *        avatar_url AS "avatarUrl", biography, state, operator_account_id AS "operatorAccountId",
- *        controller_id AS "controllerId", to_char(birth_date, 'YYYY-MM-DD') AS "birthDate",
- *        content_preferences AS "contentPreferences", suspension_reason AS "suspensionReason",
- *        minimum_authn_epoch::text AS "minimumAuthnEpoch", authn_fenced AS fenced,
- *        (extract(epoch FROM created_at) * 1000)::double precision AS "createdAt",
- *        rate_tier AS "rateTier", transaction_id AS "transactionId"
- * FROM access.account
- * WHERE route = :route AND account_id = :account_id;
- * ```
- *
- * The `.sql` file's contents, exactly as written, as the module's `raw` export.
- */
+export declare const sql: "SELECT route, account_id AS \"accountId\", kind, handle, display_name AS \"displayName\",\n       avatar_url AS \"avatarUrl\", biography, state, operator_account_id AS \"operatorAccountId\",\n       controller_id AS \"controllerId\", to_char(birth_date, 'YYYY-MM-DD') AS \"birthDate\",\n       content_preferences AS \"contentPreferences\", suspension_reason AS \"suspensionReason\",\n       minimum_authn_epoch::text AS \"minimumAuthnEpoch\", authn_fenced AS fenced,\n       (extract(epoch FROM created_at) * 1000)::double precision AS \"createdAt\",\n       rate_tier AS \"rateTier\", transaction_id AS \"transactionId\"\nFROM access.account\nWHERE route = $1 AND account_id = $2;";
 export declare const raw: "SELECT route, account_id AS \"accountId\", kind, handle, display_name AS \"displayName\",\n       avatar_url AS \"avatarUrl\", biography, state, operator_account_id AS \"operatorAccountId\",\n       controller_id AS \"controllerId\", to_char(birth_date, 'YYYY-MM-DD') AS \"birthDate\",\n       content_preferences AS \"contentPreferences\", suspension_reason AS \"suspensionReason\",\n       minimum_authn_epoch::text AS \"minimumAuthnEpoch\", authn_fenced AS fenced,\n       (extract(epoch FROM created_at) * 1000)::double precision AS \"createdAt\",\n       rate_tier AS \"rateTier\", transaction_id AS \"transactionId\"\nFROM access.account\nWHERE route = :route AND account_id = :account_id;\n";
 export declare const params: readonly ["route", "account_id"];
 /**
@@ -85,7 +55,7 @@ declare const query: Query<{
     operatorAccountId: string | null;
     controllerId: string | null;
     birthDate: string | null;
-    contentPreferences: unknown;
+    contentPreferences: Json;
     suspensionReason: string | null;
     minimumAuthnEpoch: string;
     fenced: boolean;
@@ -93,37 +63,7 @@ declare const query: Query<{
     rateTier: "ordinary" | "trusted" | "service";
     transactionId: string;
 }, "maybeOne", "postgres", QueryError> & {
-    /**
-     * ```sql
-     * SELECT route, account_id AS "accountId", kind, handle, display_name AS "displayName",
-     *        avatar_url AS "avatarUrl", biography, state, operator_account_id AS "operatorAccountId",
-     *        controller_id AS "controllerId", to_char(birth_date, 'YYYY-MM-DD') AS "birthDate",
-     *        content_preferences AS "contentPreferences", suspension_reason AS "suspensionReason",
-     *        minimum_authn_epoch::text AS "minimumAuthnEpoch", authn_fenced AS fenced,
-     *        (extract(epoch FROM created_at) * 1000)::double precision AS "createdAt",
-     *        rate_tier AS "rateTier", transaction_id AS "transactionId"
-     * FROM access.account
-     * WHERE route = $1 AND account_id = $2;
-     * ```
-     *
-     * The statement as Reylo sends it to the database, as the module's `sql` export: `:id` is `$1` on Postgres and `?` on MySQL and SQLite, each cast is the dialect's own, and a comment naming the file ends it.
-     */
     readonly sql: typeof sql;
-    /**
-     * ```sql
-     * SELECT route, account_id AS "accountId", kind, handle, display_name AS "displayName",
-     *        avatar_url AS "avatarUrl", biography, state, operator_account_id AS "operatorAccountId",
-     *        controller_id AS "controllerId", to_char(birth_date, 'YYYY-MM-DD') AS "birthDate",
-     *        content_preferences AS "contentPreferences", suspension_reason AS "suspensionReason",
-     *        minimum_authn_epoch::text AS "minimumAuthnEpoch", authn_fenced AS fenced,
-     *        (extract(epoch FROM created_at) * 1000)::double precision AS "createdAt",
-     *        rate_tier AS "rateTier", transaction_id AS "transactionId"
-     * FROM access.account
-     * WHERE route = :route AND account_id = :account_id;
-     * ```
-     *
-     * The `.sql` file's contents, exactly as written, as the module's `raw` export.
-     */
     readonly raw: typeof raw;
     readonly source: string;
 };

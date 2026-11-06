@@ -61,8 +61,8 @@ export async function prepareShelfTitleStep(
   key: string,
 ): Promise<ShelfTitlePreparationReceipt> {
   const response = await client.libraryShelfTitlePreparation.post(undefined, {
-    headers: { authorization, 'idempotency-key': key },
-    fetch: { cache: 'no-store', redirect: 'manual' },
+    headers: { 'idempotency-key': key },
+    fetch: { headers: { authorization }, cache: 'no-store', redirect: 'manual' },
   });
   if (response.error || !response.data) throw new Error('Library title preparation failed');
   return response.data;
@@ -73,8 +73,8 @@ export async function prepareShelfScoreStep(
   key: string,
 ): Promise<ShelfScorePreparationReceipt> {
   const response = await client.libraryShelfScorePreparation.post(undefined, {
-    headers: { authorization, 'idempotency-key': key },
-    fetch: { cache: 'no-store', redirect: 'manual' },
+    headers: { 'idempotency-key': key },
+    fetch: { headers: { authorization }, cache: 'no-store', redirect: 'manual' },
   });
   if (response.error || !response.data) throw new Error('Library score preparation failed');
   return response.data;

@@ -375,8 +375,7 @@ export function BangumiLabelAdoption({
     current.labels?.confirmed &&
     (current.labels.outcomes.some((outcome) => outcome.status === 'failed') ||
       (current.result?.remaining.length ?? 0) > 0);
-  const staleCommand =
-    current.command && current.command.kind !== 'tags' && current.command.rowRevision !== rowRevision;
+  const staleCommand = current.command?.kind === 'review-labels' && current.command.rowRevision !== rowRevision;
 
   return (
     <details className="rounded-md border p-4" data-bangumi-labels={ordinal}>

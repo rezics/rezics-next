@@ -7,6 +7,7 @@ import {
 import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../../threads/authoring-departure';
 import { useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { releaseDigest } from '@rezics/definitions';
 import { EntityPicker, type EntityPickerSearch } from '@rezics/ui/entity-picker';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
@@ -152,7 +153,7 @@ function StoryArcProfileLive({
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
-  const observedDefinition = query.data?.ok ? query.data.release.digest : undefined;
+  const observedDefinition = query.data?.ok ? releaseDigest(query.data.release) : undefined;
   const selection = JSON.stringify([
     id,
     work,
@@ -426,7 +427,7 @@ function StoryArcProfileLive({
                 transport={transport}
                 release={privateRead.release}
                 {...(work ? { work } : {})}
-                href={address}
+                href={outerAddress ?? signInAddress}
                 onCreated={setCreated}
                 navigation={({ dirty, pending, confirmed }) => (
                   <StoryArcDraftDeparture dirty={!confirmed && dirty} pending={!confirmed && pending} />

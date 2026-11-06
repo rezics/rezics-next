@@ -362,7 +362,10 @@ export function bulkRoutes(
                   cause: error,
                   commandIndex: pending.index,
                 });
-              const payload = await response.json();
+              const payload = (await response.json()) as Extract<
+                BatchWriteResult['results'][number],
+                { problem: unknown }
+              >['problem'] & { redirect?: { from: string; to: string } };
               if (error instanceof SubjectRedirectError) payload.redirect = { from: error.from, to: error.to };
               results[pending.index] = { key, status: response.status, problem: payload };
             }

@@ -73,7 +73,7 @@ function TagDetails({
           href={queryHref(concept.href, conceptQuery)}
           lang={label.lang ?? undefined}
           dir="auto"
-          className={`${buttonVariants({ variant: 'outline', size: 'sm' })} max-w-full whitespace-normal text-start [overflow-wrap:anywhere]`}
+          className={`${buttonVariants({ variant: 'outline', size: 'sm' })} min-h-11 min-w-11 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]`}
         >
           {label.text}
         </a>

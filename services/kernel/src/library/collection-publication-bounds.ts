@@ -38,9 +38,11 @@ export function COLLECTION_PUBLICATION_STEP_CEILING() {
   );
 }
 
-/** Convert only the statically private-only plan into the existing eight-axis execution receipt.
- * `engineRequests` is exactly zero because the admitted plan contains owner leaves only; a public catalogue
- * leaf is refused before scope preparation, so no engine request can be hidden by this adapter.
+/** Convert the step envelope into the existing eight-axis execution receipt.
+ * `engineRequests` is exactly zero here because an owner-source step issues no engine request. A catalogue-source
+ * publication stages through Search's public producer, which reserves its statements, points, lookahead candidates
+ * and bytes from this same compose allowance and reports its own `engineRequests` on the page. The Library never
+ * declares those Search requests as owner work.
  */
 export function collectionPublicationWorkDimensions(bound: PrivatePublicationBound): WorkDimensions {
   return Object.freeze({

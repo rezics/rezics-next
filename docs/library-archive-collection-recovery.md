@@ -28,8 +28,9 @@ The typed client exposes these owner-only methods under `libraryArchiveCollectio
 | `DELETE /:id`                                    | Stop new work and retain already accepted native mutations and their precise outcomes.                         |
 
 Every response is `private, no-store`; cursors are sealed to the owner, upload, page size and review epoch. Admission
-uses the current Collections gate and `collection:read`; review and apply also require the native create/update
-scopes. Each target Subject is resolved through current `subject:read` exposure and must already be canonical.
+uses the current Collections gate and the owner-account action `library_archive:read`; review and apply also require the
+native create/update scopes. Decision: `collection:read` remains the resource-level Collection action, so recovery does
+not share its authority. Each target Subject is resolved through current `subject:read` exposure and must already be canonical.
 Unavailable, retired, inaccessible or unmapped targets stay explicit unresolved items. Display titles never match
 Subjects. Authorization and cancellation are checked again after source work and before final responses.
 

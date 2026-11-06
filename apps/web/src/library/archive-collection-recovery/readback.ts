@@ -39,7 +39,7 @@ export function projectReceivingCollection(
   if (!record(page) || !('members' in page) || !Array.isArray(page.members)) return null;
   const members: ReceivingMemberReadback[] = [];
   for (const row of page.members) {
-    if (!record(row) || typeof row.id !== 'string') return null;
+    if (!record(row) || !('id' in row) || typeof row.id !== 'string') return null;
     const member = row as CuratedMember;
     members.push({
       id: member.id,

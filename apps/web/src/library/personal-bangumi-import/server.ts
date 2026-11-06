@@ -27,6 +27,7 @@ import {
   type BangumiScoreChoice,
   type BangumiScoreSelection,
   type BangumiLabelAssignmentsResult,
+  type BangumiLabelApplyResult,
   type BangumiLabelOptionsResult,
   type BangumiLabelReviewResult,
   type BangumiTagPageResult,
@@ -243,7 +244,7 @@ export const readBangumiTags = createServerFn({ method: 'GET' })
       uploadId: requireId(input.uploadId),
       ordinal: requireOrdinal(input.ordinal),
       after,
-      ...(input.custody === undefined ? {} : { custody: requireCustody(input.custody) }),
+      ...('custody' in input && input.custody !== undefined ? { custody: requireCustody(input.custody) } : {}),
     };
   })
   .handler(async ({ data }): Promise<BangumiTagPageResult> => {

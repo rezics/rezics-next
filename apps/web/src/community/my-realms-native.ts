@@ -10,7 +10,10 @@ export type MyRealmsInventoryLink = Pick<MyRealmsNativeItem, 'realmId' | 'name'>
  * This installed response admits inventory labels only: role is not action or entry advice.
  * Keep the projection explicit so additional native fields require deliberate admission.
  */
-export function formatMyRealmsInventory(page: MyRealmsNativePage): {
+export function formatMyRealmsInventory(page: {
+  items: readonly MyRealmsInventoryLink[];
+  next: MyRealmsNativePage['next'];
+}): {
   realms: MyRealmsInventoryLink[];
   next: MyRealmsNativePage['next'];
 } {

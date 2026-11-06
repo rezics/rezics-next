@@ -17,11 +17,12 @@ export const loadSubjectArtwork = createServerFn({ method: 'POST', strict: false
   })
   .handler(async ({ data }): Promise<ArtworkResult> => {
     setResponseHeader('cache-control', 'private, no-store');
-    const [{ env }, { prepareSession, sessionSubject, viewerCredential }, { kernelClient }] = await Promise.all([
-      import('cloudflare:workers'),
-      import('../../../session/request'),
-      import('../../../kernel/client'),
-    ]);
+    const environment = import('cloudflare:workers');
+    const session = import('../../../session/request');
+    const kernel = import('../../../kernel/client');
+    const { env } = await environment;
+    const { prepareSession, sessionSubject, viewerCredential } = await session;
+    const { kernelClient } = await kernel;
     const request = getRequest();
     await prepareSession(request, env);
     if ((sessionSubject(request) ?? null) !== data.expectedReader) return { kind: 'unavailable' };

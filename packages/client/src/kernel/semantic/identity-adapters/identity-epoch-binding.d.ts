@@ -1,7 +1,7 @@
 import { type AccountIdentityReversalSettlement } from '../../access/agent-verification-identity.ts';
 import type { Pool } from 'pg';
 import { type CommandTransaction } from '../../command/command.ts';
-import type { IdentityAdmissionAuthority, IdentityAdmissionInput, IdentityJobRef } from './identity-epoch-contract.ts';
+import { type IdentityAdmissionAuthority, type IdentityAdmissionInput, type IdentityJobRef } from './identity-epoch-contract.ts';
 import type { IdentitySourceConsumerReference, IdentitySourceConsumerGeneration, IdentitySourceConsumerDisposition, IdentitySourceConsumerWork, IdentitySourceConsumerContext } from '../identity-source-consumer-custody.ts';
 /** A serializable locator is custody data. Only a released verified read mints an in-process proof. */
 export type IdentityReceiptBinding = Readonly<{

@@ -59,7 +59,8 @@ export const Route = createFileRoute('/@{$handle}_/$view')({
   }),
   loaderDeps: ({ search }): { cursor: string | undefined } => ({ cursor: search.cursor }),
   // Realms replaces its native loader page; other named views keep their existing query cache.
-  loader: async ({ params, deps, location, context }) => {
+  loader: async ({ params, deps: suppliedDeps, location, context }) => {
+    const deps = suppliedDeps as { cursor: string | undefined };
     const view = agentPathView(params.view);
     if (!view) throw notFound();
     const locale = getLocale();

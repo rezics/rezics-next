@@ -99,7 +99,7 @@ function Outcome({
           {score.vote ? (
             <p className="text-sm">
               {m.library_mal_score_receipt_vote({
-                units: score.vote.units,
+                units: score.vote.units ?? 0,
                 revision: score.vote.revision,
                 at: score.vote.at,
               })}

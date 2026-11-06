@@ -13,7 +13,7 @@ import {
   prepareOwnClassificationsVisit,
 } from '../../ratings/own-classifications/actions';
 import { useLibraryWorkspaceAdmission } from '../../library/library-workspace-admission';
-import { OwnVotesDeparture } from '../../ratings/own-votes/departure';
+import { OwnVotesDeparture, type OwnVotesDepartureControl } from '../../ratings/own-votes/departure';
 import { useClassificationAddress } from '../../ratings/own-classifications/address';
 import { ClassificationsReader } from '../../ratings/own-classifications/reader';
 import {
@@ -58,7 +58,7 @@ function ClassificationAssessmentsRoute() {
     retained.current.initial = initial;
   }
   retained.current.address = address.key;
-  const confirmMovement = useRef<(() => Promise<boolean>) | null>(null);
+  const confirmMovement = useRef<OwnVotesDepartureControl | null>(null);
   useEffect(() => {
     const cancelFocus = () => {
       windows.focus = false;

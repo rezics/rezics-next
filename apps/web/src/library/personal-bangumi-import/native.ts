@@ -181,8 +181,11 @@ function isScoreQuestion(value: unknown): value is NonNullable<BangumiScoreRevie
     (value.grain !== 'work' && value.grain !== 'release' && value.grain !== 'episode' && value.grain !== 'character') ||
     (value.lifecycleState !== 'active' && value.lifecycleState !== 'retired') ||
     !record(value.scale) ||
+    typeof value.scale.minimum !== 'number' ||
     !Number.isSafeInteger(value.scale.minimum) ||
+    typeof value.scale.maximum !== 'number' ||
     !Number.isSafeInteger(value.scale.maximum) ||
+    typeof value.scale.step !== 'number' ||
     !Number.isSafeInteger(value.scale.step)
   )
     return false;
@@ -357,6 +360,7 @@ function isLabelState(value: unknown): value is BangumiLabelState {
       return (
         typeof item.target.labelId === 'string' &&
         SUBJECT_ID.test(item.target.labelId) &&
+        typeof item.target.revision === 'number' &&
         Number.isSafeInteger(item.target.revision) &&
         item.target.revision > 0
       );
@@ -388,7 +392,7 @@ function isTagPage(value: unknown): value is BangumiTagPage {
     !['missing', 'empty', 'known', 'invalid', 'unknown'].includes(String(value.evidence)) ||
     !Array.isArray(value.tags) ||
     value.tags.length > 32 ||
-    !(value.next === null || (Number.isSafeInteger(value.next) && value.next >= 0)) ||
+    !(value.next === null || (typeof value.next === 'number' && Number.isSafeInteger(value.next) && value.next >= 0)) ||
     !(value.labels === null || isLabelState(value.labels))
   )
     return false;
@@ -442,6 +446,7 @@ function isLabelOptions(value: unknown): value is { labels: BangumiLabelOption[]
       typeof label.id === 'string' &&
       SUBJECT_ID.test(label.id) &&
       typeof label.name === 'string' &&
+      typeof label.revision === 'number' &&
       Number.isSafeInteger(label.revision) &&
       label.revision > 0,
   );
@@ -480,7 +485,7 @@ function responseReason(result: NativeResult): string {
   return `http_${result.status}`;
 }
 
-function unavailableReadback(result: NativeResult): BangumiEntryReadback | BangumiVoteReadback {
+function unavailableReadback(result: NativeResult): { status: 'stale' | 'unavailable'; reason: string } {
   return {
     status: result.status === 409 ? 'stale' : 'unavailable',
     reason: responseReason(result),
@@ -542,10 +547,14 @@ export function kernelBangumiPort(
   sessionEnv: Partial<SessionEnv>,
   originConfigured: boolean,
 ): BangumiImportPort {
-  const headers = (authorization: string, key?: string): NativeHeaders => ({
-    authorization,
-    ...(key ? { 'idempotency-key': quotedIdempotencyKey(key) } : {}),
-  });
+  function headers(authorization: string, key: string): NativeHeaders & { 'idempotency-key': string };
+  function headers(authorization: string): NativeHeaders;
+  function headers(authorization: string, key?: string): NativeHeaders {
+    return {
+      authorization,
+      ...(key === undefined ? {} : { 'idempotency-key': quotedIdempotencyKey(key) }),
+    };
+  }
   async function call<T>(
     command: BangumiCommand,
     send: (bangumi: BangumiSurface, authorization: string) => Promise<NativeResult>,

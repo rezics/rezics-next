@@ -25,7 +25,7 @@ function targetFor(part: Part, read: FactsCurrent, locale: string) {
   if (typeof id !== 'string' || !Object.hasOwn(read.public.related, id)) return;
   const summary = read.public.related[id];
   if (!summary || !('labels' in summary)) return;
-  if (part.property.id === 'wdt:P106' && !peopleOccupationConcept(definition, summary.type)) return;
+  if (part.property.id === 'wdt:P106' && (!summary.type || !peopleOccupationConcept(definition, summary.type))) return;
   return { id, label: peopleLabel(summary.labels ?? {}, locale) };
 }
 

@@ -43,6 +43,7 @@ const projection: CollectionViewerProjection = {
   },
   rows: [
     {
+      actions: { state: 'unavailable', reason: 'admission' },
       rowKey: memberIds[0]!,
       subjectId,
       entry: {
@@ -54,12 +55,14 @@ const projection: CollectionViewerProjection = {
       vote: { state: 'present', questionId, questionRevision: 1, units: 14, revision: 5 },
     },
     {
+      actions: { state: 'unavailable', reason: 'admission' },
       rowKey: memberIds[1]!,
       subjectId,
       entry: { state: 'absent' },
       vote: { state: 'absent', questionId, questionRevision: 1 },
     },
     {
+      actions: { state: 'unavailable', reason: 'admission' },
       rowKey: memberIds[2]!,
       subjectId,
       entry: { state: 'unavailable', reason: 'scope' },

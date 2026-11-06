@@ -3,7 +3,7 @@
  */
 import { type Bound } from '@rezics/bounds';
 import type { IdentityScopeWork } from '../semantic/identity-scope-types.ts';
-import type { WorkDimensions, WorkReceipt } from './collection-source.ts';
+import type { WorkDimensions, WorkReceipt } from './contract/work-dimensions.ts';
 export { CANONICAL_SOURCE_RAW_KEY_LIMIT } from './canonical-source-limits.ts';
 export declare function CANONICAL_SOURCE_AXES(): readonly ["candidateKeys", "nativeRows", "identityMetadataRows", "emptySeeks", "nativePoints", "witnessKeys", "statements", "bytes", "engineRequests"];
 export declare const CANONICAL_SOURCE_ZONE_AGGREGATE = 256;

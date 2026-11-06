@@ -7,8 +7,8 @@ import {
   createAlbumCurrentVisitLink,
   type AlbumCurrentVisitOrigin,
 } from '../features/catalogue/album-current-visit-model';
-import { AlbumProfile } from '../features/catalogue/album-profile-view';
-import type { AlbumEditors, AlbumTransport } from '../features/catalogue/album-profile';
+import { AlbumProfile, type AlbumEditors } from '../features/catalogue/album-profile-view';
+import type { AlbumTransport } from '../features/catalogue/album-profile';
 import { albumFixture, albumId, artistId, roleId, seriesId, partId } from '../kernel/fake/catalogue-album-profile';
 import { candidateContext } from '../subject/candidates';
 import { subjectVisitReturn } from '../features/pages/subject-visit-navigation';

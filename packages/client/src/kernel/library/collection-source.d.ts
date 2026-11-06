@@ -11,33 +11,7 @@ import type { ListingStamp } from './listing-freshness-contract.ts';
 import type { RawOrdinalCollectionPrefix, ReadRawOrdinalCollectionPrefix } from './collection-source-order.ts';
 import type { ScopeWorkContext } from '../search/scope-work-context.ts';
 export { COLLECTION_SOURCE_DRIVER_COUNT } from './canonical-source-limits.ts';
-/** Shared caller-ledger dimensions. These types allocate no budget and implement no ledger. */
-export interface WorkDimensions {
-    readonly candidateKeys: number;
-    /** Shared Source.rows unit: charged plan-proved row-work upper bound; observed physical rows are measured separately. */
-    readonly nativeRows: number;
-    /** TWO independently released 4096-home sweeps per full Semantic basis read; not candidate work. */
-    readonly identityMetadataRows: number;
-    readonly emptySeeks: number;
-    readonly nativePoints: number;
-    readonly witnessKeys: number;
-    readonly statements: number;
-    readonly bytes: number;
-}
-/** Reserved BEFORE dispatch, from the ONE Search/Zone request ledger; all dimensions are finite integers >= 0. */
-export interface WorkAllowance {
-    readonly reservationId: string;
-    readonly remaining: WorkDimensions;
-}
-/**
- * Every used dimension <= its reservation. `used.nativeRows` sums charged per-operation plan bounds, not observed
- * physical tuples. Failures settle consumed dispatched work through caller instrumentation; unused reservation is
- * never reported as spent.
- */
-export interface WorkReceipt {
-    readonly reservationId: string;
-    readonly used: WorkDimensions;
-}
+import type { WorkAllowance, WorkReceipt } from './contract/work-dimensions.ts';
 type SourceWorkContext<W extends ScopeWorkContext = ScopeWorkContext> = W extends ScopeWorkContext ? Readonly<{
     actor?: never;
     at?: never;

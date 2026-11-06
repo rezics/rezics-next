@@ -7,7 +7,7 @@ import type {
   BangumiScoreCurrentVote,
   BangumiScoreOutcome as KernelBangumiScoreOutcome,
   BangumiScoreReview as KernelBangumiScoreReview,
-  BangumiScoreSelection,
+  BangumiScoreSelection as KernelBangumiScoreSelection,
   PersonalEntrySourceAdmission,
 } from '@rezics/client';
 import type { SourceAdmissionCustody } from '../rich-private-entry/admission';
@@ -23,16 +23,25 @@ type GeneratedLibraryLabels = NonNullable<
   Awaited<ReturnType<KernelClient['libraryLabels']['get']>>['data']
 >['labels'][number];
 
-export type BangumiTagPage = NonNullable<Awaited<GeneratedBangumiTagCall>['data']>;
-export type BangumiLabelReviewBody = Parameters<GeneratedBangumiReviewLabelsCall>[0];
-export type BangumiLabelMapping = BangumiLabelReviewBody['mappings'][number];
-export type BangumiLabelState = NonNullable<
+type NativeBangumiTagPage = NonNullable<Awaited<GeneratedBangumiTagCall>['data']>;
+type NativeBangumiLabelState = NonNullable<
   NonNullable<Awaited<ReturnType<GeneratedBangumiReviewLabelsCall>>['data']>['labels']
 >;
+export type BangumiTag = Omit<NativeBangumiTagPage['tags'][number], 'value'> & { value: BangumiJson };
+export type BangumiTagPage = Omit<NativeBangumiTagPage, 'tags' | 'labels'> & {
+  tags: BangumiTag[];
+  labels: BangumiLabelState | null;
+};
+export type BangumiScoreSelection = KernelBangumiScoreSelection;
+export type BangumiLabelReviewBody = Parameters<GeneratedBangumiReviewLabelsCall>[0];
+export type BangumiLabelMapping = BangumiLabelReviewBody['mappings'][number];
+export type BangumiLabelItem = Omit<NativeBangumiLabelState['review']['items'][number], 'source'> & {
+  source: BangumiJson;
+};
+export type BangumiLabelReview = Omit<NativeBangumiLabelState['review'], 'items'> & { items: BangumiLabelItem[] };
+export type BangumiLabelState = Omit<NativeBangumiLabelState, 'review'> & { review: BangumiLabelReview };
 export type BangumiLabelApplyData = NonNullable<Awaited<ReturnType<GeneratedBangumiApplyLabelsCall>>['data']>;
 export type BangumiLabelOutcome = BangumiLabelState['outcomes'][number];
-export type BangumiLabelReview = BangumiLabelState['review'];
-export type BangumiLabelItem = BangumiLabelReview['items'][number];
 export type BangumiLabelOption = Pick<GeneratedLibraryLabels, 'id' | 'name' | 'revision'>;
 export type BangumiLabelAssignment = { id: string; labelId: string; name: string; revision: number };
 export type BangumiCredentialCustody = Readonly<{ viewer: string; csrfToken: string; credential: string }>;

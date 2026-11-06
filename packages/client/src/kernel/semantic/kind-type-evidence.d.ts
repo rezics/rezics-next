@@ -4,7 +4,7 @@ import type { Access } from '../request/access.ts';
 import type { PrepareKindAudienceInput } from '../access/kind-audience.ts';
 import type { CollectionKindWorkDefinition, CollectionKindPreparationLocator } from '../library/collection-kind-work-admission.ts';
 import type { CanonicalDerivedRow, CanonicalGroupProgress } from '../library/canonical-source-store.ts';
-import type { WorkAllowance, WorkDimensions, WorkReceipt } from '../library/collection-source.ts';
+import type { WorkAllowance, WorkDimensions, WorkReceipt } from '../library/contract/work-dimensions.ts';
 import { NativeCollectionWork } from '../library/collection-source-work.ts';
 import type { CollectionKindPreparationWorkContext } from '../search/scope-work-context.ts';
 import { type NativeKindTypeAnchor } from './scope-leaf-selection.ts';

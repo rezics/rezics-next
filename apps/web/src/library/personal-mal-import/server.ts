@@ -74,7 +74,7 @@ function reviewScore(value: unknown): MalScoreReviewInput {
   const questionRevision = value.questionRevision;
   if (typeof questionRevision !== 'number' || !Number.isSafeInteger(questionRevision) || questionRevision < 1)
     throw new Error('Invalid MAL import');
-  if (value.action === 'clear') return { action: 'clear', questionId, questionRevision };
+  if (value.action === 'clear') return { action: 'clear', questionId, questionRevision } as MalScoreReviewInput;
   if (value.action !== 'adopt' || !('units' in value)) throw new Error('Invalid MAL import');
   const units = value.units;
   if (typeof units !== 'number' || !Number.isSafeInteger(units)) throw new Error('Invalid MAL import');
@@ -85,7 +85,7 @@ function reviewScore(value: unknown): MalScoreReviewInput {
     questionRevision,
     units,
     ...('replaceCurrent' in value && value.replaceCurrent ? { replaceCurrent: true } : {}),
-  };
+  } as MalScoreReviewInput;
 }
 
 function reviewLabels(value: unknown): NonNullable<MalReviewInput['labels']> {

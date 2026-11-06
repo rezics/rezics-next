@@ -11,7 +11,7 @@ import {
   readReading,
   sendReading,
 } from '../src/settings/reading-preferences';
-import { loadSettingsPage } from '../src/settings/preferences';
+import { loadSettingsPage, presentPreferencePage } from '../src/settings/preferences';
 import { preferenceRetryDeadline } from '../src/settings/preference-failure-retry';
 import { createKernelClient } from '@rezics/client';
 import type { SessionEnv } from '../src/session/client';
@@ -21,6 +21,16 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 const { ReadingCard } = await import('../src/settings/reading-card');
 
 const latest = () => 0;
+
+test('an undeclared notification kind cannot admit a native preference editor', () => {
+  const page = {
+    version: 2,
+    kinds: [{ kind: 'reply', optional: true, default: true, enabled: false }],
+    actions: [{ name: 'edit', expectedVersion: 2 }],
+  };
+  expect(presentPreferencePage(page, 2)).toEqual(page);
+  expect(presentPreferencePage({ ...page, kinds: [{ ...page.kinds[0], kind: 'invented_kind' }] }, 2)).toBeUndefined();
+});
 
 test('Retry-After accepts delay-seconds and HTTP dates without guessing invalid delays', () => {
   const now = Date.UTC(2026, 10, 5),

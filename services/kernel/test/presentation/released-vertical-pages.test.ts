@@ -83,11 +83,11 @@ function status(response: HttpResponse, wanted: number, phase: string) {
   expect(response.status, `${phase}: ${JSON.stringify(response.body)}`).toBe(wanted);
 }
 function selection(type: string): Scope {
-  if (['schema:Person', 'schema:Organization', 'wd:Q95074'].includes(type)) return { scope: 'type', key: type };
+  if (['schema:Person', 'schema:Organization', 'schema:Recipe', 'wd:Q20631656', 'wd:Q95074'].includes(type))
+    return { scope: 'type', key: type };
   if (['schema:TVSeries', 'schema:ComicSeries', 'schema:BookSeries', 'wd:Q7725310'].includes(type))
     return { scope: 'base', key: 'schema:CreativeWorkSeries' };
-  if (['schema:Recipe', 'wd:Q20631656', 'schema:SoftwareApplication'].includes(type))
-    return { scope: 'generic', key: null };
+  if (type === 'schema:SoftwareApplication') return { scope: 'generic', key: null };
   return { scope: 'base', key: 'schema:CreativeWork' };
 }
 function selectedViews(selected: Scope) {

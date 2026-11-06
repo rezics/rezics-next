@@ -1163,6 +1163,7 @@ export function CatalogueFileReaderOverview({
   currentHref?: string | undefined;
   recoverCurrentPage?: (() => Promise<void>) | undefined;
 }) {
+  const viewer = page.viewer && 'state' in page.viewer ? page.viewer : undefined;
   const candidate = catalogueFileReaderCandidate(publicRead);
   if (!candidate) {
     if (!returning && fileEvidenceAt(currentHref, locale)?.source !== publicRead.subject.id) return null;
@@ -1177,7 +1178,7 @@ export function CatalogueFileReaderOverview({
       <CatalogueFileReader
         visit={visit}
         readerSpoiler={readerSpoiler}
-        correctionAvailability={page.viewer?.actions.statementPropose}
+        correctionAvailability={viewer?.actions.statementPropose}
         link={link}
         source={page}
         descriptor={readerDescriptor(page, publicRead, locale, currentHref)}
@@ -1197,7 +1198,7 @@ export function CatalogueFileReaderOverview({
       ? { unavailable: true }
       : {}),
     allowCorrection:
-      page.viewer?.actions.statementPropose === 'allowed' &&
+      viewer?.actions.statementPropose === 'allowed' &&
       !page.requestedRealm &&
       page.context?.population.kind !== 'realm',
     relationPages: profileRelationPages(page),
@@ -1207,7 +1208,7 @@ export function CatalogueFileReaderOverview({
     <CatalogueFileReader
       visit={visit}
       readerSpoiler={readerSpoiler}
-      correctionAvailability={page.viewer?.actions.statementPropose}
+      correctionAvailability={viewer?.actions.statementPropose}
       link={link}
       source={page}
       descriptor={readerDescriptor(page, publicRead, locale, currentHref)}
@@ -1227,7 +1228,7 @@ function readerDescriptor(page: SubjectPageData, publicRead: SubjectRead, locale
     page.subject,
     page.requestedReader ?? null,
     page.viewer?.account ?? null,
-    page.viewer?.context ?? null,
+    page.viewer && 'context' in page.viewer ? page.viewer.context : null,
     page.context?.id ?? null,
     page.requestedRealm ?? null,
     page.catalogue?.state ?? null,

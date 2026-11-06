@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import type { SubjectRead } from '@rezics/client';
 import { useMemo } from 'react';
 import { GameProfile } from '../features/catalogue/game-profile-view';
 import { candidateContext } from '../subject/candidates';
@@ -16,7 +17,7 @@ function CurrentGameVisit() {
   const fixture = useMemo(() => {
     const value = gameProfileFixture('ready', locale, true);
     value.publicRead.related[concept] = { type: 'skos:Concept', labels: { en: 'Adventure' } };
-    const assertion = (id: string, citation: string) => ({
+    const assertion = (id: string, citation: string): SubjectRead['subject']['statements'][string][number] => ({
       id,
       property: { id: 'schema:genre', data_type: 'wikibase-item' },
       value: { type: 'value', content: concept },

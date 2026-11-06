@@ -32,6 +32,7 @@ function Journey() {
       </div>
       {sent ? <ReplyContext parentId={sent.parentId} parents={parents} /> : null}
       <ThreadReplyComposer
+        credentialMode="session"
         {...target}
         parents={parents}
         pending={pending}

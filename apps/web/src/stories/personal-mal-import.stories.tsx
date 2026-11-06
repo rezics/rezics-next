@@ -24,7 +24,6 @@ const target = '0192f3a0-6c1e-7b2a-9d4e-000000000091';
 const questionId = '0192f3a0-6c1e-7b2a-9d4e-000000000092';
 const question = {
   id: questionId,
-  realmId: null,
   meaning: 'A personal rating for this work.',
   revision: 1,
   lifecycle: { state: 'active', revision: 1 },

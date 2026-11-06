@@ -99,7 +99,7 @@ export function creatorEditionOriginTokenFromSearch(search: string | Record<stri
 }
 
 export function addCreatorEditionOriginToken(href: string, token: string): string {
-  const [address, hash = ''] = href.split('#', 2);
+  const [address = '', hash = ''] = href.split('#', 2);
   const separator = address.includes('?') ? '&' : '?';
   return `${address}${separator}${CREATOR_EDITION_ORIGIN_QUERY}=${encodeURIComponent(token)}${hash ? `#${hash}` : ''}`;
 }

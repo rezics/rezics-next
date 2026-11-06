@@ -238,9 +238,7 @@ export function SearchCoverage({
                   ))}
                 </p>
               )}
-              <p>
-                {m.search_context_languages({}, options)}: <code className="break-all">{technicalLanguages}</code>
-              </p>
+              <p>{m.search_context_languages({ languages: technicalLanguages }, options)}</p>
               <ul className="min-w-0 space-y-1">
                 {Object.entries(state.facets).map(([propertyId, values]) => (
                   <li key={propertyId}>

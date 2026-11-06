@@ -273,7 +273,7 @@ export function CharacterPersonSelectionFields({
       locale,
       languages,
       reader: reader.identity,
-      release: metadata?.release,
+      ...(metadata ? { release: metadata.release } : {}),
       available: !!metadata && reader.ready,
     }),
     [locale, JSON.stringify(languages), reader.identity, metadata],

@@ -13,6 +13,7 @@ import {
   type MalOutcome,
   type MalPage,
   type MalPreviewRow,
+  type MalScoreReviewInput,
   type MalUnknown,
 } from './contract';
 import { MalConfirmPage, scoreConsentKey } from './confirm';
@@ -62,12 +63,7 @@ export function PersonalMalImportPage({ visit }: { visit?: MalVisit | null }) {
       </main>
     );
   }
-  return (
-    <MalImportSession
-      key={`${current.identity ?? ''}:${current.subject}:${current.csrfToken}:${current.locale}`}
-      visit={current}
-    />
-  );
+  return <MalImportSession key={`${current.subject}:${current.csrfToken}:${current.locale}`} visit={current} />;
 }
 
 function MalImportSession({ visit }: { visit: MalVisit }) {
@@ -162,11 +158,7 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
       if (!current) return current;
       return {
         ...current,
-        rows: current.rows.map((row) => {
-          const next = { ...row };
-          delete next.currentScoreVote;
-          return next;
-        }),
+        rows: current.rows.map(({ currentScoreVote: _cleared, ...row }) => row),
       };
     });
   }
@@ -314,11 +306,11 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
   async function saveReview(draft: RowDraft) {
     const id = uploadId.current;
     if (!id || !page || (draft.score?.action === 'adopt' && draft.score.units === undefined)) return;
-    const score =
+    const score: MalScoreReviewInput | undefined =
       draft.score?.action === 'adopt'
-        ? { ...draft.score, units: draft.score.units! }
+        ? ({ ...draft.score, units: draft.score.units! } as MalScoreReviewInput)
         : draft.score?.action === 'clear'
-          ? draft.score
+          ? (draft.score as MalScoreReviewInput)
           : undefined;
     const command: Extract<MalCommand, { kind: 'review' }> = {
       kind: 'review',

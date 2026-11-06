@@ -19,6 +19,10 @@ export type PreparationDefinition = Readonly<{
         digest: string;
         value: FilterRelease;
     }>;
+    /** Saved population selector. Owner keys keep the retained six-part basis; a catalogue key adds one element. */
+    source: Readonly<{
+        kind: 'owner' | 'catalogue';
+    }>;
 }>;
 export type PreparationDefinitionBasis = Readonly<{
     definition: PreparationDefinition;

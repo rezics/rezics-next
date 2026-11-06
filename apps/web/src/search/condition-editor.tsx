@@ -74,7 +74,7 @@ type MessageOptions = { locale: (typeof locales)[number] };
 type PendingPropertyChange = {
   property: string;
   identity: string;
-  occurrence: string;
+  occurrence: ConditionDraftNode['key'];
   metadata: ConditionMetadata;
   transition: ConditionPropertyTransition;
 };
