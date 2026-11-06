@@ -27,14 +27,14 @@ the typed History contract; they reach other owner implementations only from thi
 modules have no behavior edges to implementations. The architecture manifest records the four layers and their
 allowed dependency direction.
 
-Measured with `scripts/architecture.ts` against base `a4edc81001`: the changed-base check passes, and the full graph
-keeps its inherited unbaselined errors at base and final. Kernel files in value cycles fell from 398 to 345, the
-largest value component from 381 to 326 files, and History files in value cycles from 24 to zero. Violations that
-touch History source fell from 361 to zero, and unbaselined History errors from 49 to zero. Value imports from other
-modules into History files outside the contract and application entries fell from 87 to 7; those seven name declared
-contract and core entries (Access and Library callers) or the composition root's adapter barrel. History source files have 102 outgoing value edges to other modules at base and 109 at
-final; the increase is the native owner bindings in adapters. Contract, core and application import no
-implementation: their outgoing value edges reach only contract modules, `bounds` and `memoized`.
+Measured with `scripts/architecture.ts` against base `a311990286`: the changed-base check passes, and the full graph
+keeps its inherited unbaselined errors at final. Kernel files in value cycles are 345, the largest value component is
+326 files, and History files in value cycles are zero. Violations that touch History source fell from 312 to zero, and
+unbaselined History errors are zero. Value imports from other modules into History files outside the contract and
+application entries are the declared contract and core entries (Access and Library callers) or the composition root's
+adapter barrel. History source files have 109 outgoing value edges to other modules at final; the increase is the
+native owner bindings in adapters. Contract, core and application import no implementation: their outgoing value
+edges reach only contract modules, `bounds` and `memoized`.
 
 Decision: native composition is installed by server and worker startup, the shared runtime defaults and the preload
 hook; facades never fall back to an implementation. Only typed History vocabulary imports the contract; comment or
