@@ -1,6 +1,6 @@
 import { type Actor } from '../request/access.ts';
 import { type ContentReadDependencies, type NoticeBoardContext, type NoticePostContext } from './reads.ts';
-export declare const DecisionPageSchema: import("typebox").TObject<{
+export declare function DecisionPageSchema(): import("typebox").TObject<{
     id: import("typebox").TString;
     targetKind: import("typebox").TUnion<[import("typebox").TLiteral<"board">, import("typebox").TLiteral<"thread">, import("typebox").TLiteral<"post">]>;
     targetId: import("typebox").TString;

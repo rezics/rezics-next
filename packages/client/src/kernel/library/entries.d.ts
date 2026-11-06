@@ -6,7 +6,6 @@ import type { KeyRing } from '../tokens/seal.ts';
 import { type ShelfTypeDigest } from './shelf-type-keys.ts';
 import type { Entry, EntryState, EntryDeletion } from './entry-model.ts';
 import { type VndbEntryReview } from './list-import-vndb-admission.ts';
-import { LibraryConflictError } from './entry-errors.ts';
 export { LibraryConflictError } from './entry-errors.ts';
 type Dependencies = {
     pool: Pool;
@@ -44,14 +43,38 @@ type EntryStateHistoryOptions = {
 export declare class LibraryEntryInvalidError extends TypeError {
     constructor(message?: string);
 }
-export declare class LibraryEntryLifecycleConflictError extends LibraryConflictError {
-    readonly reason: 'stale' | 'occupied' | 'expired';
-    constructor(reason: 'stale' | 'occupied' | 'expired');
-}
-export declare class LibraryEntryStateRestoreConflictError extends LibraryConflictError {
-    readonly reason: 'stale' | 'unavailable' | 'unchanged';
-    constructor(reason: 'stale' | 'unavailable' | 'unchanged');
-}
+export declare function LibraryEntryLifecycleConflictError(): {
+    new (reason: 'stale' | 'occupied' | 'expired'): {
+        readonly reason: 'stale' | 'occupied' | 'expired';
+        name: string;
+        message: string;
+        stack?: string;
+        cause?: unknown;
+    };
+    isError(error: unknown): error is Error;
+    isError(value: unknown): value is Error;
+    captureStackTrace(targetObject: object, constructorOpt?: Function): void;
+    captureStackTrace(targetObject: object, constructorOpt?: Function): void;
+    prepareStackTrace(err: Error, stackTraces: NodeJS.CallSite[]): any;
+    stackTraceLimit: number;
+};
+export type LibraryEntryLifecycleConflictError = InstanceType<ReturnType<typeof LibraryEntryLifecycleConflictError>>;
+export declare function LibraryEntryStateRestoreConflictError(): {
+    new (reason: 'stale' | 'unavailable' | 'unchanged'): {
+        readonly reason: 'stale' | 'unavailable' | 'unchanged';
+        name: string;
+        message: string;
+        stack?: string;
+        cause?: unknown;
+    };
+    isError(error: unknown): error is Error;
+    isError(value: unknown): value is Error;
+    captureStackTrace(targetObject: object, constructorOpt?: Function): void;
+    captureStackTrace(targetObject: object, constructorOpt?: Function): void;
+    prepareStackTrace(err: Error, stackTraces: NodeJS.CallSite[]): any;
+    stackTraceLimit: number;
+};
+export type LibraryEntryStateRestoreConflictError = InstanceType<ReturnType<typeof LibraryEntryStateRestoreConflictError>>;
 type EntryStateCommandKind = 'library.entry.put' | 'library.entry.state.restore';
 /** Ordinary deletion transition, on the caller's authorized native owner transaction. */
 export declare function deleteLibraryEntryInTransaction(tx: CommandTransaction, command: {

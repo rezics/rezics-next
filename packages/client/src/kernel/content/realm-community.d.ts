@@ -16,7 +16,7 @@ export type RealmCommunityRecent = Readonly<{
     threads: readonly RealmCommunityThread[];
     complete: boolean;
 }>;
-export declare const RealmCommunityRecentSchema: import("typebox").TObject<{
+export declare function RealmCommunityRecentSchema(): import("typebox").TObject<{
     state: import("typebox").TLiteral<"current">;
     threads: import("typebox").TArray<import("typebox").TObject<{
         comments: import("typebox").TUnion<[import("typebox").TObject<{

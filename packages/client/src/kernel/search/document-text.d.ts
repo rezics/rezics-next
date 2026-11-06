@@ -1,7 +1,7 @@
 import { type PageDocumentReference } from '@rezics/composition';
 import type { DocumentView } from '../content/document-read.ts';
 /** Consumer bounds, chosen before dispatch. The producer must bound bytes before reading a body. */
-export declare const DOCUMENT_TEXT_COST: Readonly<{
+export declare function DOCUMENT_TEXT_COST(): Readonly<{
     documents: 8;
     sourceBytesPerDocument: number;
     textBytesPerSubject: number;

@@ -163,7 +163,7 @@ export declare const ReportResponseSchema: import("typebox").TObject<{
     }>>>;
 }>;
 /** The erased variant cannot carry authored bytes, even to an authorized reader. */
-export declare const ItemViewSchema: import("typebox").TUnsafe<ItemView & ViewerReactionSlot & ReactionCountsSlot>;
+export declare function ItemViewSchema(): import("typebox").TUnsafe<ItemView & ViewerReactionSlot & ReactionCountsSlot>;
 export declare const ErasedPlaceholderSchema: import("typebox").TObject<{
     id: import("typebox").TString;
     threadId: import("typebox").TString;
@@ -175,8 +175,8 @@ export declare const ErasedPlaceholderSchema: import("typebox").TObject<{
     body: import("typebox").TNull;
     sha256: import("typebox").TNull;
 }>;
-export declare const PostEntrySchema: import("typebox").TUnsafe<PostEntry & ViewerReactionSlot & ReactionCountsSlot>;
-export declare const ThreadViewSchema: import("typebox").TUnsafe<Omit<Readonly<{
+export declare function PostEntrySchema(): import("typebox").TUnsafe<PostEntry & ViewerReactionSlot & ReactionCountsSlot>;
+export declare function ThreadViewSchema(): import("typebox").TUnsafe<Omit<Readonly<{
     id: import("./model.ts").ThreadId;
     route: import("./model.ts").Route;
     authorId: import("./model.ts").ContentId;
@@ -206,7 +206,7 @@ export declare const BoardRecordSchema: import("typebox").TObject<{
     purpose: import("typebox").TUnion<[import("typebox").TLiteral<"discussion">, import("typebox").TLiteral<"reviews">]>;
     availability: import("typebox").TUnion<[import("typebox").TLiteral<"available">, import("typebox").TLiteral<"erased">]>;
 }>;
-export declare const BoardViewSchema: import("typebox").TUnsafe<Readonly<{
+export declare function BoardViewSchema(): import("typebox").TUnsafe<Readonly<{
     id: import("./model.ts").BoardId;
     realmId: string | null;
     community: import("./community-presentation-model.ts").CommunityPresentation | null;
@@ -218,7 +218,7 @@ export declare const BoardViewSchema: import("typebox").TUnsafe<Readonly<{
     availability: import("./model.ts").Availability;
     createdAt: string;
 }>>;
-export declare const ThreadInputSchema: import("typebox").TObject<{
+export declare function ThreadInputSchema(): import("typebox").TObject<{
     licence: import("typebox").TString;
     subjectIds: import("typebox").TArray<import("typebox").TString>;
     boardId: import("typebox").TString;
@@ -233,7 +233,7 @@ export declare const ThreadInputSchema: import("typebox").TObject<{
         revision: import("typebox").TInteger;
     }>>;
 }>;
-export declare const PostInputSchema: import("typebox").TObject<{
+export declare function PostInputSchema(): import("typebox").TObject<{
     visibility: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"published">, import("typebox").TLiteral<"draft">, import("typebox").TLiteral<"protected">]>>;
     body: import("typebox").TUnsafe<DocumentSnapshot>;
     licence: import("typebox").TString;
@@ -242,7 +242,7 @@ export declare const PostInputSchema: import("typebox").TObject<{
     boardId: import("typebox").TOptional<import("typebox").TString>;
     mediaIds: import("typebox").TOptional<import("typebox").TArray<import("typebox").TString>>;
 }>;
-export declare const RevisionInputSchema: import("typebox").TObject<{
+export declare function RevisionInputSchema(): import("typebox").TObject<{
     title: import("typebox").TOptional<import("typebox").TString>;
     visibility: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"published">, import("typebox").TLiteral<"draft">]>>;
     body: import("typebox").TUnsafe<DocumentSnapshot>;
@@ -260,10 +260,10 @@ export declare const ContentPageQuerySchema: import("typebox").TObject<{
     cursor: import("typebox").TOptional<import("typebox").TString>;
     limit: import("typebox").TOptional<Readonly<import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TCodec<import("typebox").TRefine<import("typebox").TString>, number>]>>>;
 }>;
-export declare const ReactionInputSchema: import("typebox").TObject<{
+export declare function ReactionInputSchema(): import("typebox").TObject<{
     kind: import("typebox").TUnsafe<"downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote">;
 }>;
-export declare const ReactionResponseSchema: import("typebox").TObject<{
+export declare function ReactionResponseSchema(): import("typebox").TObject<{
     kind: import("typebox").TUnsafe<"downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote">;
 }>;
 export declare const SubjectReactionInputSchema: import("typebox").TObject<{
@@ -281,7 +281,7 @@ export declare const SubjectReactionRedirectResponseSchema: import("typebox").TO
         to: import("typebox").TString;
     }>;
 }>;
-export declare const ThreadResponseSchema: import("typebox").TObject<{
+export declare function ThreadResponseSchema(): import("typebox").TObject<{
     thread: import("typebox").TUnsafe<Omit<Readonly<{
         id: import("./model.ts").ThreadId;
         route: import("./model.ts").Route;
@@ -310,10 +310,10 @@ export declare const ThreadResponseSchema: import("typebox").TObject<{
         mayErase: import("typebox").TBoolean;
     }>>;
 }>;
-export declare const PostResponseSchema: import("typebox").TObject<{
+export declare function PostResponseSchema(): import("typebox").TObject<{
     post: import("typebox").TUnsafe<PostEntry & ViewerReactionSlot & ReactionCountsSlot>;
 }>;
-export declare const BoardResponseSchema: import("typebox").TObject<{
+export declare function BoardResponseSchema(): import("typebox").TObject<{
     board: import("typebox").TUnsafe<Readonly<{
         id: import("./model.ts").BoardId;
         realmId: string | null;
@@ -379,7 +379,7 @@ export declare const GlobalBoardDirectoryQuerySchema: import("typebox").TObject<
     cursor: import("typebox").TOptional<import("typebox").TString>;
     limit: import("typebox").TOptional<Readonly<import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TCodec<import("typebox").TRefine<import("typebox").TString>, number>]>>>;
 }>;
-export declare const GlobalBoardDirectoryResponseSchema: import("typebox").TObject<{
+export declare function GlobalBoardDirectoryResponseSchema(): import("typebox").TObject<{
     boards: import("typebox").TArray<import("typebox").TUnsafe<Readonly<{
         id: import("./model.ts").BoardId;
         realmId: string | null;
@@ -394,7 +394,7 @@ export declare const GlobalBoardDirectoryResponseSchema: import("typebox").TObje
     }>>>;
     next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
 }>;
-export declare const PostPageResponseSchema: import("typebox").TObject<{
+export declare function PostPageResponseSchema(): import("typebox").TObject<{
     posts: import("typebox").TArray<import("typebox").TUnsafe<PostEntry & ViewerReactionSlot & ReactionCountsSlot>>;
     next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
     reactionsAsOf: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
@@ -420,7 +420,7 @@ export declare const AvatarSummarySchema: import("typebox").TUnion<[import("type
     }>, import("typebox").TNull]>;
     credit: import("typebox").TNull;
 }>, import("typebox").TNull]>;
-export declare const HistoryPageContextSchema: import("typebox").TObject<{
+export declare function HistoryPageContextSchema(): import("typebox").TObject<{
     viewer: import("typebox").TUnion<[import("typebox").TObject<{
         kind: import("typebox").TLiteral<"account">;
         id: import("typebox").TString;
@@ -687,7 +687,7 @@ export declare const HistoryPageContextSchema: import("typebox").TObject<{
         state: import("typebox").TLiteral<"none">;
     }>]>;
 }>;
-export declare const RevisionPageResponseSchema: import("typebox").TObject<{
+export declare function RevisionPageResponseSchema(): import("typebox").TObject<{
     revisions: import("typebox").TArray<import("typebox").TUnsafe<ItemView & ViewerReactionSlot & ReactionCountsSlot>>;
     next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
     page: import("typebox").TObject<{
@@ -958,7 +958,7 @@ export declare const RevisionPageResponseSchema: import("typebox").TObject<{
         }>]>;
     }>;
 }>;
-export declare const MediaImportInputSchema: {
+export declare function MediaImportInputSchema(): {
     '~standard': {
         version: 1;
         vendor: string;
@@ -1206,7 +1206,7 @@ export declare const MediaImportInputSchema: {
         };
     };
 };
-export declare const MediaImportReceiptSchema: {
+export declare function MediaImportReceiptSchema(): {
     '~standard': {
         version: 1;
         vendor: string;
@@ -1264,7 +1264,7 @@ export declare const MediaImportReceiptSchema: {
         };
     };
 };
-export declare const MediaImportPollSchema: {
+export declare function MediaImportPollSchema(): {
     '~standard': {
         version: 1;
         vendor: string;
@@ -1833,7 +1833,7 @@ export declare const BoardThreadsQuerySchema: import("typebox").TObject<{
     sort: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"newest">, import("typebox").TLiteral<"oldest">, import("typebox").TLiteral<"active">, import("typebox").TLiteral<"hot">]>>;
     query: import("typebox").TOptional<import("typebox").TString>;
 }>;
-export declare const BoardThreadsResponseSchema: import("typebox").TObject<{
+export declare function BoardThreadsResponseSchema(): import("typebox").TObject<{
     pinnedThreads: import("typebox").TArray<import("typebox").TUnsafe<Omit<Readonly<{
         id: import("./model.ts").ThreadId;
         route: import("./model.ts").Route;
@@ -1875,7 +1875,7 @@ export declare const BoardThreadsResponseSchema: import("typebox").TObject<{
     next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
     rankRefreshedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
 }>;
-export declare const BoardOpeningCardSchema: import("typebox").TObject<{
+export declare function BoardOpeningCardSchema(): import("typebox").TObject<{
     thread: import("typebox").TUnsafe<Omit<Readonly<{
         id: import("./model.ts").ThreadId;
         route: import("./model.ts").Route;
@@ -2071,7 +2071,7 @@ export declare const BoardPageQuerySchema: import("typebox").TObject<{
     cursor: import("typebox").TOptional<import("typebox").TString>;
     sort: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"new">, import("typebox").TLiteral<"active">, import("typebox").TLiteral<"hot">]>>;
 }>;
-export declare const BoardPageResponseSchema: import("typebox").TObject<{
+export declare function BoardPageResponseSchema(): import("typebox").TObject<{
     board: import("typebox").TUnsafe<Readonly<{
         id: import("./model.ts").BoardId;
         realmId: string | null;
@@ -2558,7 +2558,7 @@ export declare const SubjectThreadsQuerySchema: import("typebox").TObject<{
     cursor: import("typebox").TOptional<import("typebox").TString>;
     limit: import("typebox").TOptional<Readonly<import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TCodec<import("typebox").TRefine<import("typebox").TString>, number>]>>>;
 }>;
-export declare const SubjectThreadCardSchema: import("typebox").TUnsafe<Readonly<{
+export declare function SubjectThreadCardSchema(): import("typebox").TUnsafe<Readonly<{
     state: 'current' | 'erased';
     authors: Readonly<{
         thread: Readonly<{
@@ -2635,7 +2635,7 @@ export declare const SubjectThreadCardSchema: import("typebox").TUnsafe<Readonly
         comments: 'current' | 'unavailable' | 'not_applicable';
     }>;
 }>>;
-export declare const SubjectThreadsResponseSchema: import("typebox").TObject<{
+export declare function SubjectThreadsResponseSchema(): import("typebox").TObject<{
     entry: import("typebox").TUnsafe<SubjectThreadEntry>;
     threads: import("typebox").TArray<import("typebox").TUnsafe<SubjectThreadCardEntry>>;
     next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
@@ -2678,7 +2678,7 @@ export declare const AuthorThreadsQuerySchema: import("typebox").TObject<{
     limit: import("typebox").TOptional<Readonly<import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TCodec<import("typebox").TRefine<import("typebox").TString>, number>]>>>;
     kind: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"discussion">, import("typebox").TLiteral<"review">]>>;
 }>;
-export declare const AuthorThreadsResponseSchema: import("typebox").TObject<{
+export declare function AuthorThreadsResponseSchema(): import("typebox").TObject<{
     actionSelection: import("typebox").TOptional<import("typebox").TObject<{
         proof: import("typebox").TString;
         references: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TObject<{
@@ -2698,7 +2698,7 @@ export declare const AuthorThreadsResponseSchema: import("typebox").TObject<{
     threads: import("typebox").TArray<import("typebox").TUnsafe<AuthorThreadEntry>>;
     next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
 }>;
-export declare const AuthorPostsResponseSchema: import("typebox").TObject<{
+export declare function AuthorPostsResponseSchema(): import("typebox").TObject<{
     actionSelection: import("typebox").TOptional<import("typebox").TObject<{
         proof: import("typebox").TString;
         references: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TObject<{
@@ -2721,7 +2721,7 @@ export declare const AuthorPostsResponseSchema: import("typebox").TObject<{
 export declare const DocumentMediaInputSchema: import("typebox").TObject<{
     ids: import("typebox").TArray<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
 }>;
-export declare const DocumentImagePresentationSchema: import("typebox").TUnsafe<Readonly<{
+export declare function DocumentImagePresentationSchema(): import("typebox").TUnsafe<Readonly<{
     id: string;
     containerId: string;
     digest: string;
@@ -2742,7 +2742,7 @@ export declare const DocumentImagePresentationSchema: import("typebox").TUnsafe<
     } | null;
     credit: import("@rezics/definitions/media-import").MediaImportRequest['credit'] | null;
 }>>;
-export declare const DocumentMediaPageSchema: import("typebox").TUnsafe<Readonly<{
+export declare function DocumentMediaPageSchema(): import("typebox").TUnsafe<Readonly<{
     images: readonly import("./media-presentation.ts").DocumentImagePresentation[];
 }>>;
 export declare const MediaReservationInputSchema: import("typebox").TUnion<[import("typebox").TObject<{
@@ -3029,7 +3029,7 @@ export declare const ContentEditionSchema: import("typebox").TObject<{
     sha256: import("typebox").TString;
     licence: import("typebox").TString;
 }>;
-export declare const ContentEditionRevisionSchema: import("typebox").TObject<{
+export declare function ContentEditionRevisionSchema(): import("typebox").TObject<{
     editionId: import("typebox").TString;
     revisionId: import("typebox").TString;
     sha256: import("typebox").TString;

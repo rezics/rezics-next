@@ -3,14 +3,14 @@ import { type Access } from '../../request/access.ts';
 import type { KeyRing } from '../../tokens/seal.ts';
 import type { WorkClient } from '../../work/client.ts';
 import type { subjectRoutes } from './subjects.ts';
-export declare const ProviderReviewQuerySchema: import("typebox").TObject<{
+export declare function ProviderReviewQuerySchema(): import("typebox").TObject<{
     source: import("typebox").TString;
     context: import("typebox").TOptional<import("typebox").TString>;
     status: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"pending">, import("typebox").TLiteral<"accepted_unselected">]>>;
     limit: import("typebox").TOptional<Readonly<import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TCodec<import("typebox").TRefine<import("typebox").TString>, number>]>>>;
     cursor: import("typebox").TOptional<import("typebox").TString>;
 }>;
-export declare const ProviderReviewPrepareSchema: import("typebox").TObject<{
+export declare function ProviderReviewPrepareSchema(): import("typebox").TObject<{
     source: import("typebox").TString;
     context: import("typebox").TOptional<import("typebox").TString>;
     status: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"pending">, import("typebox").TLiteral<"accepted_unselected">]>>;
@@ -663,6 +663,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                         language?: string;
                         includeViewerActions?: boolean;
                         includeDocuments?: boolean;
+                        selectedSynopsis?: string;
                         reviewIdentitySource?: "bangumi" | "bangumi_cross_media" | "vndb" | "vndb_cross_media";
                         reviewIdentityExternalId?: string;
                     };
@@ -740,6 +741,66 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                     };
                                     attribution?: string;
                                 }[];
+                            };
+                            selectedSynopsis?: {
+                                kind: "matched";
+                                fact: {
+                                    id: string;
+                                    rank: "deprecated" | "normal" | "preferred";
+                                    property: {
+                                        id: string;
+                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                    };
+                                    value: {
+                                        type: "value";
+                                        content: any;
+                                    } | {
+                                        type: "somevalue";
+                                    } | {
+                                        type: "novalue";
+                                    };
+                                    qualifiers: {
+                                        property: {
+                                            id: string;
+                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                        };
+                                        value: {
+                                            type: "value";
+                                            content: any;
+                                        } | {
+                                            type: "somevalue";
+                                        } | {
+                                            type: "novalue";
+                                        };
+                                    }[];
+                                    references: {
+                                        parts: {
+                                            property: {
+                                                id: string;
+                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                            };
+                                            value: {
+                                                type: "value";
+                                                content: any;
+                                            } | {
+                                                type: "somevalue";
+                                            } | {
+                                                type: "novalue";
+                                            };
+                                        }[];
+                                        hash: string;
+                                    }[];
+                                };
+                                context: string;
+                                release: string;
+                            } | {
+                                kind: "changed";
+                            } | {
+                                kind: "missing";
+                            } | {
+                                kind: "unsupported";
+                            } | {
+                                kind: "unavailable";
                             };
                             reviewedIdentity?: {
                                 subject: string;
@@ -861,7 +922,29 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                             detail: unknown;
                             errors: unknown;
                         };
+                        403: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
                         404: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        409: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;

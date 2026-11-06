@@ -22,7 +22,7 @@ export declare const FactSchema: import("typebox").TUnion<[import("typebox").TOb
     kind: import("typebox").TLiteral<"code">;
     value: import("typebox").TString;
 }>]>;
-declare const genericBase: import("typebox").TObject<{
+declare function genericBase(): import("typebox").TObject<{
     id: import("typebox").TString;
     kind: import("typebox").TString;
     kindLabel: import("typebox").TObject<{
@@ -71,7 +71,7 @@ declare const genericBase: import("typebox").TObject<{
         }>, import("typebox").TNull]>;
     }>;
 }>;
-export declare const searchHit: import("typebox").TObject<{
+export declare function searchHit(): import("typebox").TObject<{
     id: import("typebox").TString;
     type: import("typebox").TString;
     kind: import("typebox").TString;
@@ -204,7 +204,7 @@ export declare const searchHit: import("typebox").TObject<{
     }>]>>>>;
     figure: import("typebox").TRef<"PublicFigure">;
 }>;
-export declare const searchResponse: import("typebox").TObject<{
+export declare function searchResponse(): import("typebox").TObject<{
     subjects: import("typebox").TArray<import("typebox").TObject<{
         id: import("typebox").TString;
         type: import("typebox").TString;
@@ -381,7 +381,7 @@ export declare const searchResponse: import("typebox").TObject<{
         }>]>>;
     }>>;
 }>;
-export type SearchHttpBase = Static<typeof genericBase>;
+export type SearchHttpBase = Static<ReturnType<typeof genericBase>>;
 export type SearchHttpResponse = Omit<PublicSearchPage, 'subjects'> & {
     emptyRecovery?: Static<typeof EmptyRecoverySchema>;
     subjects: (PublicSearchPage['subjects'][number] & {

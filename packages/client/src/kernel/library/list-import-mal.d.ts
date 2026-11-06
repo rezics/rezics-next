@@ -129,7 +129,7 @@ export type MalDateOutcome = {
     } | null;
     reason: string | null;
 };
-export declare const MAL_DATE_LIMITS: {
+export declare function MAL_DATE_LIMITS(): {
     readonly rows: 20;
     readonly fields: 2;
     readonly requestBytes: 16384;

@@ -6,7 +6,7 @@ import { type NativeSourceIdentity } from '../library/native-source-custody.ts';
 import type { LeafOptions } from '../semantic/scope-leaf-evidence.ts';
 import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
 /** Fixed selected-work schedule for one raw ordinal continuation. This bounds work; it grants no dispatch authority. */
-export declare const SEARCH_SCOPE_ORDINAL_OPERATION: Readonly<{
+export declare function SEARCH_SCOPE_ORDINAL_OPERATION(): Readonly<{
     axes: readonly ["candidateKeys", "nativeRows", "identityMetadataRows", "emptySeeks", "nativePoints", "witnessKeys", "statements", "bytes", "engineRequests"];
     rawLimit: 1;
     schedule: Readonly<{

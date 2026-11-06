@@ -12,7 +12,7 @@ export type LibraryExportDependencies = {
     clock?: KernelClock;
 };
 type State = 'collecting' | 'ready' | 'stale' | 'cancelled' | 'expired' | 'limit';
-export declare const exportAuthorityTypes: string[];
+export declare function exportAuthorityTypes(): string[];
 /** No private artifact is retained: signed keysets replay only against the original unchanged source. */
 export declare function createLibraryExport(deps: LibraryExportDependencies): {
     create(actor: Actor, requestKey: string, signal?: AbortSignal): Promise<{

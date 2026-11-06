@@ -7,11 +7,11 @@ import type { ViewerActionResources } from '../access/viewer-actions.ts';
 export declare const READING_PAGE_REPLY_LIMIT = 20;
 export declare const READING_PAGE_REQUEST_BYTES: number;
 export declare const READING_CARD_REFERENCE_LIMIT = 20;
-export declare const READING_PAGE_RESPONSE_BYTES: number;
+export declare function READING_PAGE_RESPONSE_BYTES(): number;
 export declare const ReadingPageQuerySchema: import("typebox").TObject<{
     cursor: import("typebox").TOptional<import("typebox").TString>;
 }>;
-export declare const ReadingPageResponseSchema: import("typebox").TObject<{
+export declare function ReadingPageResponseSchema(): import("typebox").TObject<{
     target: import("typebox").TObject<{
         threadId: import("typebox").TString;
         boardId: import("typebox").TString;

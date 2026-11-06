@@ -76,4 +76,4 @@ export declare function openSelectedOperationalPhase(pool: Pool, options: Operat
 /** Trusted composition only. The genuine client binding is installed solely by createWorkClient. */
 export declare function composeSelectedRuntime(pool: Pool, work: WorkClient): SelectedRuntime;
 /** Work-owned adapter installed on each native WorkClient by the Kernel composition roots. */
-export declare const workExecutionPort: WorkExecutionPort;
+export declare function workExecutionPort(): WorkExecutionPort;

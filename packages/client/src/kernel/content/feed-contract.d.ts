@@ -89,7 +89,7 @@ export type ConversationActivityReplyCount = Readonly<{
     kind: 'lower-bound';
     value: number;
 }>;
-export declare const FeedItemSchema: import("typebox").TUnion<[import("typebox").TObject<{
+export declare function FeedItemSchema(): import("typebox").TUnion<[import("typebox").TObject<{
     id: import("typebox").TString;
     occurredAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
     source: import("typebox").TLiteral<"discovery">;
@@ -554,7 +554,7 @@ export declare const FeedItemSchema: import("typebox").TUnion<[import("typebox")
     }>;
 }>]>;
 export declare const FeedSourceStateSchema: import("typebox").TUnion<[import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"preparing">, import("typebox").TLiteral<"unavailable">, import("typebox").TLiteral<"not_requested">]>;
-export declare const FeedPageSchema: import("typebox").TObject<{
+export declare function FeedPageSchema(): import("typebox").TObject<{
     feedItems: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TObject<{
         id: import("typebox").TString;
         occurredAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
@@ -1032,7 +1032,7 @@ export declare const FeedPageSchema: import("typebox").TObject<{
         continue: import("typebox").TUnion<[import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"preparing">, import("typebox").TLiteral<"unavailable">, import("typebox").TLiteral<"not_requested">]>;
     }>;
 }>;
-export type FeedItem = Static<typeof FeedItemSchema>;
-export type FeedPage = Static<typeof FeedPageSchema>;
+export type FeedItem = Static<ReturnType<typeof FeedItemSchema>>;
+export type FeedPage = Static<ReturnType<typeof FeedPageSchema>>;
 export type FeedSourceState = Static<typeof FeedSourceStateSchema>;
 export {};

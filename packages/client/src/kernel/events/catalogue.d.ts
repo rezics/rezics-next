@@ -1,6 +1,9 @@
 import { Type, type TSchema } from 'typebox';
 import { type Validator } from 'typebox/compile';
-declare const productEventTypes: {
+/** Collect the declared producer contracts before process resources start. */
+export declare function initializeEventTypes(): void;
+/** Schema view retained for consumers that inspect event contracts. */
+export declare function EVENT_TYPES(): Readonly<{
     readonly "com.rezics.semantic.identity-scope.native-associated.v1": Type.TObject<{
         sourceKey: Type.TString;
         scope: Type.TString;
@@ -252,6 +255,10 @@ declare const productEventTypes: {
     readonly 'com.rezics.semantic.links.projected.v1': Type.TObject<{
         subjects: Type.TArray<Type.TString>;
     }>;
+    readonly 'com.rezics.search.recent-changed.v1': Type.TObject<{
+        accountId: Type.TString;
+    }>;
+    readonly 'com.rezics.search.trending.changed.v1': Type.TObject<{}>;
     readonly 'com.rezics.zone.created.v1': Type.TObject<{
         id: Type.TString;
         revision: Type.TString;
@@ -1793,12 +1800,9 @@ declare const productEventTypes: {
     readonly 'com.rezics.semantic.context.created.v1': Type.TObject<{
         id: Type.TString;
     }>;
-};
-/** Schema view retained for consumers that inspect event contracts. */
-export declare const EVENT_TYPES: Readonly<typeof productEventTypes> & Readonly<Record<string, TSchema>>;
+}> & Readonly<Record<string, TSchema>>;
 /** Register startup-only event contracts, compiling each schema exactly once. */
 export declare function registerEventTypes(entries: Readonly<Record<string, TSchema>>): void;
 export declare function lookupEventType(type: string): Validator | undefined;
 /** Called only after a command transaction has committed successfully. */
 export declare function sealEventTypes(): void;
-export {};

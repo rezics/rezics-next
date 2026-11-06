@@ -5,7 +5,7 @@ import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkClient } from '../work/client.ts';
 import { type ArchiveCoverage, type ArchiveRecord } from './library-archive.ts';
 import { createSessionCommands } from './sessions.ts';
-export declare const LIBRARY_ARCHIVE_MERGE_LIMITS: {
+export declare function LIBRARY_ARCHIVE_MERGE_LIMITS(): {
     readonly records: 100000;
     readonly recordBytes: number;
     readonly maxRecordBytes: 65536;

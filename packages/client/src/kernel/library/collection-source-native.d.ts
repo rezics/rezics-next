@@ -89,12 +89,7 @@ export type NativeCollectionOrdinalPageBound = Readonly<{
 /** The single native ordinal statement's literal and schema-width bounds. */
 export declare function nativeCollectionOrdinalPageBound(limit: number): NativeCollectionOrdinalPageBound;
 export declare const nativeCollectionPartitionMetadataSQL = "SELECT partition_no AS \"partitionNo\", write_state AS \"writeState\", epoch, position::text AS position FROM core.partition WHERE partition_no=$1";
-/**
- * One saved-Collection membership probe: current metadata (including a prior public output head), one entry
- * check, copy and session points, and the complete 32-label native window. The saved-rule contract excludes
- * the state-builtin compressed-pin branch. This bound is paired with the separate canonical group cap.
- */
-export declare const COLLECTION_SOURCE_NATIVE_SAVED_PROBE_COST: Bound;
+export declare function COLLECTION_SOURCE_NATIVE_SAVED_PROBE_COST(): Bound;
 export declare function nativeCollectionFootprint(sql: string, values: readonly unknown[], work?: NativeCollectionWork): WorkDimensions | undefined;
 export declare function readNativeCollectionWorkingMetadata(pool: Pool, ref: Ref, options: Options): Promise<{
     metadata: Readonly<Ref & {

@@ -57,7 +57,7 @@ export type AccountPreferences = {
     notifications: Notifications;
     version: number;
 };
-export declare const DEFAULT_ACCOUNT_PREFERENCES: Readonly<AccountPreferences>;
+export declare function DEFAULT_ACCOUNT_PREFERENCES(): Readonly<AccountPreferences>;
 export declare const READING_SPOILER_LEVELS: readonly [0, 1, 2];
 export declare const READING_SUITABILITY: readonly ['blur', 'show'];
 export declare const READING_DEFAULTS: Readonly<{

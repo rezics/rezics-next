@@ -6,7 +6,7 @@ export declare const COLLECTION_KIND_INPUT_RAW_LIMIT = 100;
 export declare const COLLECTION_KIND_INPUT_BYTE_LIMIT = 4096;
 /** One raw original. An exact-limit page is not EOF; the next charged seek establishes exhaustion. */
 export declare const COLLECTION_KIND_INPUT_QUANTUM = 1;
-export declare const COLLECTION_KIND_INPUT_TERMS: Readonly<{
+export declare function COLLECTION_KIND_INPUT_TERMS(): Readonly<{
     admissionEpisode: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
     admissionSource: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
     custody: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
@@ -20,7 +20,7 @@ export declare const COLLECTION_KIND_INPUT_TERMS: Readonly<{
     retire: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
     admission: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
 }>;
-export declare const COLLECTION_KIND_PREPARATION_TERMS: Readonly<{
+export declare function COLLECTION_KIND_PREPARATION_TERMS(): Readonly<{
     scope: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
     observation: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
     retired: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
@@ -28,9 +28,9 @@ export declare const COLLECTION_KIND_PREPARATION_TERMS: Readonly<{
     custody: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
 }>;
 /** Complete one-attempt sequence: admission, state, two reads, source observations, insert fence, retirement. */
-export declare const COLLECTION_KIND_INPUT_COST: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
-export declare const COLLECTION_KIND_PREPARATION_OBSERVATION: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
-export declare const COLLECTION_KIND_PREPARATION_RETIREMENT: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
+export declare function COLLECTION_KIND_INPUT_COST(): Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
+export declare function COLLECTION_KIND_PREPARATION_OBSERVATION(): Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
+export declare function COLLECTION_KIND_PREPARATION_RETIREMENT(): Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
 export declare const COLLECTION_KIND_INPUT_PATHS: Readonly<{
     quantum: 1;
     rawCeiling: 100;
@@ -41,7 +41,7 @@ export declare const COLLECTION_KIND_INPUT_PATHS: Readonly<{
     custodyStatements: 7;
     nativeAttempts: 3;
 }>;
-export declare const COLLECTION_KIND_INPUT_DECLARATION: Readonly<{
+export declare function COLLECTION_KIND_INPUT_DECLARATION(): Readonly<{
     status: 'complete';
     axes: readonly ["candidateKeys", "nativeRows", "identityMetadataRows", "emptySeeks", "nativePoints", "witnessKeys", "statements", "bytes", "engineRequests"];
     cost: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;

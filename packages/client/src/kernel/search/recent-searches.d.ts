@@ -39,7 +39,7 @@ export type RecentDependencies = {
     routeKey: Uint8Array;
     clock?: () => Date;
 };
-declare const item: import("typebox").TObject<{
+declare function item(): import("typebox").TObject<{
     id: import("typebox").TString;
     lastUsed: import("typebox").TString;
     revision: import("typebox").TInteger;
@@ -101,7 +101,7 @@ declare const item: import("typebox").TObject<{
         }>, import("typebox").TNull]>;
     }>, import("typebox").TNull]>;
 }>;
-export type RecentSearch = Static<typeof item>;
+export type RecentSearch = Static<ReturnType<typeof item>>;
 export declare const RECENT_CHANGED = "com.rezics.search.recent-changed.v1";
 export declare const RECENT_DAYS = 90;
 /** No retained labels or URLs: each bounded page uses the current native owner reads. */

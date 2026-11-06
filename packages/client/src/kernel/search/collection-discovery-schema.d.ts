@@ -1,4 +1,4 @@
-export declare const CollectionDiscoverySummarySchema: import("typebox").TObject<{
+export declare function CollectionDiscoverySummarySchema(): import("typebox").TObject<{
     id: import("typebox").TString;
     title: import("typebox").TString;
     description: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;

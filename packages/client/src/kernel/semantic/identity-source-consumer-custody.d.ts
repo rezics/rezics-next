@@ -11,7 +11,7 @@ import type { AgentIdentityRetirementStage } from '../history/agent-identity-ret
 import type { AgentIdentitySDKReceivingBinding } from '../history/agent-identity-sdk-fence.ts';
 import { type SdkWriterState } from '../work/sdk-retirement-fence.ts';
 import type { IdentitySourceConsumerMaintenanceWork } from './identity-source-consumer-maintenance.ts';
-export declare const IDENTITY_SOURCE_LOCAL_SQL: Readonly<{
+export declare function IDENTITY_SOURCE_LOCAL_SQL(): Readonly<{
     retained: "SELECT r.erasure_key::text,r.binding_generation::text,r.transaction_id,r.owner_epoch,n.position::text\nFROM semantic.identity_epoch_source_consumer_custody r\nJOIN semantic.erasure_source_commit n ON n.partition_no=r.partition_no AND n.transaction_id=r.transaction_id\n  AND n.epoch=r.owner_epoch AND n.xmin=r.xmin\nJOIN core.partition p ON p.partition_no=r.partition_no AND p.write_state='active'\n  AND p.epoch=r.owner_epoch AND p.position>=n.position\nJOIN semantic.identity_epoch_receipt_binding b ON b.partition_no=r.partition_no\n  AND b.receipt_key=r.receipt_key AND b.generation=r.binding_generation\n  AND b.intent_digest=r.source_digest AND b.state='accepted'\n  AND b.accepted_job=r.job_id AND b.accepted_epoch=r.job_epoch\nJOIN semantic.identity_epoch_receipt_claim c ON c.partition_no=b.partition_no\n  AND c.receipt_key=b.receipt_key AND c.generation=b.generation\n  AND c.scope_digest=r.scope_digest AND c.job_id=r.job_id AND c.job_epoch=r.job_epoch\nJOIN semantic.identity_epoch_receipt_claim_commit k ON k.partition_no=c.partition_no\n  AND k.receipt_key=c.receipt_key AND k.generation=c.generation AND k.transaction_id=r.binding_transaction_id\nWHERE r.partition_no=$1 AND r.receipt_key=$2 AND r.source_digest=$3 AND r.source_epoch=$4\n  AND r.source_position=$5 AND r.source_transaction_id=$6 AND r.job_id=$7 AND r.job_epoch=$8\n  AND r.barrier_account_id=$9 AND r.barrier_account_route=$10 AND r.barrier_version=$11\n  AND r.barrier_at=$12::timestamptz AND r.erased_role=$13\nFOR SHARE OF r,n,p,b,c,k /*file='..%2F..%2F..%2F..%2Fservices%2Fkernel%2Fsrc%2Fsemantic%2Fidentity-source-consumer-custody-select.sql'*/;";
     progress: "SELECT r.sequence::text,r.state,r.directory_after,r.ticket_key,r.effect_after,r.seal_digest,\n       r.replay_generation::text,r.undo_generation::text,r.restore_generation::text,\n       r.transaction_id,r.owner_epoch,n.position::text,\n       r.receiving_partition,r.receiving_epoch,r.receiving_position::text,r.receiving_transaction_id,\n       (n.transaction_id IS NOT NULL AND p.partition_no IS NOT NULL) AS native_current\nFROM (\n SELECT *, xmin AS source_xmin FROM semantic.identity_epoch_source_consumer_terminal\n WHERE partition_no=$1 AND custody_key=$2 ORDER BY sequence DESC LIMIT 1\n) r\nLEFT JOIN semantic.erasure_source_commit n ON n.partition_no=r.partition_no AND n.transaction_id=r.transaction_id\n AND n.epoch=r.owner_epoch AND n.xmin=r.source_xmin\nLEFT JOIN core.partition p ON p.partition_no=r.partition_no AND p.write_state='active'\n AND p.moved_to IS NULL AND p.epoch=r.owner_epoch AND p.position>=n.position /*file='..%2F..%2F..%2F..%2Fservices%2Fkernel%2Fsrc%2Fsemantic%2Fidentity-source-consumer-custody-progress.sql'*/;";
     accepted: "SELECT c.generation::text,c.scope_digest,c.job_home,\n  k.transaction_id AS binding_transaction_id\nFROM semantic.identity_epoch_receipt_binding b\nJOIN semantic.identity_epoch_receipt_claim c USING(partition_no,receipt_key,generation)\nJOIN semantic.identity_epoch_receipt_claim_commit k USING(partition_no,receipt_key,generation)\nJOIN semantic.identity_epoch_native_commit n ON n.partition_no=k.partition_no\n  AND n.transaction_id=k.transaction_id AND n.purpose='admission' AND n.xmin=k.xmin\nJOIN core.partition p ON p.partition_no=b.partition_no AND p.write_state='active'\n  AND p.epoch=n.epoch AND p.position>=n.position\nWHERE b.partition_no=$1 AND b.receipt_key=$2 AND b.state='accepted'\n  AND b.intent_digest=$3 AND c.intent_digest=$3 AND c.job_id=$4 AND c.job_epoch=$5\n  AND b.accepted_job=c.job_id AND b.accepted_epoch=c.job_epoch AND c.receipt=$6::jsonb\n  AND octet_length(c.scope_digest)<=128 AND c.job_home BETWEEN 0 AND 4095\nFOR UPDATE OF b FOR SHARE OF c,k,n,p";
@@ -21,7 +21,7 @@ export declare const IDENTITY_SOURCE_LOCAL_SQL: Readonly<{
  * Bytes include the actual SQL text, bounded serialized binds and full schema
  * projection. A hit/absence reserves the same leading-key probes and one EOF.
  */
-export declare const IDENTITY_SOURCE_LOCAL_READ_DECLARATIONS: Readonly<Readonly<Record<"accepted" | "progress" | "published" | "retained", Readonly<{
+export declare function IDENTITY_SOURCE_LOCAL_READ_DECLARATIONS(): Readonly<Readonly<Record<"accepted" | "progress" | "published" | "retained", Readonly<{
     engineRequests: 0;
     work: Readonly<{
         candidateKeys: 0;
@@ -40,7 +40,7 @@ export declare const IDENTITY_SOURCE_LOCAL_READ_DECLARATIONS: Readonly<Readonly<
  * work cannot inherit Core's single-no-effect envelope.
  * Parameter maxima include JSON escaping (six bytes per bounded text byte).
  */
-export declare const IDENTITY_SOURCE_LOCAL_MUTATION_COMPONENTS: Readonly<{
+export declare function IDENTITY_SOURCE_LOCAL_MUTATION_COMPONENTS(): Readonly<{
     custodyInsert: Readonly<{
         body: Readonly<{
             engineRequests: 0;
@@ -81,7 +81,7 @@ export declare const IDENTITY_SOURCE_LOCAL_MUTATION_COMPONENTS: Readonly<{
  * alternative branch makes repeated work free. Each list names its exact child
  * rather than accepting a caller-supplied total.
  */
-export declare const IDENTITY_SOURCE_LOCAL_CALLS: Readonly<{
+export declare function IDENTITY_SOURCE_LOCAL_CALLS(): Readonly<{
     retainedDiscovery: Readonly<{
         controls: Readonly<{
             profile: 'single-no-effect';
@@ -546,7 +546,7 @@ export declare function lockIdentitySourceHistoryAuthority(tx: CommandTransactio
  * or engine request occurs. Failed exact-key lookup reserves one empty seek.
  * SQL/parameter bytes include the 2048/4096 inputs and the closed native output
  * projection above. The independent legacy allowance is not the prepaid price. */
-export declare const IDENTITY_SOURCE_HISTORY_GUARD_DECLARATION: Readonly<{
+export declare function IDENTITY_SOURCE_HISTORY_GUARD_DECLARATION(): Readonly<{
     engineRequests: 0;
     work: Readonly<{
         candidateKeys: 0;

@@ -1,4 +1,3 @@
-import { AccessUnavailableError } from './unavailable.ts';
 /** Neutral native dimensions, structurally compatible with the Source ledger. */
 export type AccessWork = Readonly<{
     keys: number;
@@ -37,10 +36,23 @@ export type AccessWorkResult<T> = Readonly<{
     error: unknown;
     usage: AccessWork;
 }>;
-export declare class AccessWorkUnavailableError extends AccessUnavailableError {
-    readonly dependency: string;
-    constructor(dependency: string);
-}
+export declare function AccessWorkUnavailableError(): {
+    new (dependency: string): {
+        readonly dependency: string;
+        name: string;
+        message: string;
+        stack?: string;
+        cause?: unknown;
+        readonly reason: 'deadline' | 'overloaded' | 'contention';
+    };
+    isError(error: unknown): error is Error;
+    isError(value: unknown): value is Error;
+    captureStackTrace(targetObject: object, constructorOpt?: Function): void;
+    captureStackTrace(targetObject: object, constructorOpt?: Function): void;
+    prepareStackTrace(err: Error, stackTraces: NodeJS.CallSite[]): any;
+    stackTraceLimit: number;
+};
+export type AccessWorkUnavailableError = InstanceType<ReturnType<typeof AccessWorkUnavailableError>>;
 export declare function addAccessWork(...values: readonly AccessWork[]): AccessWork;
 export declare function isAccessWorkDispatch(): boolean;
 /** Receipt accumulator only. Admission and remaining budget stay with the sink.

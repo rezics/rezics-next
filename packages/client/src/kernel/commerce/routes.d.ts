@@ -537,6 +537,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                         language?: string;
                         includeViewerActions?: boolean;
                         includeDocuments?: boolean;
+                        selectedSynopsis?: string;
                         reviewIdentitySource?: "bangumi" | "bangumi_cross_media" | "vndb" | "vndb_cross_media";
                         reviewIdentityExternalId?: string;
                     };
@@ -614,6 +615,66 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                     };
                                     attribution?: string;
                                 }[];
+                            };
+                            selectedSynopsis?: {
+                                kind: "matched";
+                                fact: {
+                                    id: string;
+                                    rank: "deprecated" | "normal" | "preferred";
+                                    property: {
+                                        id: string;
+                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                    };
+                                    value: {
+                                        type: "value";
+                                        content: any;
+                                    } | {
+                                        type: "somevalue";
+                                    } | {
+                                        type: "novalue";
+                                    };
+                                    qualifiers: {
+                                        property: {
+                                            id: string;
+                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                        };
+                                        value: {
+                                            type: "value";
+                                            content: any;
+                                        } | {
+                                            type: "somevalue";
+                                        } | {
+                                            type: "novalue";
+                                        };
+                                    }[];
+                                    references: {
+                                        parts: {
+                                            property: {
+                                                id: string;
+                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                            };
+                                            value: {
+                                                type: "value";
+                                                content: any;
+                                            } | {
+                                                type: "somevalue";
+                                            } | {
+                                                type: "novalue";
+                                            };
+                                        }[];
+                                        hash: string;
+                                    }[];
+                                };
+                                context: string;
+                                release: string;
+                            } | {
+                                kind: "changed";
+                            } | {
+                                kind: "missing";
+                            } | {
+                                kind: "unsupported";
+                            } | {
+                                kind: "unavailable";
                             };
                             reviewedIdentity?: {
                                 subject: string;
@@ -735,7 +796,29 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             detail: unknown;
                             errors: unknown;
                         };
+                        403: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
                         404: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        409: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;

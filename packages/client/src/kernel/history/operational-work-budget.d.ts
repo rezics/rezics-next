@@ -6,8 +6,8 @@ import { OPERATIONAL_WORK_AXES } from './operational-work-axes.ts';
 /** Complete native dimensions used by the operational History producer. */
 export { OPERATIONAL_WORK_AXES };
 export type OperationalWorkCost = Bound;
-export declare const sumOperationalWork: typeof sumBounds;
-export declare const OPERATIONAL_WORK_COST: Readonly<{
+export declare function sumOperationalWork(): typeof sumBounds;
+export declare function OPERATIONAL_WORK_COST(): Readonly<{
     attempt: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
     originalLookup: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
     sourceDomain: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
@@ -32,20 +32,20 @@ export declare const OPERATIONAL_WORK_COST: Readonly<{
     writerBarrier: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
     replaySeals: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
 }>;
-export declare const OPERATIONAL_WORK_REGISTRATION: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
-export declare const OPERATIONAL_WORK_RECEIVING: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
-export declare const OPERATIONAL_WORK_RECHECK: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
-export declare const OPERATIONAL_WORK_TRANSFER_COST: Readonly<{
+export declare function OPERATIONAL_WORK_REGISTRATION(): Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
+export declare function OPERATIONAL_WORK_RECEIVING(): Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
+export declare function OPERATIONAL_WORK_RECHECK(): Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
+export declare function OPERATIONAL_WORK_TRANSFER_COST(): Readonly<{
     resolve: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
     verify: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
     receive: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
     replay: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
     retirement: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
 }>;
-export type OperationalWorkPhase = keyof typeof OPERATIONAL_WORK_TRANSFER_COST;
+export type OperationalWorkPhase = keyof ReturnType<typeof OPERATIONAL_WORK_TRANSFER_COST>;
 /** Documented static ceiling for three complete attempts including every child. This is a
  * descriptive bound, not a prepaid ledger: callers do not buy dispatch from it. */
-export declare const OPERATIONAL_WORK_LOCAL_DECLARATION: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
+export declare function OPERATIONAL_WORK_LOCAL_DECLARATION(): Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
 export declare class OperationalWorkUnavailable extends Error {
     readonly gap: string;
     constructor(gap: string);

@@ -26,7 +26,7 @@ export type RealmPresentationImage = Readonly<{
     }> | null;
     credit: import('@rezics/definitions/media-import').MediaImportRequest['credit'] | null;
 }>;
-export declare const RealmPresentationImageSchema: import("typebox").TObject<{
+export declare function RealmPresentationImageSchema(): import("typebox").TObject<{
     id: import("typebox").TString;
     containerId: import("typebox").TString;
     digest: import("typebox").TString;

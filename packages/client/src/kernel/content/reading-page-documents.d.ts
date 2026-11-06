@@ -25,7 +25,7 @@ export type ReadingPageDocumentMedia = Readonly<{
     state: 'available' | 'unavailable' | 'overflow';
     documents: readonly ReadingPageDocument[];
 }>;
-export declare const ReadingPageDocumentMediaSchema: import("typebox").TUnsafe<Readonly<{
+export declare function ReadingPageDocumentMediaSchema(): import("typebox").TUnsafe<Readonly<{
     state: 'available' | 'unavailable' | 'overflow';
     documents: readonly ReadingPageDocument[];
 }>>;
@@ -50,4 +50,4 @@ export declare function selectReadingPageDocumentMedia(threadId: string, posts: 
 export declare function readReadingPageDocumentMedia(dependencies: MediaDependencies & Readonly<{
     routeKey: Uint8Array;
 }>, actor: Actor, threadId: string, posts: readonly PostEntry[], deadline: number): Promise<ReadingPageDocumentMedia>;
-export type ReadingPageDocumentMediaResponse = Static<typeof ReadingPageDocumentMediaSchema>;
+export type ReadingPageDocumentMediaResponse = Static<ReturnType<typeof ReadingPageDocumentMediaSchema>>;

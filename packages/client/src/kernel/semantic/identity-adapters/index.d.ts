@@ -66,7 +66,7 @@ export declare function pageLibraryIdentityEpochChanges(tx: CommandTransaction, 
     next: string | null;
 }>;
 /** Native source mappings and partition-scoped admission. Participant completion is never inferred. */
-export declare const identityEpochStore: IdentityEpochStore;
+export declare function identityEpochStore(): IdentityEpochStore;
 export { readIdentityMappings, readIdentityRatingReview };
 export type { IdentityRatingControlLocator, IdentityRatingReviewOperand, IdentityRatingReviewResult, IdentityRatingReviewUnavailableReason, } from './read.ts';
 export type * from './identity-epoch-contract.ts';

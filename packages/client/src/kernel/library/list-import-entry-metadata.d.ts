@@ -3,7 +3,7 @@ import type { Actor } from '../request/access.ts';
 import type { CommandOutcome } from '../command/command.ts';
 import { createEntryPersonalCommands } from './entry-personal.ts';
 import type { LabelCommandAdmission } from './label-command-admission.ts';
-export declare const ENTRY_IMPORT_METADATA_LIMITS: {
+export declare function ENTRY_IMPORT_METADATA_LIMITS(): {
     readonly fields: 5;
     readonly reviewsPerRow: 2;
     readonly requestBytes: 2048;

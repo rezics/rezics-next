@@ -1,6 +1,6 @@
 import { type LibraryArchiveManifest, type LibraryExportSection } from './library-export-format.ts';
 /** Consumer bounds, fixed before parsing. No upload, permission or effect is admitted here. */
-export declare const LIBRARY_ARCHIVE_LIMITS: {
+export declare function LIBRARY_ARCHIVE_LIMITS(): {
     readonly records: 100000;
     readonly recordBytes: number;
     readonly maxRecordBytes: 65536;

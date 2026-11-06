@@ -539,6 +539,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                         language?: string;
                         includeViewerActions?: boolean;
                         includeDocuments?: boolean;
+                        selectedSynopsis?: string;
                         reviewIdentitySource?: "bangumi" | "bangumi_cross_media" | "vndb" | "vndb_cross_media";
                         reviewIdentityExternalId?: string;
                     };
@@ -616,6 +617,66 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                                     };
                                     attribution?: string;
                                 }[];
+                            };
+                            selectedSynopsis?: {
+                                kind: "matched";
+                                fact: {
+                                    id: string;
+                                    rank: "deprecated" | "normal" | "preferred";
+                                    property: {
+                                        id: string;
+                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                    };
+                                    value: {
+                                        type: "value";
+                                        content: any;
+                                    } | {
+                                        type: "somevalue";
+                                    } | {
+                                        type: "novalue";
+                                    };
+                                    qualifiers: {
+                                        property: {
+                                            id: string;
+                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                        };
+                                        value: {
+                                            type: "value";
+                                            content: any;
+                                        } | {
+                                            type: "somevalue";
+                                        } | {
+                                            type: "novalue";
+                                        };
+                                    }[];
+                                    references: {
+                                        parts: {
+                                            property: {
+                                                id: string;
+                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                            };
+                                            value: {
+                                                type: "value";
+                                                content: any;
+                                            } | {
+                                                type: "somevalue";
+                                            } | {
+                                                type: "novalue";
+                                            };
+                                        }[];
+                                        hash: string;
+                                    }[];
+                                };
+                                context: string;
+                                release: string;
+                            } | {
+                                kind: "changed";
+                            } | {
+                                kind: "missing";
+                            } | {
+                                kind: "unsupported";
+                            } | {
+                                kind: "unavailable";
                             };
                             reviewedIdentity?: {
                                 subject: string;
@@ -737,7 +798,29 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                             detail: unknown;
                             errors: unknown;
                         };
+                        403: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
                         404: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        409: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -6805,7 +6888,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                             page: number;
                             pageCount: number;
                             nextPage: number | null;
-                            items: {
+                            items: readonly {
                                 selected: {
                                     subjectId: string;
                                     incarnationId: string;
@@ -6946,7 +7029,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                                 page: number;
                                 pageCount: number;
                                 nextPage: number | null;
-                                items: {
+                                items: readonly {
                                     selected: {
                                         subjectId: string;
                                         incarnationId: string;
@@ -7090,7 +7173,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                                     page: number;
                                     pageCount: number;
                                     nextPage: number | null;
-                                    items: {
+                                    items: readonly {
                                         selected: {
                                             subjectId: string;
                                             incarnationId: string;
@@ -11742,7 +11825,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
         view: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"BASIC">, import("typebox").TLiteral<"FULL">]>>;
         cursor: import("typebox").TOptional<import("typebox").TString>;
         limit: import("typebox").TOptional<import("typebox").TInteger>;
-        targetType: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"subject">, import("typebox").TLiteral<"collection">, import("typebox").TLiteral<"space">]>>;
+        targetType: import("typebox").TOptional<import("typebox").TEnum<["collection", "space", "subject"]>>;
     }>;
     response: {
         400: import("typebox").TObject<{
@@ -12241,7 +12324,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
             view: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"BASIC">, import("typebox").TLiteral<"FULL">]>>;
             cursor: import("typebox").TOptional<import("typebox").TString>;
             limit: import("typebox").TOptional<import("typebox").TInteger>;
-            targetType: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"subject">, import("typebox").TLiteral<"collection">, import("typebox").TLiteral<"space">]>>;
+            targetType: import("typebox").TOptional<import("typebox").TEnum<["collection", "space", "subject"]>>;
         }>;
         response: {
             400: import("typebox").TObject<{
@@ -12496,7 +12579,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
         view: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"BASIC">, import("typebox").TLiteral<"FULL">]>>;
         cursor: import("typebox").TOptional<import("typebox").TString>;
         limit: import("typebox").TOptional<import("typebox").TInteger>;
-        targetType: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"subject">, import("typebox").TLiteral<"collection">, import("typebox").TLiteral<"space">]>>;
+        targetType: import("typebox").TOptional<import("typebox").TEnum<["collection", "space", "subject"]>>;
     }>;
     response: {
         400: import("typebox").TObject<{

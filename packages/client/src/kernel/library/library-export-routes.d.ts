@@ -1,7 +1,6 @@
 import type { Access } from '../request/access.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import { type LibraryExportDependencies } from './library-export.ts';
-import { exportSections, exportSectionsV2, exportSectionsV3, exportSectionsV4 } from './library-export-format.ts';
 export declare function libraryExportRoutes(app: ReturnType<typeof definitionRoutes>, deps: Omit<LibraryExportDependencies, 'access'> & {
     access: () => Access;
 }): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
@@ -519,6 +518,7 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
                         language?: string;
                         includeViewerActions?: boolean;
                         includeDocuments?: boolean;
+                        selectedSynopsis?: string;
                         reviewIdentitySource?: "bangumi" | "bangumi_cross_media" | "vndb" | "vndb_cross_media";
                         reviewIdentityExternalId?: string;
                     };
@@ -596,6 +596,66 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
                                     };
                                     attribution?: string;
                                 }[];
+                            };
+                            selectedSynopsis?: {
+                                kind: "matched";
+                                fact: {
+                                    id: string;
+                                    rank: "deprecated" | "normal" | "preferred";
+                                    property: {
+                                        id: string;
+                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                    };
+                                    value: {
+                                        type: "value";
+                                        content: any;
+                                    } | {
+                                        type: "somevalue";
+                                    } | {
+                                        type: "novalue";
+                                    };
+                                    qualifiers: {
+                                        property: {
+                                            id: string;
+                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                        };
+                                        value: {
+                                            type: "value";
+                                            content: any;
+                                        } | {
+                                            type: "somevalue";
+                                        } | {
+                                            type: "novalue";
+                                        };
+                                    }[];
+                                    references: {
+                                        parts: {
+                                            property: {
+                                                id: string;
+                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                            };
+                                            value: {
+                                                type: "value";
+                                                content: any;
+                                            } | {
+                                                type: "somevalue";
+                                            } | {
+                                                type: "novalue";
+                                            };
+                                        }[];
+                                        hash: string;
+                                    }[];
+                                };
+                                context: string;
+                                release: string;
+                            } | {
+                                kind: "changed";
+                            } | {
+                                kind: "missing";
+                            } | {
+                                kind: "unsupported";
+                            } | {
+                                kind: "unavailable";
                             };
                             reviewedIdentity?: {
                                 subject: string;
@@ -717,7 +777,29 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
                             detail: unknown;
                             errors: unknown;
                         };
+                        403: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
                         404: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        409: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -8054,87 +8136,59 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
     readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
     readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<{
-    format: typeof import("./library-export-format.ts").LIBRARY_EXPORT_FORMAT;
+    format: "https://rezics.com/formats/library-export";
     version: 1;
     exportId: string;
     capturedAt: string;
     expiresAt: string;
-    privacy: 'private';
-    completeness: 'supported-native-facts';
-    sections: [...typeof exportSections];
-    omissions: {
-        readonly trash: 'excluded; current live facts and retained session history only';
-        readonly providerIdentifiers: 'stored personal import evidence only; no shared custody scan or inferred identifiers';
-        readonly personalImportEvidence: 'retained Bangumi and unexpired MAL row evidence; raw XML, credentials and internal review/apply capabilities excluded';
-        readonly commerce: 'excluded; orders and financial evidence use Commerce retention/export policy';
-        readonly publication: 'excluded; stored rules only, no dynamic evaluation or working publication output';
-        readonly reimport: 'unavailable; this format does not promise an installed re-import endpoint';
-    };
-    state: "cancelled" | "collecting" | "expired" | "limit" | "ready" | "stale";
+    privacy: "private";
+    completeness: "supported-native-facts";
+    sections: ["entries", "labels", "assignments", "sessions", "holdings", "collections", "collectionPins", "bangumiUploads", "bangumiEvidence", "malImports", "units", "history", "occurrences", "malEvidence"];
+    omissions: Record<string, string>;
     fullExport: false;
+    state: "cancelled" | "collecting" | "expired" | "limit" | "ready" | "stale";
     first: string | null;
 } | {
-    format: typeof import("./library-export-format.ts").LIBRARY_EXPORT_FORMAT;
+    format: "https://rezics.com/formats/library-export";
     version: 2;
-    coverage: 'private-library-owner-facts-v2';
+    coverage: "private-library-owner-facts-v2";
     exportId: string;
     capturedAt: string;
     expiresAt: string;
-    privacy: 'private';
-    completeness: 'supported-native-facts';
-    sections: [...typeof exportSectionsV2];
-    omissions: {
-        readonly trash: 'excluded; current live facts and retained session history only';
-        readonly providerIdentifiers: 'only explicitly reviewed owner observations and retained import evidence; no shared custody scan or inferred identifiers';
-        readonly personalImportEvidence: 'retained Bangumi and unexpired MAL row evidence; raw uploads, credentials and internal review/apply capabilities excluded';
-        readonly commerce: 'excluded; orders and financial evidence use Commerce retention/export policy';
-        readonly publication: 'excluded; stored rules only, no dynamic evaluation or working publication output';
-        readonly reimport: 'version 1 archive recovery plus reviewed version 2 annotations and journal dates/reflection; provenance remains unsupported';
-    };
-    state: "cancelled" | "collecting" | "expired" | "limit" | "ready" | "stale";
+    privacy: "private";
+    completeness: "supported-native-facts";
+    sections: ["entries", "labels", "assignments", "sessions", "holdings", "collections", "collectionPins", "bangumiUploads", "bangumiEvidence", "malImports", "units", "history", "occurrences", "malEvidence", "annotations", "provenance", "journals"];
+    omissions: Record<string, string>;
     fullExport: false;
+    state: "cancelled" | "collecting" | "expired" | "limit" | "ready" | "stale";
     first: string | null;
 } | {
-    format: typeof import("./library-export-format.ts").LIBRARY_EXPORT_FORMAT;
+    format: "https://rezics.com/formats/library-export";
     version: 3;
-    coverage: 'private-library-owner-facts-v3';
+    coverage: "private-library-owner-facts-v3";
     exportId: string;
     capturedAt: string;
     expiresAt: string;
-    privacy: 'private';
-    completeness: 'supported-native-facts';
-    sections: [...typeof exportSectionsV3];
-    omissions: {
-        readonly trash: 'excluded; current live facts and retained session history only';
-        readonly providerIdentifiers: 'only explicitly reviewed owner observations and retained import evidence; no shared custody scan or inferred identifiers';
-        readonly personalImportEvidence: 'retained Bangumi and unexpired MAL row evidence; raw uploads, credentials and internal review/apply capabilities excluded';
-        readonly commerce: 'excluded; orders and financial evidence use Commerce retention/export policy';
-        readonly publication: 'excluded; stored rules only, no dynamic evaluation or working publication output';
-        readonly reimport: 'version 1 archive recovery plus reviewed version 2 annotations and journal dates/reflection and supported version 3 occurrence assessments; provenance remains unsupported';
-    };
-    state: "cancelled" | "collecting" | "expired" | "limit" | "ready" | "stale";
+    privacy: "private";
+    completeness: "supported-native-facts";
+    sections: ["entries", "labels", "assignments", "sessions", "holdings", "collections", "collectionPins", "bangumiUploads", "bangumiEvidence", "malImports", "units", "history", "occurrences", "malEvidence", "annotations", "provenance", "journals"];
+    omissions: Record<string, string>;
     fullExport: false;
+    state: "cancelled" | "collecting" | "expired" | "limit" | "ready" | "stale";
     first: string | null;
 } | {
-    format: typeof import("./library-export-format.ts").LIBRARY_EXPORT_FORMAT;
+    format: "https://rezics.com/formats/library-export";
     version: 4;
-    coverage: 'private-library-owner-facts-v4';
+    coverage: "private-library-owner-facts-v4";
     exportId: string;
     capturedAt: string;
     expiresAt: string;
-    privacy: 'private';
-    completeness: 'supported-native-facts';
-    sections: [...typeof exportSectionsV4];
-    omissions: {
-        readonly trash: 'excluded; current live facts and retained session history only';
-        readonly providerIdentifiers: 'only explicitly reviewed owner observations and retained import evidence; no shared custody scan or inferred identifiers';
-        readonly commerce: 'excluded; orders and financial evidence use Commerce retention/export policy';
-        readonly publication: 'excluded; stored rules only, no dynamic evaluation or working publication output';
-        readonly personalImportEvidence: 'retained Bangumi, unexpired MAL and VNDB, and retained AniList parsed rows; raw uploads, wrapper documents, credentials and review/apply capabilities excluded';
-        readonly reimport: 'version 4 recovery unavailable to the installed V1/V2/V3 archive consumer; evidence never authorizes execution';
-    };
-    state: "cancelled" | "collecting" | "expired" | "limit" | "ready" | "stale";
+    privacy: "private";
+    completeness: "supported-native-facts";
+    sections: ["entries", "labels", "assignments", "sessions", "holdings", "collections", "collectionPins", "bangumiUploads", "bangumiEvidence", "malImports", "units", "history", "occurrences", "malEvidence", "annotations", "provenance", "journals", "vndbUploads", "vndbEvidence", "anilistUploads", "anilistEvidence"];
+    omissions: Record<string, string>;
     fullExport: false;
+    state: "cancelled" | "collecting" | "expired" | "limit" | "ready" | "stale";
     first: string | null;
 }>, {
     params: import("typebox").TObject<{

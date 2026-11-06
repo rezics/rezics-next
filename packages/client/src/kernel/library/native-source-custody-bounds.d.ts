@@ -52,12 +52,12 @@ type NativeSourceCustodyQueries = Readonly<{
     }>;
 }>;
 /** The canonical SQL objects used by the native adapter and the executable plan. */
-export declare const nativeSourceCustodyQueries: NativeSourceCustodyQueries;
+export declare function nativeSourceCustodyQueries(): NativeSourceCustodyQueries;
 type StatementCounts = Readonly<Partial<Record<StatementId, number>>>;
 /** Translate the nine-axis public bound to the legacy native receipt axes explicitly. */
 export declare function nativeSourceCustodyWorkDimensions(bound: Bound): WorkDimensions;
 /** Closed operation-to-statement bindings and finite maxima for the actual custody adapter. */
-export declare const NATIVE_SOURCE_CUSTODY_OPERATION_PLAN: Readonly<{
+export declare function NATIVE_SOURCE_CUSTODY_OPERATION_PLAN(): Readonly<{
     version: 1;
     owner: 'Library';
     operations: {
@@ -223,7 +223,7 @@ export declare const NATIVE_SOURCE_CUSTODY_OPERATION_PLAN: Readonly<{
     }>;
 }>;
 export type NativeSourceCustodyOperation = CustodyOperation;
-export declare const NATIVE_SOURCE_CUSTODY_RETIREMENT_PAGE_BOUND: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
+export declare function NATIVE_SOURCE_CUSTODY_RETIREMENT_PAGE_BOUND(): Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
 /** Rejects a recognized statement when it is not bound to this native operation. */
 export declare function nativeSourceCustodyOperationAllows(operation: CustodyOperation, query: Query): boolean;
 export type NativeSourceCustodyOperationUse = Readonly<{
@@ -234,7 +234,7 @@ export type NativeSourceCustodyOperationUse = Readonly<{
 export declare function createNativeSourceCustodyOperationUse(operation: CustodyOperation): NativeSourceCustodyOperationUse;
 export declare function nativeSourceCustodyOperationBound(operation: CustodyOperation): Bound;
 /** The Source-selected effect step invokes one raw page or its terminal finish path. */
-export declare const NATIVE_SOURCE_CUSTODY_CAPTURE_STEP_BOUND: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
+export declare function NATIVE_SOURCE_CUSTODY_CAPTURE_STEP_BOUND(): Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
 /** Exact runtime query-object pricing. Unknown SQL has no compatibility estimate. */
 export declare function nativeSourceCustodyExecutionBound(query: Query, values: readonly unknown[]): Bound | undefined;
 /** Nine-axis declaration for original-work composition and SQL-backed dispatch. */

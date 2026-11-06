@@ -130,14 +130,14 @@ export type AgentIdentityRecoveryArtifactInspection = Readonly<{
 /** Resolve one artifact-leading recovery association and re-read its exact two-slot cut.
  * No source JSON, account-prefix, or history population scan participates. */
 export declare function readAgentIdentityRecoveryArtifactInTransaction(tx: CommandTransaction, artifact: HistoryArtifact, pool?: Pool, context?: Pick<HistoryReceivingContext, 'deadline' | 'identityConsumerWork'>): Promise<AgentIdentityRecoveryArtifactInspection>;
-export declare const AGENT_IDENTITY_RECOVERY_INVENTORY_READ_COST: Readonly<{
+export declare function AGENT_IDENTITY_RECOVERY_INVENTORY_READ_COST(): Readonly<{
     rows: number;
     points: number;
     statements: number;
     bytes: number;
     engineRequests: number;
 }>;
-export declare const AGENT_IDENTITY_RECOVERY_INVENTORY_SNAPSHOT_COST: Readonly<{
+export declare function AGENT_IDENTITY_RECOVERY_INVENTORY_SNAPSHOT_COST(): Readonly<{
     rows: number;
     points: number;
     statements: number;

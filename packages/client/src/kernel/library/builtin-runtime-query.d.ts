@@ -14,13 +14,13 @@ export type OwnerQueryDependencies = {
     routeKey?: Uint8Array;
     search?: SearchService;
 };
-declare class OwnerQueryWork extends ScopeWork {
+declare class OwnerQueryWorkLedger extends ScopeWork {
     readonly plan: OrdinaryCollectionPagePlan;
     constructor(plan: OrdinaryCollectionPagePlan);
     consume(used: WorkDimensions): void;
 }
 /** Canonical and Search work settle into the same request reservation, including failed dispatches. */
-export declare function ownerQueryWork(limit: number, view?: 'BASIC' | 'FULL'): OwnerQueryWork;
+export declare function ownerQueryWork(limit: number, view?: 'BASIC' | 'FULL'): OwnerQueryWorkLedger;
 /** One current native Source and the registered Search service. No owner/client impersonation or GET work. */
 export declare function openOwnerQuery(deps: OwnerQueryDependencies, input: {
     actor: Actor;

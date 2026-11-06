@@ -5,7 +5,7 @@ import type { ReadContext } from './model.ts';
 import { RealmPresentationImageSchema, type RealmPresentationImage, type RealmPresentationOptional } from './realm-presentation-image.ts';
 export { RealmPresentationImageSchema, type RealmPresentationImage, type RealmPresentationOptional, } from './realm-presentation-image.ts';
 /** Exact JSON summary shared by native presentation consumers; never download authority. */
-export declare function exactRealmPresentationImage(value: RealmPresentationImage): import('typebox').Static<typeof RealmPresentationImageSchema> | null;
+export declare function exactRealmPresentationImage(value: RealmPresentationImage): import('typebox').Static<ReturnType<typeof RealmPresentationImageSchema>> | null;
 /** Called after the native settings revision/head writes, within their authorized command.
  * Null slots never undo claims made by an immutable earlier Realm revision. */
 export declare function claimRealmPresentationMedia(tx: CommandTransaction, input: Readonly<{

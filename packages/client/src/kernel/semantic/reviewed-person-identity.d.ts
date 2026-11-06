@@ -1,6 +1,5 @@
 import type { Release } from '@rezics/definitions';
 import { type CommandTransaction } from '../command/command.ts';
-import { CommandUnavailableError } from '../access/unavailable.ts';
 export type ReviewedPersonEndpoint = {
     subject: string;
     revision: number;
@@ -57,10 +56,25 @@ export declare function reviewedPersonIdentifier(source: ReviewedPersonSource): 
 };
 export declare function validReviewedPersonExpectation(subjects: readonly string[], expected: ReviewedPersonExpectation): boolean;
 /** Existing native unavailable classification, with a stable internal reason for unsupported coverage. */
-export declare class ReviewedPersonGuardUnavailableError extends CommandUnavailableError {
-    readonly code = "atomic_guard_unavailable";
-    constructor(partition: number);
-}
+export declare function ReviewedPersonGuardUnavailableError(): {
+    new (partition: number): {
+        readonly code: "atomic_guard_unavailable";
+        name: string;
+        message: string;
+        stack?: string;
+        cause?: unknown;
+        readonly reason: 'fenced' | 'moved' | 'contention' | 'deadline' | 'overloaded';
+        readonly partition: number;
+        readonly movedTo: string | null;
+    };
+    isError(error: unknown): error is Error;
+    isError(value: unknown): value is Error;
+    captureStackTrace(targetObject: object, constructorOpt?: Function): void;
+    captureStackTrace(targetObject: object, constructorOpt?: Function): void;
+    prepareStackTrace(err: Error, stackTraces: NodeJS.CallSite[]): any;
+    stackTraceLimit: number;
+};
+export type ReviewedPersonGuardUnavailableError = InstanceType<ReturnType<typeof ReviewedPersonGuardUnavailableError>>;
 /** Caller has already authorized this original in its final read transaction. Never follows redirects. */
 export declare function observeReviewedPersonIdentity(tx: CommandTransaction, subject: string, source: ReviewedPersonSource, routeKey: Uint8Array, release: Release, lockSelected?: boolean): Promise<ReviewedPersonEndpoint | null>;
 /** Runs only inside the authorized first-effect callback; every restarted callback reacquires exclusions. */

@@ -40,7 +40,7 @@ export declare function createAccess(config: AccessConfig): Access;
 /** Evaluate exact gate actions on the Global Context, borrowing the mounted operation's scope operand. */
 export declare function authorizePlatformGate(access: Access, actor: Actor, actions: readonly string[], clientAction: string, resource: Resource, context: AccessContext, at: string, client?: AccessClient): Promise<boolean>;
 /** Standalone instance denies authorization until an app supplies its own catalogue. */
-export declare const access: Access;
+export declare function access(): Access;
 export { visibleOperations, type VisibleOperation } from './gates/visibility.ts';
 export { ACTIVE_ACCOUNTS, type GrantSubject } from './grant-subject.ts';
 export { captureDurableInitiator, durableInitiatorCommitment, DurableInitiatorCaptureUnavailableError, } from './durable-initiator-capture.ts';

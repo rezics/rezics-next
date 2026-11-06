@@ -63,7 +63,7 @@ export declare const shelfMaintenanceSourceExecution: PreparationSourceExecution
 export declare function runShelfMaintenanceStep<T>(input: unknown, dispatch: () => Promise<T>): Promise<T>;
 /** Closed executable composition: dynamic byte operands are bound by their native size points, not
  * population constants. Limits describe invocation multiplicity; no operation can buy another frame. */
-export declare const SHELF_MAINTENANCE_OPERATIONS: Readonly<{
+export declare function SHELF_MAINTENANCE_OPERATIONS(): Readonly<{
     request: Readonly<{
         command: typeof shelfMaintenanceCommandPlan;
         query: typeof shelfMaintenanceStatementPlan;

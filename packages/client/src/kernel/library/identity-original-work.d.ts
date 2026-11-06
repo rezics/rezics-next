@@ -17,13 +17,13 @@ export declare function declareLibraryIdentityStatement(owner: LibraryIdentitySt
 /** Operation-level custody term from the same declarations used by SQL dispatch. */
 export declare function declareLibraryIdentityCustodyOperation(operation: NativeSourceCustodyOperation): LibraryIdentityOriginalComponent;
 /** The Source-selected page can dispatch one capture page or its terminal finish step. */
-export declare const LIBRARY_IDENTITY_CUSTODY_CAPTURE_STEP: Readonly<{
+export declare function LIBRARY_IDENTITY_CUSTODY_CAPTURE_STEP(): Readonly<{
     [component]: true;
     work: WorkDimensions;
     engineRequests: 0;
 }>;
 /** Pool checkout itself has no SQL, result projection, candidate or witness. */
-export declare const LIBRARY_IDENTITY_CHECKOUT_WORK: Readonly<{
+export declare function LIBRARY_IDENTITY_CHECKOUT_WORK(): Readonly<{
     [component]: true;
     work: WorkDimensions;
     engineRequests: 0;
@@ -176,7 +176,7 @@ export declare function assembleLibraryIdentitySelectedBodies(): Readonly<{
  * Source/History term before it can allocate either child. This exact own data
  * shape contains no component brand, caller price, allowance or parent authority.
  */
-export declare const IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION: Readonly<{
+export declare function IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION(): Readonly<{
     work: WorkDimensions;
     engineRequests: 0;
 }>;
