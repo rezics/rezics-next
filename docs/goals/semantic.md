@@ -31,6 +31,37 @@ erase authored documents through Content's command under an exact document grant
 HTTP fallback retains its actual language and mounted exact-binding cases cover unreadable previews without rewriting
 stored bodies.
 
+Decision: Zone lifecycle through custody is pinned by native kernel journeys (delete/hide/restore, pointer takedown,
+hold/purge) and two web mapping tests; no Storybook stories.
+
+Decision: Semantic issues Zone cleanup admission after the parent lock, then Access grant pages and the existing
+Content, Library, Auth and Search participant reads share that command; a missing owner stays incomplete. Editor
+delete/restore uses the catalogue mapping client. No Storybook stories.
+
+Decision: Zone owner mutations keep compiled page authorization; derived Access forwards preparePage.
+Platform inverse records identity_epoch_native_commit or erasure_source_commit, not fabricated write_basis.
+Source-commit validation accepts that native commit. Account-agent tests use the request deadline, not
+authenticate's short identity expiry. Page coverage rebinds by identity while routes stay in canonical
+order. The rebind journey publishes first so anonymous 404 is withholding, not an unpublished private Zone.
+Native kernel journeys and two web mapping tests pin lifecycle; no Storybook stories or expanded
+served walks. Catalogue commands live in lifecycle-zone-commands.ts; lifecycle-zone.tsx re-exports them
+so bun --no-bundle landing transpile does not map a .ts/.tsx pair onto one .js path.
+collection-source.ts keeps the current Library contract; Collection restore stays Commerce's HTTP.
+
+Decision: live takedown keys are JSON pointers; `custody` is the retained-original bag and is excluded from
+pointer-key assertions. Internal Zone purge pages bind mechanical history evidence from the owner, the same
+way library entry due-purge does, because they never enter Access admission.
+
+Decision: Cross-module Zone cleanup, history evidence and web session edges use declared public entries.
+New deletion helpers and the account-erasure Zone writer are import-acyclic leaves so they do not join the
+command/history value cycle. Content lifecycle resolution falls back to the native adapter like hashing
+and routing, so HTTP tests that skip worker composition still project covers. Zone configure keeps the
+current locale map when renaming one label. Platform hold/purge bind operator history evidence before
+enrollment. Internal Zone purge pages use a unique `zone.purge` receipt and idle history on no-effect
+paths. Account-agent tests use a wall-clock request budget and prepare Access evidence at authorize time.
+Decision: Subject source pages precheck each statement minimum then charge returned rows; identity mapping
+uses the unmetered pool and one original key so tombstone homes cannot overflow the caller limit.
+
 ## Ownership
 
 Placement decision: each existing owner remains the sole authority for its contract: Definitions for vocabulary, Semantic for native behavior, Conversion for value fidelity, Imports for acquisition and publication, and Web for reading and correction. The [Semantic module](../../services/kernel/src/semantic/README.md), [Definitions](../../packages/definitions/README.md), [Conversion](../../packages/conversion/README.md), [filters](../../packages/filter/README.md), [Zones](../zones.md), [membership](../zone-membership.md), [Collection sources](../collection-source.md), [dynamic Collections](../dynamic-collections.md) and [deletion](../deletion.md) hold their contracts.

@@ -4,7 +4,9 @@ import { recordSemanticProducerRole } from './erasure-producer.ts';
 import { initializeSubjectPagePublication } from './subject-page-publication-store.ts';
 import { subjectPageFacts, recordSubjectPageDiff } from './subject-page-publication-native.ts';
 import type { Pool, PoolClient } from 'pg';
-import { runCommand, type CommandTransaction } from '../command/command.ts';
+import { runCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
+import { ACCOUNT_ROLE_BITS } from '../history/contracts.ts';
+import { bindCommandHistoryEvidence } from '../history/command-evidence.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { withReadTransaction } from './read.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -290,14 +292,35 @@ async function ensureInTransaction(
   };
 }
 
+/** Trusted native client that maintains an account's own agent node; it is never request-supplied. */
+const ACCOUNT_AGENT_PRODUCER = 'semantic-account-agent';
+
+/** The agent's own account is the attributed principal of its producer command. The write basis then exists, so a
+ * replaced label's erasure-source removal is recorded in this transaction. Evidence is bound only for that account.
+ * A command with a basis that creates an exact-self subject must be authorized as `subject:create`; this trusted
+ * authorization is never request-supplied. */
+function accountAgentProducer(account: string, agentRoute: number, agentId: string): CommandAuthorization {
+  return {
+    action: 'subject:create',
+    resource: Object.freeze({ route: agentRoute, id: agentId }),
+    denied: () => new TypeError('Account agent producer authorization failed'),
+    async authorize(tx) {
+      bindCommandHistoryEvidence(tx, [
+        {
+          accountRoute: routeOf(account)!,
+          accountId: account,
+          roles: ACCOUNT_ROLE_BITS.principal | ACCOUNT_ROLE_BITS.subject,
+        },
+      ]);
+      return 'execute';
+    },
+  };
+}
+
 /** Ensure one account graph agent at its deterministic account-partition id. */
 export async function ensureAccountAgent(
   pool: Pool,
-  options: { account: Account; kind: AgentKind; name: string | null; language?: string },
-): Promise<{ subject: Item; created: boolean }>;
-export async function ensureAccountAgent(
-  pool: Pool,
-  options: { account: Account; kind: AgentKind; name: string | null; language?: string },
+  options: { account: Account; kind: AgentKind; name: string | null; language?: string; deadline?: number },
 ): Promise<{ subject: Item; created: boolean }> {
   const account = accountIdOf(options.account);
   const agentId = accountAgentId(account);
@@ -305,7 +328,12 @@ export async function ensureAccountAgent(
   try {
     const outcome = await runIdentityTerminalCommand(
       pool,
-      { partition: partitionOf(agentRoute) },
+      {
+        partition: partitionOf(agentRoute),
+        basis: { actorAccountId: account, clientId: ACCOUNT_AGENT_PRODUCER, requestedBy: null },
+        authorization: accountAgentProducer(account, agentRoute, agentId),
+        ...(options.deadline !== undefined ? { deadline: options.deadline } : {}),
+      },
       async (tx, { transactionId }) => {
         await recordSemanticProducerRole(tx, transactionId, accountIdOf(options.account), 'subject');
         const state = await tx.query(
@@ -341,46 +369,30 @@ export async function verifyAccountAgent(
   const account = accountIdOf(options.account);
   const agentId = accountAgentId(account);
   if (routeOf(options.catalogue) === null || options.catalogue === agentId) throw new AccountAgentVerificationError();
+  const node = await readAgentSubject(pool, agentId);
+  const catalogue = await readAgentSubject(pool, options.catalogue);
+  const before = await accountAgentForNode(pool, agentId);
+  if (!node || !catalogue || catalogue.redirect || !before || before.account !== account || before.agent_id !== agentId)
+    throw new AccountAgentVerificationError('The account agent and catalogue must be visible and complete');
+  if (node.type !== 'schema:Person' && node.type !== 'schema:Organization')
+    throw new AccountAgentVerificationError('Only person and organization account agents can be verified');
+  if (node.type !== catalogue.type)
+    throw new AccountAgentVerificationError('The catalogue subject must match the account agent kind');
+  if (before.verified) {
+    if (before.subject !== options.catalogue || before.receipt_id !== options.receipt)
+      throw new AccountAgentVerificationError('The account agent is already verified to another catalogue subject');
+  } else if (
+    node.redirect ||
+    before.subject !== agentId ||
+    (await accountAgentsForSubjects(pool, [options.catalogue])).has(options.catalogue)
+  )
+    throw new AccountAgentVerificationError('The catalogue subject is already linked or the account agent is merged');
   const { deliverAccountIdentity, loadAccountIdentitySource, accountIdentityUnavailable } =
     await import('../access/agent-verification-identity.ts');
   const receipt = { kind: 'account-agent.verify' as const, account, receipt: options.receipt };
   const source = await loadAccountIdentitySource(pool, receipt);
   if (source.input.intent.kind !== 'merge' || source.input.intent.survivor !== options.catalogue)
     throw accountIdentityUnavailable('caller catalogue does not match original verification');
-  const { lookupIdentityBinding } = await import('./identity-adapters/identity-epoch-binding.ts');
-  // An admitted original delivery owns its recovery even while mapping is between native commits.
-  const bound = await lookupIdentityBinding(pool, {}, source.input);
-  if (!bound) {
-    const node = await readAgentSubject(pool, agentId);
-    const catalogue = await readAgentSubject(pool, options.catalogue);
-    const before = await accountAgentForNode(pool, agentId);
-    if (
-      !node ||
-      !catalogue ||
-      catalogue.redirect ||
-      !before ||
-      before.account !== account ||
-      before.agent_id !== agentId
-    )
-      throw new AccountAgentVerificationError('The account agent and catalogue must be visible and complete');
-    if (node.type !== 'schema:Person' && node.type !== 'schema:Organization')
-      throw new AccountAgentVerificationError('Only person and organization account agents can be verified');
-    if (node.type !== catalogue.type)
-      throw new AccountAgentVerificationError('The catalogue subject must match the account agent kind');
-    if (before.verified) {
-      if (before.subject !== options.catalogue || before.receipt_id !== options.receipt)
-        throw new AccountAgentVerificationError('The account agent is already verified to another catalogue subject');
-    } else {
-      if (
-        node.redirect ||
-        before.subject !== agentId ||
-        (await accountAgentsForSubjects(pool, [options.catalogue])).has(options.catalogue)
-      )
-        throw new AccountAgentVerificationError(
-          'The catalogue subject is already linked or the account agent is merged',
-        );
-    }
-  }
   await deliverAccountIdentity(pool, receipt);
   const mapping = await accountAgentForNode(pool, agentId);
   if (

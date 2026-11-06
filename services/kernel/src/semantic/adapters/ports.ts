@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import { nativeContentLifecycle } from './content-lifecycle.ts';
 import { nativeHashing } from './hashing.ts';
 import { nativeRouting } from './routing.ts';
 import { resolvedSemanticDomain } from './registry.ts';
@@ -20,7 +21,7 @@ export function routingOf(pool?: Pool): RoutePort {
 }
 
 export function contentLifecycleOf(pool?: Pool): ContentLifecyclePort {
-  const bound = resolvedSemanticDomain(pool)?.ports.contentLifecycle ?? ordinaryContentLifecycle;
-  if (!bound) throw new Error('Semantic content lifecycle is not bound');
-  return bound;
+  return (
+    resolvedSemanticDomain(pool)?.ports.contentLifecycle ?? ordinaryContentLifecycle ?? nativeContentLifecycle()
+  );
 }

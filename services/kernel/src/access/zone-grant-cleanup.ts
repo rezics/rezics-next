@@ -1,4 +1,4 @@
-import { currentCommand, type CommandTransaction } from '../command/command.ts';
+import type { CommandTransaction } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import deletePage from './zone-grant-cleanup-delete.sql';
 import resourcePage from './zone-grant-cleanup-resource-page.sql';
@@ -167,9 +167,8 @@ export async function minimizeZoneGrantPage(
   const { admission, limit } = input;
   if (!Number.isInteger(limit) || limit < 1 || limit > 100)
     throw new RangeError('Zone grant cleanup page size must be between 1 and 100');
-  const command = currentCommand(tx);
   const { source } = admission;
-  if (partitionOf(source.zone.route) !== source.zone.home.partition || command.partition !== source.zone.home.partition)
+  if (partitionOf(source.zone.route) !== source.zone.home.partition)
     throw new RangeError('Zone grant cleanup must run in the original Zone home');
 
   const scope = scopeOf(admission);

@@ -43,16 +43,17 @@ string matches of Pending are not consumers. The inherited ZoneWorkLedger ClassD
 
 ## Zone receipts, outbox events and current closure boundary
 
-The delivered Zone producer cut is the five native command receipts `zone.create`, `zone.configure`,
-`zone.publish`, `zone.delete` and `zone.restore`, plus their five outbox events
-`com.rezics.zone.{created,configured,published,deleted,restored}.v1`. The event schemas are exactly `{ id, revision }`;
+The delivered Zone producer cut is the native command receipts `zone.create`, `zone.configure`,
+`zone.publish`, `zone.delete`, `zone.restore`, `zone.takedown`, `zone.release_takedown`, `zone.hold`,
+`zone.release_hold` and `zone.purge`, plus their outbox events
+`com.rezics.zone.{created,configured,published,deleted,restored,taken_down,takedown_released,held,hold_released,purge_pending,purged}.v1`. The event schemas are exactly `{ id, revision }`;
 `contracts.ts` keeps them nonpersonal. Receipt responses still carry configuration and actor/provenance associations,
 so they follow the existing physical minimizer after their real consumer and receiving obligations close. The current
 rebuilt Zone owner has no `durable-work/v1` producer. History registers only the receipt and event coverage and leaves
 `zones:durable-work/v1` visible in `HistoryRegistry.familyGaps` until its native producer and consumer are delivered.
 
 `registerZoneHistoryConsumers` in `zone-consumers.ts` is called by `access/shared-history-work.ts`. It registers the
-exact ten producer names and owner callbacks. Each callback uses `observeZoneHistoryConsumerClosure` in
+exact current producer names and owner callbacks. Each callback uses `observeZoneHistoryConsumerClosure` in
 `receiving.ts`, which resolves the original `core.record_history_locator`, verifies its native outbox event and
 `semantic.erasure_delivery` completion, and requires every `semantic.record_purge_hold` for that source to be
 released. A delivery row must exist and be complete; an accepted event, a workflow state, a missing row, or an empty
@@ -69,8 +70,9 @@ revision. The output is either a pending native gap or an in-transaction `ZoneHi
 to their native same-transaction checks. Use `bun run --cwd services/kernel check test/history/zone-consumers.test.ts`
 for the focused owner regression.
 
-Decision: register only the ten proven receipt/event producers and keep the absent Zone durable-work family open
-until its native producer and closure owner land. The single cleanup policy is [Zones](../../../../docs/zones.md#deletion-restoration-withholding-and-durable-cleanup).
+Decision: register the ten Zone receipt kinds and eleven ID/revision events and keep the absent Zone durable-work
+family open until its native producer and closure owner land. The single cleanup policy is
+[Zones](../../../../docs/zones.md#deletion-restoration-withholding-and-durable-cleanup).
 
 Semantic's sole Zone lifecycle owner operation is still undelivered. The next owner seam must lock and bind the
 committed account barrier, original Zone owner/transaction custody, current lifecycle/protection state and durable

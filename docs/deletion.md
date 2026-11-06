@@ -127,7 +127,7 @@ rejects incomplete coverage and, when enabled, emits only a closed technical ver
 lists the concrete remaining producer, scope, consumer and routing proof gaps. These local pages do not establish
 Commerce's mandatory unused-account `none` result.
 
-Ordinary record purge remains a distinct owner exchange: Semantic's `record-purge-authority.ts` validates committed ordinary deletion, and Content and Accounts consume that exact opaque authority for their own bytes and history. Account-role custody or account erasure cannot authorize ordinary purge. Zone cleanup has separate branch admission and Zone CAS ownership; [Zones](zones.md#deletion-restoration-withholding-and-durable-cleanup) records the pending Access grant, Content order-scope and History receipt/outbox/work dispositions without claiming those interfaces are delivered.
+Ordinary record purge remains a distinct owner exchange: Semantic's `record-purge-authority.ts` validates committed ordinary deletion, and Content and Accounts consume that exact opaque authority for their own bytes and history. Account-role custody or account erasure cannot authorize ordinary purge. Zone cleanup admits Platform hold/release and purge intent on Global Context, then runs bounded `purgeZonePage` under the Zone CAS writer after Semantic issues grant admission on the locked parent. Account-erasure Zone payload and ordinary retention's final purged marker use that same writer; a live hold defers the locator and does not clear withholding. Content order-scope admission and History durable-work remain pending. Native journeys pin delete/hide/restore, pointer takedown, hold/purge and grant cleanup; two web mapping tests pin owner and denial UI; no Storybook stories. The rebind journey publishes first so anonymous 404 is withholding, not an unpublished private Zone. `purgeZonePage` drains Access grant stores in the same command because the resource store always progresses into the role store. Served-page walks stay with the managed stack. Kernel Eden inventory includes Platform hold, releaseHold and purge on `v1.platform.zones`; withholding JSON is narrowed to an object before key inspection.
 
 ### Access and Auth participants
 
@@ -285,3 +285,25 @@ There is no kernel-to-Auth maintenance RPC, kernel Auth credential or final-ACK
 dependency cycle. Enqueue, local cleanup alone, storage, missing configuration and
 an undelivered specification are not shared-history proof. The global participant
 set and Search's undelivered cleanup remain unchanged.
+
+Decision: platform inverse removal records erasure_source_commit and identity_epoch_native_commit in the
+same home/T; capture_erasure_source_removal and validate_erasure_source_commit accept those besides
+editorial write_basis. No fabricated basis. Retention capture names no plpgsql columns `kind`/`owner_id`.
+Page coverage rebinds by identity while routes stay in canonical order. Live takedown keys are pointers;
+`custody` is excluded from those assertions. Internal Zone purge pages bind mechanical history evidence from
+the owner. Native kernel journeys and two web mapping tests pin Zone lifecycle; no Storybook stories or
+expanded served walks on this landing. Catalogue commands live in lifecycle-zone-commands.ts so the
+matching tsx controls keep a distinct bun --no-bundle output path.
+Decision: Cross-module Zone cleanup, history evidence and web session edges use declared public entries.
+New deletion helpers and the account-erasure Zone writer are import-acyclic leaves so they do not join the
+command/history value cycle. Fewest tests remain the native journeys and two web mapping tests.
+
+Decision: preserve the native Content lifecycle fallback through the public `content/cover-reference-read.ts`
+leaf; cover reads and metadata validation share no value import with the claim command writer. Existing
+cover claim and lifecycle journeys retain their assertions; focused fallback coverage exercises native reads
+without worker composition. Internal Zone purge pages carry a unique `zone.purge` receipt and declare idle
+history on no-effect paths so COMMIT can match enrolled event pages. Account-agent authorized reads prepare
+Access evidence at authorize time. Native cleanup/hold commit fences, erasure effects, independent public
+readback and the original browser journeys remain acceptance obligations after landing.
+Decision: Subject source pages precheck each statement minimum then charge returned rows; identity mapping
+uses the unmetered pool and one original key so tombstone homes cannot overflow the caller limit.

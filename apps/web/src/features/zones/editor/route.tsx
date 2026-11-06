@@ -13,6 +13,7 @@ import {
 } from './owner-lifetime';
 import { ZoneEditorSession, type Failure, type Loaded, type Mutation } from './model';
 import { readConfiguration, readMountChoices, readSavedPreview, writeConfiguration } from './server';
+import { changeOwnZoneLifecycle } from '../../catalogue/lifecycle-zone-actions';
 import { EditorFailure, EditorLoading, ZoneConfigurationEditor } from './view';
 
 const missingAdmission: Failure = { kind: 'failure', status: 401, code: 'unauthorized' };
@@ -150,6 +151,14 @@ function AdmittedZoneEditor({
       locale={locale}
       enabled
       writeEnabled={hasValidOwnerCsrfToken(capture.csrfToken)}
+      onLifecycle={(operation) => {
+        const loaded = session.snapshot().loaded;
+        const revision = loaded.resource.kind === 'ready' ? loaded.resource.value.zone.revision : '1';
+        return changeOwnZoneLifecycle({
+          data: { id, revision, key: crypto.randomUUID(), operation },
+          headers: { 'X-CSRF-Token': capture.csrfToken ?? '' },
+        });
+      }}
     />
   );
 }

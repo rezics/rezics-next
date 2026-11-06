@@ -1,9 +1,16 @@
 import { minimizeSemanticRecordPayload } from './retention-payload.ts';
 import type { Pool } from 'pg';
-import { noEffect, runCommand, type CommandTransaction } from '../command/command.ts';
+import {
+  authoritativeTimeValue,
+  currentCommand,
+  noEffect,
+  runCommand,
+  type CommandTransaction,
+} from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { recordLateErasureItem, resolveLateErasureItem } from '../access/erasure.ts';
+import { minimizeAccountErasureZone } from '../zones/account-erasure-zone.ts';
 import { SEMANTIC_ERASURE_STORES, SEMANTIC_RECEIVING_ERASURE_STORES } from './account-erasure-stores.ts';
 import { SEMANTIC_EVENTS } from './events.ts';
 import type { Effect } from '../events/effects.ts';
@@ -307,16 +314,21 @@ async function minimizePayload(
     return;
   }
   if (store === 'zone') {
-    await tx.query(
-      `UPDATE zones.zone SET
-      configuration=CASE WHEN visibility='public' AND state='active' AND public_ever THEN configuration ELSE NULL END,
-      mounts=CASE WHEN visibility='public' AND state='active' AND public_ever THEN mounts ELSE '{}'::uuid[] END,
-      owner_id=CASE WHEN owner_id=$4::uuid THEN NULL ELSE owner_id END,
-      state=CASE WHEN visibility='public' AND state='active' AND public_ever THEN state ELSE 'purged' END,
-      withholding='{}',write_fenced=true,deleted_at=NULL,restore_until=NULL
-      WHERE route BETWEEN $1 AND $2 AND erasure_key=$3 AND (transaction_id=$5 OR owner_id=$4)`,
+    const found = await tx.query<{ route: number; zone_id: string }>(
+      `SELECT route, zone_id FROM zones.zone
+       WHERE route BETWEEN $1 AND $2 AND erasure_key=$3 AND (transaction_id=$5 OR owner_id=$4)`,
       [...values, accountId, locator.source_transaction_id],
     );
+    if (!found.rowCount) return;
+    const command = currentCommand(tx);
+    const outcome = await minimizeAccountErasureZone(tx, {
+      route: found.rows[0]!.route,
+      id: found.rows[0]!.zone_id,
+      accountId,
+      at: authoritativeTimeValue(command.time),
+      transactionId: command.transactionId,
+    });
+    if (outcome === 'held') return { defer: true, rawKeys: 1, bytes: 0 };
     return;
   }
   const where = 'route BETWEEN $1 AND $2 AND erasure_key=$3';

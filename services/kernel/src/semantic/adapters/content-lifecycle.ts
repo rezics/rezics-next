@@ -1,6 +1,6 @@
 import type { PoolClient } from 'pg';
 import { memoizedValue } from '../../memoized.ts';
-import { checkMediaObject, checkMediaObjects, type CoverReference } from '../../content/cover-reference.ts';
+import { checkMediaObject, checkMediaObjects, type CoverReference } from '../../content/cover-reference-read.ts';
 import { tupleRoute } from '../../content/imported-contract.ts';
 import type {
   ContentCoverRef,
