@@ -375,7 +375,11 @@ export function affineEnvelope(scales: readonly number[], values: readonly numbe
   for (let index = 0; index < count; index += 1) {
     const dx = checkedSubtract(scales[index]!, meanX, 'Affine envelope scale difference');
     const dy = checkedSubtract(values[index]!, meanY, 'Affine envelope value difference');
-    variance = checkedAdd(variance, checkedMultiply(dx, dx, 'Affine envelope variance term'), 'Affine envelope variance');
+    variance = checkedAdd(
+      variance,
+      checkedMultiply(dx, dx, 'Affine envelope variance term'),
+      'Affine envelope variance',
+    );
     covariance = checkedAdd(
       covariance,
       checkedMultiply(dx, dy, 'Affine envelope covariance term'),
@@ -388,11 +392,13 @@ export function affineEnvelope(scales: readonly number[], values: readonly numbe
     checkedSubtract(meanY, checkedMultiply(slope, meanX, 'Affine envelope fitted mean'), 'Affine envelope intercept'),
   );
   const predicted = scales.map((scale) =>
-    checkedAdd(intercept, checkedMultiply(slope, scale, 'Affine envelope prediction term'), 'Affine envelope prediction'),
+    checkedAdd(
+      intercept,
+      checkedMultiply(slope, scale, 'Affine envelope prediction term'),
+      'Affine envelope prediction',
+    ),
   );
-  const residuals = values.map((value, index) =>
-    checkedSubtract(value, predicted[index]!, 'Affine envelope residual'),
-  );
+  const residuals = values.map((value, index) => checkedSubtract(value, predicted[index]!, 'Affine envelope residual'));
   return {
     intercept,
     slope,
@@ -462,12 +468,7 @@ function formatRelationContext(samples: readonly GrowthSample[]): string[] {
       const lastDensity = lastSize.reltuples / lastSize.relpages;
       if (!(lastDensity > firstDensity * 1.25) && !(firstDensity > lastDensity * 1.25)) return [];
       return [
-        [
-          name,
-          firstDensity,
-          lastDensity,
-          lastDensity > firstDensity ? 'heap packing' : 'page expansion',
-        ] as const,
+        [name, firstDensity, lastDensity, lastDensity > firstDensity ? 'heap packing' : 'page expansion'] as const,
       ];
     })
     .toSorted(([left], [right]) => left.localeCompare(right));

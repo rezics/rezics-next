@@ -236,12 +236,7 @@ test('observed nonempty statements match the derived five-plus-two envelope', ()
 
 test('a failed attempt prices BEGIN/ROLLBACK and replay repeats the remaining identities', () => {
   const inventory = retentionPayloadFanoutInventory(10, { operations: 8, events: 1, history: 1 });
-  const failed = [
-    nonemptyStatements[0]!,
-    'BEGIN',
-    ...nonemptyStatements.slice(2, 6),
-    'ROLLBACK',
-  ];
+  const failed = [nonemptyStatements[0]!, 'BEGIN', ...nonemptyStatements.slice(2, 6), 'ROLLBACK'];
   const observed = retentionObservedWork(failed, inventory);
   expect(observed.outcome).toBe('rollback');
   expect(observed.commitStatements).toBe(0);
@@ -254,9 +249,9 @@ test('a failed attempt prices BEGIN/ROLLBACK and replay repeats the remaining id
 });
 
 test('family count and single-copy byte axes admit owner limits independently of selected IDs', () => {
-  expect(WORKFLOW_RETENTION_COUNT_SCALES.map((scale) => retentionFamilyCountScale('operation_outputs', scale))).toEqual([
-    1, 8, 64,
-  ]);
+  expect(WORKFLOW_RETENTION_COUNT_SCALES.map((scale) => retentionFamilyCountScale('operation_outputs', scale))).toEqual(
+    [1, 8, 64],
+  );
   expect(WORKFLOW_RETENTION_COUNT_SCALES.map((scale) => retentionFamilyCountScale('workflow_events', scale))).toEqual([
     1, 8, 8,
   ]);

@@ -58,7 +58,13 @@ export const WORKFLOW_RETENTION_CASCADE_TABLES = [
 ] as const;
 
 export const WORKFLOW_RETENTION_PAYLOAD_FAMILIES = [
-  { table: 'workflow_status', key: 'workflow_uuid', deletion: 'explicit', copies: 1, payload: ['inputs', 'output', 'error'] },
+  {
+    table: 'workflow_status',
+    key: 'workflow_uuid',
+    deletion: 'explicit',
+    copies: 1,
+    payload: ['inputs', 'output', 'error'],
+  },
   { table: 'workflow_input', key: 'workflow_uuid', deletion: 'explicit', copies: 1, payload: ['inputs'] },
   { table: 'workflow_output', key: 'workflow_uuid', deletion: 'explicit', copies: 1, payload: ['output', 'error'] },
   { table: 'operation_outputs', key: 'workflow_uuid', deletion: 'explicit', copies: 64, payload: ['output', 'error'] },
@@ -87,7 +93,11 @@ export const WORKFLOW_RETENTION_VARIABLE_FAMILIES = [
   'streams',
 ] as const;
 
-export const WORKFLOW_RETENTION_SINGLE_COPY_FAMILIES = ['workflow_status', 'workflow_input', 'workflow_output'] as const;
+export const WORKFLOW_RETENTION_SINGLE_COPY_FAMILIES = [
+  'workflow_status',
+  'workflow_input',
+  'workflow_output',
+] as const;
 
 export const SELECTED_ISSUE_DEADLINE_MS = 5_000;
 export const SELECTED_NATIVE_STATEMENT_LIMIT = 64;

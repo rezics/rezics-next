@@ -154,9 +154,7 @@ export function emptyRetentionKindCounts(): WorkflowRetentionObservedKindCounts 
   return emptyKinds;
 }
 
-export function countRetentionStatementKinds(
-  statements: readonly string[],
-): WorkflowRetentionObservedKindCounts {
+export function countRetentionStatementKinds(statements: readonly string[]): WorkflowRetentionObservedKindCounts {
   const counts = { ...emptyKinds };
   for (const statement of statements) counts[classifyRetentionStatement(statement)] += 1;
   return counts;
@@ -175,9 +173,7 @@ export function retentionControlKindsFor(
   return ['begin', 'commit'];
 }
 
-export function retentionAttemptOutcome(
-  counts: WorkflowRetentionObservedKindCounts,
-): WorkflowRetentionAttemptOutcome {
+export function retentionAttemptOutcome(counts: WorkflowRetentionObservedKindCounts): WorkflowRetentionAttemptOutcome {
   if (counts.rollback > 0) return 'rollback';
   if (counts.select > 0 && counts['delete-workflow_status'] === 0 && counts.begin === 0) return 'empty';
   return 'commit';
@@ -261,9 +257,7 @@ export function walkRetentionPlan(plan: unknown): WorkflowRetentionPlanNode | un
         return node ? [node] : [];
       })
     : [];
-  const buffers = asRecord(entry['Shared Hit Blocks'])
-    ? undefined
-    : asRecord(entry['Buffers']) ?? asRecord(entry);
+  const buffers = asRecord(entry['Shared Hit Blocks']) ? undefined : (asRecord(entry['Buffers']) ?? asRecord(entry));
   return {
     nodeType,
     indexName: readString(entry['Index Name']),
@@ -283,7 +277,11 @@ export function flattenRetentionPlan(plan: WorkflowRetentionPlanNode | undefined
 }
 
 export function retentionPlanIndexNames(plan: unknown): string[] {
-  return [...new Set(flattenRetentionPlan(walkRetentionPlan(plan)).flatMap((node) => (node.indexName ? [node.indexName] : [])))];
+  return [
+    ...new Set(
+      flattenRetentionPlan(walkRetentionPlan(plan)).flatMap((node) => (node.indexName ? [node.indexName] : [])),
+    ),
+  ];
 }
 
 export function retentionPlanNodeTypes(plan: unknown): string[] {
@@ -331,18 +329,14 @@ export function classifyRetentionPlanDocument(document: unknown): WorkflowRetent
   return undefined;
 }
 
-export function classifyRetentionPlanDocuments(
-  documents: readonly unknown[],
-): WorkflowRetentionPlanDocument[] {
+export function classifyRetentionPlanDocuments(documents: readonly unknown[]): WorkflowRetentionPlanDocument[] {
   return documents.flatMap((document) => {
     const classified = classifyRetentionPlanDocument(document);
     return classified ? [classified] : [];
   });
 }
 
-export function retentionSelectorPlanProof(
-  documents: readonly unknown[],
-): WorkflowRetentionSelectorPlanProof {
+export function retentionSelectorPlanProof(documents: readonly unknown[]): WorkflowRetentionSelectorPlanProof {
   const selector = classifyRetentionPlanDocuments(documents).filter((document) => document.kind === 'select');
   const indexes = [...new Set(selector.flatMap((document) => document.indexes))];
   const nodes = [...new Set(selector.flatMap((document) => document.nodes))];
@@ -364,11 +358,7 @@ export function retentionDeletePlanProof(documents: readonly unknown[]): Workflo
     .filter((document) => isRetentionCascadeDelete(document.kind))
     .map((document) => document.kind);
   const sequentialRelations = [
-    ...new Set(
-      classified.flatMap((document) =>
-        document.sequentialScans > 0 ? document.relations : [],
-      ),
-    ),
+    ...new Set(classified.flatMap((document) => (document.sequentialScans > 0 ? document.relations : []))),
   ];
   return {
     exactIdDeletes,

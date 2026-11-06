@@ -192,9 +192,7 @@ export function workflowRetentionInventory(
   };
 }
 
-export function workflowRetentionBytes(
-  rows: Partial<WorkflowRetentionByteInventory>,
-): WorkflowRetentionByteInventory {
+export function workflowRetentionBytes(rows: Partial<WorkflowRetentionByteInventory>): WorkflowRetentionByteInventory {
   return workflowRetentionInventory(rows);
 }
 
@@ -218,12 +216,8 @@ export function retentionAdmittedByteScale(countScale: number): number {
   return WORKFLOW_RETENTION_BYTE_SCALES[index]!;
 }
 
-export function retentionFamilyCountScale(
-  family: WorkflowRetentionPayloadFamily,
-  countScale: number,
-): number {
-  if (!(WORKFLOW_RETENTION_COUNT_SCALES as readonly number[]).includes(countScale))
-    throw new RangeError('countScale');
+export function retentionFamilyCountScale(family: WorkflowRetentionPayloadFamily, countScale: number): number {
+  if (!(WORKFLOW_RETENTION_COUNT_SCALES as readonly number[]).includes(countScale)) throw new RangeError('countScale');
   return admitRetentionFamilyCopies(family, countScale);
 }
 

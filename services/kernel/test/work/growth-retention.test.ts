@@ -849,10 +849,7 @@ for (const family of WORKFLOW_RETENTION_VARIABLE_FAMILIES) {
     );
     const last = retentionCompleteBatchWork(
       shortBatch,
-      retentionPayloadFanoutInventory(
-        shortBatch,
-        familyFanout(family, retentionFamilyCountScale(family, 64)),
-      ),
+      retentionPayloadFanoutInventory(shortBatch, familyFanout(family, retentionFamilyCountScale(family, 64))),
     );
     expect(last.selected).toBe(first.selected);
     expect(last.nestedFkStatements).toBe(first.nestedFkStatements);

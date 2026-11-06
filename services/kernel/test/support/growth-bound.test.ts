@@ -439,10 +439,7 @@ test('a packing jump that is not affine fails linear and keeps relation and scan
   expect((error as Error).message).toContain('dbos.workflow_events');
   expect((error as Error).message).toContain('Plan transitions');
   expect((error as Error).message).toContain('heap packing');
-  const envelope = affineEnvelope(
-    [1, 8, 64],
-    [80, 90, 400],
-  );
+  const envelope = affineEnvelope([1, 8, 64], [80, 90, 400]);
   expect(envelope.maxResidual).toBeGreaterThan(50);
   const classified = classifyEngineWork(samples);
   expect(classified.class).toBe('plan-transition');
