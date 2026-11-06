@@ -40,7 +40,7 @@ const search: SearchService = {
   async releaseGroups() {
     throw new Error('Unexpected release groups call');
   },
-  async savedCatalogueMembers() {
+  savedCatalogueMembers: async () => {
     throw new Error('Unexpected saved catalogue members call');
   },
   async search(_principal, request, _now, _active, context) {

@@ -13,6 +13,7 @@ import type {
   DiscoveryUnionKey,
 } from './discovery.ts';
 import { createDiscoveryRegistry } from './discovery-registry.ts';
+import { revalidateOwnerCurrentSummaries } from './disclosure/owner-current.ts';
 import { routeOf } from '../route/route.ts';
 
 /** Native owner assembly. Accounts never pass through SubjectSource or attribution readers.
@@ -216,7 +217,7 @@ export async function hydrateOwnerDiscoveryHits(
       const review = value as DiscoveryOwnerMetadataSummary<'review'>;
       if (!candidate.sourceVersion || review.sourceVersion !== candidate.sourceVersion) return undefined;
     }
-    return { candidate, value };
+    return { candidate, kind: key.kind, id: key.id, value };
   });
 
   const reviewRows = accepted.flatMap((entry) => (entry?.candidate.key.kind === 'review' ? [entry] : []));
@@ -233,8 +234,9 @@ export async function hydrateOwnerDiscoveryHits(
   const subjectSummaries = semanticEntry
     ? await readBatches(subjectIds, (ids) => semanticEntry.hydrate(ids, context))
     : new Map();
+  const currentAccepted = await revalidateOwnerCurrentSummaries(registry, accepted, context);
 
-  return accepted.map((entry): DiscoveryOwnerHit | undefined => {
+  return currentAccepted.map((entry): DiscoveryOwnerHit | undefined => {
     if (!entry) return undefined;
     const { candidate, value } = entry;
     const key = publicKey(candidate.key);

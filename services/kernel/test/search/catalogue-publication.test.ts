@@ -5,6 +5,7 @@ import { enterCataloguePublicationMembers } from '../../src/library/collection-p
 import { observeCataloguePublication, readCataloguePublicationPage } from '../../src/search/catalogue-publication.ts';
 import type { OpenSearch, SearchRequestOptions, SearchRequestWork } from '../../src/search/opensearch.ts';
 import { SearchUnavailableError } from '../../src/search/opensearch.ts';
+import type { SearchPlan } from '../../src/search/query.ts';
 import { zeroScopeWork } from '../../src/search/scope-work.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import type { WorkAllowance } from '../../src/library/contract/work-dimensions.ts';
@@ -13,10 +14,6 @@ const first = '018f0000-0000-7000-8000-00a000000001';
 const second = '018f0000-0000-7000-8000-00a000000002';
 const third = '018f0000-0000-7000-8000-00a000000003';
 const digest = releaseDigest(bundledRelease);
-
-function record(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 function allowance(keys = 32): WorkAllowance {
   return {
@@ -39,6 +36,14 @@ function hit(id: string, index: string) {
     sort: [id],
   };
 }
+
+/** Trusted `searchSubjectHits` template body. Catalogue publication is the only caller of this mock. */
+type SubjectSearchTemplateRequest = Readonly<{
+  id: string;
+  params: Readonly<{
+    after?: SearchPlan['after'];
+  }>;
+}>;
 
 function catalogueClient(options: {
   generation?: number;
@@ -71,8 +76,7 @@ function catalogueClient(options: {
       if (path.endsWith('/_settings')) {
         return { status: 200, body: { [index]: { settings: { index: { uuid } } } } as T };
       }
-      const after =
-        record(_body) && record(_body.params) && Array.isArray(_body.params.after) ? _body.params.after[0] : undefined;
+      const after = (_body as SubjectSearchTemplateRequest | undefined)?.params.after?.[0];
       const selected = typeof after === 'string' ? ids.filter((id) => id > after) : ids;
       return {
         status: 200,

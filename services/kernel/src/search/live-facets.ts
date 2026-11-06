@@ -8,6 +8,11 @@ import {
   type Facet,
   type FacetValue,
 } from './facets.ts';
+import {
+  collectCurrentPredicateHits,
+  currentPredicateFacetHits,
+  type CurrentPredicateHit,
+} from './current-predicate.ts';
 import { checkHits, type FactClause, type Hit } from './disclosure/check.ts';
 import { chooseTexts, validateHitOptions } from './hits.ts';
 import type { IndexedSubject, SubjectSource } from './source.ts';
@@ -83,9 +88,13 @@ export async function readLiveFacets(request: LiveFacetRequest): Promise<LiveFac
       : { relationProperties: [...relationProperties] }),
   });
 
-  // Repeated engine hits cannot contribute more than once per current source id.
-  const subjects = new Map<string, IndexedSubject>();
-  for (const { hit, subject } of checked.passed) if (!subjects.has(hit.id)) subjects.set(hit.id, subject);
+  const disclosed = new Map<Hit, CurrentPredicateHit & { subject: IndexedSubject }>();
+  for (const { hit, subject } of checked.passed) {
+    disclosed.set(hit, { key: { owner: 'semantic', kind: subject.type, id: subject.id }, subject });
+  }
+  // Facet consumers reuse the executed predicate's unique current identities.
+  const selected = collectCurrentPredicateHits(request.hits, disclosed);
+  const subjects = new Map(currentPredicateFacetHits(selected).map((hit) => [hit.key.id, hit.subject]));
 
   // A dropped candidate or uncertain relation proof cannot establish an exact count. An empty engine sample also
   // cannot prove current absence: `complete` describes engine exhaustion, not source truth.

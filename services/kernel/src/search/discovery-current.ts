@@ -490,9 +490,39 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
         selected.map(({ key }) => key.id),
         (ids) => entry.hydrate(ids, context),
       );
+      for (const [partition, group] of partitioned(selected.map(({ key }) => key))) {
+        const ids = [...new Set(group.map(({ id }) => id))];
+        for (let offset = 0; offset < ids.length; offset += MAX_ACCOUNT_DISCOVERY_BATCH) {
+          const chunk = ids.slice(offset, offset + MAX_ACCOUNT_DISCOVERY_BATCH);
+          const observed = await entry.source.read(partition, chunk);
+          let snapshot;
+          try {
+            snapshot = validateAccountSnapshot(observed, partition, chunk, 0n);
+          } catch {
+            throw new ProblemError('search_restart_required');
+          }
+          const currentRows = new Map(snapshot.accounts.map((account) => [account.id, account]));
+          for (const id of chunk) {
+            const before = [...selectedAccounts.values()].find((row) => row.id === id);
+            const after = currentRows.get(id);
+            if (!before || !after) {
+              for (const candidate of selected) if (candidate.key.id === id) selectedAccounts.delete(candidate);
+              continue;
+            }
+            if (
+              after.revision !== before.revision ||
+              after.handle !== before.handle ||
+              after.displayName !== before.displayName ||
+              after.accountKind !== before.accountKind
+            )
+              throw new ProblemError('search_restart_required');
+          }
+        }
+      }
       for (const candidate of selected) {
+        const row = selectedAccounts.get(candidate);
+        if (!row) continue;
         const summary = summaries.get(candidate.key.id);
-        const row = selectedAccounts.get(candidate)!;
         const hit = {
           key: candidate.key as DiscoveryKey,
           summary: { kind: 'account' as const, value: summary },
