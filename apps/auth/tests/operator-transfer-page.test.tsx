@@ -24,7 +24,11 @@ function fill(field: HTMLTextAreaElement, value: string) {
 }
 const request = {
   version: 1 as const,
-  previous: { subjectAccountId: 'managed-subject', operatorAccountId: 'current-source', reservationId: 'old-slot' },
+  previous: {
+    subjectAccountId: '00000000-0000-7000-8000-000000000001',
+    operatorAccountId: 'current-source',
+    reservationId: 'old-slot',
+  },
   expectedVersion: '12',
   operatorAccountId: 'proposed-destination',
   sourceOperationKey: 'original-source-operation',

@@ -196,7 +196,7 @@ function recoveryJson(data: unknown, status = 200): Response {
 }
 async function bodyOf(request: {
   headers: { get(name: string): string | null };
-  body: ReadableStream<Uint8Array> | null;
+  body: { getReader(): ReadableStreamDefaultReader<Uint8Array> } | null;
 }): Promise<Record<string, unknown>> {
   if (request.headers.get('content-type')?.split(';')[0]?.trim() !== 'application/json') throw new Denied(415);
   if (Number(request.headers.get('content-length') ?? 0) > 16384) throw new Denied(413);

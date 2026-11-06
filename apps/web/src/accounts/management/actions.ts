@@ -2,8 +2,9 @@ import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../../kernel/client';
-import { prepareSession, viewerCredential } from '../../session/request';
+import { prepareSession, viewerCredential, sessionSubject } from '../../session/request';
 import type { SessionEnv } from '../../session/client';
+import { projectManagedAuthNavigation } from './auth-navigation';
 import {
   loadDetail,
   loadInventory,
@@ -61,9 +62,19 @@ export const readAccountManagement = createServerFn({ method: 'GET' })
       const authorization = await reader();
       if (!authorization) return { state: 'signed-out' };
       const page = await loadDetail(kernelClient(), authorization, data.accountId, data, signal);
-      return page.state === 'ready'
-        ? { ...page, issuer: (env as Partial<SessionEnv>).AUTH_ISSUER ?? null, organizationsAvailable: null }
-        : page;
+      if (page.state !== 'ready') return page;
+      return {
+        state: 'ready',
+        value: page.value,
+        issuer: (env as Partial<SessionEnv>).AUTH_ISSUER ?? null,
+        organizationsAvailable: null,
+        authNavigation: projectManagedAuthNavigation(
+          page.authActions,
+          page.value,
+          sessionSubject(getRequest())!,
+          env as Partial<SessionEnv>,
+        ),
+      };
     } catch {
       return { state: 'unavailable' };
     }
