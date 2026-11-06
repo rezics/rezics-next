@@ -638,10 +638,13 @@ provide viewer action advice; mounted resource readers and the current-thread ca
 
 ## Worker authorization composition
 
-Default `registerContent` consumes `WorkContext.getAuthorization()` from the shared worker registry. That port
+Content's worker is `createContentWorkModule({ fetch })`, declared through `contentDeclaration()`; the composition
+root supplies `fetch`. It consumes `WorkContext.getAuthorization()` from the shared worker registry. That port
 memoizes the actual fully mounted kernel Access and canonical Auth current-consent reader for the context.
 The same Access object goes to `createContentWork` and `contentNoticeEffects`; the same consent function goes to
-author-erasure restoration and is mounted in Content's pool registry by the kernel. Mounted action metadata,
+author-erasure restoration and to edition sale reads as an explicit operand. Content keeps no pool-keyed consent
+registry: `readContentConfig` builds `ContentRuntime.readConsent` from Auth configuration and the HTTP composition
+passes it to content and commerce dependencies. Mounted action metadata,
 resource roles, grant constructors and current authorization facts remain owned by that kernel.
 Missing or invalid configuration and unavailable current consent retain the shared port's typed failures.
 
@@ -651,6 +654,10 @@ roles and consent, evidence no older than 1,000 ms, and known-nonce/current-oper
 `createContentWorkAccess(clock, pool?)` remains available for standalone fixtures and callers.
 Image processing, URL imports, collection and purge retain their committed source, state, ownership and hold
 checks and existing queues, retention and page bounds. These mechanical jobs do not restore a person initiator.
+
+Ambient operands: cursor and document-read deadlines take the supplied clock (`cursorNow`, `now`), authored-field
+transactions take the command's own transaction id, and edition consent is never read from the environment or a
+pool-keyed registry at use time.
 
 Cost per operation: authorization composition adds one memoized context-port lookup and passes existing object
 references. It adds no source SQL, pool checkout, permission allowance or per-step work; the existing Access,

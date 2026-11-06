@@ -8298,11 +8298,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/content/edition-sale-consent.ts",
-          "edge": "type import \"../access/auth-consent.ts\" #1 => services/kernel/src/access/auth-consent.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/content/edition-sale-native.ts",
           "edge": "type import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts"
         },
@@ -8675,11 +8670,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/content/feed-work.ts",
           "edge": "value import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/content/feed-work.ts",
-          "edge": "value import \"../events/catalogue.ts\" #1 => services/kernel/src/events/catalogue.ts"
         },
         {
           "rule": "rule 2",
@@ -10114,11 +10104,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/content/report-outcomes.ts",
-          "edge": "value import \"../events/catalogue.ts\" #1 => services/kernel/src/events/catalogue.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/content/report-outcomes.ts",
           "edge": "value import \"../http/request.ts\" #1 => services/kernel/src/http/request.ts"
         },
         {
@@ -10370,11 +10355,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/content/review-discovery-lifecycle.ts",
           "edge": "value import \"../database/pool.ts\" #1 => services/kernel/src/database/pool.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/content/review-discovery-lifecycle.ts",
-          "edge": "value import \"../events/catalogue.ts\" #1 => services/kernel/src/events/catalogue.ts"
         },
         {
           "rule": "rule 2",
@@ -11063,11 +11043,6 @@
         },
         {
           "rule": "rule 3",
-          "file": "services/kernel/src/content/community-presentation-model.ts",
-          "edge": "value import \"./realm-media.ts\" #1 => services/kernel/src/content/realm-media.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
           "file": "services/kernel/src/content/community-presentation-rules.ts",
           "edge": "value import \"./reads.ts\" #1 => services/kernel/src/content/reads.ts (value-import cycle)"
         },
@@ -11090,11 +11065,6 @@
           "rule": "rule 3",
           "file": "services/kernel/src/content/community-presentation.ts",
           "edge": "value import \"../request/access.ts\" #1 => services/kernel/src/request/access.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/content/community-presentation.ts",
-          "edge": "value import \"./community-presentation-model.ts\" #1 => services/kernel/src/content/community-presentation-model.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -20242,11 +20212,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/http/kernel.ts",
           "edge": "value import \"../community/space.ts\" #1 => services/kernel/src/community/space.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/http/kernel.ts",
-          "edge": "value import \"../content/edition-sale.ts\" #1 => services/kernel/src/content/edition-sale.ts"
         },
         {
           "rule": "rule 2",
