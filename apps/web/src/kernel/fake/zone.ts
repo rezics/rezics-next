@@ -1,6 +1,7 @@
 import type { KernelRecording } from '../fake.ts';
 import type { FakeRoute } from '../fake-modules.ts';
 import {
+  composedZoneCollectionFake as composedCollection,
   composedZoneEmptyFake as composedEmpty,
   composedZoneMembersFake as composedMembers,
   composedZonePrivateMountFake as composedPrivate,
@@ -27,6 +28,7 @@ const composedZoneId = composedMembers.zone.id;
 const composedPrivateZoneId = composedPrivate.zone.id;
 const composedSparseZoneId = composedSparse.zone.id;
 const composedEmptyZoneId = composedEmpty.zone.id;
+const composedCollectionZoneId = composedCollection.zone.id;
 const recoveringReads = new Map<string, number>();
 
 type ZoneTarget = { route: string };
@@ -156,6 +158,8 @@ async function response(request: Request, match: RegExpExecArray | null): Promis
     return target.route === '' ? { status: 200, ...composedSparse } : problem(404, { 'cache-control': 'no-store' });
   if (id === composedEmptyZoneId)
     return target.route === '' ? { status: 200, ...composedEmpty } : problem(404, { 'cache-control': 'no-store' });
+  if (id === composedCollectionZoneId)
+    return target.route === '' ? { status: 200, ...composedCollection } : problem(404, { 'cache-control': 'no-store' });
   if (id === recoveringZoneId) {
     const count = recoveringReads.get(id) ?? 0;
     recoveringReads.set(id, count + 1);

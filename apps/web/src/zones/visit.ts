@@ -1,5 +1,4 @@
-import { isView, type View } from '@rezics/composition';
-import { locales } from '../paraglide/runtime.js';
+import { isView, UI_LOCALES, type View } from '@rezics/composition';
 import { subjectHref } from '../subject/subject-href';
 
 const origin = 'https://rezics.invalid';
@@ -115,7 +114,7 @@ export function zoneVisitReturn(value: unknown, locale?: string): string | undef
     const zoneId = decodePath(parts[3] ?? '');
     if (
       !language ||
-      !locales.includes(language as (typeof locales)[number]) ||
+      !UI_LOCALES.includes(language as (typeof UI_LOCALES)[number]) ||
       (locale !== undefined && locale !== language) ||
       !zoneId ||
       !uuid.test(zoneId)
