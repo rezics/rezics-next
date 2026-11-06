@@ -33,7 +33,9 @@ const properties = [
   'schema:director',
 ] as const;
 
-function citation(subject: number) {
+type Statement = Subject['statements'][string][number];
+
+function citation(subject: number): Statement['references'][number] {
   return {
     parts: [
       {
@@ -44,12 +46,12 @@ function citation(subject: number) {
   };
 }
 
-function assertion(property: string, target: string, n: number, subject: number) {
+function assertion(property: string, target: string, n: number, subject: number): Statement {
   return {
     id: id(n),
-    rank: 'normal' as const,
+    rank: 'normal',
     property: { id: property, data_type: 'wikibase-item' },
-    value: { type: 'value' as const, content: target },
+    value: { type: 'value', content: target },
     qualifiers: [],
     references: [citation(subject)],
     rezics: { revision: 1, release: recorded.digest },

@@ -742,7 +742,7 @@ function MineFollowingPageState({
       {!addressRejected && !page.forbidden && active.length ? (
         <ul className="list-none space-y-1" aria-label={m.library_following_heading()}>
           {active.map((row) => {
-            const { follow, title, kind, reason, destination } = row;
+            const { follow, title, kind: rowKind, reason, destination } = row;
             const href =
               reading.suspended || (destination?.kind === 'collection' && !canReadCollection)
                 ? undefined
@@ -767,7 +767,7 @@ function MineFollowingPageState({
                 visual={follow.target?.cover ? <SubjectCover subject={follow.target} ratio="2:3" /> : undefined}
                 metadata={
                   <div className="min-w-0 space-y-1">
-                    <p>{kind}</p>
+                    <p>{rowKind}</p>
                     <p>{reason}</p>
                   </div>
                 }
