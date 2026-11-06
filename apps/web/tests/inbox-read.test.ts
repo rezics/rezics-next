@@ -367,12 +367,12 @@ test('unread decoder keeps lower-bound, capped and exact native summaries', () =
     basis: 'current-visible-unread',
     witness,
   });
-  expect(
-    decodeUnreadCount({ count: 4, capped: true, basis: 'current-visible-lower-bound', witness }),
-  ).toMatchObject({ count: 4, capped: true, basis: 'current-visible-lower-bound' });
-  expect(() =>
-    decodeUnreadCount({ count: 4, capped: false, basis: 'current-visible-lower-bound', witness }),
-  ).toThrow();
+  expect(decodeUnreadCount({ count: 4, capped: true, basis: 'current-visible-lower-bound', witness })).toMatchObject({
+    count: 4,
+    capped: true,
+    basis: 'current-visible-lower-bound',
+  });
+  expect(() => decodeUnreadCount({ count: 4, capped: false, basis: 'current-visible-lower-bound', witness })).toThrow();
 });
 
 test('installed actors decode avatar summaries while retained fixtures without avatar still pass', () => {

@@ -33,7 +33,8 @@ export const INBOX_CONTENT_DISCLOSURE_EVIDENCE = {
   ],
   list: 'inbox list and unread summary examine bounded index rows as a recipient inbox grows',
   disclosure: 'native inbox disclosure of a real post notice stays bounded as the recipient range grows',
-  unreadClassification: 'native unread counts classify empty, exact-100, capped and retained-frontier states at three scales',
+  unreadClassification:
+    'native unread counts classify empty, exact-100, capped and retained-frontier states at three scales',
   examined: {
     listCandidateLimit: INBOX_LIST_CANDIDATE_LIMIT,
     unreadRawWindow: INBOX_UNREAD_RAW_WINDOW,

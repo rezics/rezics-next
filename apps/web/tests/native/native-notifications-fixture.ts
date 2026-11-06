@@ -48,11 +48,7 @@ export type NativeNotificationFixture = {
   watchThread(actor: NotificationPersona, thread: NativeNoticeThread): Promise<void>;
   grant(resource: { id: string; route: number }, accountId: string, action: string): Promise<void>;
   revoke(resource: { id: string; route: number }, accountId: string, action: string): Promise<void>;
-  readInbox(
-    accountId: string,
-    actor: NotificationPersona,
-    query?: NativeInboxQuery,
-  ): Promise<ResolvedInboxPage>;
+  readInbox(accountId: string, actor: NotificationPersona, query?: NativeInboxQuery): Promise<ResolvedInboxPage>;
   readCount(accountId: string, actor: NotificationPersona): Promise<UnreadCountReady>;
   markNotice(accountId: string, actor: NotificationPersona, noticeId: string): Promise<void>;
   markThrough(accountId: string, actor: NotificationPersona, through: string): Promise<void>;
@@ -129,8 +125,7 @@ async function readInbox(
   const path = inboxPath(accountId, query);
   const response = await stack.kernel(path, undefined, actor);
   const body = await response.json();
-  if (!response.ok)
-    throw new Error(`GET ${path} returned ${response.status}: ${JSON.stringify(body)}`);
+  if (!response.ok) throw new Error(`GET ${path} returned ${response.status}: ${JSON.stringify(body)}`);
   try {
     return await resolveInboxItems(decodeInboxPage(body, accountId));
   } catch (error) {
@@ -148,8 +143,7 @@ async function readCount(
   const path = `/v1/accounts/${accountId}/notifications/count`;
   const response = await stack.kernel(path, undefined, actor);
   const body = await response.json();
-  if (!response.ok)
-    throw new Error(`GET ${path} returned ${response.status}: ${JSON.stringify(body)}`);
+  if (!response.ok) throw new Error(`GET ${path} returned ${response.status}: ${JSON.stringify(body)}`);
   try {
     return decodeUnreadCount(body, response.status);
   } catch (error) {

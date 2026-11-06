@@ -34,8 +34,7 @@ async function waitForInbox(
   for (let attempt = 0; attempt < 40; attempt += 1) {
     const first = await fixture.readInbox(accountId, actor, { selection: 'all' });
     last = [first];
-    if (first.next)
-      last.push(await fixture.readInbox(accountId, actor, { selection: 'all', cursor: first.next }));
+    if (first.next) last.push(await fixture.readInbox(accountId, actor, { selection: 'all', cursor: first.next }));
     if (predicate(last)) return last;
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
@@ -207,9 +206,7 @@ nativeTest(
     const unreadBeforeRead = await fixture.readCount(aliceId, 'alice');
     const badgeLabel = unreadBadgeLabel(unreadBeforeRead);
     if (unreadBeforeRead.basis === 'current-visible-lower-bound' || unreadBeforeRead.capped)
-      await browserExpect(alicePage.getByRole('status', { name: 'Current unread summary' })).toContainText(
-        'At least',
-      );
+      await browserExpect(alicePage.getByRole('status', { name: 'Current unread summary' })).toContainText('At least');
     else if (badgeLabel)
       await browserExpect(alicePage.getByRole('status', { name: 'Current unread summary' })).toContainText(
         `${unreadBeforeRead.count} unread`,
@@ -276,11 +273,7 @@ nativeTest(
     expect(
       allItems(await waitForInbox(aliceId, () => true, 'alice')).some(({ postId }) => postId === disabledReply.id),
     ).toBe(false);
-    const enabledMentionNotice = await waitForNotice(
-      aliceId,
-      (item) => item.postId === enabledMention.id,
-      'alice',
-    );
+    const enabledMentionNotice = await waitForNotice(aliceId, (item) => item.postId === enabledMention.id, 'alice');
     expect(enabledMentionNotice.kind).toBe('mention');
     expect(enabledMentionNotice.actorId).toBe(fixture.bobId);
 
@@ -315,7 +308,12 @@ nativeTest(
       await browserExpect(watchRow).toHaveAttribute('data-kind', 'thread_watch');
       await browserExpect(watchRow.locator('a')).toHaveAttribute(
         'href',
-        threadLocation('en', { id: watched.id, title: watchNotice.target?.threadTitle ?? 'Watched discussion' }, undefined, watchedPost.id),
+        threadLocation(
+          'en',
+          { id: watched.id, title: watchNotice.target?.threadTitle ?? 'Watched discussion' },
+          undefined,
+          watchedPost.id,
+        ),
       );
       const open = watchRow.locator('a');
       await open.focus();
@@ -340,7 +338,9 @@ nativeTest(
 
     const admitted = (await fixture.readInbox(aliceId, 'alice')).actions.markSeen;
     if (admitted) {
-      await alicePage.getByRole('button', { name: 'Mark notifications through the displayed boundary as read' }).click();
+      await alicePage
+        .getByRole('button', { name: 'Mark notifications through the displayed boundary as read' })
+        .click();
       await alicePage.getByText('The server marked notifications through the displayed boundary as read.').waitFor();
     }
 

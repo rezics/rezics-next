@@ -3,12 +3,8 @@ import { createKernelClient } from '@rezics/client';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { nativeInboxEnvelope, readyInboxPage } = await import('../src/inbox/inbox-read');
-const {
-  emptyInboxPagination,
-  inboxPaginationWork,
-  nextInboxPage,
-  receiveInboxPage,
-} = await import('../src/inbox/inbox-pagination');
+const { emptyInboxPagination, inboxPaginationWork, nextInboxPage, receiveInboxPage } =
+  await import('../src/inbox/inbox-pagination');
 const {
   composeInboxWork,
   deriveInboxBrowserWork,
@@ -69,15 +65,17 @@ test('composed Inbox work keeps one 20-row body, eight prior addresses, one retu
   expect(INBOX_UNREAD_RAW_WINDOW).toBe(201);
   expect(MAX_INBOX_RETAINED_CURSORS).toBe(10);
   const fullCursors = Array.from({ length: MAX_INBOX_RETAINED_CURSORS }, () => 'c'.repeat(MAX_INBOX_CURSOR_LENGTH));
-  expect(composeInboxWork({
-    listRequests: 1,
-    countRequests: 1,
-    retainedRows: 20,
-    priorAddresses: 8,
-    cursors: fullCursors,
-    visits: 1,
-    returnReceipts: 1,
-  }).cursorPayloadBytes).toBe(MAX_INBOX_CURSOR_PAYLOAD_BYTES);
+  expect(
+    composeInboxWork({
+      listRequests: 1,
+      countRequests: 1,
+      retainedRows: 20,
+      priorAddresses: 8,
+      cursors: fullCursors,
+      visits: 1,
+      returnReceipts: 1,
+    }).cursorPayloadBytes,
+  ).toBe(MAX_INBOX_CURSOR_PAYLOAD_BYTES);
 
   const pageRows = Array.from({ length: INBOX_PAGE_SIZE }, (_, index) => notice(`page-${index}`));
   const pageWire = JSON.stringify(nativeInboxEnvelope(pageRows, null, 'alice'));
@@ -122,9 +120,7 @@ test('composed Inbox work keeps one 20-row body, eight prior addresses, one retu
   for (const unrelated of INBOX_BROWSER_GROWTH_SCALES) materialized.push(await measure(unrelated, 64));
   for (const visits of INBOX_BROWSER_GROWTH_SCALES) materialized.push(await measure(64, visits));
   expect(new Set(materialized).size).toBe(1);
-  expect(INBOX_CONTENT_DISCLOSURE_EVIDENCE.growth[0]).toBe(
-    'services/kernel/test/content/growth-notice-inbox.test.ts',
-  );
+  expect(INBOX_CONTENT_DISCLOSURE_EVIDENCE.growth[0]).toBe('services/kernel/test/content/growth-notice-inbox.test.ts');
   expect(INBOX_CONTENT_DISCLOSURE_EVIDENCE.examined.listCandidateLimit).toBe(80);
 }, 60_000);
 
