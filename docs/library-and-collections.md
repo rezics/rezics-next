@@ -131,7 +131,9 @@ Decision: uncertain own-vote writes keep the optimistic units and original idemp
 command; a stale review rolls back and requires an explicit fresh save.
 Decision: native personal-score grants use the mounted Global Context `POST /v1/grants` path after capturing the Auth
 service handler for JWKS and issuance, wrapping pages only after that first governor grant returns 201. The governor
-token carries compiled `platform.governance` actions, `access:grant` and `gate:any`.
+token carries compiled `platform.governance` actions, `access:grant` and `gate:any`, not grant-routes' complete
+catalogue. The unique typed Global grant body is `PLATFORM_RESOURCE`, `{kind:'account',id}` and `(,)`. Access still
+projects `PolicyFacts.deadlineLive` from the permission row's `live` column.
 Decision: Global distribution uses the native `/ratings` aggregate admission (exact subject identity and freshness);
 a published headline never reconstructs a histogram from an unadmitted source. Disposable native stacks reach
 PostgreSQL through a bind-mounted unix socket when the test namespace has only loopback, differs from PID 1, or

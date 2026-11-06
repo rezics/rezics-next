@@ -132,6 +132,12 @@ order, own-vote currentness and public aggregate. Fewer test lines than product 
 HTTP Global grant through the Library fixture before catalogue writes. Uncertain Save retries the original
 question-bound command and idempotency key; a stale review rolls back for a fresh save.
 
+Decision: native Library grants keep compiled `platform.governance` plus `access:grant` and `gate:any` on the governor
+token, not grant-routes' complete catalogue plus `gate:any`. The fixture posts the unique typed Global grant
+(`PLATFORM_RESOURCE`, `{kind:'account',id}`, open interval) on `POST /v1/grants`. Access still types and checks the
+permission row's `live` column; `permission-check.sql` also aliases `deadline_live` as `deadlineLive` twice.
+policy-core maps `PolicyFacts.deadlineLive` from `row.live`. Those Access operands stay with Accounts.
+
 Acceptance is the seeded native and browser walk in `apps/web/tests/native/library-personal-score.host.test.ts`.
 Bound declarations read canonical Source cost leaves so Kernel can boot through the Collection Source import cycle.
 Global distribution reads admit the native aggregate shape; focused `--private-network` walks reach disposable

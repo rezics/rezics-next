@@ -1,8 +1,11 @@
 import { expect } from 'bun:test';
-import { PLATFORM_RESOURCE } from '../../../../services/kernel/src/access/bootstrap-governance.ts';
+import { PLATFORM_RESOURCE } from '../../../../services/kernel/src/access/governance-reach.ts';
 import type { NativeWebStack } from './stack.ts';
 
-/** First HTTP Global grant on the mounted createGrantCommands path; must return 201. */
+/** Unique typed Global grant on the mounted createGrantCommands path; must return 201.
+ * Matches grant-routes: PLATFORM_RESOURCE, account subject, open interval, governor bearer.
+ * Do not import bootstrap-governance here: that graph loads Reylo named SQL before the stack registers it.
+ */
 export async function grantGlobalCatalogueWrite(
   stack: NativeWebStack,
   accountId: string,
@@ -14,12 +17,12 @@ export async function grantGlobalCatalogueWrite(
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        'idempotency-key': `"${crypto.randomUUID()}"`,
+        'idempotency-key': JSON.stringify(crypto.randomUUID()),
       },
       body: JSON.stringify({
-        resource: PLATFORM_RESOURCE,
+        resource: { route: PLATFORM_RESOURCE.route, id: PLATFORM_RESOURCE.id },
         subject: { kind: 'account', id: accountId },
-        actions,
+        actions: [...actions],
         valid: '(,)',
       }),
     },
