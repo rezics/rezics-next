@@ -1,10 +1,20 @@
 import { APPEARANCE } from '@rezics/composition';
-import type { CompositionDocument } from '@rezics/composition';
-import type { ZonePublic } from '../../../../services/kernel/src/zones/contract.ts';
+import type { CompositionDocument, ZoneConfiguration, ZoneLanguage } from '@rezics/composition';
 
-export type { ZonePublic } from '../../../../services/kernel/src/zones/contract.ts';
+export type ZoneAppearance = { [K in keyof typeof APPEARANCE]?: (typeof APPEARANCE)[K][number] };
 
-type Tokens = ZonePublic['appearance'];
+/** Public Zone shell: composition appearance, labels and language, never kernel contract types. */
+export type ZonePublic = {
+  id: string;
+  revision: string;
+  labels: ZoneConfiguration['labels'];
+  primaryLanguage?: ZoneLanguage;
+  visibility: 'private' | 'unlisted' | 'public';
+  appearance: ZoneAppearance;
+  navigation: { route: string }[];
+};
+
+type Tokens = ZoneAppearance;
 type TokenName = keyof typeof APPEARANCE;
 
 const dataNames: Record<TokenName, string> = {

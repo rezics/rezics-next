@@ -3,7 +3,6 @@ import { useLocation, useRouter, notFound } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
-import type { ZonePublic } from '../../../../services/kernel/src/zones/contract.ts';
 import { SubjectFrame, subjectFrame, SubjectViewPage } from '../features/pages/subject-frame';
 import { SubjectPage, subjectPageTitle, subjectPageType, type SubjectPageData } from '../features/pages/subject';
 import { SubjectLink, subjectPageMessages, viewTabLabels } from '../features/pages/route-support';
@@ -35,7 +34,7 @@ import {
   type ZonePageInput,
   type ZonePageRouteOutcome,
 } from './zone-read';
-import { zoneAppearanceAttributes, zonePageDocument } from './appearance';
+import { zoneAppearanceAttributes, zonePageDocument, type ZonePublic } from './appearance';
 import { advanceZoneCallback, type ZoneCallbackIdentity } from './callback';
 import {
   zoneVisitFromRequest,

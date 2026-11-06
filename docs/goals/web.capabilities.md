@@ -262,3 +262,4 @@ a served-page binding marked pending does not become covered merely by linking a
   native `readPage` slots, Zone continuation, private-mount SSR isolation and same-tab Subject return; Search TypeList
   stays Global. This slice is pinned by scoped web and presentation tests; mounted native/page return stays pending.
   Broader native collection-source/configured-page persona acceptance remains the owner suites.
+  Decision: existing scoped web and presentation tests pin this slice; no extra stories.

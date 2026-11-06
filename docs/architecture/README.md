@@ -30,6 +30,8 @@ Decision: Semantic is registered as contract, core, application and adapter modu
 
 Decision: Routed Zone composition consumes Search page, visit-return and slot-admission helpers through existing public entries (`showcase-work`, `search/index.ts`, `kernel/client.ts`) and already-imported Zone reader files; it does not add manifest public entries.
 
+Decision: The public Zone shell type is the composition appearance, label and language vocabulary in the Zone reader; Web does not import kernel `contract.ts` for it.
+
 `modules.json` assigns the production sources in Kernel, Auth, Importer, Web, and the runtime packages to one module each. Tests, stories, fixtures, and workspace configuration are not production source roots. Each module records its kind, owner Goal, registered capabilities, public entries, and current allowed module dependencies. Kernel foundation code with no product owner is assigned to `platform`.
 
 The checker enforces source coverage, public entry imports (including type-only edges), module dependency direction and cycles, new value-import cycles, pure core and contract imports, adapter SQL ownership, package isolation from apps and services, and ratchet integrity. Current violations are grouped by source module in `boundary-baseline.json` with the module owner and reason `pre-boundary code`. A disappearing entry is reported so the group can be reduced.
