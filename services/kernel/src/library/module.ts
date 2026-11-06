@@ -11,15 +11,15 @@ import {
 import {
   identitySourceConsumerLibraryWork,
   type IdentitySourceConsumerMaintenanceContext,
-} from '../semantic/identity-source-consumer-maintenance.ts';
+  type IdentityReceivingSelection,
+  type IdentityJobRef,
+} from '../semantic/identity-adapters/index.ts';
 import type { LibraryIdentityPlanInput, LibraryIdentityPlanResult } from './identity-native-planner-types.ts';
 import {
   advanceLibraryIdentityNativeScope,
   prepareLibraryIdentityNativeEffect,
   stepLibraryIdentityEpochWithSource,
 } from './identity-epoch-participant.ts';
-import type { IdentityReceivingSelection } from '../semantic/identity-receiving-effects.ts';
-import type { IdentityJobRef } from '../semantic/identity-epoch-contract.ts';
 import type { LibraryScopeEffectsKey, LibraryExpectedEffectAfter } from './identity-scope-effects.ts';
 import type { NativeCollectionWork } from './collection-source-work.ts';
 
