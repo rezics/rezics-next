@@ -110,7 +110,8 @@ async function call(method: string, path: string, body?: unknown, key = randomUU
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     }),
   );
-  return { status: response.status, body: (await response.json()) as Record<string, any> };
+  const text = await response.text();
+  return { status: response.status, body: (text ? JSON.parse(text) : {}) as Record<string, any> };
 }
 const content = () => ({
   document: fromPlainText('Simmer gently for thirty minutes.'),
@@ -356,14 +357,17 @@ test('media values are still refused in single-subject writes', async () => {
   expect(created.body.errors).toEqual([{ pointer: '/statements/schema:image/0/value/content', code: 'unsupported' }]);
 });
 
-test('an authored create retries one serialization failure without changing its document input', async () => {
+test('an authored create reports identity-terminal contention without changing its document input', async () => {
   const value = content();
   const input = recipe(value);
   const before = structuredClone(input);
   const key = randomUUID();
   commitFailure.arm();
-  const answer = await call('POST', '/v1/subjects', input, key);
+  const failed = await call('POST', '/v1/subjects', input, key);
   expect(commitFailure.failures()).toBe(1);
+  expect(failed.status).toBe(503);
+  expect(input).toEqual(before);
+  const answer = await call('POST', '/v1/subjects', input, key);
   expect(answer.status).toBe(201);
   expect(input).toEqual(before);
   const replay = await call('POST', '/v1/subjects', input, key);
