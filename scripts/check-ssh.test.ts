@@ -4,11 +4,18 @@ import { join, resolve } from 'node:path';
 import {
   acquireHostControl,
   activeHostControlCount,
+  clearPlacementProbeTimeout,
   controlSocketDirectoryPath,
   dropStaleHostMaster,
   ensureSshControlDirectory,
+  hostControlLeaseIsHeld,
   hostControlSocketPath,
   hostMasterIsLive,
+  MASTER_RECOVERY_INTERVAL_MS,
+  notePlacementProbeTimeout,
+  PLACEMENT_PROBE_TIMEOUT_EVENT_MS,
+  placementProbeTimeoutEvent,
+  recoverHungHostMaster,
   releaseHostControl,
   resetHostControlLeases,
   rsyncRemoteShell,
@@ -233,4 +240,188 @@ test('sshExecutable walks PATH at call time so a fake ssh is used', () => {
   } finally {
     process.env.PATH = previousPath;
   }
+});
+
+test('a hung master with no live lease is recovered with -O exit at most once per minute', async () => {
+  const directory = fixture();
+  const bin = writeFakeSsh(
+    directory,
+    `#!/usr/bin/env bun
+const args = process.argv.slice(2);
+const log = process.env.SSH_LOG!;
+await Bun.write(log, (await Bun.file(log).exists() ? await Bun.file(log).text() : '') + args.join(' ') + '\\n');
+if (args.includes('-O') && args.includes('check')) process.exit(0);
+if (args.includes('-O') && args.includes('exit')) process.exit(0);
+if (args.some((argument) => argument.includes('REMOTE_CHECK_CONTROL_PROBE'))) {
+  process.stdout.write('REMOTE_CHECK_CONTROL_OK\\n');
+  process.exit(0);
+}
+process.exit(2);
+`,
+  );
+  const log = join(directory, 'ssh.log');
+  writeFileSync(log, '');
+  const control = join(directory, 'ssh-control');
+  const previousPath = process.env.PATH;
+  process.env.PATH = `${bin}:${previousPath ?? ''}`;
+  process.env.SSH_LOG = log;
+  try {
+    const now = 1_700_000_000_000;
+    expect(await recoverHungHostMaster(host('b'), control, now)).toBe(true);
+    fixtures.push(control);
+    expect(await recoverHungHostMaster(host('b'), control, now)).toBe(false);
+    expect(await recoverHungHostMaster(host('b'), control, now + MASTER_RECOVERY_INTERVAL_MS - 1)).toBe(false);
+    expect(await recoverHungHostMaster(host('b'), control, now + MASTER_RECOVERY_INTERVAL_MS)).toBe(true);
+    const seen = readFileSync(log, 'utf8');
+    expect(seen.match(/-O check/g)).toHaveLength(2);
+    expect(seen.match(/-O exit/g)).toHaveLength(2);
+  } finally {
+    delete process.env.SSH_LOG;
+    process.env.PATH = previousPath;
+  }
+});
+
+test('concurrent recoveries of one host take -O exit once per minute', async () => {
+  const directory = fixture();
+  const bin = writeFakeSsh(
+    directory,
+    `#!/usr/bin/env bun
+const args = process.argv.slice(2);
+const log = process.env.SSH_LOG!;
+await Bun.write(log, (await Bun.file(log).exists() ? await Bun.file(log).text() : '') + args.join(' ') + '\\n');
+if (args.includes('-O')) process.exit(args.includes('check') ? 255 : 0);
+process.exit(2);
+`,
+  );
+  const log = join(directory, 'ssh.log');
+  writeFileSync(log, '');
+  const control = join(directory, 'ssh-control');
+  const previousPath = process.env.PATH;
+  process.env.PATH = `${bin}:${previousPath ?? ''}`;
+  process.env.SSH_LOG = log;
+  try {
+    const now = 1_700_000_000_000;
+    const results = await Promise.all([
+      recoverHungHostMaster(host('c'), control, now),
+      recoverHungHostMaster(host('c'), control, now),
+      recoverHungHostMaster(host('c'), control, now),
+    ]);
+    fixtures.push(control);
+    expect(results.filter(Boolean)).toHaveLength(1);
+    expect(readFileSync(log, 'utf8').match(/-O exit/g)).toHaveLength(1);
+  } finally {
+    delete process.env.SSH_LOG;
+    process.env.PATH = previousPath;
+  }
+});
+
+test('a live master is not recovered while a run holds its lease', async () => {
+  const directory = fixture();
+  const bin = writeFakeSsh(
+    directory,
+    `#!/usr/bin/env bun
+const args = process.argv.slice(2);
+const log = process.env.SSH_LOG!;
+await Bun.write(log, (await Bun.file(log).exists() ? await Bun.file(log).text() : '') + args.join(' ') + '\\n');
+if (args.includes('-O') && args.includes('check')) process.exit(0);
+if (args.includes('-O') && args.includes('exit')) process.exit(0);
+if (args.some((argument) => argument.includes('REMOTE_CHECK_CONTROL_PROBE'))) {
+  process.stdout.write('REMOTE_CHECK_CONTROL_OK\\n');
+  process.exit(0);
+}
+process.exit(2);
+`,
+  );
+  const log = join(directory, 'ssh.log');
+  writeFileSync(log, '');
+  const control = join(directory, 'ssh-control');
+  const previousPath = process.env.PATH;
+  process.env.PATH = `${bin}:${previousPath ?? ''}`;
+  process.env.SSH_LOG = log;
+  try {
+    const lease = await acquireHostControl(host('a'), control);
+    fixtures.push(lease.directory);
+    expect(hostControlLeaseIsHeld(lease.directory, 'a')).toBe(true);
+    expect(await recoverHungHostMaster(host('a'), lease.directory, Date.now())).toBe(false);
+    expect(readFileSync(log, 'utf8')).toContain('-O check');
+    expect(readFileSync(log, 'utf8')).not.toMatch(/-O exit/);
+    releaseHostControl(lease);
+    expect(hostControlLeaseIsHeld(lease.directory, 'a')).toBe(false);
+    expect(await recoverHungHostMaster(host('a'), lease.directory, Date.now())).toBe(true);
+    expect(readFileSync(log, 'utf8')).toContain('-O exit');
+  } finally {
+    delete process.env.SSH_LOG;
+    process.env.PATH = previousPath;
+  }
+});
+
+test('a dead master is recovered even while a run holds its lease', async () => {
+  const directory = fixture();
+  const state = join(directory, 'state');
+  writeFileSync(state, 'live');
+  const bin = writeFakeSsh(
+    directory,
+    `#!/usr/bin/env bun
+const args = process.argv.slice(2);
+const state = process.env.SSH_STATE!;
+const log = process.env.SSH_LOG!;
+await Bun.write(log, (await Bun.file(log).exists() ? await Bun.file(log).text() : '') + args.join(' ') + '\\n');
+if (args.includes('-O') && args.includes('check')) {
+  process.exit((await Bun.file(state).text()) === 'live' ? 0 : 255);
+}
+if (args.includes('-O') && args.includes('exit')) process.exit(0);
+if (args.some((argument) => argument.includes('REMOTE_CHECK_CONTROL_PROBE'))) {
+  process.stdout.write('REMOTE_CHECK_CONTROL_OK\\n');
+  process.exit(0);
+}
+process.exit(2);
+`,
+  );
+  const log = join(directory, 'ssh.log');
+  writeFileSync(log, '');
+  const control = join(directory, 'ssh-control');
+  const previousPath = process.env.PATH;
+  process.env.PATH = `${bin}:${previousPath ?? ''}`;
+  process.env.SSH_STATE = state;
+  process.env.SSH_LOG = log;
+  try {
+    const lease = await acquireHostControl(host('a'), control);
+    fixtures.push(lease.directory);
+    writeFileSync(state, 'dead');
+    expect(await recoverHungHostMaster(host('a'), lease.directory, Date.now())).toBe(true);
+    expect(readFileSync(log, 'utf8')).toContain('-O exit');
+    releaseHostControl(lease);
+  } finally {
+    delete process.env.SSH_STATE;
+    delete process.env.SSH_LOG;
+    process.env.PATH = previousPath;
+  }
+});
+
+test('five minutes of consecutive probe timeouts report one environment event naming the host', async () => {
+  const directory = fixture();
+  const control = join(directory, 'ssh-control');
+  ensureSshControlDirectory(control);
+  fixtures.push(control);
+  const started = 1_700_000_000_000;
+  expect(await notePlacementProbeTimeout(control, 'b', 'probe timed out', started)).toBeNull();
+  expect(
+    await notePlacementProbeTimeout(control, 'b', 'probe timed out', started + PLACEMENT_PROBE_TIMEOUT_EVENT_MS - 1),
+  ).toBeNull();
+  expect(
+    await notePlacementProbeTimeout(control, 'b', 'probe timed out', started + PLACEMENT_PROBE_TIMEOUT_EVENT_MS),
+  ).toBe(placementProbeTimeoutEvent('b', 'probe timed out'));
+  expect(
+    await notePlacementProbeTimeout(control, 'b', 'probe timed out', started + PLACEMENT_PROBE_TIMEOUT_EVENT_MS + 1),
+  ).toBeNull();
+  await clearPlacementProbeTimeout(control, 'b');
+  expect(await notePlacementProbeTimeout(control, 'b', 'Master running', started + 6 * 60_000)).toBeNull();
+  expect(
+    await notePlacementProbeTimeout(
+      control,
+      'b',
+      'connection timed out',
+      started + 6 * 60_000 + PLACEMENT_PROBE_TIMEOUT_EVENT_MS,
+    ),
+  ).toBe(placementProbeTimeoutEvent('b', 'connection timed out'));
 });

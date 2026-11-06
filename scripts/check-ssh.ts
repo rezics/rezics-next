@@ -6,16 +6,22 @@
  * when the runtime directory is unset (`REMOTE_CHECK_SSH_CONTROL_DIR` overrides). OpenSSH's unix_listener adds a
  * `.XXXXXXXXXX` suffix, so a path at or over 97 bytes fails; a long override or runtime directory relocates to a
  * hashed `/tmp/rs<uid>-<digest>` that still names one socket per host. Concurrent callers reuse that master.
- * Completing a run never `-O exit`s it. A stale master is recovered with `-O check` then `-O exit`.
+ * Completing a run never `-O exit`s it. A stale or hung master is recovered with `-O check` then `-O exit`, at most
+ * once per host per minute across processes, and never while a run holds its lease and the master answers.
  */
 import { createHash } from 'node:crypto';
-import { chmodSync, existsSync, lstatSync, mkdirSync } from 'node:fs';
+import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 export const CONTROL_MASTER = 'auto';
 export const CONTROL_PERSIST = '10m';
 export const SSH_CONTROL_DIR_MODE = 0o700;
 export const DEFAULT_CONTROL_PROBE_TIMEOUT_MS = 8_000;
+/** Placement-probe recovery of one host's master is claimed at most this often, across remote-check processes. */
+export const MASTER_RECOVERY_INTERVAL_MS = 60_000;
+/** Consecutive placement-probe timeouts of this length report one environment event for the host. */
+export const PLACEMENT_PROBE_TIMEOUT_EVENT_MS = 5 * 60_000;
+const FLOCK_BUSY = 75;
 /** Linux `sockaddr_un.sun_path` length, including the trailing NUL OpenSSH writes. */
 export const UNIX_LISTENER_PATH_LIMIT = 108;
 /** OpenSSH `unix_listener` temporary suffix `.XXXXXXXXXX`. */
@@ -106,9 +112,18 @@ export function ensureSshControlDirectory(directory: string, uid = unixUserId())
   return directory;
 }
 
+function controlRoot(directory: string): string {
+  return ensureSshControlDirectory(relocateIfTooLong(directory, unixUserId()));
+}
+
+function hostLockPath(directory: string, hostName: string, suffix: string): string {
+  if (!HOST_NAME.test(hostName)) throw new Error(`remote-check: SSH control host name is invalid: ${hostName}`);
+  return join(directory, `${hostName}.${suffix}`);
+}
+
 /** OpenSSH options for every operational SSH and rsync path, including probes, polling, heartbeat and cleanup. */
 export function sshControlOptions(host: SshControlHost, directory: string): string[] {
-  const root = ensureSshControlDirectory(relocateIfTooLong(directory, unixUserId()));
+  const root = controlRoot(directory);
   return [
     '-i',
     host.identity,
@@ -242,6 +257,72 @@ export async function dropStaleHostMaster(host: SshControlHost, directory: strin
   await masterControl(host, directory, 'exit', timeoutMs);
 }
 
+type FlockHold = { release: () => Promise<void> };
+
+async function holdFlock(file: string, shared: boolean, blocking: boolean): Promise<FlockHold | null> {
+  writeFileSync(file, '', { flag: 'a', mode: 0o600 });
+  const child = Bun.spawn(
+    [
+      'flock',
+      ...(shared ? ['-s'] : []),
+      ...(blocking ? [] : ['-n']),
+      '--no-fork',
+      '-E',
+      String(FLOCK_BUSY),
+      file,
+      'sh',
+      '-c',
+      'printf LOCKED\\n; exec cat >/dev/null',
+    ],
+    { stdin: 'pipe', stdout: 'pipe', stderr: 'ignore' },
+  );
+  const reader = child.stdout.getReader();
+  const first = await reader.read();
+  reader.releaseLock();
+  if (first.done) {
+    const code = await child.exited;
+    if (code === FLOCK_BUSY) return null;
+    throw new Error(`remote-check: flock failed for ${file} (exit ${code})`);
+  }
+  let released: Promise<void> | undefined;
+  return {
+    release() {
+      return (released ??= (async () => {
+        try {
+          await child.stdin.end();
+        } catch {
+          // The helper may already have exited.
+        }
+        await child.exited;
+      })());
+    },
+  };
+}
+
+async function withExclusiveLock<T>(file: string, work: () => T | Promise<T>, blocking = false): Promise<T | null> {
+  const hold = await holdFlock(file, false, blocking);
+  if (!hold) return null;
+  try {
+    return await work();
+  } finally {
+    await hold.release();
+  }
+}
+
+function exclusiveLockIsHeld(file: string): boolean {
+  if (!existsSync(file)) return false;
+  const result = Bun.spawnSync(['flock', '-n', '-E', String(FLOCK_BUSY), file, 'true'], {
+    stdin: 'ignore',
+    stdout: 'ignore',
+    stderr: 'ignore',
+  });
+  if (result.exitCode === FLOCK_BUSY) return true;
+  if (result.exitCode !== 0) {
+    throw new Error(`remote-check: flock inspect failed for ${file} (exit ${result.exitCode})`);
+  }
+  return false;
+}
+
 const CONTROL_OK = 'REMOTE_CHECK_CONTROL_OK';
 
 export type HostControlLease = {
@@ -251,7 +332,14 @@ export type HostControlLease = {
   readonly connectionMs: number;
 };
 
-const liveLeases = new Map<string, { count: number; host: SshControlHost; directory: string }>();
+type HeldLease = {
+  count: number;
+  host: SshControlHost;
+  directory: string;
+  unlock: () => Promise<void>;
+};
+
+const liveLeases = new Map<string, HeldLease>();
 
 function leaseKey(directory: string, hostName: string): string {
   return `${resolve(directory)}\0${hostName}`;
@@ -261,10 +349,111 @@ export function activeHostControlCount(directory: string, hostName: string): num
   return liveLeases.get(leaseKey(directory, hostName))?.count ?? 0;
 }
 
+/** True when this process or another remote-check process holds a run lease on the host master. */
+export function hostControlLeaseIsHeld(directory: string, hostName: string): boolean {
+  const root = controlRoot(directory);
+  if (activeHostControlCount(root, hostName) > 0) return true;
+  return exclusiveLockIsHeld(hostLockPath(root, hostName, 'lease'));
+}
+
 export function reportConnectionWork(hostName: string, started: number, recovered = false): void {
   const recoveredMark = recovered ? ', recovered stale master' : '';
   console.error(
     `remote-check: connection ${((performance.now() - started) / 1000).toFixed(3)} s on ${hostName}${recoveredMark}`,
+  );
+}
+
+function readRecoveryStamp(path: string): number | undefined {
+  try {
+    const value = Number(readFileSync(path, 'utf8').trim());
+    return Number.isSafeInteger(value) && value >= 0 ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Recover a hung or lost host master the way acquireHostControl does: `-O exit` once, then the next auto connection.
+ * Claims at most once per host per minute across processes. Does not recover while a run holds its lease and the
+ * master answers `-O check`.
+ */
+export async function recoverHungHostMaster(
+  host: SshControlHost,
+  directory: string,
+  now = Date.now(),
+  timeoutMs = 1_000,
+): Promise<boolean> {
+  const root = controlRoot(directory);
+  const claimed = await withExclusiveLock(hostLockPath(root, host.name, 'recover.lock'), async () => {
+    const stampPath = hostLockPath(root, host.name, 'recovered-at');
+    const last = readRecoveryStamp(stampPath);
+    if (last !== undefined && now - last < MASTER_RECOVERY_INTERVAL_MS) return false;
+    const live = await hostMasterIsLive(host, root, timeoutMs);
+    if (live && hostControlLeaseIsHeld(root, host.name)) return false;
+    await masterControl(host, root, 'exit', timeoutMs);
+    writeFileSync(stampPath, `${now}\n`);
+    return true;
+  });
+  return claimed === true;
+}
+
+type ProbeTimeoutState = { firstAt: number; reported: boolean };
+
+function readProbeTimeoutState(path: string): ProbeTimeoutState | undefined {
+  try {
+    const parsed = JSON.parse(readFileSync(path, 'utf8')) as Partial<ProbeTimeoutState>;
+    if (!Number.isSafeInteger(parsed.firstAt) || parsed.firstAt < 0) return undefined;
+    return { firstAt: parsed.firstAt, reported: parsed.reported === true };
+  } catch {
+    return undefined;
+  }
+}
+
+export function placementProbeTimeoutEvent(hostName: string, error: string): string {
+  return `remote-check: environment: check host ${hostName} skipped for probe timeouts: ${error}`;
+}
+
+/** Record a placement-probe timeout. After five minutes in a row, returns one environment event line. */
+export async function notePlacementProbeTimeout(
+  directory: string,
+  hostName: string,
+  error: string,
+  now = Date.now(),
+): Promise<string | null> {
+  const root = controlRoot(directory);
+  const statePath = hostLockPath(root, hostName, 'probe-timeouts');
+  const event = await withExclusiveLock(
+    hostLockPath(root, hostName, 'probe-timeouts.lock'),
+    () => {
+      let state = readProbeTimeoutState(statePath);
+      if (!state || state.firstAt > now) state = { firstAt: now, reported: false };
+      let line: string | null = null;
+      if (!state.reported && now - state.firstAt >= PLACEMENT_PROBE_TIMEOUT_EVENT_MS) {
+        state.reported = true;
+        line = placementProbeTimeoutEvent(hostName, error);
+      }
+      writeFileSync(statePath, JSON.stringify(state));
+      return line;
+    },
+    true,
+  );
+  return event ?? null;
+}
+
+export async function clearPlacementProbeTimeout(directory: string, hostName: string): Promise<void> {
+  const root = controlRoot(directory);
+  const statePath = hostLockPath(root, hostName, 'probe-timeouts');
+  if (!existsSync(statePath)) return;
+  await withExclusiveLock(
+    hostLockPath(root, hostName, 'probe-timeouts.lock'),
+    () => {
+      try {
+        unlinkSync(statePath);
+      } catch {
+        // Already gone.
+      }
+    },
+    true,
   );
 }
 
@@ -277,15 +466,11 @@ export async function acquireHostControl(
   directory: string,
   timeoutMs = DEFAULT_CONTROL_PROBE_TIMEOUT_MS,
 ): Promise<HostControlLease> {
-  const root = ensureSshControlDirectory(relocateIfTooLong(directory, unixUserId()));
+  const root = controlRoot(directory);
   const started = performance.now();
   let recovered = false;
   let lastDetail = 'control probe failed';
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    if (attempt === 1) {
-      recovered = true;
-      await masterControl(host, root, 'exit', 1_000);
-    }
     const child = Bun.spawn(
       sshControlArgv(host, root, undefined, `# REMOTE_CHECK_CONTROL_PROBE\nprintf '${CONTROL_OK}\\n'`),
       { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', env: process.env },
@@ -300,6 +485,7 @@ export async function acquireHostControl(
       lastDetail = probeFailureDetail(await output, null);
       if (attempt === 1)
         throw new Error(`remote-check: connection to ${host.name} failed during control probe: ${lastDetail}`);
+      recovered = await recoverHungHostMaster(host, root);
       continue;
     }
     const text = await output;
@@ -307,7 +493,15 @@ export async function acquireHostControl(
       const key = leaseKey(root, host.name);
       const held = liveLeases.get(key);
       if (held) held.count += 1;
-      else liveLeases.set(key, { count: 1, host, directory: root });
+      else {
+        const lock = await holdFlock(hostLockPath(root, host.name, 'lease'), true, true);
+        if (!lock) throw new Error(`remote-check: SSH lease lock failed for ${host.name}`);
+        const raced = liveLeases.get(key);
+        if (raced) {
+          raced.count += 1;
+          await lock.release();
+        } else liveLeases.set(key, { count: 1, host, directory: root, unlock: () => lock.release() });
+      }
       reportConnectionWork(host.name, started, recovered);
       return {
         host,
@@ -320,6 +514,7 @@ export async function acquireHostControl(
     if (attempt === 1) {
       throw new Error(`remote-check: connection to ${host.name} failed during control probe: ${lastDetail}`);
     }
+    recovered = await recoverHungHostMaster(host, root);
   }
   throw new Error(`remote-check: connection to ${host.name} failed during control probe: ${lastDetail}`);
 }
@@ -333,10 +528,14 @@ export function releaseHostControl(lease: HostControlLease): void {
   const held = liveLeases.get(key);
   if (!held) return;
   held.count -= 1;
-  if (held.count <= 0) liveLeases.delete(key);
+  if (held.count > 0) return;
+  liveLeases.delete(key);
+  void held.unlock();
 }
 
 /** Test seam: forget in-process lease counts without touching a live OpenSSH master. */
 export function resetHostControlLeases(): void {
+  const held = [...liveLeases.values()];
   liveLeases.clear();
+  for (const entry of held) void entry.unlock();
 }

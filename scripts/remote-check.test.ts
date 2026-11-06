@@ -466,7 +466,7 @@ if (options.filter((argument) => argument === '-O').length > 1) reject('duplicat
 if (positionals.length !== (controlOperation ? 1 : 2)) reject('expected host and optional command positionals');
 const address = positionals[0]!;
 if (!/^ops@[^:]+\.test$/.test(address)) reject('invalid host position');
-let script = controlOperation === 'exit' ? 'REMOTE_CHECK_CONTROL_CLOSE' : positionals[1]!;
+let script = controlOperation === 'exit' ? 'REMOTE_CHECK_CONTROL_CLOSE' : (positionals[1] ?? '');
 const launchCommand = script;
 if (script.startsWith('python3 -c ') && script.includes('truncated launch')) {
   const bytes = Buffer.from(await Bun.stdin.text());
@@ -516,6 +516,7 @@ if (controlOperation === 'exit') {
 }
 if (controlOperation === 'check') {
   log({ kind: 'control-check' });
+  if (config.controlCheckFail) process.exit(255);
   process.exit(0);
 }
 if (script.includes('REMOTE_CHECK_CONTROL_PROBE')) {
@@ -550,6 +551,15 @@ if (script.includes('REMOTE_CHECK_MEMORY_RECLAIM')) {
   process.exit(0);
 }
 if (script.includes('/proc/loadavg')) {
+  const probeAttempt = count('placement-probe');
+  if (probeAttempt < (config.stalledProbes ?? 0)) {
+    log({ kind: 'probe', stalled: true, attempt: probeAttempt });
+    process.on('SIGTERM', () => {
+      log({ kind: 'probe-stopped', attempt: probeAttempt });
+      process.exit(143);
+    });
+    await new Promise(() => setInterval(() => {}, 1000));
+  }
   if (!knownHost || config.down) {
   if (config.probeError) console.error(config.probeError);
   process.exit(255);
@@ -1168,6 +1178,8 @@ type HostConfig = {
   holdLandingGrant?: boolean;
   down?: boolean;
   probeError?: string;
+  stalledProbes?: number;
+  controlCheckFail?: boolean;
   exit?: number;
   lifetimeFailure?: boolean;
   transportFailures?: number;
@@ -3705,6 +3717,72 @@ test('every ssh and rsync path uses one host ControlMaster under a short shared 
     .at(-1)!;
   const repeatedPath = (repeated.options as string[]).find((option) => option.startsWith('ControlPath='));
   expect(repeatedPath).toBe(selectedControlPath);
+});
+
+test('a placement probe timeout recovers a hung ControlMaster and probes again before skipping', async () => {
+  const { env, events } = scenario({
+    a: { available: 4.5e9, slots: 2 },
+    b: { available: 8e9, slots: 10, stalledProbes: 1 },
+  });
+  env.REMOTE_CHECK_PLACEMENT_PROBE_TIMEOUT_MS = '80';
+  const result = await remote(env, workspace());
+  expect(result.code).toBe(0);
+  expect(result.stderr).toContain('recovered hung ControlMaster on b');
+  expect(result.stderr).not.toContain('environment: check host b skipped for probe timeouts');
+  const seen = events().filter((event) => event.address === 'ops@b.test');
+  const probes = seen.filter((event) => event.kind === 'probe');
+  expect(probes[0]).toMatchObject({ stalled: true });
+  expect(probes.some((event) => event.stalled !== true)).toBe(true);
+  const stalledAt = seen.findIndex((event) => event.kind === 'probe' && event.stalled === true);
+  const checkAt = seen.findIndex((event) => event.kind === 'control-check');
+  const closeAt = seen.findIndex((event) => event.kind === 'control-close');
+  const recoveredAt = seen.findIndex(
+    (event, index) => event.kind === 'probe' && event.stalled !== true && index > closeAt,
+  );
+  expect(stalledAt).toBeGreaterThanOrEqual(0);
+  expect(checkAt).toBeGreaterThan(stalledAt);
+  expect(closeAt).toBeGreaterThan(checkAt);
+  expect(recoveredAt).toBeGreaterThan(closeAt);
+  expect(events().find((event) => event.kind === 'rsync')!.destination).toStartWith('ops@b.test:');
+});
+
+test('concurrent placement probes recover one hung master at most once per host per minute', async () => {
+  const { env, events } = scenario({
+    a: { available: 4.5e9, slots: 2 },
+    b: { available: 8e9, slots: 10, stalledProbes: 99 },
+  });
+  env.REMOTE_CHECK_PLACEMENT_PROBE_TIMEOUT_MS = '80';
+  env.REMOTE_CHECK_POLL_MS = '200';
+  const directory = workspace();
+  const first = startRemote(env, directory);
+  const second = startRemote(env, directory);
+  expect(await first.child.exited).toBe(0);
+  expect(await second.child.exited).toBe(0);
+  expect(events().filter((event) => event.kind === 'control-close' && event.address === 'ops@b.test')).toHaveLength(1);
+  expect(events().find((event) => event.kind === 'rsync')!.destination).toStartWith('ops@a.test:');
+});
+
+test('a host skipped for probe timeouts for five minutes reports one environment event', async () => {
+  const { env, events } = scenario({
+    a: { available: 4.5e9, slots: 2 },
+    b: { available: 8e9, slots: 10, stalledProbes: 99, controlCheckFail: true },
+  });
+  env.REMOTE_CHECK_PLACEMENT_PROBE_TIMEOUT_MS = '80';
+  const directory = workspace();
+  const control = sshControlDirectory(directory, env);
+  mkdirSync(control, { recursive: true, mode: 0o700 });
+  writeFileSync(
+    join(control, 'b.probe-timeouts'),
+    JSON.stringify({ firstAt: Date.now() - 5 * 60_000, reported: false }),
+  );
+  const result = await remote(env, directory);
+  expect(result.code).toBe(0);
+  expect(result.stderr).toContain('environment: check host b skipped for probe timeouts: probe timed out');
+  expect(result.stderr.match(/environment: check host b skipped for probe timeouts/g)).toHaveLength(1);
+  expect(
+    events().filter((event) => event.kind === 'control-close' && event.address === 'ops@b.test').length,
+  ).toBeGreaterThan(0);
+  expect(events().find((event) => event.kind === 'rsync')!.destination).toStartWith('ops@a.test:');
 });
 
 test('a completed run leaves the host ControlMaster for a concurrent caller', async () => {

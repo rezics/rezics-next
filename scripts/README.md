@@ -64,13 +64,16 @@ owned directory `$XDG_RUNTIME_DIR/rezics-ssh/<host>` (or `/tmp/rezics-ssh-<uid>/
 overrides that directory. OpenSSH's `unix_listener` adds a `.XXXXXXXXXX` suffix, so a path at or over 97 bytes is
 relocated to a hashed `/tmp/rs<uid>-<digest>` that still names one socket per host. Concurrent callers reuse that
 master. Completing a run releases its channels and never `-O exit`s a master other runs still use; ControlPersist reaps
-idle sockets. A stale or lost master is recovered with `-O check` then `-O exit` before the next auto connection.
-Stderr reports connection work and probe failures (including `unix_listener` overflow) separately from admitted
-execution. `--exclude-hosts` and the wait line's `reservation N GiB` expose host exclusions and the memory reservation,
+idle sockets. A stale, lost or hung master is recovered with `-O check` then `-O exit` before the next auto connection,
+including a placement-probe timeout: at most once per host per minute, never while a run holds its lease and the master
+answers, then probe again; five minutes of consecutive probe-timeout skips report one environment event. Stderr reports
+connection work and probe failures (including `unix_listener` overflow) separately from admitted execution.
+`--exclude-hosts` and the wait line's `reservation N GiB` expose host exclusions and the memory reservation,
 including the 11 GiB wait that still places on host b.
 
-Decision: pin user-visible transport, empty-directory return, 11 GiB/b-placement and host-exclusion behaviour with
-the existing remote-check/check-ssh unit files rather than a second suite. Admitted stack databases use `--rm`,
+Decision: pin hung ControlMaster placement recovery, once-per-minute cross-process recovery, the five-minute
+probe-timeout environment event, user-visible transport, empty-directory return, 11 GiB/b-placement and host-exclusion
+behaviour with the existing remote-check/check-ssh unit files rather than a second suite. Admitted stack databases use `--rm`,
 labelled owner-pid cleanup, 120s `docker run`/`rm -f` and 5s probes, a labelled volume rather than 1 GiB tmpfs, nonce
 reap on create failure, `container:<id>` attachment and an independent TCP-to-Unix forwarder after in-container
 `pg_isready` plus a protocol reply; host-lifetime Python cleanup uses those same 120s/5s bounds and does not classify a
