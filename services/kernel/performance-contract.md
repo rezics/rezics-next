@@ -41,7 +41,7 @@ and architecture acceptance remain the later capability repair.
 ## History domain composition
 
 Decision: `history-complete-current-architecture-receiving` keeps History contract, core and application inward and
-binds the native capability in `composition/history.ts`. Server and worker install it during startup; the explicit
+binds the native capability in `composition/history.ts`. Server and worker install it during startup, and so do the shared runtime defaults; the explicit
 `composition/preload.ts` hook supplies the same native composition to test/command preloads. Work compatibility
 facades route receiving and durable-locator recording through History's application entry and import registry,
 selected-work and locator vocabulary from its contract entry. The adapters add no query or extra statement; existing

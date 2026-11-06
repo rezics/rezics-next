@@ -73,16 +73,6 @@
         },
         {
           "rule": "rule 3",
-          "file": "services/auth/src/host.ts",
-          "edge": "value import \"./index.ts\" #1 => services/auth/src/index.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/auth/src/index.ts",
-          "edge": "value import \"./host.ts\" #1 => services/auth/src/host.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
           "file": "services/auth/src/receiving-closure.ts",
           "edge": "value import \"./erasure-copy.ts\" #1 => services/auth/src/erasure-copy.ts (value-import cycle)"
         },
@@ -9260,16 +9250,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/list-import-anilist.ts",
-          "edge": "value import \"../database/pool.ts\" #1 => services/kernel/src/database/pool.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/list-import-anilist.ts",
-          "edge": "value import \"../content/imported-contract.ts\" #1 => services/kernel/src/content/imported-contract.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/list-import-anilist.ts",
           "edge": "value import \"../database/read-snapshot.ts\" #1 => services/kernel/src/database/read-snapshot.ts"
         },
         {
@@ -9441,16 +9421,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/library/list-import-mal.ts",
           "edge": "value import \"../access/grant-commands.ts\" #1 => services/kernel/src/access/grant-commands.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/list-import-mal.ts",
-          "edge": "value import \"../database/pool.ts\" #1 => services/kernel/src/database/pool.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/list-import-mal.ts",
-          "edge": "value import \"../content/imported-contract.ts\" #1 => services/kernel/src/content/imported-contract.ts"
         },
         {
           "rule": "rule 2",
@@ -16898,16 +16868,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/semantic/account-erasure.ts",
-          "edge": "value import \"../database/pool.ts\" #1 => services/kernel/src/database/pool.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/semantic/account-erasure-source.ts",
-          "edge": "value import \"../content/imported-contract.ts\" #1 => services/kernel/src/content/imported-contract.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/semantic/authored.ts",
           "edge": "value import \"../content/authored-fields.ts\" #1 => services/kernel/src/content/authored-fields.ts"
         },
@@ -17190,16 +17150,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/semantic/http/bulk.ts",
           "edge": "value import \"../../access/resource-authorization.ts\" #1 => services/kernel/src/access/resource-authorization.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/semantic/http/bulk.ts",
-          "edge": "value import \"../../database/pool.ts\" #1 => services/kernel/src/database/pool.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/semantic/http/bulk.ts",
-          "edge": "value import \"../../content/cover-reference.ts\" #1 => services/kernel/src/content/cover-reference.ts"
         },
         {
           "rule": "rule 2",
@@ -18305,26 +18255,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/semantic/subject.ts",
           "edge": "value import \"../access/unavailable.ts\" #1 => services/kernel/src/access/unavailable.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/semantic/subject.ts",
-          "edge": "value import \"../database/pool.ts\" #1 => services/kernel/src/database/pool.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/semantic/subject.ts",
-          "edge": "value import \"../content/cover-reference.ts\" #1 => services/kernel/src/content/cover-reference.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/semantic/subject.ts",
-          "edge": "value import \"../history/record.ts\" #1 => services/kernel/src/history/record.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/semantic/subject.ts",
-          "edge": "value import \"../content/imported-contract.ts\" #1 => services/kernel/src/content/imported-contract.ts"
         },
         {
           "rule": "rule 2",
@@ -19789,11 +19719,6 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/semantic/subject.ts",
-          "edge": "value import \"../content/cover-reference.ts\" #1 => services/kernel/src/content/cover-reference.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/semantic/subject.ts",
           "edge": "value import \"./authored.ts\" #1 => services/kernel/src/semantic/authored.ts (value-import cycle)"
         },
         {
@@ -19895,11 +19820,6 @@
           "rule": "rule 3",
           "file": "services/kernel/src/semantic/subject.ts",
           "edge": "value import \"./summaries.ts\" #1 => services/kernel/src/semantic/summaries.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/semantic/summaries.ts",
-          "edge": "value import \"../content/cover-reference.ts\" #1 => services/kernel/src/content/cover-reference.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",

@@ -31,9 +31,15 @@ Decision: Semantic is registered as contract, core, application and adapter modu
 Decision: Routed Zone composition consumes Search page, visit-return and slot-admission helpers through existing public entries (`showcase-work`, `search/index.ts`, `kernel/client.ts`) and already-imported Zone reader files; it does not add manifest public entries.
 
 Decision: The public Zone shell type is the composition appearance, label and language vocabulary in the Zone reader; Web does not import kernel `contract.ts` for it.
-Decision: History is registered as contract, core, application and adapter modules. Foreign modules use its declared application and contract entries; `composition/history.ts` binds native Postgres, command, Access, Semantic, Search, Zones and Work adapters. Server, worker and the explicit `composition/preload.ts` hook install that composition before use. Application facades remain implementation-free, and no History file participates in a value-import cycle.
+Decision: History is registered as contract, core, application and adapter modules. Foreign modules use its declared application and contract entries; `composition/history.ts` binds native Postgres, command, Access, Semantic, Search, Zones and Work adapters. Server, worker, the shared runtime defaults and the explicit `composition/preload.ts` hook install that composition before use. Application facades remain implementation-free, and no History file participates in a value-import cycle.
 
-Measured with `scripts/architecture.ts` against base `99558bc8f6`: rule 2 violations fell from 7,067 to 6,457 and rule 3 from 2,414 to 1,893; full-graph unbaselined errors fell from 986 to 907. Baseline entries fell from 8,519 to 7,464 by removing 1,055 obsolete entries. Kernel files in value cycles fell from 398 to 345; the largest component fell from 381 to 326 files, and History cycle membership fell from 24 to zero. History source paths have 102 outgoing value edges at base and 109 at final; the final total includes 34 native owner bindings. The changed-base check passes; remaining full-graph errors are inherited outside this History change.
+Measured with `scripts/architecture.ts` against base `a4edc81001`: the changed-base check passes with no new violations.
+Kernel files in value cycles fell from 398 to 345, the largest value component from 381 to 326 files, and History files
+in value cycles from 24 to zero. Violations that touch History source fell from 361 to zero. History source files have
+102 outgoing value edges to other modules at base and 109 at final; the increase is the native owner bindings in
+adapters, while contract, core and application import no implementation. Baseline entries fell from 8,498 to 7,439,
+including 16 obsolete entries removed in this change. The full-graph check reports inherited unbaselined errors outside
+this change at base and final.
 
 `modules.json` assigns the production sources in Kernel, Auth, Importer, Web, and the runtime packages to one module each. Tests, stories, fixtures, and workspace configuration are not production source roots. Each module records its kind, owner Goal, registered capabilities, public entries, and current allowed module dependencies. Kernel foundation code with no product owner is assigned to `platform`.
 

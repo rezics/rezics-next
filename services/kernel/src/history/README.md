@@ -10,8 +10,9 @@ capability. `kernel-history-adapters` implements that capability with native Pos
 and Access, Semantic, Search, Zones and Work owner bindings.
 
 Foreign Kernel modules import the declared History application and contract entries. The composition root in
-`composition/history.ts` binds every capability method to its native adapter. Server and worker startup install that
-composition before use; `composition/preload.ts` exposes the same binding through an explicit preload hook used by
+`composition/history.ts` binds every capability method to its native adapter. Server and worker startup, and the shared
+runtime defaults in `composition/runtime-defaults.ts`, install that composition before use; `composition/preload.ts`
+exposes the same binding through an explicit preload hook used by
 `test/support/native-history-composition.ts`. Calling a facade before installation throws; there is no fallback
 implementation. Fake `HistoryComposition` capabilities exercise the application facades independently, while
 `native-composition.test.ts` exercises the installed native binding. Opaque handles
@@ -23,13 +24,17 @@ the typed History contract; they reach other owner implementations only from thi
 modules have no behavior edges to implementations. The architecture manifest records the four layers and their
 allowed dependency direction.
 
-Measured with `scripts/architecture.ts` against base `99558bc8f6`: rule 2 violations fell from 7,067 to 6,457 and
-rule 3 from 2,414 to 1,893; full-graph unbaselined errors fell from 986 to 907. The changed-base check passes. Kernel
-files in value cycles fell from 398 to 345; the largest component fell from 381 to 326 files, and History cycle
-membership fell from 24 to zero. Baseline entries fell from 8,519 to 7,464 by removing 1,055 obsolete entries.
-History source paths have 102 outgoing value edges at base and 109 at final; the final total includes 34 native owner
-bindings. Those bindings are confined to adapters; contract, core and application expose zero behavior edges. The
-full graph still reports 907 inherited errors outside the History slice, so its absolute baseline is not clean.
+Measured with `scripts/architecture.ts` against base `a4edc81001`: the changed-base check passes, and the full graph
+keeps its inherited unbaselined errors at base and final. Kernel files in value cycles fell from 398 to 345, the
+largest value component from 381 to 326 files, and History files in value cycles from 24 to zero. Violations that
+touch History source fell from 361 to zero, and unbaselined History errors from 49 to zero. Value imports from other
+modules into History files outside the contract and application entries fell from 87 to 7; those seven name declared
+contract and core entries (Access and Library callers) or the composition root's adapter barrel. History source files have 102 outgoing value edges to other modules at base and 109 at
+final; the increase is the native owner bindings in adapters. Contract, core and application import no
+implementation: their outgoing value edges reach only contract modules, `bounds` and `memoized`.
+
+Decision: native composition is installed by server and worker startup, the shared runtime defaults and the preload
+hook; facades never fall back to an implementation.
 
 ## Zone receipts, outbox events and current closure boundary
 

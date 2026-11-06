@@ -96,7 +96,7 @@ statement; observed cost stays the existing admitted-path declarations.
 ## Kernel History domain inversion
 
 Decision: `history-complete-current-architecture-receiving` keeps History contract/core/application implementation-free
-and binds its typed native capability in `composition/history.ts`. Server and worker install it during startup;
+and binds its typed native capability in `composition/history.ts`. Server and worker install it during startup, and so do the shared runtime defaults;
 `composition/preload.ts` exposes that binding for test and command preloads. Compatibility callers use the declared
 History application and contract entries, including Work registry, selected-runtime, receiving and durable-locator
 paths. Test choice: use the focused causal History regressions for application/native composition, prepaid identity,

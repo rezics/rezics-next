@@ -380,7 +380,7 @@ Work's shared History module and receiving compatibility export come from `histo
 `HistoryRegistry`, selected-runtime shapes and durable locator scopes come from `history/contract/index.ts`.
 `work/adapters/history-store.ts` records a durable locator through the History facade, and
 `composition/work-modules.ts` installs the same shared History module used by native composition. History is
-installed before worker dispatch and during server startup; these entry changes preserve existing admitted Work
+installed before worker dispatch by server and worker startup and the shared runtime defaults; these entry changes preserve existing admitted Work
 bounds.
 
 The exact consumer ABI is `WorkContext.getSelectedRuntime?(): SelectedRuntime`, then
