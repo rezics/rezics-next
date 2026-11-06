@@ -57,7 +57,7 @@ export function VndbRowReview({
       ? row.target.baseline
       : row.decision && targetId === row.decision.targetId
         ? row.decision.baseline
-        : selectedEntry?.targetId === targetId
+        : selectedEntry && selectedEntry.targetId === targetId
           ? selectedEntry.baseline
           : null;
 
