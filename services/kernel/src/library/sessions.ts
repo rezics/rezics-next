@@ -597,14 +597,14 @@ export function createSessionCommands(config: Dependencies) {
         async prepare() {
           try {
             await admission?.prepare?.();
-            return { error: null };
+            return {};
           } catch (error) {
             return { error };
           }
         },
       },
       async (tx, _command, prepared) => {
-        if (prepared.error) throw prepared.error;
+        if ('error' in prepared) throw prepared.error;
         if (admission) {
           await sessionLockPlan({ route, session_id: sessionId }).run(tx);
           const fact = await store.readSessionFact(tx, route, sessionId);
