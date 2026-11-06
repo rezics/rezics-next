@@ -7,7 +7,9 @@ vocabulary, receiving and operational types, error classes, and the typed `Histo
 `contract/ports.ts`. `kernel-history-core` owns pure operational cost declarations. `kernel-history-application`
 exports the receiving, record, operational, shared-work and identity facades; they invoke only the installed contract
 capability. `kernel-history-adapters` implements that capability with native Postgres operations, command execution,
-and Access, Semantic, Search, Zones and Work owner bindings.
+and Access, Semantic, Search, Zones and Work owner bindings. The Semantic record-source-set producer is loaded
+lazily from `../../semantic/record-source-set.ts`, matching the adapter type import; a missing owner file stays
+unavailable.
 
 Foreign Kernel modules import the declared History application and contract entries. Zones and Semantic account-agents take `ACCOUNT_ROLE_BITS` and `declareCommandHistory` from those entries. Access keeps compatibility
 re-exports at `access/shared-history.ts` and `access/shared-history-work.ts` that resolve to those facades. Native adapters

@@ -25,11 +25,12 @@ export class RecordSourceSetUnavailableError extends Error {
 const requireNative = createRequire(import.meta.url);
 let producer: RecordSourceSetProducer | undefined;
 
+const nativeSourceSetModule = '../../semantic/record-source-set.ts';
+
 export function nativeRecordSourceSetProducer(): RecordSourceSetProducer {
   if (producer) return producer;
-  if (!existsSync(new URL('../semantic/record-source-set.ts', import.meta.url)))
-    throw new RecordSourceSetUnavailableError();
-  const native: RecordSourceSetProducer = requireNative('../semantic/record-source-set.ts');
+  if (!existsSync(new URL(nativeSourceSetModule, import.meta.url))) throw new RecordSourceSetUnavailableError();
+  const native: RecordSourceSetProducer = requireNative(nativeSourceSetModule);
   producer = native;
   return native;
 }

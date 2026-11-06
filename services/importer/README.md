@@ -119,7 +119,7 @@ Decision: review exact original `bangumi_cross_media`/`vndb_cross_media` claims 
 
 Persona collections report the reached step as `collections.<view>.<phase>` with the failing state and code.
 
-Existing franchise, work-links, publication, focused Game and VNDB cases remain the acceptance pins; no extra tests. Native Game publication current-read, VNDB release seed/reseed, VNDB statistics Auth-registration and native transaction retry stay named capability repairs. Decision: Kernel callers take `ACCOUNT_ROLE_BITS` and `declareCommandHistory` from the released History contract and application entries. VNDB table admission and three-scale grouping keep explicit deadlines past bun’s 5s default.
+Existing franchise, work-links, publication, focused Game and VNDB cases remain the acceptance pins; no extra tests. Native Game publication current-read, VNDB release seed/reseed, VNDB statistics Auth-registration and native transaction retry stay named capability repairs. Decision: Kernel callers take `ACCOUNT_ROLE_BITS` and `declareCommandHistory` from the released History contract and application entries. History adapters load the Semantic record-source-set owner from `../../semantic/record-source-set.ts`. VNDB table admission and three-scale grouping keep explicit deadlines past bun’s 5s default.
 
 ## Deletion
 
