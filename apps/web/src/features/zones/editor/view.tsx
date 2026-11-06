@@ -147,6 +147,7 @@ export function ZoneConfigurationEditor({
     setComposing(false);
     setCopied(null);
     setFocusRequest(null);
+    setLifecycle(undefined);
   }, [state.generation]);
   useEffect(() => {
     if (current() && saved) setVisibility(saved.zone.visibility);
@@ -305,7 +306,13 @@ export function ZoneConfigurationEditor({
         <p className="max-w-3xl text-muted-foreground">{m.zone_editor_live_note()}</p>
         {onLifecycle && saved ? (
           <ZoneLifecycleControls
-            deleted={saved.zone.deletedAt !== null}
+            deleted={
+              lifecycle?.ok === true && lifecycle.operation === 'delete'
+                ? true
+                : lifecycle?.ok === true && lifecycle.operation === 'restore'
+                  ? false
+                  : saved.zone.deletedAt !== null
+            }
             withheld={false}
             busy={state.busy || !writeEnabled}
             last={lifecycle}
