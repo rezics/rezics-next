@@ -613,9 +613,70 @@ test('fresh native vote projection keeps zero, absence and unavailable distinct 
     expect(html.match(/data-vndb-native-vote="present"/g)).toHaveLength(1);
     expect(html.match(/data-vndb-native-vote="absent"/g)).toHaveLength(1);
     expect(html.match(/data-vndb-native-vote="unavailable"/g)).toHaveLength(1);
+    expect(html.match(/data-vndb-native-vote-zero/g)).toHaveLength(1);
     expect(html).toContain('Current vote: 0 units, revision 4.');
     expect(html).toContain('There is no current vote.');
     expect(html).toContain('The current vote could not be read.');
     expect(html).not.toContain('Ratings are not included');
+    expect(html).not.toContain('data-vndb-native-question');
   }
+});
+
+test('non-current viewer facts keep occurrence order and withhold question and vote rows', async () => {
+  setLocale('en', { reload: false });
+  const { vndbLifecycleUnavailableFactsPage, vndbLifecycleOtherViewerPage } =
+    await import('../src/library/personal-list-import/lifecycle');
+  const withheld = vndbLifecycleUnavailableFactsPage();
+  const rows = importLibraryRows(withheld, 'en');
+  expect(rows.map((row) => row.entry.subjectId)).toEqual(withheld.libraryEntries.map((entry) => entry.subjectId));
+  expect(rows.every((row) => row.vote === null && row.voteQuestion === null)).toBe(true);
+  const html = await render(
+    <ImportLibraryView result={{ state: 'current', page: withheld }} busy={false} onRead={nothing} />,
+  );
+  expect(html.match(/data-vndb-current-entry=/g)).toHaveLength(2);
+  expect(html).not.toContain('data-vndb-native-question');
+  expect(html).not.toContain('Private source note');
+  const other = await render(
+    <ImportLibraryView
+      result={{ state: 'current', page: vndbLifecycleOtherViewerPage() }}
+      busy={false}
+      onRead={nothing}
+    />,
+  );
+  expect(other).not.toContain('Private source note');
+  expect(other).not.toContain('data-vndb-native-question');
+  expect(other).not.toContain('data-vndb-native-vote="present"');
+});
+
+test('owner preview, explicit score review, reopen and changed reimport keep private source off Library return', async () => {
+  const {
+    vndbLifecyclePreviewSnapshot,
+    vndbLifecycleScoreReviewSnapshot,
+    vndbLifecyclePartialResultSnapshot,
+    vndbLifecycleReopenSnapshot,
+    vndbLifecycleChangedReimportSnapshot,
+    vndbLifecycleLibrarySnapshot,
+  } = await import('../src/library/personal-list-import/lifecycle');
+  const preview = await vndbLifecyclePreviewSnapshot();
+  expect(preview.stage).toBe('review');
+  expect(preview.sourceXML).toContain('Private source note');
+  expect(preview.rows[0]?.fields.score).toMatchObject({ raw: '07.0', value: 7 });
+  const score = await vndbLifecycleScoreReviewSnapshot();
+  expect(score.rows.some((row) => row.nativeScore.exactUnits === 14)).toBe(true);
+  expect(score.rows.some((row) => row.fields.score?.raw === '0')).toBe(true);
+  const partial = await vndbLifecyclePartialResultSnapshot();
+  expect(partial.outcomes.map((row) => row.status).sort()).toEqual(['applied', 'unavailable']);
+  const reopened = await vndbLifecycleReopenSnapshot();
+  expect(reopened.stage).toBe('review');
+  expect(reopened.uploadId).toBe(preview.uploadId);
+  const changed = await vndbLifecycleChangedReimportSnapshot();
+  expect(changed.rows[0]?.title).toBe('Changed export title');
+  expect(changed.rows[0]?.nativeScore.currentVote).toMatchObject({ state: 'set', units: 14 });
+  const libraryHtml = await render(
+    <ImportLibraryView result={null} snapshot={vndbLifecycleLibrarySnapshot()} busy={false} onRead={nothing} />,
+  );
+  expect(libraryHtml).toContain('data-vndb-native-vote="present"');
+  expect(libraryHtml).toContain('data-vndb-native-vote-zero');
+  expect(libraryHtml).not.toContain('Private source note');
+  expect(libraryHtml).not.toContain(preview.sourceXML ?? 'vndb-export');
 });

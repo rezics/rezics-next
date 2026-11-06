@@ -14,9 +14,13 @@ function originConfigured(): boolean {
   return Boolean((env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN);
 }
 
+function readerClient() {
+  return kernelClient(requestLocale() ?? 'en');
+}
+
 function port(sender: string) {
   setResponseHeader('cache-control', 'private, no-store');
-  return kernelVndbPort(kernelClient(), getRequest(), env as Partial<SessionEnv>, originConfigured(), sender);
+  return kernelVndbPort(readerClient(), getRequest(), env as Partial<SessionEnv>, originConfigured(), sender);
 }
 
 function requireKey(value: unknown): string {
@@ -118,7 +122,7 @@ export const readVndbOccurrences = createServerFn({ method: 'GET' })
     setResponseHeader('cache-control', 'private, no-store');
     const auth = await withVndbSession(getRequest(), env as Partial<SessionEnv>, originConfigured(), data.sender);
     if ('kind' in auth) return { kind: 'unavailable' as const };
-    const response = await kernelClient().progressSessions.get({
+    const response = await readerClient().progressSessions.get({
       query: { subjectId: data.targetId, limit: 8 },
       headers: { authorization: auth.authorization },
     });
@@ -144,7 +148,7 @@ export const readVndbTargetStates = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
     const entry = await readVndbTargetEntry(
-      kernelClient(),
+      readerClient(),
       getRequest(),
       env as Partial<SessionEnv>,
       originConfigured(),

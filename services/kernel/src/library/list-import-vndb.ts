@@ -243,6 +243,14 @@ function nativeVoteView(vote: Pick<Vote, 'units' | 'revision' | 'changedAt'> | n
     : { state: 'set', units: vote.units, revision: vote.revision, at: vote.changedAt };
 }
 
+/** Counted zero stays a set vote; explicit clear stays cleared; proven absence stays absent. */
+function nativeVoteFromReview(vote: VoteReview['currentVote']): NativeVoteObservation {
+  if (vote.state === 'unavailable') return { state: 'unavailable' };
+  if (vote.state === 'absent') return { state: 'absent' };
+  if (vote.state === 'clear') return { state: 'cleared', revision: vote.revision, at: vote.changedAt };
+  return { state: 'set', units: vote.units, revision: vote.revision, at: vote.changedAt };
+}
+
 function sourceScoreReason(source: SourceValue): { reason: string; exactUnits: number | null } {
   if (source.kind === 'missing')
     return { reason: 'No source score was supplied; absence never clears a native vote.', exactUnits: null };
@@ -622,7 +630,7 @@ export function createVndbImport(config: Config) {
       try {
         const review = reviewed ?? (await votes.readVoteReview(actor, selectedQuestion.id, targetId));
         selectedQuestion = nativeQuestionView(review.question);
-        currentVote = nativeVoteView(review.currentVote.state === 'absent' ? null : review.currentVote);
+        currentVote = nativeVoteFromReview(review.currentVote);
       } catch (error) {
         if (!(error instanceof VoteReviewUnavailableError || error instanceof GrantDeniedError)) throw error;
         currentVote = { state: 'unavailable' };
@@ -2177,6 +2185,22 @@ export function createVndbImport(config: Config) {
     };
   }
 
+  /** Rebuild the closed vote operand after JSONB: key order and numeric coercions cannot fail participant.prepare. */
+  function closedVoteIdentity(identity: NonNullable<ScoreDecision['nativeGuard']['subject']['identity']>) {
+    return {
+      version: 1 as const,
+      requestedOriginalId: identity.requestedOriginalId,
+      canonicalTerminalId: identity.canonicalTerminalId,
+      sourceIdentities: [...identity.sourceIdentities],
+      sourceHomes: identity.sourceHomes.map((home) => Number(home)),
+      controlLocators: identity.controlLocators.map((locator) => ({
+        partition: Number(locator.partition),
+        group: locator.group,
+      })),
+      evidence: identity.evidence,
+    };
+  }
+
   function scoreCommandInput(score: ScoreDecision): PreparedPutVote['input'] {
     const identity = score.nativeGuard.subject.identity;
     return {
@@ -2195,22 +2219,7 @@ export function createVndbImport(config: Config) {
             partition: Number(entry.partition),
             epoch: String(entry.epoch),
           })),
-          ...(identity === undefined
-            ? {}
-            : {
-                identity: {
-                  version: 1,
-                  requestedOriginalId: identity.requestedOriginalId,
-                  canonicalTerminalId: identity.canonicalTerminalId,
-                  sourceIdentities: [...identity.sourceIdentities],
-                  sourceHomes: identity.sourceHomes.map((home) => Number(home)),
-                  controlLocators: identity.controlLocators.map((locator) => ({
-                    partition: Number(locator.partition),
-                    group: locator.group,
-                  })),
-                  evidence: identity.evidence,
-                },
-              }),
+          ...(identity === undefined ? {} : { identity: closedVoteIdentity(identity) }),
         },
         ownVote: {
           state: score.nativeGuard.ownVote.state,
@@ -2255,10 +2264,7 @@ export function createVndbImport(config: Config) {
     if (['applied', 'skipped', 'stale'].includes(score.status)) {
       const review =
         score.status === 'applied' ? await votes.readVoteReview(actor, score.question.id, score.targetId) : null;
-      return outcome(
-        score.status,
-        review ? nativeVoteView(review.currentVote.state === 'absent' ? null : review.currentVote) : undefined,
-      );
+      return outcome(score.status, review ? nativeVoteFromReview(review.currentVote) : undefined);
     }
     const retry = !!score.commandActor;
     if (!score.commandActor) {
@@ -2303,7 +2309,7 @@ export function createVndbImport(config: Config) {
         reconciled ??
         (await votes.putVoteOutcome(
           score.commandActor!,
-          score.command?.input ?? scoreCommandInput(score),
+          scoreCommandInput(score),
           score.commandKey,
           scoreAdmission(score.commandActor!, score),
         ));
@@ -2335,10 +2341,7 @@ export function createVndbImport(config: Config) {
       },
     );
     record(settled);
-    return outcome(
-      status,
-      reviewed ? nativeVoteView(reviewed.currentVote.state === 'absent' ? null : reviewed.currentVote) : undefined,
-    );
+    return outcome(status, reviewed ? nativeVoteFromReview(reviewed.currentVote) : undefined);
   }
 
   async function apply(

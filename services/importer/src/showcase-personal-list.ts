@@ -180,10 +180,16 @@ async function nativeRead<T>(
 }
 
 /** Read only the retained, currently authorized native preview; never reconstruct it from journal receipts. */
-export function readShowcasePersonalList(input: { client: KernelClient; uploadId: string; offset?: number }) {
+export function readShowcasePersonalList(input: {
+  client: KernelClient;
+  uploadId: string;
+  offset?: number;
+  language?: string;
+}) {
   return nativeRead(() =>
     input.client.libraryImports.vndb({ uploadId: input.uploadId }).get({
       query: { offset: input.offset ?? 0 },
+      headers: { 'accept-language': input.language ?? 'en' },
       fetch: { cache: 'no-store', redirect: 'manual' },
     }),
   );

@@ -279,6 +279,19 @@ test('explicit review and confirmation keep original operands across reopen, par
     expect(await readShowcasePersonalLibrary({ client })).toEqual({ state: 'current', value: current });
     expect(calls.at(-1)?.path).toBe('/v1/libraryEntries');
     expect(calls.at(-1)?.language).toBe('en');
+    reply = () =>
+      Response.json({
+        uploadId,
+        state: 'active',
+        expiresAt: '2099-01-01T00:00:00Z',
+        total: 1,
+        next: null,
+        rows: [],
+      });
+    const { readShowcasePersonalList } = await import('../src/showcase-personal-list.ts');
+    expect((await readShowcasePersonalList({ client, uploadId, language: 'ja' })).state).toBe('current');
+    expect(calls.at(-1)?.path).toBe(`/v1/libraryImports/vndb/${uploadId}`);
+    expect(calls.at(-1)?.language).toBe('ja');
     expect(await readShowcasePersonalLibrary({ client, language: 'ja' })).toEqual({ state: 'current', value: current });
     expect(calls.at(-1)?.language).toBe('ja');
     reply = () => Response.json({ detail: 'private response must not enter a journal failure' }, { status: 403 });

@@ -5,8 +5,13 @@ import type { ImportLibraryRow } from './presentation';
 export function ImportLibraryVote({ row, detailed = false }: { row: ImportLibraryRow; detailed?: boolean }) {
   const vote = row.vote;
   const question = row.voteQuestion;
+  const units = vote?.state === 'present' ? vote.units : null;
   return (
-    <div className="space-y-1 text-sm" data-vndb-native-vote={vote?.state ?? 'unavailable'}>
+    <div
+      className="space-y-1 text-sm"
+      data-vndb-native-vote={vote?.state ?? 'unavailable'}
+      {...(units === 0 ? { 'data-vndb-native-vote-zero': '' } : {})}
+    >
       <p>
         {vote?.state === 'present'
           ? m.library_vndb_score_current_set({ units: vote.units, revision: vote.revision })
