@@ -1,10 +1,76 @@
-import { WORKFLOW_RETENTION_BATCH_SIZE, WORKFLOW_RETENTION_MAX_BATCHES } from '../contract/bounds.ts';
+import { TERMINAL_WORKFLOW_STATUSES, WORKFLOW_RETENTION_BATCH_SIZE, WORKFLOW_RETENTION_CASCADE_TABLES, WORKFLOW_RETENTION_EXPLICIT_DELETE_TABLES, WORKFLOW_RETENTION_MAX_BATCHES, WORKFLOW_RETENTION_PAYLOAD_FAMILIES } from '../contract/bounds.ts';
 export type WorkflowRetentionConfig = Readonly<{
     retentionDays: number;
+}>;
+export type WorkflowRetentionStart = Readonly<{
+    retentionDays: number;
+    now: number;
+    applicationName: string;
+}>;
+export type WorkflowRetentionSelection = Readonly<{
+    applicationName: string;
+    statuses: typeof TERMINAL_WORKFLOW_STATUSES;
+    completedBefore: number;
+    limit: number;
+}>;
+export type WorkflowRetentionPayloadFamily = (typeof WORKFLOW_RETENTION_PAYLOAD_FAMILIES)[number]['table'];
+export type WorkflowRetentionPayloadInventory = Readonly<Record<WorkflowRetentionPayloadFamily, number>>;
+export type WorkflowRetentionStatementKind = 'select' | 'begin' | 'commit' | 'rollback' | 'delete-workflow_input' | 'delete-workflow_output' | 'delete-operation_outputs' | 'delete-workflow_status' | 'other';
+export type WorkflowRetentionBatchWork = Readonly<{
+    selected: number;
+    statements: number;
+    applicationStatements: number;
+    controlStatements: number;
+    selectStatements: number;
+    deleteStatements: number;
+    payloadRows: number;
+    cascadeRows: number;
+    deletionRows: number;
+    examinedRows: number;
+}>;
+export type WorkflowRetentionSweepWork = Readonly<{
+    batches: number;
+    lastBatchSize: number;
+    selected: number;
+    statements: number;
+    applicationStatements: number;
+    controlStatements: number;
+    payloadRows: number;
+    cascadeRows: number;
+    deletionRows: number;
+    examinedRows: number;
 }>;
 export declare function parseWorkflowRetentionDays(raw: string | undefined): number;
 export declare function readWorkflowRetentionConfig(env: Readonly<Record<string, string | undefined>>): WorkflowRetentionConfig;
 export declare function assertRetentionDays(retentionDays: number): void;
 export declare function retentionCutoff(now: Date, retentionDays: number): number;
 export declare function clampRetentionBatch(ids: readonly string[]): string[];
-export { WORKFLOW_RETENTION_BATCH_SIZE, WORKFLOW_RETENTION_MAX_BATCHES };
+export declare function emptyWorkflowRetentionInventory(): WorkflowRetentionPayloadInventory;
+export declare function workflowRetentionInventory(rows: Partial<WorkflowRetentionPayloadInventory>): WorkflowRetentionPayloadInventory;
+export declare function retentionPayloadRows(inventory: WorkflowRetentionPayloadInventory): number;
+export declare function retentionCascadeRows(inventory: WorkflowRetentionPayloadInventory): number;
+export declare function retentionExplicitDeleteRows(inventory: WorkflowRetentionPayloadInventory): number;
+export declare function retentionDeletionRows(inventory: WorkflowRetentionPayloadInventory): number;
+export declare function retentionOwnedRows(inventory: WorkflowRetentionPayloadInventory): number;
+export declare function retentionBatchStatementCount(selected: number): number;
+export declare function retentionApplicationStatementCount(selected: number): number;
+export declare function retentionControlStatementCount(selected: number): number;
+export declare function retentionSweepStatementCount(fullBatches: number, lastBatchSize: number): number;
+export declare function retentionBatchWork(selected: number, inventory: WorkflowRetentionPayloadInventory): WorkflowRetentionBatchWork;
+export declare function retentionSweepWork(batchSizes: readonly number[], inventories: readonly WorkflowRetentionPayloadInventory[]): WorkflowRetentionSweepWork;
+export declare function retentionSelectionBinds(now: Date, retentionDays: number, applicationName: string, limit?: number): WorkflowRetentionSelection;
+export declare function freezeWorkflowRetentionStart(retentionDays: number, now: number, applicationName: string): WorkflowRetentionStart;
+export declare function classifyRetentionStatement(sql: string): WorkflowRetentionStatementKind;
+export declare function retentionDeleteTableFor(kind: WorkflowRetentionStatementKind): string | undefined;
+export declare function isRetentionForegroundDelete(kind: WorkflowRetentionStatementKind): boolean;
+export declare function retentionFamilyDeletion(table: WorkflowRetentionPayloadFamily): 'explicit' | 'cascade';
+export declare function retentionPayloadFanoutInventory(selected: number, fanout: Readonly<{
+    operations?: number;
+    events?: number;
+    history?: number;
+    notifications?: number;
+    streams?: number;
+    input?: number;
+    output?: number;
+}>): WorkflowRetentionPayloadInventory;
+export { WORKFLOW_RETENTION_BATCH_SIZE, WORKFLOW_RETENTION_CASCADE_TABLES, WORKFLOW_RETENTION_EXPLICIT_DELETE_TABLES, WORKFLOW_RETENTION_MAX_BATCHES, WORKFLOW_RETENTION_PAYLOAD_FAMILIES, };

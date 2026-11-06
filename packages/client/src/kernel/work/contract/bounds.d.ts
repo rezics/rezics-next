@@ -13,6 +13,55 @@ export declare const WORKFLOW_RETENTION_SCHEDULE = "kernel.workflowRetention.eve
 export declare const WORKFLOW_RETENTION_SCHEDULE_EXPRESSION = "*/10 * * * *";
 export declare const TERMINAL_WORKFLOW_STATUSES: readonly ['SUCCESS', 'ERROR', 'CANCELLED', 'MAX_RECOVERY_ATTEMPTS_EXCEEDED'];
 export declare const WORKFLOW_RETENTION_SELECTOR_INDEX = "workflow_retention_selector";
+export declare const WORKFLOW_RETENTION_START_STEP = "kernel.workflowRetention.start";
+export declare const WORKFLOW_RETENTION_BATCH_STEP = "kernel.workflowRetention.batch";
+export declare const WORKFLOW_RETENTION_SELECT_TAG = "work:workflow-retention-select";
+export declare const WORKFLOW_RETENTION_PAYLOAD_TAG = "work:workflow-retention-payload";
+export declare const WORKFLOW_RETENTION_WRITER_FENCE_TABLE = "workflow_writer_fences";
+export declare const WORKFLOW_RETENTION_DAY_MS = 86400000;
+export declare const WORKFLOW_RETENTION_SELECT_STATEMENTS = 1;
+export declare const WORKFLOW_RETENTION_DELETE_CONTROL_STATEMENTS = 2;
+export declare const WORKFLOW_RETENTION_DELETE_DATA_STATEMENTS = 4;
+export declare const WORKFLOW_RETENTION_DELETE_STATEMENTS = 6;
+export declare const WORKFLOW_RETENTION_NONEMPTY_APPLICATION_STATEMENTS = 5;
+export declare const WORKFLOW_RETENTION_NONEMPTY_BATCH_STATEMENTS = 7;
+export declare const WORKFLOW_RETENTION_EMPTY_BATCH_STATEMENTS = 1;
+export declare const WORKFLOW_RETENTION_BATCH_ATTEMPTS = 3;
+export declare const WORKFLOW_RETENTION_EXPLICIT_DELETE_TABLES: readonly ['workflow_input', 'workflow_output', 'operation_outputs', 'workflow_status'];
+export declare const WORKFLOW_RETENTION_CASCADE_TABLES: readonly ['workflow_events', 'workflow_events_history', 'notifications', 'streams'];
+export declare const WORKFLOW_RETENTION_PAYLOAD_FAMILIES: readonly [{
+    readonly table: 'workflow_status';
+    readonly key: 'workflow_uuid';
+    readonly deletion: 'explicit';
+}, {
+    readonly table: 'workflow_input';
+    readonly key: 'workflow_uuid';
+    readonly deletion: 'explicit';
+}, {
+    readonly table: 'workflow_output';
+    readonly key: 'workflow_uuid';
+    readonly deletion: 'explicit';
+}, {
+    readonly table: 'operation_outputs';
+    readonly key: 'workflow_uuid';
+    readonly deletion: 'explicit';
+}, {
+    readonly table: 'workflow_events';
+    readonly key: 'workflow_uuid';
+    readonly deletion: 'cascade';
+}, {
+    readonly table: 'workflow_events_history';
+    readonly key: 'workflow_uuid';
+    readonly deletion: 'cascade';
+}, {
+    readonly table: 'notifications';
+    readonly key: 'destination_uuid';
+    readonly deletion: 'cascade';
+}, {
+    readonly table: 'streams';
+    readonly key: 'workflow_uuid';
+    readonly deletion: 'cascade';
+}];
 export declare const SELECTED_ISSUE_DEADLINE_MS = 5000;
 export declare const SELECTED_NATIVE_STATEMENT_LIMIT = 64;
 export declare const SELECTED_CONTINUATION_PAYLOAD_MAX_BYTES = 4096;
