@@ -41,6 +41,19 @@ export class PageReadLimitError extends Error {
   }
 }
 
+function isNode(value: unknown): value is CompositionNode {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    typeof (value as CompositionNode).type === 'string' &&
+    (value as CompositionNode).props !== null &&
+    typeof (value as CompositionNode).props === 'object' &&
+    !Array.isArray((value as CompositionNode).props) &&
+    typeof (value as CompositionNode).props.id === 'string'
+  );
+}
+
 /** Valid documents only: visit the parent first, then slots in registry order. */
 function* walkNodes(registry: CompositionRegistry, document: CompositionDocument): Generator<CompositionNode> {
   const components = new Map(registry.components.map((component) => [component.type, component]));
@@ -51,6 +64,25 @@ function* walkNodes(registry: CompositionRegistry, document: CompositionDocument
     }
   }
   yield* visit(document.content);
+}
+
+/** Configured-list lookup: registered slots in document order; unknown types and malformed slots are skipped. */
+export function* walkStructuralContent(
+  registry: CompositionRegistry,
+  content: unknown,
+): Generator<CompositionNode> {
+  const components = new Map(registry.components.map((component) => [component.type, component]));
+  function* visit(nodes: unknown): Generator<CompositionNode> {
+    if (!Array.isArray(nodes)) return;
+    for (const item of nodes) {
+      if (!isNode(item)) continue;
+      const component = components.get(item.type);
+      if (!component) continue;
+      yield item;
+      for (const slot of component.slots) yield* visit(item.props[slot]);
+    }
+  }
+  yield* visit(content);
 }
 
 /** Plan code-owned reads for a valid document without executing them or changing the document. */
