@@ -20,7 +20,7 @@ import {
   createContentWorkModule,
 } from '../../src/content/register.ts';
 
-const registerContent = createContentWorkModule({ fetch: (request) => fetch(request) });
+const registerContent = createContentWorkModule({ fetch: (request) => fetch(request), now: () => Date.now() });
 import { contentEffects } from '../../src/content/relays.ts';
 import { readMembershipRouteKey } from '../../src/access/membership-work-config.ts';
 import {

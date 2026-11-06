@@ -2,9 +2,9 @@ import type { Pool, PoolClient } from 'pg';
 import { withConnection } from '../database/pool.ts';
 import { readRealmVotes, type RealmVotes } from '../community/content-capabilities.ts';
 import { PARTITIONS } from '../route/route.ts';
-import { tryContentApplication } from './adapters/bind.ts';
+import { contentClock } from './adapters/bind.ts';
 import { CONTENT_DEFAULT_REALM_VOTES } from './contract/index.ts';
-import { clampReactionScore, lemmyActiveRank } from './core/index.ts';
+import { clampReactionScore, lemmyActiveRank, rankUpdate } from './core/index.ts';
 import refresh from './board-rank-refresh.sql';
 import updateRanks from './board-rank-update.sql';
 import readScores from './board-rank-scores.sql';
@@ -49,7 +49,8 @@ function weightedScore(
   totals: readonly Total[],
   realmVotes: ReadonlyMap<string, RealmVotes>,
 ): number {
-  const weights = candidate.realm_id === null ? CONTENT_DEFAULT_REALM_VOTES : (realmVotes.get(candidate.realm_id) ?? {});
+  const weights =
+    candidate.realm_id === null ? CONTENT_DEFAULT_REALM_VOTES : (realmVotes.get(candidate.realm_id) ?? {});
   const score = totals.reduce((sum, total) => sum + total.count * (weights[total.kind] ?? 0), 0);
   return clampReactionScore(score);
 }
@@ -91,7 +92,7 @@ async function updateBatch(
 /** One indexed refresh batch per partition, each locking at most 500 due candidates. */
 export async function refreshBoardRankBatch(
   pool: Pool,
-  at = tryContentApplication()?.ambient.clock() ?? new Date(),
+  at = contentClock(),
   partitions: readonly number[] = Array.from({ length: PARTITIONS }, (_, partition) => partition),
 ): Promise<number> {
   if (!Number.isFinite(at.getTime())) throw new TypeError('Invalid board rank refresh time');
@@ -120,13 +121,25 @@ async function refreshPartition(pool: Pool, partition: number, at: Date): Promis
       const realmVotes = await readRealmVotes(client, realmIds);
       const updates = candidates.map((candidate): RankUpdate => {
         const score = weightedScore(candidate, totals.get(candidate.thread_id) ?? [], realmVotes);
-        return {
-          route: candidate.route,
-          board_id: candidate.board_id,
-          thread_id: candidate.thread_id,
+        const ranked = rankUpdate(
+          {
+            route: candidate.route,
+            boardId: candidate.board_id,
+            threadId: candidate.thread_id,
+            createdAt: candidate.created_at,
+            lastActivityAt: candidate.last_activity_at,
+            realmId: candidate.realm_id,
+          },
           score,
-          active_rank: lemmyActiveRank(score, new Date(candidate.last_activity_at), at),
-          hot_rank: lemmyActiveRank(score, new Date(candidate.created_at), at),
+          at,
+        );
+        return {
+          route: ranked.route,
+          board_id: ranked.boardId,
+          thread_id: ranked.threadId,
+          score: ranked.score,
+          active_rank: ranked.activeRank,
+          hot_rank: ranked.hotRank,
         };
       });
       const updated = await updateBatch(client, partition, updates, at);

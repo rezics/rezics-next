@@ -8,8 +8,7 @@ export function createRanking(ports: Pick<ContentApplicationPorts, 'ranking'>, a
       return lemmyActiveRank(score, activityAt, ambient.clock());
     },
     async refresh(pool: ContentPool, partitions?: readonly number[]): Promise<number> {
-      const selected =
-        partitions ?? Array.from({ length: CONTENT_PARTITION_COUNT }, (_, partition) => partition);
+      const selected = partitions ?? Array.from({ length: CONTENT_PARTITION_COUNT }, (_, partition) => partition);
       if (!admitCollectionPartitions(selected, CONTENT_PARTITION_COUNT)) {
         throw new RangeError('Invalid board rank partitions');
       }

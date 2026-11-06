@@ -49,18 +49,23 @@ export function createKernelWorkModules(
   composeSemantic: SemanticIdentityParticipantComposer,
   ambient?: ContentWorkAmbient,
 ): readonly WorkModule[] {
-  const bound = tryContentApplication()?.ambient;
-  const id = ambient?.id ?? bound?.id;
-  const resolved: ContentWorkAmbient = id
-    ? {
-        fetch: ambient?.fetch ?? bound?.fetch ?? ((request) => globalThis.fetch(request)),
-        now: ambient?.now ?? bound?.now ?? (() => Date.now()),
-        id,
-      }
-    : {
-        fetch: ambient?.fetch ?? bound?.fetch ?? ((request) => globalThis.fetch(request)),
-        now: ambient?.now ?? bound?.now ?? (() => Date.now()),
-      };
+  const resolved: ContentWorkAmbient = {
+    fetch: (request) => {
+      const fetch = ambient?.fetch ?? tryContentApplication()?.ambient.fetch;
+      if (!fetch) throw new Error('Content worker fetch is not supplied');
+      return fetch(request);
+    },
+    now: () => {
+      const now = ambient?.now ?? tryContentApplication()?.ambient.now;
+      if (!now) throw new Error('Content worker now is not supplied');
+      return now();
+    },
+    id: () => {
+      const id = ambient?.id ?? tryContentApplication()?.ambient.id;
+      if (!id) throw new Error('Content worker id is not supplied');
+      return id();
+    },
+  };
   const searchWorkModule = createSearchWorkModule(composeDiscovery, composeRuntimeDefaults);
   const semanticWorkModule = createSemanticWorkModule(composeSemantic);
   const contentWorkModule = contentDeclaration().work(resolved);

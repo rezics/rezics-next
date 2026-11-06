@@ -4,6 +4,7 @@ import type {
   ContentAmbient,
   ContentApplicationPorts,
   ContentAuthoredFieldPort,
+  ContentConfigPort,
   ContentDocumentPort,
   ContentPool,
   ContentQueryClient,
@@ -12,6 +13,7 @@ import type {
 import { readAuthoredField, readAuthoredFieldBounded } from '../authored-fields.ts';
 import { readImportedField, readImportedFieldBounded } from '../imported-fields.ts';
 import { refreshBoardRankBatch } from '../board-rank.ts';
+import { readContentConfig } from '../config.ts';
 import { createNativeContentAmbient } from './ambient.ts';
 
 function asPool(pool: ContentPool): Pool {
@@ -73,6 +75,15 @@ function nativeRanking(): ContentRankingPort {
   };
 }
 
+function nativeConfig(): ContentConfigPort {
+  return {
+    read(env) {
+      const runtime = readContentConfig(env);
+      return runtime.fetchConfig === undefined ? {} : { fetchConfig: runtime.fetchConfig };
+    },
+  };
+}
+
 /** Native Content ports. Composition roots bind these; applications never import this module. */
 export function createNativeContentPorts(
   ambient: ContentAmbient = createNativeContentAmbient(),
@@ -81,6 +92,7 @@ export function createNativeContentPorts(
     documents: nativeDocuments(),
     authoredFields: nativeAuthoredFields(ambient),
     ranking: nativeRanking(),
+    config: nativeConfig(),
     ambient,
   };
 }

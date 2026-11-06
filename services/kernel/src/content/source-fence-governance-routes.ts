@@ -1,3 +1,4 @@
+import { contentRequestId } from './adapters/bind.ts';
 import { memoizedValue } from '../memoized.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
@@ -123,7 +124,7 @@ export function sourceFenceGovernanceRoutes(app: ReturnType<typeof sourceFenceRo
       const context = {
         idempotencyKey: idempotencyKeyOf(request.headers.get(IDEMPOTENCY_HEADER)),
         deadline: job.deadline,
-        requestId: Bun.randomUUIDv7(),
+        requestId: contentRequestId(),
       };
       try {
         const result = await admission.run('normal', job, () =>

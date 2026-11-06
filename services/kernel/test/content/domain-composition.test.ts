@@ -110,6 +110,28 @@ test('bindContentApplication exposes the fake application to Content facades', (
   expect(tryContentApplication()?.ambient.now()).toBe(1_000);
   expect(tryContentApplication()?.ambient.id()).toBe('33333333-3333-4333-8333-333333333333');
   expect(tryContentApplication()?.workerStepDeadline()).toBe(1_000 + CONTENT_WORKER_STEP_MS);
+  expect(tryContentApplication()?.requestContext(2_000, 'key')).toEqual({
+    deadline: 2_000,
+    requestId: '33333333-3333-4333-8333-333333333333',
+    idempotencyKey: 'key',
+  });
   unbindContentApplication();
   expect(tryContentApplication()).toBeUndefined();
+});
+
+test('publication withholds work after the supplied clock passes the deadline', async () => {
+  const created: number[] = [];
+  const application = createContentApplication(
+    fakePorts({
+      publication: {
+        async createThread(deadline) {
+          created.push(deadline);
+          return { id: 'thread' };
+        },
+      },
+    }),
+  );
+  expect(await application.createThread(2_000)).toEqual({ id: 'thread' });
+  expect(await application.createThread(500)).toBeNull();
+  expect(created).toEqual([2_000]);
 });

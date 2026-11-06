@@ -8,10 +8,7 @@ export class AuthoredFieldRejectedError extends Error {
   }
 }
 
-export function createAuthoredFields(
-  ports: Pick<ContentApplicationPorts, 'authoredFields'>,
-  ambient: ContentAmbient,
-) {
+export function createAuthoredFields(ports: Pick<ContentApplicationPorts, 'authoredFields'>, ambient: ContentAmbient) {
   return {
     admit(input: ContentAuthoredFieldInput): void {
       const reason = admitAuthoredFieldInput(input);

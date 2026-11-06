@@ -11,7 +11,7 @@ import { createDiscoveryProducerEntry } from './composition/discovery.ts';
 import { createKernelRuntimeDefaults } from './composition/runtime-defaults.ts';
 import { composeSemanticIdentityParticipants } from './composition/semantic.ts';
 import { composeAccessApplication } from './composition/access.ts';
-import { composeContentApplication } from './composition/content.ts';
+import { startContentApplication } from './composition/content.ts';
 import { composeWork, type WorkModule } from './work/registry.ts';
 import { effectsRelay } from './events/effects.ts';
 import { startRelays } from './events/relays.ts';
@@ -72,14 +72,18 @@ export async function startWorker(
   env: Readonly<Record<string, string | undefined>> = process.env,
 ) {
   composeAccessApplication();
-  const content = composeContentApplication(config.clock ? { clock: config.clock } : undefined);
+  const content = startContentApplication(config.clock ? { clock: config.clock } : undefined);
   const resolvedModules =
     modules ??
     createKernelWorkModules(
       createDiscoveryProducerEntry,
       createKernelRuntimeDefaults,
       composeSemanticIdentityParticipants,
-      { fetch: content.ambient.fetch, now: content.ambient.now, id: content.ambient.id },
+      {
+        fetch: content.application.ambient.fetch,
+        now: content.application.ambient.now,
+        id: content.application.ambient.id,
+      },
     );
   const receiptKeys = readReceiptKeyRing(env, config.receiptKeys);
   initializeEventTypes();
@@ -93,6 +97,7 @@ export async function startWorker(
     client = await createWorkClient(config.databaseUrl, pool);
     bindExecutionContract(client, workExecutionPort(), historyExecutionPort);
   } catch (error) {
+    content.stop();
     await pool.end();
     throw error;
   }
@@ -116,7 +121,11 @@ export async function startWorker(
         try {
           await client.close();
         } finally {
-          await pool.end();
+          try {
+            content.stop();
+          } finally {
+            await pool.end();
+          }
         }
       }
     })());

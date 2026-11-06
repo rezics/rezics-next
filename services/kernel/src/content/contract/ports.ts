@@ -65,7 +65,10 @@ export type ContentRankingTotal = Readonly<{
 
 export type ContentRankingPort = {
   refreshBatch(pool: ContentPool, at: Date, partitions: readonly number[]): Promise<number>;
-  readRealmVotes(client: ContentQueryClient, realmIds: readonly string[]): Promise<ReadonlyMap<string, ContentRealmVotes>>;
+  readRealmVotes(
+    client: ContentQueryClient,
+    realmIds: readonly string[],
+  ): Promise<ReadonlyMap<string, ContentRealmVotes>>;
 };
 
 export type ContentPublicationPort = {
@@ -102,12 +105,15 @@ export type ContentWorkModule = Readonly<{
   register(context: unknown): Promise<void> | void;
 }>;
 
+export type ContentDeclaredEffects = (pool: ContentPool, client: unknown, access: unknown) => readonly unknown[];
+
 export type ContentSurfaceDeclaration = Readonly<{
   name: 'content';
   events: () => Readonly<Record<string, unknown>>;
   operations: readonly unknown[];
   permissions: Iterable<readonly [string, unknown]>;
   work: (ambient: Pick<ContentAmbient, 'fetch' | 'now' | 'id'>) => ContentWorkModule;
+  effects: ContentDeclaredEffects;
 }>;
 
 export type AdmitDocumentReadInput = Readonly<{
@@ -134,6 +140,12 @@ export type ContentRankCursorAdmission = Readonly<{
   expectedEpoch: number;
 }>;
 
+export type ContentHttpRequestContext = Readonly<{
+  idempotencyKey?: string | null;
+  deadline: ContentDeadline;
+  requestId: string;
+}>;
+
 export type ContentApplication = {
   readonly ports: ContentApplicationPorts;
   readonly ambient: ContentAmbient;
@@ -143,8 +155,13 @@ export type ContentApplication = {
   refreshRanks(pool: ContentPool, partitions?: readonly number[]): Promise<number>;
   admitAuthoredField(input: ContentAuthoredFieldInput): void;
   nextAuthoredFieldId(): string;
-  eraseAuthoredField(id: string, deadline: ContentDeadline): Promise<{ id: string; subject: string; authorId: string } | null>;
+  eraseAuthoredField(
+    id: string,
+    deadline: ContentDeadline,
+  ): Promise<{ id: string; subject: string; authorId: string } | null>;
   normalizeBoardQuery(query: string): string;
   workerStepDeadline(): number;
   workerLongStepDeadline(): number;
+  requestContext(deadline: ContentDeadline, idempotencyKey?: string | null): ContentHttpRequestContext;
+  createThread(deadline: ContentDeadline): Promise<unknown | null>;
 };

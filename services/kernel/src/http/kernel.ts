@@ -1,5 +1,6 @@
 import { initializeEventTypes } from '../events/catalogue.ts';
-import { contentDeclaration } from '../content/register.ts';
+import { ensureContentApplication } from '../content/adapters/index.ts';
+import { contentHttpDeclaration, mountContentHttp, type ContentHttpRoutes } from '../content/http.ts';
 import { createOperationCatalogue } from '@rezics/operations';
 import { readCommerceMoneyPolicy, type CommerceMoneyPolicy } from '../commerce/money.ts';
 import type { CurrentConsentReader } from '../access/auth-consent.ts';
@@ -61,8 +62,6 @@ import {
 } from '../rating/module.ts';
 import type { ContentBoardDependencies } from '../content/boards.ts';
 import { currentRealmDisclosureScope } from '../content/reads.ts';
-import { tryContentApplication } from '../content/adapters/bind.ts';
-import { mountContentHttp, type ContentHttpRoutes } from '../content/http.ts';
 import { realmOfItem } from '../content/realm-of-item.ts';
 import type { TurnstileVerifier } from '../content/turnstile.ts';
 import type { ContentRuntime } from '../content/runtime.ts';
@@ -376,11 +375,14 @@ export function createKernelAccessResolver(options: {
 
 /** The route key must stay the same across restarts, or retries lose their receipts. */
 export function createKernel(dependencies: KernelDependencies): Kernel {
+  const declared = contentHttpDeclaration();
+  const contentRuntime = ensureContentApplication({
+    ...(dependencies.clock ? { clock: dependencies.clock } : {}),
+    ...(dependencies.content?.now ? { now: dependencies.content.now } : {}),
+    ...(dependencies.content?.id ? { id: dependencies.content.id } : {}),
+  });
   initializeEventTypes();
-  const operationCatalogue = createOperationCatalogue([
-    ...LIBRARY_OPERATION_DECLARATIONS,
-    ...contentDeclaration().operations,
-  ]);
+  const operationCatalogue = createOperationCatalogue([...LIBRARY_OPERATION_DECLARATIONS, ...declared.operations]);
   const sourceClock = dependencies.clock ?? systemClock;
   const clock = () => {
     const instant = sourceClock();
@@ -618,7 +620,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
   });
   const anonymousVerifier = dependencies.reports?.anonymousVerifier ?? dependencies.content?.anonymousVerifier;
   const cursorNow = dependencies.content?.cursorNow ?? (() => clock().getTime());
-  const contentAmbient = tryContentApplication()?.ambient;
+  const contentAmbient = contentRuntime.ambient;
   let contentAccess: Access | undefined;
   let realmParticipation: RealmParticipationCheck | undefined;
   let content: ReturnType<typeof mountContentHttp>['content'];
@@ -639,8 +641,8 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     clock,
     cursorNow,
     // Request budgets use wall time from the composed Content ambient; domain time stays on the kernel clock.
-    now: dependencies.content?.now ?? contentAmbient?.now ?? (() => Date.now()),
-    id: dependencies.content?.id ?? contentAmbient?.id ?? (() => Bun.randomUUIDv7()),
+    now: dependencies.content?.now ?? contentAmbient.now,
+    id: dependencies.content?.id ?? contentAmbient.id,
     tokens,
     ...(dependencies.content?.readConsent === undefined ? {} : { readConsent: dependencies.content.readConsent }),
     ...(dependencies.content?.fetchConfig === undefined ? {} : { fetchConfig: dependencies.content.fetchConfig }),
@@ -654,7 +656,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
       return contentAccess;
     },
   };
-  const mounted = mountContentHttp(
+  const mounted = declared.mount(
     searched as unknown as Parameters<typeof mountContentHttp>[0],
     app as unknown as Parameters<typeof mountContentHttp>[1],
     {
@@ -876,7 +878,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
   });
   const mountedViewerResources = new Map<string, ViewerActionResource>([
     ...subjectViewerActionResources(),
-    ...contentDeclaration().permissions,
+    ...declared.permissions,
     ['semantic.context', contextViewerActionResource],
     ['access.account', accountViewerActionResource],
     ['library.collection', collectionViewerActionResource],

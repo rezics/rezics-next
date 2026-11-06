@@ -10,7 +10,7 @@ import {
   createContentWorkModule,
 } from '../../src/content/register.ts';
 
-const registerContent = createContentWorkModule({ fetch: (request) => fetch(request) });
+const registerContent = createContentWorkModule({ fetch: (request) => fetch(request), now: () => Date.now() });
 import { CONTENT_WORKFLOWS } from '../../src/content/work-contract.ts';
 import {
   CONTENT_BOARD_RANK_SCHEDULE,
@@ -63,7 +63,10 @@ function workEnvironment(mode: 'empty' | 'full'): Record<string, string | undefi
     KERNEL_ROUTE_KEY: routeKey,
     KERNEL_SESSION_KEYS: `1:${Buffer.alloc(32, 2).toString('base64url')}`,
     KERNEL_RECEIPT_KEYS: `1:${Buffer.alloc(32, 17).toString('base64url')}`,
-    KERNEL_WORKFLOW_REFERENCE_KEYS: JSON.stringify({ current: 1, keys: { '1': Buffer.alloc(32, 19).toString('base64url') } }),
+    KERNEL_WORKFLOW_REFERENCE_KEYS: JSON.stringify({
+      current: 1,
+      keys: { '1': Buffer.alloc(32, 19).toString('base64url') },
+    }),
     AUTH_ISSUER: 'https://worker-auth.test',
     AUTH_AUDIENCE: 'https://worker-api.test',
     AUTH_JWKS_URL: 'https://worker-auth.test/jwks',

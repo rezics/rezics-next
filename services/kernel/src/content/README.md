@@ -673,14 +673,16 @@ roles and consent, evidence no older than 1,000 ms, and known-nonce/current-oper
 Image processing, URL imports, collection and purge retain their committed source, state, ownership and hold
 checks and existing queues, retention and page bounds. These mechanical jobs do not restore a person initiator.
 
-Declared surfaces: `contentDeclaration()` (`register.ts`) names Content's events, operations, permissions and worker
-factory, which the kernel composition consumes; `mountContentHttp` (`http.ts`) is the one HTTP mount, in the order
-content, notices, subject reactions, media. Ambient operands are explicit and required: `createKernel` and `startWorker` take `now`, `id`, `clock` and `fetch`
-from the bound `ContentAmbient` (tests may override through `composeContentApplication`). Board cursors take `cursorNow`
-(the composition defaults it to the domain clock). Document reads take the wall-clock `now` that request budgets use.
-The worker takes `fetch` and `now`. Edition consent is the reader that `readContentEditionConsent` builds from Auth
-configuration; nothing mounts a reader onto a pool. Authored-field transactions take the command's transaction id.
-Request budgets stay on wall time per the kernel clock policy. Platform `defineModule` is not delivered.
+Declared surfaces: `contentDeclaration()` (`register.ts`) names Content's events (including locator events), operations,
+permissions, effects and worker factory. `contentHttpDeclaration()` (`http.ts`) is that same value plus `mount`, so HTTP
+and the worker consume one declaration. `createKernel` and `startWorker` call `ensureContentApplication` /
+`startContentApplication`; `stop` unbinds the process. Ambient operands are explicit: composition supplies `now`, `id`,
+`clock` and `fetch`. Board cursors take `cursorNow` (the composition defaults it to the domain clock). Document reads
+take the wall-clock `now` that request budgets use. HTTP request ids come from the bound identity factory. The worker
+takes `fetch` and `now` and throws if they are absent at register. Edition consent is the reader that
+`readContentEditionConsent` builds from Auth configuration; nothing mounts a reader onto a pool. Authored-field
+transactions take the command's transaction id. Request budgets stay on wall time per the kernel clock policy.
+Platform `defineModule` is not delivered.
 
 Cost per operation: authorization composition adds one memoized context-port lookup and passes existing object
 references. It adds no source SQL, pool checkout, permission allowance or per-step work; the existing Access,

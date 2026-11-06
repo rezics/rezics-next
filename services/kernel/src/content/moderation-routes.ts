@@ -1,3 +1,4 @@
+import { contentRequestId } from './adapters/bind.ts';
 import { memoizedValue } from '../memoized.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
@@ -94,7 +95,7 @@ function context(request: Request, deadline: number) {
   return {
     idempotencyKey: idempotencyKeyOf(request.headers.get(IDEMPOTENCY_HEADER)),
     deadline,
-    requestId: Bun.randomUUIDv7(),
+    requestId: contentRequestId(),
   };
 }
 async function command<T>(work: () => Promise<T>): Promise<T> {

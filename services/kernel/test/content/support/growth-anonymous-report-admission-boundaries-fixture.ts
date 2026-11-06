@@ -4,7 +4,7 @@ import { createAccess } from '../../../src/access/index.ts';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import { createContentWorkModule } from '../../../src/content/register.ts';
 
-const registerContent = createContentWorkModule({ fetch: (request) => fetch(request) });
+const registerContent = createContentWorkModule({ fetch: (request) => fetch(request), now: () => Date.now() });
 import { createTurnstileVerifier } from '../../../src/content/turnstile.ts';
 import { relayEffects } from '../../../src/events/effects.ts';
 import { createKernel } from '../../../src/http/kernel.ts';

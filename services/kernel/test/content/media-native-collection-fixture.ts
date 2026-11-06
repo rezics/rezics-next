@@ -4,7 +4,7 @@ import pg, { type Pool } from 'pg';
 import { R2Storage } from '../../src/content/r2-storage.ts';
 import { createContentWorkModule } from '../../src/content/register.ts';
 
-const registerContent = createContentWorkModule({ fetch: (request) => fetch(request) });
+const registerContent = createContentWorkModule({ fetch: (request) => fetch(request), now: () => Date.now() });
 import { effectWorkflowId, relayEffects } from '../../src/events/effects.ts';
 import type { Envelope } from '../../src/events/log.ts';
 import { contentWorkWorkflowId } from '../../src/content/work-contract.ts';

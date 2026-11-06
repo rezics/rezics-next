@@ -158,6 +158,7 @@ beforeAll(async () => {
     access,
     routeKey,
     now: () => Date.now(),
+    id: () => '01900000-0000-7000-8000-000000000001',
     cursorNow: () => Date.now(),
     tokens,
     clock: () => new Date(),

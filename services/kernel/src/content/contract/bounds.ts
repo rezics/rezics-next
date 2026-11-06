@@ -24,15 +24,7 @@ export type ContentBoardSort = (typeof CONTENT_BOARD_SORTS)[number];
 export const CONTENT_RANK_SORTS = ['active', 'hot'] as const;
 export type ContentRankSort = (typeof CONTENT_RANK_SORTS)[number];
 
-export const CONTENT_REACTION_KINDS = [
-  'upvote',
-  'downvote',
-  'like',
-  'love',
-  'laugh',
-  'insightful',
-  'sad',
-] as const;
+export const CONTENT_REACTION_KINDS = ['upvote', 'downvote', 'like', 'love', 'laugh', 'insightful', 'sad'] as const;
 export type ContentReactionKind = (typeof CONTENT_REACTION_KINDS)[number];
 
 export type ContentRealmVoteWeight = 1 | -1;

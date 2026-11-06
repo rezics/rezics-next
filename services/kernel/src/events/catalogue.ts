@@ -6,8 +6,7 @@ import { Compile, type Validator } from 'typebox/compile';
 import { ACCESS_EVENTS } from '../access/events.ts';
 import { COMMERCE_EVENTS } from '../commerce/events.ts';
 import { COMMUNITY_EVENTS } from '../community/events.ts';
-import { CONTENT_EVENTS } from '../content/events.ts';
-import { REPORT_LOCATOR_EVENTS } from '../content/report-locator-events.ts';
+import { contentDeclaredEvents } from '../content/declared-catalogue.ts';
 import { LIBRARY_EVENTS } from '../library/events.ts';
 import { RATING_EVENTS } from '../rating/events.ts';
 import { SEMANTIC_EVENTS } from '../semantic/events.ts';
@@ -34,8 +33,7 @@ function productEventTypes() {
         ...ACCESS_EVENTS(),
         ...COMMERCE_EVENTS,
         ...COMMUNITY_EVENTS(),
-        ...CONTENT_EVENTS(),
-        ...REPORT_LOCATOR_EVENTS,
+        ...contentDeclaredEvents(),
         ...LIBRARY_EVENTS,
         ...RATING_EVENTS(),
         ...SEMANTIC_EVENTS,

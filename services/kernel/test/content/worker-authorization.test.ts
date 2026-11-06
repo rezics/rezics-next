@@ -6,7 +6,7 @@ import { ConfigError } from '../../src/commerce/config.ts';
 import { receiptKeysFor } from '../../src/command/receipt-key.ts';
 import { createContentWorkAccess, createContentWorkModule } from '../../src/content/register.ts';
 
-const registerContent = createContentWorkModule({ fetch: (request) => fetch(request) });
+const registerContent = createContentWorkModule({ fetch: (request) => fetch(request), now: () => Date.now() });
 import * as feedWork from '../../src/content/feed-work.ts';
 import * as moderationDirectoryWork from '../../src/content/moderation-directory-work.ts';
 import * as reportLocatorWork from '../../src/content/report-locator-work.ts';
@@ -34,7 +34,9 @@ function composition(extraEnv: Readonly<Record<string, string>> = {}) {
   const info = spyOn(console, 'info').mockImplementation(() => {});
   // Registration-time helpers start DBOS steps and services; this boundary captures Content's own options only.
   const reportLocator = spyOn(reportLocatorWork, 'registerReportLocatorWork').mockImplementation(() => {});
-  const moderationDirectory = spyOn(moderationDirectoryWork, 'registerModerationDirectoryWork').mockImplementation(() => {});
+  const moderationDirectory = spyOn(moderationDirectoryWork, 'registerModerationDirectoryWork').mockImplementation(
+    () => {},
+  );
   const feed = spyOn(feedWork, 'registerFeedWork').mockImplementation(async () => {});
   const receiptKeys = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(3)]]) };
   const env = {

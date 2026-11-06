@@ -38,10 +38,7 @@ export type ContentQueryResult<T = Record<string, unknown>> = {
 };
 
 export type ContentQueryClient = {
-  query<T = Record<string, unknown>>(
-    text: string,
-    values?: readonly unknown[],
-  ): Promise<ContentQueryResult<T>>;
+  query<T = Record<string, unknown>>(text: string, values?: readonly unknown[]): Promise<ContentQueryResult<T>>;
 };
 
 export type ContentPool = {
@@ -54,5 +51,4 @@ export function isContentUuid(value: unknown): value is string {
   return typeof value === 'string' && CONTENT_UUID_PATTERN.test(value);
 }
 
-export const CONTENT_UTC_TIMESTAMP_PATTERN =
-  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?Z$/;
+export const CONTENT_UTC_TIMESTAMP_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?Z$/;

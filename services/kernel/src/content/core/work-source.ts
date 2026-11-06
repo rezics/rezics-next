@@ -71,14 +71,12 @@ export function admitWorkSource(input: {
 }
 
 export function workerDeadline(now: number, budgetMs: number): number {
-  if (!Number.isFinite(now) || !Number.isFinite(budgetMs) || budgetMs <= 0) throw new TypeError('Invalid worker budget');
+  if (!Number.isFinite(now) || !Number.isFinite(budgetMs) || budgetMs <= 0)
+    throw new TypeError('Invalid worker budget');
   return now + budgetMs;
 }
 
-export function admitCollectionPartitions(
-  partitions: readonly number[],
-  partitionCount: number,
-): boolean {
+export function admitCollectionPartitions(partitions: readonly number[], partitionCount: number): boolean {
   return (
     partitions.length > 0 &&
     new Set(partitions).size === partitions.length &&

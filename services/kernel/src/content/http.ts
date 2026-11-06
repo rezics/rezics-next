@@ -4,6 +4,7 @@ import type { Dependencies as NoticeDependencies } from './notice-routes.ts';
 import { noticeRoutes } from './notice-routes.ts';
 import type { Dependencies as MediaDependencies } from './media-routes.ts';
 import { mediaRoutes } from './media-routes.ts';
+import { contentDeclaration } from './register.ts';
 
 /** Explicit operands for Content's HTTP surface. The trusted kernel composition constructs each object; no
  * route reads the environment, the network, a UUID source or a clock by itself. */
@@ -33,3 +34,12 @@ export type ContentHttpRoutes = ReturnType<typeof contentRoutes> &
   ReturnType<typeof noticeRoutes> &
   ReturnType<typeof subjectReactionRoutes> &
   ReturnType<typeof mediaRoutes>;
+
+/** HTTP composition reads the same declaration as the worker: events, operations, permissions, work,
+ * effects, plus the mount function this module owns. */
+export function contentHttpDeclaration() {
+  return Object.freeze({
+    ...contentDeclaration(),
+    mount: mountContentHttp,
+  });
+}

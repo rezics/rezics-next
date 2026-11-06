@@ -1,4 +1,5 @@
 import { tryContentApplication } from './adapters/bind.ts';
+import { contentDeclaredEvents } from './declared-catalogue.ts';
 import { registerModerationDirectoryWork } from './moderation-directory-work.ts';
 import { createAccess } from '../access/index.ts';
 import resourceRoles from '../access/resource-roles.json';
@@ -24,9 +25,9 @@ import { readContentWorkConfig, type ContentWorkConfig } from './work-config.ts'
 import { registerFeedWork } from './feed-work.ts';
 import { registerReportLocatorWork } from './report-locator-work.ts';
 import { createConversationActivityEffect } from './conversation-activity.ts';
-import { CONTENT_EVENTS } from './events.ts';
 import { FEED_OPERATION_DECLARATIONS } from './feed-operation-declarations.ts';
 import { contentViewerActionResources } from './viewer-actions.ts';
+import type { ContentPool } from './contract/index.ts';
 
 /** Standalone fixture/caller Access with the shared role catalogue. Default
  * production registration uses WorkContext's fully mounted authorization instead.
@@ -151,15 +152,29 @@ export type ContentWorkAmbient = Readonly<{
   id?: () => string;
 }>;
 
+/** Content's declared effects. The worker register consumes this; tests may install the same list. */
+export function contentDeclaredEffects(
+  pool: ContentPool,
+  client: Parameters<typeof contentEffects>[1],
+  access: Parameters<typeof contentNoticeEffects>[1],
+) {
+  return Object.freeze([
+    createConversationActivityEffect(pool as Parameters<typeof createConversationActivityEffect>[0]),
+    ...contentEffects(pool as Parameters<typeof contentEffects>[0], client),
+    ...contentNoticeEffects(pool as Parameters<typeof contentNoticeEffects>[0], access),
+  ]);
+}
+
 /** Content's declared surfaces, read by the composition root. Events, operations and permissions are data;
- * the worker is a factory over explicit operands. HTTP routes are mounted by the HTTP composition. */
+ * the worker is a factory over explicit operands. HTTP composition extends this with `mount`. */
 export function contentDeclaration() {
   return Object.freeze({
-    name: 'content',
-    events: CONTENT_EVENTS,
+    name: 'content' as const,
+    events: contentDeclaredEvents,
     operations: FEED_OPERATION_DECLARATIONS,
     permissions: contentViewerActionResources,
     work: createContentWorkModule,
+    effects: contentDeclaredEffects,
   });
 }
 
@@ -175,22 +190,20 @@ export function createContentWorkModule(ambient: ContentWorkAmbient): WorkModule
         console.info(`content ${group.name} group is absent: ${group.variables.join(', ')}`);
       }
       const { access, readConsent } = context.getAuthorization();
+      const now = ambient.now ?? tryContentApplication()?.ambient.now;
+      if (!now) throw new Error('Content worker now is not supplied');
       await createContentWork({
         storage: dependencies.storage,
         access,
         readConsent,
         routeKey: readMembershipRouteKey(context.env),
         fetchConfig: dependencies.fetchConfig,
-        now: ambient.now ?? tryContentApplication()?.ambient.now ?? (() => Date.now()),
+        now,
         ...(collectionPartitions === undefined ? {} : { collectionPartitions }),
       }).register(context);
       registerReportLocatorWork(context);
       registerModerationDirectoryWork(context);
-      context.addEffects([
-        createConversationActivityEffect(context.pool),
-        ...contentEffects(context.pool, context.client),
-        ...contentNoticeEffects(context.pool, access),
-      ]);
+      context.addEffects([...contentDeclaredEffects(context.pool, context.client, access)]);
       await registerFeedWork(context);
     },
   };

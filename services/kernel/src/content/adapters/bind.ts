@@ -1,4 +1,4 @@
-import type { ContentApplication } from '../contract/index.ts';
+import type { ContentAmbient, ContentApplication } from '../contract/index.ts';
 
 let bound: ContentApplication | undefined;
 
@@ -19,4 +19,24 @@ export function tryContentApplication(): ContentApplication | undefined {
 /** Tests restore the process binding; createKernel rebinds native ports. */
 export function unbindContentApplication(): void {
   bound = undefined;
+}
+
+function boundAmbient(): ContentAmbient {
+  if (!bound) throw new Error('Content application is not bound');
+  return bound.ambient;
+}
+
+/** Request IDs come from the composed identity factory, never from a hidden UUID source. */
+export function contentRequestId(): string {
+  return boundAmbient().id();
+}
+
+/** Wall-clock budgets come from the composed `now`, never from a hidden Date.now. */
+export function contentNow(): number {
+  return boundAmbient().now();
+}
+
+/** Domain ranking and command time come from the composed clock. */
+export function contentClock(): Date {
+  return boundAmbient().clock();
 }

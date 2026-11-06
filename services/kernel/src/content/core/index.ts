@@ -9,14 +9,9 @@ export {
   isUtcTimestamp,
   normalizeBoardQuery,
 } from './board-cursor.ts';
-export {
-  clampReactionScore,
-  lemmyActiveRank,
-  parseRankingInstant,
-  rankUpdate,
-  weightedRankScore,
-} from './ranking.ts';
-export { admitDocumentByteLimit, admitDocumentRead, deadlineElapsed, documentReadExhausted } from './document-read.ts';
+export { clampReactionScore, lemmyActiveRank, parseRankingInstant, rankUpdate, weightedRankScore } from './ranking.ts';
+export { boundedDeadline, deadlineElapsed, remainingBudgetMs } from './deadline.ts';
+export { admitDocumentByteLimit, admitDocumentRead, documentReadExhausted } from './document-read.ts';
 export {
   admitAuthoredFieldInput,
   admitAuthoredLanguage,

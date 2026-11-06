@@ -470,8 +470,7 @@ async function registerWork(
     { name: NOTICE_RETENTION_WORKFLOW },
   );
   const boardSlowRecoveryPage = DBOS.registerStep(
-    async () =>
-      recoverBoardSlowModePage(context.pool, BOARD_SLOW_RECOVERY_PAGE_SIZE, context.clock(), now() + 120_000),
+    async () => recoverBoardSlowModePage(context.pool, BOARD_SLOW_RECOVERY_PAGE_SIZE, context.clock(), now() + 120_000),
     { name: 'content.board-slow.recovery.page', ...retry },
   );
   DBOS.registerWorkflow(

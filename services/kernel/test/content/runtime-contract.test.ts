@@ -9,6 +9,7 @@ import type { TurnstileVerifier } from '../../src/content/turnstile.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel, type KernelDependencies } from '../../src/http/kernel.ts';
 import type { ContentShelfTitleInputs } from '../../src/library/shelf-title-content-source.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 type KernelContent = ContentRuntime &
   Partial<Pick<ContentBoardDependencies, 'cursorNow'>> & {
@@ -31,6 +32,8 @@ test('trusted optional content runtime types retain exactly the native ports and
   >();
   expectTypeOf<KernelDependencies['content']>().toEqualTypeOf<KernelContent | undefined>();
   expectTypeOf<routes.Dependencies['cursorNow']>().toEqualTypeOf<() => number>();
+  expectTypeOf<routes.Dependencies['id']>().toEqualTypeOf<() => string>();
+  expectTypeOf<routes.Dependencies['now']>().toEqualTypeOf<() => number>();
   expectTypeOf<Pick<routes.Dependencies, keyof ContentRuntime>>().toEqualTypeOf<ContentRuntime>();
   expectTypeOf<Parameters<typeof routes.contentRoutes>[1]>().toEqualTypeOf<routes.Dependencies>();
   expectTypeOf<KernelDependencies['clock']>().toEqualTypeOf<(() => Date) | undefined>();
@@ -52,7 +55,15 @@ test('kernel forwards native ports unchanged without executing jobs, I/O, access
   const cursorNow = forbidden;
   const runtime: ContentRuntime = Object.freeze({ fetchConfig, workflows, anonymousVerifier });
   const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(42)]]) };
-  const base: KernelDependencies = { pool, routeKey: new Uint8Array(32), tokens, access: forbidden, clock: forbidden };
+  const receiptKeys = testReceiptKeys();
+  const base: KernelDependencies = {
+    pool,
+    routeKey: new Uint8Array(32),
+    tokens,
+    receiptKeys,
+    access: forbidden,
+    clock: forbidden,
+  };
   try {
     const baseline = JSON.stringify(
       createKernel(base).routes.map(({ method, path, hooks }) => ({ method, path, hooks })),
@@ -121,7 +132,15 @@ test('content composition retains lazy access resolution and the validated kerne
   const instant = new Date('2026-01-01T00:00:00Z');
   const clock = mock(() => instant);
   try {
-    createKernel({ pool, routeKey: new Uint8Array(32), access: factory, clock, content: {} });
+    createKernel({
+      pool,
+      routeKey: new Uint8Array(32),
+      tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(42)]]) },
+      receiptKeys: testReceiptKeys(),
+      access: factory,
+      clock,
+      content: {},
+    });
     const received = compose.mock.calls.at(-1)![1];
     expect(factory).not.toHaveBeenCalled();
     expect(clock).not.toHaveBeenCalled();

@@ -37,7 +37,8 @@ export function authoredFieldContainsMedia(document: unknown): boolean {
 
 export function admitAuthoredFieldInput(input: ContentAuthoredFieldInput): string | null {
   if (!admitAuthoredLanguage(input.language)) return 'Invalid authored document language';
-  if (!admitAuthoredRevision(input.revision)) return 'Authored revision must be a positive safe integer allocated by semantic';
+  if (!admitAuthoredRevision(input.revision))
+    return 'Authored revision must be a positive safe integer allocated by semantic';
   if (authoredFieldContainsMedia(input.document)) return 'Authored field documents cannot contain image or media nodes';
   return null;
 }

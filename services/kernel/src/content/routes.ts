@@ -76,7 +76,6 @@ import type { Anchored, AnchoredPosition, ReadContext } from './model.ts';
 import { clearReaction, setReaction, type ReactionKind } from './reactions.ts';
 import { readThreadWatchState, unwatchThread, watchThread } from './watch.ts';
 import { watchRoutes } from './watch-routes.ts';
-import { tryContentApplication } from './adapters/bind.ts';
 import type { ContentRuntime } from './runtime.ts';
 import {
   readContentReadingPage,
@@ -157,7 +156,7 @@ export type Dependencies = ContentCommandDependencies &
   Readonly<{
     viewerActionRuntime?: () => ReadingPageViewerActionRuntime;
     now: () => number;
-    id?: () => string;
+    id: () => string;
   }>;
 const params = t.Object({ id: t.String() }, { additionalProperties: false });
 function readFailures() {
@@ -495,7 +494,7 @@ function requestContext(request: Request, deadline: number, dependencies: Pick<D
   return {
     idempotencyKey: idempotencyKeyOf(request.headers.get(IDEMPOTENCY_HEADER)),
     deadline,
-    requestId: (dependencies.id ?? tryContentApplication()?.ambient.id ?? (() => Bun.randomUUIDv7()))(),
+    requestId: dependencies.id(),
   };
 }
 

@@ -7,7 +7,7 @@ import { threadTarget } from '../../src/content/commands.ts';
 import { CONTENT_QUEUES } from '../../src/content/work-contract.ts';
 import { createContentWorkModule } from '../../src/content/register.ts';
 
-const registerContent = createContentWorkModule({ fetch: (request) => fetch(request) });
+const registerContent = createContentWorkModule({ fetch: (request) => fetch(request), now: () => Date.now() });
 import { effectsRelay, effectWorkflowId, type Effect } from '../../src/events/effects.ts';
 import { readBatch, type CloudEvent, type Envelope } from '../../src/events/log.ts';
 import { createKernel } from '../../src/http/kernel.ts';

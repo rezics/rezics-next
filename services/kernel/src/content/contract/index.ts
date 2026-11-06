@@ -13,11 +13,7 @@ export type {
   ContentQueryResult,
   ContentResourceRef,
 } from './vocabulary.ts';
-export {
-  CONTENT_UTC_TIMESTAMP_PATTERN,
-  CONTENT_UUID_PATTERN,
-  isContentUuid,
-} from './vocabulary.ts';
+export { CONTENT_UTC_TIMESTAMP_PATTERN, CONTENT_UUID_PATTERN, isContentUuid } from './vocabulary.ts';
 export type {
   ContentBoardSort,
   ContentRankSort,
@@ -69,6 +65,8 @@ export type {
   ContentRankingCandidate,
   ContentRankingPort,
   ContentRankingTotal,
+  ContentDeclaredEffects,
+  ContentHttpRequestContext,
   ContentSurfaceDeclaration,
   ContentWorkModule,
   ContentWorkRegistrationPort,

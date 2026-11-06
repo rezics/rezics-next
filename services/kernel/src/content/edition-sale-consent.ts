@@ -1,4 +1,1 @@
-export {
-  readContentEditionConsent,
-  type ContentEditionConsentReader,
-} from './edition-sale-native.ts';
+export { readContentEditionConsent, type ContentEditionConsentReader } from './edition-sale-native.ts';

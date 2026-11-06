@@ -1,9 +1,7 @@
 import { CONTENT_DOCUMENT_BYTES, type AdmitDocumentReadInput } from '../contract/index.ts';
+import { deadlineElapsed } from './deadline.ts';
 
-/** A passed deadline withholds the document before any storage is touched. */
-export function deadlineElapsed(now: number, deadline: number): boolean {
-  return !Number.isFinite(deadline) || !Number.isFinite(now) || now >= deadline;
-}
+export { deadlineElapsed } from './deadline.ts';
 
 export function admitDocumentByteLimit(maxSourceBytes: number | undefined, maxBytes = CONTENT_DOCUMENT_BYTES): boolean {
   return (
