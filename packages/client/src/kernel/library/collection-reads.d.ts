@@ -1,6 +1,7 @@
 import { type AccessWorkAccounting } from '../access/work.ts';
 import { type BuiltinCollectionView } from './builtin-runtime.ts';
 import { type AuthoritativeTime, type CommandAttempt } from '../command/command.ts';
+import { type ContributionAttribution } from '../access/public-identity.ts';
 import { type Actor } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { type CollectionPresentation } from './collection-presentation.ts';
@@ -30,6 +31,9 @@ export type CollectionView = CollectionPresentation & Partial<CollectionPreview>
     memberCount: number;
     createdAt: string;
     updatedAt: string;
+    attribution?: ContributionAttribution;
+    generation?: string;
+    subjectIds?: string[];
 };
 export type CuratedCollectionView = CollectionView & {
     membershipKind: 'curated';
@@ -45,7 +49,7 @@ export type CollectionResourceView = CollectionView | SavedDynamicCollectionView
 export declare function collectionReadView(value: CollectionResourceView): {
     presentationKind: import("./collection-kind.ts").CollectionKind['presentationKind'];
     presentationKindSource: import("./collection-kind.ts").CollectionKind['presentationKindSource'];
-    cover: import("../semantic/summaries.ts").CoverSummary | null;
+    cover: import("./contract/capabilities.ts").LibraryCoverSummary | null;
     coverSource: 'owner' | 'member' | 'none' | 'pending';
     coverMediaId?: string | null;
     previewMembers?: {
@@ -59,6 +63,9 @@ export declare function collectionReadView(value: CollectionResourceView): {
     description: string | null;
     visibility: 'private' | 'unlisted' | 'public';
     revision: number;
+    attribution?: ContributionAttribution;
+    generation?: string;
+    subjectIds?: string[];
     membershipKind: 'dynamic';
     allowedVisibilityActions?: ("private" | "public" | "unlisted")[];
 } | {
@@ -80,7 +87,7 @@ export declare function collectionReadView(value: CollectionResourceView): {
 } | {
     presentationKind: import("./collection-kind.ts").CollectionKind['presentationKind'];
     presentationKindSource: import("./collection-kind.ts").CollectionKind['presentationKindSource'];
-    cover: import("../semantic/summaries.ts").CoverSummary | null;
+    cover: import("./contract/capabilities.ts").LibraryCoverSummary | null;
     coverSource: 'owner' | 'member' | 'none' | 'pending';
     coverMediaId?: string | null;
     previewMembers?: {
@@ -97,6 +104,9 @@ export declare function collectionReadView(value: CollectionResourceView): {
     memberCount: number;
     createdAt: string;
     updatedAt: string;
+    attribution?: ContributionAttribution;
+    generation?: string;
+    subjectIds?: string[];
     allowedVisibilityActions?: ("private" | "public" | "unlisted")[];
     membershipKind: 'curated';
     orderEpoch: number;
@@ -174,13 +184,7 @@ export declare function createCollectionReads(dependencies: PreviewPreparationDe
         members: MemberView[];
         next: string | null;
     }>;
-    readMembers: (viewer: Actor, collectionId: string, options?: CollectionMemberQuery, deadline?: number) => Promise<Readonly<{
-        members: readonly Readonly<{
-            kind: 'dynamic';
-            subjectId: string;
-        }>[];
-        next: import("../search/service.ts").PublicSearchPage['next'];
-    }> | {
+    readMembers: (viewer: Actor, collectionId: string, options?: CollectionMemberQuery, deadline?: number) => Promise<import("../search/service-saved-collection.ts").SavedCatalogueMembersPage | {
         preparing: true;
     } | {
         members: MemberView[];

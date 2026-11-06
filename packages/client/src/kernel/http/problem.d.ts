@@ -53,6 +53,7 @@ export declare function logInternalError(options: {
     route?: string | undefined;
     cause: unknown;
     commandIndex?: number | undefined;
+    event?: 'internal_error' | 'dependency_unavailable';
 }): void;
 export declare function logDeadlineExceeded(context: {
     method: string;

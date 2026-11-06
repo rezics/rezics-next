@@ -1,12 +1,12 @@
 import type { Pool } from 'pg';
 import type { WorkClient } from '../work/client.ts';
-import type { HistoryRegistry } from '../history/registry.ts';
 import type { KernelClock } from '../clock.ts';
 import type { NativeStepWork } from './identity-epoch-contract.ts';
 import type { WorkDimensions, WorkAllowance } from '../library/contract/work-dimensions.ts';
 import { NativeCollectionWork } from '../library/collection-source-work.ts';
 import { type HistoryOriginalDependencies, type IdentityOriginalSourceContext } from '../access/identity-original-admission.ts';
 import { type IdentitySourceLibraryOperation, type IdentitySourceScheduledOperation } from './identity-source-maintenance-config.ts';
+import { HistoryRegistry } from '../history/contract/index.ts';
 declare const identitySourceConsumerMaintenance: unique symbol;
 export type IdentitySourceConsumerMaintenanceWork = Readonly<{
     [identitySourceConsumerMaintenance]: true;
@@ -89,17 +89,21 @@ export declare function withIdentitySourceNoEffectCommand<T>(pool: Pool, deadlin
  * Accounts grant. Library body SQL remains on its existing Library partition.
  */
 export declare function withIdentitySourceFenceCommand<T>(pool: Pool, deadline: number, accountId: string, body: () => Promise<T>): Promise<T>;
-/** Actual owner receiving disposition. There is deliberately no successful
- * IDENTITY_HISTORY_ORIGINAL_SOURCE_DECLARATION export while these reached bodies
- * lack compatible eight-axis declarations. Accounts treats absence as unavailable,
- * rather than accepting total:null or a local-only price as whole-child funding. */
+/** Custody prepare/checkpoint/finish: Core's event-callback-source-association profile. */
+export declare function withIdentitySourceAssociationCommand<T>(pool: Pool, deadline: number, accountId: string, body: () => Promise<T>): Promise<T>;
+/** Owner receiving disposition. Installed owner getters supply eight-axis children;
+ * any absent operand names its owner and callable. */
 export declare function readIdentitySourceOriginalCostDisposition(): Promise<Readonly<{
-    state: 'missing';
+    state: "complete" | "missing";
     whole: Readonly<{
         state: 'missing';
         missing: readonly string[];
     }> | Readonly<{
         state: 'complete';
+        work: WorkDimensions;
+        engineRequests: 0;
+    }>;
+    sourceDeclaration: Readonly<{
         work: WorkDimensions;
         engineRequests: 0;
     }>;
@@ -573,6 +577,10 @@ export declare function readIdentitySourceOriginalCostDisposition(): Promise<Rea
                 }>;
             }>;
         }>;
+        association: Readonly<{
+            work: WorkDimensions;
+            engineRequests: 0;
+        }>;
     }>;
     schedule: Readonly<{
         custodyAdvancements: 1;
@@ -612,6 +620,7 @@ export declare function readIdentitySourceOriginalCostDisposition(): Promise<Rea
         checkpoint: "terminal append + recordSemanticSourceCommit + producer roles + SEMANTIC_ERASURE_PROGRESS";
         exhaustedReceiving: "single-source-fence: retainIdentityScopeConsumerFence + native commit SQL + SEMANTIC_ERASURE_PROGRESS";
         finish: "terminal append + binding cut + Account technical receiver + SEMANTIC_ERASURE_PROGRESS";
+        profile: "event-callback-source-association";
     }>;
     historyComponents: Readonly<{
         local: Readonly<{
@@ -620,14 +629,40 @@ export declare function readIdentitySourceOriginalCostDisposition(): Promise<Rea
         sdk: Readonly<{
             [k: string]: Readonly<WorkDimensions>;
         }>;
-        multiplicities: 'requires executable reached History caller multiplicities';
-    }> | null;
+        selectedCommandCalls: Readonly<{
+            retirement: number;
+            physicalMinimization: number;
+            physicalFenceReceiving: number;
+            selectedContinuation: number;
+        }>;
+        multiplicities: "requires executable reached History caller multiplicities" | Readonly<Record<string, number>>;
+    }>;
     historyCallableInstalled: boolean;
     libraryDeclaration: Readonly<{
         work: WorkDimensions;
         engineRequests: 0;
     }> | null;
     librarySameWorkCallableInstalled: boolean;
+    accessOriginal: Readonly<{
+        work: WorkDimensions;
+        engineRequests: 0;
+    }> | null;
+    jobRead: Readonly<{
+        work: WorkDimensions;
+        engineRequests: 0;
+    }> | null;
+    stepReconcile: Readonly<{
+        work: WorkDimensions;
+        engineRequests: 0;
+    }> | null;
+    bindingConsumer: Readonly<{
+        work: WorkDimensions;
+        engineRequests: 0;
+    }> | null;
+    nativeHold: Readonly<{
+        work: WorkDimensions;
+        engineRequests: 0;
+    }> | null;
     missing: readonly string[];
 }>>;
 export {};

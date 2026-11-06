@@ -143,8 +143,8 @@ export declare function admitSavedCollectionMemberQuery(deps: Dependencies, view
  * No private fact SQL, raw-window fallback, fabricated handle, readiness or additional allowance is supplied.
  */
 export declare function prepareCollectionMemberFilter(deps: Dependencies, options: CollectionMemberQuery, input: PrepareCollectionSource): Promise<{
-    source: import("./collection-source.ts").PreparedCollectionSource;
-    work: import("./contract/work-dimensions.ts").WorkReceipt;
     admission: CollectionMemberAdmission;
+    source: import("./collection-source.ts").PreparedCollectionSource;
+    work: import("./access-capabilities.ts").WorkReceipt;
 }>;
 export {};

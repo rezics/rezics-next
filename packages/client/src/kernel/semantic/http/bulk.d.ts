@@ -3086,6 +3086,7 @@ export declare function bulkRoutes(app: ReturnType<typeof subjectRoutes>, { pool
                                                 obligations: string[];
                                             };
                                         } | null;
+                                        redirect?: string;
                                     }>;
                                     type: string;
                                     label: string;
@@ -4629,6 +4630,7 @@ export declare function bulkRoutes(app: ReturnType<typeof subjectRoutes>, { pool
                                                 obligations: string[];
                                             };
                                         } | null;
+                                        redirect?: string;
                                     }>;
                                     target: string | null;
                                     external: string | null;

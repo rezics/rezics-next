@@ -37,7 +37,7 @@ export declare function realmParticipationAnchor(resource: Resource): {
 export declare function createRealmParticipationCheck(input: {
     pool: Pool;
     access: Access;
-    clock?: () => Date;
+    clock: () => Date;
 }): RealmParticipationCheck;
 /** Installs the Realm's member-group role only while the Realm is protected.
  * The command must already be authorized against this exact Realm.

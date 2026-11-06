@@ -7,6 +7,7 @@ import type { KernelClock } from '../clock.ts';
 import type { PublicFilterConsumer, PublicFilterCost, PublicFilterProjectionMeaning, PublicFilterSource, PrivacyReductionHead, PrivacyReductionStart } from '../semantic/public-filter-source-contract.ts';
 import type { OpenSearch } from './opensearch.ts';
 import type { SearchPlan, SearchResult, SubjectHit } from './query.ts';
+import type { CreditSearchSource } from './credit-search.ts';
 /** The ONE queried-observation type. Internal native locators, never public transport fields.
  * Each locator resolves to retained native execution/registration state; its shape proves nothing.
  */
@@ -158,6 +159,7 @@ export interface PublicDiscoveryConsumerOperations extends PublicFilterConsumerO
 export type PublicFilterConsumerOperationsFactory = (config: Readonly<{
     pool: Pool;
     source: PublicFilterSource;
+    creditSearch?: CreditSearchSource;
     binding: PublicFilterSourceBinding;
     registry?: DiscoveryRegistry;
     search: OpenSearch;

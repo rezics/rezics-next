@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import type { Access, Actor } from '../request/access.ts';
-import type { RealmClaimApprovalResult } from './contract/index.ts';
+import { type RealmClaimApprovalResult } from './contract/index.ts';
 export type ApproveRealmClaimInput = Readonly<{
     realmId: string;
     requestId: string;

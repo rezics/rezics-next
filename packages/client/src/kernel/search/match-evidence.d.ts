@@ -30,6 +30,7 @@ export declare const MATCH_EVIDENCE_LIMITS: Readonly<{
     spans: 8;
     textBytes: 256;
     fragmentBytes: 1024;
+    scanBytes: number;
     enginePageBytes: 262144;
     pageBytes: 131072;
 }>;

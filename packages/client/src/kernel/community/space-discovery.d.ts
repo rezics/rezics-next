@@ -43,7 +43,7 @@ export type SpaceDiscoverySnapshot = Readonly<{
 export type SpaceDiscoveryDependencies = Readonly<{
     pool: Pool;
     access: Access;
-    clock?: () => Date;
+    clock: () => Date;
 }>;
 export interface SpaceDiscoverySource {
     /** Dependency capability is separate from census and current hydration. */

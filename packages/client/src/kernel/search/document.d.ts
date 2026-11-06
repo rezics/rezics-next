@@ -1,5 +1,6 @@
 import { type IndexedSubject, type SubjectSnapshot } from './source.ts';
 import { type AccountSnapshot } from './discovery.ts';
+import { type CreditedNameDocument } from './credit-search-document.ts';
 export declare const MISSING_NAME = "\uDBFF\uDFFF";
 export declare const MAX_NAME_SORT_CHARACTERS = 512;
 /** One nested fact. Qualifiers are `property=value` strings, unique and in source order. */
@@ -40,6 +41,9 @@ export type SubjectDocument = {
     /** Published Global standard-question score and prior identity; absent figures omit both fields. */
     rating_score?: number | null;
     rating_prior_epoch?: number | null;
+    /** Present only for generations carrying the credit mapping; an incomplete cut publishes no names. */
+    credit_search_complete?: boolean;
+    credited_names?: CreditedNameDocument[];
     /** Coverage remains explicit when a bounded native projection is incomplete or unavailable. */
     document_text_coverage?: 'complete' | 'partial' | 'unsupported' | 'preparing' | 'unavailable';
     /** Opaque current native Subject observation chosen by the page reference selector. */

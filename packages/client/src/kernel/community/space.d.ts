@@ -5,7 +5,7 @@ export type SpaceDependencies = Readonly<{
     pool: Pool;
     access: Access;
     routeKey: Uint8Array;
-    clock?: () => Date;
+    clock: () => Date;
 }>;
 export type SpaceContext = Readonly<{
     idempotencyKey: string;

@@ -7,7 +7,7 @@ export type ModerationDependencies = Readonly<{
     pool: Pool;
     access: Access;
     routeKey: Uint8Array;
-    clock?: () => Date;
+    clock: () => Date;
 }>;
 export type TakedownTarget = Readonly<{
     kind: 'board';

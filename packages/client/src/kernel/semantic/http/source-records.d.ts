@@ -3087,6 +3087,7 @@ export declare function sourceRecordRoutes(app: ReturnType<typeof subjectRoutes>
                                                 obligations: string[];
                                             };
                                         } | null;
+                                        redirect?: string;
                                     }>;
                                     type: string;
                                     label: string;
@@ -4630,6 +4631,7 @@ export declare function sourceRecordRoutes(app: ReturnType<typeof subjectRoutes>
                                                 obligations: string[];
                                             };
                                         } | null;
+                                        redirect?: string;
                                     }>;
                                     target: string | null;
                                     external: string | null;

@@ -1,6 +1,7 @@
 /** Explicit membership Publication storage. It never evaluates personal predicates or grants read authority. */
 import type { PoolClient } from 'pg';
 import { type CommandTransaction } from '../command/command.ts';
+import { type CollectionPublicationSearch } from './collection-publication-staging.ts';
 import type { CollectionPublicationEpisode } from './collection-publication-episode-contract.ts';
 import type { CollectionPublicationLocator } from './collection-publication-work-admission.ts';
 import type { NativeCollectionWork } from './collection-source-work.ts';
@@ -26,6 +27,7 @@ type StagingActivation = Readonly<{
     version: string;
     phase: Extract<CollectionPublicationEpisode['phase'], 'staging' | 'awaiting_activation'>;
     selected: CollectionPublicationEpisode['selected'];
+    search?: CollectionPublicationSearch;
 }>;
 export declare function beginCollectionSourceOutput(tx: CommandTransaction, input: CollectionOutputRef & {
     readonly expectedMembers: number;

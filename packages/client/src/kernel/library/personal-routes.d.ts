@@ -3102,6 +3102,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                                                 obligations: string[];
                                             };
                                         } | null;
+                                        redirect?: string;
                                     }>;
                                     type: string;
                                     label: string;
@@ -4645,6 +4646,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                                                 obligations: string[];
                                             };
                                         } | null;
+                                        redirect?: string;
                                     }>;
                                     target: string | null;
                                     external: string | null;
@@ -6225,6 +6227,93 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
 } & {
     v1: {
         definitions: {
+            imports: {
+                post: {
+                    body: import("../semantic/definition-import.ts").DefinitionImportRequest;
+                    params: {};
+                    query: unknown;
+                    headers: unknown;
+                    response: {
+                        200: import("../semantic/definition-import.ts").ImportedPreview;
+                        400: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        401: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        403: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        404: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        422: Response | {
+                            type: 'validation';
+                            code: 'validation';
+                            title: 'Validation Error';
+                            status: 422;
+                            detail?: string;
+                            on: string;
+                            found?: unknown;
+                            property?: string;
+                            expected?: unknown;
+                            errors?: {
+                                message?: string;
+                                [key: string]: unknown;
+                            }[];
+                        };
+                        503: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                    };
+                    error: never;
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        definitions: {
             releases: {
                 post: {
                     body: {
@@ -6814,6 +6903,83 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                             };
                         };
                         error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        contexts: {
+            ":id": {
+                definitions: {
+                    extensions: {
+                        ":digest": {
+                            get: {
+                                body: unknown;
+                                params: {
+                                    id: string;
+                                    digest: string;
+                                };
+                                query: unknown;
+                                headers: unknown;
+                                response: {
+                                    200: {
+                                        digest: string;
+                                        extension: Record<string, any>;
+                                    };
+                                    401: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    404: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    422: Response | {
+                                        type: 'validation';
+                                        code: 'validation';
+                                        title: 'Validation Error';
+                                        status: 422;
+                                        detail?: string;
+                                        on: string;
+                                        found?: unknown;
+                                        property?: string;
+                                        expected?: unknown;
+                                        errors?: {
+                                            message?: string;
+                                            [key: string]: unknown;
+                                        }[];
+                                    };
+                                    503: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                };
+                                error: never;
+                            };
+                        };
                     };
                 };
             };
@@ -11441,6 +11607,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                                 state: "following" | "unfollowed";
                                 reason: "explicit" | "library" | "membership";
                                 updatedAt: string;
+                                ownerId: string;
                             };
                         };
                         400: Response | {
@@ -11547,6 +11714,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                                 state: "following" | "unfollowed";
                                 reason: "explicit" | "library" | "membership";
                                 updatedAt: string;
+                                ownerId: string;
                             };
                         };
                         400: Response | {
@@ -11685,6 +11853,12 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                                     } | null;
                                 } | {
                                     id: string;
+                                    kind: "actor" | "organization";
+                                    displayName: string | null;
+                                } | {
+                                    displayName: "Deleted account" | "Deleted organization";
+                                } | {
+                                    id: string;
                                     type: string;
                                     label: string;
                                 } | null;
@@ -11693,6 +11867,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                                 state: "following" | "unfollowed";
                                 reason: "explicit" | "library" | "membership";
                                 updatedAt: string;
+                                ownerId: string;
                                 destination?: {
                                     kind: "space";
                                     spaceId: string;
@@ -11933,8 +12108,9 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                 state: import("typebox").TUnion<[import("typebox").TLiteral<"following">, import("typebox").TLiteral<"unfollowed">]>;
                 reason: import("typebox").TUnion<[import("typebox").TLiteral<"explicit">, import("typebox").TLiteral<"library">, import("typebox").TLiteral<"membership">]>;
                 updatedAt: import("typebox").TString;
+                ownerId: import("typebox").TString;
             } & {
-                target: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                target: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TUnion<[import("typebox").TObject<{
                     id: import("typebox").TString;
                     type: import("typebox").TString;
                     types: import("typebox").TArray<import("typebox").TString>;
@@ -11973,7 +12149,13 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                     id: import("typebox").TString;
                     type: import("typebox").TString;
                     label: import("typebox").TString;
-                }>, import("typebox").TNull]>>;
+                }>, import("typebox").TNull]>, import("typebox").TUnion<[import("typebox").TObject<{
+                    id: import("typebox").TString;
+                    kind: import("typebox").TUnion<[import("typebox").TLiteral<"actor">, import("typebox").TLiteral<"organization">]>;
+                    displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                }>, import("typebox").TObject<{
+                    displayName: import("typebox").TUnion<[import("typebox").TLiteral<"Deleted account">, import("typebox").TLiteral<"Deleted organization">]>;
+                }>, import("typebox").TNull]>]>>;
                 destination: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
                     kind: import("typebox").TLiteral<"space">;
                     spaceId: import("typebox").TString;
@@ -12136,6 +12318,12 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                     } | null;
                 } | {
                     id: string;
+                    kind: "actor" | "organization";
+                    displayName: string | null;
+                } | {
+                    displayName: "Deleted account" | "Deleted organization";
+                } | {
+                    id: string;
                     type: string;
                     label: string;
                 } | null;
@@ -12144,6 +12332,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                 state: "following" | "unfollowed";
                 reason: "explicit" | "library" | "membership";
                 updatedAt: string;
+                ownerId: string;
                 destination?: {
                     kind: "space";
                     spaceId: string;
@@ -12286,6 +12475,12 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                     } | null;
                 } | {
                     id: string;
+                    kind: "actor" | "organization";
+                    displayName: string | null;
+                } | {
+                    displayName: "Deleted account" | "Deleted organization";
+                } | {
+                    id: string;
                     type: string;
                     label: string;
                 } | null;
@@ -12294,6 +12489,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                 state: "following" | "unfollowed";
                 reason: "explicit" | "library" | "membership";
                 updatedAt: string;
+                ownerId: string;
                 destination?: {
                     kind: "space";
                     spaceId: string;
@@ -12432,8 +12628,9 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                     state: import("typebox").TUnion<[import("typebox").TLiteral<"following">, import("typebox").TLiteral<"unfollowed">]>;
                     reason: import("typebox").TUnion<[import("typebox").TLiteral<"explicit">, import("typebox").TLiteral<"library">, import("typebox").TLiteral<"membership">]>;
                     updatedAt: import("typebox").TString;
+                    ownerId: import("typebox").TString;
                 } & {
-                    target: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                    target: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TUnion<[import("typebox").TObject<{
                         id: import("typebox").TString;
                         type: import("typebox").TString;
                         types: import("typebox").TArray<import("typebox").TString>;
@@ -12472,7 +12669,13 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                         id: import("typebox").TString;
                         type: import("typebox").TString;
                         label: import("typebox").TString;
-                    }>, import("typebox").TNull]>>;
+                    }>, import("typebox").TNull]>, import("typebox").TUnion<[import("typebox").TObject<{
+                        id: import("typebox").TString;
+                        kind: import("typebox").TUnion<[import("typebox").TLiteral<"actor">, import("typebox").TLiteral<"organization">]>;
+                        displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                    }>, import("typebox").TObject<{
+                        displayName: import("typebox").TUnion<[import("typebox").TLiteral<"Deleted account">, import("typebox").TLiteral<"Deleted organization">]>;
+                    }>, import("typebox").TNull]>]>>;
                     destination: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
                         kind: import("typebox").TLiteral<"space">;
                         spaceId: import("typebox").TString;
@@ -12563,6 +12766,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
         state: import("./follow-model.ts").FollowState;
         reason: import("./follow-model.ts").FollowReason;
         updatedAt: string;
+        ownerId: string;
     } & object & {
         target?: (import("../semantic/summaries.ts").SubjectSummary | {
             id: string;
@@ -12687,8 +12891,9 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                 state: import("typebox").TUnion<[import("typebox").TLiteral<"following">, import("typebox").TLiteral<"unfollowed">]>;
                 reason: import("typebox").TUnion<[import("typebox").TLiteral<"explicit">, import("typebox").TLiteral<"library">, import("typebox").TLiteral<"membership">]>;
                 updatedAt: import("typebox").TString;
+                ownerId: import("typebox").TString;
             } & {
-                target: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                target: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TUnion<[import("typebox").TObject<{
                     id: import("typebox").TString;
                     type: import("typebox").TString;
                     types: import("typebox").TArray<import("typebox").TString>;
@@ -12727,7 +12932,13 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                     id: import("typebox").TString;
                     type: import("typebox").TString;
                     label: import("typebox").TString;
-                }>, import("typebox").TNull]>>;
+                }>, import("typebox").TNull]>, import("typebox").TUnion<[import("typebox").TObject<{
+                    id: import("typebox").TString;
+                    kind: import("typebox").TUnion<[import("typebox").TLiteral<"actor">, import("typebox").TLiteral<"organization">]>;
+                    displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                }>, import("typebox").TObject<{
+                    displayName: import("typebox").TUnion<[import("typebox").TLiteral<"Deleted account">, import("typebox").TLiteral<"Deleted organization">]>;
+                }>, import("typebox").TNull]>]>>;
                 destination: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
                     kind: import("typebox").TLiteral<"space">;
                     spaceId: import("typebox").TString;

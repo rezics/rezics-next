@@ -58,7 +58,7 @@ export type RealmClaimReviewPage = Readonly<{
 export declare function listRealmClaimRequests(deps: {
     pool: Pool;
     access: Access;
-    clock?: () => Date;
+    clock: () => Date;
 }, actor: Actor, input: {
     realmId: string;
     cursor?: string;

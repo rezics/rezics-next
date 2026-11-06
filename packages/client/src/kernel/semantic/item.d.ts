@@ -1,6 +1,8 @@
 import type { DataType, RelationDefinition, Release } from '@rezics/definitions';
-import { type Violation } from '@rezics/definitions/validate';
 export type { Violation } from '@rezics/definitions/validate';
+import type { ItemFact, ItemFactRow, Item as ContractItem, ItemSourceRecord } from './contract/item-values.ts';
+import { SubjectInputError } from './application/index.ts';
+import { RELATION_GROUPS } from './core/index.ts';
 import type { SourceRecord } from './source-records.ts';
 export type Value = {
     type: 'value';
@@ -36,51 +38,18 @@ export type Statement = {
         revision: number;
     };
 };
-export type Item = {
-    id: string;
-    type: string;
-    revision: number;
-    release: string;
-    context: string;
-    resolution: Record<string, 'unresolved' | 'suppressed'>;
-    relationCounts: Record<string, number>;
-    labels: Record<string, string>;
-    descriptions: Record<string, string>;
-    aliases: Record<string, string[]>;
+export type Item = Omit<ContractItem, 'sourceRecords' | 'statements'> & {
     statements: Record<string, Statement[]>;
     sourceRecords: SourceRecord[];
 };
-export type Fact = {
-    slot_id: string;
-    log_seq: number;
-    operation: 'assert' | 'retract' | 'expand';
-    kind: 'label' | 'description' | 'alias' | 'statement';
-    language: string | null;
-    property: string | null;
-    statement_id: string | null;
-    body: unknown;
-};
-export type FactRow = {
-    kind: Fact['kind'];
-    language: string | null;
-    property: string | null;
-    statement_id: string | null;
-    operation: Fact['operation'];
-    body: unknown;
-    fact_revision?: number | null;
-    fact_release?: string | null;
-};
-/** Datatypes for the properties named by these facts, without walking the rest of the release. */
-export declare function factDataTypes(release: Release, facts: readonly FactRow[]): Record<string, DataType>;
-export declare class SubjectInputError extends Error {
-    readonly violations: Violation[];
-    constructor(violations: Violation[]);
-}
+export type Fact = ItemFact;
+export type FactRow = ItemFactRow;
+export { SubjectInputError, RELATION_GROUPS };
 export declare const SLOT_NS = "c30d6caa-d9e8-4108-a42a-35701219e8ec";
-export declare const RELATION_GROUPS: Set<string>;
+export declare const STATEMENT_NS = "9f44e74c-b77c-47aa-96d0-b7a4aa330182";
+export declare function factDataTypes(release: Release, facts: readonly FactRow[]): Record<string, DataType>;
 export declare function isRelationProperty(release: Release, property: string): boolean;
 export declare function statementSlotId(subject: string, property: string): string;
-/** Relation slots isolate one target (and, where declared, one repeatable item qualifier). */
 export declare function relationSlotId(subject: string, property: string, target: string, slotKey?: {
     declared: boolean;
     value: string;
@@ -99,3 +68,4 @@ export declare function resolveItem(subjectId: string, rows: readonly FactRow[],
     resolution?: Record<string, 'unresolved' | 'suppressed'>;
     relationCounts?: Record<string, number>;
 }): Item;
+export type { ItemSourceRecord };

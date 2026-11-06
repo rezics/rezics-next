@@ -55,6 +55,7 @@ export type NoticeDisclosureDependencies = Readonly<{
     access: Access;
     tokens: KeyRing;
     routeKey: Uint8Array;
+    clock: () => Date;
     actor: Actor;
     deadline: number;
 }>;

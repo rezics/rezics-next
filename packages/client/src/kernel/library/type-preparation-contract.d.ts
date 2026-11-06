@@ -56,7 +56,7 @@ export type TypePreparationPageResult = {
 };
 /** No caller-supplied account, source, type text, stamp, actor body or entry intent in metadata jobs. */
 export interface TypePreparationPorts {
-    /** Initial owner/subject Access, one-hop observations and ONE bounded native reservation transaction. */
+    /** Initial owner/subject Access (admit/resolve), one-hop observations and ONE bounded native reservation transaction. */
     prepare(actor: Actor, input: {
         subjectId: string;
         requestKey: string;

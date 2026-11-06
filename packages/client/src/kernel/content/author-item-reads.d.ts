@@ -23,7 +23,7 @@ export type AuthorPostEntry = Extract<ItemView, {
 export type AuthorThreadEntry = ThreadView & Partial<AuthorItemContext>;
 export type AuthorItemDependencies = ContentReadDependencies & {
     routeKey: Uint8Array;
-    cursorNow?: () => number;
+    cursorNow: () => number;
 };
 export type AuthorPage<T> = {
     entries: readonly T[];

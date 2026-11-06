@@ -1,3 +1,4 @@
+import { type ContentHttpRoutes } from '../content/http.ts';
 import { type CommerceMoneyPolicy } from '../commerce/money.ts';
 import type { CurrentConsentReader } from '../access/auth-consent.ts';
 import { zoneRoutes } from '../zones/http.ts';
@@ -20,9 +21,6 @@ import { yearlyCompletionGoalRoutes } from '../library/yearly-goal-routes.ts';
 import { diaryRoutes } from '../library/diary-routes.ts';
 import { type RatingCapabilities, type RatingHttpApp } from '../rating/module.ts';
 import type { ContentBoardDependencies } from '../content/boards.ts';
-import { mediaRoutes } from '../content/media-routes.ts';
-import { contentRoutes, subjectReactionRoutes } from '../content/routes.ts';
-import { noticeRoutes } from '../content/notice-routes.ts';
 import type { TurnstileVerifier } from '../content/turnstile.ts';
 import type { ContentRuntime } from '../content/runtime.ts';
 import { bangumiImportRoutes } from '../library/list-import-bangumi-routes.ts';
@@ -46,6 +44,7 @@ import { recentSearchRoutes } from '../search/recent-searches.ts';
 import { searchRoutes } from '../search/http/routes.ts';
 import type { SearchService as SearchRuntime } from '../search/service-scope.ts';
 import { definitionRoutes } from '../semantic/http/definitions.ts';
+import type { DefinitionImportRoutes } from '../semantic/definition-import.ts';
 import { contextRoutes } from '../semantic/http/contexts.ts';
 import { bulkRoutes } from '../semantic/http/bulk.ts';
 import { sourceRecordRoutes } from '../semantic/http/source-records.ts';
@@ -70,10 +69,12 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
     clock?: () => Date;
     commerce?: CommerceDependencies;
     moneyPolicy?: CommerceMoneyPolicy;
-    content?: ContentRuntime & Pick<ContentBoardDependencies, 'cursorNow'> & {
+    content?: ContentRuntime & Partial<Pick<ContentBoardDependencies, 'cursorNow'>> & {
         readConsent?: CurrentConsentReader;
         /** Complete-input title observations; absent until Content installs its native producer. */
         shelfTitleInputs?: ContentShelfTitleInputs;
+        now?: () => number;
+        id?: () => string;
     };
     search?: SearchRuntime;
     /** Native shelf maintenance bindings; absence is a typed preparing response, never ready empty data. */
@@ -117,10 +118,10 @@ export declare function createKernelAccessResolver(options: {
 export declare function createKernel(dependencies: KernelDependencies): Kernel;
 type ZoneComposition = Omit<ReturnType<typeof zoneRoutes>, '~Routes'> & {
     '~Routes': {
-        v1: Pick<ReturnType<typeof zoneRoutes>['~Routes']['v1'], 'zones'>;
+        v1: Pick<ReturnType<typeof zoneRoutes>['~Routes']['v1'], 'zones' | 'platform'>;
     };
 };
-type KernelComposition = ZoneComposition & ReturnType<typeof recentSearchRoutes> & ReturnType<typeof viewerActionsRoutes> & RatingHttpApp & ReturnType<typeof collectionRoutes> & ReturnType<typeof continueRoutes> & ReturnType<typeof feedRoutes> & ReturnType<typeof pinRoutes> & ReturnType<typeof personalLabelRoutes> & ReturnType<typeof personalLibraryRoutes> & ReturnType<typeof bangumiImportRoutes> & ReturnType<typeof malImportRoutes> & ReturnType<typeof aniListImportRoutes> & ReturnType<typeof vndbImportRoutes> & ReturnType<typeof libraryExportRoutes> & ReturnType<typeof libraryArchiveMergeRoutes> & ReturnType<typeof copyArchiveRoutes> & ReturnType<typeof libraryArchiveCollectionRecoveryRoutes> & ReturnType<typeof communityRoutes> & ReturnType<typeof exposureRoutes> & ReturnType<typeof subjectPageRoutes> & ReturnType<typeof bulkRoutes> & ReturnType<typeof sourceRecordRoutes> & ReturnType<typeof profileRoutes> & ReturnType<typeof accessRoutes> & ReturnType<typeof erasureStatusRoutes> & ReturnType<typeof mediaRoutes> & ReturnType<typeof contentRoutes> & ReturnType<typeof noticeRoutes> & ReturnType<typeof subjectReactionRoutes> & ReturnType<typeof searchRoutes> & ReturnType<typeof payoutRoutes> & ReturnType<typeof commerceRoutes> & ReturnType<typeof progressRoutes> & ReturnType<typeof readingInsightsRoutes> & ReturnType<typeof yearlyCompletionGoalRoutes> & ReturnType<typeof diaryRoutes> & ReturnType<typeof contextRoutes> & ReturnType<typeof providerReviewQueueRoutes>;
+type KernelComposition = ZoneComposition & ReturnType<typeof recentSearchRoutes> & ReturnType<typeof viewerActionsRoutes> & RatingHttpApp & ReturnType<typeof collectionRoutes> & ReturnType<typeof continueRoutes> & ReturnType<typeof feedRoutes> & ReturnType<typeof pinRoutes> & ReturnType<typeof personalLabelRoutes> & ReturnType<typeof personalLibraryRoutes> & ReturnType<typeof bangumiImportRoutes> & ReturnType<typeof malImportRoutes> & ReturnType<typeof aniListImportRoutes> & ReturnType<typeof vndbImportRoutes> & ReturnType<typeof libraryExportRoutes> & ReturnType<typeof libraryArchiveMergeRoutes> & ReturnType<typeof copyArchiveRoutes> & ReturnType<typeof libraryArchiveCollectionRecoveryRoutes> & ReturnType<typeof communityRoutes> & ReturnType<typeof exposureRoutes> & ReturnType<typeof subjectPageRoutes> & ReturnType<typeof bulkRoutes> & ReturnType<typeof sourceRecordRoutes> & ReturnType<typeof profileRoutes> & ReturnType<typeof accessRoutes> & ReturnType<typeof erasureStatusRoutes> & ContentHttpRoutes & ReturnType<typeof searchRoutes> & ReturnType<typeof payoutRoutes> & ReturnType<typeof commerceRoutes> & ReturnType<typeof progressRoutes> & ReturnType<typeof readingInsightsRoutes> & ReturnType<typeof yearlyCompletionGoalRoutes> & ReturnType<typeof diaryRoutes> & ReturnType<typeof contextRoutes> & ReturnType<typeof providerReviewQueueRoutes>;
 export type Kernel = KernelComposition;
 type ClientRoutes<Routes, Base> = {
     [Key in keyof Routes]: Key extends keyof Base ? Base[Key] extends {
@@ -129,5 +130,5 @@ type ClientRoutes<Routes, Base> = {
     } ? Base[Key] : ClientRoutes<Routes[Key], Base[Key]> : Routes[Key];
 };
 /** createKernel guarantees one parameter name for each route position. */
-export type ClientKernel = Elysia<KernelComposition['~Prefix'], 'local', KernelComposition['~Singleton'], KernelComposition['~Definitions'], KernelComposition['~Metadata'], ClientRoutes<KernelComposition['~Routes'], ReturnType<typeof definitionRoutes>['~Routes']>, KernelComposition['~Ephemeral'], KernelComposition['~Volatile']>;
+export type ClientKernel = Elysia<KernelComposition['~Prefix'], 'local', KernelComposition['~Singleton'], KernelComposition['~Definitions'], KernelComposition['~Metadata'], ClientRoutes<KernelComposition['~Routes'], ReturnType<typeof definitionRoutes>['~Routes']> & DefinitionImportRoutes, KernelComposition['~Ephemeral'], KernelComposition['~Volatile']>;
 export {};

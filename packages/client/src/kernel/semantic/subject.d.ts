@@ -46,7 +46,7 @@ export declare function writeSubject(tx: CommandTransaction, transactionId: stri
     source?: Source | AgentSelfSource;
     routeKey?: Uint8Array;
 }): Promise<{
-    value: Item;
+    value: import("./contract/item-values.ts").Item;
     events: {
         type: string;
         subject: string;

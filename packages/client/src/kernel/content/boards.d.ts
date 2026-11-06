@@ -3,7 +3,7 @@ import type { Anchored, AnchoredPosition, BoardView, Page, ReadContext } from '.
 import { type ContentReadDependencies, type ThreadView } from './reads.ts';
 export type ContentBoardDependencies = ContentReadDependencies & {
     /** Trusted service configuration, independent of authentication's wall clock. */
-    cursorNow?: () => number;
+    cursorNow: () => number;
 };
 export type BoardPageInput = {
     cursor?: string;

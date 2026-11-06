@@ -1,6 +1,6 @@
 import type { PoolClient } from 'pg';
 import type { Collection, CollectionDraft } from './collection-model.ts';
-import type { CoverSummary } from '../semantic/summaries.ts';
+import type { LibraryCoverSummary } from './contract/index.ts';
 import { COLLECTION_METADATA_HISTORY_LIMIT, COLLECTION_METADATA_HISTORY_MAX_PAGE_SIZE, COLLECTION_METADATA_HISTORY_PAGE_SIZE } from './collection-history-bounds.ts';
 type Client = Pick<PoolClient, 'query'>;
 export { COLLECTION_METADATA_HISTORY_LIMIT, COLLECTION_METADATA_HISTORY_MAX_PAGE_SIZE, COLLECTION_METADATA_HISTORY_PAGE_SIZE, };
@@ -42,7 +42,7 @@ export type CollectionMetadataHistoryCover = {
 } | {
     state: 'available';
     mediaId: string;
-    summary: CoverSummary;
+    summary: LibraryCoverSummary;
 };
 export type CollectionMetadataHistorySnapshot = Omit<CollectionMetadataSnapshot, 'coverMediaId'> & {
     cover: CollectionMetadataHistoryCover;

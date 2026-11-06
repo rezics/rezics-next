@@ -2,6 +2,8 @@ export { ensureAccountAgent, verifyAccountAgent, unverifyAccountAgent } from './
 export { AccountAgentLabelEditError, AccountAgentScopeGrowthError, AccountAgentVerificationError, AccountAgentWriteDeniedError, accountAgentId, } from './agents.ts';
 export type { AgentSelfSource } from './subject.ts';
 export { readSemanticLifecycle } from './lifecycle-state.ts';
+export { admitZoneCleanup, advanceZoneCleanupGrants } from './deletion/index.ts';
+export type { ZoneCleanupAdmission, ZoneCleanupIntent } from './deletion/index.ts';
 export { readWorkReleaseCards, workReleaseCardFieldLimit, workReleaseCardLimit, workReleaseCardProperties, workReleaseCardQualifierLimit, workReleaseCardReferenceLimit, workReleaseCardReferencePartLimit, workReleaseCardStatementBytes, workReleaseCardResponseBytes, } from './work-release-cards.ts';
 export type { WorkReleaseCard, WorkReleaseCardField, WorkReleaseCards } from './work-release-cards.ts';
 export { readListPresentationFacts } from './list-presentation.ts';

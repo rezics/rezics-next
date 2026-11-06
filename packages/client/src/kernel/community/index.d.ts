@@ -3,3 +3,5 @@ export { readSpaceDiscoverySummaries, spaceDiscoverySource } from './space-disco
 export type { IndexedSpace, SpaceDiscoveryDependencies, SpaceDiscoveryKey, SpaceDiscoverySnapshot, SpaceDiscoverySource, SpaceDiscoverySummary, SpaceDiscoveryTupleWitness, SpaceDiscoveryTupleWitnessInput, SpaceDiscoveryTupleSource, } from './space-discovery.ts';
 export type { SpaceDiscoveryDependencyReadiness } from './space-discovery-dependencies.ts';
 export type { SpaceEntryPage, SpaceEntryPresentation } from './space-discovery-entry-contract.ts';
+/** Native transaction-bound claim custody consumed by Access composition. */
+export { applyRealmClaimApproval, lockRealmClaimApprovalSource, type LockedRealmClaimApproval, type RealmClaimApprovalResult, } from './realm-claim-approval.ts';

@@ -62,7 +62,7 @@ export type ContentReadDependencies = Readonly<{
     pool: Pool;
     access: Access;
     tokens: KeyRing;
-    clock?: () => Date;
+    clock: () => Date;
 }>;
 /** Retain the initial source and prepared native authority across foreign work.
  * The optional qualifier evaluates already-prepared native checks in the same
@@ -310,13 +310,13 @@ export declare function observeBoardRecords(dependencies: ContentReadDependencie
 export declare function readBoards(dependencies: ContentReadDependencies, boardIds: readonly string[], context: ReadContext): Promise<readonly Anchored<import('./model.ts').BoardView | null>[]>;
 /** Edition publication enrolls just the selected source post. Ancestors keep their
  * ordinary read formula; this port cannot authorize an ordinary post route. */
-export declare function prepareEditionSource(dependencies: Pick<ContentReadDependencies, 'pool' | 'access'>, source: ContentEditionSource, context: ReadContext, time: AuthoritativeTime, accessContext: AccessContext, ordinarySource: boolean): Promise<Readonly<{
+export declare function prepareEditionSource(dependencies: Pick<ContentReadDependencies, 'pool' | 'access' | 'clock'>, source: ContentEditionSource, context: ReadContext, time: AuthoritativeTime, accessContext: AccessContext, ordinarySource: boolean): Promise<Readonly<{
     check(client: AccessClient): Promise<boolean>;
     final(): Promise<boolean>;
 }> | null>;
 /** Native publisher checks restore separately for every action and exact resource.
  * This never creates a workflow ReadContext or supplies a buyer identity. */
-export declare function prepareEditionPublisherSource(dependencies: Pick<ContentReadDependencies, 'pool' | 'access'>, source: ContentEditionSource, operation: DurableOperationAnchor, restorer: InitiatorRestorer, time: AuthoritativeTime, accessContext: AccessContext): Promise<Readonly<{
+export declare function prepareEditionPublisherSource(dependencies: Pick<ContentReadDependencies, 'pool' | 'access' | 'clock'>, source: ContentEditionSource, operation: DurableOperationAnchor, restorer: InitiatorRestorer, time: AuthoritativeTime, accessContext: AccessContext): Promise<Readonly<{
     check(client: AccessClient): Promise<boolean>;
     final(): Promise<boolean>;
 }> | null>;

@@ -9,6 +9,7 @@ import { type SearchScopeOrder, type SearchScopeOrdinalPrefix } from './service-
 import type { LeafOptions, LeafProgress, LeafWork } from '../semantic/scope-leaf-evidence.ts';
 import { type ScopeLeafPosition } from './scope-progress.ts';
 import type { OpenSearch } from './opensearch.ts';
+import type { CataloguePublicationObservation } from './catalogue-publication.ts';
 import type { SearchHit } from './query.ts';
 import { type PreparedRealmScope, type RealmSubjectCapabilities } from './realm-scope.ts';
 import type { RealmSubjectSource } from '../content/realm-subject-source.ts';
@@ -34,6 +35,7 @@ export type ScopeBasis = Readonly<{
     query: string;
     profile: string;
     canonical: string;
+    publicCatalogue?: CataloguePublicationObservation;
 }> & (Readonly<{
     generation: number;
     index: string;

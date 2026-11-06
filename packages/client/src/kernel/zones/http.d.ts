@@ -3090,6 +3090,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                                 obligations: string[];
                                             };
                                         } | null;
+                                        redirect?: string;
                                     }>;
                                     type: string;
                                     label: string;
@@ -4633,6 +4634,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                                 obligations: string[];
                                             };
                                         } | null;
+                                        redirect?: string;
                                     }>;
                                     target: string | null;
                                     external: string | null;
@@ -6213,6 +6215,93 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
 } & {
     v1: {
         definitions: {
+            imports: {
+                post: {
+                    body: import("../semantic/definition-import.ts").DefinitionImportRequest;
+                    params: {};
+                    query: unknown;
+                    headers: unknown;
+                    response: {
+                        200: import("../semantic/definition-import.ts").ImportedPreview;
+                        400: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        401: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        403: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        404: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        422: Response | {
+                            type: 'validation';
+                            code: 'validation';
+                            title: 'Validation Error';
+                            status: 422;
+                            detail?: string;
+                            on: string;
+                            found?: unknown;
+                            property?: string;
+                            expected?: unknown;
+                            errors?: {
+                                message?: string;
+                                [key: string]: unknown;
+                            }[];
+                        };
+                        503: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                    };
+                    error: never;
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        definitions: {
             releases: {
                 post: {
                     body: {
@@ -6809,6 +6898,83 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
     };
 } & {
     v1: {
+        contexts: {
+            ":id": {
+                definitions: {
+                    extensions: {
+                        ":digest": {
+                            get: {
+                                body: unknown;
+                                params: {
+                                    id: string;
+                                    digest: string;
+                                };
+                                query: unknown;
+                                headers: unknown;
+                                response: {
+                                    200: {
+                                        digest: string;
+                                        extension: Record<string, any>;
+                                    };
+                                    401: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    404: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    422: Response | {
+                                        type: 'validation';
+                                        code: 'validation';
+                                        title: 'Validation Error';
+                                        status: 422;
+                                        detail?: string;
+                                        on: string;
+                                        found?: unknown;
+                                        property?: string;
+                                        expected?: unknown;
+                                        errors?: {
+                                            message?: string;
+                                            [key: string]: unknown;
+                                        }[];
+                                    };
+                                    503: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                };
+                                error: never;
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
         zones: {
             post: {
                 body: {
@@ -7304,6 +7470,15 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     } | null;
                                     coverSource: "member" | "none" | "owner" | "pending";
                                     coverMediaId?: string | null;
+                                    attribution?: {
+                                        id: string;
+                                        kind: "actor" | "organization";
+                                        displayName: string | null;
+                                    } | {
+                                        displayName: "Deleted account" | "Deleted organization";
+                                    } | null;
+                                    generation?: string;
+                                    subjectIds?: string[];
                                     revision: number;
                                     memberCount: number;
                                     orderEpoch: number;
@@ -7371,10 +7546,177 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     } | null;
                                     coverSource: "member" | "none" | "owner" | "pending";
                                     coverMediaId?: string | null;
+                                    attribution?: {
+                                        id: string;
+                                        kind: "actor" | "organization";
+                                        displayName: string | null;
+                                    } | {
+                                        displayName: "Deleted account" | "Deleted organization";
+                                    } | null;
+                                    generation?: string;
+                                    subjectIds?: string[];
                                     revision: number;
                                     membershipKind: "dynamic";
                                 })[];
                                 next: string | null;
+                            };
+                            400: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            403: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            409: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            412: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        zones: {
+            ":id": {
+                subjects: {
+                    get: {
+                        body: unknown;
+                        params: {
+                            id: string;
+                        };
+                        query: {
+                            limit?: string;
+                            cursor?: string;
+                        };
+                        headers: unknown;
+                        response: {
+                            200: {
+                                subjects: {
+                                    id: string;
+                                    type: string;
+                                    labels: Record<string, string>;
+                                    summary: {
+                                        id: string;
+                                        type: string;
+                                        types: string[];
+                                        label: {
+                                            value: string;
+                                            language: string;
+                                        } | null;
+                                        creativeWork: boolean;
+                                        cover: {
+                                            media: string;
+                                            width: number;
+                                            height: number;
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            };
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                            }[];
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: {
+                                                rightsHolder: string;
+                                                via: {
+                                                    name: string;
+                                                    url: string;
+                                                };
+                                                license: string;
+                                                obligations: string[];
+                                            };
+                                        } | null;
+                                    };
+                                }[];
+                                next: string | null;
+                            };
+                            202: {
+                                next: string;
                             };
                             400: Response | {
                                 type: unknown;
@@ -8284,6 +8626,670 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
             };
         };
     };
+} & {
+    v1: {
+        zones: {
+            ":id": {
+                $restore: {
+                    post: {
+                        body: object;
+                        params: {
+                            id: string;
+                        };
+                        query: unknown;
+                        headers: {
+                            "idempotency-key": string;
+                            'if-match'?: string;
+                        };
+                        response: {
+                            200: {
+                                zone: {
+                                    id: string;
+                                    revision: string;
+                                    labels: {
+                                        de?: string;
+                                        en?: string;
+                                        es?: string;
+                                        fr?: string;
+                                        ja?: string;
+                                        ko?: string;
+                                        "zh-Hans"?: string;
+                                        "zh-Hant"?: string;
+                                    };
+                                    primaryLanguage?: "de" | "en" | "es" | "fr" | "ja" | "ko" | "zh-Hans" | "zh-Hant";
+                                    visibility: "private" | "public" | "unlisted";
+                                    appearance: {
+                                        density?: "comfortable" | "compact";
+                                        radius?: "lg" | "md" | "sm";
+                                        surface?: "cards" | "flat";
+                                        cover?: "landscape" | "portrait" | "square";
+                                        headingScale?: "lg" | "md";
+                                    };
+                                    navigation: {
+                                        route: string;
+                                    }[];
+                                    ownerId: string;
+                                    deletedAt: string | null;
+                                    restoreUntil: string | null;
+                                };
+                            };
+                            400: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            403: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            409: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            412: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        zones: {
+            ":id": {
+                $takedown: {
+                    post: {
+                        body: {
+                            pointers: string[];
+                        };
+                        params: {
+                            id: string;
+                        };
+                        query: unknown;
+                        headers: {
+                            "idempotency-key": string;
+                            'if-match'?: string;
+                        };
+                        response: {
+                            200: {
+                                zone: {
+                                    id: string;
+                                    revision: string;
+                                    labels: {
+                                        de?: string;
+                                        en?: string;
+                                        es?: string;
+                                        fr?: string;
+                                        ja?: string;
+                                        ko?: string;
+                                        "zh-Hans"?: string;
+                                        "zh-Hant"?: string;
+                                    };
+                                    primaryLanguage?: "de" | "en" | "es" | "fr" | "ja" | "ko" | "zh-Hans" | "zh-Hant";
+                                    visibility: "private" | "public" | "unlisted";
+                                    appearance: {
+                                        density?: "comfortable" | "compact";
+                                        radius?: "lg" | "md" | "sm";
+                                        surface?: "cards" | "flat";
+                                        cover?: "landscape" | "portrait" | "square";
+                                        headingScale?: "lg" | "md";
+                                    };
+                                    navigation: {
+                                        route: string;
+                                    }[];
+                                    ownerId: string;
+                                    deletedAt: string | null;
+                                    restoreUntil: string | null;
+                                };
+                            };
+                            400: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            403: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            409: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            412: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        zones: {
+            ":id": {
+                $releaseTakedown: {
+                    post: {
+                        body: {
+                            pointers: string[];
+                        };
+                        params: {
+                            id: string;
+                        };
+                        query: unknown;
+                        headers: {
+                            "idempotency-key": string;
+                            'if-match'?: string;
+                        };
+                        response: {
+                            200: {
+                                zone: {
+                                    id: string;
+                                    revision: string;
+                                    labels: {
+                                        de?: string;
+                                        en?: string;
+                                        es?: string;
+                                        fr?: string;
+                                        ja?: string;
+                                        ko?: string;
+                                        "zh-Hans"?: string;
+                                        "zh-Hant"?: string;
+                                    };
+                                    primaryLanguage?: "de" | "en" | "es" | "fr" | "ja" | "ko" | "zh-Hans" | "zh-Hant";
+                                    visibility: "private" | "public" | "unlisted";
+                                    appearance: {
+                                        density?: "comfortable" | "compact";
+                                        radius?: "lg" | "md" | "sm";
+                                        surface?: "cards" | "flat";
+                                        cover?: "landscape" | "portrait" | "square";
+                                        headingScale?: "lg" | "md";
+                                    };
+                                    navigation: {
+                                        route: string;
+                                    }[];
+                                    ownerId: string;
+                                    deletedAt: string | null;
+                                    restoreUntil: string | null;
+                                };
+                            };
+                            400: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            403: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            409: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            412: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        platform: {
+            zones: {
+                ":id": {
+                    $hold: {
+                        post: {
+                            body: {
+                                reason: string;
+                            };
+                            params: {
+                                id: string;
+                            };
+                            query: unknown;
+                            headers: {
+                                "idempotency-key": string;
+                            };
+                            response: {
+                                200: {
+                                    id: string;
+                                    held: boolean;
+                                };
+                                400: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                401: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                403: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                404: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                409: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                412: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                422: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                503: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                            };
+                            error: never;
+                        };
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        platform: {
+            zones: {
+                ":id": {
+                    $releaseHold: {
+                        post: {
+                            body: object;
+                            params: {
+                                id: string;
+                            };
+                            query: unknown;
+                            headers: {
+                                "idempotency-key": string;
+                            };
+                            response: {
+                                200: {
+                                    id: string;
+                                    held: boolean;
+                                };
+                                400: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                401: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                403: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                404: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                409: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                412: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                422: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                503: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                            };
+                            error: never;
+                        };
+                    };
+                };
+            };
+        };
+    };
 }, import("elysia").DefaultEphemeral, {
     derive: {
         readonly admission: import("../http/admission.ts").Admission;
@@ -8305,24 +9311,32 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
     schemas: {};
     response: {};
     error: [];
-}, "post", "/v1/zones/:id/$restore", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
+}, "post", "/v1/platform/zones/:id/$purge", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
     params: import("typebox").TObject<{
         id: import("typebox").TString;
     }>;
     headers: import("typebox").TObject<{
         "idempotency-key": import("typebox").TString;
-        'if-match': import("typebox").TOptional<import("typebox").TString>;
     }>;
     body: {
         '~standard': {
             version: 1;
             vendor: string;
             types: {
-                input: object;
-                output: object;
+                input: {
+                    reason?: string;
+                    order?: string;
+                };
+                output: {
+                    reason?: string;
+                    order?: string;
+                };
             } | undefined;
             validate(value: unknown): {
-                value: object;
+                value: {
+                    reason?: string;
+                    order?: string;
+                };
                 issues?: never;
             } | {
                 value?: never;
@@ -8331,8 +9345,14 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                 }[];
             };
             jsonSchema: {
-                input: () => import("typebox").TObject<{}>;
-                output: () => import("typebox").TObject<{}>;
+                input: () => import("typebox").TObject<{
+                    reason: import("typebox").TOptional<import("typebox").TString>;
+                    order: import("typebox").TOptional<import("typebox").TString>;
+                }>;
+                output: () => import("typebox").TObject<{
+                    reason: import("typebox").TOptional<import("typebox").TString>;
+                    order: import("typebox").TOptional<import("typebox").TString>;
+                }>;
             };
         };
     };
@@ -8455,99 +9475,18 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                 vendor: string;
                 types: {
                     input: {
-                        zone: {
-                            id: string;
-                            revision: string;
-                            labels: {
-                                de?: string;
-                                en?: string;
-                                es?: string;
-                                fr?: string;
-                                ja?: string;
-                                ko?: string;
-                                "zh-Hans"?: string;
-                                "zh-Hant"?: string;
-                            };
-                            primaryLanguage?: "de" | "en" | "es" | "fr" | "ja" | "ko" | "zh-Hans" | "zh-Hant";
-                            visibility: "private" | "public" | "unlisted";
-                            appearance: {
-                                density?: "comfortable" | "compact";
-                                radius?: "lg" | "md" | "sm";
-                                surface?: "cards" | "flat";
-                                cover?: "landscape" | "portrait" | "square";
-                                headingScale?: "lg" | "md";
-                            };
-                            navigation: {
-                                route: string;
-                            }[];
-                            ownerId: string;
-                            deletedAt: string | null;
-                            restoreUntil: string | null;
-                        };
+                        id: string;
+                        state: "purge_pending";
                     };
                     output: {
-                        zone: {
-                            id: string;
-                            revision: string;
-                            labels: {
-                                de?: string;
-                                en?: string;
-                                es?: string;
-                                fr?: string;
-                                ja?: string;
-                                ko?: string;
-                                "zh-Hans"?: string;
-                                "zh-Hant"?: string;
-                            };
-                            primaryLanguage?: "de" | "en" | "es" | "fr" | "ja" | "ko" | "zh-Hans" | "zh-Hant";
-                            visibility: "private" | "public" | "unlisted";
-                            appearance: {
-                                density?: "comfortable" | "compact";
-                                radius?: "lg" | "md" | "sm";
-                                surface?: "cards" | "flat";
-                                cover?: "landscape" | "portrait" | "square";
-                                headingScale?: "lg" | "md";
-                            };
-                            navigation: {
-                                route: string;
-                            }[];
-                            ownerId: string;
-                            deletedAt: string | null;
-                            restoreUntil: string | null;
-                        };
+                        id: string;
+                        state: "purge_pending";
                     };
                 } | undefined;
                 validate(value: unknown): {
                     value: {
-                        zone: {
-                            id: string;
-                            revision: string;
-                            labels: {
-                                de?: string;
-                                en?: string;
-                                es?: string;
-                                fr?: string;
-                                ja?: string;
-                                ko?: string;
-                                "zh-Hans"?: string;
-                                "zh-Hant"?: string;
-                            };
-                            primaryLanguage?: "de" | "en" | "es" | "fr" | "ja" | "ko" | "zh-Hans" | "zh-Hant";
-                            visibility: "private" | "public" | "unlisted";
-                            appearance: {
-                                density?: "comfortable" | "compact";
-                                radius?: "lg" | "md" | "sm";
-                                surface?: "cards" | "flat";
-                                cover?: "landscape" | "portrait" | "square";
-                                headingScale?: "lg" | "md";
-                            };
-                            navigation: {
-                                route: string;
-                            }[];
-                            ownerId: string;
-                            deletedAt: string | null;
-                            restoreUntil: string | null;
-                        };
+                        id: string;
+                        state: "purge_pending";
                     };
                     issues?: never;
                 } | {
@@ -8558,66 +9497,12 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                 };
                 jsonSchema: {
                     input: () => import("typebox").TObject<{
-                        zone: import("typebox").TObject<{
-                            id: import("typebox").TString;
-                            revision: import("typebox").TString;
-                            labels: import("typebox").TObject<{
-                                de: import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                                en: import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                                es: import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                                fr: import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                                ja: import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                                ko: import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                                "zh-Hans": import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                                "zh-Hant": import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                            }>;
-                            primaryLanguage: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"en">, import("typebox").TLiteral<"zh-Hant">, import("typebox").TLiteral<"zh-Hans">, import("typebox").TLiteral<"ja">, import("typebox").TLiteral<"ko">, import("typebox").TLiteral<"de">, import("typebox").TLiteral<"fr">, import("typebox").TLiteral<"es">]>>;
-                            visibility: import("typebox").TUnion<[import("typebox").TLiteral<"private">, import("typebox").TLiteral<"unlisted">, import("typebox").TLiteral<"public">]>;
-                            appearance: import("typebox").TObject<{
-                                density: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"compact">, import("typebox").TLiteral<"comfortable">]>>;
-                                radius: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"sm">, import("typebox").TLiteral<"md">, import("typebox").TLiteral<"lg">]>>;
-                                surface: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"flat">, import("typebox").TLiteral<"cards">]>>;
-                                cover: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"portrait">, import("typebox").TLiteral<"square">, import("typebox").TLiteral<"landscape">]>>;
-                                headingScale: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"md">, import("typebox").TLiteral<"lg">]>>;
-                            }>;
-                            navigation: import("typebox").TArray<import("typebox").TObject<{
-                                route: import("typebox").TString;
-                            }>>;
-                            ownerId: import("typebox").TString;
-                            deletedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                            restoreUntil: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                        }>;
+                        id: import("typebox").TString;
+                        state: import("typebox").TLiteral<"purge_pending">;
                     }>;
                     output: () => import("typebox").TObject<{
-                        zone: import("typebox").TObject<{
-                            id: import("typebox").TString;
-                            revision: import("typebox").TString;
-                            labels: import("typebox").TObject<{
-                                de: import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                                en: import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                                es: import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                                fr: import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                                ja: import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                                ko: import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                                "zh-Hans": import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                                "zh-Hant": import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                            }>;
-                            primaryLanguage: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"en">, import("typebox").TLiteral<"zh-Hant">, import("typebox").TLiteral<"zh-Hans">, import("typebox").TLiteral<"ja">, import("typebox").TLiteral<"ko">, import("typebox").TLiteral<"de">, import("typebox").TLiteral<"fr">, import("typebox").TLiteral<"es">]>>;
-                            visibility: import("typebox").TUnion<[import("typebox").TLiteral<"private">, import("typebox").TLiteral<"unlisted">, import("typebox").TLiteral<"public">]>;
-                            appearance: import("typebox").TObject<{
-                                density: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"compact">, import("typebox").TLiteral<"comfortable">]>>;
-                                radius: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"sm">, import("typebox").TLiteral<"md">, import("typebox").TLiteral<"lg">]>>;
-                                surface: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"flat">, import("typebox").TLiteral<"cards">]>>;
-                                cover: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"portrait">, import("typebox").TLiteral<"square">, import("typebox").TLiteral<"landscape">]>>;
-                                headingScale: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"md">, import("typebox").TLiteral<"lg">]>>;
-                            }>;
-                            navigation: import("typebox").TArray<import("typebox").TObject<{
-                                route: import("typebox").TString;
-                            }>>;
-                            ownerId: import("typebox").TString;
-                            deletedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                            restoreUntil: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                        }>;
+                        id: import("typebox").TString;
+                        state: import("typebox").TLiteral<"purge_pending">;
                     }>;
                 };
             };
@@ -8633,8 +9518,9 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
             bearerAuth?: never;
         })[];
         'x-rate-limit'?: Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
+        'x-resource-types': string[];
     };
-}, {}, "/v1/zones/:id/$restore">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ params, headers, actor, admission, job, session, set }: {
+}, {}, "/v1/platform/zones/:id/$purge">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ params, body, headers, actor, admission, job, session, set }: {
     server: import("elysia").Server | null;
     redirect: import("elysia").redirect;
     set: {
@@ -8733,35 +9619,8 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
             errors: unknown;
         };
         200: {
-            zone: {
-                id: string;
-                revision: string;
-                labels: {
-                    de?: string;
-                    en?: string;
-                    es?: string;
-                    fr?: string;
-                    ja?: string;
-                    ko?: string;
-                    "zh-Hans"?: string;
-                    "zh-Hant"?: string;
-                };
-                primaryLanguage?: "de" | "en" | "es" | "fr" | "ja" | "ko" | "zh-Hans" | "zh-Hant";
-                visibility: "private" | "public" | "unlisted";
-                appearance: {
-                    density?: "comfortable" | "compact";
-                    radius?: "lg" | "md" | "sm";
-                    surface?: "cards" | "flat";
-                    cover?: "landscape" | "portrait" | "square";
-                    headingScale?: "lg" | "md";
-                };
-                navigation: {
-                    route: string;
-                }[];
-                ownerId: string;
-                deletedAt: string | null;
-                restoreUntil: string | null;
-            };
+            id: string;
+            state: "purge_pending";
         };
     }>;
     problem: import("elysia").SelectiveProblem<{
@@ -8854,35 +9713,8 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
             errors: unknown;
         };
         200: {
-            zone: {
-                id: string;
-                revision: string;
-                labels: {
-                    de?: string;
-                    en?: string;
-                    es?: string;
-                    fr?: string;
-                    ja?: string;
-                    ko?: string;
-                    "zh-Hans"?: string;
-                    "zh-Hant"?: string;
-                };
-                primaryLanguage?: "de" | "en" | "es" | "fr" | "ja" | "ko" | "zh-Hans" | "zh-Hant";
-                visibility: "private" | "public" | "unlisted";
-                appearance: {
-                    density?: "comfortable" | "compact";
-                    radius?: "lg" | "md" | "sm";
-                    surface?: "cards" | "flat";
-                    cover?: "landscape" | "portrait" | "square";
-                    headingScale?: "lg" | "md";
-                };
-                navigation: {
-                    route: string;
-                }[];
-                ownerId: string;
-                deletedAt: string | null;
-                restoreUntil: string | null;
-            };
+            id: string;
+            state: "purge_pending";
         };
     }>;
     defer: (fn: import("elysia/types").AfterResponseHandler<NoInfer<import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
@@ -8891,18 +9723,26 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
         }>;
         headers: import("typebox").TObject<{
             "idempotency-key": import("typebox").TString;
-            'if-match': import("typebox").TOptional<import("typebox").TString>;
         }>;
         body: {
             '~standard': {
                 version: 1;
                 vendor: string;
                 types: {
-                    input: object;
-                    output: object;
+                    input: {
+                        reason?: string;
+                        order?: string;
+                    };
+                    output: {
+                        reason?: string;
+                        order?: string;
+                    };
                 } | undefined;
                 validate(value: unknown): {
-                    value: object;
+                    value: {
+                        reason?: string;
+                        order?: string;
+                    };
                     issues?: never;
                 } | {
                     value?: never;
@@ -8911,8 +9751,14 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     }[];
                 };
                 jsonSchema: {
-                    input: () => import("typebox").TObject<{}>;
-                    output: () => import("typebox").TObject<{}>;
+                    input: () => import("typebox").TObject<{
+                        reason: import("typebox").TOptional<import("typebox").TString>;
+                        order: import("typebox").TOptional<import("typebox").TString>;
+                    }>;
+                    output: () => import("typebox").TObject<{
+                        reason: import("typebox").TOptional<import("typebox").TString>;
+                        order: import("typebox").TOptional<import("typebox").TString>;
+                    }>;
                 };
             };
         };
@@ -9035,99 +9881,18 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     vendor: string;
                     types: {
                         input: {
-                            zone: {
-                                id: string;
-                                revision: string;
-                                labels: {
-                                    de?: string;
-                                    en?: string;
-                                    es?: string;
-                                    fr?: string;
-                                    ja?: string;
-                                    ko?: string;
-                                    "zh-Hans"?: string;
-                                    "zh-Hant"?: string;
-                                };
-                                primaryLanguage?: "de" | "en" | "es" | "fr" | "ja" | "ko" | "zh-Hans" | "zh-Hant";
-                                visibility: "private" | "public" | "unlisted";
-                                appearance: {
-                                    density?: "comfortable" | "compact";
-                                    radius?: "lg" | "md" | "sm";
-                                    surface?: "cards" | "flat";
-                                    cover?: "landscape" | "portrait" | "square";
-                                    headingScale?: "lg" | "md";
-                                };
-                                navigation: {
-                                    route: string;
-                                }[];
-                                ownerId: string;
-                                deletedAt: string | null;
-                                restoreUntil: string | null;
-                            };
+                            id: string;
+                            state: "purge_pending";
                         };
                         output: {
-                            zone: {
-                                id: string;
-                                revision: string;
-                                labels: {
-                                    de?: string;
-                                    en?: string;
-                                    es?: string;
-                                    fr?: string;
-                                    ja?: string;
-                                    ko?: string;
-                                    "zh-Hans"?: string;
-                                    "zh-Hant"?: string;
-                                };
-                                primaryLanguage?: "de" | "en" | "es" | "fr" | "ja" | "ko" | "zh-Hans" | "zh-Hant";
-                                visibility: "private" | "public" | "unlisted";
-                                appearance: {
-                                    density?: "comfortable" | "compact";
-                                    radius?: "lg" | "md" | "sm";
-                                    surface?: "cards" | "flat";
-                                    cover?: "landscape" | "portrait" | "square";
-                                    headingScale?: "lg" | "md";
-                                };
-                                navigation: {
-                                    route: string;
-                                }[];
-                                ownerId: string;
-                                deletedAt: string | null;
-                                restoreUntil: string | null;
-                            };
+                            id: string;
+                            state: "purge_pending";
                         };
                     } | undefined;
                     validate(value: unknown): {
                         value: {
-                            zone: {
-                                id: string;
-                                revision: string;
-                                labels: {
-                                    de?: string;
-                                    en?: string;
-                                    es?: string;
-                                    fr?: string;
-                                    ja?: string;
-                                    ko?: string;
-                                    "zh-Hans"?: string;
-                                    "zh-Hant"?: string;
-                                };
-                                primaryLanguage?: "de" | "en" | "es" | "fr" | "ja" | "ko" | "zh-Hans" | "zh-Hant";
-                                visibility: "private" | "public" | "unlisted";
-                                appearance: {
-                                    density?: "comfortable" | "compact";
-                                    radius?: "lg" | "md" | "sm";
-                                    surface?: "cards" | "flat";
-                                    cover?: "landscape" | "portrait" | "square";
-                                    headingScale?: "lg" | "md";
-                                };
-                                navigation: {
-                                    route: string;
-                                }[];
-                                ownerId: string;
-                                deletedAt: string | null;
-                                restoreUntil: string | null;
-                            };
+                            id: string;
+                            state: "purge_pending";
                         };
                         issues?: never;
                     } | {
@@ -9138,66 +9903,12 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     };
                     jsonSchema: {
                         input: () => import("typebox").TObject<{
-                            zone: import("typebox").TObject<{
-                                id: import("typebox").TString;
-                                revision: import("typebox").TString;
-                                labels: import("typebox").TObject<{
-                                    de: import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                                    en: import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                                    es: import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                                    fr: import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                                    ja: import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                                    ko: import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                                    "zh-Hans": import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                                    "zh-Hant": import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                                }>;
-                                primaryLanguage: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"en">, import("typebox").TLiteral<"zh-Hant">, import("typebox").TLiteral<"zh-Hans">, import("typebox").TLiteral<"ja">, import("typebox").TLiteral<"ko">, import("typebox").TLiteral<"de">, import("typebox").TLiteral<"fr">, import("typebox").TLiteral<"es">]>>;
-                                visibility: import("typebox").TUnion<[import("typebox").TLiteral<"private">, import("typebox").TLiteral<"unlisted">, import("typebox").TLiteral<"public">]>;
-                                appearance: import("typebox").TObject<{
-                                    density: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"compact">, import("typebox").TLiteral<"comfortable">]>>;
-                                    radius: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"sm">, import("typebox").TLiteral<"md">, import("typebox").TLiteral<"lg">]>>;
-                                    surface: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"flat">, import("typebox").TLiteral<"cards">]>>;
-                                    cover: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"portrait">, import("typebox").TLiteral<"square">, import("typebox").TLiteral<"landscape">]>>;
-                                    headingScale: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"md">, import("typebox").TLiteral<"lg">]>>;
-                                }>;
-                                navigation: import("typebox").TArray<import("typebox").TObject<{
-                                    route: import("typebox").TString;
-                                }>>;
-                                ownerId: import("typebox").TString;
-                                deletedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                                restoreUntil: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                            }>;
+                            id: import("typebox").TString;
+                            state: import("typebox").TLiteral<"purge_pending">;
                         }>;
                         output: () => import("typebox").TObject<{
-                            zone: import("typebox").TObject<{
-                                id: import("typebox").TString;
-                                revision: import("typebox").TString;
-                                labels: import("typebox").TObject<{
-                                    de: import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                                    en: import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                                    es: import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                                    fr: import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                                    ja: import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                                    ko: import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                                    "zh-Hans": import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                                    "zh-Hant": import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                                }>;
-                                primaryLanguage: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"en">, import("typebox").TLiteral<"zh-Hant">, import("typebox").TLiteral<"zh-Hans">, import("typebox").TLiteral<"ja">, import("typebox").TLiteral<"ko">, import("typebox").TLiteral<"de">, import("typebox").TLiteral<"fr">, import("typebox").TLiteral<"es">]>>;
-                                visibility: import("typebox").TUnion<[import("typebox").TLiteral<"private">, import("typebox").TLiteral<"unlisted">, import("typebox").TLiteral<"public">]>;
-                                appearance: import("typebox").TObject<{
-                                    density: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"compact">, import("typebox").TLiteral<"comfortable">]>>;
-                                    radius: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"sm">, import("typebox").TLiteral<"md">, import("typebox").TLiteral<"lg">]>>;
-                                    surface: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"flat">, import("typebox").TLiteral<"cards">]>>;
-                                    cover: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"portrait">, import("typebox").TLiteral<"square">, import("typebox").TLiteral<"landscape">]>>;
-                                    headingScale: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"md">, import("typebox").TLiteral<"lg">]>>;
-                                }>;
-                                navigation: import("typebox").TArray<import("typebox").TObject<{
-                                    route: import("typebox").TString;
-                                }>>;
-                                ownerId: import("typebox").TString;
-                                deletedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                                restoreUntil: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                            }>;
+                            id: import("typebox").TString;
+                            state: import("typebox").TLiteral<"purge_pending">;
                         }>;
                     };
                 };
@@ -9213,8 +9924,9 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                 bearerAuth?: never;
             })[];
             'x-rate-limit'?: Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
+            'x-resource-types': string[];
         };
-    }, {}, "/v1/zones/:id/$restore">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
+    }, {}, "/v1/platform/zones/:id/$purge">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
         derive: {
             readonly admission: import("../http/admission.ts").Admission;
             readonly job: {
@@ -9237,14 +9949,16 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
     rid?: string;
     request: Request;
     store: {};
-    body: object;
+    body: {
+        reason?: string;
+        order?: string;
+    };
     query: Record<string, string | undefined>;
     params: {
         id: string;
     };
     headers: {
         "idempotency-key": string;
-        'if-match'?: string;
     };
     cookie: Record<string, import("elysia").Cookie<unknown>>;
     readonly admission: import("../http/admission.ts").Admission;
@@ -9262,53 +9976,34 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
     readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
     readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<{
-    zone: {
-        id: string;
-        revision: string;
-        labels: {
-            de?: string;
-            en?: string;
-            es?: string;
-            fr?: string;
-            ja?: string;
-            ko?: string;
-            "zh-Hans"?: string;
-            "zh-Hant"?: string;
-        };
-        primaryLanguage?: "de" | "en" | "es" | "fr" | "ja" | "ko" | "zh-Hans" | "zh-Hant";
-        visibility: "private" | "public" | "unlisted";
-        appearance: {
-            density?: "comfortable" | "compact";
-            radius?: "lg" | "md" | "sm";
-            surface?: "cards" | "flat";
-            cover?: "landscape" | "portrait" | "square";
-            headingScale?: "lg" | "md";
-        };
-        navigation: {
-            route: string;
-        }[];
-        ownerId: string;
-        deletedAt: string | null;
-        restoreUntil: string | null;
-    };
+    id: string;
+    state: 'purge_pending';
 }>, {
     params: import("typebox").TObject<{
         id: import("typebox").TString;
     }>;
     headers: import("typebox").TObject<{
         "idempotency-key": import("typebox").TString;
-        'if-match': import("typebox").TOptional<import("typebox").TString>;
     }>;
     body: {
         '~standard': {
             version: 1;
             vendor: string;
             types: {
-                input: object;
-                output: object;
+                input: {
+                    reason?: string;
+                    order?: string;
+                };
+                output: {
+                    reason?: string;
+                    order?: string;
+                };
             } | undefined;
             validate(value: unknown): {
-                value: object;
+                value: {
+                    reason?: string;
+                    order?: string;
+                };
                 issues?: never;
             } | {
                 value?: never;
@@ -9317,8 +10012,14 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                 }[];
             };
             jsonSchema: {
-                input: () => import("typebox").TObject<{}>;
-                output: () => import("typebox").TObject<{}>;
+                input: () => import("typebox").TObject<{
+                    reason: import("typebox").TOptional<import("typebox").TString>;
+                    order: import("typebox").TOptional<import("typebox").TString>;
+                }>;
+                output: () => import("typebox").TObject<{
+                    reason: import("typebox").TOptional<import("typebox").TString>;
+                    order: import("typebox").TOptional<import("typebox").TString>;
+                }>;
             };
         };
     };
@@ -9441,99 +10142,18 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                 vendor: string;
                 types: {
                     input: {
-                        zone: {
-                            id: string;
-                            revision: string;
-                            labels: {
-                                de?: string;
-                                en?: string;
-                                es?: string;
-                                fr?: string;
-                                ja?: string;
-                                ko?: string;
-                                "zh-Hans"?: string;
-                                "zh-Hant"?: string;
-                            };
-                            primaryLanguage?: "de" | "en" | "es" | "fr" | "ja" | "ko" | "zh-Hans" | "zh-Hant";
-                            visibility: "private" | "public" | "unlisted";
-                            appearance: {
-                                density?: "comfortable" | "compact";
-                                radius?: "lg" | "md" | "sm";
-                                surface?: "cards" | "flat";
-                                cover?: "landscape" | "portrait" | "square";
-                                headingScale?: "lg" | "md";
-                            };
-                            navigation: {
-                                route: string;
-                            }[];
-                            ownerId: string;
-                            deletedAt: string | null;
-                            restoreUntil: string | null;
-                        };
+                        id: string;
+                        state: "purge_pending";
                     };
                     output: {
-                        zone: {
-                            id: string;
-                            revision: string;
-                            labels: {
-                                de?: string;
-                                en?: string;
-                                es?: string;
-                                fr?: string;
-                                ja?: string;
-                                ko?: string;
-                                "zh-Hans"?: string;
-                                "zh-Hant"?: string;
-                            };
-                            primaryLanguage?: "de" | "en" | "es" | "fr" | "ja" | "ko" | "zh-Hans" | "zh-Hant";
-                            visibility: "private" | "public" | "unlisted";
-                            appearance: {
-                                density?: "comfortable" | "compact";
-                                radius?: "lg" | "md" | "sm";
-                                surface?: "cards" | "flat";
-                                cover?: "landscape" | "portrait" | "square";
-                                headingScale?: "lg" | "md";
-                            };
-                            navigation: {
-                                route: string;
-                            }[];
-                            ownerId: string;
-                            deletedAt: string | null;
-                            restoreUntil: string | null;
-                        };
+                        id: string;
+                        state: "purge_pending";
                     };
                 } | undefined;
                 validate(value: unknown): {
                     value: {
-                        zone: {
-                            id: string;
-                            revision: string;
-                            labels: {
-                                de?: string;
-                                en?: string;
-                                es?: string;
-                                fr?: string;
-                                ja?: string;
-                                ko?: string;
-                                "zh-Hans"?: string;
-                                "zh-Hant"?: string;
-                            };
-                            primaryLanguage?: "de" | "en" | "es" | "fr" | "ja" | "ko" | "zh-Hans" | "zh-Hant";
-                            visibility: "private" | "public" | "unlisted";
-                            appearance: {
-                                density?: "comfortable" | "compact";
-                                radius?: "lg" | "md" | "sm";
-                                surface?: "cards" | "flat";
-                                cover?: "landscape" | "portrait" | "square";
-                                headingScale?: "lg" | "md";
-                            };
-                            navigation: {
-                                route: string;
-                            }[];
-                            ownerId: string;
-                            deletedAt: string | null;
-                            restoreUntil: string | null;
-                        };
+                        id: string;
+                        state: "purge_pending";
                     };
                     issues?: never;
                 } | {
@@ -9544,66 +10164,12 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                 };
                 jsonSchema: {
                     input: () => import("typebox").TObject<{
-                        zone: import("typebox").TObject<{
-                            id: import("typebox").TString;
-                            revision: import("typebox").TString;
-                            labels: import("typebox").TObject<{
-                                de: import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                                en: import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                                es: import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                                fr: import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                                ja: import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                                ko: import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                                "zh-Hans": import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                                "zh-Hant": import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                            }>;
-                            primaryLanguage: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"en">, import("typebox").TLiteral<"zh-Hant">, import("typebox").TLiteral<"zh-Hans">, import("typebox").TLiteral<"ja">, import("typebox").TLiteral<"ko">, import("typebox").TLiteral<"de">, import("typebox").TLiteral<"fr">, import("typebox").TLiteral<"es">]>>;
-                            visibility: import("typebox").TUnion<[import("typebox").TLiteral<"private">, import("typebox").TLiteral<"unlisted">, import("typebox").TLiteral<"public">]>;
-                            appearance: import("typebox").TObject<{
-                                density: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"compact">, import("typebox").TLiteral<"comfortable">]>>;
-                                radius: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"sm">, import("typebox").TLiteral<"md">, import("typebox").TLiteral<"lg">]>>;
-                                surface: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"flat">, import("typebox").TLiteral<"cards">]>>;
-                                cover: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"portrait">, import("typebox").TLiteral<"square">, import("typebox").TLiteral<"landscape">]>>;
-                                headingScale: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"md">, import("typebox").TLiteral<"lg">]>>;
-                            }>;
-                            navigation: import("typebox").TArray<import("typebox").TObject<{
-                                route: import("typebox").TString;
-                            }>>;
-                            ownerId: import("typebox").TString;
-                            deletedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                            restoreUntil: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                        }>;
+                        id: import("typebox").TString;
+                        state: import("typebox").TLiteral<"purge_pending">;
                     }>;
                     output: () => import("typebox").TObject<{
-                        zone: import("typebox").TObject<{
-                            id: import("typebox").TString;
-                            revision: import("typebox").TString;
-                            labels: import("typebox").TObject<{
-                                de: import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                                en: import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                                es: import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                                fr: import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                                ja: import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                                ko: import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                                "zh-Hans": import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                                "zh-Hant": import("typebox").TOptional<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
-                            }>;
-                            primaryLanguage: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"en">, import("typebox").TLiteral<"zh-Hant">, import("typebox").TLiteral<"zh-Hans">, import("typebox").TLiteral<"ja">, import("typebox").TLiteral<"ko">, import("typebox").TLiteral<"de">, import("typebox").TLiteral<"fr">, import("typebox").TLiteral<"es">]>>;
-                            visibility: import("typebox").TUnion<[import("typebox").TLiteral<"private">, import("typebox").TLiteral<"unlisted">, import("typebox").TLiteral<"public">]>;
-                            appearance: import("typebox").TObject<{
-                                density: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"compact">, import("typebox").TLiteral<"comfortable">]>>;
-                                radius: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"sm">, import("typebox").TLiteral<"md">, import("typebox").TLiteral<"lg">]>>;
-                                surface: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"flat">, import("typebox").TLiteral<"cards">]>>;
-                                cover: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"portrait">, import("typebox").TLiteral<"square">, import("typebox").TLiteral<"landscape">]>>;
-                                headingScale: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"md">, import("typebox").TLiteral<"lg">]>>;
-                            }>;
-                            navigation: import("typebox").TArray<import("typebox").TObject<{
-                                route: import("typebox").TString;
-                            }>>;
-                            ownerId: import("typebox").TString;
-                            deletedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                            restoreUntil: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                        }>;
+                        id: import("typebox").TString;
+                        state: import("typebox").TLiteral<"purge_pending">;
                     }>;
                 };
             };
@@ -9619,5 +10185,6 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
             bearerAuth?: never;
         })[];
         'x-rate-limit'?: Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
+        'x-resource-types': string[];
     };
 }>;

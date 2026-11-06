@@ -1,9 +1,9 @@
 import type { IdentitySourceConsumerReference } from '../semantic/identity-source-consumer-custody.ts';
 import type { Pool } from 'pg';
-import { type AgentIdentitySourceKey } from '../history/agent-identity-source.ts';
 import { type CommandTransaction } from '../command/command.ts';
 import type { IdentityNativeReceipt, IdentityIntent, IdentityJobRef, IdentityReceipt } from '../semantic/identity-epoch-contract.ts';
 import { IdentityEpochStoreError } from '../semantic/identity-adapters/index.ts';
+import { type AgentIdentitySourceKey } from '../history/contract/index.ts';
 type AccountReceipt = Exclude<IdentityReceipt, {
     kind: 'subject.merge';
 }>;
@@ -58,7 +58,7 @@ type OriginalIdentity = Readonly<{
         transactionId: string;
         eventType: string;
     }> | null;
-    accounts: readonly import('../history/locator.ts').AccountReference[];
+    accounts: readonly import('../history/contract/locator.ts').AccountReference[];
 }>;
 /** History's data-only declaration verifier. Only this original writer issues the binding;
  * a historical source read, source UUID or a copied query method cannot issue it. */
@@ -68,6 +68,21 @@ export declare function accountIdentityUnavailable(detail: string): IdentityEpoc
 export declare function recordAccountIdentitySource(tx: CommandTransaction, source: Source): Promise<void>;
 /** Current native T and account terminal fence precede the immutable receipt lookup and any disclosure. */
 export declare function readAccountIdentitySource(tx: CommandTransaction, receipt: AccountReceipt, intent?: IdentityIntent, undoOnly?: boolean): Promise<AccountIdentitySource>;
+/** In-command undo-only original source: account SHARE, intent, technical fallback.
+ * Command controls are composed by the caller. Released History wrapping is a separate term. */
+export declare function ACCOUNT_IDENTITY_ORIGINAL_SOURCE_DECLARATION(): Readonly<{
+    engineRequests: 0;
+    work: Readonly<{
+        candidateKeys: 0;
+        nativeRows: 7;
+        identityMetadataRows: 0;
+        nativePoints: 7;
+        witnessKeys: 0;
+        statements: 3;
+        bytes: number;
+        emptySeeks: 3;
+    }>;
+}>;
 /** Opaque source custody from a released native read; JSON or a raw CommandAuthorization cannot mint it. */
 export declare function assertAccountIdentitySource(source: AccountIdentitySource, receipt: AccountReceipt, intent?: IdentityIntent): void;
 export declare function loadAccountIdentitySource(pool: Pool, receipt: AccountReceipt): Promise<AccountIdentitySource>;

@@ -2,7 +2,10 @@ import type { Actor } from '../request/access.ts';
 import type { Static } from 'typebox';
 import type { MediaDependencies } from './media.ts';
 import { type DocumentImagePresentation } from './media-presentation.ts';
+import { projectReadingPageDocumentMedia, type SelectedReadingPageDocument } from './reading-page-document-projection.ts';
 import type { PostEntry } from './reads.ts';
+export { projectReadingPageDocumentMedia };
+export type { SelectedReadingPageDocument };
 export declare const READING_PAGE_DOCUMENT_MEDIA_LIMIT = 32;
 export declare const READING_PAGE_DOCUMENT_LIMIT = 21;
 export type ReadingPageDocumentImage = Readonly<{
@@ -29,13 +32,6 @@ export declare function ReadingPageDocumentMediaSchema(): import("typebox").TUns
     state: 'available' | 'unavailable' | 'overflow';
     documents: readonly ReadingPageDocument[];
 }>>;
-export type SelectedReadingPageDocument = Readonly<{
-    postId: string;
-    threadId: string;
-    revisionId: string;
-    sha256: string;
-    mediaIds: readonly string[];
-}>;
 export type ReadingPageDocumentSelection = Readonly<{
     state: 'selected';
     documents: readonly SelectedReadingPageDocument[];

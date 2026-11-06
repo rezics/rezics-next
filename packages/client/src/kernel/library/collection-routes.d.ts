@@ -6,7 +6,7 @@ import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkClient } from '../work/client.ts';
 import type { SearchService } from '../search/service-scope.ts';
-import type { ViewerPersonalActionsReader } from './viewer-personal-actions.ts';
+import type { ViewerPersonalActionsPage, ViewerPersonalActionsReader } from './viewer-personal-actions.ts';
 type Dependencies = {
     pool: Pool;
     access: () => Access;
@@ -55,6 +55,15 @@ export declare function collectionSchema(): import("typebox").TObject<{
     }>, import("typebox").TNull]>, import("typebox").TNull]>>;
     coverSource: import("typebox").TUnion<[import("typebox").TLiteral<"owner">, import("typebox").TLiteral<"member">, import("typebox").TLiteral<"none">, import("typebox").TLiteral<"pending">]>;
     coverMediaId: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>>;
+    attribution: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+        id: import("typebox").TString;
+        kind: import("typebox").TUnion<[import("typebox").TLiteral<"actor">, import("typebox").TLiteral<"organization">]>;
+        displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+    }>, import("typebox").TObject<{
+        displayName: import("typebox").TUnion<[import("typebox").TLiteral<"Deleted account">, import("typebox").TLiteral<"Deleted organization">]>;
+    }>, import("typebox").TNull]>>;
+    generation: import("typebox").TOptional<import("typebox").TString>;
+    subjectIds: import("typebox").TOptional<import("typebox").TArray<import("typebox").TString>>;
     revision: import("typebox").TInteger;
     memberCount: import("typebox").TInteger;
     orderEpoch: import("typebox").TInteger;
@@ -99,6 +108,15 @@ export declare function collectionReadSchema(): import("typebox").TUnion<[import
     }>, import("typebox").TNull]>, import("typebox").TNull]>>;
     coverSource: import("typebox").TUnion<[import("typebox").TLiteral<"owner">, import("typebox").TLiteral<"member">, import("typebox").TLiteral<"none">, import("typebox").TLiteral<"pending">]>;
     coverMediaId: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>>;
+    attribution: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+        id: import("typebox").TString;
+        kind: import("typebox").TUnion<[import("typebox").TLiteral<"actor">, import("typebox").TLiteral<"organization">]>;
+        displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+    }>, import("typebox").TObject<{
+        displayName: import("typebox").TUnion<[import("typebox").TLiteral<"Deleted account">, import("typebox").TLiteral<"Deleted organization">]>;
+    }>, import("typebox").TNull]>>;
+    generation: import("typebox").TOptional<import("typebox").TString>;
+    subjectIds: import("typebox").TOptional<import("typebox").TArray<import("typebox").TString>>;
     revision: import("typebox").TInteger;
     memberCount: import("typebox").TInteger;
     orderEpoch: import("typebox").TInteger;
@@ -179,6 +197,15 @@ export declare function savedDynamicCollectionSchema(): import("typebox").TObjec
     }>, import("typebox").TNull]>, import("typebox").TNull]>>;
     coverSource: import("typebox").TUnion<[import("typebox").TLiteral<"owner">, import("typebox").TLiteral<"member">, import("typebox").TLiteral<"none">, import("typebox").TLiteral<"pending">]>;
     coverMediaId: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>>;
+    attribution: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+        id: import("typebox").TString;
+        kind: import("typebox").TUnion<[import("typebox").TLiteral<"actor">, import("typebox").TLiteral<"organization">]>;
+        displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+    }>, import("typebox").TObject<{
+        displayName: import("typebox").TUnion<[import("typebox").TLiteral<"Deleted account">, import("typebox").TLiteral<"Deleted organization">]>;
+    }>, import("typebox").TNull]>>;
+    generation: import("typebox").TOptional<import("typebox").TString>;
+    subjectIds: import("typebox").TOptional<import("typebox").TArray<import("typebox").TString>>;
     revision: import("typebox").TInteger;
     membershipKind: import("typebox").TLiteral<"dynamic">;
 }>;
@@ -229,6 +256,15 @@ export declare function collectionResourceSchema(): import("typebox").TUnion<[im
     }>, import("typebox").TNull]>, import("typebox").TNull]>>;
     coverSource: import("typebox").TUnion<[import("typebox").TLiteral<"owner">, import("typebox").TLiteral<"member">, import("typebox").TLiteral<"none">, import("typebox").TLiteral<"pending">]>;
     coverMediaId: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>>;
+    attribution: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+        id: import("typebox").TString;
+        kind: import("typebox").TUnion<[import("typebox").TLiteral<"actor">, import("typebox").TLiteral<"organization">]>;
+        displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+    }>, import("typebox").TObject<{
+        displayName: import("typebox").TUnion<[import("typebox").TLiteral<"Deleted account">, import("typebox").TLiteral<"Deleted organization">]>;
+    }>, import("typebox").TNull]>>;
+    generation: import("typebox").TOptional<import("typebox").TString>;
+    subjectIds: import("typebox").TOptional<import("typebox").TArray<import("typebox").TString>>;
     revision: import("typebox").TInteger;
     memberCount: import("typebox").TInteger;
     orderEpoch: import("typebox").TInteger;
@@ -271,6 +307,15 @@ export declare function collectionResourceSchema(): import("typebox").TUnion<[im
     }>, import("typebox").TNull]>, import("typebox").TNull]>>;
     coverSource: import("typebox").TUnion<[import("typebox").TLiteral<"owner">, import("typebox").TLiteral<"member">, import("typebox").TLiteral<"none">, import("typebox").TLiteral<"pending">]>;
     coverMediaId: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>>;
+    attribution: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+        id: import("typebox").TString;
+        kind: import("typebox").TUnion<[import("typebox").TLiteral<"actor">, import("typebox").TLiteral<"organization">]>;
+        displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+    }>, import("typebox").TObject<{
+        displayName: import("typebox").TUnion<[import("typebox").TLiteral<"Deleted account">, import("typebox").TLiteral<"Deleted organization">]>;
+    }>, import("typebox").TNull]>>;
+    generation: import("typebox").TOptional<import("typebox").TString>;
+    subjectIds: import("typebox").TOptional<import("typebox").TArray<import("typebox").TString>>;
     revision: import("typebox").TInteger;
     membershipKind: import("typebox").TLiteral<"dynamic">;
 }>, import("typebox").TObject<{
@@ -3402,6 +3447,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                                 obligations: string[];
                                             };
                                         } | null;
+                                        redirect?: string;
                                     }>;
                                     type: string;
                                     label: string;
@@ -4945,6 +4991,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                                 obligations: string[];
                                             };
                                         } | null;
+                                        redirect?: string;
                                     }>;
                                     target: string | null;
                                     external: string | null;
@@ -6525,6 +6572,93 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
 } & {
     v1: {
         definitions: {
+            imports: {
+                post: {
+                    body: import("../semantic/definition-import.ts").DefinitionImportRequest;
+                    params: {};
+                    query: unknown;
+                    headers: unknown;
+                    response: {
+                        200: import("../semantic/definition-import.ts").ImportedPreview;
+                        400: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        401: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        403: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        404: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        422: Response | {
+                            type: 'validation';
+                            code: 'validation';
+                            title: 'Validation Error';
+                            status: 422;
+                            detail?: string;
+                            on: string;
+                            found?: unknown;
+                            property?: string;
+                            expected?: unknown;
+                            errors?: {
+                                message?: string;
+                                [key: string]: unknown;
+                            }[];
+                        };
+                        503: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                    };
+                    error: never;
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        definitions: {
             releases: {
                 post: {
                     body: {
@@ -7114,6 +7248,83 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             };
                         };
                         error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        contexts: {
+            ":id": {
+                definitions: {
+                    extensions: {
+                        ":digest": {
+                            get: {
+                                body: unknown;
+                                params: {
+                                    id: string;
+                                    digest: string;
+                                };
+                                query: unknown;
+                                headers: unknown;
+                                response: {
+                                    200: {
+                                        digest: string;
+                                        extension: Record<string, any>;
+                                    };
+                                    401: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    404: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    422: Response | {
+                                        type: 'validation';
+                                        code: 'validation';
+                                        title: 'Validation Error';
+                                        status: 422;
+                                        detail?: string;
+                                        on: string;
+                                        found?: unknown;
+                                        property?: string;
+                                        expected?: unknown;
+                                        errors?: {
+                                            message?: string;
+                                            [key: string]: unknown;
+                                        }[];
+                                    };
+                                    503: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                };
+                                error: never;
+                            };
+                        };
                     };
                 };
             };
@@ -8214,6 +8425,15 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     } | null;
                                     coverSource: "member" | "none" | "owner" | "pending";
                                     coverMediaId?: string | null;
+                                    attribution?: {
+                                        id: string;
+                                        kind: "actor" | "organization";
+                                        displayName: string | null;
+                                    } | {
+                                        displayName: "Deleted account" | "Deleted organization";
+                                    } | null;
+                                    generation?: string;
+                                    subjectIds?: string[];
                                     revision: number;
                                     membershipKind: "dynamic";
                                 };
@@ -8447,7 +8667,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                         collection: {
                             presentationKind: import("./collection-kind.ts").CollectionKind['presentationKind'];
                             presentationKindSource: import("./collection-kind.ts").CollectionKind['presentationKindSource'];
-                            cover: import("../semantic/summaries.ts").CoverSummary | null;
+                            cover: import("./contract/capabilities.ts").LibraryCoverSummary | null;
                             coverSource: 'owner' | 'member' | 'none' | 'pending';
                             id: string;
                             curatorAccountId: string | null;
@@ -8459,7 +8679,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                         } | {
                             presentationKind: import("./collection-kind.ts").CollectionKind['presentationKind'];
                             presentationKindSource: import("./collection-kind.ts").CollectionKind['presentationKindSource'];
-                            cover: import("../semantic/summaries.ts").CoverSummary | null;
+                            cover: import("./contract/capabilities.ts").LibraryCoverSummary | null;
                             coverSource: 'owner' | 'member' | 'none' | 'pending';
                             id: string;
                             curatorAccountId: string | null;
@@ -8475,7 +8695,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                         } | {
                             presentationKind: import("./collection-kind.ts").CollectionKind['presentationKind'];
                             presentationKindSource: import("./collection-kind.ts").CollectionKind['presentationKindSource'];
-                            cover: import("../semantic/summaries.ts").CoverSummary | null;
+                            cover: import("./contract/capabilities.ts").LibraryCoverSummary | null;
                             coverSource: 'owner' | 'member' | 'none' | 'pending';
                             id: string;
                             curatorAccountId: string | null;
@@ -8488,7 +8708,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                         } | {
                             presentationKind: import("./collection-kind.ts").CollectionKind['presentationKind'];
                             presentationKindSource: import("./collection-kind.ts").CollectionKind['presentationKindSource'];
-                            cover: import("../semantic/summaries.ts").CoverSummary | null;
+                            cover: import("./contract/capabilities.ts").LibraryCoverSummary | null;
                             coverSource: 'owner' | 'member' | 'none' | 'pending';
                             id: string;
                             curatorAccountId: string | null;
@@ -8543,6 +8763,15 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             } | null;
                             coverSource: "member" | "none" | "owner" | "pending";
                             coverMediaId?: string | null;
+                            attribution?: {
+                                id: string;
+                                kind: "actor" | "organization";
+                                displayName: string | null;
+                            } | {
+                                displayName: "Deleted account" | "Deleted organization";
+                            } | null;
+                            generation?: string;
+                            subjectIds?: string[];
                             revision: number;
                             memberCount: number;
                             orderEpoch: number;
@@ -8610,6 +8839,15 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             } | null;
                             coverSource: "member" | "none" | "owner" | "pending";
                             coverMediaId?: string | null;
+                            attribution?: {
+                                id: string;
+                                kind: "actor" | "organization";
+                                displayName: string | null;
+                            } | {
+                                displayName: "Deleted account" | "Deleted organization";
+                            } | null;
+                            generation?: string;
+                            subjectIds?: string[];
                             revision: number;
                             membershipKind: "dynamic";
                         };
@@ -8756,6 +8994,15 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             } | null;
                             coverSource: "member" | "none" | "owner" | "pending";
                             coverMediaId?: string | null;
+                            attribution?: {
+                                id: string;
+                                kind: "actor" | "organization";
+                                displayName: string | null;
+                            } | {
+                                displayName: "Deleted account" | "Deleted organization";
+                            } | null;
+                            generation?: string;
+                            subjectIds?: string[];
                             revision: number;
                             memberCount: number;
                             orderEpoch: number;
@@ -8913,6 +9160,15 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             } | null;
                             coverSource: "member" | "none" | "owner" | "pending";
                             coverMediaId?: string | null;
+                            attribution?: {
+                                id: string;
+                                kind: "actor" | "organization";
+                                displayName: string | null;
+                            } | {
+                                displayName: "Deleted account" | "Deleted organization";
+                            } | null;
+                            generation?: string;
+                            subjectIds?: string[];
                             revision: number;
                             previewMembers?: {
                                 subjectId: string;
@@ -9103,6 +9359,15 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     } | null;
                                     coverSource: "member" | "none" | "owner" | "pending";
                                     coverMediaId?: string | null;
+                                    attribution?: {
+                                        id: string;
+                                        kind: "actor" | "organization";
+                                        displayName: string | null;
+                                    } | {
+                                        displayName: "Deleted account" | "Deleted organization";
+                                    } | null;
+                                    generation?: string;
+                                    subjectIds?: string[];
                                     revision: number;
                                     memberCount: number;
                                     orderEpoch: number;
@@ -9180,6 +9445,15 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     } | null;
                                     coverSource: "member" | "none" | "owner" | "pending";
                                     coverMediaId?: string | null;
+                                    attribution?: {
+                                        id: string;
+                                        kind: "actor" | "organization";
+                                        displayName: string | null;
+                                    } | {
+                                        displayName: "Deleted account" | "Deleted organization";
+                                    } | null;
+                                    generation?: string;
+                                    subjectIds?: string[];
                                     revision: number;
                                     membershipKind: "dynamic";
                                 })[];
@@ -9328,6 +9602,15 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 } | null;
                                 coverSource: "member" | "none" | "owner" | "pending";
                                 coverMediaId?: string | null;
+                                attribution?: {
+                                    id: string;
+                                    kind: "actor" | "organization";
+                                    displayName: string | null;
+                                } | {
+                                    displayName: "Deleted account" | "Deleted organization";
+                                } | null;
+                                generation?: string;
+                                subjectIds?: string[];
                                 revision: number;
                                 memberCount: number;
                                 orderEpoch: number;
@@ -9405,6 +9688,15 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 } | null;
                                 coverSource: "member" | "none" | "owner" | "pending";
                                 coverMediaId?: string | null;
+                                attribution?: {
+                                    id: string;
+                                    kind: "actor" | "organization";
+                                    displayName: string | null;
+                                } | {
+                                    displayName: "Deleted account" | "Deleted organization";
+                                } | null;
+                                generation?: string;
+                                subjectIds?: string[];
                                 revision: number;
                                 membershipKind: "dynamic";
                             };
@@ -10297,6 +10589,15 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     } | null;
                                     coverSource: "member" | "none" | "owner" | "pending";
                                     coverMediaId?: string | null;
+                                    attribution?: {
+                                        id: string;
+                                        kind: "actor" | "organization";
+                                        displayName: string | null;
+                                    } | {
+                                        displayName: "Deleted account" | "Deleted organization";
+                                    } | null;
+                                    generation?: string;
+                                    subjectIds?: string[];
                                     revision: number;
                                     memberCount: number;
                                     orderEpoch: number;
@@ -10364,6 +10665,15 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     } | null;
                                     coverSource: "member" | "none" | "owner" | "pending";
                                     coverMediaId?: string | null;
+                                    attribution?: {
+                                        id: string;
+                                        kind: "actor" | "organization";
+                                        displayName: string | null;
+                                    } | {
+                                        displayName: "Deleted account" | "Deleted organization";
+                                    } | null;
+                                    generation?: string;
+                                    subjectIds?: string[];
                                     revision: number;
                                     membershipKind: "dynamic";
                                 };
@@ -10514,6 +10824,15 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 } | null;
                                 coverSource: "member" | "none" | "owner" | "pending";
                                 coverMediaId?: string | null;
+                                attribution?: {
+                                    id: string;
+                                    kind: "actor" | "organization";
+                                    displayName: string | null;
+                                } | {
+                                    displayName: "Deleted account" | "Deleted organization";
+                                } | null;
+                                generation?: string;
+                                subjectIds?: string[];
                                 revision: number;
                                 memberCount: number;
                                 orderEpoch: number;
@@ -10581,6 +10900,15 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 } | null;
                                 coverSource: "member" | "none" | "owner" | "pending";
                                 coverMediaId?: string | null;
+                                attribution?: {
+                                    id: string;
+                                    kind: "actor" | "organization";
+                                    displayName: string | null;
+                                } | {
+                                    displayName: "Deleted account" | "Deleted organization";
+                                } | null;
+                                generation?: string;
+                                subjectIds?: string[];
                                 revision: number;
                                 membershipKind: "dynamic";
                             };
@@ -10825,6 +11153,15 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     } | null;
                                     coverSource: "member" | "none" | "owner" | "pending";
                                     coverMediaId?: string | null;
+                                    attribution?: {
+                                        id: string;
+                                        kind: "actor" | "organization";
+                                        displayName: string | null;
+                                    } | {
+                                        displayName: "Deleted account" | "Deleted organization";
+                                    } | null;
+                                    generation?: string;
+                                    subjectIds?: string[];
                                     revision: number;
                                     memberCount: number;
                                     orderEpoch: number;
@@ -10892,6 +11229,15 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     } | null;
                                     coverSource: "member" | "none" | "owner" | "pending";
                                     coverMediaId?: string | null;
+                                    attribution?: {
+                                        id: string;
+                                        kind: "actor" | "organization";
+                                        displayName: string | null;
+                                    } | {
+                                        displayName: "Deleted account" | "Deleted organization";
+                                    } | null;
+                                    generation?: string;
+                                    subjectIds?: string[];
                                     revision: number;
                                     membershipKind: "dynamic";
                                 };
@@ -11124,7 +11470,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     })[]>;
                                 })[];
                                 next: string | null;
-                                viewerFacts?: import("./viewer-personal-actions.ts").ViewerPersonalActionsPage;
+                                viewerFacts?: ViewerPersonalActionsPage;
                             };
                             202: {
                                 preparing: true;
@@ -11390,6 +11736,15 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         } | null;
                                         coverSource: "member" | "none" | "owner" | "pending";
                                         coverMediaId?: string | null;
+                                        attribution?: {
+                                            id: string;
+                                            kind: "actor" | "organization";
+                                            displayName: string | null;
+                                        } | {
+                                            displayName: "Deleted account" | "Deleted organization";
+                                        } | null;
+                                        generation?: string;
+                                        subjectIds?: string[];
                                         revision: number;
                                         memberCount: number;
                                         orderEpoch: number;
@@ -11548,6 +11903,15 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         } | null;
                                         coverSource: "member" | "none" | "owner" | "pending";
                                         coverMediaId?: string | null;
+                                        attribution?: {
+                                            id: string;
+                                            kind: "actor" | "organization";
+                                            displayName: string | null;
+                                        } | {
+                                            displayName: "Deleted account" | "Deleted organization";
+                                        } | null;
+                                        generation?: string;
+                                        subjectIds?: string[];
                                         revision: number;
                                         memberCount: number;
                                         orderEpoch: number;
@@ -11592,6 +11956,15 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         } | null;
                                         coverSource: "member" | "none" | "owner" | "pending";
                                         coverMediaId?: string | null;
+                                        attribution?: {
+                                            id: string;
+                                            kind: "actor" | "organization";
+                                            displayName: string | null;
+                                        } | {
+                                            displayName: "Deleted account" | "Deleted organization";
+                                        } | null;
+                                        generation?: string;
+                                        subjectIds?: string[];
                                         revision: number;
                                         memberCount: number;
                                         orderEpoch: number;

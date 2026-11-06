@@ -1,9 +1,9 @@
 import { DBOSClient } from '@dbos-inc/dbos-sdk';
 import { Pool, type PoolClient } from 'pg';
 import type { KernelExecutionContract } from '../command/execution-contract.ts';
-import { type WorkQueueName } from './queues.ts';
-export declare const DBOS_SCHEMA = "dbos";
-export declare const WORK_APPLICATION = "rezics-kernel";
+import { DBOS_SCHEMA, WORK_APPLICATION, type WorkIntent as ContractIntent } from './contract/vocabulary.ts';
+export { DBOS_SCHEMA, WORK_APPLICATION };
+export type WorkIntent = ContractIntent;
 export type WorkClient = DBOSClient & {
     close(): Promise<void>;
     discoverLegacyLeaveChild(workflowId: string): Promise<string | null>;
@@ -11,23 +11,6 @@ export type WorkClient = DBOSClient & {
 };
 /** Private service composition binding. Matching URLs or a structural client do not enroll. */
 export declare function assertSelectedWorkClient(client: WorkClient, pool: Pool): void;
-export type WorkIntent = Readonly<{
-    queue: WorkQueueName;
-    workflowName: string;
-    workflowId: string;
-    /** Locators only; consumer modules own their input schema. */
-    input: Readonly<{
-        accounts: readonly string[];
-        [locator: string]: unknown;
-    }>;
-    /** Original positional SDK arguments, when the existing workflow predates scoped work. */
-    arguments?: readonly unknown[];
-    /** Native queue controls; deduplication spans the entire queue, including partitions. */
-    queuePartitionKey?: string;
-    deduplicationID?: string;
-    priority?: number;
-    delaySeconds?: number;
-}>;
 /** Executor internals. The SDK uses this very connection; no pool checkout or relay. */
 export declare function enqueueWorkIntent(work: WorkClient, client: PoolClient, intent: WorkIntent, capture?: (created: boolean) => void): Promise<void>;
 /** Exact existence probes for the supported durable family. Pre-mapping orphan copies are

@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import { type Access, type Actor } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { type PublicIdentity } from './account-data.ts';
+import { mountedExposureCatalogue } from './gates/visibility.ts';
 import type { GrantSubject } from './grant-subject.ts';
 import type { ViewerActionResources } from './viewer-actions.ts';
 export type ManagedGrant = {
@@ -47,6 +48,7 @@ export declare function readResourceGrants(deps: {
     resources: ViewerActionResources;
     clock: () => Date;
     commands?: ReturnType<typeof createGrantCommands>;
+    routes?: Parameters<typeof mountedExposureCatalogue>[0];
 }, actor: Actor, input: {
     resourceId: string;
     cursor?: string;

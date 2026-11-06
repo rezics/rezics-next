@@ -38,18 +38,27 @@ export type PublishedLogOutcome = CommandOutcome<PublishedLog> & {
     revision?: number;
     deletionId?: string;
 };
+export type PublishedLogPresent<T> = (body: T) => Promise<T>;
+export type PublishedLogReadOptions<T> = {
+    deadline?: number;
+    present?: PublishedLogPresent<T>;
+};
 export declare function createPublishedLogCommands(config: Dependencies): {
     publishLog: (actor: Actor, input: {
         sessionId: string;
         note?: string | null;
-    }, requestKey: string) => Promise<PublishedLogOutcome>;
-    retractLog: (actor: Actor, logId: string, requestKey: string, revision?: number) => Promise<PublishedLogOutcome>;
-    restoreLog: (actor: Actor, logId: string, input: unknown, requestKey: string) => Promise<PublishedLogOutcome>;
-    readWithRevision: (viewer: Actor, logId: string) => Promise<{
+    }, requestKey: string, deadline?: number) => Promise<PublishedLogOutcome>;
+    retractLog: (actor: Actor, logId: string, requestKey: string, revision?: number, deadline?: number) => Promise<PublishedLogOutcome>;
+    restoreLog: (actor: Actor, logId: string, input: unknown, requestKey: string, deadline?: number) => Promise<PublishedLogOutcome>;
+    readWithRevision: (viewer: Actor, logId: string, options?: PublishedLogReadOptions<{
+        publishedLog: PublishedLog | PublishedLogTombstone;
+    }>) => Promise<{
         publishedLog: PublishedLog | PublishedLogTombstone;
         revision?: number;
     }>;
-    readPublishedLog: (viewer: Actor, logId: string) => Promise<PublishedLog | PublishedLogTombstone>;
-    listPublishedLogs: (viewer: Actor, page: Page) => Promise<PublishedLogPageResult>;
+    readPublishedLog: (viewer: Actor, logId: string, options?: PublishedLogReadOptions<{
+        publishedLog: PublishedLog | PublishedLogTombstone;
+    }>) => Promise<PublishedLog | PublishedLogTombstone>;
+    listPublishedLogs: (viewer: Actor, page: Page, options?: PublishedLogReadOptions<PublishedLogPageResult>) => Promise<PublishedLogPageResult>;
 };
 export {};

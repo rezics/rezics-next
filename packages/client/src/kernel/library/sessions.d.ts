@@ -20,6 +20,7 @@ type Page = {
 };
 export type ProgressSessionJournalAdmission = {
     identity: unknown;
+    prepare?: () => Promise<void>;
     assert: (tx: CommandTransaction) => Promise<void>;
 };
 type ExpectedProgressBinding = {

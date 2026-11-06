@@ -1,0 +1,27 @@
+/** Closed Content work bounds. These allocate no ledger and import no runtime. */
+export declare const CONTENT_PARTITION_COUNT = 4096;
+export declare const CONTENT_ROUTE_MAX = 65535;
+export declare const CONTENT_DOCUMENT_BYTES: number;
+export declare const CONTENT_BOARD_QUERY_MAX = 8192;
+export declare const CONTENT_CURSOR_PAGE_MAX = 100;
+export declare const CONTENT_RANK_BATCH_MAX = 500;
+export declare const CONTENT_RANK_HOT_HOURS = 168;
+export declare const CONTENT_WORKER_STEP_MS = 30000;
+export declare const CONTENT_WORKER_LONG_STEP_MS = 120000;
+export declare const CONTENT_NOTICE_READ_MS = 3000;
+export declare const CONTENT_AUTHORED_LANGUAGE_MAX = 128;
+export declare const CONTENT_COLLECTION_PARTITION_MAX = 4096;
+export declare const CONTENT_REACTION_SCORE_MIN = -2147483648;
+export declare const CONTENT_REACTION_SCORE_MAX = 2147483647;
+export declare const CONTENT_WORK_EVENT_INDEX_MAX = 1000;
+export declare const CONTENT_WORK_POSITION_MAX = 9223372036854775807n;
+export declare const CONTENT_WORK_EPOCH_MAX = 2147483647;
+export declare const CONTENT_BOARD_SORTS: readonly ['newest', 'oldest', 'active', 'hot'];
+export type ContentBoardSort = (typeof CONTENT_BOARD_SORTS)[number];
+export declare const CONTENT_RANK_SORTS: readonly ['active', 'hot'];
+export type ContentRankSort = (typeof CONTENT_RANK_SORTS)[number];
+export declare const CONTENT_REACTION_KINDS: readonly ['upvote', 'downvote', 'like', 'love', 'laugh', 'insightful', 'sad'];
+export type ContentReactionKind = (typeof CONTENT_REACTION_KINDS)[number];
+export type ContentRealmVoteWeight = 1 | -1;
+export type ContentRealmVotes = Readonly<Partial<Record<ContentReactionKind, ContentRealmVoteWeight>>>;
+export declare const CONTENT_DEFAULT_REALM_VOTES: ContentRealmVotes;
