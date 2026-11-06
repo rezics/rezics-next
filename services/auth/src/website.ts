@@ -523,7 +523,10 @@ export function websiteRoutes(input: {
           const response = await input.native().handler(request);
           if (!response.ok) return response;
           const metadata: unknown = await response.json();
-          if (!metadata || typeof metadata !== 'object') return response;
+          // Native discovery is third-party JSON. A consumed body cannot be returned, and an array
+          // or scalar is not website metadata, so the existing protocol projection answers instead.
+          if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata))
+            return failure('temporarily_unavailable');
           return Response.json(
             {
               ...metadata,

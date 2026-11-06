@@ -50,6 +50,10 @@ import { SubjectAccessDeniedError, type SubjectComponent } from '../subject.ts';
 import { globalContextAnchor } from '../context.ts';
 import type { subjectRoutes } from './subjects.ts';
 
+type BulkProblemBody = Extract<BatchWriteResult['results'][number], { problem: unknown }>['problem'] & {
+  redirect?: { from: string; to: string };
+};
+
 // A malformed command key still needs its own result. Keep the portable success
 // shapes while allowing the diagnostic result to echo an empty or invalid key.
 function portableResult() {
@@ -362,14 +366,7 @@ export function bulkRoutes(
                   cause: error,
                   commandIndex: pending.index,
                 });
-              const payload = (await response.json()) as {
-                type: string;
-                title: string;
-                status: number;
-                detail?: string;
-                errors?: unknown[];
-                redirect?: { from: string; to: string };
-              };
+              const payload = (await response.json()) as BulkProblemBody;
               if (error instanceof SubjectRedirectError) payload.redirect = { from: error.from, to: error.to };
               results[pending.index] = { key, status: response.status, problem: payload };
             }
@@ -406,13 +403,7 @@ export function bulkRoutes(
           results[pending.index] = {
             key,
             status: response.status,
-            problem: (await response.json()) as {
-              type: string;
-              title: string;
-              status: number;
-              detail?: string;
-              errors?: unknown[];
-            },
+            problem: (await response.json()) as BulkProblemBody,
           };
         }
       }

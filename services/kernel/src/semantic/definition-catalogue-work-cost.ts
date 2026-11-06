@@ -690,7 +690,6 @@ export type CataloguePublisherOperation = keyof typeof CATALOGUE_PUBLISHER_OPERA
  */
 export function catalogueParameterBytes(value: unknown): number {
   if (value === null || value === undefined) return 0;
-  if (Buffer.isBuffer(value)) return value.byteLength;
   if (value instanceof Uint8Array) return value.byteLength;
   // pg's arrayString quotes elements and escapes backslash/quote. Native batches
   // additionally restrict these strings to 100 digest keys before dispatch.
