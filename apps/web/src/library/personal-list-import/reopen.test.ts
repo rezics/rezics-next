@@ -114,6 +114,7 @@ test('reopening reads retained decisions without another upload or mutation and 
   const snap = await journey.reopen(address);
   expect(calls).toEqual([{ kind: 'page', ...address }]);
   expect(snap.outcomes).toEqual([{ ordinal: 0, reviewId, status: 'applied' }]);
+  expect(snap.page?.rows[0]?.decision?.progress).toBeNull();
   expect(snap.settledEffects[0]?.targetId).toBe(targetId);
   expect(snap.selectedEffects).toBe(0);
   expect(snap.page?.rows[1]?.match.status).toBe('unmatched');
@@ -297,5 +298,6 @@ test('an explicit match refreshes the native target and vote without replacing t
   expect(snap.page?.rows[0]?.nativeScore.currentVote).toMatchObject({ state: 'set', units: 0 });
   expect(snap.page?.rows[0]?.match.status).toBe('unmatched');
   expect(snap.page?.rows[0]?.decision).toEqual(decision);
+  expect(snap.page?.rows[0]?.decision?.progress).toBeNull();
   expect(snap.selectedEffects).toBe(1);
 });
