@@ -9,7 +9,9 @@ test('released CreativeWork descendants carry only their current bounded tag and
     const page = cataloguePageMetadata(bundledRelease, bundledDigest, type);
     expect(page).toMatchObject({ state: 'released', type, digest: bundledDigest });
     expect(page?.definitions?.types[type]).toBeDefined();
-    expect(page?.definitions?.types['schema:CreativeWork']).toBeDefined();
+    // CreativeWork is a released ancestry base, not a type in the bundled catalogue.
+    expect(bundledRelease.types[type]?.bases).toContain('schema:CreativeWork');
+    expect(page?.definitions?.types['schema:CreativeWork']).toBeUndefined();
     expect(page?.definitions?.types[type]?.facets).toEqual(bundledRelease.types[type]?.facets);
     for (const property of facetProperties(bundledRelease, [type]))
       expect(page?.definitions?.properties).toHaveProperty(property);
@@ -28,6 +30,7 @@ test('released Recipe and SoftwareApplication join catalogue page metadata witho
     const page = cataloguePageMetadata(bundledRelease, bundledDigest, type);
     expect(page).toMatchObject({ state: 'released', type, digest: bundledDigest });
     expect(page?.definitions?.types[type]).toBeDefined();
+    expect(bundledRelease.types[type]?.bases).not.toContain('schema:CreativeWork');
     expect(page?.definitions?.types['schema:CreativeWork']).toBeUndefined();
     expect(page?.directions?.every((entry) => entry.release === bundledDigest)).toBe(true);
   }
@@ -50,7 +53,10 @@ test('released inheritance admits descendants while an unrelated type remains ou
         ...bundledRelease.types['schema:VideoGame']!,
         bases: ['schema:VideoGame'],
       },
-      'ex:Unrelated': { ...bundledRelease.types['schema:Thing']!, bases: ['schema:Thing'] },
+      'ex:Unrelated': {
+        ...bundledRelease.types['schema:Place']!,
+        bases: ['schema:Thing'],
+      },
     },
   };
   const digest = releaseDigest(release);
