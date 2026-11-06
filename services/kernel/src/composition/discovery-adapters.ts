@@ -202,8 +202,7 @@ function createCollectionPopulationProducer(
 /** Access and command unavailability set these names; composition does not import the private Access file. */
 function isAccessOrCommandUnavailable(error: unknown): boolean {
   return (
-    error instanceof Error &&
-    (error.name === 'AccessUnavailableError' || error.name === 'CommandUnavailableError')
+    error instanceof Error && (error.name === 'AccessUnavailableError' || error.name === 'CommandUnavailableError')
   );
 }
 

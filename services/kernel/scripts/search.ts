@@ -76,9 +76,7 @@ export async function waitForSearch(url: string, containerName: string, timeoutM
 /** A check running on a development host keeps its containers inside its run's slice. */
 export function cgroupArgs(env: NodeJS.ProcessEnv = process.env): string[] {
   if (env.REZICS_WALK_STACK_SLOT) return [];
-  return env.KERNEL_CHECK_ON_REMOTE
-    ? [`--cgroup-parent=${env.REZICS_CHECK_SLICE || 'rezics-check.slice'}`]
-    : [];
+  return env.KERNEL_CHECK_ON_REMOTE ? [`--cgroup-parent=${env.REZICS_CHECK_SLICE || 'rezics-check.slice'}`] : [];
 }
 
 export function searchRunArgs(image: string): string[] {

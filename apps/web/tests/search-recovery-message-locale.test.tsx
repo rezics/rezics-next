@@ -180,7 +180,10 @@ test('a Retry-After deadline expiring in transit hydrates without replacing the 
   Date.now = () => now;
   const errors: unknown[] = [];
   const props = {
-    state: { status: 'index-not-ready' as const, retryAt: 2000 }, retryHref, restartHref, onRetry() {},
+    state: { status: 'index-not-ready' as const, retryAt: 2000 },
+    retryHref,
+    restartHref,
+    onRetry() {},
   };
   try {
     host.innerHTML = renderToString(createElement(SearchRecovery, props));
