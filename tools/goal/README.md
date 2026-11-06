@@ -1837,8 +1837,9 @@ same source task and attempt never block each other: their backlog names share t
 and the derived outputs landing already regenerates). Decision: empty remaining paths after that subtraction are not a
 path-duplicate; a duplicate is a matching title, or every remaining path covered by one single active task or ready
 brief. That duplicate goes to `proposed/` with a `.reason` naming the overlapping task or brief and an inbox notice so
-the manager can merge the remaining scope. A continuation that only partly overlaps an active task is admitted with
-every such task appended to `after`. Dispatch checks overlap again under the same backlog lease used by harvest.
+the manager can merge the remaining scope. Decision: a continuation that only partly overlaps an active task is admitted
+without an `after` edge; the merge train and its resolver handle concurrent edits, and `after` comes only from explicit
+undelivered dependencies. Dispatch checks overlap again under the same backlog lease used by harvest.
 Nonoverlapping briefs outside review mode move to
 `<state>/backlog/<goal>/continuation-<task>-<attempt>-<name>.md` and record `continuation-queued`. A name that normalizes or truncates onto a file
 already holding the same brief is left in place. A different brief is published under a stable distinct name, and the

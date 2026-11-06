@@ -775,7 +775,7 @@ test('seven continuations that share owner docs dispatch; a proposal does not bl
   expect(existsSync(join(root, 'proposed', 'continuation-bbbbbbbb-1-parked.md'))).toBe(true);
 });
 
-test('each continuation admission refreshes overlap after the preceding dispatch', async () => {
+test('a continuation that partly overlaps the preceding dispatch is admitted without an after edge', async () => {
   const f = fixture({ perSweep: 2 });
   f.runtime.policy = readControlPolicy({ backlog: { continuationReview: { web: false } } });
   let sequence = 0;
@@ -809,7 +809,7 @@ test('each continuation admission refreshes overlap after the preceding dispatch
 
   expect(sweep.dispatched.map((entry) => entry.brief)).toEqual([first, second]);
   expect(sweep.dispatched[0]?.taskId).toBe('admitted-1');
-  expect(f.dispatched[1]?.text).toContain('after:\n  - admitted-1');
+  expect(f.dispatched[1]?.text).not.toContain('admitted-1');
 });
 
 const SPAN_MS = 90 * 60 * 1000;

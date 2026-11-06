@@ -513,7 +513,7 @@ test('title match and remaining-path coverage are still duplicates; proposed bri
     );
     const partial = harvestContinuations(h.store, h.settings, task, ref);
     expect(partial.proposed).toEqual([]);
-    expect(readFileSync(partial.queued[0]!, 'utf8')).toContain(other.id);
+    expect(readFileSync(partial.queued[0]!, 'utf8')).not.toContain(other.id);
   } finally {
     h.dispose();
   }
