@@ -2,7 +2,7 @@ import { isIP } from 'node:net';
 import { ConfigError } from '../commerce/config.ts';
 import { createTurnstileVerifier } from './turnstile.ts';
 import type { ContentRuntime } from './runtime.ts';
-import { readContentEditionConsent } from './edition-sale-native.ts';
+import { readContentEditionConsent } from './edition-sale-consent.ts';
 
 type Environment = Readonly<Record<string, string | undefined>>;
 

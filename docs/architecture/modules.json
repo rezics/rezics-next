@@ -277,7 +277,12 @@
       "kind": "adapter",
       "owner": "content",
       "paths": ["services/kernel/src/content/**", "services/kernel/db/content/**"],
-      "excludes": ["services/kernel/src/content/community-projection/**"],
+      "excludes": [
+        "services/kernel/src/content/community-projection/**",
+        "services/kernel/src/content/contract/**",
+        "services/kernel/src/content/core/**",
+        "services/kernel/src/content/application/**"
+      ],
       "publicEntries": [
         "services/kernel/src/content/document-public.ts",
         "services/kernel/src/content/realm-board-home.ts",
@@ -287,7 +292,10 @@
         "services/kernel/src/content/report-locator-events.ts",
         "services/kernel/src/content/register.ts",
         "services/kernel/src/content/review-discovery.ts",
-        "services/kernel/src/content/access-capabilities.ts"
+        "services/kernel/src/content/access-capabilities.ts",
+        "services/kernel/src/content/adapters/index.ts",
+        "services/kernel/src/content/adapters/bind.ts",
+        "services/kernel/src/content/adapters/ambient.ts"
       ],
       "allowedDependencies": [
         "definitions",
@@ -296,7 +304,10 @@
         "kernel-access",
         "kernel-commerce",
         "kernel-community",
+        "kernel-content-application",
         "kernel-content-community-projection",
+        "kernel-content-contract",
+        "kernel-content-core",
         "kernel-library",
         "kernel-library-contract",
         "kernel-platform",
@@ -307,6 +318,33 @@
       ],
       "capabilities": ["content"],
       "postgresPaths": ["services/kernel/src/content/**"]
+    },
+    {
+      "id": "kernel-content-contract",
+      "kind": "contract",
+      "owner": "content",
+      "paths": ["services/kernel/src/content/contract/**"],
+      "publicEntries": ["services/kernel/src/content/contract/index.ts"],
+      "allowedDependencies": [],
+      "capabilities": ["content-vocabulary"]
+    },
+    {
+      "id": "kernel-content-core",
+      "kind": "core",
+      "owner": "content",
+      "paths": ["services/kernel/src/content/core/**"],
+      "publicEntries": ["services/kernel/src/content/core/index.ts"],
+      "allowedDependencies": ["kernel-content-contract"],
+      "capabilities": ["content-domain-rules"]
+    },
+    {
+      "id": "kernel-content-application",
+      "kind": "application",
+      "owner": "content",
+      "paths": ["services/kernel/src/content/application/**"],
+      "publicEntries": ["services/kernel/src/content/application/index.ts"],
+      "allowedDependencies": ["kernel-content-contract", "kernel-content-core"],
+      "capabilities": ["content-use-cases"]
     },
     {
       "id": "kernel-content-community-projection",
@@ -324,7 +362,8 @@
       "paths": ["services/kernel/src/community/**", "services/kernel/db/community/**"],
       "publicEntries": [
         "services/kernel/src/community/index.ts",
-        "services/kernel/src/community/access-capabilities.ts"
+        "services/kernel/src/community/access-capabilities.ts",
+        "services/kernel/src/community/content-capabilities.ts"
       ],
       "allowedDependencies": [
         "auth-contract",
@@ -602,6 +641,9 @@
         "kernel-access-core",
         "kernel-commerce",
         "kernel-content",
+        "kernel-content-application",
+        "kernel-content-contract",
+        "kernel-content-core",
         "kernel-community",
         "kernel-library",
         "kernel-platform",

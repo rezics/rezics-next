@@ -5,6 +5,7 @@ import { createAccountsWorkModule } from '../access/membership-work.ts';
 import { readMembershipWorkConfig } from '../access/membership-work-config.ts';
 import { createRealmMembership, readMembershipInitiator } from '../community/membership.ts';
 import { communityWorkModule } from '../community/work.ts';
+import { tryContentApplication } from '../content/adapters/bind.ts';
 import { contentDeclaration, type ContentWorkAmbient } from '../content/register.ts';
 import type { WorkModule } from './registry.ts';
 import { commerceWorkModule } from '../commerce/work-module.ts';
@@ -46,11 +47,17 @@ export function createKernelWorkModules(
   composeDiscovery: Parameters<typeof createSearchWorkModule>[0],
   composeRuntimeDefaults: Parameters<typeof createSearchWorkModule>[1],
   composeSemantic: SemanticIdentityParticipantComposer,
-  ambient: ContentWorkAmbient = { fetch: (request) => globalThis.fetch(request) },
+  ambient?: ContentWorkAmbient,
 ): readonly WorkModule[] {
+  const bound = tryContentApplication()?.ambient;
+  const resolved: ContentWorkAmbient = {
+    fetch: ambient?.fetch ?? bound?.fetch ?? ((request) => globalThis.fetch(request)),
+    now: ambient?.now ?? bound?.now ?? (() => Date.now()),
+    ...(ambient?.id ?? bound?.id ? { id: ambient?.id ?? bound?.id } : {}),
+  };
   const searchWorkModule = createSearchWorkModule(composeDiscovery, composeRuntimeDefaults);
   const semanticWorkModule = createSemanticWorkModule(composeSemantic);
-  const contentWorkModule = contentDeclaration().work(ambient);
+  const contentWorkModule = contentDeclaration().work(resolved);
   return [
     accountsWorkModule,
     erasureWorkModule,

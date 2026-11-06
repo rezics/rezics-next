@@ -1,15 +1,16 @@
 import type { Pool, PoolClient } from 'pg';
 import { withConnection } from '../database/pool.ts';
-import { readRealmVotes, type RealmVotes } from '../community/realm-votes.ts';
+import { readRealmVotes, type RealmVotes } from '../community/content-capabilities.ts';
 import { PARTITIONS } from '../route/route.ts';
+import { tryContentApplication } from './adapters/bind.ts';
+import { CONTENT_DEFAULT_REALM_VOTES } from './contract/index.ts';
+import { clampReactionScore, lemmyActiveRank } from './core/index.ts';
 import refresh from './board-rank-refresh.sql';
 import updateRanks from './board-rank-update.sql';
 import readScores from './board-rank-scores.sql';
 import type { ReactionKind } from './reactions.ts';
 
-const noRealmVotes: RealmVotes = Object.freeze({ upvote: 1, downvote: -1 });
-const minimumScore = -2_147_483_648;
-const maximumScore = 2_147_483_647;
+export { lemmyActiveRank };
 
 type Candidate = {
   route: number;
@@ -31,26 +32,6 @@ type RankUpdate = {
   hot_rank: number;
 };
 
-/**
- * Based on https://github.com/LemmyNet/lemmy, tag 0.19.21,
- * crates/db_schema/replaceable_schema/utils.sql: r.hot_rank. With h = age in hours,
- * Lemmy uses log10(max(2, score + 2)) / (h + 2)^1.8 for 0 < h < 168, otherwise 0.
- * REZICS uses last activity for active and creation for hot, clamps h to 0, and
- * retains the positive rank at exactly 168 h. Server transaction times make h <= 0
- * an instant creation or clock skew; ranking those as newest avoids sinking new
- * threads. The single-instant 168 h difference is retained to agree with the SQL
- * function without a migration. Any future path accepting external creation or
- * activity times must clamp them to the transaction time when writing: ranking
- * trusts these times.
- */
-export function lemmyActiveRank(score: number, activityAt: Date, at: Date): number {
-  if (!Number.isInteger(score) || !Number.isFinite(activityAt.getTime()) || !Number.isFinite(at.getTime()))
-    throw new TypeError('Invalid active rank input');
-  const hours = Math.max(0, (at.getTime() - activityAt.getTime()) / 3_600_000);
-  if (at.getTime() - activityAt.getTime() > 7 * 24 * 3_600_000) return 0;
-  return Math.log10(Math.max(2, score + 2)) / Math.pow(hours + 2, 1.8);
-}
-
 function routedThreadPartition(threadId: string): number {
   const route = Number.parseInt(threadId.slice(24, 28), 16);
   if (!Number.isInteger(route) || route < 0 || route > 65_535) throw new TypeError('Invalid thread route');
@@ -68,9 +49,9 @@ function weightedScore(
   totals: readonly Total[],
   realmVotes: ReadonlyMap<string, RealmVotes>,
 ): number {
-  const weights = candidate.realm_id === null ? noRealmVotes : (realmVotes.get(candidate.realm_id) ?? {});
+  const weights = candidate.realm_id === null ? CONTENT_DEFAULT_REALM_VOTES : (realmVotes.get(candidate.realm_id) ?? {});
   const score = totals.reduce((sum, total) => sum + total.count * (weights[total.kind] ?? 0), 0);
-  return Math.max(minimumScore, Math.min(maximumScore, Math.trunc(score)));
+  return clampReactionScore(score);
 }
 
 async function readBatchScores(client: PoolClient, candidates: readonly Candidate[]): Promise<Map<string, Total[]>> {
@@ -110,7 +91,7 @@ async function updateBatch(
 /** One indexed refresh batch per partition, each locking at most 500 due candidates. */
 export async function refreshBoardRankBatch(
   pool: Pool,
-  at = new Date(),
+  at = tryContentApplication()?.ambient.clock() ?? new Date(),
   partitions: readonly number[] = Array.from({ length: PARTITIONS }, (_, partition) => partition),
 ): Promise<number> {
   if (!Number.isFinite(at.getTime())) throw new TypeError('Invalid board rank refresh time');

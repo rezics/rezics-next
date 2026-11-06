@@ -61,6 +61,7 @@ import {
 } from '../rating/module.ts';
 import type { ContentBoardDependencies } from '../content/boards.ts';
 import { currentRealmDisclosureScope } from '../content/reads.ts';
+import { tryContentApplication } from '../content/adapters/bind.ts';
 import { mountContentHttp, type ContentHttpRoutes } from '../content/http.ts';
 import { realmOfItem } from '../content/realm-of-item.ts';
 import type { TurnstileVerifier } from '../content/turnstile.ts';
@@ -158,6 +159,8 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
       readConsent?: CurrentConsentReader;
       /** Complete-input title observations; absent until Content installs its native producer. */
       shelfTitleInputs?: ContentShelfTitleInputs;
+      now?: () => number;
+      id?: () => string;
     };
   search?: SearchRuntime;
   /** Native shelf maintenance bindings; absence is a typed preparing response, never ready empty data. */
@@ -615,6 +618,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
   });
   const anonymousVerifier = dependencies.reports?.anonymousVerifier ?? dependencies.content?.anonymousVerifier;
   const cursorNow = dependencies.content?.cursorNow ?? (() => clock().getTime());
+  const contentAmbient = tryContentApplication()?.ambient;
   let contentAccess: Access | undefined;
   let realmParticipation: RealmParticipationCheck | undefined;
   let content: ReturnType<typeof mountContentHttp>['content'];
@@ -634,8 +638,9 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     routeKey: dependencies.routeKey,
     clock,
     cursorNow,
-    // Request budgets use wall time; domain time stays on the kernel clock.
-    now: () => Date.now(),
+    // Request budgets use wall time from the composed Content ambient; domain time stays on the kernel clock.
+    now: dependencies.content?.now ?? contentAmbient?.now ?? (() => Date.now()),
+    id: dependencies.content?.id ?? contentAmbient?.id ?? (() => Bun.randomUUIDv7()),
     tokens,
     ...(dependencies.content?.readConsent === undefined ? {} : { readConsent: dependencies.content.readConsent }),
     ...(dependencies.content?.fetchConfig === undefined ? {} : { fetchConfig: dependencies.content.fetchConfig }),

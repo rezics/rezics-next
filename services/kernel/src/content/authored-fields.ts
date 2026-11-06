@@ -16,6 +16,7 @@ import { ACCOUNT_ROLE_BITS } from '../history/contracts.ts';
 import { declareCommandHistory } from '../history/record.ts';
 import { declareCommandRecordSources } from '../history/record-source.ts';
 import { ContentNotFoundError } from './commands.ts';
+import { admitAuthoredLanguage, admitAuthoredRevision, authoredFieldContainsMedia } from './core/index.ts';
 import { readAuthoredFieldHistorySource } from './authored-fields-history.ts';
 import { validateContentDocument } from './document.ts';
 import append from './append-authored-field.sql';
@@ -84,37 +85,21 @@ export async function appendAuthoredField(
   )
     throw new TypeError('Authored document requires current subject command authorization');
   if (routeOf(input.candidate) !== route) throw new RangeError('Authored candidate must carry the subject route');
-  if (!Number.isSafeInteger(input.revision) || input.revision < 1)
+  if (!admitAuthoredRevision(input.revision))
     throw new RangeError('Authored revision must be a positive safe integer allocated by semantic');
 
   const authorAccountId = command.basis?.actorAccountId;
   if (authorAccountId === undefined || authorAccountId === null)
     throw new TypeError('Authored documents require an account actor');
-  if (
-    typeof input.language !== 'string' ||
-    input.language.length < 1 ||
-    input.language.length > 128 ||
-    /[\u0000-\u001f\u007f-\u009f]/u.test(input.language)
-  )
-    throw new TypeError('Invalid authored document language');
-  try {
-    new Intl.Locale(input.language);
-  } catch {
-    throw new TypeError('Invalid authored document language');
-  }
+  if (!admitAuthoredLanguage(input.language)) throw new TypeError('Invalid authored document language');
 
   const document = validateContentDocument({
     body: input.document,
     licence: input.licence,
     subjectIds: [input.subject],
   });
-  const pending = [document.snapshot.doc];
-  while (pending.length) {
-    const node = pending.pop()!;
-    if (node.type === 'image' || node.type === 'media')
-      throw new TypeError('Authored field documents cannot contain image or media nodes');
-    pending.push(...(node.content ?? []));
-  }
+  if (authoredFieldContainsMedia(document.snapshot.doc))
+    throw new TypeError('Authored field documents cannot contain image or media nodes');
 
   const id = newId(route);
   await append.run(tx, {

@@ -7624,11 +7624,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/content/board-rank.ts",
-          "edge": "value import \"../community/realm-votes.ts\" #1 => services/kernel/src/community/realm-votes.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/content/board-rank.ts",
           "edge": "value import \"../database/pool.ts\" #1 => services/kernel/src/database/pool.ts"
         },
         {
@@ -25889,11 +25884,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/semantic/http/subjects.ts",
-          "edge": "value import \"../../content/events.ts\" #1 => services/kernel/src/content/events.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/semantic/http/subjects.ts",
           "edge": "value import \"../../content/reaction-projection.ts\" #1 => services/kernel/src/content/reaction-projection.ts"
         },
         {
@@ -25930,16 +25920,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/semantic/http/subjects.ts",
           "edge": "value import \"../../partition/partition.ts\" #1 => services/kernel/src/partition/partition.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/semantic/identity-basis.ts",
-          "edge": "value import \"../access/unavailable.ts\" #1 => services/kernel/src/access/unavailable.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/semantic/identity-basis.ts",
-          "edge": "value import \"../request/deadline.ts\" #1 => services/kernel/src/request/deadline.ts"
         },
         {
           "rule": "rule 2",

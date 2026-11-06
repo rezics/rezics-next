@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import { readDocument } from '../../src/content/document-read.ts';
 import { contentDeclaration } from '../../src/content/register.ts';
 import { readContentConfig } from '../../src/content/config.ts';
+import { createNativeContentAmbient } from '../../src/content/adapters/ambient.ts';
 import type { Access } from '../../src/request/access.ts';
 import { newId } from '../../src/route/route.ts';
 
@@ -12,7 +13,19 @@ test('content declares its events, permissions and worker from one value', () =>
   expect(declared.name).toBe('content');
   expect(Object.keys(declared.events())).toContain('com.rezics.content.thread.created.v1');
   expect([...declared.permissions.keys()]).toContain('content.thread');
-  expect(declared.work({ fetch: (request) => fetch(request) }).name).toBe('content');
+  expect(declared.work({ fetch: (request) => fetch(request), now: () => 0 }).name).toBe('content');
+});
+
+test('native ambient supplies clock, now, id and fetch as explicit operands', () => {
+  const ambient = createNativeContentAmbient({
+    now: () => 42,
+    id: () => 'id',
+    clock: () => new Date(0),
+    fetch: async () => new Response('ok'),
+  });
+  expect(ambient.now()).toBe(42);
+  expect(ambient.id()).toBe('id');
+  expect(ambient.clock().getTime()).toBe(0);
 });
 
 // The injected clock alone decides whether a deadline has passed; storage is touched only when it has not.

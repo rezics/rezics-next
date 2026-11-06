@@ -2,6 +2,7 @@ import { createWriteRateLimiter, type WriteRateLimiter } from '../access/write-r
 import { createAccess, type AccessConfig } from '../access/index.ts';
 import type { AuthenticationConfig } from '../access/authenticate.ts';
 import { composeAccessApplication } from './access.ts';
+import { composeContentApplication } from './content.ts';
 import { ConfigError } from '../commerce/config.ts';
 import { assertReceiptKeyRing, readReceiptKeyRing } from '../command/receipt-key.ts';
 import { systemClock } from '../clock.ts';
@@ -57,6 +58,7 @@ function readAuthConfig(env: NodeJS.ProcessEnv): AuthenticationConfig | undefine
 /** Shared runtime defaults for the HTTP server and Search work factory. */
 export function createKernelRuntimeDefaults(overrides: KernelRuntimeOverrides = {}): KernelRuntimeDefaults {
   composeAccessApplication();
+  composeContentApplication();
   const env = overrides.env ?? process.env;
   const tokens = overrides.tokens ?? readTokenKeys(env);
   const receiptKeys = readReceiptKeyRing(env, overrides.receiptKeys);

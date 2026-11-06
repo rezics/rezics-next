@@ -1,3 +1,4 @@
+import { tryContentApplication } from './adapters/bind.ts';
 import { registerModerationDirectoryWork } from './moderation-directory-work.ts';
 import { createAccess } from '../access/index.ts';
 import resourceRoles from '../access/resource-roles.json';
@@ -143,8 +144,12 @@ function unavailableConsent(): CurrentConsentReader {
   };
 }
 
-/** Network access is an explicit operand supplied by the composition root. */
-export type ContentWorkAmbient = Readonly<{ fetch: (request: Request) => Promise<Response> }>;
+/** Network, wall-clock budgets and request IDs are explicit operands supplied by the composition root. */
+export type ContentWorkAmbient = Readonly<{
+  fetch: (request: Request) => Promise<Response>;
+  now?: () => number;
+  id?: () => string;
+}>;
 
 /** Content's declared surfaces, read by the composition root. Events, operations and permissions are data;
  * the worker is a factory over explicit operands. HTTP routes are mounted by the HTTP composition. */
@@ -176,6 +181,7 @@ export function createContentWorkModule(ambient: ContentWorkAmbient): WorkModule
         readConsent,
         routeKey: readMembershipRouteKey(context.env),
         fetchConfig: dependencies.fetchConfig,
+        now: ambient.now ?? tryContentApplication()?.ambient.now ?? (() => Date.now()),
         ...(collectionPartitions === undefined ? {} : { collectionPartitions }),
       }).register(context);
       registerReportLocatorWork(context);

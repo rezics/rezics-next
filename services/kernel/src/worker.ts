@@ -11,6 +11,7 @@ import { createDiscoveryProducerEntry } from './composition/discovery.ts';
 import { createKernelRuntimeDefaults } from './composition/runtime-defaults.ts';
 import { composeSemanticIdentityParticipants } from './composition/semantic.ts';
 import { composeAccessApplication } from './composition/access.ts';
+import { composeContentApplication } from './composition/content.ts';
 import { composeWork, type WorkModule } from './work/registry.ts';
 import { effectsRelay } from './events/effects.ts';
 import { startRelays } from './events/relays.ts';
@@ -67,14 +68,19 @@ export function readWorkerConfig(env: NodeJS.ProcessEnv): WorkerConfig {
 
 export async function startWorker(
   config: WorkerConfig,
-  modules: readonly WorkModule[] = createKernelWorkModules(
-    createDiscoveryProducerEntry,
-    createKernelRuntimeDefaults,
-    composeSemanticIdentityParticipants,
-  ),
+  modules?: readonly WorkModule[],
   env: Readonly<Record<string, string | undefined>> = process.env,
 ) {
   composeAccessApplication();
+  const content = composeContentApplication(config.clock ? { clock: config.clock } : undefined);
+  const resolvedModules =
+    modules ??
+    createKernelWorkModules(
+      createDiscoveryProducerEntry,
+      createKernelRuntimeDefaults,
+      composeSemanticIdentityParticipants,
+      { fetch: content.ambient.fetch, now: content.ambient.now, id: content.ambient.id },
+    );
   const receiptKeys = readReceiptKeyRing(env, config.receiptKeys);
   initializeEventTypes();
   const pool = config.kernelPool
@@ -125,7 +131,7 @@ export async function startWorker(
   process.on('SIGTERM', signal);
   try {
     starting = (async () => {
-      work = await composeWork(modules, { ...config, pool, client, env });
+      work = await composeWork(resolvedModules, { ...config, pool, client, env });
       await work.launch();
       relays = startRelays(pool, [effectsRelay(pool, work.effects)]);
     })();
