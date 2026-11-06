@@ -3,13 +3,13 @@ import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { fromPlainText } from '@rezics/document';
-import type { SubjectPageData } from '../src/features/pages/subject';
 import type { Stmt } from '../src/features/pages/shared';
 import type { Related, Subject } from '../src/subject/types';
 import { defaultReader } from '../src/subject/reader';
 import recorded from '../src/kernel/recorded/subject-page.json';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
+type SubjectPageData = import('../src/features/pages/subject').SubjectPageData;
 const { RecipePublicationEntry } = await import('../src/features/pages/recipe-publication');
 const { recipePublicationReading } = await import('../src/features/pages/recipe-publication/model');
 const { ReleasePublicationEntry } = await import('../src/features/pages/release-publication');
