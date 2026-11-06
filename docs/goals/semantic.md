@@ -59,8 +59,10 @@ and routing, so HTTP tests that skip worker composition still project covers. Zo
 current locale map when renaming one label. Platform hold/purge bind operator history evidence before
 enrollment. Internal Zone purge pages use a unique `zone.purge` receipt and idle history on no-effect
 paths. Account-agent tests use a wall-clock request budget and prepare Access evidence at authorize time.
-Decision: Subject source pages precheck each statement minimum then charge returned rows; identity mapping
-uses the unmetered pool and one original key so tombstone homes cannot overflow the caller limit.
+Decision: Subject source pages compose mapping source/control collects and Source fence children, including
+hidden write_basis and outbox writes, before effects, and persist continuation so an affordable call finishes
+the native all-home walk. Empty sealed homes charge a page/seek read then one hold and one transfer command;
+the independent terminal proof is walked after the page cursor.
 
 ## Ownership
 

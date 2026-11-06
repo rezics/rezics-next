@@ -2081,8 +2081,10 @@ on the same client; Global has no personal owner. Creator, adopter, provenance a
   uses the actual participant fence, late-item and open-work protocols. No account-wide graph or payload scan.
 - Bound: one pending locator, one unsettled receipt and at most one exact Context child key, or one empty routing-home key; all count within native ceilings of 100 raw keys, 64 KiB returned and 1 KiB per locator;
   fixed 4096-home routing discovery plus work proportional to this account's source records. Subject source pages
-  precheck each statement minimum then charge returned rows; identity mapping is one original key on the unmetered
-  pool so tombstone homes cannot overflow that caller limit. Permanent applicability,
+  compose mapping source/control collects and Source fence children, including hidden write_basis and outbox
+  writes, before effects, and persist continuation so an affordable call finishes the native all-home walk.
+  Empty sealed homes charge a page/seek read then one hold and one transfer command; the independent terminal
+  proof is walked after the page cursor. Permanent applicability,
   per-home receipts and delivery cursors survive process loss and workflow replay. Native growth captures all SQL
   and pools. The default account-and-T workflow uses one persisted DBOS step per native page on the existing
   effects queue and partition key; no queue settings change or nested page loop is involved. Its actual workflow
