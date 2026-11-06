@@ -72,3 +72,7 @@ route. Media acceptance uses the same browser cookies and CSRF token as producti
 Decision: the account-entry walk is `apps/auth/tests/sign-in-walk.test.ts`, run on a walk stack with
 `REZICS_SIGN_IN_WALK=1 bun services/auth/scripts/dev-stack.ts walk -- bun test apps/auth/tests/sign-in-walk.test.ts`.
 The journey stays unaccepted until a real walk passes.
+
+Decision: delegated agent and principal media acceptance waits for Accounts' native delegated-client and assignment
+fixture binding. The operator session is never used as a delegated proof; Alice, Bob, anonymous, revoked and suspended
+cases bind the personal driver now.
