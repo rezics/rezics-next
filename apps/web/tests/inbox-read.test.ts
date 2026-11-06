@@ -21,8 +21,15 @@ mock.module('@tanstack/react-start/server', () => ({
 }));
 mock.module('../src/kernel/client', () => ({ kernelClient: () => configuredKernel }));
 import type { InboxNotice } from '../src/inbox/inbox-read';
-const { decodeInboxPage, inboxPageActions, loadUnreadCount, nativeInboxEnvelope, readUnreadCount, readyInboxPage } =
-  await import('../src/inbox/inbox-read');
+const {
+  decodeInboxPage,
+  decodeUnreadCount,
+  inboxPageActions,
+  loadUnreadCount,
+  nativeInboxEnvelope,
+  readUnreadCount,
+  readyInboxPage,
+} = await import('../src/inbox/inbox-read');
 import type { SessionEnv } from '../src/session/client';
 import { preferenceRetryDeadline } from '../src/settings/preference-failure-retry';
 
@@ -350,6 +357,22 @@ test('readUnreadCount keeps setup failures private and the configured Eden clien
   expect(JSON.stringify(unavailable)).not.toContain('stack');
   expect(responseHeaders.get('cache-control')).toBe('private, no-store');
   requestFailure = undefined;
+});
+
+test('unread decoder keeps lower-bound, capped and exact native summaries', () => {
+  const witness = { kind: 'current-disclosure' as const, at: '2026-11-04T00:00:00.000Z' };
+  expect(decodeUnreadCount({ count: 0, capped: false, basis: 'current-visible-unread', witness })).toEqual({
+    count: 0,
+    capped: false,
+    basis: 'current-visible-unread',
+    witness,
+  });
+  expect(
+    decodeUnreadCount({ count: 4, capped: true, basis: 'current-visible-lower-bound', witness }),
+  ).toMatchObject({ count: 4, capped: true, basis: 'current-visible-lower-bound' });
+  expect(() =>
+    decodeUnreadCount({ count: 4, capped: false, basis: 'current-visible-lower-bound', witness }),
+  ).toThrow();
 });
 
 test('installed actors decode avatar summaries while retained fixtures without avatar still pass', () => {

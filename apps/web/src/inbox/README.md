@@ -60,23 +60,33 @@ only a deliberate first-page refresh recovers, and no neighbor receives restored
 
 **Decision:** Pin this journey with the existing inbox-read, inbox-page, inbox-native-triage, inbox-notice-detail,
 inbox-session-authority, inbox-pagination, notifications-inbox and recorded-responses suites plus the consumption
-stories; landing is those tests with changed-workspace typing.
+stories and native-notifications.host; landing is those tests with changed-workspace typing. Fewest tests: keep those
+suites, complete the native fixture/journey, and add one browser-work pin at 64/512/4096 rather than a second suite.
+
+**Decision:** Native All/Unread, lower-bound badge, one-item and admitted-range acknowledgement, keyboard return,
+unknown-command recovery, failed observation after receipt, and viewer/credential replacement stay on those suites.
+The decoder is the capture path for current actor, thread/board titles and additive avatar summaries. Native SQL
+examined rows stay with Content `growth-notice-inbox`; composed Inbox reports request, retained-row and cursor-byte
+bounds and links that producer evidence.
 
 **Cost:** Each Inbox page dispatches one private list request for at most 20 items and zero actor/target requests. Next,
 Previous and browser return each issue a fresh native page read at the selected exact address; a query admission ID
 prevents an earlier cached response from substituting for that read. Pagination retains at most eight prior addresses,
-each paired with All/Unread and its mounted viewer episode, plus one current address. The native cursor bound is 4,096
-UTF-16 code units: those eight addresses, the current address and one return receipt contribute at most 80 KiB of cursor
-payload; selection, episode and native notice-key metadata are fixed-size. At most one 20-row response body is readable,
+each paired with All/Unread and its mounted viewer episode, plus one current address and one return receipt. The native
+cursor bound is 4,096 UTF-16 code units: those ten retained cursors contribute at most 80 KiB of cursor payload;
+selection, episode and native notice-key metadata are fixed-size. At most one 20-row response body is readable,
 including during a pending or transiently failed direction; the eight prior bodies are never retained. A successful
 continuation replaces the prior page, so the view retains at most 20 notices; during a pending or failed continuation
 it retains only the prior 20-row window. Concurrent unread-count consumers for one viewer episode share one coalesced
 native observation, independently of the selected page. A chosen or bulk acknowledgement dispatches one native command,
 followed by the existing deliberate badge/list invalidation. A completed command stays consumed when that follow-up
 observation fails; the page offers a current read, not another command. Sequential visits release the previous page and
-callbacks; the browser growth check varies unrelated list size and visits while checking request, retained-row and
-materialized-byte bounds. Nested native disclosure and acknowledgement examined-work stay with Content
+callbacks; the browser growth check varies unrelated notice population and visits independently at 64, 512 and 4,096
+while checking request, retained-row and materialized-byte bounds, including discarded candidates outside the 20-row
+window. Nested native disclosure and acknowledgement examined-work stay with Content
 ([current inbox disclosure](../../../../services/kernel/src/content/README.md#cost-current-inbox-disclosure),
-[growth-notice-inbox](../../../../services/kernel/test/content/growth-notice-inbox.test.ts)); composed Inbox work keeps
-the original command and read counts in diagnostic output. Native database and Access history growth are owned by
-Content, not inferred from browser requests.
+[notification inbox projection](../../../../services/kernel/src/content/README.md#cost-notification-inbox-projection),
+[growth-notice-inbox](../../../../services/kernel/test/content/growth-notice-inbox.test.ts)
+list/disclosure/unread cases); composed Inbox work keeps the original command and read counts in diagnostic output and
+names Content's constant-row / logarithmic-block / 80-candidate list and 201-key unread window. Native database and
+Access history growth are owned by Content, not inferred from browser requests.
