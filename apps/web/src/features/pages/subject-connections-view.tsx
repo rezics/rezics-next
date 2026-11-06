@@ -254,10 +254,12 @@ function ConnectionsReading({
     });
   }
   const visit = snapshot.visit;
-  const currentHref = withSubjectVisitReturn(
-    connectionReturnHref(value.subject!, value.subjectLabel ?? value.unlabelled, value.locale, value.realm),
-    returnTo ?? '',
+  // Each list link opens one immediate canonical Connections address; this page's own return stays on its back link.
+  const currentHref = connectionReturnHref(
+    value.subject!,
+    value.subjectLabel ?? value.unlabelled,
     value.locale,
+    value.realm,
   );
   const Link = value.link;
   const link = useMemo<typeof PlainLink>(
@@ -463,23 +465,14 @@ function ConnectionsReading({
                           (item) => item.statement === work.statement.id && item.id === work.id,
                         );
                         if (!item || !current) return null;
+                        // One immediate Connections window opener per control; no nested return chain travels with it.
                         const returnToFor = (control: 'browse' | 'evidence') =>
-                          withSubjectVisitReturn(
-                            connectionReturnHref(
-                              value.subject!,
-                              value.subjectLabel ?? value.unlabelled,
-                              value.locale,
-                              value.realm,
-                              connectionReturn(
-                                current,
-                                snapshot.pages?.[group],
-                                work.statement.id,
-                                work.holder,
-                                control,
-                              ),
-                            ),
-                            returnTo ?? '',
+                          connectionReturnHref(
+                            value.subject!,
+                            value.subjectLabel ?? value.unlabelled,
                             value.locale,
+                            value.realm,
+                            connectionReturn(current, snapshot.pages?.[group], work.statement.id, work.holder, control),
                           );
                         const returnHref = returnToFor('browse');
                         const target = restore.current;
