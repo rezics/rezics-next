@@ -58,6 +58,10 @@ labels, coalesces one count per viewer episode, and records installed `thread_wa
 **Decision:** After return, a notice absent from the freshly admitted selected page is reported at the Inbox heading;
 only a deliberate first-page refresh recovers, and no neighbor receives restored focus or acknowledgement.
 
+**Decision:** Pin this journey with the existing inbox-read, inbox-page, inbox-native-triage, inbox-notice-detail,
+inbox-session-authority, inbox-pagination, notifications-inbox and recorded-responses suites plus the consumption
+stories; landing is those tests with changed-workspace typing.
+
 **Cost:** Each Inbox page dispatches one private list request for at most 20 items and zero actor/target requests. Next,
 Previous and browser return each issue a fresh native page read at the selected exact address; a query admission ID
 prevents an earlier cached response from substituting for that read. Pagination retains at most eight prior addresses,

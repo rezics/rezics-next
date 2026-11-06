@@ -150,6 +150,10 @@ function noticeId(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && !/[\s/\\?#%]/.test(value) && value !== '.' && value !== '..';
 }
 
+function positiveInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1;
+}
+
 function exactKeys(value: Record<string, unknown>, expected: readonly string[]) {
   const actual = Object.keys(value).sort();
   return actual.length === expected.length && actual.every((key, index) => key === [...expected].sort()[index]);
@@ -161,10 +165,8 @@ function validAvatarSummary(value: unknown): boolean {
     !isRecord(value) ||
     !exactKeys(value, ['media', 'width', 'height', 'placeholder', 'variants', 'focalPoint', 'credit']) ||
     !noticeId(value.media) ||
-    !Number.isInteger(value.width) ||
-    value.width < 1 ||
-    !Number.isInteger(value.height) ||
-    value.height < 1 ||
+    !positiveInteger(value.width) ||
+    !positiveInteger(value.height) ||
     value.credit !== null
   )
     return false;
@@ -184,8 +186,7 @@ function validAvatarSummary(value: unknown): boolean {
       !isRecord(variant) ||
       !exactKeys(variant, ['format', 'width']) ||
       (variant.format !== 'avif' && variant.format !== 'webp') ||
-      !Number.isInteger(variant.width) ||
-      variant.width < 1
+      !positiveInteger(variant.width)
     )
       return false;
   }

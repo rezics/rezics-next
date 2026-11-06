@@ -167,26 +167,28 @@ function ReturnPreview() {
   );
 }
 
+async function keyboardReturnPlay({ canvasElement }: { canvasElement: HTMLElement }) {
+  const view = within(canvasElement);
+  const list = await view.findByRole('list', { name: m.inbox_heading() });
+  const destination = within(list).getByRole('link', { name: 'A new post on a thread you watch' });
+  destination.focus();
+  await expect(destination).toHaveFocus();
+  await expect(destination).toHaveAttribute('href', watchHref);
+  await userEvent.keyboard('{Enter}');
+}
+
 export const KeyboardReturnPhone: Story = {
   name: 'Keyboard return restores the current watch notice',
   globals: { viewport: { value: 'phone390', isRotated: false } },
   render: () => <ReturnPreview />,
-  play: async ({ canvasElement }) => {
-    const view = within(canvasElement);
-    const list = await view.findByRole('list', { name: m.inbox_heading() });
-    const destination = within(list).getByRole('link', { name: 'A new post on a thread you watch' });
-    destination.focus();
-    await expect(destination).toHaveFocus();
-    await expect(destination).toHaveAttribute('href', watchHref);
-    await userEvent.keyboard('{Enter}');
-  },
+  play: keyboardReturnPlay,
 };
 
 export const KeyboardReturnDesktop: Story = {
   name: 'Keyboard return on desktop',
   globals: { viewport: { value: 'desktop1280', isRotated: false } },
   render: () => <ReturnPreview />,
-  play: KeyboardReturnPhone.play,
+  play: keyboardReturnPlay,
 };
 
 function RecoveryPreview() {
