@@ -734,8 +734,7 @@ function executeDiscoverySearch(
               directory: kindDirectory.map((entry) => entry.kind),
               complete: false,
             });
-            for (const [kind, evidence] of kindCounts)
-              if ('value' in evidence) witnesses.set(kind, evidence.value);
+            for (const [kind, evidence] of kindCounts) if ('value' in evidence) witnesses.set(kind, evidence.value);
             await countCoverage.consume(countBatch.execution, window.examined);
             await countCoverage.finish();
           } catch (error) {

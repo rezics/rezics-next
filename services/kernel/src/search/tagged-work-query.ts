@@ -303,8 +303,7 @@ export function pageTaggedWorkSubjects(input: {
       };
     }
   }
-  if (hits.length < input.limit && input.exhausted === false && !complete)
-    return { status: 'preparing', examined };
+  if (hits.length < input.limit && input.exhausted === false && !complete) return { status: 'preparing', examined };
   if (hits.length < input.limit && examined >= input.scanBound && input.exhausted === false)
     return { status: 'preparing', examined };
   return {
