@@ -43,7 +43,8 @@ export const COMMERCE_CUSTODY_BLOCKER =
 
 /** The only currently supported order-retention policy is a deterministic native-test fixture policy. */
 export const NATIVE_TEST_ORDER_RETENTION_FIELDS = ['buyer_account_id', 'checkout_url', 'expires_at'] as const;
-export const NATIVE_TEST_ORDER_RETENTION_PURPOSE = 'Finite native test retention of the exact original Checkout capability.';
+export const NATIVE_TEST_ORDER_RETENTION_PURPOSE =
+  'Finite native test retention of the exact original Checkout capability.';
 export const ORDER_RETENTION_STORE = 'commerce.purchase_order_retained';
 export const ORDER_RETENTION_BLOCKER =
   'Order retention policy is not configured uniformly for every buyer order before the account barrier';
@@ -221,10 +222,7 @@ export async function advanceCommerceErasure(pool: Pool, accountId: string): Pro
       if (progress.phase === 'pending') return noEffect('pending' as const);
       if (progress.phase === 'retained') {
         const now = authoritativeTimeValue(time);
-        if (
-          progress.retentionExpiresAt !== null &&
-          Date.parse(progress.retentionExpiresAt) <= Date.parse(now)
-        ) {
+        if (progress.retentionExpiresAt !== null && Date.parse(progress.retentionExpiresAt) <= Date.parse(now)) {
           const retained = await pageRetained.run(tx, {
             ...key,
             after: progress.cursor,
@@ -238,20 +236,15 @@ export async function advanceCommerceErasure(pool: Pool, accountId: string): Pro
             });
             if (removed.length !== retained.length) throw new Error('Commerce retained-order purge was incomplete');
           }
-          const nextPhase = retained.length === 100
-            ? 'retained'
-            : progress.blocker && progress.blocker !== COMMERCE_CUSTODY_BLOCKER
-              ? 'pending'
-              : 'resolve';
+          const nextPhase =
+            retained.length === 100
+              ? 'retained'
+              : progress.blocker && progress.blocker !== COMMERCE_CUSTODY_BLOCKER
+                ? 'pending'
+                : 'resolve';
           await checkpoint.run(
             tx,
-            checkpointInput(
-              key,
-              progress,
-              retained.at(-1)?.id ?? progress.cursor,
-              nextPhase,
-              progress.blocker,
-            ),
+            checkpointInput(key, progress, retained.at(-1)?.id ?? progress.cursor, nextPhase, progress.blocker),
           );
           return {
             value: nextPhase === 'retained' ? ('more' as const) : nextPhase,
@@ -290,7 +283,13 @@ export async function advanceCommerceErasure(pool: Pool, accountId: string): Pro
         const full = keys.length === 100;
         await checkpoint.run(
           tx,
-          checkpointInput(key, progress, full ? keys.at(-1)!.id : ZERO, full ? 'acquisitions' : 'money-observations', ''),
+          checkpointInput(
+            key,
+            progress,
+            full ? keys.at(-1)!.id : ZERO,
+            full ? 'acquisitions' : 'money-observations',
+            '',
+          ),
         );
         return {
           value: 'more' as const,
@@ -314,23 +313,23 @@ export async function advanceCommerceErasure(pool: Pool, accountId: string): Pro
         const orders = await pageOrders.run(tx, { ...key, after: progress.cursor });
         if (orders.length === 0) {
           if (!progress.hadData) {
-            await checkpoint.run(
-              tx,
-              checkpointInput(key, progress, ZERO, 'pending', COMMERCE_CUSTODY_BLOCKER),
-            );
+            await checkpoint.run(tx, checkpointInput(key, progress, ZERO, 'pending', COMMERCE_CUSTODY_BLOCKER));
             return {
               value: 'pending' as const,
               events: [{ type: 'com.rezics.access.account-updated.v1', subject: accountId, data: { accountId } }],
             };
           }
           const nextPhase = blocker && progress.retentionStore === null ? 'pending' : 'retained';
-          await checkpoint.run(tx, checkpointInput(
-            key,
-            progress,
-            ZERO,
-            nextPhase,
-            nextPhase === 'retained' ? blocker ?? COMMERCE_CUSTODY_BLOCKER : blocker,
-          ));
+          await checkpoint.run(
+            tx,
+            checkpointInput(
+              key,
+              progress,
+              ZERO,
+              nextPhase,
+              nextPhase === 'retained' ? (blocker ?? COMMERCE_CUSTODY_BLOCKER) : blocker,
+            ),
+          );
           return {
             value: nextPhase,
             events: [{ type: 'com.rezics.access.account-updated.v1', subject: accountId, data: { accountId } }],
@@ -398,7 +397,7 @@ export async function advanceCommerceErasure(pool: Pool, accountId: string): Pro
             progress,
             full ? orders.at(-1)!.id : ZERO,
             nextPhase,
-            nextPhase === 'retained' ? finalBlocker ?? COMMERCE_CUSTODY_BLOCKER : finalBlocker,
+            nextPhase === 'retained' ? (finalBlocker ?? COMMERCE_CUSTODY_BLOCKER) : finalBlocker,
             retainedPolicy,
           ),
         );
@@ -420,19 +419,20 @@ export async function advanceCommerceErasure(pool: Pool, accountId: string): Pro
     if (!retained) throw new Error('Commerce retained-order progress unavailable');
     const exceptions: RetentionException[] = [];
     if (retained.store !== null) {
-      if (!retained.fields || !retained.purpose || !retained.expiresAt)
+      if (
+        retained.fields?.join('\0') !== NATIVE_TEST_ORDER_RETENTION_FIELDS.join('\0') ||
+        retained.purpose !== NATIVE_TEST_ORDER_RETENTION_PURPOSE ||
+        !retained.expiresAt
+      )
         throw new Error('Commerce retained-order metadata is incomplete');
       exceptions.push({
         store: retained.store,
-        fields: retained.fields,
+        fields: [...NATIVE_TEST_ORDER_RETENTION_FIELDS],
         purpose: retained.purpose,
         expiresAt: new Date(retained.expiresAt),
       });
     }
-    await acknowledgeErasure(
-      { pool },
-      { accountId, participant: 'commerce', outcome: 'erased', retained: exceptions },
-    );
+    await acknowledgeErasure({ pool }, { accountId, participant: 'commerce', outcome: 'erased', retained: exceptions });
     if (exceptions.length === 0) {
       await changeProgress(pool, accountId, 'pending', current.blocker ?? COMMERCE_CUSTODY_BLOCKER);
       return 'pending';
@@ -472,23 +472,31 @@ export function registerCommerceErasure({ pool, client, addEffects }: WorkContex
     maxAttempts: 5,
     intervalSeconds: 1,
   });
-  const retentionDeadline = DBOS.registerStep(async (accountId: string) => {
-    const route = routeForAccount(accountId);
-    const progress = await withConnection(pool, (connection) => readRetention.run(connection, {
-      route,
-      account_id: accountId,
-    }));
-    if (!progress?.expiresAt) throw new Error('Commerce retained-order deadline unavailable');
-    return Math.max(0, Date.parse(progress.expiresAt) - Date.now());
-  }, { name: 'commerce.erasure.retentionDeadline' });
-  const resolve = DBOS.registerStep(async (accountId: string) => {
-    const route = routeForAccount(accountId);
-    const key = { route, account_id: accountId };
-    const progress = await withConnection(pool, (connection) => readRetention.run(connection, key));
-    if (!progress?.store) throw new Error('Commerce retained-order store unavailable');
-    await resolveRetention({ pool }, { accountId, participant: 'commerce', store: progress.store });
-    await changeProgress(pool, accountId, 'pending', COMMERCE_CUSTODY_BLOCKER);
-  }, { name: 'commerce.erasure.resolveRetention' });
+  const retentionDeadline = DBOS.registerStep(
+    async (accountId: string) => {
+      const route = routeForAccount(accountId);
+      const progress = await withConnection(pool, (connection) =>
+        readRetention.run(connection, {
+          route,
+          account_id: accountId,
+        }),
+      );
+      if (!progress?.expiresAt) throw new Error('Commerce retained-order deadline unavailable');
+      return Math.max(0, Date.parse(progress.expiresAt) - Date.now());
+    },
+    { name: 'commerce.erasure.retentionDeadline' },
+  );
+  const resolve = DBOS.registerStep(
+    async (accountId: string) => {
+      const route = routeForAccount(accountId);
+      const key = { route, account_id: accountId };
+      const progress = await withConnection(pool, (connection) => readRetention.run(connection, key));
+      if (!progress?.store) throw new Error('Commerce retained-order store unavailable');
+      await resolveRetention({ pool }, { accountId, participant: 'commerce', store: progress.store });
+      await changeProgress(pool, accountId, 'pending', COMMERCE_CUSTODY_BLOCKER);
+    },
+    { name: 'commerce.erasure.resolveRetention' },
+  );
   DBOS.registerWorkflow(
     async (accountId: string) => {
       let state = await advance(accountId);
