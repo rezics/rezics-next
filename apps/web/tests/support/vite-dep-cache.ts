@@ -29,6 +29,7 @@ export const webViteWorkerSsrOptimizeDeps = {
     'react/jsx-runtime',
     'react/jsx-dev-runtime',
     'react-dom',
+    'react-dom/server',
     'react-dom/server.edge',
     '@tanstack/react-router > @tanstack/react-store',
     '@inlang/paraglide-js/urlpattern-polyfill',

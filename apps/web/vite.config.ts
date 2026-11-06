@@ -93,9 +93,10 @@ const linkedDependencyRoot = linkedDependencyAllow(
  * Host-b evidence: Worker discovery printed `(ssr) [optimizer] scanning dependencies...` and then
  * nothing for 150s. Empty include plus `noDiscovery` printed no Vite line at all. The composition
  * that reaches ready is Web's host-local optimizeDeps cache plus Worker `noDiscovery` with an
- * explicit React/TanStack/paraglide include. Leave `urlpattern-polyfill` and the generic
- * `react-dom/server` entry off include: the nested package is resolved to ESM, while
- * `react-dom/server.edge` is pre-bundled to convert its CommonJS wrapper for Worker SSR.
+ * explicit React/TanStack/paraglide include. The generic `react-dom/server` entry is listed because app source
+ * imports it, and under the Worker conditions it resolves to the CommonJS `react-dom/server.edge.js`. An import whose
+ * specifier is not listed is served raw, and Worker inspection then fails with `require is not defined`.
+ * `react-dom/server.edge` stays listed for any direct import of that entry.
  * Calendar packages stay excluded.
  */
 const webRequire = createRequire(import.meta.url);

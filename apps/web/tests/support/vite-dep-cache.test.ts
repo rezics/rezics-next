@@ -46,8 +46,9 @@ test('the default pre-bundle is vite optimize --force, not a second HTTP server'
   expect(source).toContain(`${webViteWarmSsrEnvName} = '1'`);
   expect(webViteWorkerSsrEnvironment.optimizeDeps.include).toEqual([...webViteWorkerSsrOptimizeDeps.include]);
   expect(webViteWorkerSsrEnvironment.optimizeDeps.exclude).toEqual([...webViteWorkerSsrOptimizeDeps.exclude]);
-  expect(webViteWorkerSsrOptimizeDeps.include.includes('react-dom/server')).toBe(false);
-  expect(webViteWorkerSsrOptimizeDeps.include.includes('react-dom/server.edge')).toBe(true);
+  // App source imports the generic entry, which resolves to CommonJS server.edge.js under Worker conditions.
+  expect(webViteWorkerSsrOptimizeDeps.include).toContain('react-dom/server');
+  expect(webViteWorkerSsrOptimizeDeps.include).toContain('react-dom/server.edge');
   expect(webViteWorkerSsrEnvironment.resolve.conditions).toContain('workerd');
   expect(webViteWorkerSsrEnvironment.optimizeDeps.noDiscovery).toBe(true);
 });

@@ -134,7 +134,9 @@ the root still leads it. Full custody needs a launch-time mechanism the launcher
 Decision: a dev server reads its Worker bindings once from `WEB_TEST_WORKER_BINDINGS` when Vite starts, and they stay
 fixed for that server. A running server is shared only with a request whose bindings are compatible; a private server
 reuses the shared run server's Vite cache directory when one is advertised. The production entry reads no fixture
-header and imports no test runtime, so no request header can inject origin, API or Auth bindings.
+header and imports no test runtime, so no request header can inject origin, API or Auth bindings. The Worker SSR
+pre-bundle lists the generic `react-dom/server` entry: app source imports it, and under the Worker conditions it
+resolves to the CommonJS `react-dom/server.edge.js`, which the Worker runner cannot evaluate unbundled.
 
 Browser tests wait for `html[data-hydrated]` before interacting with a page.
 Browser tests start the dev server through `tests/support/dev-server.ts`, whose errors name the phase that failed; a test never imports another test file.
