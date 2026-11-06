@@ -152,7 +152,7 @@ beforeAll(async () => {
     commandContext(),
   );
   const realm = await createRealm(
-    { pool: fixture.pool, access: fixture.access, routeKey },
+    { pool: fixture.pool, access: fixture.access, routeKey, deadlineNow: () => Date.now() },
     owner,
     {
       spaceId: space.value.spaceId,
