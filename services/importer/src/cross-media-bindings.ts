@@ -926,7 +926,9 @@ export class CrossMediaGraph {
       };
       const edgeKey = graphEdgeKey(draft);
       const journaled =
-        releaseSupersession || draft.targetAlias !== undefined || (draft.source === 'vndb' && draft.table === 'vn_relations');
+        releaseSupersession ||
+        draft.targetAlias !== undefined ||
+        (draft.source === 'vndb' && draft.table === 'vn_relations');
       const prior = journaled ? this.command(edgeKey) : null;
       let sealedCommand = command;
       if (prior?.bytes) {
