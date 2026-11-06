@@ -83,7 +83,8 @@ Its anonymous observation is `{ state: 'anonymous' }` with sign-in advice. Its s
 readability, membership episode and participation, plus current entry, management and leave advice. It does not
 supply join or claim advice. The installed generated Client declaration owns `home`, `boardShelf` and
 `publicationShelf`. Web binds those methods once and maps recent and Board visibility from the installed types;
-it does not assemble a substitute DTO. Native producer recordings remain with their owners.
+it does not assemble a substitute DTO. Public exact and lower-bound reply counts stay public; viewer-cohort activity
+stays unavailable. Native producer recordings remain with their owners.
 
 Membership and each command require their own explicit composed native advice. Separate standing, participation,
 setup or claim reads cannot manufacture that observation. Missing publication support remains unavailable; it must

@@ -14,6 +14,14 @@ export type RealmBoardRecent =
   | { state: 'current'; threads: readonly RealmBoardRecentThread[]; complete: boolean }
   | { state: 'unavailable' };
 
+function publicComments(
+  comments: Extract<NativeBoardRecent, { state: 'current' }>['threads'][number]['comments'],
+): RealmBoardRecentThread['comments'] {
+  // Viewer-cohort activity is not a public count. Relabelling it as exact/lower-bound would invent a public figure.
+  if (comments.state !== 'current' || comments.cohort !== 'public') return { state: 'unavailable' };
+  return { state: 'current', kind: comments.count.kind, value: comments.count.value };
+}
+
 /** Installed Home/shelf `recent`. A missing older callable, overflow, or mismatched target stays unavailable. */
 export function presentRealmBoardRecent(
   value: NativeBoardRecent | null | undefined,
@@ -27,10 +35,7 @@ export function presentRealmBoardRecent(
     threads.push({
       id: item.thread.id,
       title: item.thread.title,
-      comments:
-        item.comments.state === 'current'
-          ? { state: 'current', kind: item.comments.count.kind, value: item.comments.count.value }
-          : { state: 'unavailable' },
+      comments: publicComments(item.comments),
     });
   }
   return { state: 'current', threads, complete: value.complete };

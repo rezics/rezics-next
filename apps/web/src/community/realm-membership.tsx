@@ -245,13 +245,13 @@ function NativeMembership({
       caller.store.retireNativeCommandAcknowledgement(attempt);
       return;
     }
+    const standing = source.viewer.state === 'member' ? source.viewer : null;
+    const membership = standing?.membership;
     const membershipMatches =
-      source.viewer.state === 'member' &&
-      (attempt.body.action === 'join'
-        ? source.viewer.membership === 'member' || source.viewer.membership === 'pending'
-        : source.viewer.membership === 'none') &&
+      membership !== undefined &&
+      (attempt.body.action === 'join' ? membership === 'member' || membership === 'pending' : membership === 'none') &&
       owner.isCurrent();
-    if (!membershipMatches) {
+    if (!standing || !membershipMatches) {
       if (attempt.source) return;
       acknowledged.current = null;
       accepted?.focus.cancel();
@@ -275,7 +275,7 @@ function NativeMembership({
       receipt: {
         realmId,
         action: attempt.body.action,
-        membership: source.viewer.membership,
+        membership,
         current: receiptCurrent,
         focusEligible: () => receiptCurrent() && focus.eligible(),
       },

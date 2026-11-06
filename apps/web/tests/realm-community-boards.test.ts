@@ -54,6 +54,20 @@ test('native recent discussion prefixes keep exact destinations and never invent
     ],
   } as NativeRecent;
   expect(presentRealmBoardRecent(overflow, boardId)).toEqual({ state: 'unavailable' });
+  const viewerCohort = {
+    ...currentRecent(),
+    threads: [
+      {
+        ...currentRecent().threads[0]!,
+        comments: { ...currentRecent().threads[0]!.comments, cohort: 'viewer' as const },
+      },
+    ],
+  } as NativeRecent;
+  expect(presentRealmBoardRecent(viewerCohort, boardId)).toEqual({
+    state: 'current',
+    complete: true,
+    threads: [{ id: threadId, title: 'Ordinary thread', comments: { state: 'unavailable' } }],
+  });
 });
 
 test('membership completion stays with the header host; only publication receipts restore a shelf region', () => {
