@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { formatModuleMap, loadManifest } from '../../../scripts/architecture.ts';
+import { formatModuleMap, loadManifest } from '../../../scripts/architecture-map.ts';
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import { workerTestCommands } from './affected-tests.ts';
 import { CONTINUATION_DIRECTORY, continuesItself } from './continuation.ts';

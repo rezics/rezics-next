@@ -15,7 +15,7 @@ import {
   RatingControlView,
   type RatingControlState,
 } from '../src/features/pages/rating-control';
-import { subjectOwnRatingQuery } from '../src/features/pages/subject-queries';
+import { subjectOwnRatingQuery, subjectRatingQuery } from '../src/features/pages/subject-queries';
 import { m } from '../src/paraglide/messages.js';
 
 const subjectId = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e01';
@@ -375,3 +375,42 @@ test('setting, changing and clearing each issue one bounded write', async () => 
   expect(client.getQueryData(queryKey)).toEqual({ reader: binding.reader, kind: 'ready', units: null });
   await client.cancelQueries();
 });
+
+test.each(['successful', 'rejected', 'uncertain', 'retired'] as const)(
+  'dependent rating views refresh only after a current acknowledgement: %s',
+  async (outcome) => {
+    const client = new QueryClient();
+    const binding = personalLease();
+    const consumers = [
+      ['personal-library-current', 'reader-a', 'score-order'],
+      ['own-votes', 'reader-a', 'current-page'],
+      ['collection-page', 'collection', 'score-order'],
+      subjectRatingQuery(subjectId, 'en').queryKey,
+    ];
+    const unrelated = subjectRatingQuery('another-subject', 'en').queryKey;
+    for (const key of [...consumers, unrelated]) client.setQueryData(key, 'independent readback');
+    let finish!: (value: 'successful' | 'rejected' | 'uncertain') => void;
+    const pending = applyOptimisticRatingChange({
+      queryClient: client,
+      subjectId,
+      locale: 'en',
+      binding,
+      units: 0,
+      write: () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+      onFailure: () => {},
+    });
+    for (const key of consumers) expect(client.getQueryState(key)?.isInvalidated).toBe(false);
+    if (outcome === 'retired') binding.retire();
+    finish(outcome === 'retired' ? 'successful' : outcome);
+    expect(await pending).toBe(outcome === 'successful');
+    for (const key of consumers) {
+      expect(client.getQueryState(key)?.isInvalidated).toBe(outcome === 'successful');
+      expect(client.getQueryData(key)).toBe('independent readback');
+    }
+    expect(client.getQueryState(unrelated)?.isInvalidated).toBe(false);
+    client.clear();
+  },
+);

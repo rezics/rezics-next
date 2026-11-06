@@ -541,6 +541,14 @@ The subject overview reads the public Global rating aggregate and imported sourc
 page. Signed-in readers also request their own vote. The overview does not read Realm memberships, so it shows Global
 alone; imported figures retain their source's scale.
 
+Decision: subject rating controls retain the exact question, credential evidence, units and request key after an
+uncertain response. Readers can deliberately replay that request or discard it and reload the current answer;
+source, route and reader replacement retire those controls through the existing personal lease.
+
+Acknowledged votes from a current Subject reader invalidate personal Library, My ratings and Collection queries,
+as well as the Subject's asynchronously published figure. Pending, uncertain, rejected and retired-reader results
+leave those readbacks untouched; invalidation never copies a private vote into a public figure.
+
 ### Native account-operation fixture
 
 `tests/native/native-agent-identity-fixture.ts` uses the semantic driver's existing Auth host and database.
