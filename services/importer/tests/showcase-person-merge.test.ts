@@ -134,8 +134,21 @@ test('a reviewed pair merges once, observes the native job and reads both identi
         ],
       },
     });
-    // Reopening the journal repeats only the reads: the admitted operation is never sent again.
-    expect(await publish()).toMatchObject({ state: 'published', operation, survivor });
+    // After the merge the originals redirect and expose no reviewed identity; reopening resumes from the journal.
+    const redirected = {
+      ...native,
+      readReviewedPersonIdentity: async (id: string) =>
+        ({ subject: { id }, reviewedIdentity: null }) as unknown as ReviewedPersonRead,
+    };
+    expect(
+      await publishReviewedPersonMerge({
+        pair,
+        transport: redirected,
+        readPublic: async () => publicPerson(survivor),
+        journal,
+        pause: async () => {},
+      }),
+    ).toMatchObject({ state: 'published', operation, survivor });
     expect(calls.merges).toHaveLength(1);
   } finally {
     journal.close();

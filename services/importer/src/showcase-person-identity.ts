@@ -148,6 +148,7 @@ export type ReviewedPersonMergeJournal = Readonly<{
   prepareAction(actionKey: string, body: unknown, idempotencyKey: string): unknown;
   action(actionKey: string): Readonly<{
     state: 'prepared' | 'acknowledged' | 'refused';
+    body_json: string;
     idempotency_key: string;
     result_id: string | null;
     error_code: string | null;
@@ -196,37 +197,43 @@ export async function publishReviewedPersonMerge(input: {
     bangumi.boundSubjectId === vndb.boundSubjectId
   )
     throw new TypeError('Reviewed Person pair must be one Bangumi original and one VNDB original');
-  const endpoints: ReviewedPersonEndpoint[] = [];
-  for (const source of input.pair) {
-    const read = await input.transport.readReviewedPersonIdentity(source.boundSubjectId, {
-      source: source.sourceAlias as ReviewedPersonSource['source'],
-      externalId: source.identity.externalId,
-    });
-    const endpoint = read.reviewedIdentity;
-    if (!endpoint)
-      return { state: 'withheld', reason: `${source.identity.externalId} has no coherent reviewed identity` };
-    if (
-      endpoint.subject !== source.boundSubjectId ||
-      endpoint.property !== source.identity.property ||
-      endpoint.value !== source.identity.value
-    )
-      return { state: 'withheld', reason: `${source.identity.externalId} observed a different identity` };
-    endpoints.push(endpoint);
+  const subjects: [string, string] = [bangumi.boundSubjectId, vndb.boundSubjectId];
+  const actionKey = `reviewed-person-merge:${[...subjects].sort().join(':')}`;
+  // A journaled intent is the authority: resume its sealed body and key. Originals may already be redirected
+  // by the merge, so their reviewed identities are read only when the intent is new.
+  let intent = input.journal.action(actionKey);
+  if (!intent) {
+    const endpoints: ReviewedPersonEndpoint[] = [];
+    for (const source of input.pair) {
+      const read = await input.transport.readReviewedPersonIdentity(source.boundSubjectId, {
+        source: source.sourceAlias as ReviewedPersonSource['source'],
+        externalId: source.identity.externalId,
+      });
+      const endpoint = read.reviewedIdentity;
+      if (!endpoint)
+        return { state: 'withheld', reason: `${source.identity.externalId} has no coherent reviewed identity` };
+      if (
+        endpoint.subject !== source.boundSubjectId ||
+        endpoint.property !== source.identity.property ||
+        endpoint.value !== source.identity.value
+      )
+        return { state: 'withheld', reason: `${source.identity.externalId} observed a different identity` };
+      endpoints.push(endpoint);
+    }
+    const body: ReviewedPersonMerge = {
+      subjects,
+      expectedIdentity: { endpoints: [endpoints[0]!, endpoints[1]!] },
+    };
+    const digest = createHash('sha256').update(JSON.stringify(body)).digest('hex');
+    input.journal.prepareAction(actionKey, body, mergeKey(digest));
+    intent = input.journal.action(actionKey)!;
   }
-  const body: ReviewedPersonMerge = {
-    subjects: [bangumi.boundSubjectId, vndb.boundSubjectId],
-    expectedIdentity: { endpoints: [endpoints[0]!, endpoints[1]!] },
-  };
-  const digest = createHash('sha256').update(JSON.stringify(body)).digest('hex');
-  const actionKey = `reviewed-person-merge:${[...body.subjects].sort().join(':')}`;
-  // A prior unacknowledged intent returns its original sealed body; the stored key is what Kernel saw.
-  const sealed = input.journal.prepareAction(actionKey, body, mergeKey(digest)) as ReviewedPersonMerge;
-  const row = input.journal.action(actionKey)!;
-  if (row.state === 'refused') return { state: 'withheld', reason: row.error_code ?? 'refused' };
-  let operation: string | null = row.result_id;
+  const sealed = JSON.parse(intent.body_json) as ReviewedPersonMerge;
+  if (intent.state === 'refused') return { state: 'withheld', reason: intent.error_code ?? 'refused' };
+  let operation: string | null = intent.result_id;
   if (operation === null) {
     try {
-      const admission = await input.transport.mergeReviewedPersons(sealed, row.idempotency_key);
+      const admission = await input.transport.mergeReviewedPersons(sealed, intent.idempotency_key);
       operation = admission.operation.id;
     } catch (error) {
       // A definite client refusal is terminal. Other failures may have reached Kernel: resume replays this exact intent.
@@ -249,7 +256,6 @@ export async function publishReviewedPersonMerge(input: {
   }
   if (!done) return { state: 'pending', operation };
   const { survivor, redirected, revision } = done.result;
-  const subjects = [bangumi.boundSubjectId, vndb.boundSubjectId];
   if (
     !subjects.includes(survivor) ||
     !subjects.includes(redirected) ||
