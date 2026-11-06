@@ -1,18 +1,21 @@
 import { expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import type { PoolClient } from 'pg';
 import { createAccess } from '../../src/access/index.ts';
 import { createPublishedLogCommands } from '../../src/library/published-logs.ts';
 import type { Actor } from '../../src/request/access.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
+import { bootstrapRelease } from '../../src/semantic/definitions.ts';
+import { createSubject, subjectTarget } from '../../src/semantic/subject.ts';
 import { checkGrowth, costOf, GrowthBoundError, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 import { testTokens } from '../support/test-kernel.ts';
 
 const anonymous: Actor = { kind: 'anonymous' };
 const time = '2026-10-26T08:00:00.000Z';
-const scopes = ['published_log:create', 'published_log:delete'];
+const scopes = ['subject:read', 'published_log:create', 'published_log:delete'];
 type Operation = 'publish' | 'retract' | 'read' | 'page';
 
 function id(prefix: string, route: number, ordinal: number): string {
@@ -113,9 +116,9 @@ async function prepare(route: number) {
   const database = await openGrowthDatabase();
   try {
     configureTestReceiptKeys(database.pool);
+    await bootstrapRelease(database.pool, bundledRelease);
     const owner = newId(route);
     const sessionId = newId(route);
-    const subjectId = newId(route + 4096);
     await database.admin.query(
       `INSERT INTO access.account
          (route, account_id, kind, state, transaction_id, authn_fenced, minimum_authn_epoch, membership_inverse_complete)
@@ -125,7 +128,7 @@ async function prepare(route: number) {
     const signing = await generateKeyPair('ES256', { extractable: true });
     const jwk = { ...(await exportJWK(signing.publicKey)), kid: 'published-logs-growth' };
     const access = createAccess({
-      actions: new Map(scopes.map((scope) => [scope, { anonymous: false }])),
+      actions: new Map(scopes.map((scope) => [scope, { anonymous: scope === 'subject:read' }])),
       auth: {
         issuer: 'https://published-logs-growth.auth.test',
         audience: 'https://published-logs-growth.api.test',
@@ -148,6 +151,18 @@ async function prepare(route: number) {
       .setExpirationTime('5m')
       .sign(signing.privateKey);
     const actor = await access.authenticate(token, { pool: database.pool, deadline: Date.now() + 290_000 });
+    if (actor.kind !== 'account') throw new TypeError('Published-log growth owner must authenticate as an account');
+    const requestKey = randomUUID();
+    const created = await createSubject(database.pool, {
+      actor,
+      target: subjectTarget(new Uint8Array(32).fill(81), owner, requestKey),
+      idempotencyKey: requestKey,
+      digest: createHash('sha256').update(requestKey).digest(),
+      item: { type: 'schema:Book', labels: { en: 'Published log growth subject' } },
+      release: { digest: bundledDigest, release: bundledRelease },
+      authorize: async () => true,
+    });
+    const subjectId = created.subject.id;
     const commands = createPublishedLogCommands({ pool: database.pool, access, tokens: testTokens() });
     await database.admin.query(
       `INSERT INTO library.progress_session
@@ -200,7 +215,7 @@ async function check(operation: Operation, route: number, name: string) {
           expect(result.replayed).toBe(false);
           expect(result.value).toMatchObject({ accountId: owner, subjectId, sessionState: 'active' });
         } else if (operation === 'retract') {
-          const result = await commands.retractLog(actor, probes[repetition]!, randomUUID());
+          const result = await commands.retractLog(actor, probes[repetition]!, randomUUID(), 1);
           expect(result.replayed).toBe(false);
           expect(result.value.id).toBe(probes[repetition]!);
         } else if (operation === 'read') {

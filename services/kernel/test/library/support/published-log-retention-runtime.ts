@@ -15,7 +15,7 @@ export async function createPublishedLogRetentionRuntime(clock: () => Date) {
   let worker: Awaited<ReturnType<typeof composeWork>> | undefined;
   try {
     fixture = await createProfileEntryFixture({ clock });
-    client = await createWorkClient(databaseUrl);
+    client = await createWorkClient(databaseUrl, fixture.pool);
     worker = await composeWork([libraryWorkModule], {
       pool: fixture.pool,
       client,

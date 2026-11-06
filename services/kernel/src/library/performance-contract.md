@@ -712,9 +712,11 @@ attempts share that envelope. HTTP `present`/`fullView` and `resolveSubject` kee
 Access work. A changed Source on FULL published-log is withheld (`subject: null`) so later private session edits
 leave the snapshot readable. The native interceptor catalogues reached SQL and skips consume while the enclosing
 operation reservation is open; an empty subject list is the zero operand. Growth suites use 64/512/4096 with `scale`
-rows per owner, same-route and other-partition population and a fixed selected neighbourhood. restoreExpired
+rows per owner, same-route and other-partition population and a fixed selected neighbourhood.
+Publish growth resolves one real subject so original/terminal Source is charged; retract uses the stored CAS
+revision. restoreExpired
 CAS-sets `restore_until`; restoreHistorical retires the private session while the public snapshot remains. Empty
-and post-drain sweeps use the default worker. Native receiving evidence remains integration-owned. Web Back href is
+and post-drain sweeps use the default worker bound to that native fixture's shared WorkClient/Pool. Native receiving evidence remains integration-owned. Web Back href is
 cursor-free My Logs; ordinary click uses history.back() only for the captured My Logs visit, log and current session.
 Fewest tests: extend the existing operation-bounds, growth, retention, source and retract suites, plus native-published-log-responses
 and the existing Web logs-return/mounted Back pins, rather than a second lifecycle file. A later private retirement of the source session clears `completedAt`. FULL
