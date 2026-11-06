@@ -15,6 +15,7 @@ import { linkProjection } from '../../src/semantic/links.ts';
 import { holderFacts } from '../../src/semantic/link-keys.ts';
 import { updateSubjectIdentity, writeFacts } from '../../src/semantic/subject.ts';
 import { createRealAccess } from './real-access.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -40,6 +41,7 @@ const kernel = createKernel({
   }),
   tokens,
   routeKey,
+  receiptKeys: testReceiptKeys(),
 });
 const projection = linkProjection(pool);
 const editorActions = ['definitions:publish', 'definitions:activate', 'subject:create', 'context:adopt'] as const;

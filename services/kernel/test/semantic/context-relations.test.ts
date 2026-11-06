@@ -8,6 +8,7 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { linkProjection, listSubjectLinks, listSubjectRelations } from '../../src/semantic/links.ts';
 import { createRealAccess } from './real-access.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 
 const url = process.env.DATABASE_URL;
@@ -37,6 +38,7 @@ const kernel = createKernel({
   writeRate: access.writeRate,
   routeKey: new Uint8Array(32).fill(48),
   tokens: ring,
+  receiptKeys: testReceiptKeys(),
 });
 const projection = linkProjection(pool);
 const itemProperty = (id: string, group: 'appearance' | 'credit' | 'classification') => ({

@@ -2,11 +2,12 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { releaseDigest, valueSchema, type Release } from '@rezics/definitions';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { createPool } from '../../src/database/pool.ts';
 import { startRelays } from '../../src/events/relays.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
 import { observeSql } from '../content/support/sql-observer.ts';
 import { suspendAccount } from '../support/native-suspension-driver.ts';
@@ -18,6 +19,7 @@ if (!url) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(url);
 const admin = new pg.Pool({ connectionString: url, max: 4 });
 const accounts = {
+  operator: newId(0x7260),
   editor: newId(0x7210),
   acceptor: newId(0x7220),
   steward: newId(0x7230),
@@ -25,6 +27,8 @@ const accounts = {
   suspended: newId(0x7250),
 };
 const actions = [
+  'access:grant',
+  'gate:any',
   'definitions:publish',
   'definitions:activate',
   'gate:definition_publication',
@@ -241,15 +245,21 @@ beforeAll(async () => {
       account,
     ]);
   }
+  // Publication authority is delegated by a governing operator through the ordinary grant command, as in the native
+  // publication fixture: an action is delegated only by an account that holds it, so the operator holds each one.
   const grants: Record<Exclude<Persona, undefined>, readonly string[]> = {
-    editor: [
+    operator: [
+      'access:grant',
+      'gate:any',
       'definitions:publish',
       'definitions:activate',
       'gate:definition_publication',
       'subject:create',
       'subject:read',
       'statement:propose',
+      'context:read',
     ],
+    editor: ['subject:create', 'subject:read', 'statement:propose', 'context:read'],
     acceptor: ['subject:read', 'context:create', 'context:read', 'context:accept', 'context:adopt'],
     steward: ['subject:read', 'moderation:hide'],
     outsider: ['subject:read'],
@@ -258,9 +268,53 @@ beforeAll(async () => {
   for (const [persona, granted] of Object.entries(grants) as [Exclude<Persona, undefined>, readonly string[]][]) {
     for (const action of granted) await real.grant({ route: 0, id: GLOBAL_CONTEXT }, persona, action);
   }
-  const published = await call('POST', '/v1/definitions/releases', 'editor', { release });
+  for (const action of ['definitions:publish', 'definitions:activate', 'gate:definition_publication'])
+    await call('POST', '/v1/grants', 'operator', {
+      resource: { route: 0, id: GLOBAL_CONTEXT },
+      subject: { kind: 'account', id: accounts.editor },
+      actions: [action],
+      valid: '(,)',
+    });
+  // The Global Context's bundled release is the active head before custom publication, as in the native publication fixture.
+  await bootstrapRelease(pool, bundledRelease);
+  const attempt = await handle('POST', '/v1/definitions/releases', 'editor', { release });
+  if (attempt.status !== 200 && attempt.status !== 201) {
+    console.log(
+      'DIAG publish',
+      attempt.status,
+      JSON.stringify(attempt.body).slice(0, 400),
+      JSON.stringify(real.checks.slice(-5)),
+    );
+    const grantRows = await admin.query(
+      'SELECT route, resource_id, action, subject_kind, valid::text AS valid FROM access.resource_grant WHERE subject_id = $1 ORDER BY action',
+      [accounts.editor],
+    );
+    console.log('DIAG grants', JSON.stringify(grantRows.rows));
+    const accountRows = await admin.query(
+      'SELECT route, account_id, kind, state FROM access.account WHERE account_id = $1',
+      [accounts.editor],
+    );
+    console.log('DIAG account', JSON.stringify(accountRows.rows));
+    const viewer = await handle('POST', '/v1/viewerActions', 'editor', {
+      resources: [{ type: 'semantic.context', id: GLOBAL_CONTEXT }],
+    });
+    console.log('DIAG viewer', viewer.status, JSON.stringify(viewer.body).slice(0, 1200));
+    const control = await handle('POST', '/v1/viewerActions', 'acceptor', {
+      resources: [{ type: 'semantic.context', id: GLOBAL_CONTEXT }],
+    });
+    console.log('DIAG viewer-acceptor', control.status, JSON.stringify(control.body).slice(0, 1200));
+    const globalRow = await admin.query(
+      'SELECT route, context_id::text AS context_id, kind, labels::text AS labels FROM semantic.context WHERE context_id = $1',
+      [GLOBAL_CONTEXT],
+    );
+    console.log('DIAG global-row', JSON.stringify(globalRow.rows));
+    const contextKinds = await admin.query('SELECT kind, count(*)::int AS n FROM semantic.context GROUP BY kind');
+    console.log('DIAG context-kinds', JSON.stringify(contextKinds.rows));
+    throw new Error(`POST /v1/definitions/releases: ${attempt.status} ${JSON.stringify(attempt.body)}`);
+  }
+  const published = attempt.body as { digest: string };
   expect(published.digest).toBe(digest);
-  await call('POST', `/v1/definitions/releases/${digest}:activate`, 'editor', { expected_head: null });
+  await call('POST', `/v1/definitions/releases/${digest}:activate`, 'editor', { expected_head: 1 });
   role = (await call('POST', '/v1/subjects', 'editor', { type: 'ex:Role', labels: { en: 'Lead', ja: '主役' } })).subject
     .id;
   partitions.add(partitionOf(routeOf(role)!));

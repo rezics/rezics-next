@@ -18,10 +18,13 @@ import { readSubjectReference } from '../../src/semantic/references.ts';
 import { createSubject } from '../../src/semantic/subject.ts';
 import { actorFixture, type ActorFixture } from '../access/actor-side-fixture.ts';
 import { observeSql } from '../content/support/sql-observer.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 import { createRealAccess } from './real-access.ts';
 
 const pool = createPool(process.env.DATABASE_URL!);
 const admin = createPool(process.env.DATABASE_URL!);
+// Receipts bind to the pool they are written through; the fixture material is explicit, never an ambient variable.
+configureTestReceiptKeys(pool);
 beforeAll(() => bootstrapRelease(pool, bundledRelease));
 afterAll(async () => {
   await pool.end();
