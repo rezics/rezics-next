@@ -69,6 +69,15 @@ the affected Web/root checks; fast copy-on-write preparation does not establish 
 or unavailable evidence is neither denial nor a product pass. Use [verification](../development/verification.md)
 for evidence and check-host placement.
 
+## Kernel Work domain inversion
+
+Decision: Compact causal tests pin Work enqueue, registration, selected admission and retirement against fake ports;
+worker and kernel landing tests carry `KERNEL_RECEIPT_KEYS` through `workerTestEnv`. The existing growth-work-client,
+selected-runtime-native, sdk-transaction-fence, sdk-retirement-fence and growth-retention fixtures remain the
+bounded-work proof. Search tombstone registration includes both `search_account_erasure` and `search_erasure`. Contract/core/application load no downstream implementations.
+Native adapters are bound by ordinary `createKernel`/`server`/`worker` composition. The split adds no query or extra
+statement; observed cost stays the existing admitted-path declarations.
+
 ## Kernel Access domain inversion
 
 Decision: Compact causal tests pin Access allow/deny, identity recovery with the original actor/request/deadline, and

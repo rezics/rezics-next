@@ -20035,56 +20035,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/work/modules.ts",
-          "edge": "value import \"../access/durable-initiator.ts\" #1 => services/kernel/src/access/durable-initiator.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/work/modules.ts",
-          "edge": "value import \"../access/erasure.ts\" #1 => services/kernel/src/access/erasure.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/work/modules.ts",
-          "edge": "value import \"../access/membership-work.ts\" #1 => services/kernel/src/access/membership-work.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/work/modules.ts",
-          "edge": "value import \"../commerce/work-module.ts\" #1 => services/kernel/src/commerce/work-module.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/work/modules.ts",
-          "edge": "value import \"../community/membership.ts\" #1 => services/kernel/src/community/membership.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/work/modules.ts",
-          "edge": "value import \"../community/work.ts\" #1 => services/kernel/src/community/work.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/work/modules.ts",
-          "edge": "value import \"../content/register.ts\" #1 => services/kernel/src/content/register.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/work/modules.ts",
-          "edge": "value import \"../library/work-module.ts\" #1 => services/kernel/src/library/work-module.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/work/modules.ts",
-          "edge": "value import \"../rating/work-module.ts\" #1 => services/kernel/src/rating/work-module.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/work/registry.ts",
-          "edge": "value import \"../access/auth-consent.ts\" #1 => services/kernel/src/access/auth-consent.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/work/retries.ts",
           "edge": "value import \"../access/unavailable.ts\" #1 => services/kernel/src/access/unavailable.ts"
         },

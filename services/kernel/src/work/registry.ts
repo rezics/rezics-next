@@ -1,18 +1,15 @@
-import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { Pool } from 'pg';
 import { systemClock, type KernelClock } from '../clock.ts';
-import { DBOS_SCHEMA, WORK_APPLICATION, type WorkClient } from './client.ts';
+import type { WorkClient } from './client.ts';
 import { registerEffects, type Effect, type NativeEffect } from '../events/effects.ts';
 import { WORK_QUEUES } from './queues.ts';
-import { HistoryRegistry } from '../history/registry.ts';
+import type { HistoryRegistry } from '../history/registry.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { createWorkerAuthorization, type WorkerAuthorization } from './authorization.ts';
+import type { WorkerAuthorization } from './authorization.ts';
 import type { KindConsentParticipant } from '@rezics/auth-contract';
-import { bindIdentityOriginalEffect, IDENTITY_FX_EFFECT } from '../history/identity-original-association.ts';
-import { readAuthConsentConfig } from '../access/auth-consent.ts';
-import { createKindConsentParticipantTransport } from './kind-consent-transport.ts';
-
-import { composeSelectedRuntime, type SelectedRuntime } from './selected-runtime.ts';
+import type { SelectedRuntime } from './selected-runtime.ts';
+import { ensureNativeWorkApplication } from './adapters/index.ts';
+import type { WorkModule as ContractModule, WorkComposeOptions } from './contract/index.ts';
 
 export type WorkService = { stop(): Promise<void> };
 
@@ -37,146 +34,24 @@ export type WorkOptions = {
   pool: Pool;
   client: WorkClient;
   env?: Readonly<Record<string, string | undefined>>;
-  /** Trusted service composition only. */
   clock?: KernelClock;
   receiptKeys?: KeyRing;
 };
-
-let composed = false;
+export type ComposedWork = {
+  effects: ReturnType<typeof registerEffects>;
+  launch(): Promise<void>;
+  shutdown(): Promise<void>;
+};
 
 /** Registration owns the process-global SDK once. Pools and clients belong to the caller. */
-export async function composeWork(modules: readonly WorkModule[], options: WorkOptions) {
-  if (composed || DBOS.isInitialized()) throw new Error('Work registration is already composed or launched');
-  const registrations = [...modules];
-  const names = new Set<string>();
-  for (const module of registrations) {
-    if (names.has(module.name)) throw new Error(`Duplicate work module: ${module.name}`);
-    names.add(module.name);
-  }
-  const clock = options.clock ?? systemClock;
-  const env = options.env ?? process.env;
-  composed = true;
-  DBOS.setConfig({
-    name: WORK_APPLICATION,
-    systemDatabaseUrl: options.databaseUrl,
-    systemDatabaseSchemaName: DBOS_SCHEMA,
-    systemDatabasePool: options.pool,
-    runMigrations: false,
-    logLevel: 'warn',
-    ...(options.executorId === undefined ? {} : { executorID: options.executorId }),
-  });
-  // DBOS.registerQueue requires a launched executor in this SDK. The client persists
-  // queues first; launch discovers them before dispatching any workflow.
-  for (const [name, parameters] of Object.entries(WORK_QUEUES)) {
-    await options.client.registerQueue(name, parameters);
-  }
-  const collectedEffects: Array<Effect | NativeEffect> = [];
-  const history = new HistoryRegistry();
-  const serviceStarters: Array<() => WorkService | Promise<WorkService>> = [];
-  const started: WorkService[] = [];
-  let accepting = true;
-  let authorization: WorkerAuthorization | undefined;
-  let selectedRuntime: SelectedRuntime | undefined;
-  const context: WorkContext = Object.freeze({
+export async function composeWork(modules: readonly WorkModule[], options: WorkOptions): Promise<ComposedWork> {
+  return (await ensureNativeWorkApplication().compose(modules as unknown as readonly ContractModule[], {
+    databaseUrl: options.databaseUrl,
     pool: options.pool,
-    queues: WORK_QUEUES,
     client: options.client,
-    env,
-    clock,
-    history,
-    getSelectedRuntime() {
-      return (selectedRuntime ??= composeSelectedRuntime(options.pool, options.client));
-    },
-    getAuthorization() {
-      return (authorization ??= createWorkerAuthorization({
-        pool: options.pool,
-        client: options.client,
-        env,
-        clock,
-        ...(options.receiptKeys === undefined ? {} : { receiptKeys: options.receiptKeys }),
-      }));
-    },
-    getKindConsentParticipant(deadline) {
-      const config = readAuthConsentConfig(env);
-      if (!config) return undefined;
-      return createKindConsentParticipantTransport(config, deadline);
-    },
-    addEffects(effects) {
-      if (!accepting) throw new Error('Cannot add effects after work composition');
-      collectedEffects.push(
-        ...effects.map((effect) =>
-          effect.name === IDENTITY_FX_EFFECT
-            ? bindIdentityOriginalEffect(effect, { pool: options.pool, client: options.client })
-            : effect,
-        ),
-      );
-    },
-    addNativeEffects(effects) {
-      if (!accepting) throw new Error('Cannot add native effects after work composition');
-      collectedEffects.push(...effects);
-    },
-    addService(start) {
-      if (!accepting) throw new Error('Cannot add a service after composition');
-      serviceStarters.push(start);
-    },
-  });
-  try {
-    for (const module of registrations) await module.register(context);
-  } finally {
-    accepting = false;
-  }
-  const effects = registerEffects(collectedEffects, options.pool);
-  history.seal();
-
-  // Stop every service. One failure does not skip the rest; the first one is returned.
-  const stopServices = async (services: readonly WorkService[]): Promise<unknown> => {
-    let failure: unknown;
-    for (let index = services.length - 1; index >= 0; index -= 1) {
-      try {
-        await services[index]!.stop();
-      } catch (error) {
-        failure ??= error;
-      }
-    }
-    return failure;
-  };
-
-  let launching: Promise<void> | undefined;
-  let stopping: Promise<void> | undefined;
-  return {
-    effects,
-    launch(): Promise<void> {
-      if (stopping) return Promise.reject(new Error('Work launch refused after shutdown'));
-      return (launching ??= (async () => {
-        await DBOS.launch();
-        const running: WorkService[] = [];
-        try {
-          for (const start of serviceStarters) running.push(await start());
-        } catch (error) {
-          await stopServices(running);
-          throw error;
-        }
-        started.push(...running);
-      })());
-    },
-    shutdown(): Promise<void> {
-      return (stopping ??= (async () => {
-        let failure: unknown;
-        try {
-          await launching;
-        } catch (error) {
-          failure = error;
-        }
-        const stopFailure = await stopServices(started.splice(0));
-        failure ??= stopFailure;
-        try {
-          // SDK stops receivers and queue dispatch before draining, then disconnects.
-          await DBOS.shutdown({ workflowCompletionTimeoutMS: 2_147_483_647 });
-        } catch (error) {
-          failure ??= error;
-        }
-        if (failure) throw failure;
-      })());
-    },
-  };
+    env: options.env ?? process.env,
+    clock: options.clock ?? systemClock,
+    ...(options.executorId === undefined ? {} : { executorId: options.executorId }),
+    ...(options.receiptKeys === undefined ? {} : { receiptKeys: options.receiptKeys }),
+  } satisfies WorkComposeOptions)) as ComposedWork;
 }

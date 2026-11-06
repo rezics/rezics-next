@@ -1232,35 +1232,39 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
           closed,
         ),
         response: {
-          200: t.Object(
-            {
-              members: t.Array(
-                t.Union([
-                  embedded(memberSchema, {
-                    ...subjectFields(),
-                    facts: t.Optional(t.Record(t.String(), t.Array(FactSchema, { maxItems: 3 }), { maxProperties: 4 })),
-                  }),
-                  t.Object(
-                    {
-                      kind: t.Literal('dynamic'),
-                      subjectId: id,
+          200: strict(
+            t.Object(
+              {
+                members: t.Array(
+                  t.Union([
+                    embedded(memberSchema, {
                       ...subjectFields(),
                       facts: t.Optional(
                         t.Record(t.String(), t.Array(FactSchema, { maxItems: 3 }), { maxProperties: 4 }),
                       ),
-                    },
-                    closed,
-                  ),
-                ]),
-              ),
-              next: nullableString,
-              viewerFacts: t.Optional(viewerPersonalActionsResponseSchema()),
-            },
-            closed,
+                    }),
+                    t.Object(
+                      {
+                        kind: t.Literal('dynamic'),
+                        subjectId: id,
+                        ...subjectFields(),
+                        facts: t.Optional(
+                          t.Record(t.String(), t.Array(FactSchema, { maxItems: 3 }), { maxProperties: 4 }),
+                        ),
+                      },
+                      closed,
+                    ),
+                  ]),
+                ),
+                next: nullableString,
+                viewerFacts: t.Optional(viewerPersonalActionsResponseSchema()),
+              },
+              closed,
+            ),
           ),
           ...failures(),
           422: problemSchema('unsupported_query'),
-          202: t.Object({ preparing: t.Literal(true) }, closed),
+          202: strict(t.Object({ preparing: t.Literal(true) }, closed)),
         },
         detail: detail('collection_member.list', 'collection:read', true),
       },
@@ -1299,6 +1303,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
         if ('preparing' in result) {
           set.status = 202;
           set.headers['retry-after'] = '1';
+          return { preparing: true as const };
         }
         // Saved catalogue pages carry readonly dynamic members; the response schema owns mutable arrays.
         return 'members' in result ? { ...result, members: [...result.members] } : result;

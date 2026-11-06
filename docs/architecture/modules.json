@@ -212,6 +212,9 @@
         "services/kernel/src/access/write-rate.ts",
         "services/kernel/src/access/write-rate-stage.ts",
         "services/kernel/src/access/membership-work-config.ts",
+        "services/kernel/src/access/membership-work.ts",
+        "services/kernel/src/access/durable-initiator.ts",
+        "services/kernel/src/access/erasure.ts",
         "services/kernel/src/access/adapters/index.ts"
       ],
       "allowedDependencies": [
@@ -267,7 +270,10 @@
       "kind": "adapter",
       "owner": "commerce",
       "paths": ["services/kernel/src/commerce/**", "services/kernel/db/commerce/**"],
-      "publicEntries": ["services/kernel/src/commerce/config.ts"],
+      "publicEntries": [
+        "services/kernel/src/commerce/config.ts",
+        "services/kernel/src/commerce/work-module.ts"
+      ],
       "allowedDependencies": ["kernel-access", "kernel-content", "kernel-platform", "kernel-semantic", "money"],
       "capabilities": ["commerce"],
       "postgresPaths": ["services/kernel/src/commerce/**"]
@@ -283,7 +289,8 @@
         "services/kernel/src/content/realm-board-home.ts",
         "services/kernel/src/content/index.ts",
         "services/kernel/src/content/review-discovery.ts",
-        "services/kernel/src/content/access-capabilities.ts"
+        "services/kernel/src/content/access-capabilities.ts",
+        "services/kernel/src/content/register.ts"
       ],
       "allowedDependencies": [
         "definitions",
@@ -320,7 +327,9 @@
       "paths": ["services/kernel/src/community/**", "services/kernel/db/community/**"],
       "publicEntries": [
         "services/kernel/src/community/index.ts",
-        "services/kernel/src/community/access-capabilities.ts"
+        "services/kernel/src/community/access-capabilities.ts",
+        "services/kernel/src/community/membership.ts",
+        "services/kernel/src/community/work.ts"
       ],
       "allowedDependencies": [
         "auth-contract",
@@ -379,7 +388,8 @@
         "services/kernel/src/library/collection-discovery-source.ts",
         "services/kernel/src/library/collection-discovery-summaries.ts",
         "services/kernel/src/library/identity-epoch-participant.ts",
-        "services/kernel/src/library/access-capabilities.ts"
+        "services/kernel/src/library/access-capabilities.ts",
+        "services/kernel/src/library/work-module.ts"
       ],
       "allowedDependencies": [
         "access-policy",
@@ -535,6 +545,11 @@
         "services/kernel/db/migrations/**",
         "services/kernel/db/schema.sql"
       ],
+      "excludes": [
+        "services/kernel/src/work/contract/**",
+        "services/kernel/src/work/core/**",
+        "services/kernel/src/work/application/**"
+      ],
       "publicEntries": [
         "services/kernel/src/command/receipt-key.ts",
         "services/kernel/src/database/json.ts",
@@ -550,7 +565,19 @@
         "services/kernel/src/events/effects.ts",
         "services/kernel/src/events/relays.ts",
         "services/kernel/src/request/deadline.ts",
-        "services/kernel/src/work/registry.ts"
+        "services/kernel/src/history/work.ts",
+        "services/kernel/src/imports/erasure.ts",
+        "services/kernel/src/work/adapters/index.ts",
+        "services/kernel/src/work/authorization.ts",
+        "services/kernel/src/work/client.ts",
+        "services/kernel/src/work/history-enqueue.ts",
+        "services/kernel/src/work/queues.ts",
+        "services/kernel/src/work/registry.ts",
+        "services/kernel/src/work/retention.ts",
+        "services/kernel/src/work/retries.ts",
+        "services/kernel/src/work/sdk-retirement-fence.ts",
+        "services/kernel/src/work/selected-runtime-cost.ts",
+        "services/kernel/src/work/selected-runtime.ts"
       ],
       "allowedDependencies": [
         "auth-contract",
@@ -565,6 +592,9 @@
         "kernel-rating",
         "kernel-search",
         "kernel-semantic",
+        "kernel-work-application",
+        "kernel-work-contract",
+        "kernel-work-core",
         "kernel-zones",
         "operations"
       ],
@@ -601,13 +631,43 @@
         "kernel-community",
         "kernel-library",
         "kernel-platform",
+        "kernel-rating",
         "kernel-search",
         "kernel-semantic",
         "kernel-semantic-application",
         "kernel-semantic-contract",
-        "kernel-rating"
+        "kernel-work-application",
+        "kernel-work-contract",
+        "kernel-work-core"
       ],
       "capabilities": []
+    },
+    {
+      "id": "kernel-work-contract",
+      "kind": "contract",
+      "owner": "performance",
+      "paths": ["services/kernel/src/work/contract/**"],
+      "publicEntries": ["services/kernel/src/work/contract/index.ts"],
+      "allowedDependencies": [],
+      "capabilities": ["work-vocabulary"]
+    },
+    {
+      "id": "kernel-work-core",
+      "kind": "core",
+      "owner": "performance",
+      "paths": ["services/kernel/src/work/core/**"],
+      "publicEntries": ["services/kernel/src/work/core/index.ts"],
+      "allowedDependencies": ["bounds", "kernel-work-contract"],
+      "capabilities": ["work-domain-rules"]
+    },
+    {
+      "id": "kernel-work-application",
+      "kind": "application",
+      "owner": "performance",
+      "paths": ["services/kernel/src/work/application/**"],
+      "publicEntries": ["services/kernel/src/work/application/index.ts"],
+      "allowedDependencies": ["kernel-work-contract", "kernel-work-core"],
+      "capabilities": ["work-use-cases"]
     },
     {
       "id": "auth-service",

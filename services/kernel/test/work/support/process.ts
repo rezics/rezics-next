@@ -1,8 +1,9 @@
 import { expect } from 'bun:test';
+import { workerTestEnv } from '../../support/worker-env.ts';
 
 export function fixture(mode: string) {
   const child = Bun.spawn([process.execPath, `${import.meta.dir}/runtime.ts`, mode], {
-    env: process.env,
+    env: { ...process.env, ...workerTestEnv() },
     stdout: 'pipe',
     stderr: 'pipe',
   });

@@ -11,6 +11,7 @@ import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkClient } from './client.ts';
 
 export type WorkerAuthorization = Readonly<{ access: Access; readConsent: CurrentConsentReader }>;
+export { readAuthConsentConfig };
 
 /** Trusted composition only: mounting the kernel creates no request or listener. */
 export function createWorkerAuthorization(

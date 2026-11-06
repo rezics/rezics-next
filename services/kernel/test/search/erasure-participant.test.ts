@@ -71,7 +71,7 @@ const workerProgram = `
   import { startWorker, readWorkerConfig } from './src/worker.ts';
   import { createDiscoveryProducerEntry } from './src/composition/discovery.ts';
   import { createKernelRuntimeDefaults } from './src/composition/runtime-defaults.ts';
-    import { createKernelWorkModules } from './src/work/modules.ts';
+    import { createKernelWorkModules } from './src/composition/work-modules.ts';
     import { composeSemanticIdentityParticipants } from './src/composition/semantic.ts';
     const KERNEL_WORK_MODULES = createKernelWorkModules(
       createDiscoveryProducerEntry,
@@ -274,7 +274,7 @@ test('default Search registers the native account-tombstoned participant even wi
     const actual = observed.registered.filter(({ name }) => name === 'search');
     expect(actual).toHaveLength(1);
     // Executable missing-registration red: no required invented export or unconditional port throw.
-    expect(actual[0]!.effects.filter(({ types }) => types.includes(tombstone))).toHaveLength(1);
+    expect(actual[0]!.effects.filter(({ types }) => types.includes(tombstone))).toHaveLength(2);
     await native.ready;
     await deletePersona(options, personas.delegated);
     await drainEffects(pool, partitionOf(routeOf(personas.delegated.accountId)!));
