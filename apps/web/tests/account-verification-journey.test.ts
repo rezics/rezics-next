@@ -395,12 +395,9 @@ test('signed-in safety destinations, admitted subject request, revisit, withdraw
         accountId: currentAccountId,
         ...status,
         subjectTitle: status.verificationRequest
-          ? await readVerificationTitle(
-              client,
-              status.verificationRequest.catalogueSubjectId,
-              'Bearer applicant',
-              ['en'],
-            )
+          ? await readVerificationTitle(client, status.verificationRequest.catalogueSubjectId, 'Bearer applicant', [
+              'en',
+            ])
           : null,
       };
     },
