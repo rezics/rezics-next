@@ -15,14 +15,16 @@ import { PARTITIONS, partitionOf } from '../route/route.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
 import { requireRoute, runLibraryBoundedOperation, workStepDeadline } from './command-support.ts';
-import { withPublishedLogNativeWork } from './published-log-native.ts';
+import {
+  executePublishedLogDue,
+  executePublishedLogPurge,
+  withPublishedLogNativeWork,
+} from './published-log-native.ts';
 import { receiptKeysFor } from '../command/receipt-key.ts';
 import { lockPublishedLog } from './published-log-store.ts';
 import {
   PUBLISHED_LOG_RETENTION_PAGE_BOUND,
   PUBLISHED_LOG_RETENTION_SEGMENT_BOUND,
-  executePublishedLogDue,
-  executePublishedLogPurge,
   publishedLogDuePlan,
   publishedLogPurgePlan,
   publishedLogRetentionPageOperationPlan,

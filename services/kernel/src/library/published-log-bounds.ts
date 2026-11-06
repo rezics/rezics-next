@@ -12,7 +12,6 @@ import { sessionReadPlan, sessionSourceWork, sessionPartitionWork } from './sess
 import { followSubjectSummaryObservationWork } from './follow-operation-bounds.ts';
 import type { PublishedLogDueKey } from './published-log-retention.ts';
 import { routeOf } from '../route/route.ts';
-import { runLibraryBoundedStep } from './command-support.ts';
 import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
 import publicAccountRead from '../access/account-public-read.sql';
 import read from './published-log-read.sql';
@@ -274,23 +273,6 @@ export function publishedLogPurgePlan(input: Parameters<typeof purge.run>[1]): P
     total: mutation(purge.sql, original, 1, { purged: true }, 4, 6, 2, 1, 2),
   });
 }
-
-export const executePublishedLogRead = (client: Parameters<typeof read.run>[0], plan: PublishedLogReadPlan) =>
-  runLibraryBoundedStep(plan.kind, plan.total, () => read.run(client, plan.input));
-export const executePublishedLogLock = (client: Parameters<typeof lock.run>[0], plan: PublishedLogLockPlan) =>
-  runLibraryBoundedStep(plan.kind, plan.total, () => lock.run(client, plan.input));
-export const executePublishedLogPage = (client: Parameters<typeof page.run>[0], plan: PublishedLogPagePlan) =>
-  runLibraryBoundedStep(plan.kind, plan.total, () => page.run(client, plan.input));
-export const executePublishedLogDue = (client: Parameters<typeof due.run>[0], plan: PublishedLogDuePlan) =>
-  runLibraryBoundedStep(plan.kind, plan.total, () => due.run(client, plan.input));
-export const executePublishedLogInsert = (client: Parameters<typeof insert.run>[0], plan: PublishedLogInsertPlan) =>
-  runLibraryBoundedStep(plan.kind, plan.total, () => insert.run(client, plan.input));
-export const executePublishedLogDelete = (client: Parameters<typeof remove.run>[0], plan: PublishedLogDeletePlan) =>
-  runLibraryBoundedStep(plan.kind, plan.total, () => remove.run(client, plan.input));
-export const executePublishedLogRestore = (client: Parameters<typeof restore.run>[0], plan: PublishedLogRestorePlan) =>
-  runLibraryBoundedStep(plan.kind, plan.total, () => restore.run(client, plan.input));
-export const executePublishedLogPurge = (client: Parameters<typeof purge.run>[0], plan: PublishedLogPurgePlan) =>
-  runLibraryBoundedStep(plan.kind, plan.total, () => purge.run(client, plan.input));
 
 export type PublishedLogOperationPlan = Readonly<{
   kind: string;

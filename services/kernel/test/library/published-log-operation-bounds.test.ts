@@ -14,6 +14,7 @@ import {
   publishedLogRemainingMs,
   publishedLogRestoreOperationPlan,
   publishedLogRetractOperationPlan,
+  publishedLogReadPlan,
   publishedLogRetentionPageOperationPlan,
   publishedLogRetentionPurgeOperationPlan,
   publishedLogRetentionSegmentOperationPlan,
@@ -287,5 +288,15 @@ test('native interceptor skips consume while the enclosing operation reservation
     ),
   );
   expect(result).toBe('kept');
+  expect(runs).toEqual([]);
+  const plan = publishedLogReadPlan({ route: locator.route, log_id: logId });
+  const executed = await withCommandWorkAssociation(association, () =>
+    runLibraryBoundedOperation('published-log.test-execute', bound, () =>
+      withPublishedLogNativeWork(association.deadline, () =>
+        consumePublishedLogWork(plan.kind, plan.total, async () => null),
+      ),
+    ),
+  );
+  expect(executed).toBeNull();
   expect(runs).toEqual([]);
 });
