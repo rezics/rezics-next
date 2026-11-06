@@ -531,6 +531,11 @@
         "services/kernel/db/migrations/**",
         "services/kernel/db/schema.sql"
       ],
+      "excludes": [
+        "services/kernel/src/work/contract/**",
+        "services/kernel/src/work/core/**",
+        "services/kernel/src/work/application/**"
+      ],
       "publicEntries": [
         "services/kernel/src/command/receipt-key.ts",
         "services/kernel/src/database/json.ts",
@@ -540,7 +545,18 @@
         "services/kernel/src/memoized.ts",
         "services/kernel/src/request/access.ts",
         "services/kernel/src/route/route.ts",
-        "services/kernel/src/tokens/seal.ts"
+        "services/kernel/src/tokens/seal.ts",
+        "services/kernel/src/work/adapters/index.ts",
+        "services/kernel/src/work/authorization.ts",
+        "services/kernel/src/work/client.ts",
+        "services/kernel/src/work/history-enqueue.ts",
+        "services/kernel/src/work/queues.ts",
+        "services/kernel/src/work/registry.ts",
+        "services/kernel/src/work/retention.ts",
+        "services/kernel/src/work/retries.ts",
+        "services/kernel/src/work/sdk-retirement-fence.ts",
+        "services/kernel/src/work/selected-runtime-cost.ts",
+        "services/kernel/src/work/selected-runtime.ts"
       ],
       "allowedDependencies": [
         "auth-contract",
@@ -555,6 +571,9 @@
         "kernel-rating",
         "kernel-search",
         "kernel-semantic",
+        "kernel-work-application",
+        "kernel-work-contract",
+        "kernel-work-core",
         "kernel-zones",
         "operations"
       ],
@@ -594,9 +613,39 @@
         "kernel-search",
         "kernel-semantic",
         "kernel-semantic-application",
-        "kernel-semantic-contract"
+        "kernel-semantic-contract",
+        "kernel-work-application",
+        "kernel-work-contract",
+        "kernel-work-core"
       ],
       "capabilities": []
+    },
+    {
+      "id": "kernel-work-contract",
+      "kind": "contract",
+      "owner": "performance",
+      "paths": ["services/kernel/src/work/contract/**"],
+      "publicEntries": ["services/kernel/src/work/contract/index.ts"],
+      "allowedDependencies": [],
+      "capabilities": ["work-vocabulary"]
+    },
+    {
+      "id": "kernel-work-core",
+      "kind": "core",
+      "owner": "performance",
+      "paths": ["services/kernel/src/work/core/**"],
+      "publicEntries": ["services/kernel/src/work/core/index.ts"],
+      "allowedDependencies": ["bounds", "kernel-work-contract"],
+      "capabilities": ["work-domain-rules"]
+    },
+    {
+      "id": "kernel-work-application",
+      "kind": "application",
+      "owner": "performance",
+      "paths": ["services/kernel/src/work/application/**"],
+      "publicEntries": ["services/kernel/src/work/application/index.ts"],
+      "allowedDependencies": ["kernel-work-contract", "kernel-work-core"],
+      "capabilities": ["work-use-cases"]
     },
     {
       "id": "auth-service",

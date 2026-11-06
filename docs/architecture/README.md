@@ -13,6 +13,12 @@ Access ports are bound at the Kernel composition root; Content, Community, Seman
 389/368 (from 403/376), current 391/365; Access outgoing behaviour edges 61 (from 69); Kernel files in value cycles
 403 (from 405); largest value SCC 386 (from 388).
 
+Decision: Split Kernel Work into `kernel-work-contract`, `kernel-work-core`, `kernel-work-application` and native
+adapters that remain in `kernel-platform`. Contract, core and application have no downstream behaviour imports.
+Native Work ports are bound at the Kernel composition root; product module assembly lives in `composition/work-modules.ts`.
+Facades keep the previous import paths. Compact fake-port tests pin enqueue, registration and retirement; existing
+native Work fixtures remain the causal set.
+
 Decision: The client declaration closure depends on the public Access, Bounds, Money, Operations, Progress and
 Search Text packages used by mounted contracts. Register those dependencies alongside the client's existing package
 dependencies; generated declarations retain the native package identities and the boundary baseline does not grow.

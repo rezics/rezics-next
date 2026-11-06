@@ -1,3 +1,17 @@
+# Work domain inversion
+
+Decision: Work follows Access. Contract, core and application load no downstream behaviour. Native SDK, SQL, clock,
+authorization, receipt association and selected-admission adapters are bound by ordinary `createKernel` /
+`createKernelRuntimeDefaults` / `server` / `worker` composition. Existing facades call that composed application.
+Product module assembly lives in `composition/work-modules.ts`. Compact tests pin fake-port enqueue, registration,
+selected admission and retirement; the existing growth-work-client, selected-runtime-native, sdk-transaction-fence,
+sdk-retirement-fence and growth-retention fixtures remain the causal native set.
+
+Public entries: `work/contract/index.ts`, `work/core/index.ts`, `work/application/index.ts`, `work/adapters/index.ts`,
+and the stable facades `client.ts`, `registry.ts`, `retries.ts`, `queues.ts`, `selected-runtime.ts`,
+`selected-runtime-cost.ts`, `history-enqueue.ts`, `sdk-retirement-fence.ts`, `authorization.ts`, `retention.ts`.
+Adapters stay in `kernel-platform` so Work does not form a new module cycle with Command, History and Events.
+
 # Installed queue controls and cleanup replay
 
 `WorkIntent` forwards `queuePartitionKey`, `deduplicationID`, `priority` and `delaySeconds` to the installed
