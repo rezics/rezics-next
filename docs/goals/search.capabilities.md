@@ -240,9 +240,11 @@ but helper/certificate scaffolding is not the adopted epoch lifecycle. Actual409
 these surfaces: REQUIRED NOT YET FROZEN/BOUND; no per-page alias sweep or raw256 protocol is adopted.
 
 **Native wrapper/command:** Search wrapper and bounded-name outcome driver client;
-`bun run --cwd services/kernel check test/search/outcomes.test.ts test/search/bounded-name-cursor-outcomes.test.ts test/search/bounded-generation-readiness.test.ts`.
+`bun run --cwd services/kernel check test/search/outcomes.test.ts test/search/bounded-name-cursor-outcomes.test.ts test/search/bounded-generation-readiness.test.ts test/search/canonical-executed-recovery.test.ts test/search/canonical-keyset.test.ts`.
 Search binds confidential principal/request/operation/generation/epoch cursors; Semantic supplies maintained
 identity access paths, Commerce supplies occurrence versus canonical read boundaries.
+Focused native HTTP recovery (`canonical-executed-recovery.test.ts`) pins unique traversal, generation restart and
+terminal pages separately from browser and promoted-main proof.
 
 | Stage                                   | Evidence                                                                                         |
 | --------------------------------------- | ------------------------------------------------------------------------------------------------ |
@@ -320,10 +322,11 @@ defensive only. Delegated/unscoped/revoked fixture coverage remains REQUIRED NOT
 driver cannot express it.
 
 **Native wrapper/command:** SearchDriver via Search wrapper;
-`bun run --cwd services/kernel check test/search/outcomes.test.ts`.
+`bun run --cwd services/kernel check test/search/outcomes.test.ts test/search/native-recovery.test.ts test/search/canonical-executed-recovery.test.ts`.
 No new suggest suite is needed for already frozen prefixes/operators/budgets; extend only missing persona/source
 outcomes after owner adoption. Shared consumer acceptance is catalogue-jobs and composition-and-profile-governance.
 Focused Web adapter tests pin installed Search/suggest/facet/Realm native HTTP families; they are not a native pass.
+In-budget invalid HTTP keeps pointers; over-budget authored JSON restarts without echoing the payload.
 
 | Stage                                   | Evidence                                                                                           |
 | --------------------------------------- | -------------------------------------------------------------------------------------------------- |
@@ -475,7 +478,7 @@ response closes publication, and no native context schema is invented here.
 | --------------------------------------- | ----------------------------------------------------------------------------------------- |
 | specification validated red             | Existing separate route assertions present; composed context/claim journey not frozen.    |
 | native driver registered                | Pages and Semantic route slices registered; complete context/publication binding missing. |
-| implementation exposed                  | Standalone relations/views exist; rating pair restarts together. Realm-context pending.   |
+| implementation exposed                  | Standalone relations/views exist; rating order/population restart as one executed pair in canonical-executed-recovery. Realm-context pending. |
 | user-case native pass at named revision | None recorded for this capability or its publication stage.                               |
 | promoted                                | No main closure evidence.                                                                 |
 

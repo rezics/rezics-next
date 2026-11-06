@@ -321,10 +321,8 @@ export function searchRoutes<App>(
                 : null;
             };
             const page = discoveryHttpPage(
-              await discovery(
-                searchHttpPrincipal(actor),
-                { ...nativeBody, representation: 'discovery-v1' },
-                {
+              await searchHttpExecute(nativeBody, () =>
+                discovery(searchHttpPrincipal(actor), { ...nativeBody, representation: 'discovery-v1' }, {
                   access: ownerAccess,
                   actor,
                   deadline: job.deadline,
@@ -334,7 +332,7 @@ export function searchRoutes<App>(
                     ? {}
                     : { spoilerThreshold: body.spoilerThreshold as 0 | 1 | 2 }),
                   observeRelationRelease,
-                },
+                }),
               ),
             );
             const emptyRecovery = await recoveryForPage(
@@ -402,13 +400,14 @@ export function searchRoutes<App>(
                 errors: [{ pointer: '/representation', code: 'unsupported' }],
               });
             const active = await activeRelease(pool);
-            const page = await search.releaseGroups(
-              searchHttpPrincipal(actor),
-              principal,
-              nativeBody as GroupedReleaseSearchRequest,
-              clock().getTime(),
-              active,
-              { deadline: job.deadline, complete: async () => {} },
+            const page = await searchHttpExecute(nativeBody, () =>
+              search.releaseGroups(
+                searchHttpPrincipal(actor),
+                nativeBody as GroupedReleaseSearchRequest,
+                clock().getTime(),
+                active,
+                { deadline: job.deadline, complete: async () => {} },
+              ),
             );
             await trending.submitted(actor, body);
             return releaseResponse(page, catalogueResponses, authorize, body.languages ?? [], active);

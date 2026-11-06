@@ -103,6 +103,8 @@ readers share the native HTTP families (invalid, invalid-cursor, session, closed
 source-not-ready, unavailable, ready). Decision: the fewest adapter tests pin that journey through createKernelClient
 on Search, suggest, facets and Realm More/Retry/Restart; named stories stay unchanged; native/browser cells remain
 deferred until stack releases land.
+Decision: Search HTTP omits absent optional problem fields when classifying those families. Leftover History imports
+in Semantic/Zones use the documented contract and application entries so kernel typecheck can complete.
 
 Search rating order and population are one pending native GET pair, applied only by Submit in both hydrated and
 unhydrated visits. A field change never dispatches. Application starts a first traversal, retaining every other

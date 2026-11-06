@@ -20,6 +20,19 @@ export type SearchNativeRecoveryInput = Readonly<{
   cursorPointer?: boolean;
 }>;
 
+/** Omit absent optional problem fields so exactOptionalPropertyTypes callers can classify a status. */
+export function searchNativeRecoveryInput(
+  status: number,
+  code?: string,
+  cursorPointer?: boolean,
+): SearchNativeRecoveryInput {
+  return {
+    status,
+    ...(code === undefined ? {} : { code }),
+    ...(cursorPointer === undefined ? {} : { cursorPointer }),
+  };
+}
+
 export type SearchNativeCorrection = Readonly<{
   pointer: string;
   code: string;
@@ -70,11 +83,9 @@ export function searchNativeOperandRecovery(input: {
   extensions?: Readonly<Record<string, unknown>>;
   authoredBytes: number;
 }): SearchNativeOperandRecovery {
-  const family = searchNativeRecoveryFamily({
-    status: input.status,
-    code: input.code,
-    cursorPointer: searchNativeCursorPointer(input.errors),
-  });
+  const family = searchNativeRecoveryFamily(
+    searchNativeRecoveryInput(input.status, input.code, searchNativeCursorPointer(input.errors)),
+  );
   if (family === 'invalid' || family === 'invalid-cursor') {
     if (input.authoredBytes > SEARCH_VISIT_OPERAND_BUDGET) return { family: 'restart', reusableRequest: false };
     return {
@@ -95,9 +106,9 @@ export function searchNativeProblemRecovery(error: ProblemError, authored: unkno
   return searchNativeOperandRecovery({
     status: PROBLEMS[error.code].status,
     code: error.code,
-    errors: error.errors,
-    extensions: error.extensions,
     authoredBytes: searchNativeAuthoredBytes(authored),
+    ...(error.errors === undefined ? {} : { errors: error.errors }),
+    ...(error.extensions === undefined ? {} : { extensions: error.extensions }),
   });
 }
 

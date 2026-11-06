@@ -2,6 +2,7 @@ import { ProblemError } from '../../http/problem.ts';
 import type { Actor } from '../../request/access.ts';
 import {
   searchNativeRecoveryFamily,
+  searchNativeRecoveryInput,
   searchNativeRetainOrRestart,
   type SearchNativeRecoveryFamily,
 } from './native-recovery.ts';
@@ -27,5 +28,5 @@ export function searchHttpFamilyFromStatus(
   code?: string,
   cursorPointer?: boolean,
 ): SearchNativeRecoveryFamily {
-  return searchNativeRecoveryFamily({ status, code, cursorPointer });
+  return searchNativeRecoveryFamily(searchNativeRecoveryInput(status, code, cursorPointer));
 }
