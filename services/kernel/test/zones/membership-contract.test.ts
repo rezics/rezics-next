@@ -10,6 +10,7 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { capture, costOf, openGrowthDatabase } from '../support/growth.ts';
+import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
 
 type Collection = { id: string; revision: number; title: string; membershipKind?: string };
 type Zone = { id: string; revision: number };
@@ -21,6 +22,7 @@ const starter = (await Bun.file(
 /** Real HTTP and production Access. Only account provisioning is privileged fixture setup. */
 export async function membershipFixture() {
   const db = await openGrowthDatabase();
+  configureTestReceiptKeys(db.pool);
   await bootstrapRelease(db.pool, bundledRelease);
   const owner = newId(0x6c41);
   await db.admin.query(
@@ -77,6 +79,7 @@ export async function membershipFixture() {
   }
   const app = createKernel({
     pool: db.pool,
+    receiptKeys: testReceiptKeys(),
     routeKey: new Uint8Array(32).fill(83),
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(84)]]) },
     access: (config) =>

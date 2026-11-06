@@ -45,6 +45,8 @@ export const COMMAND_HISTORY_KINDS = Object.freeze({
   'zone.publish': 3012,
   'zone.delete': 3013,
   'zone.restore': 3014,
+  'zone.takedown': 3015,
+  'zone.release_takedown': 3016,
   'subject.create': 3020,
   'subject.batch_create': 3021,
   'subject.propose': 3022,

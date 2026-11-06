@@ -21,7 +21,9 @@ import {
   type CollectionSourceWorkState,
 } from './collection-source-work-native.ts';
 
+// The work vocabulary lives in the Library contract module; these names stay exported for existing Library consumers.
 import type { WorkAllowance, WorkDimensions, WorkReceipt } from './contract/work-dimensions.ts';
+export type { WorkAllowance, WorkDimensions, WorkReceipt };
 
 type SourceWorkContext<W extends ScopeWorkContext = ScopeWorkContext> = W extends ScopeWorkContext
   ? Readonly<{ actor?: never; at?: never; work: W }>

@@ -11,7 +11,7 @@ import {
   type PreparedCollectionSource,
   type CollectionSourceEvidence,
 } from '../library/collection-source.ts';
-import { type WorkAllowance, type WorkReceipt, type WorkDimensions } from '../library/contract/work-dimensions.ts';
+import type { WorkAllowance, WorkDimensions, WorkReceipt } from '../library/contract/work-dimensions.ts';
 import { CollectionSourceLedger } from '../library/collection-source-work.ts';
 import {
   readCanonicalSourceState,

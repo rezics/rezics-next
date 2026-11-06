@@ -427,6 +427,35 @@ async function checkPreparedPermission(
           project(row),
         ),
       );
+      // PROBE (temporary, removed before landing): Zone and Collection owner denials with decisive operands.
+      if (/^(zone|collection):/.test(action) && ordinary.some((decision) => decision.decision !== 'allow'))
+        console.log(
+          'PROBE-ACCESS',
+          JSON.stringify({
+            action,
+            resourceType,
+            scope: facts.scope,
+            anonymous: facts.anonymous,
+            hasPrincipal,
+            rows: rows.map((row) => {
+              const operands = project(row);
+              return {
+                live: (row as any).live,
+                assignmentValid: operands.assignmentValid,
+                deadlineLive: operands.deadlineLive,
+                localDenied: operands.localDenied,
+                actorActionGrant: operands.actorActionGrant,
+                actorResourceRoleGrant: operands.actorResourceRoleGrant,
+                actorOwnAccountGrant: operands.actorOwnAccountGrant,
+              };
+            }),
+            decisions: ordinary.map((decision) => ({
+              decision: decision.decision,
+              reason: decision.reason,
+              explanation: decision.explanation,
+            })),
+          }),
+        );
       const explicit = canEvaluateExplicit
         ? rows.map((row) =>
             decideNativePermission(
