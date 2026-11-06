@@ -74,6 +74,11 @@ import { ReleaseSearchCursorInvalid } from './release-search-cursor.ts';
 import { OpenSearchError, SearchUnavailableError, type OpenSearch } from './opensearch.ts';
 import { publicHitFigures } from './public-figures.ts';
 import { installTemplates, searchSubjectHits, suggestSubjects, type SearchPlan } from './query.ts';
+import {
+  bindSearchIdentityCursorRequest,
+  observeSearchIdentityEpoch,
+  resolveCanonicalKeyset,
+} from './canonical-keyset.ts';
 import { decodeRatingCursor, encodeRatingCursor, type RatingPhase } from './rating-cursor.ts';
 import { normalizePublicRatingFigure, type PublicRatingEpoch, type PublicRatingSource } from './rating-source.ts';
 import { subjectConsumer } from './runner.ts';
@@ -967,11 +972,24 @@ export function createSearchService({
       readContext?: PublicSearchReadContext,
     ) {
       request = ownSubjectRequest(request);
-      const { text, filter, sort, limit, hitOptions, spoilerThreshold, bindingRequest } = validate(request);
+      const {
+        text,
+        filter,
+        sort,
+        limit,
+        hitOptions,
+        spoilerThreshold,
+        bindingRequest: admittedRequest,
+      } = validate(request);
       // One lookup serves filter admission and the requested properties.
       const native = active === undefined && !releaseOverride ? await activeRelease(pool) : active;
       const current = native?.release ?? (releaseOverride ? await release() : undefined);
       if (publicFilters && !native) throw indexNotReady();
+      const identity = await sourceRequest(() =>
+        observeSearchIdentityEpoch(pool, readContext?.deadline ?? now + 10_000),
+      );
+      if (identity.status === 'preparing') throw indexNotReady();
+      const bindingRequest = bindSearchIdentityCursorRequest(admittedRequest, identity.digest);
       const kinds: KindSnapshot | undefined = current
         ? compileKinds(current, native?.digest ?? kindDigest(current))
         : undefined;
@@ -1373,6 +1391,7 @@ export function createSearchService({
           throw indexNotReady();
         return evaluation.values;
       };
+      let canonicalIds: Awaited<ReturnType<typeof resolveCanonicalKeyset<IndexedSubject>>> | undefined;
       const checkCandidates = async (hits: readonly NativeSearchHit[]) => {
         sourcePositions.clear();
         const { passed, relationRejected } = await sourceRequest(() =>
@@ -1406,7 +1425,7 @@ export function createSearchService({
           const values = await evaluateScope(ids);
           scopedMatches = new Set(ids.filter((_, index) => values[index] === true));
         }
-        const checked = new Map<(typeof hits)[number], IndexedSubject>();
+        const disclosed: IndexedSubject[] = [];
         for (const hit of hits) {
           if (rating && hit.ratingPhase !== 'scored' && hit.ratingPhase !== 'unscored') throw indexNotReady();
           const subject = subjects.get(hit);
@@ -1414,11 +1433,19 @@ export function createSearchService({
             subject &&
             (!scopedMatches || scopedMatches.has(subject.id)) &&
             (!ratingAccepted || ratingAccepted.has(hit))
-          ) {
-            checked.set(hit, subject);
-            evidenceById.set(subject.id, hit.engineEvidence);
-          }
+          )
+            disclosed.push(subject);
         }
+        const canonical = await sourceRequest(() => resolveCanonicalKeyset(pool, disclosed));
+        if (canonical.status === 'preparing') throw indexNotReady();
+        const checked = new Map<(typeof hits)[number], IndexedSubject>();
+        for (const hit of hits) {
+          const subject = subjects.get(hit);
+          if (!subject || !canonical.accepted.has(subject)) continue;
+          checked.set(hit, subject);
+          evidenceById.set(subject.id, hit.engineEvidence);
+        }
+        canonicalIds = canonical;
         return checked;
       };
       if (
@@ -1606,7 +1633,8 @@ export function createSearchService({
                 ...(preparePublic ? { prepare: preparePublic } : {}),
                 ...(retained ? { continuation: retained } : {}),
                 check: checkCandidates,
-                canonicalId: (subject) => subject.id,
+                canonicalId: (subject) =>
+                  canonicalIds && canonicalIds.status === 'ready' ? canonicalIds.canonicalId(subject) : subject.id,
               }),
             )
           : undefined;
@@ -1640,7 +1668,8 @@ export function createSearchService({
               return page;
             },
             check: checkCandidates,
-            canonicalId: (subject) => subject.id,
+            canonicalId: (subject) =>
+              canonicalIds && canonicalIds.status === 'ready' ? canonicalIds.canonicalId(subject) : subject.id,
           }));
         // Never publish a partial page or a raw-candidate continuation on work-bound exhaustion.
         // Native preparation must own the retained input; a request cannot fabricate a job.

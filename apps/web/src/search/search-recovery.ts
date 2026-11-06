@@ -5,9 +5,9 @@ import { parseDiscoveryPage, parseLegacySearchPage, type DiscoveryState, type Le
 import { facetProblem, type FacetState } from './refinement/request';
 import type { SearchPageData } from './search';
 import type { SearchLoaderDeps } from './search-params';
-import { searchRetryAt } from './search-recovery-retry';
+import { narrowSearchRetryAt, searchRetryAt } from './search-recovery-retry';
 
-export { searchRetryAt } from './search-recovery-retry';
+export { narrowSearchRetryAt, searchRetryAt } from './search-recovery-retry';
 
 type Request = NonNullable<Parameters<KernelClient['subjects']['$search']['post']>[0]>;
 export type SearchWireResponse = {
@@ -78,6 +78,16 @@ export function searchRecoveryFromResponse(
                   : 'unavailable';
   const retryAt = searchRetryAt(response.response?.headers.get('retry-after') ?? null, now);
   return { status, ...(problem ? { problem } : {}), ...(retryAt !== undefined ? { retryAt } : {}) };
+}
+
+/** A later native Retry-After replaces only a shorter wait on the same recovery owner. */
+export function retainSearchRetryAt<T extends { retryAt?: number }>(current: T | undefined, next: T): T {
+  const retryAt = narrowSearchRetryAt(current?.retryAt, next.retryAt);
+  if (retryAt === undefined) {
+    const { retryAt: _retryAt, ...rest } = next;
+    return rest as T;
+  }
+  return { ...next, retryAt };
 }
 
 /** Exactly one existing SDK request per read. A restart always needs an explicit reader action. */

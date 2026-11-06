@@ -351,6 +351,8 @@ For an unchanged identified observation, every unconsumed head is after F, so se
 Live keysets do not promise a cross-database snapshot under arbitrary edits. Ordinary row writes do not change
 order meaning or trigger registry-wide restart. Actual physical generation, comparator/producer-set or published
 identity meaning changes retain `409 search_restart_required`; pending identity/currentness requires readiness.
+Decision: confidential Search continuations bind the published identity-epoch digest with principal, operands,
+operation and physical generation; canonical pages emit one terminal per maintained original-and-terminal path.
 Re-resolve current resource heads, release and authority on every continuation within the fixed budget.
 
 Preserve the confidential [Search cursor profile](../services/kernel/src/search/README.md#confidential-cursor-and-bounded-name-sort):
