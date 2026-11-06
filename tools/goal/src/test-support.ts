@@ -23,6 +23,7 @@ import {
   groupMembers,
   inspectProcessIdentity,
   inspectProcessSnapshot,
+  isEmptyProcessGroupUnconfirmed,
   sameProcess,
   signalProcessIdentity,
   waitForWorkerExit,
@@ -74,16 +75,27 @@ function leaderIsDeadAlone(identity: ProcessIdentity): boolean {
     snapshot?.dead === true &&
     snapshot.identity.start === identity.start &&
     snapshot.identity.boot === identity.boot &&
+    snapshot.identity.group === identity.group &&
     groupMembers(identity.group).length === 0
   );
 }
 
-function checkedFixtureGroup(identity: ProcessIdentity, _allowLeaderExit = false): ProcessIdentity[] {
-  return checkedProcessGroup(identity);
+/**
+ * Teardown may accept an empty group only while its original dead leader still proves custody.
+ * An unconfirmed empty group alone does not establish that the owned group has exited.
+ */
+function checkedFixtureGroup(identity: ProcessIdentity, allowLeaderExit = false): ProcessIdentity[] {
+  try {
+    return checkedProcessGroup(identity);
+  } catch (error) {
+    if (allowLeaderExit && isEmptyProcessGroupUnconfirmed(error, identity.group) && leaderIsDeadAlone(identity))
+      return [];
+    throw error;
+  }
 }
 
 async function signalFixtureGroup(identity: ProcessIdentity, signal: NodeJS.Signals): Promise<void> {
-  for (const member of checkedFixtureGroup(identity)) await signalProcessIdentity(member, signal);
+  for (const member of checkedFixtureGroup(identity, true)) await signalProcessIdentity(member, signal);
 }
 
 async function waitForFixtureGroupExit(identity: ProcessIdentity, timeoutMs: number): Promise<boolean> {
@@ -96,8 +108,7 @@ async function waitForFixtureGroupExit(identity: ProcessIdentity, timeoutMs: num
 }
 
 async function reapFixtureGroup(identity: ProcessIdentity): Promise<void> {
-  // Teardown only: a dead leader's group is empty here. Liveness checks during the run keep the strict custody check.
-  if (leaderIsDeadAlone(identity) || !checkedFixtureGroup(identity).length) return;
+  if (!checkedFixtureGroup(identity, true).length) return;
   await signalFixtureGroup(identity, 'SIGTERM');
   if (await waitForFixtureGroupExit(identity, FIXTURE_TERM_GRACE_MS)) return;
   await signalFixtureGroup(identity, 'SIGKILL');
@@ -172,14 +183,14 @@ const CHECK_SCRIPT_PATHS = [
 function cloneSharedGit(template: string, destination: string, identity: { name: string; email: string }): void {
   mkdirSync(destination, { recursive: true });
   repositoryGit(destination, 'clone', '--quiet', '--shared', '--no-hardlinks', template, '.');
+  // Clone does not copy the template's user.name/user.email. Check hosts have no global identity.
+  repositoryGit(destination, 'config', 'user.name', identity.name);
+  repositoryGit(destination, 'config', 'user.email', identity.email);
   try {
     repositoryGit(destination, 'remote', 'remove', 'origin');
   } catch {
     /* git clone always adds origin; keep init-like remotes. */
   }
-  // A clone does not copy the template's identity; check hosts have no global one, so set it here.
-  repositoryGit(destination, 'config', 'user.name', identity.name);
-  repositoryGit(destination, 'config', 'user.email', identity.email);
 }
 
 function gitTemplate(kind: 'repository' | 'harness', build: (root: string) => void): string {

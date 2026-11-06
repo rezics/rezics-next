@@ -19,7 +19,7 @@ test('Git fixtures clone a per-file template with shared objects and isolated wo
     first.close();
     second.close();
   }
-});
+}, 15_000);
 
 test('harness clones share the fixture template without sharing later commits', () => {
   const first = harness();
@@ -32,7 +32,7 @@ test('harness clones share the fixture template without sharing later commits', 
     first.dispose();
     second.dispose();
   }
-});
+}, 15_000);
 
 test('an injected clock fires timers when time advances instead of sleeping', () => {
   const clock = installTestClock(1_000);

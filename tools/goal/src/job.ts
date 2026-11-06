@@ -85,12 +85,16 @@ import { removeFinishedWorktree, type LifetimeRuntime } from './worktree-lifetim
 import { captureLaunchContext } from './launch-context.ts';
 import {
   holdRetryForToolIncident,
+  lastTransportFailure,
   recordToolBlockerFailure,
+  recordTransportFailure,
   recoverUndeliveredToolIncidentNotices,
   resolveToolIncidentsAfterAttempt,
   toolIncidentForRetry,
   toolIncidentRetryAllowed,
+  transportIncidentResumeAllowed,
 } from './tool-incidents.ts';
+import { TRANSPORT_RESUME_PROMPT } from './agents/shared.ts';
 
 function rebaseConflictFiles(outcome: GateOutcome): string[] {
   const files = new Set(outcome.conflictedFiles ?? []);
@@ -495,6 +499,16 @@ export class WorkerJob implements GateOutcomeSink {
       return `Original proof result: ${JSON.stringify(observed)}`;
     }
     if (finalReportPending(this.tasks.store, attempt)) return FINAL_REPORT_PROMPT;
+    const transport = lastTransportFailure(this.tasks.store, attempt);
+    if (transport) {
+      if (Date.parse(transport.nextResumeAt) - Date.now() > this.policy.worker.retryIntentLeadMs) return null;
+      if (!transportIncidentResumeAllowed(this.tasks.store, attempt)) return null;
+    }
+    if (attempt.checks?.length) {
+      const observed = observeWorkerChecks(task, attempt.checks, this.policy.worker);
+      return observed.status === 'pending' ? null : observed.resumeText;
+    }
+    if (transport) return TRANSPORT_RESUME_PROMPT;
     const observed = observeWorkerChecks(task, attempt.checks ?? [], this.policy.worker);
     return observed.status === 'pending' ? null : observed.resumeText;
   }
@@ -834,6 +848,7 @@ export class WorkerJob implements GateOutcomeSink {
         },
         this.policy.worker.activityPollMs,
       );
+      const priorTransport = lastTransportFailure(store, ref)?.sequence ?? 0;
       try {
         await settle(this.tasks, worker, this.landing, async () => {
           clearTimeout(timer);
@@ -845,6 +860,28 @@ export class WorkerJob implements GateOutcomeSink {
       }
       if (stopping) await stopping;
       if (silenceStopping) await silenceStopping;
+      if (!stopping) {
+        const settled = store.attempt(ref);
+        const transport = lastTransportFailure(store, ref);
+        if (transport && transport.sequence > priorTransport)
+          recordTransportFailure(
+            store,
+            store.task(ref.taskId),
+            settled,
+            this.tasks.settings,
+            this.inbox,
+            transport.line,
+          );
+        else if (
+          settled.state === 'waiting' ||
+          (settled.state === 'exited' &&
+            !settled.failureKind &&
+            reportsSuccess(settled.result, agentAdapter(settled.profile.cli)))
+        ) {
+          const resolved = resolveToolIncidentsAfterAttempt(store, ref, store.task(ref.taskId), settled);
+          if (resolved.length) this.resumePendingRetries();
+        }
+      }
     } finally {
       clearTimeout(timer);
       clearTimeout(startCheck);
@@ -852,15 +889,6 @@ export class WorkerJob implements GateOutcomeSink {
       watcher?.close();
     }
     if (!stopping) {
-      const settledAttempt = store.attempt(ref);
-      if (
-        settledAttempt.state === 'exited' &&
-        !settledAttempt.failureKind &&
-        reportsSuccess(settledAttempt.result, agentAdapter(settledAttempt.profile.cli))
-      ) {
-        const resolved = resolveToolIncidentsAfterAttempt(store, ref, store.task(ref.taskId), settledAttempt);
-        if (resolved.length) this.resumePendingRetries();
-      }
       if (silenceFailure && store.attempt(ref).state === 'exited') {
         store.updateAttempt(ref, (attempt) => {
           attempt.failureKind = 'tool';
@@ -1733,6 +1761,7 @@ export class WorkerJob implements GateOutcomeSink {
           const silence = attempt.result.startsWith('stalled: no output for ');
           const fingerprint = blockerFingerprint(attempt, task.worktree, store.policy.worker);
           const repeated =
+            Boolean(fingerprint) &&
             previous?.failureKind === 'tool' &&
             blockerFingerprint(previous, task.worktree, store.policy.worker) === fingerprint;
           const unrerun =

@@ -5,8 +5,16 @@ import type { LandingQueue } from './contracts.ts';
 import { readFileSync } from 'node:fs';
 import { makeRecord, readLogTail, readMeasurement, reportedApproaches, reportsSuccess } from './records.ts';
 import { agentAdapter } from './agents.ts';
+import {
+  isTransportFailure,
+  lastNonemptyLine,
+  TRANSPORT_FAILURE_EVENT,
+  TRANSPORT_RETRY_LIMIT,
+  transportFailureLine,
+  transportRetryBackoffMs,
+} from './agents/shared.ts';
 import { evidenceBundle } from './evidence.ts';
-import { terminateProcessGroup } from './process.ts';
+import { isEmptyProcessGroupUnconfirmed, terminateProcessGroup } from './process.ts';
 import { releaseWorkerTemporaryDirectory, type RunningWorker } from './launch.ts';
 import { removeAttemptContainers } from './worker-containers.ts';
 import { reapAttemptResources } from './attempt-resources.ts';
@@ -17,6 +25,14 @@ import { completeWorkerSourceBaseline } from './conflict-progress.ts';
 import { harvestContinuations } from './continuation.ts';
 import type { Task } from './types.ts';
 import { defaultPolicy } from './policy.ts';
+
+function readAttemptStderr(logPath: string): string {
+  try {
+    return readFileSync(`${logPath}.err`, 'utf8');
+  } catch {
+    return '';
+  }
+}
 
 function unchangedSource(task: Task, head: string): boolean {
   const frozen = new Set((task as Task & { frozenFiles?: { path: string }[] }).frozenFiles?.map((file) => file.path));
@@ -127,11 +143,17 @@ export async function settle(
       });
     }
     store.assertCurrent(ref);
-    await terminateProcessGroup(
-      store.attempt(ref).process,
-      tasks.settings.terminationGraceMs,
-      tasks.settings.policy?.process,
-    );
+    try {
+      await terminateProcessGroup(
+        store.attempt(ref).process,
+        tasks.settings.terminationGraceMs,
+        tasks.settings.policy?.process,
+      );
+    } catch (error) {
+      // The wrapper already exited; a zombie linger must not hide the worker's real stderr as unconfirmed custody.
+      const identity = store.attempt(ref).process;
+      if (!identity || !isEmptyProcessGroupUnconfirmed(error, identity.group)) throw error;
+    }
     if (!proofTask && !pendingChecks?.length) {
       if (!store.task(ref.taskId).workspace)
         await reapAttemptResources({
@@ -177,6 +199,8 @@ export async function settle(
           ...(logStartOffset !== undefined ? { logStartOffset } : {}),
         },
       );
+      const stderr = readAttemptStderr(current.logPath);
+      const adapter = agentAdapter(current.profile.cli);
       if (
         resuming &&
         !proofTask &&
@@ -184,16 +208,12 @@ export async function settle(
         !measurement.session &&
         !measurement.failureKind &&
         !measurement.blocker &&
-        !reportsSuccess(measurement.result, agentAdapter(current.profile.cli))
+        !reportsSuccess(measurement.result, adapter) &&
+        !isTransportFailure(stderr, code)
       ) {
-        let stderr = '';
-        try {
-          stderr = readFileSync(`${current.logPath}.err`, 'utf8').trim();
-        } catch {
-          /* The CLI may have failed before creating its stderr stream. */
-        }
         const detail = (
-          stderr ||
+          lastNonemptyLine(stderr) ||
+          stderr.trim() ||
           measurement.result ||
           `Worker CLI exited with code ${code ?? 'unknown'} before starting a session`
         )
@@ -218,7 +238,7 @@ export async function settle(
         });
         return;
       }
-      const proofExit = proofTask ? parseAgentExit(measurement.result, agentAdapter(current.profile.cli)) : null;
+      const proofExit = proofTask ? parseAgentExit(measurement.result, adapter) : null;
       const waitingId =
         proofExit &&
         typeof proofExit === 'object' &&
@@ -249,7 +269,6 @@ export async function settle(
       }
       // A worker that exited 0 without its exit object is asked for it once, in the same session and attempt, instead
       // of spending another attempt that repeats its checks. The host resumes it like a check wake.
-      const adapter = agentAdapter(current.profile.cli);
       const session = measurement.session ?? current.session;
       if (
         code === 0 &&
@@ -275,6 +294,43 @@ export async function settle(
         });
         return;
       }
+      const transport = isTransportFailure(stderr, code);
+      const transportLine = transport
+        ? (transportFailureLine(stderr) || lastNonemptyLine(stderr)).slice(0, policy.worker.summaryCharacters)
+        : '';
+      const transportFailures = store
+        .events(ref.taskId, ref.attempt)
+        .filter((event) => event.kind === TRANSPORT_FAILURE_EVENT).length;
+      if (
+        transport &&
+        !proofTask &&
+        transportLine &&
+        transportFailures < (policy.worker.transportRetryLimit ?? TRANSPORT_RETRY_LIMIT) &&
+        !measurement.failureKind &&
+        !measurement.blocker &&
+        !reportsSuccess(measurement.result, adapter)
+      ) {
+        const count = transportFailures + 1;
+        const delayMs = transportRetryBackoffMs(count, policy.worker.transportRetryBackoffMs);
+        const waitMs = process.env.REZICS_GOAL_TEST_ENVIRONMENT === '1' ? 0 : delayMs;
+        const nextResumeAt = new Date(Date.now() + waitMs).toISOString();
+        store.updateAttempt(ref, (attempt) => {
+          attempt.state = 'waiting';
+          attempt.process = null;
+          attempt.driver = null;
+          attempt.exitCode = code;
+          attempt.session = session;
+          attempt.result = transportLine;
+          attempt.failureKind = null;
+        });
+        store.event(ref, TRANSPORT_FAILURE_EVENT, {
+          count,
+          line: transportLine,
+          delayMs,
+          nextResumeAt,
+        });
+        return;
+      }
       const attempt = store.updateAttempt(ref, (a) => {
         a.state = 'exited';
         a.endedAt = endedAt;
@@ -297,27 +353,27 @@ export async function settle(
       // A CLI can fail before opening a session, so there is no structured event in its JSONL log.
       // Preserve that launch failure on the attempt and keep it out of the landing queue.
       if (!finalMeasurement.session && code !== null && code !== 0 && !finalMeasurement.failureKind && !committed) {
-        let stderr = '';
-        try {
-          stderr = readFileSync(`${attempt.logPath}.err`, 'utf8').trim();
-        } catch {
-          /* No stderr stream was created. */
-        }
         // Cursor refuses a spent model this way; the pool must be excluded, not the launch retried and stalled.
-        finalMeasurement.failureKind = agentAdapter(attempt.profile.cli).signals?.(stderr).allowance
-          ? 'pool-exhausted'
-          : 'tool';
-        finalMeasurement.result = stderr || `Worker CLI exited with code ${code} before starting a session`;
+        finalMeasurement.failureKind = adapter.signals?.(stderr).allowance ? 'pool-exhausted' : 'tool';
+        finalMeasurement.result =
+          lastNonemptyLine(stderr) || stderr.trim() || `Worker CLI exited with code ${code} before starting a session`;
       }
       // Only a worker's own final answer, a success report or a stated blocker, lets its branch land. A worker killed
       // mid-work gives none, and its partial worktree must not be committed and integrated as if it had passed.
       if (
         !finalMeasurement.failureKind &&
         !finalMeasurement.blocker &&
-        !reportsSuccess(finalMeasurement.result, agentAdapter(attempt.profile.cli))
+        !reportsSuccess(finalMeasurement.result, adapter)
       ) {
+        const parsed = parseAgentExit(finalMeasurement.result, adapter);
+        const errorLine = lastNonemptyLine(stderr);
+        const detail =
+          (!finalMeasurement.result.trim() || parsed == null) && errorLine
+            ? errorLine
+            : finalMeasurement.result.slice(-policy.worker.failedResultCharacters);
         finalMeasurement.failureKind = 'tool';
-        finalMeasurement.result = `Worker ended without a success report (${code === null ? 'killed' : `exit ${code}`}): ${finalMeasurement.result.slice(-policy.worker.failedResultCharacters)}`;
+        finalMeasurement.result = `Worker ended without a success report (${code === null ? 'killed' : `exit ${code}`}): ${detail}`;
+        if (transportLine) finalMeasurement.blocker = transportLine;
       }
       store.updateAttempt(ref, (a) => {
         a.session = finalMeasurement.session ?? a.session;
