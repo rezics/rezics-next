@@ -715,7 +715,9 @@ test('Account Context epochs are observed independently of the catalogue identit
       )
     ).rows;
     await held.query('COMMIT');
-    expect(owners.map((row) => row.partition_no)).toEqual([...new Set([editorHome, acceptorHome])].sort((a, b) => a - b));
+    expect(owners.map((row) => row.partition_no)).toEqual(
+      [...new Set([editorHome, acceptorHome])].sort((a, b) => a - b),
+    );
     for (const row of owners) expect(/^[1-9][0-9]*$/.test(String(row.epoch))).toBe(true);
     const ownerEpoch = new Map(owners.map((row) => [row.partition_no, String(row.epoch)]));
     for (const row of identity)
