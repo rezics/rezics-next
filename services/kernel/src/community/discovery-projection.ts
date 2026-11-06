@@ -191,7 +191,6 @@ async function board(tx: CommandTransaction, record: RealmDiscoveryCommittedChan
 export async function projectRealmDiscovery(
   pool: Pool,
   realmId: string,
-  options: { clock: () => Date; deadline?: number },
   options: { clock: () => Date; deadlineNow: () => number; deadline?: number },
 ): Promise<boolean> {
   if (routeOf(realmId) === null) throw new TypeError('Invalid Realm discovery identity');
