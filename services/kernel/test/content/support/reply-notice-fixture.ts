@@ -4,7 +4,7 @@ import { fromPlainText } from '@rezics/document';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { bootstrapRelease } from '../../../src/semantic/definitions.ts';
 import type { CloudEvent, Envelope } from '../../../src/events/log.ts';
-import { createNativeContentSystemWithWriteRateOverrides, nativeOperator } from './native-system.ts';
+import { createNativeContentSystemWithWriteRateOverrides, nativeGrantor, nativeOperator } from './native-system.ts';
 import {
   grantAccountActions,
   grantResource,
@@ -27,6 +27,7 @@ export async function replyNoticeFixture() {
   try {
     await bootstrapRelease(system.database.pool, bundledRelease);
     const operator = nativeOperator(system);
+    const grantor = nativeGrantor(system);
     const board = await provisionNativeDiscussionBoard(system.kernel, operator, { label: 'Reply notice' });
     const recipient = system.actors.author;
     const actor = system.actors.other;
@@ -37,7 +38,7 @@ export async function replyNoticeFixture() {
       [principal.actor.accountId, principal.bearer],
     ]);
     for (const id of credentials.keys()) {
-      await grantAccountActions(system.kernel, operator, grantResource(board.id), id, ['board:read', 'thread:create']);
+      await grantAccountActions(system.kernel, grantor, grantResource(board.id), id, ['board:read', 'thread:create']);
       await installRealmMember(system.database.pool, board.realmId, id);
     }
     const originalQuery = system.database.pool.query.bind(system.database.pool);
@@ -89,8 +90,8 @@ export async function replyNoticeFixture() {
       expect(result).toMatchObject({ status: 201 });
       const value = result.value.thread as { id: string; firstPost: { id: string; revisionId: string } };
       for (const id of credentials.keys()) {
-        await grantAccountActions(system.kernel, operator, grantResource(value.id), id, ['thread:read', 'post:create']);
-        await grantAccountActions(system.kernel, operator, grantResource(value.firstPost.id), id, ['post:read']);
+        await grantAccountActions(system.kernel, grantor, grantResource(value.id), id, ['thread:read', 'post:create']);
+        await grantAccountActions(system.kernel, grantor, grantResource(value.firstPost.id), id, ['post:read']);
       }
       return value;
     }
@@ -104,7 +105,7 @@ export async function replyNoticeFixture() {
       expect(result).toMatchObject({ status: 201 });
       const value = result.value.post as { id: string; revisionId: string };
       for (const id of credentials.keys())
-        await grantAccountActions(system.kernel, operator, grantResource(value.id), id, ['post:read']);
+        await grantAccountActions(system.kernel, grantor, grantResource(value.id), id, ['post:read']);
       return value;
     }
     async function envelope(postId: string): Promise<Envelope> {

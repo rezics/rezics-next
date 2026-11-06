@@ -6,10 +6,10 @@ import { partitionOf, routeOf } from '../../../src/route/route.ts';
 import { threadTarget } from '../../../src/content/commands.ts';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { openGrowthDatabase, type GrowthDatabase } from '../../support/growth.ts';
-import { installIdentityGrants } from '../../support/trusted-grants.ts';
 import type { Pool } from 'pg';
 import {
   createNativeContentSystemWithWriteRateOverrides,
+  nativeGrantor,
   nativeOperator,
   registerNativeContentAccount,
   type NativeContentSystem,
@@ -184,7 +184,13 @@ async function installGrant(
   accountId: string,
   actions: readonly string[],
 ): Promise<void> {
-  await installIdentityGrants(system.database.pool, resourceId, accountId, actions);
+  await grantAccountActions(
+    system.kernel,
+    nativeGrantor(system),
+    { route: route(resourceId), id: resourceId },
+    accountId,
+    actions,
+  );
 }
 
 export async function createNotificationFixture(options: { growth?: boolean } = {}): Promise<NotificationFixture> {
@@ -257,7 +263,7 @@ export async function createNotificationFixture(options: { growth?: boolean } = 
     // Author already holds parent-creation grants from the native system. RealmOwner needs the
     // same ordinary receipts; boards themselves are created by governance so delivery does not
     // wait on Access admitting Space creation for ordinary accounts.
-    await grantAccountActions(system.kernel, nativeOperator(system), PLATFORM_RESOURCE, realmOwner.id, [
+    await grantAccountActions(system.kernel, nativeGrantor(system), PLATFORM_RESOURCE, realmOwner.id, [
       'space:create',
       'realm:create',
       'subject:create',

@@ -117,6 +117,8 @@ deliberate read recovery only, then review current native values and later local
 leaves its immutable original uncertain; a timed-out GET withdraws current advice and permits deliberate read recovery. Late
 timed-out results cannot acknowledge, restore authority or start follow-up IO.
 
+**Decision:** Existing focused Settings notification, recovery and native-form suites pin the installed page lifecycle; no extra stories.
+
 ## Reading
 
 `/settings#reading` inspects the confirmed spoiler and suitability pair, changes an allowed setting, and recovers a

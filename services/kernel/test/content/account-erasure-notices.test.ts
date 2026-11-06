@@ -25,7 +25,12 @@ import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support
 import { createPersonas } from '../support/personas.ts';
 import { testKernel, testRouteKey } from '../support/test-kernel.ts';
 import { observeSql } from './support/sql-observer.ts';
-import { installRealmMember, provisionNativeDiscussionBoard } from './support/native-board-host.ts';
+import {
+  grantAccountActions,
+  grantResource,
+  installRealmMember,
+  provisionNativeDiscussionBoard,
+} from './support/native-board-host.ts';
 
 let db: GrowthDatabase;
 let pagePool: Pool;
@@ -94,10 +99,13 @@ async function startContentWork(options: { relays?: boolean } = {}) {
 }
 
 async function grant(accountId: string, action: string, resourceId: string): Promise<void> {
-  await db.admin.query(
-    `INSERT INTO access.resource_grant (route,resource_id,subject_id,action,valid,transaction_id)
-     VALUES ($1,$2,$3,$4,'(,)',$2) ON CONFLICT DO NOTHING`,
-    [routeOf(resourceId), resourceId, accountId, action],
+  await grantAccountActions(
+    kernel,
+    people.staff,
+    grantResource(resourceId),
+    accountId,
+    [action],
+    'https://ordinary.api.test',
   );
 }
 

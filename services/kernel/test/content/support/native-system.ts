@@ -42,12 +42,20 @@ const nativeRegistrations = new WeakMap<
   (input: NativeRegistration) => Promise<{ accountId: string }>
 >();
 const nativeOperators = new WeakMap<NativeContentSystem, ContentCredential>();
+const nativeGrantors = new WeakMap<NativeContentSystem, ContentCredential>();
 
 /** Platform governance credential used only by native fixture composition. */
 export function nativeOperator(system: NativeContentSystem): ContentCredential {
   const operator = nativeOperators.get(system);
   if (!operator) throw new TypeError('Native content system has no governance operator');
   return operator;
+}
+
+/** Grantor client with `access:grant` on the same governance account. */
+export function nativeGrantor(system: NativeContentSystem): ContentCredential {
+  const grantor = nativeGrantors.get(system);
+  if (!grantor) throw new TypeError('Native content system has no grantor');
+  return grantor;
 }
 
 /** Register a test persona through the ordinary native Auth workflow. */
@@ -495,11 +503,11 @@ async function createNativeContentSystemWithOptions(
       }
       await assertSetupResponse(response, request, status);
     };
-    // Ordinary grant receipts on the Global parent: the same train Space HTTP and board-create
-    // fixtures use. Whether Access admits those rows for Space/Realm creation is Access-owned.
+    // Ordinary grant receipts on the Global parent, issued with the grantor's access:grant
+    // token. Whether Access admits those rows for Space/Realm creation is Access-owned.
     const parentCreation = ['space:create', 'realm:create', 'subject:create'] as const;
     for (const actor of [author, other, moderator, suspended])
-      await grantAccountActions(kernel, governance, PLATFORM_RESOURCE, actor.actor.accountId, parentCreation);
+      await grantAccountActions(kernel, grantor, PLATFORM_RESOURCE, actor.actor.accountId, parentCreation);
     await command(`/v1/accounts/${suspended.actor.accountId}:suspend`, { reason: 'Native suspended persona' }, 200);
 
     const deletion: AccountDeletionRuntime = {
@@ -565,6 +573,7 @@ async function createNativeContentSystemWithOptions(
     };
     nativeRegistrations.set(system, (input) => host!.workflows.register(input));
     nativeOperators.set(system, governance);
+    nativeGrantors.set(system, grantor);
     registerAccountDeletionRuntime(system, deletion);
     return system;
   } catch (error) {
