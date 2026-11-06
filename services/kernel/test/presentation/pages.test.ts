@@ -1,3 +1,4 @@
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
@@ -31,6 +32,7 @@ afterAll(async () => {
 const accounts = { editor: '019a1b2c-3d4e-7f00-8a00-ed170e000001' };
 const realAccess = await createRealAccess(admin, accounts, ['subject:create']);
 const kernel = createKernel({
+  receiptKeys: testReceiptKeys(),
   pool,
   requestDeadlineMs: 30_000,
   routeKey: new Uint8Array(32).fill(7),
