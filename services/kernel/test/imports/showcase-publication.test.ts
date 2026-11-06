@@ -7,6 +7,7 @@ import {
   seedCrossMedia,
   planCrossMediaSeed,
   crossMediaAliases,
+  emptyCrossMediaPlan,
   type CrossMediaPort,
   type CrossMediaTables,
 } from '../../../importer/src/cross-media-seed.ts';
@@ -27,12 +28,20 @@ test('local publication accepts only its acknowledged plan after authorization a
   const directory = await mkdtemp(join(tmpdir(), 'showcase-publication-native-'));
   let journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
   try {
-    const tables: CrossMediaTables = {
-      async *rows(provider, table) {
-        if (provider === 'bangumi' && table === 'subject') yield { id: 101, name: 'STEINS;GATE', type: 2 };
-      },
-    };
-    const plan = await planCrossMediaSeed(tables);
+    const plan = emptyCrossMediaPlan();
+    plan.records.bangumi.push({
+      source: 'bangumi',
+      key: '101',
+      revision: null,
+      payload: { id: 101, name: 'STEINS;GATE', type: 2 },
+    });
+    plan.members.push({
+      source: 'bangumi',
+      key: '101',
+      kind: 'work',
+      membership: 'family',
+      franchise: 'steins-gate',
+    });
     const result = await seedCrossMedia(
       plan,
       join(directory, 'import.sqlite'),
