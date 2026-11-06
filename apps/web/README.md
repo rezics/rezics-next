@@ -123,6 +123,12 @@ process group and is reparented stays owned while its parent was live with the r
 settlement act only on recorded members whose start time still matches, so a reused PID is never signalled, and a
 zombie is not live. A failed settlement names each remaining member's state, parent and group.
 
+Decision: the group number is adopted only while the root was alive at launch or a recorded member holds the group. A
+scan that observes the group empty ends that ownership for good, because the number may then name an unrelated group.
+Real guarantee: children of live owned members are sampled every 5 to 50 ms, and the root's group every 500 ms and at
+close. A descendant created and reparented between two samples is not recorded unless it stays in the root's group.
+Full custody needs a launch-time mechanism the launcher owns; this module does not claim it.
+
 Browser tests wait for `html[data-hydrated]` before interacting with a page.
 Browser tests start the dev server through `tests/support/dev-server.ts`, whose errors name the phase that failed; a test never imports another test file.
 Subject page reads and public collections work without JavaScript; Library writes use JavaScript and stay disabled until the page hydrates.
