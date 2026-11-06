@@ -275,7 +275,7 @@ test('edits rebind a covered page through reorder and edit, retain superseded an
       configuration: {
         ...current,
         pages: [home, { ...middle, route: 'zzz' }],
-        labels: { en: `Renamed ${randomUUID()}` },
+        labels: { ...current.labels, en: `Renamed ${randomUUID()}` },
       },
       mounts: [],
     },

@@ -6,7 +6,6 @@ import { bundledRelease } from '@rezics/definitions/bundled';
 import type { CommandAuthorization } from '../../src/command/command.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { accessCheck, type AccountActor, type Resource } from '../../src/request/access.ts';
-import { deadlineFor } from '../../src/request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { accountAgentId, AccountAgentVerificationError } from '../../src/semantic/agents.ts';
 import { ensureAccountAgent, verifyAccountAgent } from '../../src/semantic/account-agents.ts';
@@ -50,7 +49,7 @@ const access = realAccess.access({
 });
 let owner: AccountActor;
 
-const requestDeadline = () => deadlineFor(120_000);
+const requestDeadline = () => Date.now() + 120_000;
 
 async function authorization(action: string, resource: Resource): Promise<CommandAuthorization> {
   const check = await accessCheck(access, owner, action, resource, { pool: admin, deadline: requestDeadline() });

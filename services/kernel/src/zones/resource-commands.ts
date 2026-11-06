@@ -14,8 +14,11 @@ import {
   type CommandAttempt,
   type CommandOutcome,
   type AuthoritativeTime,
+  type CommandTransaction,
   currentCommand,
 } from '../command/command.ts';
+import { ACCOUNT_ROLE_BITS } from '../history/contracts.ts';
+import { bindCommandHistoryEvidence } from '../history/command-evidence.ts';
 import { ProblemError } from '../http/problem.ts';
 import { requestDigest } from '../http/request.ts';
 import { createCollectionReads } from '../library/collection-reads.ts';
@@ -47,6 +50,17 @@ import { changeTakedown, rebindWithholding, withholdingJson } from './takedown.t
 
 export type ZoneMutation = 'configure' | 'publish' | 'delete' | 'restore' | 'takedown' | 'release_takedown';
 export type ZonePlatformMutation = 'hold' | 'release_hold' | 'purge';
+
+/** Platform hold/purge enter Access, then bind the operator so History enrollment has evidence. */
+function bindZonePlatformHistory(tx: CommandTransaction, actor: AccountActor): void {
+  bindCommandHistoryEvidence(tx, [
+    {
+      accountRoute: routeOf(actor.accountId)!,
+      accountId: actor.accountId,
+      roles: ACCOUNT_ROLE_BITS.principal | ACCOUNT_ROLE_BITS.subject,
+    },
+  ]);
+}
 
 export function zoneIfMatch(value: string | undefined): string {
   if (
@@ -455,6 +469,7 @@ export function createZoneCommands(dependencies: { pool: Pool; access: Access; t
           const row = await lockZoneHead(tx, resource.route, id);
           if (!row || row.state === 'purged') throw new ProblemError('not_found');
           if (!(await zoneOwnerIsActive(tx, row))) throw new ProblemError('not_found');
+          bindZonePlatformHistory(tx, actor);
           const at = authoritativeTimeValue(command.time);
           const next: ZoneHead = { ...row };
           if (operation === 'hold') {
@@ -473,7 +488,7 @@ export function createZoneCommands(dependencies: { pool: Pool; access: Access; t
               ...(order ? { order } : {}),
             });
           }
-          await enrollResourceRecordSources(tx, [{ kind: 'zone', zoneId: id }], { kind });
+          await enrollResourceRecordSources(tx, [{ kind: 'zone', zoneId: id }], { kind, events: 1 });
           const updated = await compareAndSetZone(tx, row, next, { at, transactionId: command.transactionId });
           if (!updated) throw new ProblemError('precondition_failed');
           const event =

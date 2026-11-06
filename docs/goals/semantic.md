@@ -54,7 +54,10 @@ way library entry due-purge does, because they never enter Access admission.
 
 Decision: Cross-module Zone cleanup, history evidence and web session edges use declared public entries.
 New deletion helpers and the account-erasure Zone writer are import-acyclic leaves so they do not join the
-command/history value cycle.
+command/history value cycle. Content lifecycle resolution falls back to the native adapter like hashing
+and routing, so HTTP tests that skip worker composition still project covers. Zone configure keeps the
+current locale map when renaming one label. Platform hold/purge bind operator history evidence before
+enrollment. Account-agent tests use a wall-clock request budget, not an enclosing ALS deadline.
 
 ## Ownership
 
