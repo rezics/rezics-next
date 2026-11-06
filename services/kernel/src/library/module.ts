@@ -21,7 +21,6 @@ import {
 import type { IdentityReceivingSelection } from '../semantic/identity-receiving-effects.ts';
 import type { IdentityJobRef } from '../semantic/identity-epoch-contract.ts';
 import type { LibraryScopeEffectsKey, LibraryExpectedEffectAfter } from './identity-scope-effects.ts';
-import type { IdentitySourceConsumerMaintenanceContext } from '../semantic/identity-source-consumer-maintenance.ts';
 import type { NativeCollectionWork } from './collection-source-work.ts';
 
 /** Named public ports retain the opaque seal through its owning page union during declaration emission. */

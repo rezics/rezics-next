@@ -297,6 +297,10 @@ export async function advanceLibraryIdentityNativeScope(
   const work = identitySourceConsumerLibraryWork(pool, context.identityConsumerWork, context.deadline);
   if (!work || activeIdentitySourceConsumerMaintenance(pool)?.identityConsumerWork !== context.identityConsumerWork)
     throw unavailable('Library native scope requires the live prepaid Source maintenance frame');
+  // Public output authority is owned by its publication producer, which has no account owner
+  // locator for the private Library receiving cursor.
+  if (key.sourceIdentity.scope === 'public_output')
+    return { state: 'unavailable', after, effect: null, work: work.receipt() };
   if (key.job.epoch <= 0n || identityJobPartition(key.job) !== partitionOf(key.sourceIdentity.route))
     throw stale('Library native scope crossed its admitted source partition');
   const planKey = libraryIdentityPlanKey(key);
@@ -671,19 +675,24 @@ async function applyLibraryPlanEffect(
     disposition?: unknown;
     sourceIdentity?: { scope?: unknown; incarnation?: unknown; collectionId?: unknown };
   };
-  const role = roleOfDriver(saved.raw?.driver);
+  const raw = saved.raw;
+  const change = saved.change;
+  const factId = raw?.factId;
+  const previousTerminal = change?.previousTerminal;
+  const terminal = change?.terminal;
+  const role = roleOfDriver(raw?.driver);
   if (
     row.role !== role ||
     saved.job?.jobId !== job.jobId ||
     String(saved.job.epoch) !== job.epoch.toString() ||
-    saved.change?.original !== row.original ||
+    change?.original !== row.original ||
     saved.disposition !== row.disposition ||
     saved.sourceIdentity?.collectionId !== row.source_id ||
     saved.sourceIdentity?.incarnation !== retained.source.incarnation ||
-    typeof saved.raw?.storedSubjectId !== 'string' ||
-    typeof saved.raw?.factId !== 'string' ||
-    typeof saved.change.previousTerminal !== 'string' ||
-    typeof saved.change.terminal !== 'string'
+    typeof raw?.storedSubjectId !== 'string' ||
+    typeof factId !== 'string' ||
+    typeof previousTerminal !== 'string' ||
+    typeof terminal !== 'string'
   )
     throw stale('Library effect operation differs from its exact retained selection');
 
@@ -723,7 +732,7 @@ async function applyLibraryPlanEffect(
     const basis = retainedBasis.rows[0];
     if (!basis) throw unavailable('Canonical Source basis is missing; absence cannot prove role coverage');
 
-    const canonical = row.disposition === 'OLD' ? saved.change!.previousTerminal! : saved.change!.terminal!;
+    const canonical = row.disposition === 'OLD' ? previousTerminal : terminal;
     const candidate = await applyLibraryIdentityCandidate(tx, {
       partition: effect.receipt.partition,
       owner: record.owner,
@@ -732,7 +741,7 @@ async function applyLibraryPlanEffect(
       source: record.source.id,
       incarnation: record.source.incarnation,
       role,
-      fact: saved.raw.factId,
+      fact: factId,
       disposition: row.disposition,
       sourceScope: String(saved.sourceIdentity?.scope ?? ''),
     });
@@ -759,7 +768,7 @@ async function applyLibraryPlanEffect(
           original: row.original,
           canonical,
           driver: role,
-          factId: saved.raw.factId,
+          factId,
           disposition: row.disposition,
         },
       });
