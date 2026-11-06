@@ -52,7 +52,7 @@ export function searchRecoveryFromResponse(
   const status: Exclude<SearchRecoveryState['status'], 'ready'> =
     response.status === 401
       ? 'session'
-      : response.status === 403
+      : response.status === 403 || response.status === 404
         ? code === 'platform_closed'
           ? 'closed'
           : 'denied'

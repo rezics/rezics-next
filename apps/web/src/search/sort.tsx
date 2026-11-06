@@ -34,6 +34,7 @@ export function SearchSort({
   ratingPopulation,
   ratingReadiness,
   disabled = false,
+  formAction,
 }: {
   sort: 'relevance' | 'rating';
   locale: string;
@@ -48,9 +49,11 @@ export function SearchSort({
   /** The authentic native Search outcome for the committed Realm rating basis. */
   ratingReadiness?: RealmRatingReadiness | undefined;
   disabled?: boolean;
+  formAction?: string | undefined;
 }) {
   const sortId = useId();
   const messageLocale = { locale: locale as never };
+  const action = new URL(formAction ?? `/${locale}/search`, 'https://rezics.invalid');
   return (
     <form
       key={JSON.stringify([
@@ -66,9 +69,12 @@ export function SearchSort({
         disabled,
       ])}
       method="get"
-      action={`/${locale}/search`}
+      action={action.pathname}
       className="grid w-full min-w-0 gap-3 sm:grid-cols-[auto_minmax(0,24rem)_auto] sm:justify-end"
     >
+      {[...action.searchParams].map(([name, value]) => (
+        <input key={name} type="hidden" name={name} value={value} />
+      ))}
       <Field orientation="vertical" className="min-w-0 gap-1">
         <FieldLabel htmlFor={sortId} className="text-sm text-muted-foreground">
           {m.search_sort_label({}, messageLocale)}

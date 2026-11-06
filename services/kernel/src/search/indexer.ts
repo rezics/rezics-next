@@ -1,6 +1,6 @@
 import { withConnection } from '../database/pool.ts';
 import { routeOf } from '../route/route.ts';
-import { spaceDiscoveryInvalidation, SPACE_DISCOVERY_NATIVE_EVENTS } from '../community/space-discovery.ts';
+import { spaceDiscoveryInvalidation, SPACE_DISCOVERY_NATIVE_EVENTS } from '../community/index.ts';
 import type { DiscoveryKey } from './discovery.ts';
 import type { DiscoveryProjection } from './account-discovery.ts';
 import type { Pool } from 'pg';
@@ -132,8 +132,33 @@ export function createDiscoveryIndexer(pool: Pool, projection: DiscoveryProjecti
             spaces = new Set<string>();
           for (const envelope of envelopes)
             for (const event of envelope.events) {
+              if (SPACE_DISCOVERY_NATIVE_EVENTS.includes(event.type)) {
+                const invalidation = await spaceDiscoveryInvalidation(
+                  pool,
+                  event as Parameters<typeof spaceDiscoveryInvalidation>[1],
+                );
+                if (invalidation?.target.kind === 'space') spaces.add(invalidation.target.id);
+              }
+              const changedSubject = subjectChanged(event);
+              const changedAccount = [
+                'com.rezics.access.account-discovery-changed.v1',
+                'com.rezics.access.account-updated.v1',
+                'com.rezics.access.account-tombstoned.v1',
+              ].includes(event.type);
+              const changedCollection = [
+                'com.rezics.library.collection.updated.v1',
+                'com.rezics.library.collection.deleted.v1',
+                'com.rezics.library.collection.listing.changed.v1',
+              ].includes(event.type);
+              if (
+                !changedSubject &&
+                !changedAccount &&
+                !changedCollection &&
+                event.type !== 'com.rezics.rating.public_figure.changed.v1'
+              )
+                continue;
               if (!event.subject || subjectPartition(event.subject) !== partition) continue;
-              if (subjectChanged(event)) subjects.add(event.subject);
+              if (changedSubject) subjects.add(event.subject);
               if (event.type === 'com.rezics.rating.public_figure.changed.v1') {
                 const data = event.data;
                 if (
@@ -144,20 +169,9 @@ export function createDiscoveryIndexer(pool: Pool, projection: DiscoveryProjecti
                 )
                   subjects.add(event.subject);
               }
+              if (changedAccount) accounts.add(event.subject);
               if (
-                [
-                  'com.rezics.access.account-discovery-changed.v1',
-                  'com.rezics.access.account-updated.v1',
-                  'com.rezics.access.account-tombstoned.v1',
-                ].includes(event.type)
-              )
-                accounts.add(event.subject);
-              if (
-                [
-                  'com.rezics.library.collection.updated.v1',
-                  'com.rezics.library.collection.deleted.v1',
-                  'com.rezics.library.collection.listing.changed.v1',
-                ].includes(event.type) &&
+                changedCollection &&
                 lookupEventType(event.type)?.Check(event.data) === true &&
                 record(event.data) &&
                 typeof event.data.collectionId === 'string' &&
@@ -165,13 +179,6 @@ export function createDiscoveryIndexer(pool: Pool, projection: DiscoveryProjecti
                 routeOf(event.subject) !== null
               )
                 collections.add(event.subject);
-              if (SPACE_DISCOVERY_NATIVE_EVENTS.includes(event.type)) {
-                const invalidation = await spaceDiscoveryInvalidation(
-                  pool,
-                  event as Parameters<typeof spaceDiscoveryInvalidation>[1],
-                );
-                if (invalidation?.target.kind === 'space') spaces.add(invalidation.target.id);
-              }
             }
           const keys: DiscoveryKey[] = [...accounts].map((id) => ({
             owner: 'accounts',
