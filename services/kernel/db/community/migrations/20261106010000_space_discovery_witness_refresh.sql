@@ -1,3 +1,4 @@
+-- migrate:up
 -- The refresh only needs the current state. Avoid local names shadowing tuple columns
 -- when a Space or Realm revision updates its native discovery dependencies.
 CREATE OR REPLACE FUNCTION community.refresh_space_discovery_tuple_witness(r integer, id uuid) RETURNS void
@@ -62,3 +63,6 @@ BEGIN
   END IF;
 END;
 $$;
+
+-- migrate:down
+-- Forward only: retain the corrected native witness refresh.
