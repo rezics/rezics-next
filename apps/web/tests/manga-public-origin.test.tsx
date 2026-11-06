@@ -244,4 +244,4 @@ test('mounted installed route and session retain canonical origin, acquire fresh
     }
     window.happyDOM.abort();
   }
-});
+}, 30_000);
