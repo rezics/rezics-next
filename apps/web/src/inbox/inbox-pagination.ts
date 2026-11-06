@@ -159,8 +159,8 @@ export function inboxPaginationWork(
     priorAddresses: state.history.length,
     cursors: [...state.history.map((address) => address.cursor), state.cursor, input.returnCursor],
     visits: input.visits,
-    unrelatedNotices: input.unrelatedNotices,
-    discardedCandidates: input.discardedCandidates,
+    unrelatedNotices: input.unrelatedNotices ?? 0,
+    discardedCandidates: input.discardedCandidates ?? 0,
     returnReceipts: input.returnCursor === undefined ? 0 : 1,
   });
 }

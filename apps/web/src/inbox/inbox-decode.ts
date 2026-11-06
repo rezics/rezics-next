@@ -119,6 +119,10 @@ function positiveInteger(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 1;
 }
 
+function unreadCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 100;
+}
+
 function exactKeys(value: Record<string, unknown>, expected: readonly string[]) {
   const actual = Object.keys(value).sort();
   return actual.length === expected.length && actual.every((key, index) => key === [...expected].sort()[index]);
@@ -517,28 +521,29 @@ export async function resolveInboxItems(page: NoticePage): Promise<ResolvedInbox
 }
 
 export function decodeUnreadCount(value: unknown, status?: number): UnreadCountReady {
+  if (!isRecord(value) || !unreadCount(value.count) || typeof value.capped !== 'boolean')
+    throw new InboxReadError({ status: status ?? 200 });
+  const count = value.count;
+  const capped = value.capped;
+  const basis = value.basis;
+  const witness = value.witness;
   if (
-    !isRecord(value) ||
-    !Number.isInteger(value.count) ||
-    value.count < 0 ||
-    value.count > 100 ||
-    typeof value.capped !== 'boolean' ||
-    (value.capped && value.basis === 'current-visible-unread' && value.count !== 100) ||
-    (!value.capped && value.basis === 'current-visible-lower-bound') ||
-    (value.basis !== 'current-visible-unread' && value.basis !== 'current-visible-lower-bound') ||
-    !isRecord(value.witness) ||
-    !exactKeys(value.witness, ['kind', 'at']) ||
-    value.witness.kind !== 'current-disclosure' ||
-    typeof value.witness.at !== 'string' ||
-    !Number.isFinite(Date.parse(value.witness.at)) ||
-    new Date(value.witness.at).toISOString() !== value.witness.at
+    (capped && basis === 'current-visible-unread' && count !== 100) ||
+    (!capped && basis === 'current-visible-lower-bound') ||
+    (basis !== 'current-visible-unread' && basis !== 'current-visible-lower-bound') ||
+    !isRecord(witness) ||
+    !exactKeys(witness, ['kind', 'at']) ||
+    witness.kind !== 'current-disclosure' ||
+    typeof witness.at !== 'string' ||
+    !Number.isFinite(Date.parse(witness.at)) ||
+    new Date(witness.at).toISOString() !== witness.at
   )
     throw new InboxReadError({ status: status ?? 200 });
   return {
-    count: value.count,
-    capped: value.capped,
-    basis: value.basis,
-    witness: { kind: value.witness.kind, at: value.witness.at },
+    count,
+    capped,
+    basis,
+    witness: { kind: 'current-disclosure', at: witness.at },
   };
 }
 

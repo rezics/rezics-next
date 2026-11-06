@@ -51,7 +51,7 @@ function present(follow: RawFollow): MineFollow {
     targetType: follow.targetType,
     state: follow.state,
     reason: follow.reason,
-    target: follow.target ? subjectOf(follow.target) : null,
+    target: follow.target ? subjectOf(follow.target as Parameters<typeof subjectOf>[0]) : null,
     ...(follow.destination ? { destination: follow.destination } : {}),
     ...(follow.actions ? { actions: follow.actions } : {}),
     idempotencyKey: crypto.randomUUID(),
