@@ -1,5 +1,5 @@
 {
-  "digest": "sha256:d7e378a79c42f9b7b0f846352903734f08d555ede7d21627c7cfc0af2a377f97",
+  "digest": "sha256:a0c4b01ad683f466713e8a813255404566b965cb266a117b4db44dfe4d34b2fa",
   "release": {
     "types": {
       "wd:Q2095": {
@@ -1303,8 +1303,10 @@
           "rezics:spinOffOf",
           "rezics:storyArc",
           "rezics:summaryOf",
+          "schema:abstract",
           "schema:alternateName",
           "schema:contributor",
+          "schema:datePublished",
           "schema:endDate",
           "schema:genre",
           "schema:image",
@@ -1319,6 +1321,7 @@
           "wdt:P179",
           "wdt:P2635",
           "wdt:P361",
+          "wdt:P5732",
           "wdt:P973"
         ],
         "schemaOrgType": "https://schema.org/BookSeries",
@@ -2747,7 +2750,7 @@
       "schema": "http://schema.org/",
       "marcrel": "http://id.loc.gov/vocabulary/relators/"
     },
-    "catalogue": { "id": "https://rezics.com/catalogue/rezics", "version": "1.0.9" },
+    "catalogue": { "id": "https://rezics.com/catalogue/rezics", "version": "1.0.10" },
     "generator": { "name": "@neverblink/linkml", "version": "0.17.2" },
     "properties": {
       "wdt:P31": {

@@ -328,8 +328,9 @@ export function admitBoundProposals<Extra extends object>(
 }
 
 /**
- * The released BookSeries profile admits no Bangumi identifier, so a numeric BookSeries key is identified by its durable
- * source tuple (configured alias plus exact external ID), as Organizations are, instead of by wdt:P5732.
+ * A numeric BookSeries key is identified by its durable source tuple (configured alias plus exact external ID), as
+ * Organizations are. The released BookSeries profile also admits the bound wdt:P5732 statement, which proposals carry
+ * beside that tuple; the tuple remains the identity.
  */
 export function isBookSeriesSourceTuple(key: string, nativeType: string | undefined): boolean {
   return /^[1-9][0-9]*$/u.test(key) && nativeType === 'schema:BookSeries';

@@ -952,6 +952,10 @@ async function mediaGrowth(
 
 async function workerHost(): Promise<RpcHost> {
   mediaStart('load-work-modules');
+  // Isolated children use a private bunfig without the History test preload.
+  // Install the same native composition worker startup uses before Work names modules.
+  const { installNativeHistory } = await import('../../src/composition/history.ts');
+  installNativeHistory();
   const { KERNEL_WORK_MODULES } = await import('../support/default-work-modules.ts');
   mediaStart('open-database');
   const database = await openGrowthDatabase();

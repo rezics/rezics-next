@@ -2,7 +2,7 @@
   "format": "https://rezics.com/definitions/release/1",
   "catalogue": {
     "id": "https://rezics.com/catalogue/rezics",
-    "version": "1.0.9"
+    "version": "1.0.10"
   },
   "generator": {
     "name": "@neverblink/linkml",
@@ -1901,8 +1901,10 @@
         "rezics:spinOffOf",
         "rezics:storyArc",
         "rezics:summaryOf",
+        "schema:abstract",
         "schema:alternateName",
         "schema:contributor",
+        "schema:datePublished",
         "schema:endDate",
         "schema:genre",
         "schema:image",
@@ -1917,6 +1919,7 @@
         "wdt:P179",
         "wdt:P2635",
         "wdt:P361",
+        "wdt:P5732",
         "wdt:P973"
       ],
       "facets": [
