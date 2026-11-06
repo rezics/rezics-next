@@ -312,4 +312,5 @@ readback and the original browser journeys remain acceptance obligations after l
 Decision: Subject source pages precheck each statement minimum then charge returned rows; identity mapping
 uses the unmetered pool and one original key so tombstone homes cannot overflow the caller limit.
 Decision: Account-erasure Zone grant drain uses the committed barrier version/T and persists the Access cursor
-through both grant stores; empty resource-grant progress no longer stalls owner-role cleanup.
+through both grant stores; empty resource-grant progress no longer stalls owner-role cleanup. The two Zone tests
+pin empty owner-role drain, paging, non-1 barrier, interruption/replay, unrelated grants and persisted readback.
