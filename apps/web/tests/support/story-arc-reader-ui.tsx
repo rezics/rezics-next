@@ -27,6 +27,9 @@ export async function ui() {
     MouseEvent: window.MouseEvent,
     MutationObserver: window.MutationObserver,
     getComputedStyle: window.getComputedStyle.bind(window),
+    // Base UI's animation-frame hook reads these globals directly during layout effects.
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
   };
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
