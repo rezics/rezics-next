@@ -16,7 +16,6 @@ import {
 import { LeafNativeWork, LeafReservationUnavailable } from '../scope-leaf-selection.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
-import type { OpenAPIV3 } from 'openapi-types';
 import type { Pool } from 'pg';
 import { withConnection } from '../../database/pool.ts';
 import { withReadTransaction } from '../read.ts';
@@ -96,18 +95,6 @@ const importRequest = t.Object(
   },
   { additionalProperties: false },
 );
-const importRequestSchema = {
-  type: 'object',
-  additionalProperties: false,
-  required: ['document'],
-  properties: {
-    document: {},
-    context: { type: 'string' },
-    expected_head: {
-      anyOf: [{ type: 'integer', minimum: 1, maximum: 2147483646 }, { type: 'null' }],
-    },
-  },
-} as const satisfies OpenAPIV3.SchemaObject;
 const importPreviewResponse = t.Object(
   {
     kind: t.Union([t.Literal('release'), t.Literal('sources'), t.Literal('extension'), t.Literal('invalid')]),
@@ -661,12 +648,6 @@ export function definitionRoutes(
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
           'x-body-limit': MAX_BODY_LIMIT(),
           security: [{ bearerAuth: [] }],
-          requestBody: {
-            required: true,
-            content: {
-              'application/json': { schema: importRequestSchema },
-            },
-          },
         },
       },
       async ({ body, actor, authorize, admission, job }) => {
