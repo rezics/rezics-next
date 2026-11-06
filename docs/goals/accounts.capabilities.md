@@ -99,6 +99,7 @@ retain their original assertions. Global grant review additionally receives the 
 its authoritative T and mounted gate delegation advice. The native composition regression in
 `services/kernel/test/access/realm-claim.test.ts` covers fixed Global approval metadata, source denial mapping,
 opaque source custody, atomic rollback, HTTP replay and ordinary Global gate grant/revoke readback.
+Architecture repair of Access/application boundaries keeps these tests and adds no stories.
 
 **Mounted evidence:** The session-bound operator page retains immutable open/close review and retry and links to
 the existing ordinary Global grant screen. `apps/web/tests/platform-exposure.test.ts` covers that navigation and

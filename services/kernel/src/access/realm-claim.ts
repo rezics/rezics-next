@@ -6,13 +6,16 @@ import type { Access, Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { accessClock } from './access-clock.ts';
 import { tryAccessApplication } from './adapters/bind.ts';
-import { RealmClaimDeniedError } from './application/index.ts';
 import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
 import globalContext from './bootstrap-governance-read.sql';
+import {
+  RealmClaimDeniedError,
+  type RealmClaimApprovalResult,
+  type RealmCommandTransaction,
+} from './contract/index.ts';
 import { GrantDeniedError } from './grant-commands.ts';
 import { resourceAuthorization } from './resource-authorization.ts';
 import { grantRealmClaimOwner } from './realm-claim-grant.ts';
-import type { RealmClaimApprovalResult, RealmCommandTransaction } from './contract/index.ts';
 
 export type ApproveRealmClaimInput = Readonly<{ realmId: string; requestId: string }>;
 export type ApproveRealmClaimContext = Readonly<{ deadline: number; idempotencyKey: string }>;

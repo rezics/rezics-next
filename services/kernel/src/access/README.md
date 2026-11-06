@@ -1459,8 +1459,9 @@ rolls back grant, state, request, event and receipt together.
 
 Native composition receives the transaction-bound implementation through Community's public `index.ts` entry.
 The adapter preserves the original opaque source object and live transaction; it neither copies source fields
-nor substitutes an application-owned source. Application-level claim denials map to native `GrantDeniedError`,
-so missing requests and invalid selections retain the ordinary forbidden HTTP response. Unexpected producer
+nor substitutes an application-owned source. Application-level claim denials throw contract `RealmClaimDeniedError`; the adapter maps that class to native
+`GrantDeniedError` without importing the application module, so missing requests and invalid selections retain
+the ordinary forbidden HTTP response. Unexpected producer
 errors and typed source conflicts propagate unchanged. The mounted approval operation declares its exact
 Global authority for generated viewer actions; its addressed Realm is not its authorization anchor.
 

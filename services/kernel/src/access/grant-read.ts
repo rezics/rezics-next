@@ -13,7 +13,6 @@ import { deadlineClient } from './authenticate.ts';
 import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
 import { mountedExposureCatalogue } from './gates/visibility.ts';
 import { createResourcePublicEligibility } from './eligibility.ts';
-import type { MountedRoute } from '../http/request.ts';
 import type { GrantSubject } from './grant-subject.ts';
 import { resourceRoleCatalogue } from './resource-roles.ts';
 import type { ViewerActionResources } from './viewer-actions.ts';
@@ -63,7 +62,7 @@ export async function readResourceGrants(
     resources: ViewerActionResources;
     clock: () => Date;
     commands?: ReturnType<typeof createGrantCommands>;
-    routes?: readonly MountedRoute[];
+    routes?: Parameters<typeof mountedExposureCatalogue>[0];
   },
   actor: Actor,
   input: { resourceId: string; cursor?: string },
