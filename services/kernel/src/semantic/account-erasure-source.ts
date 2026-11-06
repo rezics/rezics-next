@@ -83,14 +83,27 @@ const zeroCost = () => ({
   resultWrites: 0,
   frontierWrites: 0,
 });
-class BudgetEnded extends Error {}
+class BudgetEnded extends Error {
+  constructor(
+    readonly bound: 'keys' | 'bytes' | 'deadline',
+    readonly count: number,
+    readonly funding: number,
+    readonly deadline: number,
+  ) {
+    super(`Subject source ${bound} overflow count=${count} funding=${funding} deadline=${deadline}`);
+  }
+}
 
-/** Count native statements, refused points, returned/changed rows and wire bytes, including the
- * command executor's work. There is no additional allowance for metadata or empty pages.
+const WIRE_BYTES = 65536;
+
+/** Precheck the statement minimum, then charge returned rows and wire bytes. Empty pages get no extra
+ * allowance: a statement that cannot afford its floor does not start. ROLLBACK stays possible after.
  */
 function meteredPool(pool: Pool, cost: PublicFilterCost, limit: number, deadline: number): Pool {
   let bytes = 0;
   const mutable = cost as { -readonly [K in keyof PublicFilterCost]: PublicFilterCost[K] };
+  const ended = (bound: 'keys' | 'bytes' | 'deadline', count: number, funding = bound === 'bytes' ? WIRE_BYTES : limit) =>
+    new BudgetEnded(bound, count, funding, deadline);
   return new Proxy(pool, {
     get(target, key) {
       if (key !== 'connect') {
@@ -98,7 +111,8 @@ function meteredPool(pool: Pool, cost: PublicFilterCost, limit: number, deadline
         return typeof value === 'function' ? value.bind(target) : value;
       }
       return async () => {
-        if (Date.now() >= deadline || mutable.inputKeys >= limit) throw new BudgetEnded();
+        if (Date.now() >= deadline) throw ended('deadline', Date.now());
+        if (mutable.inputKeys >= limit) throw ended('keys', mutable.inputKeys);
         const client = await target.connect();
         return new Proxy(client, {
           get(native, field) {
@@ -107,20 +121,28 @@ function meteredPool(pool: Pool, cost: PublicFilterCost, limit: number, deadline
               return typeof value === 'function' ? value.bind(native) : value;
             }
             return async (...args: [string, unknown[]?]) => {
-              // ROLLBACK must remain possible after budget exhaustion.
-              const rollback = typeof args[0] === 'string' && args[0] === 'ROLLBACK';
-              const control = typeof args[0] === 'string' && /^(BEGIN|COMMIT|ROLLBACK|SET\b)/.test(args[0]);
-              if (!rollback && (Date.now() >= deadline || mutable.inputKeys >= limit)) throw new BudgetEnded();
-              mutable.dependencyPoints++;
-              bytes += Buffer.byteLength(JSON.stringify(args));
+              const sql = typeof args[0] === 'string' ? args[0] : '';
+              const rollback = sql === 'ROLLBACK';
+              const control = /^(BEGIN|COMMIT|ROLLBACK|SET\b)/.test(sql);
               // A native commit writes partition/outbox/basis as well as its returned fence row.
-              const fenceRows = control ? 0 : typeof args[0] === 'string' && args[0].includes('basis_write AS') ? 4 : 1;
-              if (!rollback && mutable.inputKeys + fenceRows > limit) throw new BudgetEnded();
+              const minimum = control || rollback ? 0 : sql.includes('basis_write AS') ? 4 : 1;
+              if (!rollback) {
+                if (Date.now() >= deadline) throw ended('deadline', Date.now());
+                if (mutable.inputKeys + minimum > limit) throw ended('keys', mutable.inputKeys + minimum);
+              }
+              const requestBytes = Buffer.byteLength(JSON.stringify(args));
+              if (!rollback && bytes + requestBytes > WIRE_BYTES) throw ended('bytes', bytes + requestBytes);
+              mutable.dependencyPoints++;
+              bytes += requestBytes;
               const result = await native.query(args[0], args[1]);
-              mutable.inputKeys += control ? 0 : Math.max(result.rows.length, result.rowCount ?? 0, fenceRows);
+              const returned = control ? 0 : Math.max(result.rows.length, result.rowCount ?? 0);
+              if (!control) mutable.inputKeys += returned;
               bytes += Buffer.byteLength(JSON.stringify(result.rows));
-              if (!rollback && (mutable.inputKeys > limit || bytes > 65536 || Date.now() >= deadline))
-                throw new BudgetEnded();
+              if (!rollback) {
+                if (Date.now() >= deadline) throw ended('deadline', Date.now());
+                if (mutable.inputKeys > limit) throw ended('keys', mutable.inputKeys);
+                if (bytes > WIRE_BYTES) throw ended('bytes', bytes);
+              }
               return result;
             };
           },
@@ -407,7 +429,19 @@ function sourceFactory(
       const command = <T>(
         partition: number,
         run: (tx: CommandTransaction) => Promise<import('../command/command.ts').CommandResult<T>>,
-      ) => runCommand(pool, { partition, basis: platform, clock: config.clock, deadline }, run);
+      ) => {
+        if (Date.now() >= deadline) throw new BudgetEnded('deadline', Date.now(), input.inputLimit, deadline);
+        if (cost.inputKeys + 1 > input.inputLimit)
+          throw new BudgetEnded('keys', cost.inputKeys + 1, input.inputLimit, deadline);
+        return runCommand(pool, { partition, basis: platform, clock: config.clock, deadline }, run);
+      };
+      const mappingOf = async (original: string) => {
+        if (cost.inputKeys + 1 > input.inputLimit)
+          throw new BudgetEnded('keys', cost.inputKeys + 1, input.inputLimit, deadline);
+        const mapping = (await readIdentityMappings(config.pool, [original]))[0];
+        (cost as { -readonly [K in keyof PublicFilterCost]: PublicFilterCost[K] }).inputKeys += 1;
+        return mapping;
+      };
       return withRequestDeadline(deadline, async () => {
         try {
           // Raw seek precedes all eligibility, visibility, role and current-state filtering.
@@ -542,7 +576,7 @@ function sourceFactory(
               await refresh();
               return { status: 'pending', cost };
             }
-            const mapping = detail.original ? (await readIdentityMappings(pool, [detail.original]))[0] : null;
+            const mapping = detail.original ? await mappingOf(detail.original) : null;
             if (detail.original && mapping?.state !== 'mapped') return { status: 'pending', cost };
             const originalHome = detail.original ? partitionOf(routeOf(detail.original)!) : next.source_partition;
             const observeOriginal = async (
@@ -767,7 +801,7 @@ function sourceFactory(
                 source: { ...record.source, position: sourceHeld.position, epoch: sourceHeld.epoch },
               };
             if (detail.original && mapping?.state === 'mapped') {
-              const current = (await readIdentityMappings(pool, [detail.original]))[0];
+              const current = await mappingOf(detail.original);
               if (
                 current?.state !== 'mapped' ||
                 current.terminal !== mapping.terminal ||
