@@ -110,7 +110,7 @@ The full native worker shares the original Pool with its WorkClient, as required
 
 Decision: review exact original `bangumi_cross_media`/`vndb_cross_media` claims through the released asynchronous merge contract; retain sealed intent and original bindings while observing native operation completion and separate public canonical reads. Client binds these exact methods while whole-Kernel declaration publication is pending. HTTP 202 is admission; HTTP 200 merge or an application reread is not completion. Current Person identifiers exclude deprecated rows and require every remaining value to agree. Native redirects resolve reads on the same API; manifest assertions and dependent credits keep original source ownership. Credits wait for current canonical delivery, not another binding or publisher.
 
-Existing franchise, work-links, publication, focused Game and VNDB cases remain the acceptance pins; no extra tests. Native Game publication current-read, VNDB release seed/reseed, VNDB statistics Auth-registration, native transaction retry and Kernel type errors outside this branch stay named capability repairs.
+Existing franchise, work-links, publication, focused Game and VNDB cases remain the acceptance pins; no extra tests. Native Game publication current-read, VNDB release seed/reseed, VNDB statistics Auth-registration and native transaction retry stay named capability repairs. Decision: Kernel typecheck repairs retarget stale `history/contracts.ts` and `history/record.ts` imports to the released History contract and application entries; Zones keep History enrollment through those public entries. Native CLI/startup stay integration.
 
 ## Deletion
 

@@ -3,9 +3,9 @@ import { enrollResourceRecordSources } from '../semantic/record-purge-custody.ts
 import { admitZoneCleanup, advanceZoneCleanupGrants } from '../semantic/deletion/index.ts';
 import type { Pool } from 'pg';
 import { authoritativeTimeValue, noEffect, runCommand, type CommandTransaction } from '../command/command.ts';
-import { ACCOUNT_ROLE_BITS } from '../history/contracts.ts';
+import { ACCOUNT_ROLE_BITS } from '../history/contract/index.ts';
 import { bindCommandHistoryEvidence } from '../history/command-evidence.ts';
-import { declareCommandHistory } from '../history/record.ts';
+import { declareCommandHistory } from '../history/application/index.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { liveCoverage, purgeIntent, retainCoveredPayload, withPurgeIntent } from './cleanup-intent.ts';
 import { compareAndSetZone, lockZoneHead, type ZoneHead } from './resource-head.ts';
