@@ -291,3 +291,46 @@ test('every generic client registration refuses the website-only completion scop
     ).rejects.toThrow();
   }
 });
+
+test('deployment receiving refuses noncanonical origins and retired callback destinations', async () => {
+  const actions = options.siteActions!;
+  const deployment = authModule.authDeploymentConfiguration(
+    {
+      issuer,
+      audience,
+      kernelOrigin: issuer,
+      turnstileSiteKey: 'installed-site-key',
+      website: { publicJwks, origins: [issuer] },
+    },
+    actions,
+  );
+  expect(() =>
+    authModule.authDeploymentConfiguration(
+      {
+        issuer,
+        audience,
+        kernelOrigin: issuer,
+        turnstileSiteKey: 'installed-site-key',
+        website: { publicJwks, origins: [`${issuer}/path`] },
+      },
+      actions,
+    ),
+  ).toThrow();
+  await service.internal.registerWebsiteClient(deployment.registration);
+  const authorization = new URL(`${issuer}/authorize`);
+  authorization.search = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    response_type: 'code',
+    scope: deployment.website.WEBSITE_SCOPES,
+    state: 'original-callback-state',
+    nonce: 'original-callback-nonce',
+    code_challenge: createHash('sha256').update('original-callback-verifier').digest('base64url'),
+    code_challenge_method: 'S256',
+    resource: audience,
+  }).toString();
+  // The old, unregistered destination cannot receive a code after reconfiguration.
+  const refused = await fetch(authorization, { redirect: 'manual' });
+  expect(refused.status).toBe(400);
+  expect(refused.headers.has('location')).toBe(false);
+});

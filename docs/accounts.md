@@ -489,6 +489,11 @@ ownership and operator responsibilities retain their existing deletion barriers.
 Decision: retain the native account, session and consent contracts and catalogue-derived website scopes; qualify
 the installed Auth renderer before replacing production behavior already supplied by those owners.
 
+Deployment binds the installed `/auth/callback` and sign-out return to canonical website origins through
+`createAuthDeployment`. It requires the native challenge and private recovery-delivery adapters, registers the
+catalogue-derived website ceiling and starts the native host before publishing Auth/Web configuration. Security
+uses the same catalogue for its response bounds; configured website scopes do not enlarge existing sessions.
+
 Auth owns credentials, login/recovery email, native sessions, refresh families, authentication evidence, signing
 keys/JWKS, client registration, consent and token issuance. Access owns handles, profiles, state, operator and
 membership relations, grants, birth dates, content preferences and private account data. Better Auth's

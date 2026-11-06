@@ -36,6 +36,10 @@ Every capability uses the `privacy` fixture contract from `docs/research/api-acc
 `apps/web/tests/session.test.ts` covers callback, renewal and sign-out against a fixture OpenID provider.
 These separate fixtures do not establish one persisted native registration-to-Home journey, deployed challenge
 or recovery delivery, native browser passkey qualification, or desktop/phone evidence of that integrated journey.
+`createAuthDeployment` now binds the native host, required delivery/challenge ports, installed callback destinations
+and page configuration. `services/auth/test/auth-page-operation-client.test.ts` covers its startup and persisted
+client receiving; `website-client.test.ts` covers persisted destinations and refuses the retired callback. These
+native checks still do not qualify the controller-held seeded/browser deployment.
 
 ## credential-session-consent
 
@@ -53,6 +57,8 @@ Auth response and page transport suites pin fixed RP receiving, exact acknowledg
 Mounted `apps/auth/tests/security.test.ts`, `password-change-page.test.tsx` and `passkey-enrollment.test.ts`
 exercise separate page fixtures. They do not connect a real browser review to the native persisted readback,
 prove current-session replacement across Auth and Web, or supply desktop/phone evidence of that integrated cycle.
+Deployment uses the same native catalogue for Security/session/client/consent bounds and the website ceiling;
+installed password, passkey, session and consent command identities retain their existing native/page owners.
 
 ## permission-formula
 

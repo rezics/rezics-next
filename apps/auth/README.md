@@ -21,6 +21,11 @@ one instance whose state must survive a sequential restart; Auth leaves that dir
 
 Set `PRIVACY_CONTACT_URL` to the deployment's `https:` or `mailto:` privacy contact URL; missing or invalid values disable account deletion at request time.
 
+For an integrated native deployment, install `createAuthDeployment`'s `authPages` bindings here: the catalogue-based
+Security response configuration and the Turnstile site key paired with the native verifier. Its website bindings
+and registered callbacks belong to Web. The native host requires a private recovery delivery adapter; page rendering
+or a generic recovery-start acknowledgement does not establish mail delivery.
+
 Pages compose the shared shadcn card, field, input, input-group, button and alert components. Security
 lists also use shadcn items and badges. Password reveal buttons have localized show/hide names and stay disabled
 until hydration. Native form submissions keep their fields and actions; scripted actions retain their pending

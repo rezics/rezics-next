@@ -2304,6 +2304,26 @@ Trusted `registerWebsiteDeployment(auth, actionCatalogue(kernel), registration, 
 registers first, then emits Web's public `WEBSITE_CONFIGURATION_FILE` operand. Deployment supplies the actual
 composition, public JWK and callbacks; Web refuses a scope override mismatch. Importer grants stay separate.
 
+`createAuthDeployment({host,kernelOrigin,turnstileSiteKey,website})` is the complete native host entry when
+installing Auth and Web together. `host` supplies the existing Auth host options and requires `siteActions`,
+`turnstile` and `recoveryDelivery`. `website` supplies public JWKs and one to eight canonical website origins.
+The entry registers each origin's installed `/auth/callback` and `/` sign-out return, starts the host and only then
+returns `{host,authPages,website}`. A registration/start failure closes the host. Deploy the returned `authPages`
+bindings on Auth pages and `website` bindings on Web; install the matching website private JWK separately as Web's
+`WEBSITE_CLIENT_KEY` secret. No secret, recovery proof or mail payload appears in the returned bindings.
+
+The shared `websiteDeploymentScopes` derives protocol scopes, mounted actions and the three native account
+scopes above. Auth pages receive `catalogue:<C>` from the same `siteActions` passed to native Auth, plus the paired
+Turnstile site key; fixed Security/enrollment/registration budgets remain unchanged. Configuration refuses path,
+query or userinfo in an origin and refuses HTTP website redirects for an HTTPS issuer. `authDeploymentConfiguration`
+allows a deployment to inspect those exact operands before construction; it neither registers nor starts a host.
+
+Delivery remains the installed private `recoveryDelivery.deliver` callback: forward the original native URL and
+delivery identity through the configured delivery owner. A void return retains the native unresolved external-copy
+custody; successful delivery does not certify deletion or make an uncertain command safe to resend. Local
+`assemble({env,authDatabaseUrl,keys,recoveryDelivery})` forwards an explicitly supplied adapter to that same port.
+No local mailbox, public delivery endpoint, provider receipt or new storage is introduced.
+
 Update registration/configuration together, then deliberately sign out, sign in and complete renewed consent.
 Old sessions/access/refresh ceilings remain unchanged. Registration supplies no resource, exposure, ownership
 or lifecycle grant; populated journeys still require native receiving and prepared fixtures.
