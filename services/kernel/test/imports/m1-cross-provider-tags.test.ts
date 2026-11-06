@@ -353,11 +353,11 @@ test('exact VNDB parent assertions need separate native acceptance and adoption 
   }
 }, 180_000);
 
-test('shared reviewed-tag setup delegates Global review grants through the current governor', async () => {
+test('shared reviewed-tag setup delegates Global review actions to a new native account', async () => {
   const driver = await createSemanticDriver();
   try {
-    await driver.grant('acceptor', ['context:accept', 'context:adopt'], GLOBAL_CONTEXT);
-    await driver.grant('editor', ['statement:propose'], GLOBAL_CONTEXT);
+    const reviewer = await driver.fixtures.person('tag-reviewer');
+    await driver.fixtures.grantAccount(reviewer, ['context:accept', 'context:adopt', 'statement:propose']);
   } finally {
     await driver.close();
   }
