@@ -28,7 +28,7 @@ const catalogue = compileNativePolicyCatalogue(actions, roles);
 function projection(overrides: Partial<NativePermissionProjection> = {}): NativePermissionProjection {
   return {
     assignmentValid: true,
-    live: true,
+    deadlineLive: true,
     localDenied: false,
     actorActionGrant: false,
     actorResourceRoleGrant: false,
@@ -65,6 +65,7 @@ function projection(overrides: Partial<NativePermissionProjection> = {}): Native
     explicitGlobalPrincipalResourceRoleGrant: false,
     explicitGlobalPrincipalOwnAccountGrant: false,
     explicitGlobalPrincipalAuthenticatedBenefitGrant: false,
+    live: true,
     ...overrides,
   };
 }

@@ -15,6 +15,7 @@ const writes = new Set([
   'offer:manage',
   'order:create',
   'payout_statement:mark_paid',
+  'recent_search:write',
 ]);
 export function declareKernelWriteRates(app: {
   routes: readonly { method: string; path: string; hooks?: { detail?: unknown } }[];

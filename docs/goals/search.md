@@ -30,6 +30,7 @@ implemented, exposed, tested and promoted are separate states; a passing local c
 
 Decision: one composition runtime; lost SDK responses keep publication outcomes unknown.
 Decision: the default worker child decorates `startWorker`'s live `createKernelWorkModules` list, including Content ambient; a pre-imported substitute list is not the production composition.
+Decision: write-rate-stage Search stubs keep one `savedCatalogueMembers` method and expect the HTTP empty-recovery envelope on an empty text page; duplicate Search/library/strict-JSON fixtures stay with their owners.
 
 Decision: delayed-index disclosure recovers through the same ordinary relay. Withholding an unsafe kind preserves independently current kinds; unsafe combined execution remains withheld through sibling projection and cursor construction.
 
