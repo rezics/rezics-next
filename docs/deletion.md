@@ -297,3 +297,9 @@ matching tsx controls keep a distinct bun --no-bundle output path.
 Decision: Cross-module Zone cleanup, history evidence and web session edges use declared public entries.
 New deletion helpers and the account-erasure Zone writer are import-acyclic leaves so they do not join the
 command/history value cycle. Fewest tests remain the native journeys and two web mapping tests.
+
+Decision: preserve the native Content lifecycle fallback through the public `content/cover-reference-read.ts`
+leaf; cover reads and metadata validation share no value import with the claim command writer. Existing
+cover claim and lifecycle journeys retain their assertions; focused fallback coverage exercises native reads
+without worker composition. Native cleanup/hold commit fences, erasure effects, independent public readback
+and the original browser journeys remain acceptance obligations after landing.

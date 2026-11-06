@@ -302,6 +302,7 @@
         "services/kernel/src/content/adapters/bind.ts",
         "services/kernel/src/content/adapters/ambient.ts",
         "services/kernel/src/content/cover-reference.ts",
+        "services/kernel/src/content/cover-reference-read.ts",
         "services/kernel/src/content/imported-contract.ts"
       ],
       "allowedDependencies": [
