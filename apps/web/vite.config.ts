@@ -59,6 +59,11 @@ export default defineConfig((context) => {
       entries: ['src/routes/**/*.tsx'],
       holdUntilCrawlEnd: true,
     },
+    ssr: {
+      optimizeDeps: {
+        include: ['@inlang/paraglide-js/urlpattern-polyfill'],
+      },
+    },
     plugins: [
       {
         name: 'generate-localization',
@@ -86,31 +91,6 @@ export default defineConfig((context) => {
         ...(persistence.directory ? { persistState: { path: persistence.directory } } : {}),
       }),
       ...(persistence.cleanupPlugin ? [persistence.cleanupPlugin] : []),
-      {
-        // Runs after the Cloudflare and TanStack plugins, which enable discovery for the Worker environment. Discovery
-        // scanned every module reachable from the Worker entry and bundled all of it before the first Worker request
-        // could finish, which exceeded the startup budget on loaded hosts. The Worker now pre-bundles only the listed
-        // packages (React and TanStack's server set, plus the paraglide polyfill); other packages are loaded directly.
-        name: 'web-worker-explicit-dependencies',
-        enforce: 'post',
-        configEnvironment(name) {
-          if (name !== 'ssr') return;
-          return {
-            optimizeDeps: {
-              noDiscovery: true,
-              include: [
-                'react',
-                'react/jsx-runtime',
-                'react/jsx-dev-runtime',
-                'react-dom',
-                'react-dom/server',
-                '@tanstack/react-router > @tanstack/react-store',
-                '@inlang/paraglide-js/urlpattern-polyfill',
-              ],
-            },
-          };
-        },
-      },
     ],
   };
 });
