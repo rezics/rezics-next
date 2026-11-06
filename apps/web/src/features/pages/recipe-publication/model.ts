@@ -4,6 +4,7 @@ import { defaultReader } from '../../../subject/reader';
 import { pageText, type Stmt } from '../shared';
 import {
   RECIPE_PUBLICATION_PROPERTIES,
+  publicationOverlayKind,
   subjectPublicationFields,
   type PublicationDefinitions,
   type PublicationField,
@@ -27,7 +28,7 @@ export function recipePublicationReading(
   locale: string,
   reader: Reader = defaultReader,
 ): RecipePublicationReading | undefined {
-  if (subject.type !== 'schema:Recipe') return;
+  if (publicationOverlayKind(subject.type, definitions) !== 'recipe') return;
   const fields = subjectPublicationFields(subject, definitions, reader, locale).flatMap((field) => {
     if (!RECIPE_PROPERTY_SET.has(field.property)) return [];
     const label = pageText(definitions?.properties[field.property]?.labels, locale);

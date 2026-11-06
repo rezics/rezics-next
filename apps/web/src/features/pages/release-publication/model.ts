@@ -4,6 +4,7 @@ import { defaultReader } from '../../../subject/reader';
 import { pageText } from '../shared';
 import {
   RELEASE_PUBLICATION_PROPERTIES,
+  publicationOverlayKind,
   subjectPublicationFields,
   type PublicationDefinitions,
   type PublicationField,
@@ -27,7 +28,7 @@ export function releasePublicationReading(
   locale: string,
   reader: Reader = defaultReader,
 ): ReleasePublicationReading | undefined {
-  if (subject.type !== 'wd:Q20631656') return;
+  if (publicationOverlayKind(subject.type, definitions) !== 'release') return;
   const fields = subjectPublicationFields(subject, definitions, reader, locale).flatMap((field) => {
     if (!RELEASE_PROPERTY_SET.has(field.property)) return [];
     const label = pageText(definitions?.properties[field.property]?.labels, locale);
