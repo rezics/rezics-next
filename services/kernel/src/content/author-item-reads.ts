@@ -35,7 +35,7 @@ export type AuthorPostEntry = Extract<ItemView, { availability: 'available' }> &
   thread: { id: string; title: string | null };
 } & Partial<AuthorItemContext>;
 export type AuthorThreadEntry = ThreadView & Partial<AuthorItemContext>;
-export type AuthorItemDependencies = ContentReadDependencies & { routeKey: Uint8Array; cursorNow: () => number };
+export type AuthorItemDependencies = ContentReadDependencies & { routeKey: Uint8Array; cursorNow?: () => number };
 export type AuthorPage<T> = {
   entries: readonly T[];
   nextCursor: string | null;
@@ -219,7 +219,7 @@ async function listAuthorItems(
 ): Promise<AuthorPage<AuthorThreadEntry | AuthorPostEntry>> {
   const limit = input.limit ?? PAGE_LIMIT;
   if (!Number.isInteger(limit) || limit < 1 || limit > PAGE_LIMIT) throw new RangeError('Page limit must be 1 to 20');
-  const now = dependencies.cursorNow();
+  const now = (dependencies.cursorNow ?? Date.now)();
   if (!Number.isSafeInteger(now)) throw new TypeError('Invalid content cursor');
   const scope = binding(accountId, list, kind, context.actor);
   const accountRoute = routeOf(accountId);

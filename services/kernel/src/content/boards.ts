@@ -36,7 +36,7 @@ import pageRealmBoardIds from './board-realm-page.sql';
 
 export type ContentBoardDependencies = ContentReadDependencies & {
   /** Trusted service configuration, independent of authentication's wall clock. */
-  cursorNow: () => number;
+  cursorNow?: () => number;
 };
 export type BoardPageInput = { cursor?: string; limit?: number; sort?: BoardCursorSort; query?: string };
 export type BoardOpeningPageInput = Omit<BoardPageInput, 'limit'>;
@@ -134,7 +134,7 @@ export async function selectRealmBoardPage(
   const check = await prepareRealmRead(dependencies, context.actor, realmId, context.deadline);
   if (!check) throw new ContentNotFoundError();
 
-  const now = dependencies.cursorNow();
+  const now = (dependencies.cursorNow ?? Date.now)();
   if (!Number.isSafeInteger(now)) throw new TypeError('Invalid content cursor');
   const binding = realmBinding(realmId, context.actor);
   const result = await within(context.deadline, () =>
@@ -317,7 +317,7 @@ async function listBoardThreadsFromSource(
   if (openingPage && limit !== 20) throw new RangeError('Board opening pages contain twenty ordinary candidates');
   if (sort !== 'newest' && sort !== 'oldest' && sort !== 'active' && sort !== 'hot')
     throw new TypeError('Invalid content cursor');
-  const now = dependencies.cursorNow();
+  const now = (dependencies.cursorNow ?? Date.now)();
   const decisions = await prepareBoardPageDecisions(dependencies, context);
   const candidateSnapshot = await readBoardPageCandidateSnapshot(
     dependencies,
