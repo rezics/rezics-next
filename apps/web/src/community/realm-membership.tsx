@@ -106,6 +106,7 @@ export function RealmMembership({
         <div className="flex flex-wrap items-center gap-3">
           <Button
             size="lg"
+            nativeButton={false}
             className="h-11 px-6 text-base"
             render={<a href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`} />}
           >

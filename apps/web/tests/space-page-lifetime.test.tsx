@@ -148,10 +148,8 @@ let membershipButton: HTMLButtonElement | null = null;
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
-// Other files in one test process link the membership component against these names, so the mock keeps them all.
-const actualSpaceActions = await import('../src/community/space-actions');
+// Keep this mock closed: loading the actual space-actions module leaves the public hydrate empty.
 mock.module('../src/community/space-actions', () => ({
-  ...actualSpaceActions,
   readSpacePage: ({ data }: { data: PageInput }) => {
     calls.pages.push(structuredClone(data));
     return pageReader(data).then((page) => ({
@@ -205,7 +203,6 @@ const actualMembership = await import('../src/community/realm-membership');
 const actualHeader = await import('../src/community/realm-home-header');
 mock.module('../src/accounts/resource-access/link', () => ({ ResourceAccessLink: () => null }));
 mock.module('../src/library/follow-target-control', () => ({ FollowTargetControl: () => null }));
-// Outside this file's membership harness the real component renders, so other files that load it see the actual module.
 mock.module('../src/community/realm-membership', () => ({
   ...actualMembership,
   RealmMembership: (props: Parameters<typeof actualMembership.RealmMembership>[0]) => {
