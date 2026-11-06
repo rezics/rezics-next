@@ -553,12 +553,12 @@ test('goal backlog status prints ready, dispatched and failed counts per Goal', 
   const json = await run('status', '--json');
   expect(json.code).toBe(0);
   expect(JSON.parse(json.stdout)).toEqual([
-    { goal: 'imports', ready: 0, dispatched: 0, failed: 1, returned: 0 },
-    { goal: 'web', ready: 1, dispatched: 1, failed: 0, returned: 0 },
+    { goal: 'imports', ready: 0, dispatched: 0, failed: 1, returned: 0, inFlight: 0, maxInFlight: 6 },
+    { goal: 'web', ready: 1, dispatched: 1, failed: 0, returned: 0, inFlight: 0, maxInFlight: 6 },
   ]);
   const table = await run('status');
   expect(table.code).toBe(0);
-  expect(table.stdout.split('\n')[2]).toMatch(/^web\s+1\s+1\s+0\s+0$/);
+  expect(table.stdout.split('\n')[2]).toMatch(/^web\s+1\s+1\s+0\s+0\s+0\s+6$/);
   expect((await run('dispatch')).code).not.toBe(0);
 });
 
