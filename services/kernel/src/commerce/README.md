@@ -997,13 +997,15 @@ production financial retention and remaining shared custody.
 Decision: genuine-order native acceptance uses Content's isolated native system and Access `grant.create`; operator
 history stays on the shared Auth/persona fixture; Accounts consumes `prepareNativeRetainedOrder`.
 Decision: one native purchase/retention/expiry journey plus the unused-actor operator-history case. Board and offer
-grants, edition publication and Commerce HTTP share one composed kernel whose Access is compiled from that kernel's
-catalogue and Score `nativeAuth.handler`. After mount, tokens are issued for a client registered with that catalogue.
-`grant.create` authenticates the governance bearer on that Access so command admission sees the same actor snapshot; a
-Content-issued actor object is not reused. Seller Global grants are
+grants, edition publication and Commerce HTTP share one composed kernel. That kernel reuses Content's native Access,
+which is already compiled from the full mounted catalogue (including Commerce) and Score `nativeAuth.handler`; Auth
+tokens use the ordinary client and omit `media:complete`. A second Access on the same pool disagrees at the board
+current-role seam. `grant.create` authenticates the governance bearer on that Access so command admission sees the
+same actor snapshot; a Content-issued actor object is not reused. Seller Global grants are
 `board:create` and `offer:create` only, because Content already installed `subject:create`. The composed worker is
 the production module list under `workerTestEnv`; readiness waits for the effects consumer to observe and catch up
-and uses the existing 5ms queue poll. The board-read current-role projection stays with Accounts.
+and uses the existing 5ms queue poll. Tombstone drain uses the 120s ceiling other native erasure suites use. The
+board-read current-role projection stays with Accounts.
 
 The [financial lifecycle and cost review](../../../../docs/research/commerce-cost-lifecycle-quality.md)
 retains its recorded source bindings and unavailable measurements. Preserve the unused-account test's `none`

@@ -156,15 +156,14 @@ Genuine purchase targets are published Content editions on Content's isolated na
 `board:create`/`offer:create` as account subjects on Global through the ordinary grant command after the governance
 account holds `board:create` via the native local-showcase bootstrap. Buyer `order:create` uses the same grant command
 after the governance account holds that action on the offer. Grants, publication and Commerce HTTP share one composed
-kernel. That kernel compiles Access from its complete mounted catalogue and authenticates through the Score
-Auth-handler capture (`nativeAuth.handler`). After mount, the suite registers one Auth client with that catalogue and
-re-issues the governance, seller and buyer bearers so Commerce actions are in scope. `grant.create` re-authenticates
-the governance bearer on that Access so command admission binds the same actor snapshot; Content's `native.auth.issue`
-actor object is not admitted there.
-Diagnostic7 showed a published board, current `content.board.owner`,
-board/subject read scopes and ownerActions, with `boardAllowed=false` and `boardRead=null`: actor/account/grant
-subject matched, while compiled role/resource/current-actor operands and the board projection still disagree at
-Access's current-role seam. Shared-database board-read current-role projection repair stays with Accounts.
+kernel. Content's native Access is already compiled from that complete catalogue, including Commerce, and
+authenticates through Score `nativeAuth.handler`. The composed kernel reuses that same Access instance and the
+ordinary Auth client (which omits `media:complete`). A second Access on the same pool is what produced
+Diagnostic7: published board, current `content.board.owner`, board/subject read scopes and ownerActions, with
+`boardAllowed=false` and `boardRead=null` because compiled role/resource/current-actor operands disagreed with
+the board projection. Shared-database board-read current-role projection repair stays with Accounts.
+`grant.create` re-authenticates the governance bearer on that Access so command admission binds the same actor
+snapshot; Content's `native.auth.issue` actor object is not admitted there.
 `prepareNativeRetainedOrder` is the Accounts terminal-graph export.
 
 The Auth/persona/fresh-deletion fixture stays in the test parent. Only kernel worker setup runs in a child using

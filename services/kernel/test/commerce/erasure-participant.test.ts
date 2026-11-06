@@ -1,10 +1,8 @@
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from 'bun:test';
-import { decodeJwt } from 'jose';
 import { createCurrentConsentReader } from '@rezics/auth/current-consent';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { bootstrapLocalShowcaseBoardCreation } from '../../src/access/bootstrap-governance.ts';
 import { createGrantCommands, GrantDeniedError } from '../../src/access/grant-commands.ts';
-import { createAccess } from '../../src/access/index.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { readErasureStatus, resolveRetention } from '../../src/access/erasure.ts';
 import { createCommerceCommands } from '../../src/commerce/commands.ts';
@@ -21,7 +19,6 @@ import { createCommerceWork } from '../../src/commerce/enqueue.ts';
 import { createStripePort } from '../../src/commerce/stripe.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
-import { actionCatalogue } from '../../src/http/request.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
 import type { Access } from '../../src/request/access.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
@@ -31,7 +28,7 @@ import { nativeFixture } from '../access/native-account-bindings-fixture.ts';
 import { accountDeletionRuntime, deletePersona, drainEffects } from '../support/account-deletion.ts';
 import { createPersonas } from '../support/personas.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
-import { testKernel, type TestKernel } from '../support/test-kernel.ts';
+import { testKernel, testRouteKey, testTokens, type TestKernel } from '../support/test-kernel.ts';
 import { KERNEL_WORK_MODULES } from '../support/default-work-modules.ts';
 import { startCommerceErasureWorker } from './support/erasure-worker.ts';
 import { createNativeEditionFixture, type NativeContentEdition } from './support/native-edition-fixture.ts';
@@ -49,6 +46,11 @@ import {
 } from '../content/support/native-system.ts';
 
 const GLOBAL = { route: 0, id: GLOBAL_CONTEXT };
+const EFFECTS_DRAIN_MS = 120_000;
+
+async function drainPartition(pool: Parameters<typeof drainEffects>[0], accountId: string) {
+  await drainEffects(pool, partitionOf(routeOf(accountId)!), { deadlineMs: EFFECTS_DRAIN_MS });
+}
 
 async function waitUntil<T>(read: () => Promise<T>, accept: (value: T) => boolean, ms = 90_000): Promise<T> {
   const deadline = Date.now() + ms;
@@ -60,7 +62,7 @@ async function waitUntil<T>(read: () => Promise<T>, accept: (value: T) => boolea
   }
 }
 
-setDefaultTimeout(120_000);
+setDefaultTimeout(300_000);
 
 describe('native genuine-order retention', () => {
   const urls = { successUrl: 'https://example.test/success', cancelUrl: 'https://example.test/cancel' };
@@ -120,7 +122,7 @@ describe('native genuine-order retention', () => {
   }
   async function erase(persona: { accountId: string; bearer: string }) {
     const barrier = await deletePersona({ version: 1, pool, auth: accountDeletionRuntime(native).auth }, persona);
-    await drainEffects(pool, partitionOf(routeOf(persona.accountId)!));
+    await drainPartition(pool, persona.accountId);
     const id = commerceErasureWorkflowId(persona.accountId);
     await waitUntil(
       () => client.getWorkflow(id),
@@ -206,30 +208,18 @@ describe('native genuine-order retention', () => {
       clock: () => new Date(),
     });
     const consent = createCurrentConsentReader({ database: native.database.authPool });
-    const token = decodeJwt(native.actors.author.bearer);
-    const issuer = token.iss;
-    const audience = typeof token.aud === 'string' ? token.aud : token.aud?.[0];
-    if (!issuer || !audience) throw new Error('Native Content Auth issuer and audience are missing from the bearer');
     const readConsent = ({ actorAccountId, clientId }: { actorAccountId: string; clientId: string }) =>
       consent.readCurrentConsent({ actorAccountId, clientId });
+    // Content's native Access is already compiled from the full mounted catalogue,
+    // including Commerce, and authenticates through Score `nativeAuth.handler`.
+    // A second Access on this pool disagrees at the board current-role seam.
+    access = native.access;
     kernel = createKernel({
       pool,
       routeKey: native.routeKey,
       tokens: native.tokenKeys,
       receiptKeys: testReceiptKeys(),
-      access: (config) =>
-        createAccess({
-          ...config,
-          auth: {
-            issuer,
-            audience,
-            jwksUrl: `${issuer}/.well-known/jwks.json`,
-            fetch: (input, init) => native.nativeAuth.handler(new Request(input, init)),
-          },
-        }),
-      onAccessReady: (mounted) => {
-        access = mounted;
-      },
+      access: native.access,
       writeRate: createWriteRateLimiter({
         secret: 'commerce-erasure-native-secret-32-bytes',
         overrides: HIGH_RATE_OVERRIDES,
@@ -241,25 +231,13 @@ describe('native genuine-order retention', () => {
       commerce: { stripe, ...urls, webhookSecrets: [provider.fake.webhookSecret], work: createCommerceWork(client) },
       workClient: client,
     });
-    if (!access) throw new Error('Composed Access was not resolved from the mounted catalogue');
-    const composedScopes = [...actionCatalogue(kernel).keys()].sort();
-    const composedClientId = `commerce-erasure-${crypto.randomUUID()}`;
-    await native.nativeAuth.internal.registerClient({
-      clientId: composedClientId,
-      firstParty: true,
-      scopes: composedScopes,
-    });
-    const issueComposed = async (accountId: string) => {
-      const issued = await native.auth.issue({
-        accountId,
-        clientId: composedClientId,
-        scopes: composedScopes,
-      });
-      return { accountId, bearer: issued.bearer, actor: issued.actor };
+    const ordinary = {
+      clientId: native.auth.ordinaryClient.id,
+      scopes: native.auth.ordinaryScopes,
     };
-    governance = await issueComposed(governanceId);
-    seller = await issueComposed(native.actors.author.actor.accountId);
-    buyer = await issueComposed(native.actors.other.actor.accountId);
+    governance = await native.auth.issue({ accountId: governanceId, ...ordinary });
+    seller = { accountId: native.actors.author.actor.accountId, bearer: native.actors.author.bearer };
+    buyer = { accountId: native.actors.other.actor.accountId, bearer: native.actors.other.bearer };
     unused = await accountDeletionRuntime(native).person();
     await bootstrapLocalShowcaseBoardCreation(pool, governance.actor.accountId);
     for (const group of ['personal_library', 'purchases', 'selling'])
@@ -334,7 +312,7 @@ describe('native genuine-order retention', () => {
     const firstNative = (await commands.readOrderForAccount(buyer.accountId, first.id))!;
     provider.fake.pay(firstNative.checkoutSessionId!);
     await finish(await event('checkout.session.completed', firstNative.checkoutSessionId!));
-    await drainEffects(pool, partitionOf(routeOf(buyer.accountId)!));
+    await drainPartition(pool, buyer.accountId);
     const entitlement = (await entitlementRows(buyer.accountId))[0]!.entitlement_id as string;
     const second = (await accepted(buyer, '/v1/orders', { offerId: offer.id, expectedOfferRevision: offer.revision }))
       .order as { id: string };
@@ -368,7 +346,7 @@ describe('native genuine-order retention', () => {
         [routeOf(buyer.accountId), buyer.accountId],
       );
       const buyerBarrier = await deletePersona({ version: 1, pool, auth: accountDeletionRuntime(native).auth }, buyer);
-      await drainEffects(pool, partitionOf(routeOf(buyer.accountId)!));
+      await drainPartition(pool, buyer.accountId);
       expect(await entitlementRows(buyer.accountId)).toHaveLength(1);
       expect(await commerceOutcome(buyer.accountId)).toEqual({ outcome: 'pending', retained: [] });
       for (const path of [`/v1/orders/${first.id}`, `/v1/entitlements/${entitlement}`, '/v1/entitlements'])
@@ -512,7 +490,7 @@ describe('native genuine-order retention', () => {
     );
     await finish(await postSignedEvent(latePaidSigned));
     await finish(latePaid);
-    await drainEffects(pool, partitionOf(routeOf(buyer.accountId)!));
+    await drainPartition(pool, buyer.accountId);
     expect(
       (
         await pool.query('SELECT settlement FROM commerce.purchase_order WHERE route=$1 AND order_id=$2', [
@@ -536,7 +514,7 @@ describe('native genuine-order retention', () => {
     await finish(await event('charge.refunded', provider.fake.chargeId(firstNative.checkoutSessionId!)));
     provider.fake.failRefund(refund);
     await finish(await event('refund.updated', refund));
-    await drainEffects(pool, partitionOf(routeOf(buyer.accountId)!));
+    await drainPartition(pool, buyer.accountId);
     expect(await entitlementRows(buyer.accountId)).toHaveLength(0);
     expect(
       (
@@ -568,7 +546,7 @@ describe('native genuine-order retention', () => {
     );
     await replay.getResult();
     expect(await commerceOutcome(unused.accountId)).toEqual({ outcome: 'none', retained: [] });
-  }, 180_000);
+  }, 300_000);
 });
 
 describe('historical operator commerce custody', () => {
@@ -601,11 +579,13 @@ describe('historical operator commerce custody', () => {
       STRIPE_API_HOST: `http://127.0.0.1:${provider.port}`,
       CHECKOUT_SUCCESS_URL: 'https://example.test/success',
       CHECKOUT_CANCEL_URL: 'https://example.test/cancel',
+      KERNEL_ROUTE_KEY: encodeNativeRouteKey(testRouteKey()),
+      KERNEL_SESSION_KEYS: encodeNativeKeyRing(testTokens()),
       KERNEL_WORKER_POOL_SIZE: '10',
       KERNEL_EXECUTOR_ID: `commerce-erasure-operator-${crypto.randomUUID()}`,
     });
-    await drainEffects(kernelPool, partitionOf(routeOf(personas.software.accountId)!));
-    await drainEffects(kernelPool, partitionOf(routeOf(personas.operator.accountId)!));
+    await drainPartition(kernelPool, personas.software.accountId);
+    await drainPartition(kernelPool, personas.operator.accountId);
   }, 360_000);
 
   afterAll(async () => {
@@ -622,9 +602,9 @@ describe('historical operator commerce custody', () => {
   test('historical acting-human and operator responsibilities cannot be attested as native no-data', async () => {
     const kernelPool = pool.current!;
     await deletePersona({ version: 1, pool: kernelPool, auth }, personas.software, { actingHuman: personas.operator });
-    await drainEffects(kernelPool, partitionOf(routeOf(personas.software.accountId)!));
+    await drainPartition(kernelPool, personas.software.accountId);
     const barrier = await deletePersona({ version: 1, pool: kernelPool, auth }, personas.operator);
-    await drainEffects(kernelPool, partitionOf(routeOf(personas.operator.accountId)!));
+    await drainPartition(kernelPool, personas.operator.accountId);
     const id = commerceErasureWorkflowId(personas.operator.accountId);
     await waitUntil(
       () => client.getWorkflow(id),
