@@ -113,8 +113,8 @@ let waitpidSymbol:
   | undefined
   | false;
 
-function waitpidNoHang(pid: number): void {
-  if (waitpidSymbol === false) return;
+function waitpidNoHang(pid: number): number | undefined {
+  if (waitpidSymbol === false) return undefined;
   try {
     if (waitpidSymbol === undefined) {
       waitpidSymbol = dlopen('libc.so.6', {
@@ -125,10 +125,22 @@ function waitpidNoHang(pid: number): void {
       }).symbols;
     }
     const status = new Int32Array(1);
-    waitpidSymbol.waitpid(pid, ptr(status), WNOHANG);
+    const result = waitpidSymbol.waitpid(pid, ptr(status), WNOHANG);
+    if (result <= 0) return undefined;
+    const raw = status[0] ?? 0;
+    if ((raw & 0x7f) === 0) return (raw >> 8) & 0xff;
+    return undefined;
   } catch {
     waitpidSymbol = false;
+    return undefined;
   }
+}
+
+/** Reap a direct child and return its exit code when this process is the parent. */
+export function directChildExitCode(pid: number): number | undefined {
+  const identity = processIdentity(pid);
+  if (!identity || identity.ppid !== process.pid) return undefined;
+  return waitpidNoHang(pid);
 }
 
 /** Live members of a process group, excluding unreaped zombies that still answer kill(-pgid, 0). */
@@ -170,7 +182,36 @@ export function reapExitedProcessGroupMembers(pgid: number): void {
 
 function groupGone(pgid: number): boolean {
   reapExitedProcessGroupMembers(pgid);
-  return !liveProcessGroup(pgid) && !processGroupExists(pgid);
+  // Unreaped zombies still answer kill(-pgid, 0). Settlement follows live members.
+  return !liveProcessGroup(pgid);
+}
+
+/** True when the pid is absent from /proc or is already a zombie. */
+export function processHasExited(pid: number): boolean {
+  const identity = processIdentity(pid);
+  return identity === undefined || identity.state === 'Z';
+}
+
+function observeLeaderExit(pid: number | undefined, observed: Promise<void>, pollIntervalMs: number): Promise<void> {
+  if (pid === undefined) return observed;
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    void observed.then(finish, finish);
+    const tick = () => {
+      if (settled) return;
+      if (processHasExited(pid)) {
+        finish();
+        return;
+      }
+      setTimeout(tick, pollIntervalMs);
+    };
+    tick();
+  });
 }
 
 async function waitUntil(predicate: () => boolean, timeoutMs: number, pollIntervalMs: number): Promise<boolean> {
@@ -248,33 +289,20 @@ function makeProcessCustody(
     if (pid !== undefined) {
       const graceDeadline = Date.now() + termGraceMs;
       signalGroup('SIGTERM');
-      // Direct child and output settle first. kill(-pgid, 0) still succeeds for unreaped
-      // zombies, including descendants this process adopted after the parent exited.
       childSettled = await completedWithin(childCompletion, termGraceMs);
       const remainingGrace = graceDeadline - Date.now();
       if (remainingGrace > 0 && liveProcessGroup(pid)) {
-        await waitUntil(() => !liveProcessGroup(pid), remainingGrace, pollIntervalMs);
+        await waitUntil(() => groupGone(pid), remainingGrace, pollIntervalMs);
       }
       if (liveProcessGroup(pid)) {
         signalGroup('SIGKILL');
         if (!childSettled) childSettled = await completedWithin(childCompletion, settleTimeoutMs);
-        try {
-          const gone = await waitUntil(() => !liveProcessGroup(pid), settleTimeoutMs, pollIntervalMs);
-          if (!gone) cleanupErrors.push(new Error(`${label} process group ${pid} remained after SIGKILL`));
-        } catch (error) {
-          cleanupErrors.push(error);
-        }
+        const gone = await waitUntil(() => groupGone(pid), settleTimeoutMs, pollIntervalMs);
+        if (!gone) cleanupErrors.push(new Error(`${label} process group ${pid} remained after SIGKILL`));
       }
-      try {
-        groupSettled = await waitUntil(() => groupGone(pid), settleTimeoutMs, pollIntervalMs);
-      } catch (error) {
-        cleanupErrors.push(error);
-        groupSettled = groupGone(pid);
-      }
-      if (!groupSettled && liveProcessGroup(pid)) {
+      groupSettled = groupGone(pid);
+      if (!groupSettled) {
         cleanupErrors.push(new Error(`${label} process group ${pid} remained after SIGKILL`));
-      } else if (!liveProcessGroup(pid)) {
-        groupSettled = true;
       }
     }
 
@@ -329,15 +357,19 @@ export function ownBunProcess(child: Bun.Subprocess, options: ProcessCustodyOpti
   const outputCompletion = Promise.all([drain(streams.stdout, 'stdout'), drain(streams.stderr, 'stderr')]).then(
     () => undefined,
   );
-  const childCompletion = Promise.resolve(child.exited).then(
-    () => undefined,
-    (error) => {
-      errors.push(
-        new Error(`${options.label ?? 'Child process group'} exit observation failed: ${errorText(error)}`, {
-          cause: error,
-        }),
-      );
-    },
+  const childCompletion = observeLeaderExit(
+    child.pid,
+    Promise.resolve(child.exited).then(
+      () => undefined,
+      (error) => {
+        errors.push(
+          new Error(`${options.label ?? 'Child process group'} exit observation failed: ${errorText(error)}`, {
+            cause: error,
+          }),
+        );
+      },
+    ),
+    options.pollIntervalMs ?? 25,
   );
   void outputCompletion.catch(() => {});
   void childCompletion.catch(() => {});

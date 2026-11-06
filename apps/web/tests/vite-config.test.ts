@@ -130,12 +130,8 @@ test('SSR optimizeDeps keeps discovery off after the Cloudflare Worker environme
           }
           for (const [name, optimizeDeps] of targets) {
             assert.equal(optimizeDeps.noDiscovery, true, command + ':' + name);
-            assert.deepEqual(
-              optimizeDeps.include,
-              ['urlpattern-polyfill', '@inlang/paraglide-js/urlpattern-polyfill'],
-              command + ':' + name + ':include',
-            );
-            for (const pkg of ['react', 'react-dom', 'react-dom/server', 'react-day-picker', 'date-fns'])
+            assert.deepEqual(optimizeDeps.include, [], command + ':' + name + ':include');
+            for (const pkg of ['urlpattern-polyfill', '@inlang/paraglide-js/urlpattern-polyfill', 'react', 'react-dom', 'react-dom/server', 'react-day-picker', 'date-fns'])
               assert.equal(
                 optimizeDeps.include.includes(pkg),
                 false,
@@ -150,17 +146,19 @@ test('SSR optimizeDeps keeps discovery off after the Cloudflare Worker environme
             for (const pkg of ['react-day-picker', 'date-fns', '@date-fns/tz'])
               assert.ok(optimizeDeps.exclude.includes(pkg), command + ':' + name + ':' + pkg);
           }
-          const aliases = [config.resolve.alias];
+          const resolvers = [['root', config.resolve]];
+          if (config.ssr.resolve) resolvers.push(['ssr', config.ssr.resolve]);
           for (const [name, environment] of Object.entries(config.environments)) {
             if (name === 'client') continue;
-            aliases.push(environment.resolve.alias);
+            resolvers.push([name, environment.resolve]);
           }
-          for (const alias of aliases) {
-            const entries = Array.isArray(alias) ? alias : [];
+          for (const [name, resolve] of resolvers) {
+            const entries = Array.isArray(resolve.alias) ? resolve.alias : [];
             const mapped = entries.find((entry) => entry && entry.find === 'urlpattern-polyfill');
-            assert.ok(mapped, command + ':urlpattern-polyfill alias');
-            assert.equal(String(mapped.replacement).endsWith('index.cjs'), false, command + ':esm');
-            assert.ok(String(mapped.replacement).endsWith('index.js'), command + ':' + mapped.replacement);
+            assert.ok(mapped, command + ':' + name + ':urlpattern-polyfill alias');
+            assert.equal(String(mapped.replacement).endsWith('index.cjs'), false, command + ':' + name + ':esm');
+            assert.ok(String(mapped.replacement).endsWith('index.js'), command + ':' + name + ':' + mapped.replacement);
+            assert.ok(resolve.conditions.includes('import'), command + ':' + name + ':import-condition');
           }
         }
       `,

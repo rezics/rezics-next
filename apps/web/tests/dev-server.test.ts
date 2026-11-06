@@ -37,7 +37,7 @@ afterAll(async () => {
       const deadline = Date.now() + 2500;
       while (Date.now() < deadline) {
         reapExitedProcessGroupMembers(pid);
-        if (liveProcessGroupMemberIds(pid).length === 0 && !fixtureGroupExists(pid)) break;
+        if (liveProcessGroupMemberIds(pid).length === 0) break;
         await Bun.sleep(10);
       }
       reapExitedProcessGroupMembers(pid);

@@ -93,11 +93,13 @@ links to the loans page. Copy and loan day fields keep a locale Calendar grid th
 or `date-fns`. Web's Vite plugin uses `configEnvironment` and a later `configResolved` pin so the
 Cloudflare Worker environment cannot turn SSR discovery back on at serve time. Vite concatenates
 `optimizeDeps.include` on both the Worker environments and the root `ssr.optimizeDeps` list,
-so the pin keeps `urlpattern-polyfill` plus its ESM wrapper and excludes the calendar packages.
+so the pin keeps that list empty and excludes the calendar packages.
 Generated `paraglide/runtime.js` imports the wrapper, which re-exports `urlpattern-polyfill`.
-Workerd's export-type inspection has no `import` condition, so package exports fall through to
-CJS `main` (`index.cjs`) and throw `module is not defined`; Web aliases that id to ESM `index.js`
-so the nested package is resolvable and the Worker evaluates ESM.
+Workerd's export-type inspection has workerd/worker/module/browser conditions, not `import`, so
+package exports miss and Node `main` loads CJS `index.cjs`. Prebundling that id evaluates CJS
+inside `runInRunnerObject` and throws `module is not defined`. Web aliases the id to ESM
+`index.js`, adds `import` to Worker resolve conditions, and leaves the package off include so
+the Worker transform pipeline evaluates ESM.
 `react-dom/server` stays off include and off exclude: TanStack would otherwise concatenate it
 into the optimizer and hang Rolldown before Copies prints ready, while excluding it loads CJS
 into Workerd. Vite then transforms React on the first Worker evaluation.

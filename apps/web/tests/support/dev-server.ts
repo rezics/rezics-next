@@ -1,7 +1,7 @@
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { chromium, type Browser, type BrowserContextOptions } from 'playwright';
-import { cleanupAll, ownBunProcess, withCleanup } from './server-custody.ts';
+import { cleanupAll, directChildExitCode, ownBunProcess, processHasExited, withCleanup } from './server-custody.ts';
 
 // Render budgets start at Vite's ready line, independently of its startup budget.
 const phaseBudgets = { ready: 150_000, firstResponse: 120_000, warmUp: 120_000 };
@@ -108,7 +108,27 @@ export async function startDevServer(
       `dev server ready failed for ${path}; elapsed ${now() - spawnedAt} ms; last error: ${String(error)}\nCaptured output:\n${output}`,
     );
   }
-  const exited = child.exited.then((code) => new Error(`dev server exited with ${code}`));
+  const pollMs = options.pollIntervalMs ?? 25;
+  const exited = Promise.race([
+    child.exited.then((code) => new Error(`dev server exited with ${code}`)),
+    new Promise<Error>((resolve) => {
+      const tick = () => {
+        if (child.exitCode !== null) {
+          resolve(new Error(`dev server exited with ${child.exitCode}`));
+          return;
+        }
+        if (child.pid !== undefined && processHasExited(child.pid)) {
+          const code = directChildExitCode(child.pid);
+          if (code !== undefined) {
+            resolve(new Error(`dev server exited with ${code}`));
+            return;
+          }
+        }
+        setTimeout(tick, pollMs);
+      };
+      tick();
+    }),
+  ]);
   const exitFailure = exited.then((error) => {
     throw error;
   });

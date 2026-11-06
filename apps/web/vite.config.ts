@@ -46,17 +46,27 @@ const linkedDependencyRoot = linkedDependencyAllow(
 const calendarOptimizeDeps = ['react-day-picker', 'date-fns', '@date-fns/tz'] as const;
 /**
  * Generated paraglide/runtime.js imports the ESM wrapper, which re-exports `urlpattern-polyfill`.
- * Workerd export-type inspection has no `import` condition, so package exports fall through to
- * CJS `main` (`index.cjs`) and throw `module is not defined`. Alias the id to the ESM file.
+ * Workerd resolve conditions are workerd/worker/module/browser, not `import`, so package exports
+ * miss and Node `main` loads CJS `index.cjs`. Prebundling that id under those conditions feeds CJS
+ * into `runInRunnerObject`, which has no `module` and throws `module is not defined`. Resolve the
+ * id to ESM `index.js`, add `import` to Worker conditions, and keep the id out of optimizeDeps.include
+ * so the Worker transform pipeline evaluates ESM.
  */
 const webRequire = createRequire(import.meta.url);
 const paraglideRequire = createRequire(webRequire.resolve('@inlang/paraglide-js'));
-const urlpatternPolyfillEsm = join(dirname(paraglideRequire.resolve('urlpattern-polyfill')), 'index.js');
+const urlpatternPolyfillCjs = paraglideRequire.resolve('urlpattern-polyfill');
+const urlpatternPolyfillEsm = join(dirname(urlpatternPolyfillCjs), 'index.js');
 const urlpatternPolyfillAlias = { find: 'urlpattern-polyfill', replacement: urlpatternPolyfillEsm } as const;
-const workerExplicitOptimizeDeps = [
-  'urlpattern-polyfill',
-  '@inlang/paraglide-js/urlpattern-polyfill',
-] as const;
+
+function isUrlpatternPolyfillId(id: string): boolean {
+  return (
+    id === 'urlpattern-polyfill' ||
+    id === urlpatternPolyfillCjs ||
+    id === urlpatternPolyfillEsm ||
+    id.endsWith('/urlpattern-polyfill/index.cjs') ||
+    id.endsWith('/urlpattern-polyfill/index.js')
+  );
+}
 
 function pinUrlpatternAlias(resolveConfig: { alias?: unknown }): void {
   const alias = resolveConfig.alias;
@@ -76,6 +86,16 @@ function pinUrlpatternAlias(resolveConfig: { alias?: unknown }): void {
   resolveConfig.alias = [urlpatternPolyfillAlias];
 }
 
+function pinWorkerConditions(resolveConfig: { conditions?: string[] }): void {
+  const conditions = resolveConfig.conditions ?? [];
+  resolveConfig.conditions = conditions.includes('import') ? [...conditions] : ['import', ...conditions];
+}
+
+function pinWorkerResolve(resolveConfig: { alias?: unknown; conditions?: string[] }): void {
+  pinUrlpatternAlias(resolveConfig);
+  pinWorkerConditions(resolveConfig);
+}
+
 function pinWorkerOptimizeDeps(optimizeDeps: {
   noDiscovery?: boolean;
   include?: string[];
@@ -84,9 +104,9 @@ function pinWorkerOptimizeDeps(optimizeDeps: {
   optimizeDeps.noDiscovery = true;
   // Vite concatenates include arrays across plugins. Cloudflare sets noDiscovery false, TanStack then
   // enqueues react-dom/server, and Rolldown hangs the Worker optimizer before Copies can print ready.
-  // The alias makes the nested polyfill resolvable as ESM. Leave react-dom/server off include
-  // and off exclude so Vite transforms it without the hanging prebundle.
-  optimizeDeps.include = [...workerExplicitOptimizeDeps];
+  // Leave the polyfill off include: prebundling it under workerd conditions loads CJS into Workerd.
+  // Leave react-dom/server off include and off exclude so Vite transforms it without the hanging prebundle.
+  optimizeDeps.include = [];
   optimizeDeps.exclude = (optimizeDeps.exclude ?? []).filter(
     (packageName) => packageName !== 'react' && packageName !== 'react-dom' && packageName !== 'react-dom/server',
   );
@@ -189,11 +209,18 @@ export default defineConfig((context) => {
       resolve: { alias: [urlpatternPolyfillAlias] },
       optimizeDeps: {
         noDiscovery: true,
-        include: [...workerExplicitOptimizeDeps],
+        include: [],
         exclude: [...calendarOptimizeDeps],
       },
     },
     plugins: [
+      {
+        name: 'urlpattern-polyfill-esm',
+        enforce: 'pre',
+        resolveId(id) {
+          if (isUrlpatternPolyfillId(id)) return urlpatternPolyfillEsm;
+        },
+      },
       {
         name: 'generate-localization',
         async config(_config, { command }) {
@@ -233,19 +260,22 @@ export default defineConfig((context) => {
             resolve: { alias: [urlpatternPolyfillAlias] },
             optimizeDeps: {
               noDiscovery: true,
-              include: [...workerExplicitOptimizeDeps],
+              include: [],
               exclude: [...calendarOptimizeDeps],
             },
           };
         },
         configResolved(config) {
           // TanStack concatenates react-dom/server onto the root ssr include after environment
-          // hooks; Workerd still reads that list during export-type inspection.
-          pinUrlpatternAlias(config.resolve);
+          // hooks; Workerd still reads that list during export-type inspection. Pin `import`
+          // here so Cloudflare's workerd/worker/module/browser list is preserved and extended.
+          pinWorkerResolve(config.resolve);
+          if (!config.ssr.resolve) config.ssr.resolve = {};
+          pinWorkerResolve(config.ssr.resolve);
           if (config.ssr.optimizeDeps) pinWorkerOptimizeDeps(config.ssr.optimizeDeps);
           for (const [name, environment] of Object.entries(config.environments)) {
             if (name === 'client') continue;
-            pinUrlpatternAlias(environment.resolve);
+            pinWorkerResolve(environment.resolve);
             pinWorkerOptimizeDeps(environment.optimizeDeps);
           }
         },
