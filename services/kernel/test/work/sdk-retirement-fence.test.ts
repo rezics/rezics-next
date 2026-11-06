@@ -1,8 +1,15 @@
 import { afterAll, expect, test } from 'bun:test';
-import { DBOSClient } from '@dbos-inc/dbos-sdk';
+import { DBOSClient, WorkflowRetirementBudgetError } from '@dbos-inc/dbos-sdk';
 import pg from 'pg';
 import { createWorkClient, hasRetainedWorkCopies } from '../../src/work/client.ts';
-import { readSdkWorkflowRetirement, retireSdkWorkflowWriters } from '../../src/work/sdk-retirement-fence.ts';
+import {
+  invokeSdkWorkflowRetirement,
+  readSdkWorkflowRetirement,
+  retireSdkWorkflowWriters,
+  SDK_RETIREMENT_DISPATCH,
+  supportsBoundedSdkRetirement,
+} from '../../src/work/sdk-retirement-fence.ts';
+import { failConnect, loseCommitOnce } from './support/sdk-retirement-invocation.ts';
 import { fixture } from './support/process.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -264,3 +271,190 @@ test('Native SDK permanent workflow writer fence', async () => {
     runtime.child.kill();
   }
 }, 120_000);
+
+async function fundedClient() {
+  const pool = new pg.Pool({ connectionString: databaseUrl, max: 1 });
+  const sdk = await DBOSClient.create({
+    systemDatabaseUrl: databaseUrl,
+    systemDatabasePool: pool,
+  });
+  return { pool, sdk };
+}
+
+function chargedReserve() {
+  const charged: unknown[] = [];
+  return {
+    charged,
+    async reserve(cost: (typeof SDK_RETIREMENT_DISPATCH)[keyof typeof SDK_RETIREMENT_DISPATCH]) {
+      charged.push(cost);
+    },
+  };
+}
+
+test('bounded retirement refuses persistent connection failure without unfunded retry', async () => {
+  expect(supportsBoundedSdkRetirement(client)).toBe(true);
+  const workflowID = id();
+  await client.enqueue(options(workflowID), workflowID);
+  const { pool, sdk } = await fundedClient();
+  const restore = failConnect(pool, 'always');
+  const accounting = chargedReserve();
+  const started = Date.now();
+  try {
+    await expect(
+      invokeSdkWorkflowRetirement(
+        workflowID,
+        { deadline: Date.now() + 2_000, maxAttempts: 3, reserve: accounting.reserve },
+        sdk,
+      ),
+    ).rejects.toSatisfy((error: unknown) => {
+      return (
+        error instanceof WorkflowRetirementBudgetError &&
+        error.attempts === 3 &&
+        error.failedWork.filter((item) => item.dispatch === 'connect').length === 3 &&
+        error.failedWork.filter((item) => item.dispatch === 'connect').length +
+          error.failedWork.filter((item) => item.dispatch === 'backoff').length ===
+          error.failedWork.length
+      );
+    });
+    expect(Date.now() - started).toBeLessThan(2_000);
+    expect(accounting.charged.filter((cost) => cost === SDK_RETIREMENT_DISPATCH.connect)).toHaveLength(3);
+    expect(await readSdkWorkflowRetirement(workflowID, client)).toBeNull();
+  } finally {
+    restore();
+    await sdk.destroy();
+    await pool.end();
+  }
+}, 30_000);
+
+test('bounded retirement lock wait expires with the caller deadline', async () => {
+  const workflowID = id();
+  await client.enqueue(options(workflowID), workflowID);
+  const writer = await database.connect();
+  const { pool, sdk } = await fundedClient();
+  const accounting = chargedReserve();
+  const started = Date.now();
+  try {
+    await writer.query('BEGIN');
+    await writer.query(family[2][3], [workflowID]);
+    await expect(
+      invokeSdkWorkflowRetirement(
+        workflowID,
+        { deadline: Date.now() + 400, maxAttempts: 1, reserve: accounting.reserve },
+        sdk,
+      ),
+    ).rejects.toBeInstanceOf(WorkflowRetirementBudgetError);
+    expect(Date.now() - started).toBeLessThan(2_000);
+    expect(accounting.charged).toContain(SDK_RETIREMENT_DISPATCH.retire);
+    expect(await readSdkWorkflowRetirement(workflowID, client)).toBeNull();
+  } finally {
+    await writer.query('ROLLBACK');
+    writer.release();
+    await sdk.destroy();
+    await pool.end();
+  }
+}, 30_000);
+
+test('bounded retirement recovers after transient connection failure and keeps failed work', async () => {
+  const workflowID = id();
+  await client.enqueue(options(workflowID), workflowID);
+  const { pool, sdk } = await fundedClient();
+  const restore = failConnect(pool, 2);
+  const accounting = chargedReserve();
+  try {
+    const outcome = await invokeSdkWorkflowRetirement(
+      workflowID,
+      { deadline: Date.now() + 5_000, maxAttempts: 3, reserve: accounting.reserve },
+      sdk,
+    );
+    expect(outcome.attempts).toBe(3);
+    expect(outcome.failedWork.filter((item) => item.dispatch === 'connect')).toEqual([
+      { attempt: 1, dispatch: 'connect' },
+      { attempt: 2, dispatch: 'connect' },
+    ]);
+    expect(outcome.fence.workflowID).toBe(workflowID);
+    expect(outcome.fence.generation).toBe('2');
+    expect(await readSdkWorkflowRetirement(workflowID, client)).toEqual(outcome.fence);
+    expect(
+      await invokeSdkWorkflowRetirement(
+        workflowID,
+        {
+          deadline: Date.now() + 5_000,
+          maxAttempts: 1,
+          reserve: async () => {},
+        },
+        sdk,
+      ),
+    ).toMatchObject({ fence: outcome.fence, attempts: 1, failedWork: [] });
+    expect(accounting.charged.filter((cost) => cost === SDK_RETIREMENT_DISPATCH.connect).length).toBeGreaterThanOrEqual(
+      3,
+    );
+  } finally {
+    restore();
+    await sdk.destroy();
+    await pool.end();
+  }
+}, 30_000);
+
+test('bounded retirement stops at the funded attempt ceiling', async () => {
+  const workflowID = id();
+  await client.enqueue(options(workflowID), workflowID);
+  const { pool, sdk } = await fundedClient();
+  const restore = failConnect(pool, 'always');
+  let reserved = 0;
+  try {
+    await expect(
+      invokeSdkWorkflowRetirement(
+        workflowID,
+        {
+          deadline: Date.now() + 5_000,
+          maxAttempts: 2,
+          reserve: async () => {
+            reserved += 1;
+          },
+        },
+        sdk,
+      ),
+    ).rejects.toMatchObject({ name: 'WorkflowRetirementBudgetError', attempts: 2 });
+    expect(reserved).toBeLessThanOrEqual(4);
+    expect(await readSdkWorkflowRetirement(workflowID, client)).toBeNull();
+  } finally {
+    restore();
+    await sdk.destroy();
+    await pool.end();
+  }
+}, 30_000);
+
+test('lost retirement COMMIT converges on a later funded invocation without reopening writers', async () => {
+  const workflowID = id();
+  await client.enqueue(options(workflowID), workflowID);
+  const oldClient = await DBOSClient.create({ systemDatabaseUrl: databaseUrl });
+  const { pool, sdk } = await fundedClient();
+  const restore = loseCommitOnce(pool);
+  try {
+    await expect(
+      invokeSdkWorkflowRetirement(
+        workflowID,
+        { deadline: Date.now() + 5_000, maxAttempts: 1, reserve: async () => {} },
+        sdk,
+      ),
+    ).rejects.toBeInstanceOf(WorkflowRetirementBudgetError);
+    const receipt = await readSdkWorkflowRetirement(workflowID, oldClient);
+    expect(receipt).toMatchObject({ workflowID, generation: '2' });
+    const outcome = await invokeSdkWorkflowRetirement(
+      workflowID,
+      { deadline: Date.now() + 5_000, maxAttempts: 1, reserve: async () => {} },
+      sdk,
+    );
+    expect(outcome.fence).toEqual(receipt);
+    expect(outcome.failedWork).toEqual([]);
+    await expect(oldClient.enqueue(options(workflowID), workflowID)).rejects.toThrow('permanently retired');
+    expect(await oldClient.getWorkflowWriterFence(workflowID)).toEqual(receipt);
+    await client.deleteWorkflows([workflowID], false);
+    expect(await readSdkWorkflowRetirement(workflowID, oldClient)).toEqual(receipt);
+  } finally {
+    restore();
+    await oldClient.destroy();
+    await sdk.destroy();
+    await pool.end();
+  }
+}, 30_000);

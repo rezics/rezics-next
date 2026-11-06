@@ -86,6 +86,13 @@ function fakePorts(overrides: Partial<WorkApplicationPorts> = {}): WorkApplicati
       async maintainOnce() {
         return fence;
       },
+      supportsBoundedRetirement() {
+        return true;
+      },
+      async invokeRetirement(id) {
+        expect(id).toBe(intent.workflowId);
+        return { fence, attempts: 1, failedWork: [] };
+      },
     },
     sdkSelected: {
       registerSelectedStep() {
@@ -241,6 +248,9 @@ test('Work application enqueues, registers and retires against fake ports', asyn
   await runtime.launch();
   await runtime.shutdown();
   expect(await application.retireWriters(intent.workflowId)).toEqual(fence);
+  expect(
+    await application.invokeRetirement(intent.workflowId, {}, { deadline: 1, maxAttempts: 1, reserve: async () => {} }),
+  ).toEqual({ fence, attempts: 1, failedWork: [] });
   expect(await application.readRetirement(intent.workflowId)).toEqual(fence);
   expect(await application.lockWriterState(tx, writer, {})).toEqual(writer);
 });

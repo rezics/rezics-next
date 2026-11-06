@@ -1,14 +1,27 @@
-import { DBOS, DBOSClient, type WorkflowWriterFence, type WorkflowWriterState } from '@dbos-inc/dbos-sdk';
+import {
+  DBOS,
+  DBOSClient,
+  type WorkflowRetirementOutcome,
+  type WorkflowWriterFence,
+  type WorkflowWriterState,
+} from '@dbos-inc/dbos-sdk';
 import type { CommandTransaction } from '../command/command.ts';
 import type { Pool } from 'pg';
 import type { NativeStepWork } from '../semantic/identity-epoch-contract.ts';
 import { ensureNativeWorkApplication } from './adapters/index.ts';
+import type { WorkRetirementInvocation } from './contract/index.ts';
 
 export type SdkRetirementFence = WorkflowWriterFence;
 export type SdkRetirementClient = Pick<DBOSClient, 'retireWorkflow' | 'getWorkflowWriterFence'>;
 export type SdkWriterState = WorkflowWriterState;
+export type SdkRetirementOutcome = WorkflowRetirementOutcome;
 
-export { SDK_MAINTENANCE_DISPATCH, SDK_TRANSACTION_FENCE_COST } from './contract/bounds.ts';
+export {
+  SDK_MAINTENANCE_DISPATCH,
+  SDK_RETIREMENT_DISPATCH,
+  SDK_RETIREMENT_MAX_ATTEMPTS,
+  SDK_TRANSACTION_FENCE_COST,
+} from './contract/bounds.ts';
 
 type BoundedSdk = DBOSClient & {
   maintainWorkflowOnce(
@@ -22,6 +35,10 @@ type BoundedSdk = DBOSClient & {
 
 export function supportsBoundedSdkMaintenance(sdk: DBOSClient): sdk is BoundedSdk {
   return sdk instanceof DBOSClient && 'maintainWorkflowOnce' in sdk && typeof sdk.maintainWorkflowOnce === 'function';
+}
+
+export function supportsBoundedSdkRetirement(sdk: SdkRetirementClient): boolean {
+  return typeof sdk.retireWorkflow === 'function' && sdk.retireWorkflow.length >= 2;
 }
 
 export function maintainSdkWorkflowOnce(
@@ -53,6 +70,14 @@ export function retireSdkWorkflowWriters(
 ): Promise<SdkRetirementFence> {
   if (sdk !== DBOS) return sdk.retireWorkflow(actualWorkflowId);
   return ensureNativeWorkApplication().retireWriters(actualWorkflowId);
+}
+
+export function invokeSdkWorkflowRetirement(
+  actualWorkflowId: string,
+  invocation: WorkRetirementInvocation,
+  sdk: SdkRetirementClient = DBOS,
+): Promise<SdkRetirementOutcome> {
+  return ensureNativeWorkApplication().invokeRetirement(actualWorkflowId, sdk, invocation);
 }
 
 export function readSdkWorkflowRetirement(

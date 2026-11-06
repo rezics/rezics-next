@@ -220,6 +220,21 @@ The pinned SDK extension declares `DBOSClient.retireWorkflow(actualWorkflowId)` 
 The actual, unchanged workflow ID is the native identity. The receipt contains that ID, its permanent writer
 generation, a native closure UUID and the native closure timestamp. Repeated retirement returns the same receipt.
 
+Decision: caller-funded retirement is `retireWorkflow(id, invocation)` on `DBOS`/`DBOSClient`, returning
+`{ fence, attempts, failedWork }`. `invocation` is `{ deadline, maxAttempts, reserve, signal? }`: `deadline` is
+absolute epoch ms and is never reset; `maxAttempts` is an integer 1 through 8; `reserve` is called before every
+dispatch including failed attempts, recovery reads and backoff; ambient `AbortSignal` only supplements that budget.
+Work maps dispatch names through `SDK_RETIREMENT_DISPATCH` in [bounds.ts](contract/bounds.ts) and exposes
+`invokeSdkWorkflowRetirement`. One-argument `retireWorkflow(id)` remains the compatibility path Auth currently
+calls; Auth consumes the invocation on its existing `closeAuthSdkWriters` owner. Failed work is the reserved
+dispatches of unsuccessful attempts and is not refunded when a later attempt converges.
+
+The bounded attempt reuses `maintainWorkflowOnce` semantics: prepaid rollback, one READ COMMITTED transaction,
+statement and lock waits set to the remaining deadline, no `withDbRetry`, no identity change and no payload
+deletion. Connection admission is reserved and raced against the same deadline. A lost COMMIT response is not a
+receipt: the next funded attempt rereads the permanent fence for that workflow ID and restore domain, or retires
+again if closure is still absent. Exhausted attempts leave custody on the existing maintenance lifecycle.
+
 The declaration commit preceded the implementation for consumer integration. The patch now supplies both the
 native implementation and declarations; declaration-only revisions establish no closure. Native proof and
 participant completion remain separate from source integration and typing. The native cases in
@@ -407,6 +422,29 @@ refusal/rollback and late-writer cases remain UNRUN pending integration. This ad
 it consumes the existing producer's permanent fence, restore domain and native functions. History's compatible
 forward migration owns only its own original association and receiving guards. The detailed default wiring and
 same-frame Source cost handoff are in [Access](../access/README.md#cost-complete-selected-identity-unit).
+
+## Caller-funded SDK retirement
+
+`invokeSdkWorkflowRetirement` is the supported failure-bounded producer. Each attempt reserves connect, prepaid
+rollback, begin, settings, reconcile, retire when still open, and commit. Backoff between retryable failures is
+reserved and sleeps at most the remaining deadline. Full success with no predecessors is
+13/7/16/41120/1 including the connection; a closed-fence reconcile omits retire (8/2/8/8320/1). Failed attempts keep
+every dispatch they reserved. `WorkflowRetirementBudgetError` exposes `attempts` and `failedWork`.
+
+| Dispatch  | SQL / wait                                                     | rows / points / statements / bytes / engine |
+| --------- | -------------------------------------------------------------- | ------------------------------------------- |
+| connect   | pool checkout, raced against remaining deadline                | 0/0/0/0/1                                   |
+| rollback  | `ROLLBACK` prepaid                                             | 0/0/1/0/0                                   |
+| begin     | `BEGIN ISOLATION LEVEL READ COMMITTED`                         | 0/0/1/0/0                                   |
+| settings  | `statement_timeout` and `lock_timeout` both remaining deadline | 1/0/1/128/0                                 |
+| reconcile | keyed closed-fence read                                        | 3/2/1/8192/0                                |
+| retire    | original `retire_workflow_writers`                             | 8/5/9/32768/0                               |
+| commit    | `COMMIT`                                                       | 0/0/1/0/0                                   |
+| backoff   | sleep capped by remaining deadline                             | 0/0/0/0/0                                   |
+
+Pin with `test/work/sdk-retirement-fence.test.ts` (persistent connect failure, lock/deadline, transient recovery,
+exhausted attempts, lost COMMIT then same-identity convergence and old-client refusal). Original one-argument
+fence assertions stay in that file and `sdk-transaction-fence.test.ts`.
 
 ## Private Auth Kind enrollment participant
 

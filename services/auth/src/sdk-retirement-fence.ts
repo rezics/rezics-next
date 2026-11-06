@@ -1,6 +1,6 @@
 import { DBOS, type WorkflowWriterFence } from '@dbos-inc/dbos-sdk';
 
-export type { WorkflowWriterFence } from '@dbos-inc/dbos-sdk';
+export type { WorkflowRetirementInvocation, WorkflowRetirementOutcome, WorkflowWriterFence } from '@dbos-inc/dbos-sdk';
 
 export const AUTH_SDK_RETIREMENT = Object.freeze({
   sdkVersion: '5.4.6-preview',
