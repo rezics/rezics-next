@@ -262,6 +262,27 @@ test('withheld Zone members keep their locators and do not invent summaries', as
   expect(body.subjects[0]?.summary).not.toBeNull();
 });
 
+test('a public Zone admits its member Subject and conceals a nonmember', async () => {
+  const client = createKernelClient('https://kernel.example.test', {
+    fetch: createFakeKernelFetch(fixtures) as typeof fetch,
+  });
+  const admitted = await readZonePage(client as never, zoneId, { target: { subject: subjectId }, languages: ['en'] });
+  expect(admitted.kind).toBe('page');
+  if (admitted.kind !== 'page') throw new Error('expected admitted subject');
+  const received = receiveZonePage(admitted.page)!;
+  expect(received.subject).toBe(subjectId);
+  expect(received.zone.id).toBe(zoneId);
+  expect(received.views).toContain('overview');
+  expect(
+    await readZonePage(client as never, zoneId, {
+      target: { subject: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e99' },
+    }),
+  ).toEqual({ kind: 'missing' });
+  expect(
+    await readZonePage(client as never, composedZoneSparseFake.zone.id, { target: { subject: subjectId } }),
+  ).toEqual({ kind: 'missing' });
+});
+
 test('an unusable source-replacement cursor restarts the current Zone read', async () => {
   const client = createKernelClient('https://kernel.example.test', {
     fetch: createFakeKernelFetch(fixtures) as typeof fetch,

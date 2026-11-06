@@ -43,6 +43,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function admittedZoneSubject(home: KernelRecording, subject: string): boolean {
+  if (subject === subjectId) return true;
+  if (!isRecord(home.reads)) return false;
+  return Object.values(home.reads).some((read) => {
+    if (!isRecord(read) || !isRecord(read.body)) return false;
+    const subjects = read.body.subjects;
+    const members = read.body.members;
+    return (
+      (Array.isArray(subjects) && subjects.some((row) => isRecord(row) && row.id === subject)) ||
+      (Array.isArray(members) && members.some((row) => isRecord(row) && row.subjectId === subject))
+    );
+  });
+}
+
 function homeDocument() {
   const title = {
     en: 'Field Notes',
@@ -142,6 +156,30 @@ async function response(request: Request, match: RegExpExecArray | null): Promis
   }
   const target = isRecord(body) ? body.target : undefined;
   if (!isRecord(target)) return { status: 400, code: 'invalid_request' };
+  if (typeof target.subject === 'string') {
+    if (target.view !== undefined && target.view !== 'overview' && target.view !== 'details')
+      return problem(404, { 'cache-control': 'no-store' });
+    const home = await response(
+      new Request(request.url, {
+        method: 'POST',
+        headers: request.headers,
+        body: JSON.stringify({
+          target: { route: '' },
+          ...(Array.isArray(isRecord(body) ? body.languages : undefined) ? { languages: body.languages } : {}),
+        }),
+      }),
+      match,
+    );
+    if (!home || home.status !== 200 || !('zone' in home) || !admittedZoneSubject(home, target.subject))
+      return problem(404, { 'cache-control': 'no-store' });
+    return {
+      ...subjectPage,
+      status: 200,
+      subject: target.subject,
+      views: ['overview', 'details'],
+      zone: home.zone,
+    };
+  }
   if (typeof target.route !== 'string') return problem(404, { 'cache-control': 'no-store' });
   const actor = request.headers.get('authorization');
   if (actor === 'Bearer suspended')

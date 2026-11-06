@@ -64,6 +64,8 @@ reuses the existing `/media` driver for upload intent, completion and download a
 those handlers, and PageStates keeps shared TypeList composition.
 Decision: A served Zone read retires in-flight continuation through the existing callback identity when the Zone
 revision or target changes; it does not keep another visit's cursor.
+Decision: Typed Zone page receiving withholds owner, mount and configuration keys from read bodies; subject
+`collections` and sourced `sources` reads stay, because those names are catalogue slots rather than Zone metadata.
 Configured routes are decoded once, relative, case-sensitive and canonical: no leading/trailing slash,
 empty segment, dot segment, query, fragment, encoded slash, backslash or URL. The empty string means home.
 Reserve the entire first segment `subjects`, including `subjects` itself, before page lookup. A configured

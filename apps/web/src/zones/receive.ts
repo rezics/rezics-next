@@ -6,7 +6,8 @@ import { validZoneCursor } from './visit.ts';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const revisionPattern = /^[1-9][0-9]*$/;
 const visibility = new Set(['private', 'unlisted', 'public']);
-const privateKeys = new Set([
+/** Zone resource fields that never appear on the public page envelope. */
+const privateEnvelopeKeys = new Set([
   'ownerId',
   'deletedAt',
   'restoreUntil',
@@ -16,6 +17,17 @@ const privateKeys = new Set([
   'scopes',
   'sources',
   'collections',
+]);
+
+/** Mount/owner identity in a read body. Subject `collections` and sourced `sources` reads stay. */
+const leakedResourceKeys = new Set([
+  'ownerId',
+  'deletedAt',
+  'restoreUntil',
+  'configuration',
+  'mounts',
+  'scope',
+  'scopes',
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -65,7 +77,7 @@ function navigation(value: unknown): ZonePublic['navigation'] | undefined {
 
 /** Public shell only: no owner, mounts, scopes, or source names. */
 export function receiveZonePublic(value: unknown): ZonePublic | undefined {
-  if (!isRecord(value) || Object.keys(value).some((key) => privateKeys.has(key))) return;
+  if (!isRecord(value) || Object.keys(value).some((key) => privateEnvelopeKeys.has(key))) return;
   const labels = publicLabels(value.labels);
   const appearance = appearanceTokens(value.appearance);
   const items = navigation(value.navigation);
@@ -116,7 +128,7 @@ function receiveRead(value: unknown): ReceivedRead | undefined {
   if (!isRecord(value) || typeof value.status !== 'number' || !Number.isInteger(value.status)) return;
   if (value.status < 100 || value.status > 599) return;
   const body = Object.hasOwn(value, 'body') ? value.body : undefined;
-  if (isRecord(body) && Object.keys(body).some((key) => privateKeys.has(key))) return;
+  if (isRecord(body) && Object.keys(body).some((key) => leakedResourceKeys.has(key))) return;
   return {
     status: value.status,
     body,
@@ -138,7 +150,7 @@ const views = new Set<View>(VIEWS);
 
 /** Typed receiving of a native Zone page: public shell, admitted reads, no private mount metadata. */
 export function receiveZonePage(value: unknown): ReceivedZonePage | undefined {
-  if (!isRecord(value) || Object.keys(value).some((key) => privateKeys.has(key))) return;
+  if (!isRecord(value) || Object.keys(value).some((key) => privateEnvelopeKeys.has(key))) return;
   const zone = receiveZonePublic(value.zone);
   const pageTemplate = template(value.template);
   const document = documentOf(value.document);
@@ -192,7 +204,7 @@ export function receiveSlotContinuation(body: unknown): SlotContinuation | undef
 }
 
 function leaksPrivateFacts(body: unknown): boolean {
-  return isRecord(body) && Object.keys(body).some((name) => privateKeys.has(name));
+  return isRecord(body) && Object.keys(body).some((name) => leakedResourceKeys.has(name));
 }
 
 /**
