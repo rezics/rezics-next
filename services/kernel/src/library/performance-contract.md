@@ -713,6 +713,8 @@ PostgreSQL timestamp text. The active-session seek is the existing partial index
 identity/Source/cover fences and language/profile/type currentness. A withheld summary does not shrink the raw
 assignment frontier. Counter-only rebuilds keep last-complete FULL tiles; field backfill withholds them until
 publication, after which the original Label and Shelf actions return the published generation.
+Fewest tests: one native maintenance journey covers last-complete, field-backfill preparing, and those original
+actions after publication; served HTTP there uses ordinary self-grants and a focused library client.
 
 The existing native prefix journey now takes a full 100-row prefix page and its five-row continuation. The FULL HTTP
 journey takes a 100-assignment raw page with one withheld Subject summary and verifies that continuation starts after

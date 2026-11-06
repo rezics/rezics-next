@@ -260,7 +260,8 @@ Decision: served Shelf viewers keep last-complete native rows and summaries duri
 backfill `503 dependency_unavailable` is `preparing`, never an empty success. Named-label FULL shelves use the same
 native generation reader and map that code to `preparing`; the Labels catalogue still treats it as unavailable.
 Publication, not a pending 503, is the completed Label/Shelf result. Fewest tests: one native maintenance journey
-covers last-complete, field-backfill preparing, and the original Label/Shelf action after publication.
+covers last-complete, field-backfill preparing, and the original Label/Shelf action after publication. The independent
+Labels unit file mocks `cloudflare:workers` before any module that loads the Worker client.
 
 Presentation decision: the Library shows the source of its effective layout and sort, and flags saved sorts or table columns that current native reads cannot honor; navigation keeps inherited choices out of the URL.
 

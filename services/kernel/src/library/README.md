@@ -35,6 +35,8 @@ pointer even while `mode=rebuilding` for counter-only work. Field backfill clear
 facet and FULL by-label assignment reads return retryable `dependency_unavailable` until publication. The original
 Label create/assign/rename and Shelf summary then return the published generation. Missing/incomplete evidence never
 becomes ready zero counts. The consumer aliases the published maintenance types rather than inventing its gate table.
+Served HTTP in the native maintenance journey uses ordinary self-grants and a focused library client; the existing
+empty-owner and purge cases stay on the shared erasure fixture without that admission.
 
 ## Bounded viewer facts
 

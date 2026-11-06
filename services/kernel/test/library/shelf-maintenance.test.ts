@@ -4,9 +4,12 @@ import {
   type ShelfMaintenanceBinding,
 } from '../../src/library/shelf-maintenance-ops-contract.ts';
 import { createLibraryCommandRunner } from '../../src/library/command-support.ts';
+import { createEntryCommands } from '../../src/library/entries.ts';
 import { noEffect } from '../../src/command/command.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { readErasureStatus } from '../../src/access/erasure.ts';
+import { cookies, password } from '../access/native-account-bindings-fixture.ts';
+import { registerTestClient, testTokens } from '../support/test-kernel.ts';
 import { createOwnedErasureFixture } from './support/erasure-worker.ts';
 import { deletePersona } from '../support/account-deletion.ts';
 import { observePreparationSource, observePreparationIdentity } from '../../src/library/preparation-source.ts';
@@ -25,6 +28,33 @@ const owner = (accountId: string) => ({ route: routeOf(accountId)!, accountId })
 const actor = (person: { bearer: string }) =>
   f.kernel.testAccess.authenticate(person.bearer, { pool: f.db.pool, deadline: Date.now() + 5000 });
 const ops = () => createShelfMaintenanceOps({ pool: f.db.pool, access: f.kernel.testAccess, client: f.client });
+const libraryHttpScopes = [
+  'library_entry:read',
+  'library_entry:list',
+  'library_entry:update',
+  'progress_session:list',
+];
+async function admitLibraryHttp(person: { accountId: string; bearer: string }) {
+  const clientId = crypto.randomUUID();
+  await registerTestClient(f.auth.host.service, { clientId, firstParty: true, scopes: libraryHttpScopes });
+  const signed = await f.auth.request('/signin', {
+    account_id: person.accountId,
+    password,
+    client_id: clientId,
+    scope: libraryHttpScopes,
+  });
+  if (!signed.ok) throw new Error(`Library sign-in: ${signed.status} ${await signed.text()}`);
+  const issued = await f.auth.request('/token', {}, cookies(signed));
+  if (!issued.ok) throw new Error(`Library token: ${issued.status} ${await issued.text()}`);
+  person.bearer = ((await issued.json()) as { access_token: string }).access_token;
+  const resource = { route: routeOf(person.accountId)!, id: person.accountId };
+  await f.json(f.people.staff, 'POST', '/v1/grants', 201, {
+    resource,
+    subject: { kind: 'account', id: person.accountId },
+    actions: libraryHttpScopes,
+    valid: '(,)',
+  });
+}
 async function finish(binding: ShelfMaintenanceBinding) {
   for (let n = 0; n < 100; n++) {
     const receipt = await ops().page(binding);
@@ -170,7 +200,11 @@ test('source change before type work preserves the native boundary and advanced 
     as = await actor(person),
     account = owner(person.accountId);
   const subjectId = await f.subject();
-  await f.json(person, 'PUT', `/v1/libraryEntries/${subjectId}`, 201, { state: 'planned' });
+  await createEntryCommands({
+    pool: f.db.pool,
+    access: f.kernel.testAccess,
+    tokens: testTokens(),
+  }).putEntry(as, subjectId, { state: 'planned' }, crypto.randomUUID());
   let binding = await ops().requestRebuild(as, { owner: account, kind: 'backfill', requestKey: crypto.randomUUID() });
   for (;;) {
     const step = await ops().page(binding);
@@ -278,8 +312,9 @@ test('terminal native tombstone rejects fabricated envelopes and late writers; p
 }, 30000);
 
 test('counter-only rebuild serves the last complete generation while field backfill withholds until publication', async () => {
-  const person = f.people.operator,
-    as = await actor(person),
+  const person = f.people.operator;
+  await admitLibraryHttp(person);
+  const as = await actor(person),
     account = owner(person.accountId);
   const runner = createLibraryCommandRunner({ pool: f.db.pool });
   await runner.ownAccount(

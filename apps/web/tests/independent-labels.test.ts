@@ -2,8 +2,8 @@ import { expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { createLibraryLabelsFake } from '../src/kernel/fake/library-labels';
 import { handleLabelForm, loadLabelsPage, submitLabel } from '../src/library/labels-read';
-import { applySubjectLabelMutation, searchSubjectLabels } from '../src/library/subject-labels.ts';
 mock.module('cloudflare:workers', () => ({ env: {} }));
+const { applySubjectLabelMutation, searchSubjectLabels } = await import('../src/library/subject-labels.ts');
 const { loadLabelShelfPage } = await import('../src/library/label-shelf-read');
 
 const owner = '0192f3a0-6c1e-7b2a-9d4e-000000000111';
