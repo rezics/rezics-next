@@ -20,6 +20,7 @@ import { createLifecycleInternals, type ProvisioningEvidence } from '../../../sr
 import { createSuspensionCommands } from '../../../src/access/suspension.ts';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import type { KernelClock } from '../../../src/clock.ts';
+import { composeLibraryDomain } from '../../../src/composition/library.ts';
 import { createPool } from '../../../src/database/pool.ts';
 import { createKernel } from '../../../src/http/kernel.ts';
 import { createEntryCommands } from '../../../src/library/entries.ts';
@@ -143,13 +144,14 @@ export async function createProfileEntryFixture(
   options: {
     clock?: KernelClock;
     pool?: Pool;
+    databaseUrl?: string;
     singleConnection?: boolean;
     projectLinks?: boolean;
     gameUnits?: readonly string[];
     ownerScopes?: readonly string[];
   } = {},
 ) {
-  const url = process.env.DATABASE_URL;
+  const url = options.databaseUrl ?? process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL must name the migrated test database');
   const pool = options.pool ?? createPool(url);
   if (options.singleConnection) pool.options.max = 1;
@@ -159,6 +161,7 @@ export async function createProfileEntryFixture(
     const tokens = testTokens();
     const routeKey = testRouteKey();
     let access!: Access;
+    composeLibraryDomain({ pool, routeKey });
     const kernel = createKernel({
       pool,
       tokens,
@@ -173,6 +176,9 @@ export async function createProfileEntryFixture(
         secret: 'native-profile-entry-test-rate-secret',
         overrides: JSON.stringify({ 'new-account': { write: { maximum: 100000, seconds: 86400 } } }),
       }),
+      onAccessReady(ready) {
+        composeLibraryDomain({ pool, access: ready, routeKey });
+      },
     });
     // The kernel composes Access lazily from its complete mounted action catalogue.
     // Resolve it through an ordinary public read before authenticating native actors.

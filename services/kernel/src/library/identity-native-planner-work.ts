@@ -10,6 +10,7 @@ import {
 } from '../semantic/identity-source-consumer-maintenance.ts';
 import { NativeCollectionWork, instrumentNativeCollectionWork } from './collection-source-work.ts';
 import type { WorkAllowance, WorkDimensions } from './contract/work-dimensions.ts';
+import { peekLibraryDomain } from './domain-binding.ts';
 import {
   isLibraryIdentityFullPartitionSQL,
   libraryIdentityNativeOperationFootprint,
@@ -169,6 +170,8 @@ export function libraryIdentityFootprint(
   work?: NativeCollectionWork,
 ): WorkDimensions | undefined {
   if (work) assertLibraryIdentityWork(work);
-  if (work && bindings.get(work)?.assertLive && isLibraryIdentityFullPartitionSQL(sql)) return undefined;
-  return libraryIdentityNativeOperationFootprint(sql, values, work);
+  const native = peekLibraryDomain()?.identityNative;
+  const fullPartition = native?.isFullPartitionSQL ?? isLibraryIdentityFullPartitionSQL;
+  if (work && bindings.get(work)?.assertLive && fullPartition(sql)) return undefined;
+  return native?.footprint(sql, values, work) ?? libraryIdentityNativeOperationFootprint(sql, values, work);
 }

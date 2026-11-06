@@ -1,21 +1,17 @@
 import type { Pool } from 'pg';
-import { deadlineClient } from '../access/authenticate.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
-import { checkMediaObject } from '../content/cover-reference.ts';
-import { decideDownload } from '../content/media.ts';
-import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import type { Access, Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
-import { activeRelease } from '../semantic/definitions.ts';
-import type { CoverSummary } from '../semantic/summaries.ts';
+import { libraryActorOf, type LibraryCoverSummary } from './contract/index.ts';
+import { peekLibraryDomain } from './domain-binding.ts';
 import { collectionKind, type CollectionKind } from './collection-kind.ts';
 
 export type PresentationSelection = { presentationKind?: string | null; coverMediaId?: string | null };
 export type CollectionPresentation = {
   presentationKind: CollectionKind['presentationKind'];
   presentationKindSource: CollectionKind['presentationKindSource'];
-  cover: CoverSummary | null;
+  cover: LibraryCoverSummary | null;
   coverSource: 'owner' | 'member' | 'none' | 'pending';
   coverMediaId?: string | null;
 };
@@ -47,39 +43,16 @@ export async function readablePresentationCover(
   actor: Actor,
   id: string,
   deadline: number,
-): Promise<CoverSummary | null> {
-  if (!dependencies.routeKey) return null;
-  const reference = await withConnection(dependencies.pool, (client) =>
-    checkMediaObject(deadlineClient(client, deadline), id, 'cover'),
-  );
-  const variant = reference?.variants?.[0];
-  if (!reference || !variant || !reference.width || !reference.height || !reference.placeholder || !reference.credit)
-    return null;
-  const decision = await decideDownload(
-    {
-      ...dependencies,
-      clock: dependencies.clock ?? systemClock,
-      downloadContext: { deadline, routeKey: dependencies.routeKey },
-    },
-    id,
-    actor,
-    `${variant.format}-${variant.width}`,
-  );
-  if (!decision.allowed) return null;
-  // Bind the descriptor to the facts whose native variant was authorized. A changed reference is withheld.
-  const current = await withConnection(dependencies.pool, (client) =>
-    checkMediaObject(deadlineClient(client, deadline), id, 'cover'),
-  );
-  if (JSON.stringify(current) !== JSON.stringify(reference)) return null;
-  return {
-    media: reference.id,
-    width: reference.width,
-    height: reference.height,
-    placeholder: reference.placeholder,
-    variants: reference.variants!.map((value) => ({ ...value })),
-    focalPoint: reference.focalPoint ?? null,
-    credit: reference.credit,
-  };
+): Promise<LibraryCoverSummary | null> {
+  const domain = peekLibraryDomain();
+  if (!domain) return null;
+  return domain.contentPublication.readableCover({
+    actor: libraryActorOf(actor),
+    mediaId: id,
+    deadline,
+    ...(dependencies.routeKey === undefined ? {} : { routeKey: dependencies.routeKey }),
+    clock: dependencies.clock ?? systemClock,
+  });
 }
 
 /** Preparation returns business errors as data: exact receipts still follow current Collection authorization. */
@@ -90,11 +63,17 @@ export async function preparePresentationSelection(
   deadline: number,
   reviewedReleaseDigest?: string,
 ): Promise<ProblemError | null> {
+  const domain = peekLibraryDomain();
+  if (!domain) return new ProblemError('dependency_unavailable');
   if (selection.presentationKind != null) {
-    const active = await activeRelease(dependencies.pool);
+    const active = await domain.identityDisclosure.readActiveRelease(dependencies.pool);
     if (reviewedReleaseDigest !== undefined && active?.digest !== reviewedReleaseDigest)
       return new ProblemError('conflict');
-    if (!active || !Object.hasOwn(active.release.types, selection.presentationKind))
+    const types =
+      active && typeof active.release === 'object' && active.release && 'types' in active.release
+        ? (active.release as { types: object }).types
+        : null;
+    if (!active || !types || !Object.hasOwn(types, selection.presentationKind))
       return new ProblemError('invalid_request');
   }
   if (selection.coverMediaId != null) {
@@ -107,7 +86,7 @@ export async function preparePresentationSelection(
 /** Kind presentation is immediate; ordered cover readiness keeps its independent contract. */
 export function collectionPresentation(
   row: { presentationKind: string | null; memberCount: number; membershipKind?: string },
-  cover: CoverSummary | null = null,
+  cover: LibraryCoverSummary | null = null,
 ): Omit<CollectionPresentation, 'coverMediaId'> {
   const empty = row.membershipKind !== 'dynamic' && row.memberCount === 0;
   return {

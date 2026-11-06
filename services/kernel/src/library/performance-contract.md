@@ -3,6 +3,24 @@
 This leaf owns Library operation bounds and caller custody. Operation-specific SQL and growth suites remain in
 [Library Cost](README.md#cost); the [Kernel contract](../../performance-contract.md) owns shared finite bounds.
 
+Layer ownership: `kernel-library-contract` (vocabulary and ports), `kernel-library-core` (pure arithmetic),
+`kernel-library-application` (use cases over ports), `kernel-library` adapters (native SQL and foreign
+Access/Search/Semantic/Content), and `composition/library.ts` (ordinary server/worker/`createKernelRuntimeDefaults`
+binding). Installed capabilities: authorization, identityDisclosure (including active release), searchPreparation (including catalogue/owner filter leaves), contentPublication
+(including cover readability), identityNative, sourceCapture (including ordinary-page capture). `LibraryCoverSummary` is the Content/Semantic cover wire (mutable variants, rights credit) so Collection HTTP, pins, Search recents and Zone pages share one type. Member preparation accepts occurrence drafts; core fills `note` and `duplicateOf`. Application result types stay in the contract. Compatibility Source, member,
+publication, presentation, command-support, Entry/progress and identity entries reach the composed implementation. Native identity matching stays the installed catalog declarations with core arithmetic;
+`identity-native-bounds.ts` is the compatibility facade. Composition binds
+`createIdentityNativeApplication(createIdentityNativeCatalog())`. Selected identity seal
+declarations use the selected bind vector; Search/current basis miss slots compose selected `emptySeeks=70`;
+transform fixtures use routable job IDs. Fewest tests: one
+domain-composition suite covering fake capabilities, independent contract/core/application load, identity-native
+declaration equality, ordinary native adapter install, Search filter-leaf ports, and unbound collection-read deferral; native identity,
+Source/member/publication, assignment-growth and lifecycle-growth cases keep their existing assertions.
+The Source adapter ABI keeps Search `ScopeWorkContext`; contract `work` stays unknown. Label
+admission SQL drives from the one-row request through LATERAL LIMIT-1 primary-key points and the 32-row reserved
+source; restore and rename lock the exact parent rather than scanning the owner catalogue. Those growth suites
+remain the oracles; this landing adds no parallel Label suite.
+
 ## Collection operation costs
 
 Decision: saved catalogue rules page through the registered Search scope using their pinned release; owner rules keep the private Library Source path.
@@ -209,7 +227,9 @@ physical custody or infer destination erasure.
   UTF-8 bytes plus JSON-serialized original bind bytes plus its closed schema/native projection bound. Repeats and
   page ranges use `sumBounds`, `repeatBound` and `withinCeiling`; overflow and unrecognized SQL remain refused.
   Native Source basis declarations take each imported query's own `params`, so arity and serialized bind bytes
-  track the actual query owner.
+  track the actual query owner. Search/current basis statements reserve one empty seek per native point (the
+  indexed miss slot), including Core ownership, publication and proof; three selected current paths compose
+  `emptySeeks=70`.
   A range admits LIMIT plus one indexed EOF slot, not result count. Effects page: `n` candidate keys,
   `n+1` native rows, zero identity metadata, one native point, zero witnesses, one statement,
   SQL+serialized binds+`512n` bytes, one empty seek. The native page projects only the producer's
@@ -727,7 +747,11 @@ optional exact source recheck, and at most one reclaim and one set. Negative par
 ineffective reservation remain in those bounds. The subject page retains its 32-key raw frontier before sorting,
 cursor filtering and slicing.
 
-Create, rename with its no-change read branch, label delete/restore, catalogue pages, assignment set, exact unassign,
+Assignment reservation, desired-tuple, parent, restore and rename statements seek the exact primary key or the
+`label_assignment_reserved_source` partial index through one-row LATERAL points (`LIMIT 1` or `LIMIT 32`). They do
+not join the heap from the left and then filter an owner catalogue. Set, unassign, restore and rename bind each
+named operand once through that one-row request; mutation WHERE clauses read those columns. Create, rename with its no-change read branch,
+label delete/restore, catalogue pages, assignment set, exact unassign,
 exact retained restore, and BASIC/FULL assignment SQL pages are consumed by the existing stores and callers. A
 composed local operation reserves once on the current `CommandWorkAssociation`; its nested SQL leaves execute on the
 same client without duplicate reservation. A direct leaf still uses its exact SQL declaration. The explicit bridge

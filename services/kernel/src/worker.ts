@@ -14,6 +14,7 @@ import { composeWorkApplication } from './composition/work.ts';
 import { installNativeHistory } from './composition/history.ts';
 import { startContentApplication } from './composition/content.ts';
 import { createKernelWorkModules } from './composition/work-modules.ts';
+import { composeLibraryDomain } from './composition/library.ts';
 import { composeWork, type WorkModule } from './work/registry.ts';
 import { effectsRelay } from './events/effects.ts';
 import { relayConcurrencyForPool, startRelays } from './events/relays.ts';
@@ -102,6 +103,7 @@ export async function startWorker(
   }
   if (receiptKeys) configureReceiptKeys(pool, receiptKeys);
   pool.on('error', () => {});
+  composeLibraryDomain({ pool });
   let client: Awaited<ReturnType<typeof createWorkClient>>;
   try {
     client = await createWorkClient(config.databaseUrl, pool);

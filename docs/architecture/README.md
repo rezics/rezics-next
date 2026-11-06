@@ -2,7 +2,22 @@
 
 Decision: Keep the current workspace and capability boundaries, assign each module to its documented Goal owner, and snapshot existing imports as explicit dependencies while grandfathering their violations for gradual removal.
 
-Decision: Library work-dimension vocabulary is the contract module `kernel-library-contract` with one public entry, `services/kernel/src/library/contract/work-dimensions.ts`. Access, Platform, Search, Semantic, Content and Zones import those shapes from it, never from the Source runtime.
+Decision: Library work-dimension vocabulary is the contract module `kernel-library-contract` with public entries under `services/kernel/src/library/contract/`. Access, Platform, Search, Semantic, Content and Zones import those shapes from it, never from the Source runtime. `kernel-library-core` and `kernel-library-application` own the pure rules and use cases; native SQL and foreign Access/Search/Semantic/Content adapters bind at `composition/library.ts`.
+
+Decision: Library Source, member, owner-query, publication and Entry/progress seams are typed application capabilities bound by the ordinary `composeLibraryDomain` process composition; contract, core and application modules load without foreign implementations. Search filter-leaf classification is bound at composition, so `adapters/search-scope.ts` has no Search value imports; publication-staging admits catalogue-only versus owner-only through that capability. Content cover download is a Content public entry (`content/media.ts`); Collection presentation and session/Entry native paths call the composed identity and Content capabilities rather than importing those implementations.
+
+Measured against base `a311990286` with `scripts/architecture.ts` and the same value-import graph:
+
+| Measure                                           |                Base |              Branch |
+| ------------------------------------------------- | ------------------: | ------------------: |
+| `kernel-library` baseline rule 2 / rule 3         |           824 / 453 |           647 / 439 |
+| `kernel-library` current rule 2 / rule 3          |                     |           731 / 471 |
+| Kernel value-cycle files                          |                 398 |                 374 |
+| Library value-cycle files                         |                  95 |                  91 |
+| Largest Kernel value SCC                          |                 381 |                 355 |
+| Boundary baseline entries                         |               8,496 |               7,807 |
+
+Search filter-leaf ports drop current `kernel-library` rule 2/3 to 731/471 (from 733/476 on the prior composition snapshot) and remove 59 disappeared baseline entries. Cycle membership stays at 374 Kernel / 91 Library files and largest SCC 355. Remaining audit errors outside the baseline also occur on base, where `boundary-baseline.json` already lagged `main`.
 
 Decision: Register Access, Bounds, and Operations as pure core modules with only their exported package entries; grant dependencies to the concrete Kernel adapter modules that actually import them, and keep native implementation choice in composition roots.
 

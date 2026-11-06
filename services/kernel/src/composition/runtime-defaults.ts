@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import { composeLibraryDomain } from './library.ts';
 import { createWriteRateLimiter, type WriteRateLimiter } from '../access/write-rate.ts';
 import { createAccess, type AccessConfig } from '../access/index.ts';
 import type { AuthenticationConfig } from '../access/authenticate.ts';
@@ -74,6 +75,7 @@ export function createKernelRuntimeDefaults(overrides: KernelRuntimeOverrides = 
   composeContentApplication();
   installNativeHistory();
   bindOrdinaryContentLifecycle(nativeContentLifecycle());
+  composeLibraryDomain();
   const env = overrides.env ?? process.env;
   const tokens = overrides.tokens ?? readTokenKeys(env);
   const receiptKeys = readReceiptKeyRing(env, overrides.receiptKeys);

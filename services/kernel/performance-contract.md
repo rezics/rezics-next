@@ -1,8 +1,20 @@
 # Kernel performance contract
 
 This owner defines shared finite bounds and native growth measurement. Product operation costs remain in the owning
-module's Cost section. [Performance acceptance](../../docs/goals/performance.capabilities.md) owns scenarios; the
+module's Cost section. Library domain composition (contract, core, application, adapters and
+`composition/library.ts`) is recorded in [Library](src/library/README.md#module-layers-and-measured-boundary) and
+[Library performance](src/library/performance-contract.md). [Performance acceptance](../../docs/goals/performance.capabilities.md) owns scenarios; the
 [Performance Goal](../../docs/goals/performance.md) owns the outcome.
+
+## Library domain composition
+
+Decision: Library contract/core/application add no SQL, scan or extra statement. Native adapters are the existing
+Collection Source factory, Access command/fence/deadline, Semantic original/terminal and release, Search scope
+preparation and filter-leaf classification, Content private-versus-activated classification and the identity SQL catalog with core matching;
+`composeLibraryDomain` binds `createIdentityNativeApplication` at process construction, including the live Search
+service when the HTTP server has one, native Source ordinary-page capture, Content cover readability and Semantic active release. `identity-native-bounds.ts` remains the compatibility facade. Compact tests cover fake capabilities
+and ordinary adapter install; native Source/member/publication, identity-original/scope, assignment-growth and
+lifecycle-growth suites remain the bounded-work checks.
 
 ## Access domain composition
 

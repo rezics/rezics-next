@@ -145,6 +145,9 @@ const service: SearchService = {
       as_of: asOf,
     };
   },
+  async savedCatalogueMembers() {
+    throw new Error('saved catalogue members is not used by this fixture');
+  },
 };
 const kernel = createKernel({
   pool,

@@ -1,11 +1,19 @@
-WITH input AS NOT MATERIALIZED (SELECT :time::nullable(timestamptz) AS time)
-SELECT route, account_id AS "accountId", subject_id AS "subjectId", label_id AS "labelId",
-       assignment_id AS id, revision, slot_no AS "slotNo",
-       created_at::text AS "createdAt", updated_at::text AS "updatedAt",
-       deleted_at::text AS "deletedAt", purge_after::text AS "purgeAfter",
-       transaction_id AS "transactionId",
-       assignment_id = :assignment_id::nullable(uuid) AS "identityMatches",
-       deleted_at <= input.time AS started,
-       input.time >= purge_after AS expired
-FROM library.label_assignment CROSS JOIN input
-WHERE route = :route AND account_id = :account_id AND subject_id = :subject_id AND label_id = :label_id;
+WITH input AS NOT MATERIALIZED (
+  SELECT :time::nullable(timestamptz) AS time, :route::integer AS route,
+         :account_id::uuid AS account_id, :subject_id::uuid AS subject_id, :label_id::uuid AS label_id
+)
+SELECT a.route, a.account_id AS "accountId", a.subject_id AS "subjectId", a.label_id AS "labelId",
+       a.assignment_id AS id, a.revision, a.slot_no AS "slotNo",
+       a.created_at::text AS "createdAt", a.updated_at::text AS "updatedAt",
+       a.deleted_at::text AS "deletedAt", a.purge_after::text AS "purgeAfter",
+       a.transaction_id AS "transactionId",
+       a.assignment_id = :assignment_id::nullable(uuid) AS "identityMatches",
+       a.deleted_at <= input.time AS started,
+       input.time >= a.purge_after AS expired
+FROM input CROSS JOIN LATERAL (
+  SELECT *
+  FROM library.label_assignment AS a
+  WHERE a.route = input.route AND a.account_id = input.account_id
+    AND a.subject_id = input.subject_id AND a.label_id = input.label_id
+  LIMIT 1
+) AS a;

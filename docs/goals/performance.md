@@ -36,7 +36,10 @@ authority. Do not enlarge production exposure or native/browser admission.
 ## Ownership
 
 Performance owns `services/kernel/test/support/growth*`, growth suites under module test directories, shared bounds
-and cross-owner receiving. [Kernel performance](../../services/kernel/performance-contract.md) owns shared harness
+and cross-owner receiving. Kernel Library domain composition (contract, core, application, native/foreign adapters
+and `composition/library.ts`) is the Collection Source/member/publication and Entry/progress admission unit; layer
+ownership and counters live in [Library](../../services/kernel/src/library/README.md#module-layers-and-measured-boundary).
+[Kernel performance](../../services/kernel/performance-contract.md) owns shared harness
 and native evidence rules; [Library performance](../../services/kernel/src/library/performance-contract.md) owns
 Collection derivations and custody. [Work](../../services/kernel/src/work/README.md#selected-execution-producer)
 and [History](../../services/kernel/src/history/README.md#selected-native-executor-binding) own their execution
@@ -105,6 +108,19 @@ identity-history recording, Zone receiving, record purge, agent verification rev
 the architecture test; do not add a duplicate synthetic suite. Original native acceptance remains open after
 land-first verification. Decision: only typed History vocabulary imports the contract; comment or string matches of
 `Pending` are not consumers. The inherited ZoneWorkLedger ClassDeclaration load-time read is `membership.ts:90`.
+
+## Kernel Library domain inversion
+
+Decision: Compact causal tests pin Source capture, member preparation, owner-query Search preparation, publication
+staging and Entry/progress admission against fake capabilities, including actor, deadline, private working versus
+activated public, repeated ordered occurrences, nested admission and original/terminal disclosure. Contract, core
+and application load no Access, Search, Semantic or Content implementations. Ordinary
+`createKernelRuntimeDefaults`/`server`/`worker` composition binds native SQL catalogs and foreign adapters.
+Compatibility command-support and publication-staging entries use those adapters. Search filter-leaf classification is a
+composition port. Unbound Access defers composed collection-read to the native owner; an explicit deny still refuses.
+Journal date preparation stays before the owner transaction. Fewest tests: one domain-composition suite, including
+unbound deferral and catalogue/owner filter leaves; existing native identity and growth cases keep unchanged assertions. The split adds no query or extra statement; identity-native cost stays the
+existing producer declarations composed through `identityNative`.
 
 ## Kernel Access domain inversion
 
