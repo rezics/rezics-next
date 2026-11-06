@@ -50,7 +50,7 @@ existing `access.account` profile. Point actions without one exact target type r
 validity and deadline validity for those profiles; its final SQL booleans are reserved for profiles whose exact
 target type is not registered or inferable. Decision: that statement selects `local.deadline_live AS deadlineLive`
 once, beside `assignmentValid`, and statement-level `live`; `policy-core.ts` maps `PolicyFacts.deadlineLive` from
-`row.live`. A second identical alias fails SQL analysis. The adapter evaluates every target at the same native
+`row.deadlineLive`. A second identical alias fails SQL analysis. The adapter evaluates every target at the same native
 snapshot and uses the same core for ordinary and explicit advice. Own-account action metadata binds its existing account target as
 `access.account`. The ordinary formula retains the verified public floor independently of scope. Explicit advice
 excludes that floor and resource-role grants. A core decision reached through registered Global authority still

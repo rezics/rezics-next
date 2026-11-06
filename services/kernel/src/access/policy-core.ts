@@ -124,7 +124,7 @@ export function decideNativePermission(
   const facts: PolicyFacts = {
     standing: true,
     assignment: row.assignmentValid,
-    deadlineLive: row.live,
+    deadlineLive: row.deadlineLive,
     scope: input.scope,
     localDenial: explicit ? row.explicitLocalDenied : row.localDenied,
     publicFloor: explicit ? false : input.floor,
