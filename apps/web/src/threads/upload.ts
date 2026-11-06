@@ -279,11 +279,13 @@ async function reserve(
   options?: ReplyImageUploadOptions,
   credential = intent?.credential ?? csrfToken(),
   onResponseWait = options?.onResponseWait,
+  key?: string,
 ): Promise<ReservedMedia> {
   throwIfAborted(signal);
   options?.episode?.assertCurrent();
   const headers: Record<string, string> = { 'content-type': 'application/json' };
-  if (intent) headers['idempotency-key'] = JSON.stringify(intent.key);
+  const idempotencyKey = intent?.key ?? key;
+  if (idempotencyKey !== undefined) headers['idempotency-key'] = JSON.stringify(idempotencyKey);
   const response = await siteFetch(
     '/media',
     {
@@ -530,7 +532,7 @@ export async function resumeReplyImageUpload(
     if (
       current.mediaType !== file.type ||
       current.byteCount !== file.size ||
-      (intent && current.containerId !== intent.body.containerId)
+      (intent && current.containerId !== ('containerId' in intent.body ? intent.body.containerId : undefined))
     )
       throw new UploadRefusal('unavailable');
     if (current.state === 'rejected') throw new UploadRefusal('rejected');
@@ -596,12 +598,17 @@ export async function readSiteAvatarUploadAdvice(
   }
 }
 
-/** Realm uploads reuse the uploader-bound byte/digest/completion pipeline; previews need a native derivative summary. */
+/**
+ * Realm uploads reuse the uploader-bound byte/digest/completion pipeline; previews need a native derivative summary.
+ * The caller owns `key` and retains the file: after an uncertain reservation, repeating the same key and file
+ * repeats the exact reservation command instead of creating another object.
+ */
 export async function uploadRealmImage(
   realmId: string,
   purpose: 'realm-icon' | 'realm-banner',
   file: File,
   signal: AbortSignal,
+  key: string = crypto.randomUUID(),
 ): Promise<{ id: string }> {
   let mediaId: string | undefined;
   const credential = csrfToken();
@@ -610,7 +617,17 @@ export async function uploadRealmImage(
     if (!isPostImageType(file.type)) throw new UploadRefusal('type');
     if (!Number.isSafeInteger(file.size) || file.size < 1) throw new UploadRefusal('unavailable');
     if (file.size > postImageByteLimit) throw new UploadRefusal('too-large');
-    const reserved = await reserve({ realmId }, file, signal, purpose, undefined, undefined, credential);
+    const reserved = await reserve(
+      { realmId },
+      file,
+      signal,
+      purpose,
+      undefined,
+      undefined,
+      credential,
+      undefined,
+      key,
+    );
     mediaId = reserved.id;
     throwIfAborted(signal);
     await putBytes(reserved, file, signal, credential);

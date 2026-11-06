@@ -3,7 +3,7 @@ import type { Access, AccessConfig } from '../../../../services/kernel/src/reque
 import { fork, spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { request as httpsRequest } from 'node:https';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { chmod, mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
@@ -124,6 +124,151 @@ const webRoot = resolve(import.meta.dir, '../..');
 const repositoryRoot = resolve(webRoot, '../..');
 const nativeWebsiteHost = 'web.native.rezics.com';
 const nativeAuthTestIssuer = process.env.NATIVE_AUTH_TEST_ISSUER;
+
+function ownedPostgresUrl(port: number, database: string, socketDirectory?: string): string {
+  const url = `postgres://rezics:rezics@127.0.0.1:${port}/${database}?sslmode=disable`;
+  // Keep the TCP hostname so Auth identity and workflow same-database checks still have a host.
+  // libpq's host query selects the bind-mounted Unix socket inside a private net namespace.
+  return socketDirectory ? `${url}&host=${encodeURIComponent(socketDirectory)}` : url;
+}
+
+function postgresUnixSocketDirectory(databaseUrl: string): string | undefined {
+  try {
+    const socket = new URL(databaseUrl).searchParams.get('host');
+    if (socket !== null && socket.startsWith('/') && socket.length > 1 && !/[:\n\r,]/.test(socket)) return socket;
+  } catch {
+    return undefined;
+  }
+}
+
+/** postgres.js (Reylo) ignores libpq's `host` query and uses URL hostname or PGHOST. */
+function reyloAnalysisUrl(databaseUrl: string): string {
+  const url = new URL(databaseUrl);
+  if (!postgresUnixSocketDirectory(databaseUrl)) return url.href;
+  url.searchParams.delete('host');
+  const query = url.searchParams.toString();
+  return `postgres://${url.pathname}${query ? `?${query}` : ''}`;
+}
+
+function bindReyloUnixSocket(databaseUrl: string): void {
+  const url = new URL(databaseUrl);
+  const socket = postgresUnixSocketDirectory(databaseUrl);
+  if (!socket) return;
+  process.env.PGHOST = socket;
+  process.env.PGUSER = decodeURIComponent(url.username);
+  process.env.PGPASSWORD = decodeURIComponent(url.password);
+  // node-pg's owner pool in createSemanticDriver has no connectionTimeoutMillis.
+  process.env.PGCONNECT_TIMEOUT ??= '5';
+}
+
+/** CREATE DATABASE TEMPLATE waits while any other session is on the migrated database. */
+async function disconnectTemplateSessions(databaseUrl: string): Promise<void> {
+  const source = new URL(databaseUrl);
+  const template = decodeURIComponent(source.pathname.slice(1));
+  if (!/^[A-Za-z0-9_]+$/.test(template)) throw new Error('Unsafe template database name');
+  const adminUrl = new URL(source);
+  adminUrl.pathname = '/postgres';
+  const admin = new Pool({
+    connectionString: adminUrl.href,
+    max: 1,
+    connectionTimeoutMillis: 1500,
+    statement_timeout: 5000,
+  });
+  try {
+    const terminated = await settledWithin(
+      admin
+        .query(
+          `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()`,
+          [template],
+        )
+        .then(() => true as const),
+      8_000,
+    );
+    if (terminated !== true) throw new Error('Disconnecting template sessions exceeded 8000ms');
+  } finally {
+    await settledWithin(admin.end().then(() => true), 1_000);
+  }
+}
+
+async function postgresConnectionWorks(url: string): Promise<Error | undefined> {
+  const probe = new Pool({
+    connectionString: url,
+    connectionTimeoutMillis: 1500,
+    max: 1,
+  });
+  try {
+    try {
+      const ready = await settledWithin(probe.query('SELECT 1').then(() => true as const), 2_000);
+      if (ready !== true) return new Error('PostgreSQL probe exceeded 2000ms');
+      return undefined;
+    } catch (error) {
+      return error instanceof Error ? error : new Error(String(error));
+    }
+  } finally {
+    await settledWithin(probe.end().then(() => true), 500);
+  }
+}
+
+async function postgresReadinessError(
+  container: string,
+  socketDirectory: string,
+  cause: Error | undefined,
+): Promise<Error> {
+  const inspect = Bun.spawnSync([
+    'docker',
+    'inspect',
+    '-f',
+    '{{.State.Status}} exit={{.State.ExitCode}} error={{.State.Error}}',
+    container,
+  ]);
+  const logs = Bun.spawnSync(['docker', 'logs', '--tail', '80', container]);
+  const ready = Bun.spawnSync(['docker', 'exec', container, 'pg_isready', '-U', 'rezics']);
+  const sockets = await readdir(socketDirectory).catch(() => [] as string[]);
+  const logText = `${logs.stdout.toString()}${logs.stderr.toString()}`;
+  const { formatPostgresErrors } = await import('../../../../services/kernel/scripts/check.ts');
+  return new Error(
+    [
+      'Disposable PostgreSQL did not become ready.',
+      inspect.stdout.toString().trim(),
+      `pg_isready=${ready.stdout.toString().trim() || ready.stderr.toString().trim()}`,
+      `sockets=${sockets.join(',')}`,
+      formatPostgresErrors(logText),
+      logText.slice(-1500),
+    ]
+      .filter(Boolean)
+      .join('\n'),
+    { cause },
+  );
+}
+
+/** Private-network checks cannot reach published TCP; only the bind-mounted Unix socket is visible. */
+async function waitForOwnedPostgres(container: string, port: number, socketDirectory: string): Promise<string> {
+  // libpq names the socket .s.PGSQL.<port>; the server listens on 5432, not the published TCP port.
+  const socketUrl = ownedPostgresUrl(5432, 'rezics', socketDirectory);
+  const deadline = Date.now() + 60_000;
+  let lastError: Error | undefined;
+  let lastReport = 0;
+  while (true) {
+    const socketError = await postgresConnectionWorks(socketUrl);
+    if (!socketError) return socketUrl;
+    lastError = socketError;
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) throw await postgresReadinessError(container, socketDirectory, lastError);
+    const now = Date.now();
+    if (now - lastReport >= 10_000) {
+      lastReport = now;
+      reportStackProgress(
+        `Native web stack startup: waiting for PostgreSQL unix socket (published ${port}, ${socketError.message})`,
+      );
+    }
+    const status = Bun.spawnSync(['docker', 'inspect', '-f', '{{.State.Status}}', container])
+      .stdout.toString()
+      .trim();
+    if (status !== '' && status !== 'running' && status !== 'created')
+      throw await postgresReadinessError(container, socketDirectory, lastError);
+    await Bun.sleep(Math.min(500, remaining));
+  }
+}
 
 function fetchNativeWebsite(input: string | URL, init?: RequestInit): Promise<Response> {
   const url = new URL(input);
@@ -412,6 +557,7 @@ async function startStack(): Promise<
   let webProcess: WebProcess | undefined;
   let driver: SemanticOutcomeDriver | undefined;
   let postgresContainer: string | undefined;
+  let postgresSocketDirectory: string | undefined;
   let runtimeDirectory: string | undefined;
   let consentServer: { env: Record<string, string>; close(): Promise<void> } | undefined;
   let closeAuth: (() => Promise<void>) | undefined;
@@ -420,6 +566,12 @@ async function startStack(): Promise<
   let search: OpenSearch | undefined;
   const searchPrefix = `native-web-${randomBytes(12).toString('hex')}-`;
   const originalDatabaseUrl = process.env.DATABASE_URL;
+  const originalPostgresEnv = {
+    PGHOST: process.env.PGHOST,
+    PGUSER: process.env.PGUSER,
+    PGPASSWORD: process.env.PGPASSWORD,
+    PGCONNECT_TIMEOUT: process.env.PGCONNECT_TIMEOUT,
+  };
   let stopped: Promise<void> | undefined;
   let peakMemory = process.memoryUsage().rss;
   const testIssuer = nativeAuthTestIssuer;
@@ -544,8 +696,17 @@ async function startStack(): Promise<
           errors.push(new Error(`Could not remove owned PostgreSQL container: ${removed.stderr.toString()}`));
         postgresContainer = undefined;
       }
+      if (postgresSocketDirectory) {
+        await attempt(() => rm(postgresSocketDirectory!, { recursive: true, force: true }));
+        postgresSocketDirectory = undefined;
+      }
       if (originalDatabaseUrl === undefined) delete process.env.DATABASE_URL;
       else process.env.DATABASE_URL = originalDatabaseUrl;
+      for (const name of ['PGHOST', 'PGUSER', 'PGPASSWORD', 'PGCONNECT_TIMEOUT'] as const) {
+        const original = originalPostgresEnv[name];
+        if (original === undefined) delete process.env[name];
+        else process.env[name] = original;
+      }
       if (errors.length) throw new AggregateError(errors, 'Native web stack cleanup failed');
       console.info('Native web stack cleanup: complete');
     })());
@@ -558,35 +719,18 @@ async function startStack(): Promise<
       reportStackProgress('Native web stack startup: starting PostgreSQL');
       const { startPostgresContainer } = await import('../../../../services/kernel/scripts/check.ts');
       const { migrate } = await import('../../../../services/kernel/scripts/database.ts');
-      postgresContainer = startPostgresContainer();
+      postgresSocketDirectory = await mkdtemp(join(tmpdir(), 'native-web-pg-socket-'));
+      await chmod(postgresSocketDirectory, 0o1777);
+      postgresContainer = startPostgresContainer(undefined, { socketDirectory: postgresSocketDirectory });
       if (process.env.NATIVE_WEB_STACK_HOST === '1') process.send?.({ postgresContainer } satisfies HostReply);
+      reportStackProgress(`Native web stack startup: PostgreSQL container ${postgresContainer}`);
       const portResult = Bun.spawnSync(['docker', 'port', postgresContainer, '5432/tcp']);
       if (portResult.exitCode !== 0)
         throw new Error(`Could not get owned PostgreSQL port: ${portResult.stderr.toString()}`);
       const port = Number(portResult.stdout.toString().match(/127\.0\.0\.1:(\d+)/)?.[1]);
       if (!Number.isInteger(port) || port <= 0)
         throw new Error(`Could not parse owned PostgreSQL port: ${portResult.stdout.toString()}`);
-      const databaseUrl = `postgres://rezics:rezics@127.0.0.1:${port}/rezics?sslmode=disable`;
-      const deadline = Date.now() + 60_000;
-      while (true) {
-        const probe = new Pool({
-          connectionString: databaseUrl,
-          connectionTimeoutMillis: 1500,
-          max: 1,
-        });
-        try {
-          await probe.query('SELECT 1');
-          break;
-        } catch (error) {
-          if (Date.now() >= deadline)
-            throw new Error('Disposable PostgreSQL did not become ready.', {
-              cause: error,
-            });
-          await Bun.sleep(500);
-        } finally {
-          await probe.end();
-        }
-      }
+      const databaseUrl = await waitForOwnedPostgres(postgresContainer, port, postgresSocketDirectory);
       process.env.DATABASE_URL = databaseUrl;
       reportStackProgress('Native web stack startup: PostgreSQL ready; migrating database');
       migrate(databaseUrl);
@@ -596,30 +740,46 @@ async function startStack(): Promise<
     // Give Reylo an owned cache and the migrated template for SQL analysis.
     runtimeDirectory = await mkdtemp(join(tmpdir(), 'native-kernel-runtime-'));
     const { writeReyloProject } = await import('../../../../services/kernel/scripts/check.ts');
-    // PostgreSQL cannot clone a template while Reylo is connected to it. The
-    // kernel runner also gives SQL analysis its own copy, separate from fixtures.
+    // PostgreSQL cannot clone a template while other sessions are connected to it.
+    reportStackProgress('Native web stack startup: disconnecting template sessions');
+    await disconnectTemplateSessions(process.env.DATABASE_URL!);
     const source = new URL(process.env.DATABASE_URL!);
     const template = decodeURIComponent(source.pathname.slice(1));
     const analysisDatabase = `native_web_analysis_${randomBytes(16).toString('hex')}`;
     const adminUrl = new URL(source);
     adminUrl.pathname = '/postgres';
-    const admin = new Pool({ connectionString: adminUrl.href, max: 1 });
+    const admin = new Pool({
+      connectionString: adminUrl.href,
+      max: 1,
+      connectionTimeoutMillis: 1500,
+      statement_timeout: 15_000,
+    });
     try {
       // Inform the supervisor before allocation, so even failed setup is cleaned.
       process.send?.({ analysisDatabase } satisfies HostReply);
-      await admin.query(`CREATE DATABASE "${analysisDatabase}" TEMPLATE "${template.replaceAll('"', '""')}"`);
+      const created = await settledWithin(
+        admin
+          .query(`CREATE DATABASE "${analysisDatabase}" TEMPLATE "${template.replaceAll('"', '""')}"`)
+          .then(() => true as const),
+        20_000,
+      );
+      if (created !== true) throw new Error('CREATE DATABASE for SQL analysis exceeded 20000ms');
     } finally {
-      await admin.end();
+      const ended = await settledWithin(admin.end().then(() => true as const), 1_000);
+      if (ended !== true) throw new Error('SQL analysis admin pool end exceeded 1000ms');
     }
     reportStackProgress('Native web stack startup: SQL analysis database cloned');
     source.pathname = `/${analysisDatabase}`;
-    process.env.REYLO_CONFIG = writeReyloProject(runtimeDirectory, source.href);
+    bindReyloUnixSocket(source.href);
+    process.env.REYLO_CONFIG = writeReyloProject(runtimeDirectory, reyloAnalysisUrl(source.href));
     process.env.KERNEL_POOL_ACQUIRE_TIMEOUT_MS ??= '2000';
     await import('../../../../services/kernel/test/support/fixture-event-types.ts');
     const { workerTestEnv } = await import('../../../../services/kernel/test/support/worker-env.ts');
     const { sharedAuth, closeOwnedSemanticAuth, advanceNativeAuthClock } =
       await import('../../../../services/kernel/test/semantic/outcome-auth.ts');
     closeAuth = closeOwnedSemanticAuth;
+    reportStackProgress('Native web stack startup: initializing semantic Auth');
+    const loadingOutcomeDriver = import('../../../../services/kernel/test/semantic/outcome-driver.ts');
     const auth = await sharedAuth(new URL(process.env.DATABASE_URL!), undefined, true);
     reportStackProgress('Native web stack startup: semantic Auth initialized');
     // Observe the harness's actual issuance, retaining its Auth cookie for the
@@ -703,7 +863,7 @@ async function startStack(): Promise<
       return response;
     };
     // The semantic harness reads DATABASE_URL during module evaluation.
-    const { createSemanticDriver } = await import('../../../../services/kernel/test/semantic/outcome-driver.ts');
+    const { createSemanticDriver } = await loadingOutcomeDriver;
     const { createKernel } = await import('../../../../services/kernel/src/http/kernel.ts');
     const [{ createCommerceWork }, { readCommerceConfig }, { createStripePort }, { createWorkClient }] =
       await Promise.all([
@@ -774,9 +934,12 @@ async function startStack(): Promise<
       return Object.assign(base, overrides);
     };
     let kernel: ReturnType<typeof createKernel> | undefined;
+    reportStackProgress('Native web stack startup: disconnecting template sessions');
+    await disconnectTemplateSessions(process.env.DATABASE_URL!);
     reportStackProgress('Native web stack startup: creating native kernel and Auth fixtures');
     driver = await createSemanticDriver(
       (dependencies) => {
+        reportStackProgress('Native web stack startup: composing native kernel');
         if (search && !dependencies.tokens) throw new Error('Native kernel did not supply session keys');
         if (commerce) {
           const databaseUrl = dependencies.pool.options.connectionString;
@@ -1294,7 +1457,7 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
   const lifecycle = currentNativeLifecycle();
   if (!lifecycle) {
     const standalone = new NativeTestLifecycle('standalone native web stack');
-    const stack = await standalone.run('start native web stack', 360_000, () => startNativeWebStack(options), false);
+    const stack = await standalone.run('start native web stack', 600_000, () => startNativeWebStack(options), false);
     return {
       ...stack,
       async stop() {

@@ -16,6 +16,7 @@ import type { StackSlot } from '../../../scripts/stack-lease.ts';
 import { walkStackRequired } from '../../../scripts/stack-run.ts';
 import {
   admitWalkStack,
+  walkHttpAnswers,
   walkProcessEnvironment,
   walkReadyUrls,
   walkStackNames,
@@ -944,7 +945,7 @@ async function untilReady(
     const exited = processes.find((child) => child.exitCode !== null || child.signalCode !== null);
     if (exited)
       throw new Error(`walk: the local stack exited (${exited.exitCode ?? exited.signalCode}) before it was ready`);
-    if (Date.now() > deadline)
+    if (Date.now() >= deadline)
       throw new Error(`walk: the local stack was not ready after ${WALK_READY_DEADLINE_MS} ms (${urls.join(', ')})`);
   };
   let lastReport = 0;
@@ -964,15 +965,11 @@ async function untilReady(
     failed();
     const remaining = deadline - Date.now();
     const ready = await Promise.all(
-      urls.map(async (url) => {
-        try {
-          const response = await fetch(url, { signal: AbortSignal.timeout(walkReadyFetchTimeoutMs(remaining)) });
-          return [url, response.status < 500] as const;
-        } catch {
-          return [url, false] as const;
-        }
-      }),
+      urls.map(async (url) =>
+        [url, await walkHttpAnswers(url, Math.min(remaining, walkReadyFetchTimeoutMs(remaining)))] as const,
+      ),
     );
+    failed();
     if (ready.every(([, ok]) => ok)) return;
     report(ready.filter(([, ok]) => !ok).map(([url]) => url));
     await Bun.sleep(WALK_READY_POLL_MS);
@@ -1025,6 +1022,8 @@ async function walk(command: string[]): Promise<number> {
             stderr: 'inherit',
           });
           code = await current.exited;
+          if (code !== 0 && attempt === 0 && script[1] === 'up' && script[0]?.endsWith('database.ts'))
+            removeWalkStack(names);
         }
         if (code !== 0) throw new Error(`walk: ${script.join(' ')} failed`);
       }

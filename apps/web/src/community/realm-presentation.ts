@@ -70,7 +70,7 @@ export type RealmAppearanceAdapter = Readonly<{
   change(command: RealmAppearanceCommand): Promise<RealmAppearanceResult>;
   select(choice: RealmAppearanceChoice): Promise<RealmAppearanceSelection>;
   prepareRules?(realmId: string, cursor: string | undefined, signal: AbortSignal): Promise<RulesAuthoringRead>;
-  upload(realmId: string, slot: RealmImageSlot, file: File, signal: AbortSignal): Promise<{ id: string }>;
+  upload(realmId: string, slot: RealmImageSlot, file: File, signal: AbortSignal, key: string): Promise<{ id: string }>;
   resume(mediaId: string, file: File, realmId: string, signal: AbortSignal): Promise<{ id: string }>;
 }>;
 
@@ -106,8 +106,14 @@ export type RealmAppearanceState = Readonly<{
   reviewed: boolean;
   busy: boolean;
   uploadSlot: RealmImageSlot | null;
-  pendingUpload: { slot: RealmImageSlot; mediaId: string } | null;
+  /** A null media id is an uncertain reservation: a retry repeats the caller's retained key and file. */
+  pendingUpload: { slot: RealmImageSlot; mediaId: string | null } | null;
 }>;
+
+/** Only an unknown reservation outcome keeps a retry offer; definite refusals end the attempt. */
+function uncertainReservation(error: unknown): boolean {
+  return error !== null && typeof error === 'object' && 'reason' in error && error.reason === 'unavailable';
+}
 
 export function realmAppearanceHasUnsavedChanges(state: RealmAppearanceState, baseline?: RealmPresentation): boolean {
   return Boolean(
@@ -158,6 +164,7 @@ export function createRealmAppearance(
     slot: RealmImageSlot;
     purpose: 'realm-icon' | 'realm-banner';
     mediaId: string | null;
+    key: string;
   } | null = null;
   let readVersion = 0;
   let operationGeneration = 0;
@@ -438,7 +445,7 @@ export function createRealmAppearance(
     if (!pending && !editable()) return;
     if (state.busy || !admitted(state.read) || !state.read.snapshot.canManage || (!file && !pending)) return;
     const purpose = uploadSlot === 'avatar' ? 'realm-icon' : 'realm-banner';
-    if (file) retainedUpload = { file, slot: uploadSlot, purpose, mediaId: null };
+    if (file) retainedUpload = { file, slot: uploadSlot, purpose, mediaId: null, key: newKey() };
     else if (
       !pending ||
       !retainedUpload ||
@@ -448,18 +455,19 @@ export function createRealmAppearance(
     )
       return;
     const original = file ?? retainedUpload?.file;
-    if (!original) return;
+    const key = retainedUpload?.key;
+    if (!original || !key) return;
     const ticket = operation();
     if (!ticket) return;
     const abort = new AbortController();
     uploadAbort = abort;
     update({ busy: true, phase: 'uploading', notice: 'none', uploadSlot });
-    let mediaId = pending?.mediaId;
+    let mediaId: string | undefined = pending?.mediaId ?? undefined;
     try {
       if (!owns(ticket) || abort.signal.aborted) return;
-      const media = pending
+      const media = pending?.mediaId
         ? await adapter.resume(pending.mediaId, original, realmId, abort.signal)
-        : await adapter.upload(realmId, uploadSlot, original, abort.signal);
+        : await adapter.upload(realmId, uploadSlot, original, abort.signal, key);
       mediaId = media.id;
       if (abort.signal.aborted || !owns(ticket)) return;
       if (retainedUpload?.file === original) retainedUpload = { ...retainedUpload, mediaId };
@@ -499,7 +507,11 @@ export function createRealmAppearance(
         busy: false,
         phase: 'idle',
         notice: 'unavailable',
-        pendingUpload: mediaId ? { slot: uploadSlot, mediaId } : null,
+        pendingUpload: mediaId
+          ? { slot: uploadSlot, mediaId }
+          : uncertainReservation(error)
+            ? { slot: uploadSlot, mediaId: null }
+            : null,
       });
     } finally {
       if (uploadAbort === abort) {
