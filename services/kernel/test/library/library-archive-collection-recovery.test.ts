@@ -3,7 +3,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createLibraryArchiveCollectionRecovery } from '../../src/library/library-archive-collection-recovery.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { testRouteKey } from '../support/test-kernel.ts';
-import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
+import { createProfileEntryFixture, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 
 type Identity = Awaited<ReturnType<NativeProfileFixture['identity']>>;
 let f: NativeProfileFixture, source: Identity;
@@ -11,6 +11,7 @@ let artifact: { manifest: Record<string, any>; records: Record<string, any>[] },
 const scopes = [
   'subject:read',
   'collection:read',
+  'library_archive:read',
   'collection:create',
   'collection:update',
   'collection:delete',

@@ -31,6 +31,7 @@ beforeAll(async () => {
   const scopes = [
     'collection:create',
     'collection:read',
+    'library_archive:read',
     'collection:update',
     'subject:create',
     'subject:read',
