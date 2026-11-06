@@ -685,3 +685,5 @@ post/thread/revision/digest and declared attachment binding. Per-post mentions u
 map: the first disclosed identity wins, including an unavailable identity, and only actual references in that exact
 body occurrence may render. Existing media, mention, thread-reading and page-context tests retain their assertions;
 the duplicate-identity rendering case and a continued-page image pin cover these concrete receiving defects.
+The unified Reply action retains the post-specific accessible name in the reader. Pagination assertions select
+the named continuation navigation rather than the preceding Following-kind navigation; exact cursor assertions remain.

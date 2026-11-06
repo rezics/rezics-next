@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { deferred, follow, mountFollowing, page, realmId, spaceId } from './helpers/following-reading';
+import { m } from '../src/paraglide/messages.js';
 
 test('keyboard close restores only the current trigger; ordinary links keep the localized destination and native continuation', async () => {
   const h = await mountFollowing({ ...page(follow('subject')), next: 'opaque/page+' });
@@ -22,7 +23,8 @@ test('keyboard close restores only the current trigger; ordinary links keep the 
     );
     expect(h.host.querySelector('[role="dialog"]')).toBeNull();
     expect(h.window.document.activeElement).toBe(trigger);
-    expect(new URL(h.host.querySelector<HTMLAnchorElement>('nav a')!.href).searchParams.get('cursor')).toBe(
+    const pagination = h.host.querySelector(`nav[aria-label="${m.library_following_heading()}"]`)!;
+    expect(new URL(pagination.querySelector<HTMLAnchorElement>('a')!.href).searchParams.get('cursor')).toBe(
       'opaque/page+',
     );
     await h.inspect(spaceId);

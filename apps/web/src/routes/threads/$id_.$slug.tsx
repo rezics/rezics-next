@@ -1123,7 +1123,7 @@ export function ThreadReadingPost({
                 }
               : undefined
           }
-          reply={{ onReply, disabled: replyPending || !personalReady }}
+          reply={{ onReply, disabled: replyPending || !personalReady, label: m.thread_reply_to_post() }}
           overflow={
             editing ? (
               <span />

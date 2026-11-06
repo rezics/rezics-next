@@ -39,6 +39,8 @@ The scripts program clears the product program's exclusions, so `scripts/check.t
 and use the same prepared compiler database. Diagnostics in either program fail the check; both programs run.
 The full Web check invokes this same workspace entry. Browser consumers use installed Client contracts;
 tooling may use the owning services' native interfaces without imposing Worker globals on those services.
+The compiler-root test checks resolved files and ambient types; the supported full compiler runs exercise Reylo,
+whose custom mapper settings are not emitted by TypeScript's `--showConfig` output.
 
 ## Prepared remote Web checks
 
