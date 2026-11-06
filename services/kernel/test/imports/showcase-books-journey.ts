@@ -1,7 +1,7 @@
 /** Opt-in real Auth/API/media-worker/Web journey. Run through scripts/worker-check.ts. */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createRequire } from 'node:module';
@@ -66,6 +66,38 @@ function cgroupMemory(): number | null {
   const file = resolve('/sys/fs/cgroup', `.${path}`, 'memory.current');
   return existsSync(file) ? Number(readFileSync(file, 'utf8').trim()) : null;
 }
+/** Every process under the stack, found through /proc, so a memory sample names what holds the memory. */
+function stackProcesses(rootPid: number): number[] {
+  const parents = new Map<number, number>();
+  for (const entry of readdirSync('/proc')) {
+    if (!/^\d+$/.test(entry)) continue;
+    try {
+      const stat = readFileSync(`/proc/${entry}/stat`, 'utf8');
+      const fields = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
+      parents.set(Number(entry), Number(fields[1]));
+    } catch {
+      // The process exited while the tree was read.
+    }
+  }
+  const found: number[] = [];
+  let frontier = [rootPid];
+  while (frontier.length > 0) {
+    frontier = [...parents].filter(([, ppid]) => frontier.includes(ppid)).map(([pid]) => pid);
+    found.push(...frontier);
+  }
+  return found;
+}
+/** A process's name and resident set in megabytes, for the periodic sample in the check log. */
+function describeProcess(pid: number): string {
+  try {
+    const status = readFileSync(`/proc/${pid}/status`, 'utf8');
+    const megabytes = Math.round(Number(/VmRSS:\s+(\d+) kB/.exec(status)?.[1]) / 1024);
+    const command = readFileSync(`/proc/${pid}/cmdline`, 'utf8').split('\0').slice(0, 3).join(' ').slice(0, 64);
+    return `${pid}:${megabytes}MB:${command}`;
+  } catch {
+    return `${pid}:exited`;
+  }
+}
 function sample(stage: string) {
   memory.push({ stage, rss: process.memoryUsage().rss, cgroup: cgroupMemory() });
 }
@@ -120,6 +152,7 @@ const evidence: Record<string, unknown> = {
 };
 const visits = evidence.visits as Record<string, unknown>[];
 let stack: Bun.Subprocess | undefined;
+let sampler: ReturnType<typeof setInterval> | undefined;
 let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
 let journal: ShowcaseJournal | undefined;
 try {
@@ -128,7 +161,6 @@ try {
   sample('start');
   // The Taskfile's dev:infra and dev:persona steps, without Go Task: check hosts need only Bun and Docker.
   await command(['bun', 'run', '--cwd', 'services/kernel', 'db', 'up'], 'database.log');
-  await command(['bun', 'run', '--cwd', 'services/kernel', 'search', 'up'], 'search.log');
   await command(['bun', 'services/auth/scripts/dev-stack.ts', 'setup'], 'setup.log');
   await command(['bun', 'services/auth/scripts/dev-stack.ts', 'persona'], 'persona.log');
   stack = Bun.spawn(['bun', 'services/auth/scripts/dev-stack.ts', 'start'], {
@@ -138,6 +170,11 @@ try {
     stderr: Bun.file(resolve(directory, 'stack-errors.log')),
   });
   evidence.stackPid = stack.pid;
+  // Every 30 seconds the check log names the stack's processes and their resident memory, so a limit failure is attributable.
+  sampler = setInterval(() => {
+    const processes = stackProcesses(stack!.pid).map(describeProcess);
+    console.log(`books journey: memory cgroup=${cgroupMemory() ?? '-'} ${processes.join(' | ')}`);
+  }, 30_000);
   await ready(`${origins.kernel}/v1/definitions`, stack);
   await ready(`${origins.web}/en`, stack);
   await ready(`${origins.issuer}/.well-known/openid-configuration`, stack);
@@ -309,6 +346,7 @@ try {
   evidence.state = 'passed';
   console.log('books journey: passed anonymous, member and reviewer current API/page walk');
 } finally {
+  clearInterval(sampler);
   await writeFile(resolve(directory, 'evidence.json'), JSON.stringify(evidence, null, 2), { mode: 0o600 });
   journal?.close();
   await browser?.close();
