@@ -118,6 +118,11 @@ invocation runs one Worker graph at a time (`--max-concurrency=1`).
 Decision: Copies' native and browser journeys compose the shared dev-server and process custody in `tests/support`.
 Their acceptance evidence is recorded from the composed landing check; a local focused run is not that evidence.
 
+Decision: the owned process tree is recorded from launch by PID and `/proc` start time. A descendant that leaves the
+process group and is reparented stays owned while its parent was live with the recorded start time. Signals and
+settlement act only on recorded members whose start time still matches, so a reused PID is never signalled, and a
+zombie is not live. A failed settlement names each remaining member's state, parent and group.
+
 Browser tests wait for `html[data-hydrated]` before interacting with a page.
 Browser tests start the dev server through `tests/support/dev-server.ts`, whose errors name the phase that failed; a test never imports another test file.
 Subject page reads and public collections work without JavaScript; Library writes use JavaScript and stay disabled until the page hydrates.
