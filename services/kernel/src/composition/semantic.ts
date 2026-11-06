@@ -11,7 +11,7 @@ import {
 import { readSearchConfig } from '../search/work.ts';
 import { createIdentityEpochParticipants } from '../semantic/application/identity-epoch-participants.ts';
 import type { IdentityEpochParticipantPorts } from '../semantic/contract/identity-epoch-ports.ts';
-import { searchReceivingProductionDeclaration } from '../semantic/identity-adapters/index.ts';
+import { searchReceivingProductionDeclaration } from '../semantic/identity-search-receiving-statements.ts';
 
 /** Real fixed identity participants for the default worker: Search currentness and Library custody, bound to the
  * worker pool. Returns null when Search configuration or the membership route key is absent, so the coordinator is

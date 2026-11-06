@@ -81,7 +81,9 @@ test('review and held identity costs stay fixed as unrelated native identities g
           `INSERT INTO semantic.identity_epoch_job
           SELECT (jsonb_populate_record(NULL::semantic.identity_epoch_job,
             to_jsonb(j) || jsonb_build_object('job_id',gen_random_uuid(),'epoch',n,
-              'receipt_key',gen_random_uuid()::text))).*
+              'receipt_key',gen_random_uuid()::text,
+              'erasure_key',nextval('semantic.erasure_record_key'),
+              'recorded_transaction_id',gen_random_uuid()))).*
           FROM semantic.identity_epoch_job j CROSS JOIN generate_series($3::bigint,$4::bigint) n
           WHERE j.partition_no=$1 AND j.job_id=$2`,
           [home, history.jobId, 100000 + previous, 99999 + scale],
