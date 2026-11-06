@@ -167,10 +167,7 @@ export function relatedProcessIds(rootPid: number, table = readProcessTable()): 
 }
 
 const WNOHANG = 1;
-let waitpidSymbol:
-  | { waitpid(pid: number, status: number, options: number): number }
-  | undefined
-  | false;
+let waitpidSymbol: { waitpid(pid: number, status: number, options: number): number } | undefined | false;
 
 function waitpidNoHang(pid: number): number | undefined {
   if (waitpidSymbol === false) return undefined;
@@ -324,18 +321,21 @@ type OwnedTree = {
   signal(signal: NodeJS.Signals, errors: unknown[]): void;
   reapOwnZombies(): void;
   remaining(): string;
+  unattributed(): string[];
   stop(): void;
 };
 
 /**
  * Owned processes from launch to close. A descendant is recorded while it is observed alive with its parent live under
  * the recorded start time, so it stays owned after leaving the group and being reparented. Settlement and signals
- * follow only recorded members whose start time still matches, and a group id is adopted only while the root or a
- * recorded live member still holds it.
+ * follow only recorded members whose start time still matches. The root's group number is adopted only while the
+ * recorded root is alive and still leads that group; a process in it that no record owns is reported as unattributed
+ * and never signalled.
  *
  * Real guarantee: children of live owned members are sampled every 5 to 50 ms, and the root's group is sampled every
  * 500 ms and at close. A descendant created and reparented between two samples is not recorded unless it stays in the
- * root's group. Full custody needs a launch-time mechanism that the launcher owns, which this module does not provide.
+ * root's group while the root still leads it. Full custody needs a launch-time mechanism that the launcher owns, which
+ * this module does not provide.
  */
 function createOwnedTree(rootPid: number, pollIntervalMs: number, launched?: OwnedMember | null): OwnedTree {
   const members = new Map<string, TrackedMember>();
@@ -343,7 +343,9 @@ function createOwnedTree(rootPid: number, pollIntervalMs: number, launched?: Own
   const rootIdentity = processIdentity(rootPid);
   // A launch record names the root by start time; a record that no longer matches the live PID is dead, not adopted.
   const rootMember: OwnedMember | undefined =
-    launched === null ? undefined : (launched ?? (rootIdentity ? { pid: rootPid, startTicks: rootIdentity.startTicks } : undefined));
+    launched === null
+      ? undefined
+      : (launched ?? (rootIdentity ? { pid: rootPid, startTicks: rootIdentity.startTicks } : undefined));
   if (rootMember) {
     const current = rootIdentity?.startTicks === rootMember.startTicks ? rootIdentity : undefined;
     const tracked: TrackedMember = current
@@ -358,13 +360,11 @@ function createOwnedTree(rootPid: number, pollIntervalMs: number, launched?: Own
 
   const live = (): TrackedMember[] => [...members.values()].filter((member) => liveIdentity(member) !== undefined);
 
-  // The group id is ours from a launch-time observation: the root was alive, or a recorded member held the group. Once a
-  // scan observes the group empty, its number may name an unrelated group, so ownership is never reacquired.
-  let groupOwned = rootMember !== undefined && liveIdentity(rootMember) !== undefined;
-  const refreshGroupOwnership = (current: TrackedMember[]): boolean => {
-    if (rootMember !== undefined && liveIdentity(rootMember) !== undefined) groupOwned = true;
-    if (current.some((member) => processIdentity(member.pid)?.pgrp === rootPid)) groupOwned = true;
-    return groupOwned;
+  // The root's group is ours only while the root is alive and still leads it: a live leader pins its group number, and
+  // its members are its descendants. Once the leader is gone, nothing is adopted by number again.
+  const rootGroupOwned = (): boolean => {
+    const identity = rootMember === undefined ? undefined : liveIdentity(rootMember);
+    return identity !== undefined && identity.pgrp === rootPid;
   };
 
   const sample = (full: boolean) => {
@@ -383,10 +383,8 @@ function createOwnedTree(rootPid: number, pollIntervalMs: number, launched?: Own
       return;
     }
     const table = readProcessTable();
-    refreshGroupOwnership(current);
-    if (groupOwned && ![...table.values()].some((identity) => identity.pgrp === rootPid)) groupOwned = false;
-    // Group members are adopted only while the group is ours; children of live owned members always are.
-    const groupHeld = groupOwned;
+    // Group members are adopted only while the root leads its group; children of live owned members always are.
+    const groupHeld = rootGroupOwned();
     let grew = true;
     while (grew) {
       grew = false;
@@ -403,15 +401,14 @@ function createOwnedTree(rootPid: number, pollIntervalMs: number, launched?: Own
   };
 
   const signal = (signalName: NodeJS.Signals, errors: unknown[]) => {
-    const current = live();
-    if (refreshGroupOwnership(current)) {
+    if (rootGroupOwned()) {
       try {
         process.kill(-rootPid, signalName);
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'ESRCH') errors.push(error);
       }
     }
-    for (const member of current) {
+    for (const member of live()) {
       try {
         signalOwnedProcess(member, signalName);
       } catch (error) {
@@ -446,6 +443,18 @@ function createOwnedTree(rootPid: number, pollIntervalMs: number, launched?: Own
     return rows.length > 0 ? rows.join('; ') : 'none';
   };
 
+  /** Live processes in the root's group number that no recorded identity owns: reported, never signalled. */
+  const unattributed = (): string[] => {
+    const rows: string[] = [];
+    for (const [pid, identity] of readProcessTable()) {
+      if (identity.pgrp !== rootPid || identity.state === 'Z') continue;
+      if (members.has(`${pid}:${identity.startTicks}`)) continue;
+      rows.push(`${pid} state=${identity.state} ppid=${identity.ppid} pgrp=${identity.pgrp}`);
+      if (rows.length === 16) break;
+    }
+    return rows;
+  };
+
   const stop = () => {
     if (timer === undefined) return;
     clearInterval(timer);
@@ -455,8 +464,8 @@ function createOwnedTree(rootPid: number, pollIntervalMs: number, launched?: Own
   const tick = () => {
     ticks += 1;
     sample(ticks % fullEvery === 0);
-    // An owned group keeps the sampler running until a scan observes it empty.
-    if (live().length === 0 && !groupOwned) stop();
+    // The sampler runs while recorded members live or while the root leads its group.
+    if (live().length === 0 && !rootGroupOwned()) stop();
   };
 
   sample(true);
@@ -471,6 +480,7 @@ function createOwnedTree(rootPid: number, pollIntervalMs: number, launched?: Own
     signal,
     reapOwnZombies,
     remaining,
+    unattributed,
     stop,
   };
 }
@@ -483,7 +493,7 @@ export function observeOwnedTreeForRegression(
   rootPid: number,
   launched: OwnedMember | null,
   pollIntervalMs = 10,
-): Pick<OwnedTree, 'sample' | 'live' | 'signal' | 'stop'> {
+): Pick<OwnedTree, 'sample' | 'live' | 'signal' | 'unattributed' | 'stop'> {
   return createOwnedTree(rootPid, pollIntervalMs, launched);
 }
 
@@ -539,10 +549,15 @@ function makeProcessCustody(
       }
       tree.sample(true);
       tree.reapOwnZombies();
-      groupSettled = tree.live().length === 0;
+      const stray = tree.unattributed();
+      groupSettled = tree.live().length === 0 && stray.length === 0;
       tree.stop();
       if (!groupSettled)
-        cleanupErrors.push(new Error(`${label} owned processes remained after SIGKILL: ${tree.remaining()}`));
+        cleanupErrors.push(
+          new Error(
+            `${label} owned processes remained after SIGKILL: ${tree.remaining()}; unattributed: ${stray.join('; ') || 'none'}`,
+          ),
+        );
     }
 
     const completions = await Promise.allSettled([
@@ -551,8 +566,7 @@ function makeProcessCustody(
     ]);
     childSettled = completions[0]?.status === 'fulfilled';
     outputIsSettled = completions[1]?.status === 'fulfilled';
-    for (const completion of completions)
-      if (completion.status === 'rejected') cleanupErrors.push(completion.reason);
+    for (const completion of completions) if (completion.status === 'rejected') cleanupErrors.push(completion.reason);
     cleanupErrors.push(...errors);
 
     isSettled = groupSettled && childSettled && outputIsSettled;

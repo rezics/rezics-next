@@ -27,6 +27,16 @@ type Fixture = {
   descendantReady: Promise<number>;
 };
 
+// Outlives one full scan (500 ms), so the owned tree records a descendant while the root still leads its group.
+const PARENT_OUTLIVES_SCAN_MS = 700;
+
+/** The fixture parent's last statement: exit after the descendant is scanned, or stay alive until the owner stops it. */
+function parentTail(parentExits: boolean): string {
+  return parentExits
+    ? `setTimeout(() => process.exit(0), ${PARENT_OUTLIVES_SCAN_MS});`
+    : "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000);";
+}
+
 const fixtures: Fixture[] = [];
 
 function processGroupExists(pid: number): boolean {
@@ -112,7 +122,7 @@ function nodeFixture(parentExits: boolean): Fixture {
         stdio: 'inherit'
       });
       process.stdout.write('descendant=' + descendant.pid + '\\n');
-      ${parentExits ? 'process.exit(0);' : "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000);"}
+      ${parentTail(parentExits)}
     }, 30);
   `;
   const child: ChildProcess = spawn(process.execPath, ['-e', source], {
@@ -150,7 +160,7 @@ function bunFixture(parentExits: boolean): Fixture {
       stdin: 'ignore', stdout: 'inherit', stderr: 'inherit'
     });
     console.log('descendant=' + descendant.pid);
-    ${parentExits ? 'process.exit(0);' : "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000);"}
+    ${parentTail(parentExits)}
   `;
   const child = Bun.spawn(['bun', '-e', source], {
     detached: true,
@@ -362,6 +372,8 @@ test('a group id recycled after its owners exit is never adopted or signalled', 
     await Bun.sleep(100);
     expect(errors).toEqual([]);
     expect(tree.live()).toEqual([]);
+    // Unrecorded, the group member is reported as unattributed rather than adopted or signalled.
+    expect(tree.unattributed().map((row) => Number(row.split(' ')[0]))).toContain(member);
     expect(processHasExited(member)).toBe(false);
     expect(processHasExited(leader.pid)).toBe(false);
   } finally {
