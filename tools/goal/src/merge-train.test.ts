@@ -526,6 +526,10 @@ test('a gate does not inherit the identity of the process that drives the train'
 
 function controlPlaneLanding(path: string, mainRelease = true) {
   const s = setup();
+  mkdirSync(join(s.main, 'scripts'), { recursive: true });
+  writeFileSync(join(s.main, 'scripts/architecture.ts'), 'process.exit(0);\n');
+  git(s.main, 'add', '--', 'scripts/architecture.ts');
+  git(s.main, 'commit', '-m', 'Architecture checker');
   mkdirSync(join(s.main, path, '..'), { recursive: true });
   writeFileSync(join(s.main, path), 'base\n');
   git(s.main, 'add', '--', path);
