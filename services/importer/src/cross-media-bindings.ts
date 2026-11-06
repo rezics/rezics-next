@@ -104,6 +104,7 @@ export type GraphRelationSnapshot = {
   provider: Provider;
   table?: string;
   currentKeys: readonly string[];
+  currentIdentities?: readonly string[];
   scope: readonly string[];
   digest: string;
   complete: boolean;
@@ -123,6 +124,19 @@ export type BangumiAppearanceEvidence = Readonly<{
   order?: number | string | null;
   sourceRow?: Readonly<Record<string, unknown>>;
 }>;
+
+/** Logical selected-graph identity independent of raw cell typing. */
+export function graphEdgeIdentity(draft: GraphEdgeDraft): string {
+  return [draft.table, draft.holder, draft.target, draft.property, draft.targetAlias ?? '', draft.url ?? ''].join('\0');
+}
+
+function graphEdgeDigest(draft: GraphEdgeDraft): string {
+  // Counterpart website rows keep the cited URL, not COPY cell types, so reopen
+  // of unchanged selected links cannot mint a second edge key and retract.
+  if (draft.source === 'vndb' && draft.table === 'extlinks' && draft.targetAlias)
+    return sourceDigest({ holder: draft.holder, target: draft.target, property: draft.property, url: draft.url });
+  return draft.vndbRelation ? sourceDigest(draft.vndbRelation.evidence) : sourceDigest(draft.record);
+}
 
 /** Stable source envelope for one selected subject-characters row. */
 export function bangumiAppearanceSource(alias: string, appearance: BangumiAppearanceEvidence): Source {
@@ -218,7 +232,7 @@ export function graphEdgeKey(draft: GraphEdgeDraft): string {
     draft.target,
     draft.property,
     ...(draft.targetAlias ? [draft.targetAlias] : []),
-    sourceDigest(draft.record),
+    graphEdgeDigest(draft),
     ...(draft.relation ? [draft.relation.mappingRevision, sourceDigest(draft.relation.evidence)] : []),
     // Another member can invalidate this volume's ordinal without changing its own source rows.
     // Retain a new proposal when that family-wide decision changes, including known to unknown.
@@ -378,6 +392,7 @@ export class CrossMediaGraph {
     const currentRelations = snapshots.map((snapshot) => ({
       ...snapshot,
       keys: new Set(snapshot.currentKeys),
+      identities: new Set(snapshot.currentIdentities ?? []),
       owners: new Set(snapshot.scope),
     }));
     const proposed: ProposedEdge[] = [];
@@ -1100,6 +1115,7 @@ export class CrossMediaGraph {
     const currentRelations = snapshots.map((snapshot) => ({
       ...snapshot,
       keys: new Set(snapshot.currentKeys),
+      identities: new Set(snapshot.currentIdentities ?? []),
       owners: new Set(snapshot.scope),
     }));
     const prior = this.database
@@ -1123,7 +1139,11 @@ export class CrossMediaGraph {
       );
       if ((!relation && !draft.targetAlias) || !snapshot) continue;
       const hasPendingRetraction = row.retraction_payload !== null;
-      if (!hasPendingRetraction && snapshot.keys.has(row.edge_key)) continue;
+      if (
+        !hasPendingRetraction &&
+        (snapshot.keys.has(row.edge_key) || snapshot.identities.has(graphEdgeIdentity(draft)))
+      )
+        continue;
       if (
         !hasPendingRetraction &&
         (!snapshot.complete || (!snapshot.owners.has(draft.holder) && !snapshot.owners.has(draft.target)))

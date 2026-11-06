@@ -19,12 +19,14 @@ cards and controls together and reject queued clicks; keyboard focus returns to 
 Decision: show independently disclosed recorded citation IDs, units and vote revision even when historical
 question labels and scale are unavailable; current review question metadata never fills that history.
 A native review target identifies the reviewed Subject independently of the current page's Subject.
+The Thread reader consumes that immutable citation through Content's public `publishedCitationForPost` entry.
 Supplied immediate-parent context uses the existing public reply presenter. Missing counts remain unknown.
 
 A row's Board link proves navigation only. Until the native Subject response supplies admitted entry
 advice, the region explains the unavailable creation entry and offers a retry. The existing producer
 must supply exact Subject/place, admitted Board, current creation advice and observation; Web retains
-Board/composer authority and Subject/place/return intent through sign-in. No row, public link or empty
+Board/composer authority and Subject/place/return intent through sign-in. Admitted Board creation is
+consumed through Content's public `BoardStartThread` entry. No row, public link or empty
 region selects a creation Board. Content's additive inputs flow through the adapter and context; no
 outer placement change is required for these reading and recovery fields.
 

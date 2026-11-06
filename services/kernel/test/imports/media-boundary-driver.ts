@@ -595,6 +595,12 @@ async function mediaGrowthSeedStep(
 }
 
 async function applicationHost(): Promise<RpcHost> {
+  // Same isolated-child order as the worker: SQL loader already ran, then the
+  // existing native History composition, then application modules. Root
+  // governance stays on the identity fixture in this host, never the worker.
+  mediaStart('native-composition');
+  const { installNativeHistoryPreload } = await import('../../src/composition/preload.ts');
+  installNativeHistoryPreload();
   mediaStart('application-modules');
   const { COMMON_ACTIONS, IMPORT_ACTIONS } = await import('../../../../specs/imports-identity-driver.ts');
   // The worker process loads the registered application modules, but has no
@@ -951,6 +957,13 @@ async function mediaGrowth(
 }
 
 async function workerHost(): Promise<RpcHost> {
+  // Isolated children load a private bunfig without test preloads. SQL is already
+  // available from the child's Reylo loader; install the same History binding
+  // the server, worker and preload hook use before Work modules load. This
+  // process never runs root governance bootstrap.
+  mediaStart('native-composition');
+  const { installNativeHistoryPreload } = await import('../../src/composition/preload.ts');
+  installNativeHistoryPreload();
   mediaStart('load-work-modules');
   // Isolated children use a private bunfig without the History test preload.
   // Install the same native composition worker startup uses before Work names modules.

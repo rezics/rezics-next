@@ -44,6 +44,7 @@ import {
   CrossMediaGraph,
   citedProviderBinding,
   combineSourceVocabularyRequests,
+  graphEdgeIdentity,
   graphEdgeKey,
   type GraphEdgeEvidence,
   type ReleaseEndpointCurrentness,
@@ -2890,7 +2891,12 @@ export async function seedCrossMedia(
               {
                 provider: 'vndb' as const,
                 table: 'extlinks',
-                currentKeys: graphEdges.filter((edge) => edge.targetAlias).map(graphEdgeKey),
+                currentKeys: graphEdges
+                  .filter((edge) => edge.source === 'vndb' && edge.table === 'extlinks' && edge.targetAlias)
+                  .map(graphEdgeKey),
+                currentIdentities: graphEdges
+                  .filter((edge) => edge.source === 'vndb' && edge.table === 'extlinks' && edge.targetAlias)
+                  .map(graphEdgeIdentity),
                 ...plan.workLinkSnapshot,
               },
             ]
@@ -2899,6 +2905,7 @@ export async function seedCrossMedia(
           provider: 'bangumi',
           table: 'subject-relations',
           currentKeys: graphEdges.filter((edge) => edge.relation).map(graphEdgeKey),
+          currentIdentities: graphEdges.filter((edge) => edge.relation).map(graphEdgeIdentity),
           scope: plan.relationScope,
           digest: plan.relationSnapshotDigest,
           complete: plan.relationSnapshotComplete,
@@ -2909,6 +2916,7 @@ export async function seedCrossMedia(
                 provider: 'vndb' as const,
                 table: 'vn_relations',
                 currentKeys: graphEdges.filter((edge) => edge.vndbRelation).map(graphEdgeKey),
+                currentIdentities: graphEdges.filter((edge) => edge.vndbRelation).map(graphEdgeIdentity),
                 ...plan.vndbRelationSnapshot,
               },
             ]

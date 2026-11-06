@@ -18,7 +18,15 @@ Decision: resource-role identifier helpers are functions so circular Access comp
 ## Domain composition
 
 Decision: Content and Library present contribution owners through Access `contribution-attribution.ts` and
-`public-identity.ts`. They do not import Access internals, Platform pool helpers or Semantic agent tables.
+`public-identity.ts`. Contribution attribution is nullable: missing, pending and unavailable identity are `null`,
+not evidence of deletion. `contributionDeleted` requires an explicit deletion label with no id; an id-free
+partial view alone never establishes deletion. The live variant retains `id`, `kind` and nullable `displayName`; only an authoritative
+deleted account produces a label-only `Deleted account` or `Deleted organization`. `readContributionAttributions` deduplicates page owners and reads at most 100 Account anchors per batch.
+Native agent attribution reads
+the exact bounded Semantic owner relation through its public Access capability and confirms the anchored Account;
+it never manufactures a deleted state when that read is absent. Consumers keep command ownership separate from
+this presentation and retain revision, SHA, licence, references and body availability under current disclosure.
+They do not import Access internals, Platform pool helpers or Semantic agent tables.
 
 Decision: Kernel Access is split into `contract`, `core`, `application` and adapter modules. Vocabulary and finite
 bounds live in `access/contract`. Pure authorization, original-work and Kind-audience rules live in `access/core`.

@@ -1,12 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { openDb } from './db.ts';
 import type { AttemptFence, GateOutcome } from './contracts.ts';
 import { StaleAttemptError } from './contracts.ts';
 import { SqliteLandingQueue } from './land.ts';
-import { failingTestFiles, MergeTrain, devPushScript } from './merge-train.ts';
+import { failingTestFiles, MergeTrain, devPushScript, rebaseOnto, resolveMechanicalConflicts } from './merge-train.ts';
 import { firstFailure, gateRunner, git } from './merge.ts';
 import { parseBrief, protectedRiskAreasForBrief, readRiskOwnership } from './briefs.ts';
 import { WorkerStore } from './store.ts';
@@ -525,6 +526,10 @@ test('a gate does not inherit the identity of the process that drives the train'
 
 function controlPlaneLanding(path: string, mainRelease = true) {
   const s = setup();
+  mkdirSync(join(s.main, 'scripts'), { recursive: true });
+  writeFileSync(join(s.main, 'scripts/architecture.ts'), 'process.exit(0);\n');
+  git(s.main, 'add', '--', 'scripts/architecture.ts');
+  git(s.main, 'commit', '-m', 'Architecture checker');
   mkdirSync(join(s.main, path, '..'), { recursive: true });
   writeFileSync(join(s.main, path), 'base\n');
   git(s.main, 'add', '--', path);
@@ -684,6 +689,113 @@ describe('control-plane launch smoke gate', () => {
     } finally {
       s.goalDb.close();
       s.close();
+    }
+  });
+});
+
+function conflictStages(root: string, file: string, base: string, dev: string, task: string): void {
+  mkdirSync(dirname(join(root, file)), { recursive: true });
+  mkdirSync(join(root, '.temp'), { recursive: true });
+  writeFileSync(join(root, file), 'unmerged content\n');
+  const blobs = [base, task, dev].map((content) => {
+    const path = join(root, '.temp/union-stage');
+    writeFileSync(path, content);
+    return git(root, 'hash-object', '-w', path);
+  });
+  const staged = spawnSync('git', ['update-index', '--index-info'], {
+    cwd: root,
+    encoding: 'utf8',
+    input: `${blobs.map((blob, index) => `100644 ${blob} ${index + 1}\t${file}`).join('\n')}\n`,
+  });
+  expect(staged.status).toBe(0);
+}
+
+const duplicateTable = `| Source | Table |
+| --- | --- |
+| vndb | vn |`;
+
+describe('Markdown union', () => {
+  test('keeps the integration block when dev collapsed a table the task edited, and names the union', () => {
+    const repo = repository();
+    const file = 'README.md';
+    try {
+      const base = `# Guide\n\n## Importers\n\n${duplicateTable}\n\n${duplicateTable}\n\n## Notes\n`;
+      writeFileSync(join(repo.main, file), base);
+      git(repo.main, 'add', '--', file);
+      git(repo.main, 'commit', '-m', 'Add README');
+      const originalBase = git(repo.main, 'rev-parse', 'HEAD');
+      const worker = join(repo.path, 'worker');
+      git(repo.main, 'worktree', 'add', '-b', 'worker', worker, originalBase);
+      writeFileSync(
+        join(worker, file),
+        `# Guide\n\n## Importers\n\n${duplicateTable}\n\n| Source | Table |\n| --- | --- |\n| vndb | vn |\n| mal | anime |\n\n## Notes\n`,
+      );
+      git(worker, 'add', '--', file);
+      git(worker, 'commit', '-m', 'Add importer row');
+      writeFileSync(join(repo.main, file), `# Guide\n\n## Importers\n\n${duplicateTable}\n\n## Notes\n`);
+      git(repo.main, 'add', '--', file);
+      git(repo.main, 'commit', '-m', 'Collapse importer table');
+      const log = join(repo.path, 'rebase.log');
+      rebaseOnto(worker, git(repo.main, 'rev-parse', 'HEAD'), originalBase, log, []);
+      const landed = readFileSync(join(worker, file), 'utf8');
+      expect(landed.match(/\| Source \| Table \|/g)).toHaveLength(1);
+      expect(landed).toContain('| mal | anime |');
+      expect(landed).not.toContain(`${duplicateTable}\n\n${duplicateTable}`);
+      expect(readFileSync(log, 'utf8')).toContain(`Markdown union: ${file}`);
+    } finally {
+      repo.close();
+    }
+  });
+
+  test('sends a new duplicate heading to the resolver with the three Git stages', () => {
+    const repo = repository();
+    const file = 'guide.md';
+    try {
+      const base = '# Doc\n\nKeep.\n';
+      const dev = '# Doc\n\nKeep.\n\n## Auth\n\nDev note.\nSomething common.\nDev tail.\n';
+      const task = '# Doc\n\nKeep.\n\nSomething common.\n## Auth\n\nTask note.\n';
+      conflictStages(repo.main, file, base, dev, task);
+      expect(() => resolveMechanicalConflicts(repo.main, [file], undefined, 'union')).toThrow(
+        `Worker change conflicts with dev in ${file}: union introduced a duplicate heading, table row or paragraph`,
+      );
+      expect(readFileSync(join(repo.main, file), 'utf8')).toBe('unmerged content\n');
+      expect(git(repo.main, 'show', `:${1}:${file}`)).toBe(base.trimEnd());
+      expect(git(repo.main, 'show', `:${2}:${file}`)).toBe(task.trimEnd());
+      expect(git(repo.main, 'show', `:${3}:${file}`)).toBe(dev.trimEnd());
+    } finally {
+      repo.close();
+    }
+  });
+
+  test('still unions independent insertions and still rejects a task deletion that remains', () => {
+    const repo = repository();
+    try {
+      const inserted = '.temp/independent-union.md';
+      conflictStages(
+        repo.main,
+        inserted,
+        'before\nafter\n',
+        'before\ndev insertion\nafter\n',
+        'before\ntask insertion\nafter\n',
+      );
+      expect(resolveMechanicalConflicts(repo.main, [inserted], undefined, 'union')).toEqual([inserted]);
+      const merged = readFileSync(join(repo.main, inserted), 'utf8');
+      expect(merged).toContain('dev insertion');
+      expect(merged).toContain('task insertion');
+
+      const deleted = '.temp/deleted-union.md';
+      conflictStages(
+        repo.main,
+        deleted,
+        'before\nold permission\nafter\n',
+        'before\nold permission\ndev note\nafter\n',
+        'before\nnew permission\nafter\n',
+      );
+      expect(() => resolveMechanicalConflicts(repo.main, [deleted], undefined, 'union')).toThrow(
+        `Worker change conflicts with dev in ${deleted}: task-deleted lines remain: "old permission"`,
+      );
+    } finally {
+      repo.close();
     }
   });
 });
