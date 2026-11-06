@@ -3,6 +3,8 @@
  * Kernel at the loopback origin lists through real discovery. Discovery lists Realms with recent public discussion,
  * so an empty listing does not prove that a quiet seeded Realm is absent; the seed result is the other authority.
  */
+export {};
+
 const kernel = 'http://127.0.0.1:4100';
 const visualNovel = /visual[ -]novel|\bVN\b/i;
 const pagesPerSort = 10;

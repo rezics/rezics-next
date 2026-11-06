@@ -133,7 +133,8 @@ region while both receipt predicates and the page lifetime remain current; other
 focus and recovery. Membership completion stays on the header control. Hydrated standing remains visible before the
 membership caller is command-ready. Board start-thread uses mounted create advice only for a known signed-in subject;
 unknown, unavailable, and signed-in-without-subject visits render no composer entry. `RealmCommunityBoards` is the one
-shelf mount and presents native recent discussion prefixes when the home or board shelf admits them.
+shelf mount and presents native recent discussion prefixes when the home or board shelf admits them. Those two edges
+are pinned in `realm-participation`; no new stories.
 
 Decision: an unavailable Realm shows its own state and never substitutes Global boards or publications.
 Decision: the VN Realm catalogue-to-community walk derives Subject identities from seed results and opens a public visual-novel Realm created through the documented Space/Realm/Board/publication commands when `seed:dev` still publishes only a Global Board.

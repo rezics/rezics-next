@@ -10,7 +10,8 @@ revision even when several changes are batched before React renders. A changed r
 for that caller and cancels only the exact standing query they own. Bound reads check again after the deferred import,
 immediately before the native standing read, and after it. Their results are tagged to the revision that completed the
 read, so previously cached standing cannot expose a membership action or Board entry after an observed transition.
-Bootstrap data remains usable until this browser has observed a transition.
+Bootstrap data remains usable until this browser has observed a transition. Hydrated standing stays visible before
+the caller is command-ready; `realm-participation` pins that first-paint edge.
 
 Membership command attempts keep their original action, idempotency key and CSRF token. A later explicit retry keeps
 that immutable intent; it never substitutes the replacement token. The retry itself must have a current caller and

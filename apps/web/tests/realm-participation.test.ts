@@ -1,28 +1,26 @@
 import { expect, mock, test } from 'bun:test';
-import { createKernelClient } from '@rezics/client';
 import { dirname } from 'node:path';
 import { act, createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
-import { RealmParticipationView } from '../src/community/realm-participation';
-import {
-  realmMembershipQuery,
-  refreshRealmMembership,
-  type RealmViewer,
-} from '../src/community/realm-membership-queries';
-import { loadRealmMembership, requestRealmMembership } from '../src/community/space';
-import { readFollowRecord, writeFollowRecord } from '../src/library/follow-records';
 import * as start from '../.storybook/react-start';
 
+const workerEnv: Record<string, unknown> = {};
+mock.module('cloudflare:workers', () => ({ env: workerEnv }));
 mock.module('@tanstack/react-start', () => start);
 let currentRequest: Request | undefined;
-const workerEnv: Record<string, unknown> = {};
 mock.module('@tanstack/react-start/server', () => ({
   ...start,
   getRequest: () => currentRequest ?? start.getRequest(),
 }));
-mock.module('cloudflare:workers', () => ({ env: workerEnv }));
+
+const { createKernelClient } = await import('@rezics/client');
+const { RealmParticipationView } = await import('../src/community/realm-participation');
+const { realmMembershipQuery, refreshRealmMembership } = await import('../src/community/realm-membership-queries');
+type RealmViewer = import('../src/community/realm-membership-queries').RealmViewer;
+const { loadRealmMembership, requestRealmMembership } = await import('../src/community/space');
+const { readFollowRecord, writeFollowRecord } = await import('../src/library/follow-records');
 const sessionModule = await import('../src/session/query');
 let session: ReturnType<typeof sessionModule.useSession> = { state: 'signed-out', csrfToken: null, subject: null };
 mock.module('../src/session/query', () => ({ ...sessionModule, useSession: () => session }));
@@ -293,6 +291,30 @@ test('Board start visibility follows mounted action advice', async () => {
     session = { state: 'signed-in', subject: 'current-person', csrfToken: 'csrf' };
     expect(await renderMembershipEntries(queries, 'allowed')).toContain(m.board_start_thread());
     expect(await renderMembershipEntries(queries, 'denied')).not.toContain(m.board_start_thread());
+    for (const state of ['unknown', 'unavailable'] as const) {
+      session = { state, subject: 'current-person', csrfToken: 'csrf' };
+      expect(await renderMembershipEntries(queries, 'allowed')).not.toContain(m.board_start_thread());
+    }
+    session = { state: 'signed-in', subject: null, csrfToken: 'csrf' };
+    expect(await renderMembershipEntries(queries, 'allowed')).not.toContain(m.board_start_thread());
+  } finally {
+    queries.clear();
+  }
+});
+
+test('hydrated membership standing stays visible before the caller is command-ready', async () => {
+  const queries = new QueryClient();
+  try {
+    session = { state: 'signed-in', subject: 'current-person', csrfToken: null };
+    queries.setQueryData(realmMembershipQuery(realmId, 'current-person').queryKey, {
+      state: 'member',
+      idempotencyKey,
+    });
+    const html = await renderMembershipEntries(queries);
+    expect(html).toContain(`>${m.realm_leave()}</button>`);
+    expect(html).toContain('disabled=""');
+    expect(html).not.toContain(m.realm_membership_loading());
+    expect(html).toContain(m.board_start_thread());
   } finally {
     queries.clear();
   }

@@ -27,8 +27,8 @@ export function isRealmPublicationCompletion(receipt: RealmCompletion): receipt 
 }
 
 export function isRealmMembershipCompletion(receipt: RealmCompletion): receipt is RealmMembershipCompletion {
+  if (!('action' in receipt) || !('membership' in receipt)) return false;
   return (
-    'membership' in receipt &&
     (receipt.action === 'join' || receipt.action === 'leave') &&
     (receipt.membership === 'member' || receipt.membership === 'pending' || receipt.membership === 'none')
   );

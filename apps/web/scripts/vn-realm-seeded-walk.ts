@@ -378,8 +378,8 @@ async function walkPersonas(stack: Origins, identities: Identities, evidence: Ev
       });
     };
 
-    const anonymous = await browser.newContext();
-    const page = await anonymous.newPage({ locale: 'en-US' });
+    const anonymous = await browser.newContext({ locale: 'en-US' });
+    const page = await anonymous.newPage();
     page.setDefaultTimeout(45_000);
     await page.route('**/*', loopbackOnly);
     for (const width of [390, 1280, 1440])
@@ -426,8 +426,8 @@ async function walkPersonas(stack: Origins, identities: Identities, evidence: Ev
     evidence.sequence.push('anonymous-membership-sign-in');
     await anonymous.close();
 
-    const member = await browser.newContext();
-    const signed = await member.newPage({ locale: 'en-US' });
+    const member = await browser.newContext({ locale: 'en-US' });
+    const signed = await member.newPage();
     signed.setDefaultTimeout(60_000);
     await signed.route('**/*', loopbackOnly);
     await signed.goto(realmPath('en'), { waitUntil: 'domcontentloaded' });
