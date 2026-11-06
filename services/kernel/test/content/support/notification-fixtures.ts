@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { accessCheck, type AccountActor } from '../../../src/request/access.ts';
+import type { AccountActor } from '../../../src/request/access.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
 import { partitionOf, routeOf } from '../../../src/route/route.ts';
 import { threadTarget } from '../../../src/content/commands.ts';
@@ -290,46 +290,6 @@ async function installGrant(
   await installIdentityGrants(system.database.pool, resourceId, accountId, actions);
 }
 
-// DIAGNOSTIC (remove before landing): probes Access on the Global Context for creation actions.
-async function probeParentCreation(system: NativeContentSystem, persona: Persona, label: string): Promise<void> {
-  const pool = system.database.pool;
-  const actor = await system.access.authenticate(persona.bearer, { pool, deadline: Date.now() + 10_000 });
-  const results: string[] = [];
-  for (const action of ['subject:read', 'space:create', 'realm:create', 'subject:create']) {
-    try {
-      const check = await accessCheck(system.access, actor, action, { route: 0, id: GLOBAL_CONTEXT }, { pool, deadline: Date.now() + 10_000 });
-      results.push(`${action}=${await check(pool)}`);
-    } catch (error) {
-      results.push(`${action}=throw(${String(error).slice(0, 120)})`);
-    }
-  }
-  const rows = await pool.query<{ action: string; subject_kind: string }>(
-    'SELECT action, subject_kind FROM access.resource_grant WHERE route=0 AND resource_id=$1 AND (subject_id=$2 OR subject_kind=$3) ORDER BY action',
-    [GLOBAL_CONTEXT, persona.id, 'active_accounts'],
-  );
-  const state = await pool.query<{ state: string; authn_fenced: boolean }>(
-    'SELECT state, authn_fenced FROM access.account WHERE route=$1 AND account_id=$2',
-    [route(persona.id), persona.id],
-  );
-  console.log(
-    `PROBE ${label} ${persona.id} ${results.join(' ')} rows=${rows.rows.map((r) => `${r.action}/${r.subject_kind}`).join(',')} state=${JSON.stringify(state.rows)}`,
-  );
-}
-
-async function installStandingCreation(system: NativeContentSystem, actions: readonly string[]): Promise<void> {
-  await system.database.pool.query(
-    `INSERT INTO access.resource_grant (route,resource_id,subject_kind,subject_id,subject_role,action,valid,transaction_id)
-     SELECT 0,$1::uuid,'active_accounts','00000000-0000-0000-0000-000000000000'::uuid,'',candidate.action,'(,)'::tstzrange,$2::uuid
-     FROM unnest($3::text[]) AS candidate(action)
-     WHERE NOT EXISTS (
-       SELECT 1 FROM access.resource_grant existing
-       WHERE existing.route=0 AND existing.resource_id=$1::uuid AND existing.subject_kind='active_accounts'
-         AND existing.subject_role='' AND existing.action=candidate.action AND existing.valid @> now()
-     )`,
-    [GLOBAL_CONTEXT, randomUUID(), [...actions]],
-  );
-}
-
 export async function createNotificationFixture(options: { growth?: boolean } = {}): Promise<NotificationFixture> {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error('DATABASE_URL is required for native notification outcomes');
@@ -397,26 +357,13 @@ export async function createNotificationFixture(options: { growth?: boolean } = 
     await system.clock.setCommandTime(fixture.now);
     await system.clock.setCursorVerificationTime(fixture.now);
     await bootstrapRelease(system.database.pool, bundledRelease, () => new Date(fixture.now));
-    // Space, Realm and subject creation authority sits on the Global Context parent (the platform root
-    // anchor). Every persona that creates a Space, including the public-board author, holds it there.
+    // Parent creation rows sit on the Global Context, the platform root anchor that Space and Realm
+    // creation authorize against. Whether Access admits them is the Access producer's decision (see
+    // the accounts continuation brief); the fixture installs the same rows the other native fixtures use.
     const parentCreation = ['space:create', 'realm:create', 'subject:create'];
     await installGrant(system, GLOBAL_CONTEXT, author.id, ['subject:read', ...parentCreation]);
     await installGrant(system, GLOBAL_CONTEXT, realmOwner.id, parentCreation);
 
-    // DIAGNOSTIC (remove before landing)
-    {
-      const governanceRow = await system.database.pool.query<{ accountId: string }>(
-        'SELECT account_id::text AS "accountId" FROM access.governance_bootstrap',
-      );
-      const governanceId = governanceRow.rows[0]!.accountId;
-      const governanceCredential = await system.auth.issue({
-        accountId: governanceId,
-        clientId: system.auth.ordinaryClient.id,
-        scopes: system.auth.ordinaryScopes,
-      });
-      await probeParentCreation(system, accountPersona(governanceCredential), 'governance');
-    }
-    await probeParentCreation(system, author, 'author');
     const [publicBoard, protectedBoard] = await Promise.all([
       createBoard(system, author, 'public', 'public'),
       createBoard(system, realmOwner, 'protected', 'protected'),
