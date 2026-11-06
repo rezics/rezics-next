@@ -404,11 +404,19 @@ export async function createNotificationFixture(options: { growth?: boolean } = 
     await installGrant(system, GLOBAL_CONTEXT, realmOwner.id, parentCreation);
 
     // DIAGNOSTIC (remove before landing)
-    await probeParentCreation(system, author, 'before-author');
-    await probeParentCreation(system, realmOwner, 'before-realmowner');
-    await installStandingCreation(system, ['space:create', 'realm:create', 'subject:create']);
-    await probeParentCreation(system, author, 'after-author');
-    await probeParentCreation(system, realmOwner, 'after-realmowner');
+    {
+      const governanceRow = await system.database.pool.query<{ accountId: string }>(
+        'SELECT account_id::text AS "accountId" FROM access.governance_bootstrap',
+      );
+      const governanceId = governanceRow.rows[0]!.accountId;
+      const governanceCredential = await system.auth.issue({
+        accountId: governanceId,
+        clientId: system.auth.ordinaryClient.id,
+        scopes: system.auth.ordinaryScopes,
+      });
+      await probeParentCreation(system, accountPersona(governanceCredential), 'governance');
+    }
+    await probeParentCreation(system, author, 'author');
     const [publicBoard, protectedBoard] = await Promise.all([
       createBoard(system, author, 'public', 'public'),
       createBoard(system, realmOwner, 'protected', 'protected'),
