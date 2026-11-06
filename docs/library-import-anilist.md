@@ -44,9 +44,11 @@ an explicit native clear separately. Apply needs a separate `confirmNativeVoteEf
 upload confirmation, state import and the score value do not provide that consent.
 
 Decision: native import tests keep the platform steward identity on the original governance scopes, including
-`gate:any`. Every fixture grant authenticates a sibling grantor onto that command's deadline with only `access:grant`
-plus either `gate:any` (library-gate) or the granted actions. Reusing the original steward snapshot, copying the
-full governance token onto that deadline, or putting `gate:personal_library` on the grantor identity drops coverage.
+`gate:any`. Bootstrap installs `platform.governance` on the Global Context; that role already holds `access:grant`,
+`gate:any` and the extra import actions. Fixture grants use mounted `/v1/grants` so Accounts authenticates the grantor
+on the live request deadline. Library-gate keeps that original steward bearer; extra actions sign a sibling token with
+only `access:grant` plus the granted actions. Reusing a prior actor snapshot, copying the full governance token, or
+putting `gate:personal_library` on the grantor identity drops coverage.
 
 Decision: compose Rating's complete native review observation and exact guarded command for the selected
 same-logical-home target in the existing AniList row; foreign-home support remains deferred. Confirmation

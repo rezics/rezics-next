@@ -14,8 +14,7 @@ import {
   unitData,
   type ProfileData,
 } from '../../../../../packages/definitions/test/support/library-profiles.ts';
-import { bootstrapGovernance } from '../../../src/access/bootstrap-governance.ts';
-import { createGrantCommands } from '../../../src/access/grant-commands.ts';
+import { bootstrapGovernance, PLATFORM_GOVERNANCE_ROLE } from '../../../src/access/bootstrap-governance.ts';
 import { createLifecycleInternals, type ProvisioningEvidence } from '../../../src/access/lifecycle.ts';
 import { createSuspensionCommands } from '../../../src/access/suspension.ts';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
@@ -269,56 +268,73 @@ export async function createProfileEntryFixture(
     const owner = await identity([...entryScopes, ...(options.ownerScopes ?? [])]);
     const other = await identity(entryScopes);
     await bootstrapGovernance(pool, steward.actor.accountId);
-    const grants = createGrantCommands({
-      pool,
-      access,
-      managementAction: 'access:grant',
-      ...(options.clock === undefined ? {} : { clock: options.clock }),
-    });
-    // Access admits a grantor only on the deadline that authenticated it.
-    // The sibling token carries access:grant plus either gate:any or the
-    // granted actions. The original steward snapshot, the full governance
-    // token copied onto this deadline, and gate:personal_library on the
-    // grantor identity all drop coverage.
-    async function grantOnDeadline(
+    // Bootstrap writes platform.governance on the Global Context for this steward.
+    // That role includes access:grant, gate:any, definitions:publish, subject:batch_write
+    // and subject:merge. Accounts admits a grantor on the live request deadline, so
+    // fixture grants use mounted /v1/grants rather than a prior actor snapshot.
+    // Library-gate keeps the original steward bearer (access:grant + gate:any). Extra
+    // actions sign a sibling token with only access:grant plus those actions.
+    async function grantFacts() {
+      const roles = await reader.query(
+        `SELECT grant_role AS fact, subject_kind, subject_id::text AS subject
+           FROM access.resource_role_grant
+          WHERE route = 0 AND resource_id = $1 AND subject_id = $2
+          ORDER BY grant_role`,
+        [global.id, steward.actor.accountId],
+      );
+      const grants = await reader.query(
+        `SELECT action AS fact, subject_kind, subject_id::text AS subject
+           FROM access.resource_grant
+          WHERE route = 0 AND resource_id = $1 AND (subject_id = $2 OR subject_kind = 'active_accounts')
+          ORDER BY action, subject_kind, subject`,
+        [global.id, steward.actor.accountId],
+      );
+      return { role: PLATFORM_GOVERNANCE_ROLE, roles: roles.rows, grants: grants.rows };
+    }
+    async function grantViaHttp(
       subject: { kind: 'account'; id: string } | { kind: 'active_accounts' },
       actions: readonly string[],
       revoke = false,
     ) {
-      const deadline = deadlineFor(30_000);
       const groups = actions.filter((action) => action !== 'gate:any' && /^gate:[a-z][a-z_]{0,62}$/.test(action));
       const held = actions.filter((action) => !groups.includes(action));
-      const actor = await authenticateAccount(
-        access,
-        { pool, deadline },
-        {
-          accountId: steward.actor.accountId,
-          clientId: steward.actor.clientId,
-          scopes: ['access:grant', ...(groups.length > 0 ? (['gate:any'] as const) : []), ...held],
-          authnEpoch: steward.actor.authnEpoch,
-          ...(steward.actor.requestedBy ? { requestedBy: steward.actor.requestedBy } : {}),
-        },
+      const bearer =
+        groups.length > 0
+          ? steward.bearer
+          : await accountToken({
+              accountId: steward.actor.accountId,
+              clientId: steward.actor.clientId,
+              scopes: ['access:grant', ...held],
+              authnEpoch: steward.actor.authnEpoch,
+              ...(steward.actor.requestedBy ? { requestedBy: steward.actor.requestedBy } : {}),
+            });
+      const response = await kernel.handle(
+        new Request(`http://kernel.test/v1/grants${revoke ? ':revoke' : ''}`, {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${bearer}`,
+            'content-type': 'application/json',
+            'idempotency-key': JSON.stringify(entryKey()),
+          },
+          body: JSON.stringify({ resource: global, subject, actions: [...actions], valid: '(,)' }),
+        }),
       );
-      const input = {
-        resource: global,
-        subject,
-        actions: [...actions],
-        valid: '(,)',
-        key: entryKey(),
-      };
-      const command = { pool, actor, deadline };
-      if (revoke) await grants.revoke(command, input);
-      else await grants.create(command, input);
+      const expected = revoke ? 200 : 201;
+      if (response.status !== expected) {
+        throw new Error(
+          `Grant ${revoke ? 'revoke' : 'create'} ${response.status}: ${await response.text()} facts=${JSON.stringify(await grantFacts())}`,
+        );
+      }
     }
-    await grantOnDeadline({ kind: 'account', id: steward.actor.accountId }, [
+    await grantViaHttp({ kind: 'account', id: steward.actor.accountId }, [
       'definitions:publish',
       'definitions:activate',
     ]);
     // Governance bootstrap already performed the Global parent's one-time installation.
     // Extend its standing creation authority through ordinary, fully authorized grants.
-    await grantOnDeadline({ kind: 'active_accounts' }, ['subject:create', 'statement:propose']);
+    await grantViaHttp({ kind: 'active_accounts' }, ['subject:create', 'statement:propose']);
     const grantAccountActions = (accountId: string, actions: readonly string[]) =>
-      grantOnDeadline({ kind: 'account', id: accountId }, actions);
+      grantViaHttp({ kind: 'account', id: accountId }, actions);
 
     async function sendWithHeaders(
       persona: 'owner' | 'other' | 'steward' | 'anonymous' | string,
@@ -511,11 +527,11 @@ export async function createProfileEntryFixture(
       },
       setLibraryOpen,
       async grantLibraryGate(accountId: string) {
-        await grantOnDeadline({ kind: 'account', id: accountId }, ['gate:personal_library']);
+        await grantViaHttp({ kind: 'account', id: accountId }, ['gate:personal_library']);
       },
       grantAccountActions,
       async revokeLibraryGate(accountId: string) {
-        await grantOnDeadline({ kind: 'account', id: accountId }, ['gate:personal_library'], true);
+        await grantViaHttp({ kind: 'account', id: accountId }, ['gate:personal_library'], true);
       },
       unknownSubject: () => newId(0x6e31),
       async suspend(accountId: string) {
