@@ -9,6 +9,19 @@ export {
 export type { AgentSelfSource } from './subject.ts';
 export { readSemanticLifecycle } from './lifecycle-state.ts';
 export {
+  admitZoneCleanup,
+  advanceZoneCleanupGrants,
+  readZoneCleanupParticipants,
+  ZONE_CLEANUP_PARTICIPANTS,
+} from './deletion/index.ts';
+export type {
+  ZoneCleanupAdmission,
+  ZoneCleanupCustody,
+  ZoneCleanupIntent,
+  ZoneCleanupParticipant,
+  ZoneCleanupParticipantState,
+} from './deletion/index.ts';
+export {
   readWorkReleaseCards,
   workReleaseCardFieldLimit,
   workReleaseCardLimit,

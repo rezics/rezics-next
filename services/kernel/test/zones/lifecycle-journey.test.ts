@@ -292,6 +292,18 @@ test('ordinary owners cannot early-purge, a hold blocks cleanup, and legal order
   });
   expect(purge.status, JSON.stringify(purge.body)).toBe(200);
   expect(purge.body.state).toBe('purge_pending');
-  expect((await f.purge(id)).next).toBeNull();
+  let cursor: string | null = null;
+  for (let step = 0; step < 8; step++) {
+    const page = await f.purge(id, cursor);
+    if (page.next === null) break;
+    cursor = page.next;
+  }
   expect(await f.raw(id)).toBeUndefined();
+  const grants = await f.db.admin.query(
+    `SELECT
+       (SELECT count(*)::int FROM access.resource_grant WHERE resource_id=$1) AS resource,
+       (SELECT count(*)::int FROM access.resource_role_grant WHERE resource_id=$1) AS role`,
+    [id],
+  );
+  expect(grants.rows[0]).toEqual({ resource: 0, role: 0 });
 });

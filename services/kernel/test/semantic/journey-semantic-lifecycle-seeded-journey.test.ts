@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { readZoneCleanupParticipants } from '../../src/semantic/deletion/index.ts';
 import { createBody, page, resourceFixture, type ResourceFixture } from '../zones/resource-fixture.ts';
 
 let f: ResourceFixture;
@@ -74,4 +75,28 @@ test('owner, another owner, anonymous reader, moderator and a delegate see curre
   expect(shown.status).toBe(200);
   expect(JSON.stringify(shown.body)).toContain('Public journey page');
   expect(JSON.stringify(shown.body)).not.toContain('Public journey label');
+
+  expect([401, 403]).toContain(
+    (await f.call('suspended', 'DELETE', `/v1/zones/${id}`, undefined, f.conditional(restored.body.zone.revision)))
+      .status,
+  );
+  const listed = await f.call('owner', 'GET', '/v1/zones?deleted=false');
+  expect(listed.status).toBe(200);
+  expect(listed.body.zones.some((zone: { id: string }) => zone.id === id)).toBe(true);
+  expect(listed.body.next === null || typeof listed.body.next === 'string').toBe(true);
+});
+
+test('a disposable owner erasure fences writes and leaves participant custody pending until owners finish', async () => {
+  const created = await f.call('owner', 'POST', '/v1/zones', createBody());
+  expect(created.status, JSON.stringify(created.body)).toBe(201);
+  const id = created.body.zone.id as string;
+  const before = await readZoneCleanupParticipants(f.db.pool, f.accounts.owner);
+  expect(before.complete).toBe(false);
+  expect(before.participants.map((row) => row.participant)).toEqual(['content', 'library', 'auth', 'search']);
+  await f.tombstoneOwner();
+  expect(
+    (await f.call('owner', 'DELETE', `/v1/zones/${id}`, undefined, f.conditional(created.body.zone.revision))).status,
+  ).toBe(401);
+  const after = await readZoneCleanupParticipants(f.db.pool, f.accounts.owner);
+  expect(after.participants.every((row) => row.outcome === 'pending' || row.outcome === 'missing')).toBe(true);
 });

@@ -1,4 +1,5 @@
 import { lockRecordPurgeAuthoritySource, type RecordPurgeAuthority } from '../semantic/record-purge-authority.ts';
+import { admitZoneCleanup, advanceZoneCleanupGrants } from '../semantic/deletion/index.ts';
 import { authoritativeTimeValue, currentCommand, type CommandTransaction } from '../command/command.ts';
 import { partitionOf } from '../route/route.ts';
 import { liveCoverage, retainCoveredPayload } from './cleanup-intent.ts';
@@ -100,6 +101,23 @@ export async function minimizeAccountErasureZone(
   const row = await lockZoneHead(tx, input.route, input.id);
   if (!row) return 'missing';
   if (row.held) return 'held';
+  if (row.ownerId === input.accountId) {
+    const admission = await admitZoneCleanup(tx, row, {
+      at: authoritativeTimeValue(command.time),
+      accountId: input.accountId,
+      barrier: { version: '1', at: authoritativeTimeValue(command.time) },
+      primaryOwner: {
+        accountId: input.accountId,
+        revision: row.revision,
+        lifecycleRevision: row.lifecycleRevision,
+        transactionId: row.transactionId,
+      },
+    });
+    if (admission) {
+      const grants = await advanceZoneCleanupGrants(tx, admission, null, 100);
+      if (grants.disposition === 'progress') return 'held';
+    }
+  }
   const matchingOwner = row.ownerId === input.accountId;
   const keepPublicPayload = row.visibility === 'public' && row.state === 'active' && row.publicEver;
   const coverage = liveCoverage(row);

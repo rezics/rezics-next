@@ -1,4 +1,5 @@
 import { enrollResourceRecordSources } from '../semantic/record-purge-custody.ts';
+import { admitZoneCleanup, advanceZoneCleanupGrants } from '../semantic/deletion/index.ts';
 import type { Pool } from 'pg';
 import { authoritativeTimeValue, noEffect, runCommand, type LegacyCommandOptions } from '../command/command.ts';
 import { partitionOf } from '../route/route.ts';
@@ -19,7 +20,7 @@ export async function purgeZonePage(input: ZonePurgePageInput): Promise<{ next: 
   const { pool, clock, route, zoneId, cursor, limit } = input;
   if (!Number.isInteger(limit) || limit < 1 || limit > 100)
     throw new RangeError('Zone purge page limit is 1 through 100');
-  if (cursor !== null && cursor !== 'payload') return { next: null };
+  if (cursor !== null && cursor !== 'payload' && cursor !== 'grants') return { next: null };
   const deadline = Date.now() + 20_000;
   const options: LegacyCommandOptions = { partition: partitionOf(route), deadline, clock };
   const outcome = await runCommand(pool, options, async (tx, command) => {
@@ -33,6 +34,13 @@ export async function purgeZonePage(input: ZonePurgePageInput): Promise<{ next: 
     const branch = intent?.branch ?? (expired ? 'ordinary' : null);
     if (!branch) return noEffect({ next: null });
     if (branch === 'ordinary' && liveCoverage(row).length > 0) return noEffect({ next: null });
+    if (cursor !== 'payload') {
+      const admission = await admitZoneCleanup(tx, row, { at });
+      if (admission) {
+        const grants = await advanceZoneCleanupGrants(tx, admission, null, Math.min(limit, 100));
+        if (grants.disposition === 'progress') return noEffect({ next: 'grants' });
+      }
+    }
     const next: ZoneHead = { ...row, writeFenced: true };
     if (branch === 'early_privacy' && liveCoverage(row).length > 0) {
       const kept = retainCoveredPayload(row);

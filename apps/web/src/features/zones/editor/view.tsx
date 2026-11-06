@@ -9,6 +9,8 @@ import { useBlocker, useRouter } from '@tanstack/react-router';
 import { Alert, AlertTitle, AlertDescription } from '@rezics/ui/shadcn/alert';
 import { m } from '../../../paraglide/messages.js';
 import { PageHeading } from '../../../shell/page-heading';
+import { ZoneLifecycleControls } from '../../catalogue/lifecycle-zone.tsx';
+import type { ZoneLifecycleResult } from '../../catalogue/lifecycle-zone';
 import { readerHref, type Visibility, type ZoneEditorSession } from './model';
 
 import { ZoneNameFields } from './name-fields';
@@ -116,11 +118,13 @@ export function ZoneConfigurationEditor({
   locale,
   enabled = true,
   writeEnabled = enabled,
+  onLifecycle,
 }: {
   session: ZoneEditorSession;
   locale: string;
   enabled?: boolean;
   writeEnabled?: boolean;
+  onLifecycle?: (operation: 'delete' | 'restore') => Promise<ZoneLifecycleResult>;
 }) {
   const state = useSyncExternalStore(session.subscribe, session.snapshot, session.snapshot);
   const editor = useRef<HTMLElement>(null);
@@ -135,6 +139,7 @@ export function ZoneConfigurationEditor({
   const [visibility, setVisibility] = useState<Visibility>(state.saved?.zone.visibility ?? 'private');
   const [composing, setComposing] = useState(false);
   const [copied, setCopied] = useState<'copied' | 'failed' | null>(null);
+  const [lifecycle, setLifecycle] = useState<ZoneLifecycleResult | undefined>();
   const { saved, draft, loaded } = state;
   useEffect(() => {
     if (!current()) return;
@@ -298,6 +303,22 @@ export function ZoneConfigurationEditor({
       <header className="space-y-3">
         <PageHeading>{m.zone_editor_heading()}</PageHeading>
         <p className="max-w-3xl text-muted-foreground">{m.zone_editor_live_note()}</p>
+        {onLifecycle && saved ? (
+          <ZoneLifecycleControls
+            deleted={saved.zone.deletedAt !== null}
+            withheld={false}
+            busy={state.busy || !writeEnabled}
+            last={lifecycle}
+            onDelete={() => {
+              if (!current() || dirty) return;
+              void onLifecycle('delete').then((result) => current() && setLifecycle(result));
+            }}
+            onRestore={() => {
+              if (!current()) return;
+              void onLifecycle('restore').then((result) => current() && setLifecycle(result));
+            }}
+          />
+        ) : null}
       </header>
       {!draft || !saved ? (
         <>
