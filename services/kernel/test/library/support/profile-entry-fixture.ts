@@ -15,6 +15,7 @@ import {
   type ProfileData,
 } from '../../../../../packages/definitions/test/support/library-profiles.ts';
 import { bootstrapGovernance } from '../../../src/access/bootstrap-governance.ts';
+import { createGrantCommands } from '../../../src/access/grant-commands.ts';
 import { createLifecycleInternals, type ProvisioningEvidence } from '../../../src/access/lifecycle.ts';
 import { createSuspensionCommands } from '../../../src/access/suspension.ts';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
@@ -22,7 +23,7 @@ import type { KernelClock } from '../../../src/clock.ts';
 import { createPool } from '../../../src/database/pool.ts';
 import { createKernel } from '../../../src/http/kernel.ts';
 import { createEntryCommands } from '../../../src/library/entries.ts';
-import type { Access, AccountActor } from '../../../src/request/access.ts';
+import type { Access, AccountActor, Resource } from '../../../src/request/access.ts';
 import { deadlineFor } from '../../../src/request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
@@ -270,33 +271,56 @@ export async function createProfileEntryFixture(
     const owner = await identity([...entryScopes, ...(options.ownerScopes ?? [])]);
     const other = await identity(entryScopes);
     await bootstrapGovernance(pool, steward.actor.accountId);
-    async function grantViaHttp(
-      subject: { kind: 'account'; id: string } | { kind: 'active_accounts' },
+    const grants = createGrantCommands({
+      pool,
+      access,
+      managementAction: 'access:grant',
+      ...(options.clock === undefined ? {} : { clock: options.clock }),
+    });
+    const stewardClaims = () => ({
+      accountId: steward.actor.accountId,
+      clientId: steward.actor.clientId,
+      scopes: steward.actor.scopes,
+      authnEpoch: steward.actor.authnEpoch,
+      requestedBy: steward.actor.requestedBy,
+    });
+    const grant = (resource: Resource, subject: string, actions: string[]) =>
+      grants.create(context(steward.actor), {
+        resource,
+        subject: { kind: 'account', id: subject },
+        actions,
+        valid: '(,)',
+        key: entryKey(),
+      });
+    await grant(global, steward.actor.accountId, ['definitions:publish', 'definitions:activate']);
+    // Governance bootstrap already performed the Global parent's one-time installation.
+    // Extend its standing creation authority through ordinary, fully authorized grants.
+    await grants.create(context(steward.actor), {
+      resource: global,
+      subject: { kind: 'active_accounts' },
+      actions: ['subject:create', 'statement:propose'],
+      valid: '(,)',
+      key: entryKey(),
+    });
+    // Later extra grants re-authenticate the steward onto this command deadline with the
+    // original consented scopes. Narrowing those scopes drops platform.governance coverage.
+    async function grantAccount(
+      subject: { kind: 'account'; id: string },
       actions: readonly string[],
       revoke = false,
     ) {
-      const response = await kernel.handle(
-        new Request(`http://kernel.test/v1/grants${revoke ? ':revoke' : ''}`, {
-          method: 'POST',
-          headers: {
-            authorization: `Bearer ${steward.bearer}`,
-            'content-type': 'application/json',
-            'idempotency-key': JSON.stringify(entryKey()),
-          },
-          body: JSON.stringify({ resource: global, subject, actions, valid: '(,)' }),
-        }),
-      );
-      const expected = revoke ? 200 : 201;
-      if (response.status !== expected)
-        throw new Error(`Grant ${revoke ? 'revoke' : 'create'} ${response.status}: ${await response.text()}`);
+      const deadline = deadlineFor(30_000);
+      const actor = await authenticateAccount(access, { pool, deadline }, stewardClaims());
+      const input = {
+        resource: global,
+        subject,
+        actions: [...actions],
+        valid: '(,)',
+        key: entryKey(),
+      };
+      if (revoke) await grants.revoke({ pool, actor, deadline }, input);
+      else await grants.create({ pool, actor, deadline }, input);
     }
-    await grantViaHttp({ kind: 'account', id: steward.actor.accountId }, [
-      'definitions:publish',
-      'definitions:activate',
-    ]);
-    // Governance bootstrap already performed the Global parent's one-time installation.
-    // Extend its standing creation authority through ordinary, fully authorized grants.
-    await grantViaHttp({ kind: 'active_accounts' }, ['subject:create', 'statement:propose']);
 
     async function sendWithHeaders(
       persona: 'owner' | 'other' | 'steward' | 'anonymous' | string,
@@ -489,13 +513,13 @@ export async function createProfileEntryFixture(
       },
       setLibraryOpen,
       async grantLibraryGate(accountId: string) {
-        await grantViaHttp({ kind: 'account', id: accountId }, ['gate:personal_library']);
+        await grantAccount({ kind: 'account', id: accountId }, ['gate:personal_library']);
       },
       async grantAccountActions(accountId: string, actions: readonly string[]) {
-        await grantViaHttp({ kind: 'account', id: accountId }, actions);
+        await grantAccount({ kind: 'account', id: accountId }, actions);
       },
       async revokeLibraryGate(accountId: string) {
-        await grantViaHttp({ kind: 'account', id: accountId }, ['gate:personal_library'], true);
+        await grantAccount({ kind: 'account', id: accountId }, ['gate:personal_library'], true);
       },
       unknownSubject: () => newId(0x6e31),
       async suspend(accountId: string) {
