@@ -50,9 +50,10 @@ test('native prefix normalization binds effective queries and handles literal an
     }
   }
   const all = await labels.listLabels(actor, { limit: 1 });
-  expect(await labels.listLabels(actor, { q: ' \t ', limit: 1, cursor: all.next! })).toEqual(
-    await labels.listLabels(actor, { limit: 1, cursor: all.next! }),
-  );
+  const whitespace = await labels.listLabels(actor, { q: ' \t ', limit: 1, cursor: all.next! });
+  const unfiltered = await labels.listLabels(actor, { limit: 1, cursor: all.next! });
+  expect(whitespace.labels).toEqual(unfiltered.labels);
+  expect(Boolean(whitespace.next)).toBe(Boolean(unfiltered.next));
   const page = await labels.listLabels(actor, { q: ' Bound ', limit: 1 });
   await labels.listLabels(actor, { q: 'Bound', limit: 1, cursor: page.next! });
   for (const q of ['Other', 'bound'])

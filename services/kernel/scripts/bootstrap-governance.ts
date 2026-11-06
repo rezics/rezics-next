@@ -22,8 +22,10 @@ async function main(): Promise<void> {
   await import('reylo/register');
   const { installNativeHistory } = await import('../src/composition/history.ts');
   installNativeHistory();
+  const { configureReceiptKeys, readReceiptKeyRing } = await import('../src/command/receipt-key.ts');
   const { bootstrapGovernance } = await import('../src/access/bootstrap-governance.ts');
   const pool = createPool(url);
+  configureReceiptKeys(pool, readReceiptKeyRing());
   try {
     await bootstrapGovernance(pool, accountId);
   } finally {

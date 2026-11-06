@@ -65,10 +65,16 @@ let authDatabase: string;
 let access: ReturnType<typeof createAccess>;
 const password = 'correct horse battery staple';
 
+function receiptKeysEnv(): string {
+  return [...testReceiptKeys().keys.entries()]
+    .map(([version, key]) => `${version}:${Buffer.from(key).toString('base64url')}`)
+    .join(',');
+}
+
 function cli(id: string) {
   return Bun.spawn(['bun', script, '--account', id], {
     cwd: root,
-    env: { ...process.env, DATABASE_URL: url },
+    env: { ...process.env, DATABASE_URL: url, KERNEL_RECEIPT_KEYS: receiptKeysEnv() },
     stdout: 'pipe',
     stderr: 'pipe',
   });

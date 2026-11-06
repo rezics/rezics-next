@@ -12,6 +12,7 @@ import {
   validateRecordSourceSetCommitment,
 } from '../../src/history/adapters/record-source-set.ts';
 import { RecordSourceSetUnavailableError } from '../../src/history/adapters/record-source-set-native.ts';
+import { preferenceSubjectScope } from '../../src/history/contract/index.ts';
 import { routeOf, partitionOf } from '../../src/route/route.ts';
 import { createDeletionFixture } from '../semantic/support/deletion-fixture.ts';
 import { custodyFixture, digest, kind, scope, type CustodyFixture, type Person } from './command-custody-fixture.ts';
@@ -179,7 +180,7 @@ test('History consumes the actual Semantic one-set building seal locator revisio
     expect(locator.transactionId).toBe(currentCommand(tx).transactionId);
     expect(() => declareCommandRecordSourceSet(tx, set)).toThrow();
     expect(() => declareCommandRecordSources(tx, [source])).toThrow();
-    await declareCommandHistory(tx, kind, scope(person));
+    await declareCommandHistory(tx, kind, preferenceSubjectScope(routeOf(person.accountId)!, person.accountId));
     await stageHistoryWork(tx, {
       owner: 'record-purge-fixture',
       intent: {
@@ -204,7 +205,16 @@ test('History consumes the actual Semantic one-set building seal locator revisio
     // Real membership becomes known after nested work serialization, before native commit.
     await producer.appendSemanticRecordSourceSet(tx, set, { sources: [source], terms: [] });
     await producer.sealSemanticRecordSourceSet(tx, set);
-    return { value: { payload: 'native set' }, events: [] };
+    return {
+      value: { payload: 'native set' },
+      events: [
+        {
+          type: 'com.rezics.access.account-updated.v1',
+          subject: person.accountId,
+          data: { accountId: person.accountId },
+        },
+      ],
+    };
   });
   if (!locator) throw new Error('Missing native locator');
   const snapshot = await producer.readSemanticRecordSourceSet({ pool: f.db.pool }, locator, {

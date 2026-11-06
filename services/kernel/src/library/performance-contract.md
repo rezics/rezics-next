@@ -26,11 +26,14 @@ through the ordinary command after Access bootstrap; Access keeps Global point c
 History before `runCommand`, matching server and worker. Subject writes load Semantic's installed source-set module
 through History's adapter at `src/semantic/record-source-set.ts`; a declaration file alone stays unavailable.
 `beginSemanticRecordSourceSet` already declares the set and registers work, so a successful History test returns an
-ordinary result rather than `noEffect`; a fabricated handle fails owner provenance, not module-unavailable. Direct
-`createKernel` / `runCommand` tests bind the dedicated receipt ring rather than seeding grants. Composed
-Entry/progress collection-read on a subject id is not library-entry authorization; native fixtures defer that denial
-and keep `library_entry` admission. FULL by-label withheld pages open `reading_progress` and carry
-`progress_session:list`; a suspended own-account viewer is unauthenticated. Whitespace prefix continuation uses one frozen clock so sealed tokens compare. Generic prefix plans may
+ordinary `access.account.preferences` result with `account-updated` rather than `noEffect`; a fabricated handle fails
+owner provenance, not module-unavailable. Direct `createKernel` / `runCommand` tests bind the dedicated receipt ring
+rather than seeding grants. The operator bootstrap CLI binds that same ring from `KERNEL_RECEIPT_KEYS` because
+standing-parent installation writes receipts. Composed Entry/progress collection-read on a subject id is not
+library-entry authorization; native fixtures defer that denial and keep `library_entry` admission. FULL by-label
+withheld pages open `reading_progress` and carry `progress_session:list`; a suspended own-account viewer is
+unauthenticated. Whitespace-only prefix continuation matches the unfiltered page; authenticated list tokens stay
+unique per issuance. Growth seed encoding resets its visited-node ceiling on each insert batch. Generic prefix plans may
 Bitmap Heap Scan `personal_label_live_name`; Seq Scan stays refused. Assignment Seq Scan oracles stay the
 existing SQL.
 
