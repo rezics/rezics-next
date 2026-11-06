@@ -1397,6 +1397,62 @@ export function createAniListImport(deps: Dependencies) {
         }
         if (scoreOutcome!.status === 'applied') retained = retained.filter((field) => field !== 'score');
       }
+      const outcome: AniListOutcome = {
+        ordinal: confirmation.ordinal,
+        status,
+        retained,
+        ...(scoreOutcome ? { score: scoreOutcome } : {}),
+      };
+      let progressCheckpoint: ProgressAdoptionCheckpoint | undefined;
+      if (reviewed.progress && hash(stored.source) === reviewed.sourceFingerprint) {
+        progressCheckpoint = await executeProgressAdoption(actor, sessions, reviewed.progress, stored.progress, {
+          async canceled() {
+            return (await load<Header>(actor, id, -1)).cancelled;
+          },
+          async binding() {
+            const matching = await match(actor, stored.source);
+            const current = await observe(actor, reviewed.progress!.subjectId);
+            if (
+              matching.fingerprint !== reviewed.match.fingerprint ||
+              !current ||
+              current.subjectId !== reviewed.progress!.subjectId ||
+              current.epoch !== reviewed.progress!.profile.epoch ||
+              hash(current.pin) !== hash(reviewed.progress!.profile.pin)
+            )
+              return null;
+            return current.profileBinding ?? null;
+          },
+          async save(checkpoint, admission = false) {
+            const digest = hash(checkpoint);
+            const saved = await save(
+              actor,
+              id,
+              confirmation.ordinal,
+              admission ? 'start' : 'finish',
+              `anilist-progress:${hash({ reviewId: reviewed.id, admission, digest })}`,
+              { reviewId: reviewed.id, admission, digest },
+              (row) => {
+                if (row.review?.id !== reviewed.id) throw new LibraryConflictError();
+                return { ...row, progress: checkpoint, ...(admission ? { started: true } : {}) };
+              },
+            );
+            if (saved.value.reviewId !== reviewed.id) return false;
+            stored.progress = checkpoint;
+            return true;
+          },
+        });
+        stored.progress = progressCheckpoint;
+        outcome.progress = publicProgress(reviewed.progress, progressCheckpoint);
+        const measureStatuses = outcome.progress.measures.map((measure) => measure.status);
+        if (measureStatuses.includes('stale')) status = 'stale';
+        else if (
+          status === 'unsupported' &&
+          measureStatuses.some((value) => value === 'applied' || value === 'cleared')
+        )
+          status = 'applied';
+        else if (measureStatuses.includes('failed')) status = 'failed';
+        outcome.status = status;
+      }
       if (
         status !== 'stale' &&
         status !== 'failed' &&
@@ -1458,62 +1514,8 @@ export function createAniListImport(deps: Dependencies) {
       }
       if (status !== 'applied' && !retained.includes('status') && Object.hasOwn(stored.source.evidence, 'status'))
         retained.push('status');
-      const outcome: AniListOutcome = {
-        ordinal: confirmation.ordinal,
-        status,
-        retained,
-        ...(scoreOutcome ? { score: scoreOutcome } : {}),
-      };
-      let progressCheckpoint: ProgressAdoptionCheckpoint | undefined;
-      if (reviewed.progress && hash(stored.source) === reviewed.sourceFingerprint) {
-        progressCheckpoint = await executeProgressAdoption(actor, sessions, reviewed.progress, stored.progress, {
-          async canceled() {
-            return (await load<Header>(actor, id, -1)).cancelled;
-          },
-          async binding() {
-            const matching = await match(actor, stored.source);
-            const current = await observe(actor, reviewed.progress!.subjectId);
-            if (
-              matching.fingerprint !== reviewed.match.fingerprint ||
-              !current ||
-              current.subjectId !== reviewed.progress!.subjectId ||
-              current.epoch !== reviewed.progress!.profile.epoch ||
-              hash(current.pin) !== hash(reviewed.progress!.profile.pin)
-            )
-              return null;
-            return current.profileBinding ?? null;
-          },
-          async save(checkpoint, admission = false) {
-            const digest = hash(checkpoint);
-            const saved = await save(
-              actor,
-              id,
-              confirmation.ordinal,
-              admission ? 'start' : 'finish',
-              `anilist-progress:${hash({ reviewId: reviewed.id, admission, digest })}`,
-              { reviewId: reviewed.id, admission, digest },
-              (row) => {
-                if (row.review?.id !== reviewed.id) throw new LibraryConflictError();
-                return { ...row, progress: checkpoint, ...(admission ? { started: true } : {}) };
-              },
-            );
-            if (saved.value.reviewId !== reviewed.id) return false;
-            stored.progress = checkpoint;
-            return true;
-          },
-        });
-        stored.progress = progressCheckpoint;
-        outcome.progress = publicProgress(reviewed.progress, progressCheckpoint);
-        const measureStatuses = outcome.progress.measures.map((measure) => measure.status);
-        if (measureStatuses.includes('stale')) status = 'stale';
-        else if (
-          status === 'unsupported' &&
-          measureStatuses.some((value) => value === 'applied' || value === 'cleared')
-        )
-          status = 'applied';
-        else if (measureStatuses.includes('failed')) status = 'failed';
-        outcome.status = status;
-      }
+      outcome.status = status;
+      outcome.retained = retained;
       // Failed attempts remain retryable with the original command; stale reviews can be refreshed before starting.
       if (
         status !== 'failed' &&

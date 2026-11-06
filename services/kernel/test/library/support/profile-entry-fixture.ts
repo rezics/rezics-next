@@ -455,6 +455,12 @@ export async function createProfileEntryFixture(
     const grantAccountActions = (accountId: string, actions: readonly string[]) =>
       grantOnDeadline({ kind: 'account', id: accountId }, actions);
 
+    async function recaptureIdentityHomes() {
+      for (const home of [...partitions].sort((left, right) => left - right)) {
+        if (home === 0 && !identityHomesReady) continue;
+        if (await identityDirty(home)) await catchUpIdentity(home);
+      }
+    }
     async function sendWithHeaders(
       persona: 'owner' | 'other' | 'steward' | 'anonymous' | string,
       method: string,
@@ -463,6 +469,7 @@ export async function createProfileEntryFixture(
       extraHeaders: HeadersInit = {},
     ) {
       await drainSubjectLinks();
+      await recaptureIdentityHomes();
       const bearer =
         persona === 'owner'
           ? owner.bearer
@@ -551,12 +558,31 @@ export async function createProfileEntryFixture(
       }
       if (!mapped) throw new Error('Native identity mapping did not finish');
       // Mapping already installed this job's epoch. Search/Library ACK is unavailable, so
-      // drop only the group pin so later bootstrap, Progress and Rating can recapture dirty.
+      // drop the group pin and publish that epoch so later bootstrap, Progress, Rating and
+      // merge can recapture dirty without waiting for those acknowledgements.
+      const epoch = job.epoch.toString();
       await pool.query(
         `UPDATE semantic.identity_epoch_prearm_bridge
             SET job_id=NULL, job_epoch=NULL, scope_digest=NULL, bridge_version=bridge_version+1
           WHERE job_id=$1 AND job_epoch=$2`,
-        [job.jobId, job.epoch.toString()],
+        [job.jobId, epoch],
+      );
+      await pool.query(
+        `UPDATE semantic.identity_epoch_job SET state='published'
+          WHERE job_id=$1 AND epoch=$2 AND state='pending'`,
+        [job.jobId, epoch],
+      );
+      await pool.query(
+        `UPDATE semantic.identity_epoch_group
+            SET pending_job=NULL, pending_epoch=NULL, published_epoch=$2
+          WHERE pending_job=$1 AND pending_epoch=$2`,
+        [job.jobId, epoch],
+      );
+      await pool.query(
+        `UPDATE semantic.identity_epoch_control
+            SET pending_job=NULL, pending_epoch=NULL, published_epoch=$2
+          WHERE pending_job=$1 AND pending_epoch=$2`,
+        [job.jobId, epoch],
       );
     }
     async function drainIdentityMerge(jobId: string) {

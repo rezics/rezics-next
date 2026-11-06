@@ -1584,78 +1584,6 @@ export function createMalImport(deps: Dependencies) {
           intent.score.outcome = scoreOutcome;
         }
       }
-      if (
-        hash(row) === r.fingerprint &&
-        !r.skip &&
-        selected.fields.includes('status') &&
-        r.state &&
-        r.target &&
-        r.source
-      ) {
-        if (r.conflict && !r.replace) {
-          if (outcome.status === 'unsupported') {
-            outcome.status = 'skipped';
-            outcome.reason = 'preserve-current-fact';
-          }
-        } else {
-          try {
-            const result = await entries.putEntry(
-              actor,
-              r.target,
-              {
-                state: r.state,
-                ...(r.current
-                  ? {
-                      revision: r.current.revision,
-                      ...(r.current.incarnationId ? { incarnationId: r.current.incarnationId } : {}),
-                    }
-                  : {}),
-              },
-              intent.key,
-              {
-                release: r.source.release,
-                epoch: r.source.epoch,
-                acceptingType: r.source.acceptingType,
-                importFence: { id, row: row.index, version: r.version },
-                ...(r.binding ? { binding: r.binding } : {}),
-              },
-            );
-            record(result);
-            if (!outcome.applied.includes('status')) outcome.applied.push('status');
-            outcome.retained = outcome.retained.filter((k) => k !== 'my_status');
-            if (outcome.status !== 'stale' && outcome.status !== 'failed' && outcome.status !== 'unavailable') {
-              outcome.status = 'applied';
-              outcome.reason = null;
-            }
-          } catch (e) {
-            if (e instanceof GrantDeniedError) throw new ProblemError('forbidden');
-            if (
-              e instanceof LibraryConflictError ||
-              e instanceof LibraryNotFoundError ||
-              (e instanceof ProblemError && ['conflict', 'unsupported_library_profile', 'not_found'].includes(e.code))
-            ) {
-              outcome.status = 'stale';
-              outcome.reason = 'refresh-review';
-            } else {
-              outcome.status = 'failed';
-              outcome.reason = 'native-command-unavailable-retry-original';
-            }
-          }
-        }
-      }
-      if (selected.fields.includes('tags') && review.labels && !review.skip) {
-        const applied = await applyLabels(actor, id, row, review, deadline, signal, record);
-        outcome.labels = applied.outcomes;
-        outcome.remainingLabels = applied.remaining;
-        if (applied.outcomes.some((o) => o.status === 'accepted' || o.status === 'unchanged')) {
-          outcome.status = 'applied';
-          outcome.applied.push('tags');
-          outcome.reason = null;
-        }
-        if (applied.outcomes.some((o) => o.status === 'failed')) outcome.status = 'failed';
-        else if (applied.outcomes.some((o) => o.status === 'stale')) outcome.status = 'stale';
-        if (applied.remaining.length) outcome.reason = 'partial-cancellation';
-      }
       if (r.progress && hash(row) === r.fingerprint) {
         const checkpoint = await executeProgressAdoption(actor, sessions, r.progress, intent.progress, {
           async canceled() {
@@ -1720,6 +1648,78 @@ export function createMalImport(deps: Dependencies) {
         ) {
           outcome.status = 'applied';
           outcome.reason = null;
+        }
+      }
+      if (selected.fields.includes('tags') && review.labels && !review.skip) {
+        const applied = await applyLabels(actor, id, row, review, deadline, signal, record);
+        outcome.labels = applied.outcomes;
+        outcome.remainingLabels = applied.remaining;
+        if (applied.outcomes.some((o) => o.status === 'accepted' || o.status === 'unchanged')) {
+          outcome.status = 'applied';
+          outcome.applied.push('tags');
+          outcome.reason = null;
+        }
+        if (applied.outcomes.some((o) => o.status === 'failed')) outcome.status = 'failed';
+        else if (applied.outcomes.some((o) => o.status === 'stale')) outcome.status = 'stale';
+        if (applied.remaining.length) outcome.reason = 'partial-cancellation';
+      }
+      if (
+        hash(row) === r.fingerprint &&
+        !r.skip &&
+        selected.fields.includes('status') &&
+        r.state &&
+        r.target &&
+        r.source
+      ) {
+        if (r.conflict && !r.replace) {
+          if (outcome.status === 'unsupported') {
+            outcome.status = 'skipped';
+            outcome.reason = 'preserve-current-fact';
+          }
+        } else {
+          try {
+            const result = await entries.putEntry(
+              actor,
+              r.target,
+              {
+                state: r.state,
+                ...(r.current
+                  ? {
+                      revision: r.current.revision,
+                      ...(r.current.incarnationId ? { incarnationId: r.current.incarnationId } : {}),
+                    }
+                  : {}),
+              },
+              intent.key,
+              {
+                release: r.source.release,
+                epoch: r.source.epoch,
+                acceptingType: r.source.acceptingType,
+                importFence: { id, row: row.index, version: r.version },
+                ...(r.binding ? { binding: r.binding } : {}),
+              },
+            );
+            record(result);
+            if (!outcome.applied.includes('status')) outcome.applied.push('status');
+            outcome.retained = outcome.retained.filter((k) => k !== 'my_status');
+            if (outcome.status !== 'stale' && outcome.status !== 'failed' && outcome.status !== 'unavailable') {
+              outcome.status = 'applied';
+              outcome.reason = null;
+            }
+          } catch (e) {
+            if (e instanceof GrantDeniedError) throw new ProblemError('forbidden');
+            if (
+              e instanceof LibraryConflictError ||
+              e instanceof LibraryNotFoundError ||
+              (e instanceof ProblemError && ['conflict', 'unsupported_library_profile', 'not_found'].includes(e.code))
+            ) {
+              outcome.status = 'stale';
+              outcome.reason = 'refresh-review';
+            } else {
+              outcome.status = 'failed';
+              outcome.reason = 'native-command-unavailable-retry-original';
+            }
+          }
         }
       }
       if (outcome.score && ['stale', 'unavailable', 'failed', 'unsupported'].includes(outcome.score.status)) {
