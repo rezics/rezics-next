@@ -493,7 +493,12 @@ function isKind(value: unknown): value is Kind {
   return value === 'new' || value === 'changed' || value === 'unchanged' || value === 'vanished';
 }
 function kindIncrements(kind: Kind): readonly [number, number, number, number] {
-  return [kind === 'new' ? 1 : 0, kind === 'changed' ? 1 : 0, kind === 'unchanged' ? 1 : 0, kind === 'vanished' ? 1 : 0];
+  return [
+    kind === 'new' ? 1 : 0,
+    kind === 'changed' ? 1 : 0,
+    kind === 'unchanged' ? 1 : 0,
+    kind === 'vanished' ? 1 : 0,
+  ];
 }
 function countedKindTotal(row: {
   kind_new?: number | null;
