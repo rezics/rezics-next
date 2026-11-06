@@ -1,6 +1,5 @@
 import { expect, test } from 'bun:test';
 import { bundledRelease } from '@rezics/definitions/bundled';
-import { ProblemError } from '../../src/http/problem.ts';
 import type { PublicCollectionDiscoverySummary } from '../../src/library/index.ts';
 import type { CollectionDiscoveryItem, CollectionDiscoverySource } from '../../src/library/collection-discovery-source.ts';
 import type { PublicCollectionDiscoveryOperand } from '../../src/library/collection-discovery-summaries.ts';
