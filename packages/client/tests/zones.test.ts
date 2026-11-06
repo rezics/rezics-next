@@ -92,7 +92,21 @@ test('native Zone refusals remain errors and an invalid bearer is sent without a
 test('the installed Zone namespace receives native page composition and subject-list envelopes', async () => {
   const sent: Request[] = [];
   const page: ZoneSubjectListPage = {
-    subjects: [{ id: COLLECTION_ID, type: 'schema:Book', labels: { en: 'Listed' }, summary: null }],
+    subjects: [
+      {
+        id: COLLECTION_ID,
+        type: 'schema:Book',
+        labels: { en: 'Listed' },
+        summary: {
+          id: COLLECTION_ID,
+          type: 'schema:Book',
+          types: ['schema:Book'],
+          label: { value: 'Listed', language: 'en' },
+          creativeWork: true,
+          cover: null,
+        },
+      },
+    ],
     next: null,
   };
   const client = createKernelClient(ORIGIN, {
