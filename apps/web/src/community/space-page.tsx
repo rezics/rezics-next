@@ -517,7 +517,8 @@ export function SpacePage(props: {
       revision:
         previous.revision +
         Number(
-          previous.state !== state ||
+          !lifetime ||
+            previous.state !== state ||
             previous.subject !== subject ||
             previous.csrfToken !== csrfToken ||
             previous.locale !== locale ||
