@@ -1,24 +1,27 @@
-import { afterAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, test } from 'bun:test';
 import type { FilterRelease } from '@rezics/filter';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { AuthenticationError, type Access, type AccountActor } from '../../src/request/access.ts';
 import { createOpenSearch, SearchUnavailableError } from '../../src/search/opensearch.ts';
 import { createSearchService } from '../../src/search/service.ts';
+import { readSearchIdentityMappings } from '../../src/search/canonical-keyset.ts';
+import { epochFixture, type EpochFixture } from '../semantic/support/identity-epoch.ts';
 import type { FacetDiscoveryProvider } from '../../src/search/facet-discovery-native.ts';
 import type { IndexedSubject, SubjectSource } from '../../src/search/source.ts';
 import type { PublicFilterCost } from '../../src/semantic/public-filter-source-contract.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 import { createFakeSource } from './support/fake-source.ts';
 import {
+  createMappedExecutedRequestSubject,
   deleteExecutedSearchPrefix,
-  executedRequestSubject,
   publishExecutedGeneration,
 } from './support/executed-request-runtime.ts';
 import { searchHttpFamilyFromStatus } from '../../src/search/http/search.ts';
 import { searchNativeCursorPointer } from '../../src/search/http/native-recovery.ts';
 import { executedRatingPair } from '../../src/search/canonical-keyset-admit.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
+import { readExposure } from '../../src/access/gates/catalogue.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 const searchUrl = process.env.OPENSEARCH_URL;
@@ -28,6 +31,8 @@ const pool = createPool(databaseUrl);
 const client = createOpenSearch(searchUrl);
 const cursors: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(11)]]) };
 const prefixes: string[] = [];
+const opening = crypto.randomUUID();
+let identity: EpochFixture | undefined;
 const reader: AccountActor = {
   kind: 'account',
   accountId: '019a1b2c-3d4e-7f00-8a00-5ab1ec700001',
@@ -49,12 +54,39 @@ const cost: PublicFilterCost = {
 };
 const release: FilterRelease = {
   types: { 'schema:Book': { bases: [], facets: ['schema:inLanguage'] } },
-  properties: { 'schema:inLanguage': { datatype: 'string' } },
+  properties: {
+    'schema:inLanguage': {
+      datatype: 'string',
+      value: { pattern: '^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$' },
+    },
+  },
 };
 
+beforeAll(async () => {
+  for (const group of ['search', 'search_advanced'])
+    if (!(await readExposure(pool, group, new Date(), Date.now() + 10_000)).open)
+      await pool.query(
+        `INSERT INTO access.exposure_opening ("group", valid, transaction_id)
+         VALUES ($1, tstzrange('2000-01-01T00:00:00Z'::timestamptz, NULL, '[)'), $2)`,
+        [group, opening],
+      );
+  identity = await epochFixture();
+});
+
 afterAll(async () => {
-  for (const prefix of prefixes) await deleteExecutedSearchPrefix(client, prefix);
-  await pool.end();
+  try {
+    for (const prefix of prefixes) await deleteExecutedSearchPrefix(client, prefix);
+  } finally {
+    try {
+      await pool.query('DELETE FROM access.exposure_opening WHERE transaction_id = $1', [opening]);
+    } finally {
+      try {
+        await pool.end();
+      } finally {
+        await identity?.close();
+      }
+    }
+  }
 });
 
 const access: Access = {
@@ -146,6 +178,16 @@ async function deployment(
   return { prefix, fake, service, kernel };
 }
 
+async function createdSubject(
+  n: number,
+  label: string,
+  partition = 10,
+  patch: Partial<IndexedSubject> = {},
+): Promise<IndexedSubject> {
+  if (!identity) throw new Error('Native identity fixture was not initialized');
+  return createMappedExecutedRequestSubject(identity, n, label, partition, patch);
+}
+
 function json(method: string, path: string, body?: unknown, token?: string) {
   return new Request(`http://kernel.test${path}`, {
     method,
@@ -163,17 +205,21 @@ async function posted(kernel: ReturnType<typeof createKernel>, path: string, bod
 }
 
 test('native HTTP search, facets and typeahead share one executed request through ties, duplicates and the terminal page', async () => {
-  const alpha = executedRequestSubject(1, 'Lantern');
-  const beta = executedRequestSubject(2, 'Lantern');
-  const gamma = executedRequestSubject(3, 'Lantern Grove');
-  const hidden = executedRequestSubject(4, 'Lantern Hidden', 10, { visibility: 'hidden', securityRevision: 2 });
+  const alpha = await createdSubject(1, 'Lantern');
+  const beta = await createdSubject(2, 'Lantern');
+  const gamma = await createdSubject(3, 'Lantern Grove');
+  const hidden = await createdSubject(4, 'Lantern Hidden', 10, { visibility: 'hidden', securityRevision: 2 });
+  if (!identity) throw new Error('Native identity fixture was not initialized');
+  expect(await readSearchIdentityMappings(identity.pool, [alpha.id])).toEqual([
+    { state: 'mapped', original: alpha.id, terminal: alpha.id },
+  ]);
   const { fake, kernel } = await deployment([alpha, beta, gamma, hidden], { facetValues: ['en', 'ja'] });
   fake.put(hidden);
   const request = { text: 'lantern', sort: 'name', limit: 2 };
   const first = await posted(kernel, '/v1/subjects:search', request);
   expect(searchHttpFamilyFromStatus(first.status)).toBe('ready');
   const firstIds = (first.body.subjects as { id: string }[]).map(({ id }) => id);
-  expect(firstIds).toEqual([alpha.id, beta.id]);
+  expect(firstIds).toEqual([alpha.id, beta.id].sort());
   expect(first.body).not.toHaveProperty('total');
   expect(first.body.next).toBeString();
 
@@ -196,7 +242,8 @@ test('native HTTP search, facets and typeahead share one executed request throug
 });
 
 test('lost generation restarts the same HTTP operands; a first-page retry of that request is ready', async () => {
-  const books = [1, 2, 3].map((n) => executedRequestSubject(n, `Ogai ${n}`));
+  const books: IndexedSubject[] = [];
+  for (const n of [1, 2, 3]) books.push(await createdSubject(n, `Ogai ${n}`));
   const { prefix, fake, kernel } = await deployment(books);
   const request = { text: 'ogai', sort: 'name', limit: 1 };
   const first = await posted(kernel, '/v1/subjects:search', request);
@@ -213,7 +260,7 @@ test('lost generation restarts the same HTTP operands; a first-page retry of tha
 });
 
 test('temporary source failure keeps the executed request; a later observation of the same body is ready', async () => {
-  const book = executedRequestSubject(1, 'Murasaki');
+  const book = await createdSubject(1, 'Murasaki');
   let fail = true;
   const { kernel } = await deployment([book], {
     source: (fake) => ({
@@ -237,7 +284,8 @@ test('temporary source failure keeps the executed request; a later observation o
 });
 
 test('invalid HTTP operands keep pointers, rating order travels with population, and a replaced reader cannot continue', async () => {
-  const books = [1, 2].map((n) => executedRequestSubject(n, `Soseki ${n}`));
+  const books: IndexedSubject[] = [];
+  for (const n of [1, 2]) books.push(await createdSubject(n, `Soseki ${n}`));
   const { kernel } = await deployment(books);
   const invalid = await posted(kernel, '/v1/subjects:search', { text: '"unclosed' });
   expect(searchHttpFamilyFromStatus(invalid.status, invalid.body.code as string)).toBe('invalid');
@@ -262,7 +310,7 @@ test('invalid HTTP operands keep pointers, rating order travels with population,
   });
   const unpaired = await posted(kernel, '/v1/subjects:search', {
     sort: 'name',
-    population: { realm: '11111111-1111-4111-8111-111111111111' },
+    population: { realm: '11111111-1111-7111-8111-111111111111' },
   });
   expect(searchHttpFamilyFromStatus(unpaired.status, unpaired.body.code as string)).toBe('invalid');
   expect(unpaired.body).toMatchObject({
