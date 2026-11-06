@@ -87,6 +87,7 @@ export class RealmMembershipLifetimeStore {
   private readonly owners = new Map<string, Set<{ owner: CallerOwner; scope: CallerScope }>>();
   private readonly nativeCommands = new Map<string, RealmMembershipCommandAttempt>();
   private readonly acknowledgements = new WeakSet<RealmMembershipCommandAttempt>();
+  private readonly stopCache: () => void;
 
   readonly subscribe = (listener: () => void) => {
     this.listeners.add(listener);
@@ -97,11 +98,30 @@ export class RealmMembershipLifetimeStore {
 
   constructor(readonly client: QueryClient) {
     this.snapshot = readSessionSnapshot(client);
-    client.getQueryCache().subscribe((event) => {
+    this.stopCache = client.getQueryCache().subscribe((event) => {
       const key = event.query.queryKey;
-      if (key.length === 1 && key[0] === 'session') this.onQueryCacheChange();
-      else this.cleanupReads();
+      if (key.length === 1 && key[0] === 'session') {
+        const action = 'action' in event ? event.action : undefined;
+        if (
+          event.type !== 'removed' &&
+          (event.type !== 'updated' ||
+            !action ||
+            (action.type !== 'success' && action.type !== 'error' && action.type !== 'setState'))
+        ) {
+          this.cleanupReads();
+          return;
+        }
+        this.onQueryCacheChange();
+      } else this.cleanupReads();
     });
+  }
+
+  dispose(): void {
+    this.stopCache();
+    this.listeners.clear();
+    this.reads.clear();
+    this.owners.clear();
+    this.nativeCommands.clear();
   }
 
   currentSession(): SessionSnapshot | null {
@@ -252,6 +272,14 @@ function storeFor(client: QueryClient): RealmMembershipLifetimeStore {
     stores.set(client, store);
   }
   return store;
+}
+
+/** Drop the session cache subscriber so a discarded QueryClient cannot retain membership callers. */
+export function releaseRealmMembershipLifetime(client: QueryClient) {
+  const store = stores.get(client);
+  if (!store) return;
+  store.dispose();
+  stores.delete(client);
 }
 
 function matchesCaller(session: SessionSnapshot | null, scope: CallerScope): boolean {

@@ -30,6 +30,7 @@ export type SpacePageSessionSource = {
   errorUpdateCount(): number;
   revision(): number;
   subscribe(listener: () => void): () => void;
+  release(): void;
 };
 
 /** Serializable loader admission. The actual reader always comes from the server read envelope. */
@@ -143,6 +144,12 @@ function expectedReader(session: SessionSnapshot, credentialMode: ReadCredential
   return { kind: 'unknown' };
 }
 
+function isCommittedCacheEvent(event: { type: string; action?: { type: string } }) {
+  if (event.type === 'removed') return true;
+  if (event.type !== 'updated' || !event.action) return false;
+  return event.action.type === 'success' || event.action.type === 'error' || event.action.type === 'setState';
+}
+
 function observeSession(client: QueryClient): SpacePageSessionSource {
   const read = () => client.getQueryData<SessionRecord>(sessionQuery.queryKey);
   const dataUpdateCount = () => client.getQueryState(sessionQuery.queryKey)?.dataUpdateCount ?? 0;
@@ -154,17 +161,12 @@ function observeSession(client: QueryClient): SpacePageSessionSource {
   const matchesSessionQuery = (query: { queryKey: readonly unknown[] }) =>
     query.queryKey.length === sessionQuery.queryKey.length &&
     query.queryKey.every((part, index) => part === sessionQuery.queryKey[index]);
-  client.getQueryCache().subscribe((event) => {
+  const stop = client.getQueryCache().subscribe((event) => {
     if (!matchesSessionQuery(event.query)) return;
     // Only committed data replacement, failed refresh, and removal change the session
     // observation. Fetch/observer notifications and StrictMode replay do not.
     const action = 'action' in event ? event.action : undefined;
-    const changed =
-      event.type === 'removed' ||
-      (event.type === 'updated' &&
-        action &&
-        (action.type === 'success' || action.type === 'error' || action.type === 'setState'));
-    if (!changed) return;
+    if (!isCommittedCacheEvent({ type: event.type, ...(action ? { action: { type: action.type } } : {}) })) return;
     revision++;
     for (const listener of listeners) listener();
   });
@@ -181,6 +183,10 @@ function observeSession(client: QueryClient): SpacePageSessionSource {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
+    release() {
+      stop();
+      listeners.clear();
+    },
   };
 }
 
@@ -192,6 +198,14 @@ export function spacePageSessionSource(client: QueryClient): SpacePageSessionSou
     sources.set(client, source);
   }
   return source;
+}
+
+/** Drop the session cache subscriber so a discarded QueryClient cannot retain visit listeners. */
+export function releaseSpacePageSessionSource(client: QueryClient) {
+  const source = sources.get(client);
+  if (!source) return;
+  source.release();
+  sources.delete(client);
 }
 
 function toSnapshot(source: SpacePageSessionSource): SessionSnapshot {
@@ -948,14 +962,14 @@ export class SpacePageLifetime {
       const stopQuery = ownedQuery
         ? this.runtime.client.getQueryCache().subscribe((event) => {
             if (event.query !== ownedQuery) return;
-            if (event.type === 'removed') {
+            const action = 'action' in event ? event.action : undefined;
+            if (!isCommittedCacheEvent({ type: event.type, ...(action ? { action: { type: action.type } } : {}) }))
+              return;
+            if (event.type === 'removed' || !this.runtime || !runtimeIsCurrent(this.admission, this.runtime)) {
               this.retire();
               return;
             }
-            if (event.type !== 'updated' || !('action' in event)) return;
-            const action = event.action;
-            if (action.type !== 'success' && action.type !== 'error' && action.type !== 'setState') return;
-            if (!this.runtime || !runtimeIsCurrent(this.admission, this.runtime)) this.retire();
+            this.publish();
           })
         : undefined;
       this.stopWatching = () => {

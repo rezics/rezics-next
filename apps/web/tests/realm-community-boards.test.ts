@@ -32,14 +32,16 @@ function currentRecent(board = boardId) {
 }
 
 test('native recent discussion prefixes keep exact destinations and never invent an empty page', () => {
-  expect(presentRealmBoardRecent(currentRecent(), boardId)).toEqual({
+  type NativeRecent = Parameters<typeof presentRealmBoardRecent>[0];
+  const recent = (board = boardId) => currentRecent(board) as NativeRecent;
+  expect(presentRealmBoardRecent(recent(), boardId)).toEqual({
     state: 'current',
     complete: true,
     threads: [{ id: threadId, title: 'Ordinary thread', comments: { state: 'current', kind: 'exact', value: 1 } }],
   });
   expect(presentRealmBoardRecent(undefined, boardId)).toEqual({ state: 'unavailable' });
   expect(presentRealmBoardRecent({ state: 'unavailable' }, boardId)).toEqual({ state: 'unavailable' });
-  expect(presentRealmBoardRecent(currentRecent('0192f3a0-6c1e-7b2a-9d4e-000000000099'), boardId)).toEqual({
+  expect(presentRealmBoardRecent(recent('0192f3a0-6c1e-7b2a-9d4e-000000000099'), boardId)).toEqual({
     state: 'unavailable',
   });
   const overflow = {
@@ -50,7 +52,7 @@ test('native recent discussion prefixes keep exact destinations and never invent
       ...currentRecent().threads,
       ...currentRecent().threads,
     ],
-  };
+  } as NativeRecent;
   expect(presentRealmBoardRecent(overflow, boardId)).toEqual({ state: 'unavailable' });
 });
 

@@ -119,8 +119,10 @@ const { bindNativeRealmHomeOperations, readNativeRealmHome, nativeRealmHomeShelv
 const { readRealmJoinAdvice: readInstalledRealmJoinAdvice } = await import('../src/community/native-operations');
 const { loadSpacePageWithOrigin } = await import('../src/community/space');
 const { SpacePage, RealmShelf } = await import('../src/community/space-page');
-const { bindSpacePageResult, captureSpacePageAdmission, SpacePageLifetimeHost } =
+const { bindSpacePageResult, captureSpacePageAdmission, SpacePageLifetimeHost, releaseSpacePageSessionSource } =
   await import('../src/community/space-page-lifetime');
+const { releaseRealmMembershipLifetime } = await import('../src/community/realm-membership-lifetime');
+const { releasePublicationSessionSource } = await import('../src/community/publication-controls-view');
 const { createRoot } = await import('react-dom/client');
 const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
 const { m } = await import('../src/paraglide/messages.js');
@@ -491,6 +493,9 @@ afterEach(async () => {
   root = createRoot(host);
   client.cancelQueries();
   client.clear();
+  releaseSpacePageSessionSource(client);
+  releaseRealmMembershipLifetime(client);
+  releasePublicationSessionSource(client);
   session = { state: 'signed-in', subject: 'reader', csrfToken: 'one' };
   client.setQueryData(sessionModule.sessionQuery.queryKey, session);
   router = makeRouter();
@@ -507,6 +512,9 @@ afterAll(async () => {
   await settle(() => root.unmount());
   client.cancelQueries();
   client.clear();
+  releaseSpacePageSessionSource(client);
+  releaseRealmMembershipLifetime(client);
+  releasePublicationSessionSource(client);
   host.remove();
   await window.happyDOM.close();
   overwriteGetLocale(originalGetLocale);
@@ -1104,4 +1112,47 @@ test('installed Home and Board shelf mappings retain native recent and Board vis
     next: null,
     unavailable: 0,
   });
+});
+
+test('a banned current reader keeps public shelves and never receives a join control', async () => {
+  native = fixture(0, 'none');
+  native.boards.next = native.publications.next = null;
+  const page = await readNativeRealmHome(operations, input);
+  page.realm!.nativeObservation = {
+    viewer: { state: 'banned' },
+    actions: {
+      participate: 'banned',
+      join: 'denied',
+      leave: 'denied',
+      claim: 'unavailable',
+      manage: 'denied',
+    },
+  };
+  await paint(page);
+  expect(host.textContent).toContain(m.realm_banned());
+  expect(controls()).not.toContain(m.realm_join());
+  expect(controls()).not.toContain(m.realm_leave());
+  expect(host.textContent).toContain(m.realm_published_empty());
+  expect(host.querySelector('[data-slot="realm-community-boards"]')).not.toBeNull();
+});
+
+test('unrelated query chatter does not remount membership or repeat native advice reads', async () => {
+  native = fixture(0, 'none');
+  native.boards.next = native.publications.next = null;
+  client.setQueryData(sessionModule.sessionQuery.queryKey, session);
+  const admission = bindSpacePageResult(await readNativeRealmHome(operations, input), capture(), {
+    kind: 'signed-in',
+    subject: session.subject,
+  })!;
+  await paint(await readNativeRealmHome(operations, input), operations, admission);
+  const membership = host.querySelector('[data-slot="realm-membership"]');
+  expect(membership).not.toBeNull();
+  const adviceReads = joinAdviceReads.length;
+  for (let n = 0; n < 20; n++) {
+    await client.fetchQuery({ queryKey: ['visit-noise', n], queryFn: async () => n, staleTime: 0, gcTime: 0 });
+  }
+  await settle(() => {});
+  expect(host.querySelector('[data-slot="realm-membership"]')).toBe(membership);
+  expect(joinAdviceReads.length).toBe(adviceReads);
+  expect(membershipActionCalls).toEqual([]);
 });

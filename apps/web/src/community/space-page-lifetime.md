@@ -100,6 +100,8 @@ Decision: the page lifetime notifies connected hosts only for session replacemen
 success, error, setState or removal; observer add/remove and fetch-status chatter do not increment the visit or
 recreate membership/publication drafts. Visit and lifetime tests dispose their Happy-DOM window, router, root and
 QueryClient per case so fixture, response and subscription lifetimes stay inside the check wrapper's 6 GiB cap.
+Connected visit, membership, publication and space-page lifetime tests pin the supplying-shelf journey, once-only
+completion, observer-chatter bound and disposal; no extra stories.
 
 The prepared consumer checks the carrying Space and Realm heads, active lifecycle and selected media and rules
 revision before presenting them. Native concealment may retain an empty optional presentation even when a selected

@@ -121,6 +121,8 @@ mock.module('../src/session/query', () => ({
 }));
 const { realmMembershipQuery } = await import('../src/community/realm-membership-queries');
 const { RealmMembership } = await import('../src/community/realm-membership');
+const { releaseRealmMembershipLifetime } = await import('../src/community/realm-membership-lifetime');
+const { releaseSpacePageSessionSource } = await import('../src/community/space-page-lifetime');
 const { m } = await import('../src/paraglide/messages.js');
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -313,6 +315,8 @@ async function makeSurface(
     await act(async () => root.unmount());
     client.cancelQueries();
     client.clear();
+    releaseRealmMembershipLifetime(client);
+    releaseSpacePageSessionSource(client);
     host.remove();
   }
 

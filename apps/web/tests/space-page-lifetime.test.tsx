@@ -254,8 +254,10 @@ mock.module('../src/kernel/query', () => ({
 const { sessionQuery } = await import('../src/session/query');
 const { spaceQuery, useShelfList } = await import('../src/community/space-queries');
 const { ShelfContinuation } = await import('../src/community/publication-controls-view');
-const { captureSpacePageAdmission, SpacePageLifetimeHost, useSpacePageLifetime } =
+const { captureSpacePageAdmission, SpacePageLifetimeHost, useSpacePageLifetime, releaseSpacePageSessionSource } =
   await import('../src/community/space-page-lifetime');
+const { releaseRealmMembershipLifetime } = await import('../src/community/realm-membership-lifetime');
+const { releasePublicationSessionSource } = await import('../src/community/publication-controls-view');
 const { SpacePage } = await import('../src/community/space-page');
 const { m } = await import('../src/paraglide/messages.js');
 const { setLocale } = await import('../src/paraglide/runtime.js');
@@ -500,6 +502,9 @@ async function close(keep?: QueryClient) {
     if (item === keep) continue;
     item.cancelQueries();
     item.clear();
+    releaseSpacePageSessionSource(item);
+    releaseRealmMembershipLifetime(item);
+    releasePublicationSessionSource(item);
     clients.delete(item);
   }
   client = keep;

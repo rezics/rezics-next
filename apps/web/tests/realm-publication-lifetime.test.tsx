@@ -153,7 +153,10 @@ mock.module('../src/community/publication-controls-view', () => ({
     return shelfControl;
   },
 }));
-const { usePublicationControls } = await import('../src/community/publication-controls-view');
+const { usePublicationControls, releasePublicationSessionSource } = await import(
+  '../src/community/publication-controls-view'
+);
+const { releaseSpacePageSessionSource } = await import('../src/community/space-page-lifetime');
 const { publicationSubjectSearch } = await import('../src/community/publication-subject-picker');
 const { RealmShelf } = await import('../src/community/space-page');
 const { m } = await import('../src/paraglide/messages.js');
@@ -168,7 +171,7 @@ async function mountHook(session = viewer()) {
   shelfSubjects = subjects();
   rerenderMarker = 0;
   client?.clear();
-  const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   client = nextClient;
   nextClient.setQueryData(sessionQuery.queryKey, session);
   root = createRoot(host);
@@ -197,6 +200,12 @@ async function close() {
       await tick();
     });
     root = undefined;
+  }
+  if (client) {
+    client.cancelQueries();
+    client.clear();
+    releasePublicationSessionSource(client);
+    releaseSpacePageSessionSource(client);
   }
   host.textContent = '';
 }

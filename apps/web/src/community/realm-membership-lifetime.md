@@ -31,5 +31,6 @@ before the replacement lifetime connects, or a same-identity Home that has not y
 of retiring. The original host invalidates sibling lists and the route once and does not refetch advice or renew the
 command. An intervening source replacement retires the acknowledgement and keeps the uncertain command for exact retry
 or discard. Session-cache notifications advance caller revision; other query chatter only releases settled reads.
+Visit, membership and publication lifetime tests pin once-only completion, selected-shelf focus and disposal; no extra stories.
 
 An explicit keyboard membership operation hands focus to the named membership summary only after its current caller settles into admitted standing and its control disappears; a surviving control keeps focus, and pointer use, focus movement or caller retirement cancels the handoff.
