@@ -35,6 +35,7 @@ import {
   renderCheckProtocol,
   renderWorkerPrompt,
 } from './prompts.ts';
+import { workerCheckBudgetDirectory, workerCheckHostBudgetLimit } from './worker-check-budget.ts';
 export { applyRenderedPrompt, renderWorkerPrompt };
 export {
   type HostCapacity,
@@ -149,7 +150,7 @@ export function workerPrompt(
 }
 /** Per-attempt variables: the attempt's identity, and the base the kernel check selects affected tests against. */
 export function attemptEnvironment(
-  task: Pick<Task, 'id' | 'base'> & Partial<Pick<Task, 'proofRun' | 'brief'>>,
+  task: Pick<Task, 'id' | 'base'> & Partial<Pick<Task, 'proofRun' | 'proofAuthorization' | 'brief'>>,
   attempt: Pick<Attempt, 'attempt'>,
   stateDirectory?: string,
 ): Record<string, string> {
@@ -173,7 +174,11 @@ export function attemptEnvironment(
     ...remoteCheckEnvironment(stateDirectory),
     // The worker check wrapper appends its full wait here, in milliseconds per line; the class limit adds it back.
     ...(stateDirectory
-      ? { GOAL_CHECK_WAIT_FILE: join(stateDirectory, 'runs', task.id, `${attempt.attempt}.check-wait`) }
+      ? {
+          GOAL_CHECK_WAIT_FILE: join(stateDirectory, 'runs', task.id, `${attempt.attempt}.check-wait`),
+          GOAL_WORKER_CHECK_BUDGET: String(workerCheckHostBudgetLimit(task, attempt.attempt)),
+          GOAL_WORKER_CHECK_BUDGET_DIR: workerCheckBudgetDirectory(stateDirectory, task.id, attempt.attempt),
+        }
       : {}),
   };
 }
