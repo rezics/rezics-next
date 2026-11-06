@@ -162,10 +162,12 @@ Each indexed page embeds one JSON-LD graph from the same data it renders:
 - a recipe's ingredients and steps as `recipeIngredient` and `recipeInstructions`;
   Decision: Recipe and software-release overviews publish the current anonymous cook-time, diet, ingredient,
   instruction, platform, date and language statements; JSON-LD matches that projection, `recipeIngredient` is
-  Schema.org Text, and released work form is `additionalType` rather than an identifier. Locale switches use
-  document navigation through the production rewrite so canonical heads match the URL. Title years use the same
-  disclosed Gregorian structured date JSON-LD would publish. CreativeWork is a released ancestry base, not a
-  bundled type in catalogue page definitions.
+  Schema.org Text, and released work form is `additionalType` rather than an identifier. Book overviews keep
+  released form, tag and word count. Anonymous Game overviews project admitted work facts from the current page
+  so first HTML matches JSON-LD; edition windows stay a later continuation. SoftwareApplication identity links
+  overlay the generic template. Locale switches use document navigation through the production rewrite so
+  canonical heads match the URL. Title years use the same disclosed Gregorian structured date JSON-LD would
+  publish. CreativeWork is a released ancestry base, not a bundled type in catalogue page definitions.
 - an agent as `Person` or `Organization` with `sameAs` links the agent published;
 - `BreadcrumbList` for type and parent pages.
 

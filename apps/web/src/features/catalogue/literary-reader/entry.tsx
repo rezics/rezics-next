@@ -37,6 +37,7 @@ const fields = [
   'schema:startDate',
   'schema:endDate',
   'wdt:P7937',
+  'schema:keywords',
   'schema:wordCount',
   'wdt:P2635',
   'schema:isbn',

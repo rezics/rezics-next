@@ -3,15 +3,16 @@
 This manifest covers every In row web owns or surfaces in [public scope](../scope.md).
 [Web](web.md) owns served pages and transport; the linked Goals retain their kernel contracts.
 These are executable specifications, not claims of implementation, passing native acceptance or visual review.
-The publication suite is frozen red without a driver; its native binding is future work. Personal suite names
-below are reserved by the parallel personal specification. A missing-driver verifier proves only specification
-execution. Product acceptance runs `bun test <suite>` with its native driver variable configured.
+Served publication metadata, overlays and sitemap consumption live in the web app. Native and browser publication
+remaining run after integration against the composed driver. Personal suite names below are reserved by the
+parallel personal specification. A missing-driver verifier proves only specification execution. Product acceptance
+runs `bun test <suite>` with its native driver variable configured.
 
 The shared publication fixture is [web-publication.json](../../specs/fixtures/web-publication.json): released Book
 word count/form/tag and Recipe diet definitions are prerequisites, never synthetic test releases. Each factory
 owns a native kernel and a production web Worker; all served-page assertions cross real HTTP.
-No application or native driver is implemented here. Owner suites listed below remain their owners' acceptance;
-a served-page binding marked pending does not become covered merely by linking a kernel test.
+Owner suites listed below remain their owners' acceptance; a served-page binding marked pending does not become
+covered merely by linking a kernel test.
 
 ## Subject pages, relations, editions and credits
 

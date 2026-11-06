@@ -1,0 +1,1 @@
+export { PublicationOverlayView } from './view';
