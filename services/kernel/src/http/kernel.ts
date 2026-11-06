@@ -629,7 +629,8 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     routeKey: dependencies.routeKey,
     clock,
     cursorNow,
-    now: () => clock().getTime(),
+    // Request budgets use wall time; domain time stays on the kernel clock.
+    now: () => Date.now(),
     tokens,
     ...(dependencies.content?.readConsent === undefined ? {} : { readConsent: dependencies.content.readConsent }),
     ...(dependencies.content?.fetchConfig === undefined ? {} : { fetchConfig: dependencies.content.fetchConfig }),

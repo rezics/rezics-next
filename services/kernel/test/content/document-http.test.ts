@@ -16,6 +16,7 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import type { definitionRoutes } from '../../src/semantic/http/definitions.ts';
 import { decodeSession } from '../../src/tokens/session.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 
 const route = 0xc120;
 const subject = newId(route);
@@ -132,6 +133,7 @@ async function fence(takenDown: boolean) {
 
 beforeAll(async () => {
   db = await openGrowthDatabase();
+  configureTestReceiptKeys(db.pool);
   // Every reference checkout must release before the next, including Access preparation.
   db.pool.options.max = 1;
   expect(partitionOf(home)).not.toBe(partitionOf(route));

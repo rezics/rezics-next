@@ -7,6 +7,9 @@ import { receiptKeysFor } from '../../src/command/receipt-key.ts';
 import { createContentWorkAccess, createContentWorkModule } from '../../src/content/register.ts';
 
 const registerContent = createContentWorkModule({ fetch: (request) => fetch(request) });
+import * as feedWork from '../../src/content/feed-work.ts';
+import * as moderationDirectoryWork from '../../src/content/moderation-directory-work.ts';
+import * as reportLocatorWork from '../../src/content/report-locator-work.ts';
 import * as relays from '../../src/content/relays.ts';
 import * as work from '../../src/content/work.ts';
 import { createWorkerAuthorization, type WorkerAuthorization } from '../../src/work/authorization.ts';
@@ -29,6 +32,10 @@ function composition(extraEnv: Readonly<Record<string, string>> = {}) {
   const factory = spyOn(work, 'createContentWork').mockImplementation(() => ({ name: 'content', register }));
   const notices = spyOn(relays, 'contentNoticeEffects');
   const info = spyOn(console, 'info').mockImplementation(() => {});
+  // Registration-time helpers start DBOS steps and services; this boundary captures Content's own options only.
+  const reportLocator = spyOn(reportLocatorWork, 'registerReportLocatorWork').mockImplementation(() => {});
+  const moderationDirectory = spyOn(moderationDirectoryWork, 'registerModerationDirectoryWork').mockImplementation(() => {});
+  const feed = spyOn(feedWork, 'registerFeedWork').mockImplementation(async () => {});
   const receiptKeys = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(3)]]) };
   const env = {
     KERNEL_ROUTE_KEY: Buffer.alloc(32, 1).toString('base64url'),
@@ -65,6 +72,9 @@ function composition(extraEnv: Readonly<Record<string, string>> = {}) {
       factory.mockRestore();
       notices.mockRestore();
       info.mockRestore();
+      reportLocator.mockRestore();
+      moderationDirectory.mockRestore();
+      feed.mockRestore();
       fetch.mockRestore();
       connect.mockRestore();
       query.mockRestore();

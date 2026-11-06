@@ -47,6 +47,7 @@ import { beginAuthorErasure } from '../../src/content/operations.ts';
 import { bindAuthorErasureWorkflow } from '../../src/content/erasure-workflow-identity.ts';
 import { readBatch, type Envelope } from '../../src/events/log.ts';
 import { readPartition } from '../../src/partition/partition.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 
 const databaseUrl = process.env.DATABASE_URL!;
 const route = 0x4920;
@@ -370,6 +371,7 @@ ON CONFLICT (route,media_id) DO UPDATE SET state='uploaded',actual_byte_count=EX
 
   test('checkGrowth proves bounded real collection SQL with same-partition distractors at three scales', async () => {
     const db = await openGrowthDatabase();
+    configureTestReceiptKeys(db.pool);
     const store = storageFixture();
     const storage = new R2Storage({
       endpoint: store.endpoint,
@@ -487,6 +489,7 @@ ON CONFLICT (route,media_id) DO UPDATE SET state='uploaded',actual_byte_count=EX
   test('actual DBOS worker consumes prelaunch image work, recovers and deduplicates real Sharp effects', async () => {
     const store = storageFixture();
     const pool = new pg.Pool({ connectionString: databaseUrl });
+    configureTestReceiptKeys(pool);
     const client = await createWorkClient(databaseUrl);
     let running: Awaited<ReturnType<typeof worker>> | undefined;
     try {
@@ -537,6 +540,7 @@ ON CONFLICT (route,media_id) DO UPDATE SET state='uploaded',actual_byte_count=EX
   test('permanent image rejection keeps cleanup retryable through failure and restart', async () => {
     const store = storageFixture();
     const pool = new pg.Pool({ connectionString: databaseUrl });
+    configureTestReceiptKeys(pool);
     const client = await createWorkClient(databaseUrl);
     let running: Awaited<ReturnType<typeof worker>> | undefined;
     try {
@@ -648,6 +652,7 @@ ON CONFLICT (route,media_id) DO UPDATE SET state='uploaded',actual_byte_count=EX
   test('native persistent hourly collection respects exact24h, claims, partition and pending fences after restart', async () => {
     const store = storageFixture();
     const pool = new pg.Pool({ connectionString: databaseUrl });
+    configureTestReceiptKeys(pool);
     const client = await createWorkClient(databaseUrl);
     let running: Awaited<ReturnType<typeof worker>> | undefined;
     try {
@@ -939,6 +944,7 @@ ON CONFLICT (route,media_id) DO UPDATE SET state='uploaded',actual_byte_count=EX
   test('native URL workflow invokes the production import rejection and governance cleanup with ID-only source', async () => {
     const store = storageFixture();
     const pool = new pg.Pool({ connectionString: databaseUrl });
+    configureTestReceiptKeys(pool);
     const client = await createWorkClient(databaseUrl);
     let running: Awaited<ReturnType<typeof worker>> | undefined;
     try {

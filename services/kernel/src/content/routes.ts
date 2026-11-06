@@ -153,7 +153,7 @@ import {
 export type Dependencies = ContentCommandDependencies &
   ContentBoardDependencies &
   ContentRuntime &
-  Readonly<{ viewerActionRuntime?: () => ReadingPageViewerActionRuntime }>;
+  Readonly<{ viewerActionRuntime?: () => ReadingPageViewerActionRuntime; now: () => number }>;
 const params = t.Object({ id: t.String() }, { additionalProperties: false });
 function readFailures() {
   return memoizedValue(readFailures, () => ({

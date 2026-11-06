@@ -13,7 +13,8 @@ test('Default paid fulfilment uses real mounted worker Access and native current
     source('content/edition-sale-native.ts'),
     source('commerce/content-edition-buyer-fact.ts'),
   ]);
-  expect(work).toContain('access: authorizedContext.getAuthorization().access');
+  expect(work).toContain('const { access, readConsent } = authorizedContext.getAuthorization();');
+  expect(work).toContain('createCommerceCommands({ pool, access, readConsent })');
   expect(work).not.toContain('createAccess');
   expect(work).not.toContain('new Map(');
   expect(module).toContain('}).register(context)');

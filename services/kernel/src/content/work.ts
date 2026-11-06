@@ -174,7 +174,7 @@ async function registerWork(
     if (!(queue in context.queues)) throw new Error('Content requires shared kernel queues');
   }
   const realmSubjectIdentityPage = DBOS.registerStep(
-    async (work: RealmSubjectIdentityWork) => realmSubject.identityPage(work, context.clock().getTime() + 30_000),
+    async (work: RealmSubjectIdentityWork) => realmSubject.identityPage(work, Date.now() + 30_000),
     { name: 'content.realmSubject.identity.page', ...retry },
   );
   DBOS.registerWorkflow(
@@ -199,9 +199,9 @@ async function registerWork(
   );
   const realmSubjectCensusPage = DBOS.registerStep(
     async () => {
-      const cursor = await realmSubject.sweepCursor(context.clock().getTime() + 30_000);
+      const cursor = await realmSubject.sweepCursor(Date.now() + 30_000);
       if (cursor.complete) return { state: 'complete' as const };
-      return realmSubject.sweep(cursor.route, REALM_SUBJECT_CENSUS_PAGE, context.clock().getTime() + 30_000);
+      return realmSubject.sweep(cursor.route, REALM_SUBJECT_CENSUS_PAGE, Date.now() + 30_000);
     },
     { name: 'content.realmSubject.census.page', ...retry },
   );
@@ -358,7 +358,7 @@ async function registerWork(
               context.pool,
               partition * 16 + offset,
               context.clock(),
-              () => context.clock().getTime() + 120_000,
+              () => Date.now() + 120_000,
               <T>(name: string, action: () => Promise<T>) => purgeDeleted(name, action) as Promise<T>,
               createErasureJob(context.pool, storage),
             )
@@ -413,8 +413,7 @@ async function registerWork(
     },
   );
   const conversationActivityRepairPage = DBOS.registerStep(
-    async (partition: number) =>
-      repairConversationActivityPage(context.pool, partition, context.clock().getTime() + 30_000),
+    async (partition: number) => repairConversationActivityPage(context.pool, partition, Date.now() + 30_000),
     { name: 'content.conversation-activity.repair.page', ...retry },
   );
   DBOS.registerWorkflow(
@@ -464,12 +463,7 @@ async function registerWork(
   );
   const boardSlowRecoveryPage = DBOS.registerStep(
     async () =>
-      recoverBoardSlowModePage(
-        context.pool,
-        BOARD_SLOW_RECOVERY_PAGE_SIZE,
-        context.clock(),
-        context.clock().getTime() + 120_000,
-      ),
+      recoverBoardSlowModePage(context.pool, BOARD_SLOW_RECOVERY_PAGE_SIZE, context.clock(), Date.now() + 120_000),
     { name: 'content.board-slow.recovery.page', ...retry },
   );
   DBOS.registerWorkflow(
@@ -482,12 +476,7 @@ async function registerWork(
   );
   const boardSlowRetentionPage = DBOS.registerStep(
     async (cutoff: string) =>
-      pruneBoardSlowModeHistoryPage(
-        context.pool,
-        BOARD_SLOW_RECOVERY_PAGE_SIZE,
-        cutoff,
-        context.clock().getTime() + 120_000,
-      ),
+      pruneBoardSlowModeHistoryPage(context.pool, BOARD_SLOW_RECOVERY_PAGE_SIZE, cutoff, Date.now() + 120_000),
     { name: 'content.board-slow.retention.page', ...retry },
   );
   DBOS.registerWorkflow(
@@ -588,7 +577,7 @@ async function registerWork(
       clearErasedPostRevisions(
         context.pool,
         { postId, accountErasure },
-        () => context.clock().getTime() + 120_000,
+        () => Date.now() + 120_000,
         context.clock,
         <T>(name: string, action: () => Promise<T>) => clearErasedPost(name, action) as Promise<T>,
         createErasureJob(context.pool, storage),

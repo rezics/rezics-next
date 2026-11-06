@@ -23,6 +23,7 @@ import { accessCommandAuthorization, type AccountActor } from '../../src/request
 import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase, seed } from '../support/growth.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 
 setDefaultTimeout(120_000);
 
@@ -100,6 +101,7 @@ async function rejectSql(sql: string, values: unknown[]) {
 
 beforeAll(async () => {
   db = await openGrowthDatabase();
+  configureTestReceiptKeys(db.pool);
   db.pool.options.max = 1;
   await db.admin.query(
     `INSERT INTO access.account(route,account_id,kind,state,transaction_id)
