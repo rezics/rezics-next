@@ -604,7 +604,9 @@ describe('bounded native kind metadata and checked-hit witnesses', () => {
     expect(initial.kinds!.values[0]!.count).toEqual({ value: 2, exact: false });
     expect(initial.kinds!.values.filter((v) => v.count).reduce((n, v) => n + v.count!.value, 0)).toBe(2);
     expect(queries - before).toBe(1);
-    expect(reads - beforeReads).toBe(1);
+    expect(reads - beforeReads).toBe(
+      new Set(initial.subjects.map((subject) => subjectPartition(subject.id))).size,
+    );
     expect(countReads).toBe(0);
     expect(new TextEncoder().encode(JSON.stringify(initial)).length).toBeLessThan(16_384);
     const next = await service.search('anonymous', { ...request, cursor: initial.next! });

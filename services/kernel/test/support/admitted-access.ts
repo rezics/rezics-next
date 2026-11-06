@@ -2,11 +2,12 @@ import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import type { Pool } from 'pg';
 import { EMPTY_ACCESS_WORK } from '../../src/access/work.ts';
 import { createAccess, createResourcePublicEligibility, type AccessConfig } from '../../src/access/index.ts';
+import { deadlineClient } from '../../src/access/authenticate.ts';
+import { withConnection } from '../../src/database/pool.ts';
 import { statementBytes } from '../../src/database/statement-bytes.ts';
 import { collectionDirectoryRowPlan } from '../../src/library/collection-directory-bounds.ts';
 import collectionRead from '../../src/library/collection-reads-collection.sql';
 import type { Access, AccessCheck, AccessContext, AccountActor, Resource } from '../../src/request/access.ts';
-import { withReadTransaction } from '../../src/semantic/read.ts';
 
 const issuer = 'https://admitted-access.example.test';
 const audience = 'https://api.admitted-access.example.test';
@@ -100,20 +101,30 @@ export function collectionReadEligibility(resource: Pick<Resource, 'route' | 'id
       return { ready: true as const };
     },
     async verify({ client }) {
-      const row = await collectionDirectoryRowPlan(identity).run({ query: client.query.bind(client) });
+      const row = await collectionRead.run(client, identity);
       return row != null && row.state === 'active' && row.visibility !== 'private';
     },
   });
 }
 
 /**
- * Repeatable-read snapshot matching GET members `loadCollection` / FULL members:
- * authorize on that client without a second minted T that prepare did not capture.
+ * Repeatable-read snapshot matching GET members `loadCollection`: BEGIN on the
+ * raw connection, then authorize through `deadlineClient` without a second minted T.
  */
 export async function authorizeMintedRead(
   check: AccessCheck,
   pool: Pool,
   deadline = Date.now() + 5000,
 ): Promise<boolean> {
-  return withReadTransaction(pool, (client) => check(client), deadline);
+  return withConnection(pool, async (connection) => {
+    await connection.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    try {
+      const allowed = await check(deadlineClient(connection, deadline));
+      await connection.query('COMMIT');
+      return allowed;
+    } catch (error) {
+      await connection.query('ROLLBACK');
+      throw error;
+    }
+  });
 }

@@ -144,7 +144,9 @@ eligibility (public floor false) through the directory row plan and Access work 
 and a repeatable-read snapshot. Authorize on that client without minting a second T that prepare did not capture.
 Owner and catalogue pages remain distinct admission episodes. Search reuses the constructor runtime (pool, client,
 prefix, source, current release, authenticated context) through `createSearchScopeForService`; public capture uses
-`compilePublicFilterConsumerCapture` with the binder's inverse admission and the original accepted meaning. Initial
-kind chips reuse at most two unique current hits. Each fixture releases owned pools and runtime after the original
+`compilePublicFilterConsumerCapture` with the binder's inverse admission and the original accepted meaning. Compiled
+capture retains the admitted tree; engine DSL is optional equality evidence. Initial kind chips reuse at most two
+unique current hits; disclosed page hits still read each current partition once. Each fixture releases owned pools and
+runtime after the original
 context, including after a failing assertion. Native subject writes load History's Semantic source-set owner from
 the adapters directory as a filesystem path.
