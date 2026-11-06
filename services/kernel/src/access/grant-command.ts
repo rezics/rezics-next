@@ -144,6 +144,10 @@ export async function grantCommand<T>(
         proofs.set(proof, { attempt, checks });
         return proof;
       } catch (error) {
+        console.error(
+          '[diag] grant prepare failed',
+          error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+        );
         throwAccessUnavailable(error, context.deadline);
         throw options.denied();
       }
@@ -158,7 +162,14 @@ export async function grantCommand<T>(
         attempt.basis.requestedBy !== basis.requestedBy
       )
         throw options.denied();
-      for (const check of prepared.checks) if (!(await check.check(tx, attempt.time))) throw options.denied();
+      for (const check of prepared.checks)
+        if (!(await check.check(tx, attempt.time))) {
+          console.error(
+            '[diag] grant check denied',
+            JSON.stringify({ action: check.action, resource: options.resource, actor: actor.accountId }),
+          );
+          throw options.denied();
+        }
       requireAccessDeadline(context.deadline);
       return 'execute';
     },

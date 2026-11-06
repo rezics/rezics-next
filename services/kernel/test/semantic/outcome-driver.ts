@@ -19,6 +19,8 @@ import { createWorkflowApprovals } from '../../src/access/workflow-approvals.ts'
 import { admitGroup, PlatformClosedError } from '../../src/access/gates/admission.ts';
 import { createSuspensionCommands } from '../../src/access/suspension.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
+import { resourceRoleCatalogue } from '../../src/access/resource-roles.ts';
+import governanceActions from '../../src/access/platform-governance.json';
 import { createPool } from '../../src/database/pool.ts';
 import { startRelays } from '../../src/events/relays.ts';
 import { createKernel } from '../../src/http/kernel.ts';
@@ -444,6 +446,33 @@ async function startDriver(
       person('suspended'),
     ]);
     const accounts = { editor, acceptor, steward, suspended } satisfies Record<Exclude<Persona, 'anonymous'>, Account>;
+    {
+      const claims = JSON.parse(Buffer.from(governor.bearer.split('.')[1]!, 'base64url').toString()) as Record<
+        string,
+        unknown
+      >;
+      console.error(
+        '[diag] governor token claims',
+        JSON.stringify({ keys: Object.keys(claims), scope: claims.scope, scopes: claims.scopes }),
+      );
+      console.error(
+        '[diag] catalogue',
+        JSON.stringify({
+          grantInCatalogue: actionCatalogue(app).has('access:grant'),
+          grantInScopes: scopes.includes('access:grant'),
+          scopeCount: scopes.length,
+        }),
+      );
+      const roles = resourceRoleCatalogue(access);
+      console.error(
+        '[diag] platform role',
+        JSON.stringify({
+          roleNames: roles ? [...roles.roles.keys()] : null,
+          governanceRoleActions: roles?.roles.get('platform.governance') ?? null,
+          unmountedGovernanceActions: governanceActions.actions.filter((action) => !actionCatalogue(app).has(action)),
+        }),
+      );
+    }
 
     await setupSemantic(pool, bundledRelease);
     await setupContent(pool);
