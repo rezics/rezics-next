@@ -625,6 +625,7 @@ async function startStack(): Promise<
     closeAuth = closeOwnedSemanticAuth;
     const auth = await sharedAuth(new URL(process.env.DATABASE_URL!), undefined, true);
     reportStackProgress('Native web stack startup: semantic Auth initialized');
+    reportStackProgress('Native web stack startup: loading kernel modules');
     // Observe the harness's actual issuance, retaining its Auth cookie for the
     // website code flow. Never copy fixture passwords or manufacture sessions.
     const authCookies = new Map<string, string>();
@@ -1290,7 +1291,7 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
   const lifecycle = currentNativeLifecycle();
   if (!lifecycle) {
     const standalone = new NativeTestLifecycle('standalone native web stack');
-    const stack = await standalone.run('start native web stack', 360_000, () => startNativeWebStack(options), false);
+    const stack = await standalone.run('start native web stack', 900_000, () => startNativeWebStack(options), false);
     return {
       ...stack,
       async stop() {

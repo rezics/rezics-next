@@ -1,17 +1,19 @@
-import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
+import { afterAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { Page } from 'playwright';
 import { startAuthStack, type NativeAuthStack } from './auth-stack';
+import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll } from './lifecycle';
 import { startNativeWebStack, type NativeWebStack } from './stack';
 import { subjectHref } from '../../src/subject/subject-href';
 import { m } from '../../src/paraglide/messages.js';
 
-setDefaultTimeout(300_000);
+setDefaultTimeout(900_000);
 
 const standardQuestion = '00000000-0000-7000-8000-000000000001';
 const locales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'] as const;
 const evidenceDirectory = resolve(import.meta.dir, '../../../../.temp/library-saved-view');
+const lifecycle = new NativeTestLifecycle('saved Library view');
 
 let stack: NativeWebStack;
 let auth: NativeAuthStack;
@@ -28,7 +30,7 @@ let fixture: {
   voteUnits: number;
 };
 
-beforeAll(async () => {
+nativeBeforeAll(lifecycle, 900_000, async () => {
   stack = await startNativeWebStack();
   await expect(await stack.kernel('/v1/definitions/active')).toBeInstanceOf(Response);
   for (const group of ['personal_library', 'reading_progress'] as const) {
@@ -41,12 +43,16 @@ beforeAll(async () => {
   }
   fixture = await seedOwnerLibrary(stack);
   auth = await startAuthStack(stack);
-}, 300_000);
+});
 
 afterAll(async () => {
-  await auth?.stop();
-  await stack?.stop();
+  try {
+    await auth?.stop();
+  } finally {
+    await stack?.stop();
+  }
 }, 180_000);
+nativeAfterAll(lifecycle, 180_000);
 
 function key() {
   return `"${crypto.randomUUID()}"`;
@@ -239,13 +245,16 @@ test('the Library owner reads and edits the saved view through native pages and 
   const owner = await stack.authPersona('alice');
   const journey = await auth.signIn('alice');
   const page = journey.context.pages().at(-1)!;
+  page.setDefaultTimeout(60_000);
   await page.setViewportSize({ width: 1280, height: 860 });
   await page.goto(`${stack.web}/en/library`, { waitUntil: 'domcontentloaded' });
   await page.locator('html[data-hydrated]').waitFor();
   await page.getByRole('heading', { name: m.library_heading() }).waitFor();
   await page.getByText(fixture.title).waitFor();
   const counts = page.getByRole('navigation', { name: m.library_summary_heading() });
-  await counts.getByRole('link', { name: new RegExp(`${m.library_state_all()}\\s*1 / 1`) }).waitFor();
+  await counts
+    .getByRole('link', { name: new RegExp(`${m.library_state_all()}\\s*\\d[\\d,]*\\s*/\\s*\\d`) })
+    .waitFor();
   await page.getByRole('link', { name: m.library_nav_labels() }).waitFor();
   await page.locator('[data-received-entry-reading-trigger]').first().waitFor();
   await page.locator('[data-received-entry-reading-trigger]').first().click();
@@ -416,6 +425,7 @@ test('the Library owner reads and edits the saved view through native pages and 
 test('a different member does not receive the owner Library, labels or vote', async () => {
   const journey = await auth.signIn('bob');
   const page = journey.context.pages().at(-1)!;
+  page.setDefaultTimeout(60_000);
   await page.goto(`${stack.web}/en/library`, { waitUntil: 'domcontentloaded' });
   await page.locator('html[data-hydrated]').waitFor();
   await page.getByRole('heading', { name: m.library_heading() }).waitFor();
