@@ -126,9 +126,15 @@ function rebuild(source: Record<string, unknown>, records: ExportRecord[], versi
 
 /**
  * Keep downloaded V4 bytes unchanged. Recovery consumers receive the installed V1 or V3 envelope their decoder admits.
+ * Unreadable file bytes stay original so the native decoder, not this projection, refuses them.
  */
 export function projectArchiveForRecovery(bytes: Uint8Array, branch: RecoveryArchiveBranch): Uint8Array {
-  const parsed: unknown = JSON.parse(new TextDecoder().decode(bytes));
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(new TextDecoder().decode(bytes));
+  } catch {
+    return bytes;
+  }
   if (!record(parsed) || !record(parsed.manifest) || !Array.isArray(parsed.records)) return bytes;
   const sourceVersion = versionOf(parsed.manifest.version);
   if (!sourceVersion) return bytes;

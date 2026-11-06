@@ -116,7 +116,7 @@ current Session.
 Focused Web tests cover mounted file admission, three preview windows, independent reader histories, empty selected
 projections with native continuation, exact failed-read retry, immutable review/apply, pending cancellation,
 acknowledged destination retention, current Entry and label-assignment reads, and original request bounds using the
-existing typed native fixture. Retained assessment and source-observation notices explain fields that cannot yet be
+existing typed native fixture. The native Web owner walk uploads a completed export and rereads current Entry facts. Retained assessment and source-observation notices explain fields that cannot yet be
 selected, while retaining evidence unchanged. Existing controller fence and bounded-growth assertions remain. Browser,
 installed-root, byte/caller observations, broader native acceptance and promotion remain integration
 responsibilities.

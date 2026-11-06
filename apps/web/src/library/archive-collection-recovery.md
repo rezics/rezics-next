@@ -77,7 +77,8 @@ export from this signed-in owner is the same source. Results reopen the current 
 privacy, member identities, notes and order.
 
 Stories cover upload, local preparation, file-read failure, reviewed selection, stale conflict and partial result.
-Journey tests pin original-archive restart, native Collection readback and other-member denial. Focused Web
+Journey tests pin original-archive restart, native Collection readback and other-member denial. The native Web owner
+and other-member walk exports a completed file, restores through the page, and rereads the Collection. Focused Web
 acceptance exercises the mounted journey and bounded/source-session behavior; native HTTP producer acceptance
 remains owned by Commerce.
 Preparation decoders and producer implementation are not Web delivery; this guide describes the delivered consumer.
