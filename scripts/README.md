@@ -904,6 +904,9 @@ Validation failure restores the previous drop-in and does not reload sshd.
 ### Adding, resizing and removing a host
 
 Start with a small slice and slot count. Allow at least two effective slots for ordinary runs and three for gates.
+Install the `rezics-docker-prune.timer` system unit on every host. Every 15 minutes it runs
+`docker container prune -f --filter until=1h`. Check code from older worktrees starts throwaway databases without
+`--rm`, and on 2026-11-06 about 475 stopped containers on host b slowed `docker run` past its 120 s startup limit.
 Provision it, add its entry and run representative kernel, auth, browser and gate checks.
 Read the per-run CPU seconds, average cores and peak memory lines, including container usage.
 Measure complete runs on a quiet slice and repeat with the intended mix of concurrent checks.
