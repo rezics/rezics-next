@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, createElement, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { act, createContext, createElement, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import type { MembershipResult } from '../src/community/space';
@@ -54,7 +54,11 @@ mock.module('../src/community/realm-membership-actions', () => ({
 }));
 const unusedAction = async () => null;
 mock.module('../src/community/space-actions', () => ({
+  addRealmMember: unusedAction,
   changeRealmPublication: unusedAction,
+  readSpacePage: unusedAction,
+  readMyRealmsPage: unusedAction,
+  readMyRealmsPageForReview: unusedAction,
   readRealmBoards: unusedAction,
   readRealmPublications: unusedAction,
   readRealmPublicationPreparation: unusedAction,
@@ -88,6 +92,7 @@ const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
 Object.defineProperty(globalThis, 'window', { configurable: true, value: {} });
 mock.module('../src/session/query', () => ({
   ...sessionModule,
+  AnonymousSessionContext: createContext(false),
   sessionCsrfToken: () => null,
   useSession: () => {
     const client = useQueryClient();
