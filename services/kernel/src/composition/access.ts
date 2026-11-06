@@ -1,5 +1,5 @@
 import { createAccessApplication } from '../access/application/index.ts';
-import { acknowledgeErasure } from '../access/index.ts';
+import { acknowledgeErasure } from '../access/erasure.ts';
 import { bindAccessApplication, createNativeAccessPorts } from '../access/adapters/index.ts';
 import type { AccessApplication } from '../access/contract/index.ts';
 

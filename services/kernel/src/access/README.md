@@ -45,7 +45,8 @@ Public entries: `access/contract/index.ts`, `access/core/index.ts`, `access/appl
 `access/adapters/index.ts`, `access/contribution-attribution.ts`, `access/public-identity.ts`, plus the
 existing Access adapter facades. Ports: `AvatarMediaPort`,
 `RealmAdministrationPort`, `IdentitySemanticPort`, `IdentityRecoveryStorePort`, `IdentityRetentionPort`,
-`KindAudienceLibraryPort`, `OriginalWorkPort`, `SearchErasurePort`, `ResourceAuthorizationPort`. Wiring adds no
+`KindAudienceLibraryPort`, `OriginalWorkPort`, `SearchErasurePort`, `NativeErasureCoordinatorPort`,
+`ResourceAuthorizationPort`. Wiring adds no
 query, scan or extra statement; native cost stays with the existing producer declarations.
 
 ## Pure policy core consumer
