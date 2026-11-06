@@ -14,7 +14,7 @@ import {
   readingPageRawLimit,
 } from '../../src/content/reading-page.ts';
 
-const id = (tail: string) => `00000000-0000-4000-8000-${tail.padStart(12, '0')}`;
+const id = (tail: string) => `00000000-0000-7000-8000-${tail.padStart(12, '0')}`;
 const boardId = id('1');
 const threadId = id('2');
 const authorId = id('3');
@@ -159,6 +159,14 @@ test('selected reading-card references keep exact keys and close raw and reactio
     sourceRevisionId: id('403'),
   };
   expect(normalizeSelectedReadingCardReferences([postReference])).toEqual([postReference]);
+  const remoteBoard = '00000000-0000-7000-8000-123400000001';
+  const crossHomeReferences = [
+    { ...selected[0]!, placeId: remoteBoard },
+    { ...postReference, placeId: remoteBoard },
+  ];
+  expect(normalizeSelectedReadingCardReferences(crossHomeReferences)).toEqual(crossHomeReferences);
+  expect(() => normalizeSelectedReadingCardReferences([{ ...postReference, placeId: 'invalid' }])).toThrow();
+  expect(() => normalizeSelectedReadingCardReferences([{ ...postReference, sourceRevisionId: remoteBoard }])).toThrow();
   const retained = normalizeSelectedReadingCardReferences([postReference]);
   postReference.sourceRevisionId = id('404');
   expect(retained[0]!.sourceRevisionId).toBe(id('403'));

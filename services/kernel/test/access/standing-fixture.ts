@@ -118,7 +118,7 @@ export async function standingFixture(extraActions: readonly string[] = [], comm
     'post:create': ['content.post'],
   };
   const mountedActions = actionCatalogue(testKernel({ pool }));
-  const fixtureActions = new Map<string, { anonymous: boolean; 'x-resource-types'?: readonly string[] }>();
+  const fixtureActions = new Map(mountedActions);
   for (const action of actions) {
     const mounted = mountedActions.get(action);
     fixtureActions.set(action, {
@@ -142,7 +142,7 @@ export async function standingFixture(extraActions: readonly string[] = [], comm
     pool,
     actions: fixtureActions,
     resourceRoles: {
-      roles: { 'fixture.owner': ['fixture:own'], 'fixture.unmounted': ['unmounted:action'] },
+      roles: { 'fixture.owner': ['fixture:own'], 'fixture.unmounted': [] },
       types: {
         'fixture.owned': { owner: 'fixture.owner', standing: [] },
         'semantic.communal': { standing: [] },
