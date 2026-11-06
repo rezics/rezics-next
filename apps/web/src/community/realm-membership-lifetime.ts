@@ -388,13 +388,13 @@ export function hasCurrentRealmMembership(
   subject: string,
   caller: RealmMembershipCaller,
 ): boolean {
-  if (!caller.isReady()) return false;
   const query = client.getQueryCache().find({ queryKey: keyFor(realmId, subject), exact: true });
   if (!query || query.state.data === undefined) return false;
   let revision = standingRevisions.get(query);
   if (revision === undefined) {
-    // Hydrated/bootstrap data remains compatible before the browser observes an authority transition. A read that
-    // was already queued or in flight is explicitly untrusted until its bound caller completes.
+    // Hydrated/bootstrap data remains compatible before the browser observes an authority transition, including the
+    // first paint before the membership caller is command-ready. A read that was already queued or in flight is
+    // explicitly untrusted until its bound caller completes.
     if (query.state.fetchStatus === 'fetching' && query.state.status !== 'success') {
       standingRevisions.set(query, null);
       return false;
