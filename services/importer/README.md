@@ -25,7 +25,7 @@ Run `bun services/importer/src/cli.ts` with `--source`, `--dump`, `--state`, `--
 
 Decision: Every ordinary Bangumi alias admits pinned five-column PersonDetail TSV (`/type/person`, `person:N`, `unversioned`, cache ETag, JSON), retaining Person identity when careers disappear. Identity, type and the 64 KiB response cap are validated before Auth. ETags remain cache metadata. `--bangumi-person-career-bindings-file` supplies a finite JSON profile with `schemeId`, `schemeUri` (`https://rezics.com/schemes/bangumi/careers`) and up to seven `{code,id}` Concepts. These IDs are lookup hints: the existing mapper requires current native Scheme/Concept facts and released P106, with at most eight current reads per Person, including unchanged source refreshes. Missing bindings omit careers alone; unavailable reads retain the complete baseline for retry. Imports remain proposals pending independent acceptance and adoption.
 
-Decision: Ordinary four-provider CLI and native cases consume the current registered converter exports; inspection explains classified new/changed/vanished records and pending pages without a generation-wide COUNT. Seal retires staging-prefix rows by exact (source, run, ordinal) in pages of 100.
+Decision: Ordinary four-provider CLI and native cases consume the current registered converter exports; inspection explains classified new/changed/vanished records and pending pages without a generation-wide COUNT. Inspect reads stored generation integers and never COUNT journal entries. Seal retires staging-prefix rows by exact (source, run, ordinal) in pages of 100.
 
 Preview, capture comparison, inspection, disappearance review, diagnostics, resume, retention, staging retirement, backup and snapshot validation operate on bounded exact generations or pages. Diagnostics do not publish or rewrite. Interrupted unsealed acquisition is discarded. Optional checkpoints hash and resume the same bytes for large Bangumi, Open Library, Wikidata and VNDB COPY inputs. Sealed work resumes from its journal; a rejected source is not silently replaced.
 
@@ -119,9 +119,7 @@ Decision: review exact original `bangumi_cross_media`/`vndb_cross_media` claims 
 
 Persona collections report the reached step as `collections.<view>.<phase>` with the failing state and code.
 
-Native media, persona, genres and publication acceptance has not been observed on the promoted revision. Typecheck repairs keep those assertions and update fixture signatures to current SearchService and NativePermissionProjection contracts without new behaviour tests.
-
-Existing franchise, work-links, publication, focused Game and VNDB cases remain the acceptance pins; no extra tests. Native Game publication current-read, VNDB release seed/reseed, VNDB statistics Auth-registration, native transaction retry and Kernel type errors outside this branch stay named capability repairs.
+Existing franchise, work-links, publication, focused Game and VNDB cases remain the acceptance pins; no extra tests. Native Game publication current-read, VNDB release seed/reseed, VNDB statistics Auth-registration and native transaction retry stay named capability repairs. Decision: Kernel callers take `ACCOUNT_ROLE_BITS` and `declareCommandHistory` from the released History contract and application entries. VNDB table admission and three-scale grouping keep explicit deadlines past bun’s 5s default.
 
 ## Deletion
 

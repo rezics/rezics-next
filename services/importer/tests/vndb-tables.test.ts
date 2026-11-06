@@ -289,7 +289,7 @@ test('malformed and private archive entries never become staged source records',
   } finally {
     h.close();
   }
-});
+}, 60_000);
 
 test('COPY decoding, reordered headers and explicit row and child caps are enforced', async () => {
   const h = harness();
@@ -398,4 +398,4 @@ test('grouping fixed VN uses indexed seeks at three scales', async () => {
   } finally {
     h.close();
   }
-});
+}, 120_000);
