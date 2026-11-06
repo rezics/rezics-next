@@ -1,4 +1,3 @@
-import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 import { setFixtureAccountState } from '../support/native-suspension-driver.ts';
 import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 import { afterAll, beforeEach, expect, test } from 'bun:test';
@@ -290,7 +289,7 @@ test('a missing required primitive remains unavailable even when the grant facts
   const catalogue = nativePolicyCatalogueForAccess(access)!;
   const projection = {
     assignmentValid: null,
-    live: true,
+    deadlineLive: true,
     localDenied: false,
     actorActionGrant: true,
     actorResourceRoleGrant: false,
