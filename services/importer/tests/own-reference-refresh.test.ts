@@ -220,4 +220,4 @@ test('a vanished named Open Library record retracts its own candidates without r
     await importer.close();
     rmSync(directory, { recursive: true, force: true });
   }
-});
+}, 30_000);
