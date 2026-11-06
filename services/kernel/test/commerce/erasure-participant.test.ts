@@ -124,7 +124,7 @@ describe('native genuine-order retention', () => {
     );
   }
   async function listedOffer(edition: NativeContentEdition, title: string, buyers: { accountId: string }[]) {
-    const offer = (
+    const created = (
       await accepted(seller, '/v1/offers', {
         contentEditionId: edition.contentEditionId,
         title,
@@ -132,7 +132,13 @@ describe('native genuine-order retention', () => {
         unitAmountMinor: 1200,
         taxCode: 'txcd_10302000',
       })
-    ).offer as { id: string; revision: number };
+    ).offer as { id: string };
+    const reviewed = await kernel.handle(new Request(`http://kernel.test/v1/offers/${created.id}`));
+    const value = await reviewed.json();
+    if (!reviewed.ok) throw new Error(`/v1/offers/${created.id}: ${reviewed.status} ${JSON.stringify(value)}`);
+    const offer = value.offer as { id: string; revision: number };
+    if (!Number.isSafeInteger(offer.revision) || offer.revision < 1)
+      throw new Error(`/v1/offers/${created.id}: displayed public revision is required`);
     for (const subject of buyers)
       await grantAccess(subject.accountId, { route: routeOf(offer.id)!, id: offer.id }, ['order:create']);
     return offer;

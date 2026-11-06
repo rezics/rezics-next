@@ -1010,7 +1010,9 @@ effects consumer to observe and catch up and uses the existing 5ms queue poll. T
 account's tombstone envelope, not a moving partition head, with the 120s ceiling other native erasure suites use.
 The board-read current-role projection stays with Accounts.
 Decision: fresh native `POST /v1/offers` sends only `contentEditionId` and ordinary commercial terms;
-`targetSubjectId` is the historical-replay body and is rejected on the same object.
+`targetSubjectId` is the historical-replay body and is rejected on the same object. Native genuine-order
+acceptance reads `expectedOfferRevision` from public `GET /v1/offers/:offerId`; seller create responses stay
+revisionless. The native suite is that one journey plus unused-actor operator history.
 
 The [financial lifecycle and cost review](../../../../docs/research/commerce-cost-lifecycle-quality.md)
 retains its recorded source bindings and unavailable measurements. Local emptiness cannot prove absence of
