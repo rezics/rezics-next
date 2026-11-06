@@ -134,6 +134,10 @@ physical bytes, alarm, deletion progress and observation validity using the exac
 Missing/stale measurements and cleanup errors remain unhealthy; command success does not prove cache health.
 Deployment must replace the legacy captured timer/program on each configured host before claiming live recovery.
 
+Check fixtures invoke the current erasure producer-list function and define each Search service method once. Fixture
+repairs of this kind align trusted producers with the current contracts; they add no authorization rule and change no
+account custody.
+
 ## Temporary files
 
 Workers use `.temp/worker-tmp` in their task worktree; deleting the worktree deletes their scratch files. Each gate,

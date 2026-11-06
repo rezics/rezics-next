@@ -37,31 +37,10 @@ export type AccountIdentityReversalSettlement = Readonly<{
 export declare function readAccountIdentityReversalSettlement(pool: Pool, reference: IdentitySourceConsumerReference, context: IdentitySourceConsumerContext): Promise<AccountIdentityReversalSettlement | null>;
 /** A brand/observation alone never proves currentness: lock the durable native rows again. */
 export declare function verifyAccountIdentityReversalSettlement(tx: CommandTransaction, reference: IdentitySourceConsumerReference, proof: AccountIdentityReversalSettlement): Promise<boolean>;
-/** Same-home settlement read: 64/64/20/65536 plus explicit remaining axes. Verify is the 15-statement prefix. */
-export declare function ACCOUNT_IDENTITY_REVERSAL_SETTLEMENT_DECLARATION(): Readonly<{
-    engineRequests: 0;
-    work: Readonly<{
-        candidateKeys: 0;
-        nativeRows: 64;
-        identityMetadataRows: 0;
-        nativePoints: 64;
-        witnessKeys: 0;
-        statements: 20;
-        bytes: 65536;
-        emptySeeks: 20;
-    }>;
-}>;
+/** Verify re-locks settlementFor; Source names this same body as the settlement getter. */
 export declare function ACCOUNT_IDENTITY_REVERSAL_VERIFY_DECLARATION(): Readonly<{
+    work: import("./contract/bounds.ts").AccessWorkDimensions;
     engineRequests: 0;
-    work: Readonly<{
-        candidateKeys: 0;
-        nativeRows: 64;
-        identityMetadataRows: 0;
-        nativePoints: 64;
-        witnessKeys: 0;
-        statements: 15;
-        bytes: 65536;
-        emptySeeks: 15;
-    }>;
 }>;
+export declare const ACCOUNT_IDENTITY_REVERSAL_SETTLEMENT_DECLARATION: typeof ACCOUNT_IDENTITY_REVERSAL_VERIFY_DECLARATION;
 export {};

@@ -33,13 +33,16 @@ export {
   ORIGINAL_NATIVE_CONTROL,
   originalControlWork,
   originalWorkVector,
+  scaleOriginalControl,
   sumOriginalControl,
 } from './core/index.ts';
 import {
   ADDITIONAL_ORIGINAL_TRANSFER_CONTROL,
   HISTORY_ORIGINAL_LOCAL_ALLOWANCE,
   originalWorkVector,
+  sumOriginalControl,
 } from './core/index.ts';
+import { ACCOUNT_IDENTITY_SOURCE_ADMISSION_DECLARATION } from './agent-verification-identity-work.ts';
 import { IDENTITY_ORIGINAL_DEADLINE_MS, ORIGINAL_WORK_AXES as ORIGINAL_AXES } from './contract/index.ts';
 
 export const IDENTITY_ORIGINAL_SOURCE_TRANSFER_MISSING = 'identity-history-original-source-transfer-unavailable';
@@ -510,6 +513,7 @@ type HistoryOriginalAllocation = Readonly<{
   source: WorkDimensions | null;
   library: WorkDimensions | null;
   transfer: WorkDimensions;
+  accounts: WorkDimensions;
   total: WorkDimensions;
 }>;
 
@@ -517,7 +521,8 @@ type HistoryOriginalAllocation = Readonly<{
  * actual Source and Library modules before admission. Public call sites supply no price.
  * The source declaration includes all reached History, inventory, receiving, H/G/A,
  * outbox/released/current/final validators, settings, failure and rollback invocations.
- * Library's declaration includes all actual page/verifier/planner/seal/fence bodies. */
+ * Library's declaration includes all actual page/verifier/planner/seal/fence bodies.
+ * Accounts' original-home reader is admitted separately at original/prepare/checkpoint/finish. */
 export type IdentityHistoryOriginalBodyDeclaration = Readonly<{
   work: WorkDimensions;
   engineRequests: 0;
@@ -533,16 +538,21 @@ async function installedHistoryOriginalAllocation(): Promise<HistoryOriginalAllo
   } catch {
     throw new IdentityOriginalUnavailable('identity-history-original-child-declaration-invalid');
   }
+  const accounts = ACCOUNT_IDENTITY_SOURCE_ADMISSION_DECLARATION().work;
   return Object.freeze({
     local: HISTORY_ORIGINAL_LOCAL_ALLOWANCE,
     source,
     library,
     transfer: ADDITIONAL_ORIGINAL_TRANSFER_CONTROL,
-    total: composeOriginalWorkAdmission(
-      HISTORY_ORIGINAL_LOCAL_ALLOWANCE,
-      source,
-      library,
-      ADDITIONAL_ORIGINAL_TRANSFER_CONTROL,
+    accounts,
+    total: sumOriginalControl(
+      composeOriginalWorkAdmission(
+        HISTORY_ORIGINAL_LOCAL_ALLOWANCE,
+        source,
+        library,
+        ADDITIONAL_ORIGINAL_TRANSFER_CONTROL,
+      ),
+      accounts,
     ),
   });
 }

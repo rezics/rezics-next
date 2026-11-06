@@ -42,6 +42,7 @@ import {
   accountIdentityUnavailable,
   type AccountIdentitySource,
 } from './agent-verification-identity.ts';
+import { ACCOUNT_IDENTITY_TECHNICAL_ROLE_SQL } from './agent-verification-identity-work.ts';
 import select from './agent-verification-identity-technical-read.sql';
 import insert from './agent-verification-identity-technical-insert.sql';
 import {
@@ -164,12 +165,12 @@ function sameReceipt(a: IdentityNativeReceipt, b: IdentityNativeReceipt): boolea
  */
 async function inventory(tx: CommandTransaction, receipt: AccountReceipt) {
   const rows = (
-    await tx.query<{ account_id: string; roles: number }>(
-      `SELECT role_account_id::text AS account_id,roles FROM access.agent_identity_technical_role
-     WHERE route=$1 AND account_id=$2 AND direction=$3 AND receipt_id=$4
-     ORDER BY role_account_id LIMIT 2 FOR SHARE`,
-      [routeOf(receipt.account), receipt.account, receipt.kind, receipt.receipt],
-    )
+    await tx.query<{ account_id: string; roles: number }>(ACCOUNT_IDENTITY_TECHNICAL_ROLE_SQL, [
+      routeOf(receipt.account),
+      receipt.account,
+      receipt.kind,
+      receipt.receipt,
+    ])
   ).rows;
   if (rows.length !== 1 || rows[0]!.account_id !== receipt.account || rows[0]!.roles !== ACCOUNT_ROLE_BITS.subject)
     return [];

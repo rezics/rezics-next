@@ -57,6 +57,21 @@ export function sumOriginalControl(...parts: readonly AccessWorkDimensions[]): A
   );
 }
 
+/** Repeat one closed body at a positive reached-call count. Zero is a missing child, never a free pass. */
+export function scaleOriginalControl(work: AccessWorkDimensions, calls: number): AccessWorkDimensions {
+  if (!Number.isSafeInteger(calls) || calls < 1) throw new RangeError('Invalid identity original work multiplicity');
+  const values = originalWorkVector(work).map((value) => {
+    const scaled = value * calls;
+    if (!Number.isSafeInteger(scaled)) throw new RangeError('Identity original work overflow');
+    return scaled;
+  });
+  return Object.freeze(
+    Object.fromEntries(
+      ORIGINAL_WORK_AXES.map((axis, index) => [axis, values[index]!]),
+    ) as unknown as AccessWorkDimensions,
+  );
+}
+
 export function admitOriginalWorkDeclaration(declaration: AccessWorkDeclaration | null): AccessWorkDimensions | null {
   if (declaration === null) return null;
   if (
