@@ -65,6 +65,9 @@ Decision: during an eligible My ratings visit, retain up to eight admitted prede
   - Native indexed raw-page and cold summary/account/Realm costs belong to Content's producer acceptance. Native
     256/1024/4096 growth is not asserted by this frontend.
 
+Decision: vote PUT and DELETE send the command's Idempotency-Key as a quoted structured-field string, the form the Kernel
+parses. Subject rating writes do the same, so a bare UUID is never sent as a command key.
+
 Decision: the installed generated own-votes operation is the only read seam. Web types derive from its published
 `OwnVotesPage`, so no Kernel schema import remains in the Web module graph. The Workers-safe validator stays because the
 outer envelope is additive while entries and action advice remain closed; it adds no second native schema meaning.
