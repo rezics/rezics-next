@@ -1,4 +1,6 @@
-import { readAvatarSummaries, type AvatarSummary } from '../content/avatar.ts';
+import { tryAccessApplication } from './adapters/bind.ts';
+import type { AvatarSummary } from './contract/index.ts';
+export type { AvatarSummary };
 import type { PublicViews } from './public-views.ts';
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
@@ -186,7 +188,9 @@ async function publicIdentityForAccount(
     const label = labelSet ? subjectLabel(labelSet) : '';
     if (type && label) subject = { id: subjectId, label, type };
   }
-  const avatar = row.avatar ? ((await readAvatarSummaries(client, [row.avatar])).get(row.avatar) ?? null) : null;
+  const avatar = row.avatar
+    ? ((await tryAccessApplication()?.readAvatarSummaries(client, [row.avatar]))?.get(row.avatar) ?? null)
+    : null;
   return [
     {
       ...identity,

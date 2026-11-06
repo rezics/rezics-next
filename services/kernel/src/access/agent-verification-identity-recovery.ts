@@ -4,22 +4,24 @@ import type { Pool } from 'pg';
 import { currentCommand, noEffect, runCommand, type CommandTransaction } from '../command/command.ts';
 import { encodeReceiptKey, nativeReceiptKeyCandidates, receiptKeysFor } from '../command/receipt-key.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { accountAgentId } from '../semantic/agents.ts';
 import type { IdentityIntent, IdentityReceipt } from '../semantic/identity-epoch-contract.ts';
 import {
   accountIdentityUnavailable,
   publishedAccountIdentityUndo,
   readOriginalAgentIdentityDecision,
 } from './agent-verification-identity.ts';
-import {
-  readOriginalAccountAgentIdentity,
-  verifyOriginalAccountAgentIdentity,
-  type OriginalAccountAgentIdentity,
-} from '../semantic/account-agent-identity-recovery.ts';
+import { tryAccessApplication } from './adapters/bind.ts';
+import type { OriginalAccountAgentIdentity } from '../semantic/access-capabilities.ts';
 import { declareAgentIdentitySource, type AgentIdentitySourceKey } from '../history/agent-identity-source.ts';
 import insertOriginal from './agent-verification-identity-recovery-source.sql';
 import originalReversal from './agent-verification-identity-recovery-read.sql';
 import insertRecovery from './agent-verification-identity-recovery-insert.sql';
+
+function identityPort() {
+  const identity = tryAccessApplication()?.ports.identity;
+  if (!identity) throw accountIdentityUnavailable('Access application is not bound');
+  return identity;
+}
 
 type Receipt = Exclude<IdentityReceipt, { kind: 'subject.merge' }>;
 type ReversalRow = {
@@ -148,8 +150,7 @@ async function reversal(tx: CommandTransaction, receipt: Receipt): Promise<Rever
 
 /** Resolve only the exact Global decision and pending receipt. Personal JSON/history is never searched. */
 async function verificationDecision(pool: Pool, receipt: Receipt) {
-  const { withReadTransaction } = await import('../semantic/read.ts');
-  const request = await withReadTransaction(
+  const request = await identityPort().withReadTransaction(
     pool,
     async (tx) =>
       (
@@ -238,19 +239,18 @@ export async function recoverMissingAccountIdentitySource(
   // The complete Source/History aggregate has not funded the extra foreign probes and
   // recovery writer. Do not dispatch them from a Source frame on the earlier partial
   // allocation; ordinary Access recovery keeps its own command owner and deadline.
-  const sourceMaintenance = await import('../semantic/identity-source-consumer-maintenance.ts');
-  if (sourceMaintenance.activeIdentitySourceConsumerMaintenance(pool)) {
+  if (identityPort().activeIdentitySourceConsumerMaintenance?.(pool)) {
     const { IdentityHistoryWorkUnavailable } = await import('../history/agent-identity-inventory-work.ts');
     throw new IdentityHistoryWorkUnavailable();
   }
   const partition = partitionOf(routeOf(receipt.account)!);
   // The failed read has released its checkout. All cross-home proofs are collected before reacquiring it.
   const decision = receipt.kind === 'account-agent.verify' ? await verificationDecision(pool, receipt) : null;
-  const source = await readOriginalAccountAgentIdentity(pool, {
+  const source = (await identityPort().readOriginalAccountAgentIdentity(pool, {
     account: receipt.account,
     direction: receipt.kind,
     receipt: receipt.receipt,
-  });
+  })) as OriginalAccountAgentIdentity | null;
   if (decision || source) {
     await recoverOriginalSource(pool, receipt, source, decision, deadline);
     return true;
@@ -276,13 +276,13 @@ export async function recoverMissingAccountIdentitySource(
   if (
     previous.intent.kind !== 'merge' ||
     previous.intent.survivor !== original.response.catalogueSubjectId ||
-    previous.intent.redirected !== accountAgentId(receipt.account) ||
+    previous.intent.redirected !== identityPort().accountAgentId(receipt.account) ||
     undo.source.epoch !== original.epoch
   )
     throw accountIdentityUnavailable(`original reversal and prior published source differ ${keyOf(receipt)}`);
   const intent: IdentityIntent = {
     kind: 'unmerge',
-    original: accountAgentId(receipt.account),
+    original: identityPort().accountAgentId(receipt.account),
     undoJob: undo.job,
     verificationReceipt: original.response.verificationReceiptId,
     release: previous.intent.release,
@@ -328,7 +328,7 @@ export async function recoverMissingAccountIdentitySource(
         routeOf(receipt.account),
         receipt.account,
         receipt.receipt,
-        accountAgentId(receipt.account),
+        identityPort().accountAgentId(receipt.account),
         original.response.verificationReceiptId,
         original.principal_id,
         original.command_kind,
@@ -483,7 +483,7 @@ async function recoverOriginalSource(
         !prior ||
         prior.input.intent.kind !== 'merge' ||
         prior.input.intent.survivor !== catalogue ||
-        prior.input.intent.redirected !== accountAgentId(receipt.account) ||
+        prior.input.intent.redirected !== identityPort().accountAgentId(receipt.account) ||
         prior.verificationReceipt !== value.verificationReceiptId ||
         intent.verificationReceipt !== prior.verificationReceipt ||
         intent.release !== prior.input.intent.release ||
@@ -528,7 +528,7 @@ async function recoverOriginalSource(
         : nativeReversal(await reversal(tx, receipt)) !== nativeReversal(staged.reversal!);
       if (changed) throw accountIdentityUnavailable(`original Account custody changed ${keyOf(receipt)}`);
       // Supply the actual opaque object returned by Source, never its serialized data.
-      if (!(await verifyOriginalAccountAgentIdentity(tx, selection, source)))
+      if (!(await identityPort().verifyOriginalAccountAgentIdentity?.(tx, selection, source)))
         throw accountIdentityUnavailable(
           `Source verifyOriginalAccountAgentIdentity lost original custody ${keyOf(receipt)}`,
         );
@@ -558,7 +558,7 @@ async function recoverOriginalSource(
           account_id: receipt.account,
           direction: receipt.kind,
           receipt_id: receipt.receipt,
-          agent_id: accountAgentId(receipt.account),
+          agent_id: identityPort().accountAgentId(receipt.account),
           account_kind: account.kind,
           catalogue_id: catalogue,
           request_id: decision?.request_id ?? null,

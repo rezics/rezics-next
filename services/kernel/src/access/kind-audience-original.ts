@@ -18,7 +18,7 @@ import type { CollectionKindPreparationLocator } from '../library/collection-kin
 import { currentCommandWorkAssociation } from '../command/work-context.ts';
 import { authoritativeTimeValue, commandTime, type AuthoritativeTime } from '../command/command.ts';
 import { currentOperationalResources, hasOperationalAdmission } from '../command/operational.ts';
-import { collectionKindPreparationNativeWork } from '../search/scope-work-context.ts';
+import { tryAccessApplication } from './adapters/bind.ts';
 import { deadlineClient } from './authenticate.ts';
 import { withConnection, discardConnection } from '../database/pool.ts';
 import { requireAccessDeadline } from './unavailable.ts';
@@ -28,11 +28,7 @@ import originRead from './kind-audience-origin.sql';
 import insertOrigin from './kind-audience-origin-insert.sql';
 import lookupOrigin from './kind-audience-origin-read.sql';
 import readCommittedInput from './kind-audience-input-read.sql';
-import {
-  collectionKindInputWork,
-  resolveCollectionKindRawInput,
-  type CollectionKindRawInputBody,
-} from '../library/collection-kind-input.ts';
+import type { CollectionKindInputResult, CollectionKindRawInputBody } from '../library/access-capabilities.ts';
 
 export type KindOriginalIdentity = Readonly<{ expires: number; account: unknown }>;
 export type KindOriginalProducer = (actor: Actor, context: AccessContext) => KindOriginalIdentity | undefined;
@@ -44,6 +40,45 @@ type Request = Readonly<{
   context: AccessContext & { time: AuthoritativeTime; work: AccessWorkAccounting };
 }>;
 const hash = (value: unknown) => `sha256:${createHash('sha256').update(JSON.stringify(value)).digest('hex')}`;
+type KindAudienceNativeWork = {
+  deadlineAt: number;
+  receipt(): { reservationId: string; used: WorkDimensions };
+  reserve(source: WorkDimensions): {
+    dispatch(): void;
+    query<T>(run: () => Promise<T>): Promise<T>;
+    settle(): void;
+  };
+};
+function kindAudiencePort() {
+  const port = tryAccessApplication()?.ports.kindAudience;
+  if (
+    !port?.collectionKindPreparationNativeWork ||
+    !port.collectionKindInputWork ||
+    !port.resolveCollectionKindRawNative
+  ) {
+    throw new (AccessWorkUnavailableError())('Access application is not bound');
+  }
+  return port;
+}
+function collectionKindPreparationNativeWork(input: unknown): KindAudienceNativeWork | undefined {
+  return kindAudiencePort().collectionKindPreparationNativeWork!(input) as KindAudienceNativeWork | undefined;
+}
+function collectionKindInputWork(): WorkDimensions {
+  return kindAudiencePort().collectionKindInputWork!() as WorkDimensions;
+}
+function resolveCollectionKindRawInput(
+  tx: unknown,
+  locator: unknown,
+  originId: string,
+  native: unknown,
+): Promise<CollectionKindInputResult> {
+  return kindAudiencePort().resolveCollectionKindRawNative!(
+    tx,
+    locator,
+    originId,
+    native,
+  ) as Promise<CollectionKindInputResult>;
+}
 const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 const missingReceipt =
   'Semantic identity-scope-committed-receipt: committed IdentityNativeReceipt and catalogue-root closure are not installed';

@@ -3,7 +3,8 @@ import { isDeepStrictEqual } from 'node:util';
 import type { Pool, PoolClient } from 'pg';
 import type { AccountKind } from './account-data.ts';
 import { classifyUnavailability, CommandUnavailableError, requireAccessDeadline } from './unavailable.ts';
-import { readAvatarSummaries, type AvatarSummary } from '../content/avatar.ts';
+import { tryAccessApplication } from './adapters/bind.ts';
+import type { AvatarSummary } from './contract/index.ts';
 import { readPartitions } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { withReadTransaction } from '../semantic/read.ts';
@@ -395,7 +396,11 @@ export async function readAccountDiscoverySummaries(
   ];
   const avatars = mediaIds.length
     ? await optionalSummaries(deps.deadline, () =>
-        withReadTransaction(deps.pool, (client) => readAvatarSummaries(client, mediaIds)),
+        withReadTransaction(deps.pool, async (client) => {
+          const application = tryAccessApplication();
+          if (!application) throw new TypeError('Access application is not bound');
+          return new Map(await application.readAvatarSummaries(client, mediaIds));
+        }),
       )
     : new Map<string, AvatarSummary | null>();
   requireAccessDeadline(deps.deadline);

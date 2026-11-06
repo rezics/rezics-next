@@ -600,11 +600,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/access/account-data.ts",
-          "edge": "value import \"../content/avatar.ts\" #1 => services/kernel/src/content/avatar.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/access/account-data.ts",
           "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts"
         },
         {
@@ -690,11 +685,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/access/account-discovery-source.ts",
-          "edge": "value import \"../content/avatar.ts\" #1 => services/kernel/src/content/avatar.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/access/account-discovery-source.ts",
           "edge": "value import \"../partition/partition.ts\" #1 => services/kernel/src/partition/partition.ts"
         },
         {
@@ -751,11 +741,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/access/account-discovery-work.ts",
           "edge": "value import \"../semantic/public-filter-coverage-maintenance.ts\" #1 => services/kernel/src/semantic/public-filter-coverage-maintenance.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/access/account-edit-profile.ts",
-          "edge": "value import \"../content/avatar.ts\" #1 => services/kernel/src/content/avatar.ts"
         },
         {
           "rule": "rule 2",
@@ -876,26 +861,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/access/agent-verification-identity-recovery.ts",
           "edge": "value import \"../history/record.ts\" #1 => services/kernel/src/history/record.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/access/agent-verification-identity-recovery.ts",
-          "edge": "value import \"../semantic/account-agent-identity-recovery.ts\" #1 => services/kernel/src/semantic/account-agent-identity-recovery.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/access/agent-verification-identity-recovery.ts",
-          "edge": "value import \"../semantic/agents.ts\" #1 => services/kernel/src/semantic/agents.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/access/agent-verification-identity-recovery.ts",
-          "edge": "value import \"../semantic/identity-source-consumer-maintenance.ts\" #1 => services/kernel/src/semantic/identity-source-consumer-maintenance.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/access/agent-verification-identity-recovery.ts",
-          "edge": "value import \"../semantic/read.ts\" #1 => services/kernel/src/semantic/read.ts"
         },
         {
           "rule": "rule 2",
@@ -1634,16 +1599,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/access/identity-original-admission.ts",
-          "edge": "value import \"../library/collection-source-work.ts\" #2 => services/kernel/src/library/collection-source-work.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/access/identity-original-admission.ts",
-          "edge": "value import \"../semantic/identity-source-consumer-maintenance.ts\" #1 => services/kernel/src/semantic/identity-source-consumer-maintenance.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/access/index.ts",
           "edge": "type import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts"
         },
@@ -1691,16 +1646,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/access/kind-audience-original.ts",
           "edge": "value import \"../database/pool.ts\" #1 => services/kernel/src/database/pool.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/access/kind-audience-original.ts",
-          "edge": "value import \"../library/collection-kind-input.ts\" #1 => services/kernel/src/library/collection-kind-input.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/access/kind-audience-original.ts",
-          "edge": "value import \"../search/scope-work-context.ts\" #1 => services/kernel/src/search/scope-work-context.ts"
         },
         {
           "rule": "rule 2",
@@ -1761,11 +1706,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/access/lifecycle.ts",
           "edge": "value import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/access/lifecycle.ts",
-          "edge": "value import \"../content/avatar.ts\" #1 => services/kernel/src/content/avatar.ts"
         },
         {
           "rule": "rule 2",
@@ -2116,11 +2056,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/access/realm-claim.ts",
           "edge": "value import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/access/realm-claim.ts",
-          "edge": "value import \"../community/realm-claim-approval.ts\" #1 => services/kernel/src/community/realm-claim-approval.ts"
         },
         {
           "rule": "rule 2",
@@ -2681,21 +2616,6 @@
           "rule": "rule 3",
           "file": "services/kernel/src/access/agent-verification-identity-recovery.ts",
           "edge": "value import \"../history/record.ts\" #1 => services/kernel/src/history/record.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/access/agent-verification-identity-recovery.ts",
-          "edge": "value import \"../semantic/account-agent-identity-recovery.ts\" #1 => services/kernel/src/semantic/account-agent-identity-recovery.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/access/agent-verification-identity-recovery.ts",
-          "edge": "value import \"../semantic/identity-source-consumer-maintenance.ts\" #1 => services/kernel/src/semantic/identity-source-consumer-maintenance.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/access/agent-verification-identity-recovery.ts",
-          "edge": "value import \"../semantic/read.ts\" #1 => services/kernel/src/semantic/read.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -3524,16 +3444,6 @@
         },
         {
           "rule": "rule 3",
-          "file": "services/kernel/src/access/identity-original-admission.ts",
-          "edge": "value import \"../library/collection-source-work.ts\" #2 => services/kernel/src/library/collection-source-work.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/access/identity-original-admission.ts",
-          "edge": "value import \"../semantic/identity-source-consumer-maintenance.ts\" #1 => services/kernel/src/semantic/identity-source-consumer-maintenance.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
           "file": "services/kernel/src/access/index.ts",
           "edge": "value import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts (value-import cycle)"
         },
@@ -3696,16 +3606,6 @@
           "rule": "rule 3",
           "file": "services/kernel/src/access/kind-audience-original.ts",
           "edge": "value import \"../command/operational.ts\" #1 => services/kernel/src/command/operational.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/access/kind-audience-original.ts",
-          "edge": "value import \"../library/collection-kind-input.ts\" #1 => services/kernel/src/library/collection-kind-input.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/access/kind-audience-original.ts",
-          "edge": "value import \"../search/scope-work-context.ts\" #1 => services/kernel/src/search/scope-work-context.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -4066,11 +3966,6 @@
           "rule": "rule 3",
           "file": "services/kernel/src/access/realm-claim.ts",
           "edge": "value import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/access/realm-claim.ts",
-          "edge": "value import \"../community/realm-claim-approval.ts\" #1 => services/kernel/src/community/realm-claim-approval.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -6883,26 +6778,6 @@
           "rule": "rule 3",
           "file": "services/kernel/src/community/party-locator.ts",
           "edge": "value import \"./account-erasure-records.ts\" #1 => services/kernel/src/community/account-erasure-records.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/community/realm-claim-approval.ts",
-          "edge": "value import \"../access/realm-ownership.ts\" #1 => services/kernel/src/access/realm-ownership.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/community/realm-claim-approval.ts",
-          "edge": "value import \"../access/resource-role-held.ts\" #1 => services/kernel/src/access/resource-role-held.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/community/realm-claim-approval.ts",
-          "edge": "value import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/community/realm-claim-approval.ts",
-          "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -16285,11 +16160,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/progress-routes.ts",
-          "edge": "value import \"../request/deadline.ts\" #1 => services/kernel/src/request/deadline.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/progress-routes.ts",
           "edge": "value import \"../semantic/current-subject-summaries.ts\" #1 => services/kernel/src/semantic/current-subject-summaries.ts"
         },
         {
@@ -17321,36 +17191,6 @@
           "rule": "rule 3",
           "file": "services/kernel/src/library/collection-kind-consent.ts",
           "edge": "value import \"./command-support.ts\" #1 => services/kernel/src/library/command-support.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/collection-kind-input.ts",
-          "edge": "value import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/collection-kind-input.ts",
-          "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/collection-kind-input.ts",
-          "edge": "value import \"./canonical-source-store.ts\" #1 => services/kernel/src/library/canonical-source-store.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/collection-kind-input.ts",
-          "edge": "value import \"./collection-kind-work-admission.ts\" #1 => services/kernel/src/library/collection-kind-work-admission.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/collection-kind-input.ts",
-          "edge": "value import \"./collection-source-native.ts\" #1 => services/kernel/src/library/collection-source-native.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/collection-kind-input.ts",
-          "edge": "value import \"./collection-source-work.ts\" #1 => services/kernel/src/library/collection-source-work.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -30628,26 +30468,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/accounts/profile-editor/actions.ts",
           "edge": "type import \"../../session/client\" #1 => apps/web/src/session/client.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/accounts/profile-editor/data.ts",
-          "edge": "value import \"../../settings/editable-profile-source\" #1 => apps/web/src/settings/editable-profile-source.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/accounts/profile-editor/data.ts",
-          "edge": "value import \"../../settings/profile-data\" #1 => apps/web/src/settings/profile-data.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/accounts/profile-editor/data.ts",
-          "edge": "value import \"../../settings/profile-request-deadline\" #1 => apps/web/src/settings/profile-request-deadline.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/accounts/profile-editor/data.ts",
-          "edge": "value import \"../../settings/profile-write\" #1 => apps/web/src/settings/profile-write.ts"
         },
         {
           "rule": "rule 2",
@@ -44587,11 +44407,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/features/catalogue/credit-inspection/session.tsx",
           "edge": "type import \"../../../subject/relation-candidates\" #3 => apps/web/src/subject/relation-candidates.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/catalogue/credit-inspection/session.tsx",
-          "edge": "value import \"../../../session/query\" #1 => apps/web/src/session/query.ts"
         },
         {
           "rule": "rule 2",
