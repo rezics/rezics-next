@@ -26,6 +26,7 @@ import { usePreferenceRetry } from './preference-failure-retry';
 import {
   managedAccountHref,
   ManagedAccountsInventory,
+  managedAccountHref,
   type ManagedAccountsFailure,
   type ManagedAccountsIO,
   type ManagedAccountsSnapshot,
@@ -64,6 +65,7 @@ function IdentityRow({
       data-managed-feed={feed}
       data-managed-key={rowKey}
       title={name}
+      {...(href ? { href } : {})}
       headingLevel={4}
       visual={
         <Avatar aria-hidden="true">

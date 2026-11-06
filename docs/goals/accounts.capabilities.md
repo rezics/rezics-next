@@ -33,6 +33,8 @@ Every capability uses the `privacy` fixture contract from `docs/research/api-acc
 
 **Worker focused evidence:** At head `7275db3bd2`, `bun test apps/auth/tests/recovery.test.ts` passed 21/21, `bun test apps/auth/tests/step-up.test.ts` passed 3/3, and `bun run --cwd apps/auth typecheck` reported no type errors in 228 files. At head `79815141d3`, `bun test apps/auth/tests/login.test.ts` passed 4/4 and `bun test apps/auth/tests/signup.test.ts` passed 8/8; Auth source and those test files are unchanged at `7275db3bd2`. Seeded persona acceptance and the full browser/native walk remain deferred to the verifier.
 
+**Lifecycle journey acceptance:** Not accepted. At `48cf0fa64c`, `bun run --cwd services/kernel check test/access/account-lifecycle-outcome.test.ts` ran 19 original scenarios: 18 passed; pending-registration expiry failed at `erase-auth-owner` with status 503. The software disclosure scenario passed using operator management authority, with its original assertions unchanged. At `e9253f5e43`, the transfer output regression passed and the focused Web run passed six management scenarios, but four Settings browser scenarios could not start because the dev server did not serve `/en` within its existing deadline; this persisted after two retries. The affected native Auth run stopped at imported Kernel type errors. No seeded multi-persona API/page acceptance or deployed revision is established by these results.
+
 ## credential-session-consent
 
 **User job:** Replace a password, enroll/name/remove a passkey, review and revoke sessions, and explicitly approve

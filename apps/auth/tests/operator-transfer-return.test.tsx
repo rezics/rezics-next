@@ -24,7 +24,7 @@ const saved: TransferAttempt = {
   request: {
     version: 1,
     previous: {
-      subjectAccountId: 'private-subject',
+      subjectAccountId: '00000000-0000-7000-8000-000000000001',
       operatorAccountId: 'private-source',
       reservationId: 'private-slot',
     },
@@ -200,7 +200,7 @@ test('a released source reply after retirement cannot publish acknowledgement, r
   await settle(() => page.host.querySelector<HTMLInputElement>('#transfer-confirm')!.click());
   await page.choose(m.auth_transfer_submit());
   await page.resolve(2, original());
-  await page.resolve(3, Response.json({ reference: 'source-approval', expiresAt: '2030-01-01T00:00:00Z' }));
+  await page.resolve(3, Response.json({ reference: 'source-approval', expiresAt: '2030-01-01T00:00:00.000Z' }));
   expect(page.calls[4]!.path).toBe('/account-operations/execute');
   const submitted = restoreTransferAttempt();
   expect(submitted).toMatchObject({
