@@ -21,17 +21,28 @@ question labels and scale are unavailable; current review question metadata neve
 A native review target identifies the reviewed Subject independently of the current page's Subject.
 Supplied immediate-parent context uses the existing public reply presenter. Missing counts remain unknown.
 
-A row's Board link proves navigation only. Until the native Subject response supplies admitted entry
-advice, the region explains the unavailable creation entry and offers a retry. The existing producer
-must supply exact Subject/place, admitted Board, current creation advice and observation; Web retains
-Board/composer authority and Subject/place/return intent through sign-in. No row, public link or empty
-region selects a creation Board. Content's additive inputs flow through the adapter and context; no
-outer placement change is required for these reading and recovery fields.
+## Creation entry
 
-Decision: consume only the showcase's supplied native Board/work association through `subjects({ id }).threads.get({ query: { board } })` and its closed `entry` response. The current installed root callable omits both `query.board` and response `entry`, and the current Subject thread composition read has no Board association operand; keep creation unavailable until the existing owners publish those inputs, without inferring a Board.
+A supplied Board travels as one exact `board` operand: the Subject page URL, the page read target, the composition
+`subjectThreads` leaf and the native `/v1/subjects/{id}/threads` query all carry it. The native response answers with
+its closed `entry`, decoded against the exact request it answers.
 
-Decision: preserve the complete originating Subject region URL, including its cursor and Realm/node context,
-as the return target through admitted Board entry and sign-in.
+Decision: omission never selects a Board. Without one the entry is `not_selected`; the region offers no creation
+control and makes no unavailable claim. A row's Board link proves navigation only, and no row, public link or empty
+region selects a creation Board.
+
+With a supplied Board each native state renders distinctly:
+
+- `concealed`: the Board is not available for discussions about this work; no creation control.
+- `unavailable`: the entry was not admitted; the region offers a retry of the same request.
+- `current` with `allowed`: a link opens the composer with the Subject preset and the regional return.
+- `current` with `sign-in`: sign-in returns to that same composer link, so the preset and return survive.
+- `current` with `denied`: a denial notice and no control.
+
+A ready response that lacks the explicit `entry` for a supplied Board, or answers for another Board or Subject, is
+unavailable. Web keeps no Board, composer or thread authority: the composer and the thread command stay authoritative.
+
+Preserve the complete originating Subject region URL, including its cursor and Realm/node context, as the return target through admitted Board entry and sign-in.
 
 Creation acknowledgement carries that original region inside the existing thread `boardReturn` address.
 The thread reader offers a direct return to the region while its Board reading remains current; redirects,

@@ -24,6 +24,7 @@ import {
   contributionPublicationSource,
   useContributionActionsPageScope,
 } from '../../accounts/public-profile/contribution-actions/host';
+import { contributionActionsWire } from '../../accounts/public-profile/contribution-actions/actions';
 import { subjectHref } from '../../subject/subject-href';
 import { AccountFollow } from '../../accounts/public-profile/follow';
 import { ContributionWindowControls } from '../../accounts/public-profile/contribution-windows/controls';
@@ -407,6 +408,7 @@ function AccountList({ props, spec }: { props: Record<string, unknown>; spec: Li
         postsPublished={actionProfile.publicViews.posts}
         reviewsPublished={actionProfile.publicViews.reviews}
         rows={items}
+        wire={contributionActionsWire}
       >
         {list}
       </ContributionActionsHost>

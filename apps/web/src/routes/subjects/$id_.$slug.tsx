@@ -4,7 +4,7 @@ import { contextSubjectAddress } from '../../features/pages/context-subject';
 import { contextHref } from '../../features/pages/context-navigation';
 import { PendingPage } from '../../shell/pending';
 import { subjectReaderPartition, useSubjectReaderRefresh } from '../../features/pages/context-reader';
-import { validatePageNode, validatePageRealm } from '../../features/pages/view-cursor';
+import { validatePageBoard, validatePageNode, validatePageRealm } from '../../features/pages/view-cursor';
 import { createFileRoute, notFound, redirect, useLocation, useRouter } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createServerFn } from '@tanstack/react-start';
@@ -211,6 +211,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
     search: Record<string, unknown>,
   ): {
     realm?: string | undefined;
+    board?: string | undefined;
     via?: string | undefined;
     recipeReturn?: string | undefined;
     node?: string | undefined;
@@ -242,6 +243,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
       throw notFound();
     return {
       realm: validatePageRealm(search.realm),
+      board: validatePageBoard(search.board),
       via: subjectVisitReturn(search.via, getLocale()),
       ...(typeof search.recipeReturn === 'string' && search.recipeReturn.length <= 8192
         ? { recipeReturn: search.recipeReturn }
@@ -268,6 +270,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
   },
   loaderDeps: ({ search }) => ({
     realm: search.realm,
+    board: search.board,
     via: search.via,
     recipeReturn: search.recipeReturn,
     node: search.node,
@@ -301,7 +304,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
     );
     const view = 'overview' as const;
     // Fetch current native proof for both the reading and its permitted share-card projection.
-    const pageQuery = subjectPageQuery(params.id, getLocale(), view, deps.realm, reader);
+    const pageQuery = subjectPageQuery(params.id, getLocale(), view, deps.realm, reader, deps.board);
     const page = await awaitSubjectRoute(signal, () => context.queryClient.fetchQuery(pageQuery));
     signal.throwIfAborted();
     if (page.kind === 'redirect') {

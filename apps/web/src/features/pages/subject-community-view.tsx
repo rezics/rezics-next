@@ -6,13 +6,15 @@ import { Byline } from '../../threads/byline';
 import { threadLocation } from '../../threads/thread-href';
 import type { ThreadReactionsProps } from '../../threads/thread-reactions';
 import type { ThreadWatchProps } from '../../threads/thread-watch';
-import type { CommunityKind, CommunityRegion, SubjectCommunity } from './subject-community';
+import type { CommunityEntry, CommunityKind, CommunityRegion, SubjectCommunity } from './subject-community';
 import {
   communityBoardHref,
+  communityEntryHref,
   communityRegionAnchor,
   communityRegionLinks,
   communityRegionReturnTo,
 } from './subject-community-navigation';
+import { SignInPrompt } from '../../threads/write-prompts';
 import { SubjectCommunityPreview } from './subject-community-preview';
 import { useSubjectCommunityReading } from './subject-community-lifetime';
 import { linkClass, linkColor } from './shared';
@@ -28,6 +30,85 @@ export const SubjectCommunityRefreshContext = createContext<(() => Promise<void>
 const headingClass =
   'text-2xl leading-snug font-semibold tracking-tight text-balance in-data-[heading-scale=lg]:text-3xl';
 const actionClass = `${linkClass} ${linkColor} inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm text-sm font-medium whitespace-normal [overflow-wrap:anywhere] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`;
+
+/**
+ * The creation entry for the supplied Board. Each state keeps its own copy; only current allowed advice links
+ * to the composer, and sign-in returns to that same composer with the Subject preset and regional return.
+ * Without a supplied Board the region offers no creation affordance.
+ */
+function CommunityEntryPanel({
+  entry,
+  subject,
+  locale,
+  review,
+  returnTo,
+  retryHref,
+}: {
+  entry: CommunityEntry | undefined;
+  subject: { id: string; label: string };
+  locale: string;
+  review: boolean;
+  returnTo?: string;
+  retryHref: string;
+}) {
+  const options = { locale: locale as never };
+  if (!entry || entry.state === 'not_selected') return null;
+  if (entry.state === 'concealed')
+    return (
+      <p data-slot="community-entry" data-state="concealed" role="status" className="text-sm text-muted-foreground">
+        {m.subject_community_entry_concealed({}, options)}
+      </p>
+    );
+  if (entry.state === 'unavailable')
+    return (
+      <div
+        data-slot="community-entry"
+        data-state="unavailable"
+        className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-muted-foreground"
+      >
+        <p role="status">{m.subject_community_board_unavailable({}, options)}</p>
+        <a data-slot="retry" className={actionClass} href={retryHref}>
+          {m.subject_section_retry({}, options)}
+        </a>
+      </div>
+    );
+  const composer = communityEntryHref({
+    locale,
+    boardId: entry.board.id,
+    subjectId: subject.id,
+    subjectLabel: subject.label,
+    ...(returnTo ? { returnTo } : {}),
+  });
+  return (
+    <div
+      data-slot="community-entry"
+      data-state={entry.action}
+      className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-muted-foreground"
+    >
+      {entry.action === 'allowed' && (
+        <a data-slot="community-entry-start" className={actionClass} href={composer}>
+          {review ? m.subject_community_review({}, options) : m.subject_community_discuss({}, options)}
+        </a>
+      )}
+      {entry.action === 'sign-in' && (
+        <SignInPrompt returnTo={composer} label={m.board_sign_in_to_start({}, options)} compact />
+      )}
+      {entry.action === 'denied' && (
+        <p role="status" data-slot="community-entry-denied">
+          {m.subject_community_entry_denied({}, options)}
+        </p>
+      )}
+      {entry.action === 'unavailable' && (
+        <>
+          <p role="status">{m.subject_community_board_unavailable({}, options)}</p>
+          <a data-slot="retry" className={actionClass} href={retryHref}>
+            {m.subject_section_retry({}, options)}
+          </a>
+        </>
+      )}
+    </div>
+  );
+}
 
 /** Shared by the real overview, full views and Patterns. Every state keeps a stable heading and region. */
 export function SubjectCommunityRegion({
@@ -80,6 +161,7 @@ export function SubjectCommunityRegion({
       region.request,
       region.state === 'ready' ? region.context : null,
       region.state === 'ready' ? region.reactionsAsOf : null,
+      region.state === 'ready' ? region.entry : null,
       region.state === 'ready'
         ? region.threads.map(({ id, rowKey, position, postRevisionId, card, nativeCard, actions }) => [
             id,
@@ -326,16 +408,15 @@ export function SubjectCommunityRegion({
           })}
         </ul>
       )}
-      {region.state === 'ready' && (!empty || !next) && (
-        <div
-          data-slot="community-entry-unavailable"
-          className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-muted-foreground"
-        >
-          <p role="status">{m.subject_community_board_unavailable({}, options)}</p>
-          <a className={actionClass} href={retryHref}>
-            {m.subject_section_retry({}, options)}
-          </a>
-        </div>
+      {region.state === 'ready' && (
+        <CommunityEntryPanel
+          entry={region.entry}
+          subject={subject}
+          locale={locale}
+          review={review}
+          {...(returnTo ? { returnTo } : {})}
+          retryHref={retryHref}
+        />
       )}
       {next && (
         <a data-slot="community-next" className={actionClass} href={nextHref}>

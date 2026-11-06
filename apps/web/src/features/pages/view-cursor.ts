@@ -14,6 +14,10 @@ export function validatePageRealm(value: unknown): string | undefined {
     throw notFound();
   return value;
 }
+/** A supplied Board is an exact ContentId operand, validated like a Realm operand. */
+export function validatePageBoard(value: unknown): string | undefined {
+  return validatePageRealm(value);
+}
 export function validatePageNode(value: unknown): string | undefined {
   if (value === undefined) return;
   if (typeof value !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(value)) throw notFound();

@@ -152,6 +152,8 @@ export type SubjectPageData = {
   context?: SelectedContext | undefined;
   /** The requested selector survives a native Global fallback without inventing Realm metadata. */
   requestedRealm?: string | undefined;
+  /** A supplied Board operand; the native page selects its creation entry, never a default Board. */
+  requestedBoard?: string | undefined;
   /** BFF cache identity of this reading; never native read authority. */
   requestedReader?: string | null | undefined;
   continuation?: PageContinuation | undefined;
@@ -243,11 +245,14 @@ function problemError(value: unknown, status: number, headers?: unknown): Error 
 }
 
 /** The context the page's reads are planned in. */
-export function pageContext(page: Pick<SubjectPageData, 'subject' | 'account' | 'context' | 'continuation'>) {
+export function pageContext(
+  page: Pick<SubjectPageData, 'subject' | 'account' | 'context' | 'continuation' | 'requestedBoard'>,
+) {
   return {
     subject: page.subject,
     account: page.account ?? null,
     ...(page.context ? { context: page.context } : {}),
+    ...(page.requestedBoard ? { board: page.requestedBoard } : {}),
     ...(page.continuation ? { continuation: page.continuation } : {}),
   };
 }
@@ -300,6 +305,7 @@ export async function loadSubjectPage(
   locale = 'en',
   options: {
     realm?: string | undefined;
+    board?: string | undefined;
     continuation?: PageContinuation | undefined;
     authorization?: string | undefined;
     signal?: SubjectPageReadLifetime | undefined;
@@ -309,7 +315,12 @@ export async function loadSubjectPage(
   if (!subjectIdPattern.test(id)) return { kind: 'missing' };
   const result = await client.pages.$read.post(
     {
-      target: { subject: id, ...(view ? { view } : {}), ...(options.realm ? { realm: options.realm } : {}) },
+      target: {
+        subject: id,
+        ...(view ? { view } : {}),
+        ...(options.realm ? { realm: options.realm } : {}),
+        ...(options.board ? { board: options.board } : {}),
+      },
       ...(options.continuation ? { continuation: options.continuation } : {}),
       languages: requestLanguages(locale),
     },
@@ -344,7 +355,10 @@ export async function loadSubjectPage(
       const { account: _account, ...catalogue } = result.data;
       if (catalogue.subject !== id || (options.realm && !catalogue.context))
         throw new PageReadError('dependency_unavailable', 503);
-      return { kind: 'page', page: { ...catalogue, subject: id, requestedRealm: options.realm } };
+      return {
+        kind: 'page',
+        page: { ...catalogue, subject: id, requestedRealm: options.realm, requestedBoard: options.board },
+      };
     }
     const survivor = result.data.subject;
     if (typeof survivor === 'string' && survivor !== id) return { kind: 'redirect', id: survivor };
@@ -376,6 +390,7 @@ export async function loadSubjectPage(
         ...page,
         subject: page.subject ?? null,
         requestedRealm: options.realm,
+        requestedBoard: options.board,
         ...(termsAuthority ? { termsAuthority } : {}),
       },
     };
