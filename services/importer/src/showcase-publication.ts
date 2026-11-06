@@ -794,6 +794,26 @@ const bangumiAppearanceRolesSource =
 const bangumiPersonCareersSource =
   'https://github.com/bangumi/api/blob/65d29cff2331e08c0110d30d515f7f1b6488f845/open-api/v0.yaml#/components/schemas/PersonCareer';
 
+function vndbParentDictionaryCitation(record: ShowcaseRecord, assertion: ShowcaseAssertion, uri: string): boolean {
+  if (
+    record.provider !== 'vndb' ||
+    record.kind !== 'source-vocabulary' ||
+    assertion.property !== 'skos:broader' ||
+    !assertion.tagParentPath
+  )
+    return false;
+  try {
+    const parsed = new URL(uri);
+    return (
+      parsed.protocol === 'https:' &&
+      parsed.hostname === 'rezics.com' &&
+      parsed.pathname.startsWith('/schemes/vndb/public-tags/')
+    );
+  } catch {
+    return false;
+  }
+}
+
 function sourceVocabularyCitation(record: ShowcaseRecord, uri: string): boolean {
   if (record.provider !== 'bangumi' || record.kind !== 'source-vocabulary' || !record.sourceUri) return false;
   if (/^https:\/\/rezics\.com\/schemes\/bangumi\/character-kinds(?:\/[1-4])?$/u.test(record.sourceUri))
@@ -1809,7 +1829,9 @@ export async function publishShowcase(input: {
                 ) &&
                 !(assertion.property === 'schema:image' && host === 'lain.bgm.tv') &&
                 !sourceVocabularyCitation(record, uri)
-              : host !== 'vndb.org' && !host.endsWith('.vndb.org');
+              : host !== 'vndb.org' &&
+                !host.endsWith('.vndb.org') &&
+                !vndbParentDictionaryCitation(record, assertion, uri);
         } catch {
           return true;
         }
@@ -2185,7 +2207,7 @@ export async function publishShowcase(input: {
       omissions.push({ provider: 'vndb', sourceKey: binding.path, code: 'candidate-currently-rejected' });
       continue;
     }
-    if (candidate.decision !== 'accept') {
+    if (candidate.decision !== 'accepted') {
       const body = { context: GLOBAL_CONTEXT, expected_head: candidate.head ?? null };
       const key = actionKey('accept', edge.assertion.candidateId, edge.assertion.candidateDigest);
       const idempotencyKey = actionIdempotencyKey(body);
@@ -2256,7 +2278,7 @@ export async function publishShowcase(input: {
         fence !== 'open' ||
         !(await parentBindingCurrent(edge.binding)) ||
         !candidate ||
-        candidate.decision !== 'accept' ||
+        candidate.decision !== 'accepted' ||
         !showcaseSourceMatches(candidate.source, edge.assertion.source) ||
         !showcaseStatementMatches(candidate.statement, edge.assertion.statement)
       ) {

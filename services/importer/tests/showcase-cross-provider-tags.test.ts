@@ -12,8 +12,9 @@ import {
 } from '../src/showcase-cross-provider-tags.ts';
 import { prepareShowcaseTagParentPublications, projectShowcaseTagTables } from '../src/showcase-tags.ts';
 import { parseAuthoredVndbCopy } from '../src/vndb-public-tags.ts';
-import { emptyCrossMediaPlan, type CrossMediaTables } from '../src/cross-media-seed.ts';
-import { ShowcaseJournal } from '../src/showcase-publication.ts';
+import { emptyCrossMediaPlan, type CrossMediaSeedResult, type CrossMediaTables } from '../src/cross-media-seed.ts';
+import { createPublicBulkClient } from '../src/public-bulk-client.ts';
+import { publishShowcase, ShowcaseJournal, type ShowcaseReviewPort } from '../src/showcase-publication.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { buildShowcaseManifest, showcaseDigest } from '../src/showcase-manifest.ts';
 
@@ -328,4 +329,199 @@ test('parent publication rereads native metadata before exact proposal replay an
   } finally {
     journal.close();
   }
+});
+
+function emptySeed(plan: ReturnType<typeof emptyCrossMediaPlan>): CrossMediaSeedResult {
+  return {
+    status: 'imported',
+    franchises: plan.franchises,
+    members: [],
+    runs: {},
+    readings: [],
+    personIdentities: [],
+    mediaOutcomes: [],
+    workLinks: [],
+    gaps: [],
+    creditGaps: [],
+    vndbCreditDiagnostics: [],
+    vndbCreditVocabularyRequirements: [],
+    vndbCreditVocabularyUnavailable: [],
+    vndbCharacterProfileRequirements: [],
+    vndbCharacterProfileOmissions: [],
+    characterDiagnostics: [],
+    episodeDiagnostics: [],
+    unresolved: [],
+    vndbWorkRelations: [],
+  };
+}
+
+test('parent publication consumes accepted and rejected candidate-page verdicts without replaying accept-action names', async () => {
+  const projected = await projectShowcaseTagTables(tables(['g1\tg2\tt'], { g1: 'cont', g2: 'cont' }), ['v2002']);
+  const [resolved] = bindShowcaseTagParents({
+    sourceParents: projected.sourceParents,
+    invalidParentTags: [],
+    bindings: bindings(),
+  }).tagParentEvidence;
+  const schemeId = '00000000-0000-4000-8000-000000000010';
+  const childId = '00000000-0000-4000-8000-000000000011';
+  const parentId = '00000000-0000-4000-8000-000000000012';
+  const candidateId = '00000000-0000-4000-8000-000000000013';
+  const binding = { ...resolved!, childId, parentId, schemeId };
+  const command = showcaseTagParentCommand(binding);
+  const value = (content: string) => [{ value: { type: 'value' as const, content } }];
+  const subjects = new Map([
+    [
+      schemeId,
+      {
+        subject: {
+          id: schemeId,
+          type: 'skos:ConceptScheme',
+          statements: { 'schema:url': value(binding.schemeUri) },
+        },
+      },
+    ],
+    [
+      childId,
+      {
+        subject: {
+          id: childId,
+          type: 'skos:Concept',
+          statements: {
+            'schema:url': value(binding.childUri),
+            'skos:inScheme': value(schemeId),
+          },
+        },
+      },
+    ],
+    [
+      parentId,
+      {
+        subject: {
+          id: parentId,
+          type: 'skos:Concept',
+          statements: {
+            'schema:url': value(binding.parentUri),
+            'skos:inScheme': value(schemeId),
+          },
+        },
+      },
+    ],
+  ]);
+  const publishWith = async (decision: 'accepted' | 'rejected') => {
+    const journal = new ShowcaseJournal(':memory:');
+    const acceptCalls: string[] = [];
+    const adoptCalls: string[] = [];
+    journal.prepareCommand(command);
+    journal.acknowledgeCommand(command, {
+      key: command.key,
+      status: 201,
+      value: { candidate: candidateId, revision: 1 },
+    });
+    const review: ShowcaseReviewPort = {
+      async fence() {
+        return { fenced: false, securityRevision: null };
+      },
+      async readReviewedSubject(id) {
+        return subjects.get(id) as never;
+      },
+      async reviewedCandidates(id, query) {
+        expect(id).toBe(childId);
+        expect(query.property).toBe('skos:broader');
+        return {
+          candidates: [
+            {
+              id: candidateId,
+              source: command.source,
+              statement: command.statement,
+              head: 1,
+              decision,
+            },
+          ],
+          next: null,
+          adoption: null,
+        };
+      },
+      async acceptReviewedCandidate(_id, acceptedId) {
+        acceptCalls.push(acceptedId);
+        return {
+          acceptance: {
+            context: '00000000-0000-8000-8000-000000000000',
+            candidate: acceptedId,
+            decision: 'accept',
+            head: 2,
+          },
+          revision: 2,
+        };
+      },
+      async adoptReviewedCandidates(id, body) {
+        adoptCalls.push(id);
+        subjects.get(childId)!.subject.statements['skos:broader'] = [command.statement];
+        const action = body as {
+          context: string;
+          property: string;
+          mode: 'inherit' | 'replace' | 'suppress';
+          selection: { candidate: string; rank: 'normal' | 'preferred' }[];
+        };
+        return {
+          adoption: {
+            context: action.context,
+            property: action.property,
+            mode: action.mode,
+            selection: action.selection,
+            head: 1,
+          },
+          revision: 1,
+        };
+      },
+    };
+    const publicClient = createPublicBulkClient({
+      origin: 'https://fixture.test',
+      fetch: Object.assign(
+        async (input: string | URL | Request) => {
+          const id = new URL(String(input)).pathname.split('/').at(-1)!;
+          const subject = subjects.get(id);
+          if (!subject) return new Response('missing', { status: 404 });
+          return new Response(JSON.stringify(subject), { headers: { 'content-type': 'application/json' } });
+        },
+        { preconnect: fetch.preconnect },
+      ),
+    });
+    try {
+      const plan = emptyCrossMediaPlan();
+      const published = await publishShowcase({
+        plan,
+        result: emptySeed(plan),
+        aliases: { bangumi: 'bangumi_cross_media', vndb: 'vndb_cross_media' },
+        journal,
+        review,
+        publicClient,
+        tagParentEvidence: [binding],
+        tagParentAcknowledgements: journal.acknowledgedCommands(),
+      });
+      return { published, acceptCalls, adoptCalls };
+    } finally {
+      journal.close();
+    }
+  };
+  const accepted = await publishWith('accepted');
+  expect(accepted.acceptCalls).toEqual([]);
+  expect(accepted.adoptCalls).toEqual([childId]);
+  expect(accepted.published.manifest.tagParentPublications).toMatchObject([
+    { path: binding.path, childId, parentId, status: 'public' },
+  ]);
+  subjects.get(childId)!.subject.statements = {
+    'schema:url': value(binding.childUri),
+    'skos:inScheme': value(schemeId),
+  };
+  const rejected = await publishWith('rejected');
+  expect(rejected.acceptCalls).toEqual([]);
+  expect(rejected.adoptCalls).toEqual([]);
+  expect(rejected.published.manifest.tagParentPublications).toMatchObject([
+    { path: binding.path, status: 'withheld', reason: 'parent candidate is rejected' },
+  ]);
+  expect(rejected.published.omissions).toContainEqual({
+    provider: 'vndb',
+    sourceKey: binding.path,
+    code: 'candidate-currently-rejected',
+  });
 });

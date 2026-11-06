@@ -4,6 +4,7 @@ import { checkBatchWrite } from '@rezics/definitions/bulk';
 import { converter_revision } from '../src/cross-media-entities.ts';
 import { createSourceRegistration } from '../../../services/importer/src/source-registry.ts';
 import { vndbPublicTagConceptUri, vndbPublicTagScheme, vndbPublicTagTaxonomy } from '../src/support.ts';
+import { vndbPublicTagParentCommand, vndbPublicTagParentRevision } from '../src/vndb-vocabulary.ts';
 import type { NativeIdentity, ResolvedConcept, ResolvedScheme } from '../src/source-vocabulary.ts';
 
 const subjectId = '00000000-0000-4000-8000-000000000010';
@@ -118,4 +119,48 @@ test('unresolved VNDB tag codes remain structured gaps without a substituted con
     missing.proposals.some((command) => command.op === 'propose' && command.statement.property.id === 'schema:genre'),
   ).toBe(false);
   expect(JSON.stringify(missing.sourceVocabularyGaps)).not.toContain('uid');
+});
+
+test('a reviewed parent proposal cites the exact tags_parents row and both bound endpoints without rights or a main qualifier', () => {
+  const command = vndbPublicTagParentCommand({
+    child: 'g311',
+    parent: 'g12',
+    main: true,
+    category: 'cont',
+    path: '/tags_parents/g311/g12',
+    childId: ids.cont,
+    parentId: '00000000-0000-4000-8000-000000000040',
+    schemeId: ids.contScheme,
+    childUri: vndbPublicTagConceptUri('cont', 'g311'),
+    parentUri: vndbPublicTagConceptUri('cont', 'g12'),
+    schemeUri: vndbPublicTagScheme('cont'),
+    releaseDigest: bundledDigest,
+  });
+  expect(command.source.converter_revision).toBe(vndbPublicTagParentRevision);
+  expect(command.source.external_id).toBe('/tags_parents/g311/g12');
+  expect(command.statement.property.id).toBe('skos:broader');
+  expect(command.statement.value).toEqual({ type: 'value', content: '00000000-0000-4000-8000-000000000040' });
+  expect(command.statement.qualifiers).toBeUndefined();
+  expect(command.rights).toBeUndefined();
+  expect(
+    command.statement.references?.flatMap((reference) => reference.parts.map((part) => part.value.content)),
+  ).toEqual([
+    'https://vndb.org/g311#/tags_parents/g311/g12',
+    vndbPublicTagConceptUri('cont', 'g311'),
+    vndbPublicTagConceptUri('cont', 'g12'),
+  ]);
+  expect(
+    checkBatchWrite({
+      commands: [
+        {
+          ...command,
+          subject: ids.cont,
+          statement: {
+            ...command.statement,
+            value: { type: 'value', content: '00000000-0000-4000-8000-000000000040' },
+          },
+        },
+      ],
+    }),
+  ).toEqual([]);
 });
