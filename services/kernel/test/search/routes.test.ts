@@ -17,6 +17,7 @@ import { createOpenSearch, type OpenSearch } from '../../src/search/opensearch.t
 import { createSearchService } from '../../src/search/service.ts';
 import type { IndexedSubject } from '../../src/search/source.ts';
 import { createFakeSource } from './support/fake-source.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 const missingFigure: PublicFigureView = {
   questionId: STANDARD_QUESTION_ID,
@@ -81,6 +82,9 @@ const access: Access = {
 const result = { id: '018f0000-0000-7000-8000-00a000000001', type: 'schema:Book', labels: { en: 'Kokoro' } };
 const asOf = '2026-10-25T00:00:00.000Z';
 const calls: unknown[][] = [];
+process.env.KERNEL_RECEIPT_KEYS = [...testReceiptKeys().keys]
+  .map(([version, key]) => `${version}:${Buffer.from(key).toString('base64url')}`)
+  .join(',');
 let failure: ProblemError | null = null;
 const service: SearchService = {
   async savedCatalogueMembers() {

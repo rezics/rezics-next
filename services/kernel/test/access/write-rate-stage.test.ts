@@ -10,6 +10,7 @@ import { defineRateLimit } from '../../src/http/rate-limit.ts';
 import { createWriteRateStage } from '../../src/access/write-rate-stage.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -20,6 +21,9 @@ const limiter = (maximum = 205) =>
     secret,
     overrides: JSON.stringify({ anonymous: { write: { maximum, seconds: 60 } } }),
   });
+process.env.KERNEL_RECEIPT_KEYS = [...testReceiptKeys().keys]
+  .map(([version, key]) => `${version}:${Buffer.from(key).toString('base64url')}`)
+  .join(',');
 let effects = 0;
 function detail(action: string, family?: 'write' | 'report', units: 1 | 'commands' = 1) {
   return {
