@@ -4,6 +4,34 @@ This manifest maps the accounts capabilities to native acceptance; product docum
 
 Decision: capability rows record source-backed native coverage and its evidence limits; source presence alone does not claim execution, release, promotion or browser qualification. It covers [Agents and public profiles](../scope.md), [Follows](../scope.md), [Accounts, authentication, preferences and deletion](../scope.md), [Realms and Spaces (membership and Access)](../scope.md), [Notifications (preferences)](../scope.md), and [platform gates](../scope.md).
 
+## First-public journeys
+
+This is the single Accounts Goal environment walk. Source or typecheck presence is not a pass. Each row records the latest walked revision: PASS or FAIL, the reached page or HTTP operation, evidence, elapsed time, first cause and repair owner. A startup or precondition failure marks dependent rows FAIL with that exact cause and a not-reached qualification; independent paths continue. Producer repairs stay with Auth c883, Identity 4ff, Preferences 4776, Authority 89 and SDK e18 where those owners apply. Desktop 1280 and phone 390 are inspected on mounted pages. Strict money authority is unused. Named receive revisions `4a0921248bc` and `cf806226bbc` are already on this walk base.
+
+Decision: publish this table before stack startup; the walk driver `apps/web/scripts/accounts-goal-walk.ts` fills PASS/FAIL from actual Auth/Access on one admitted walk stack. Fewest checks: the table-shape test plus this walk. Native and browser evidence stay under `.temp/accounts/` and do not promote.
+
+| ID | Journey | Result | Reached | Revision | Observed (UTC) | Elapsed | First cause | Repair owner |
+| -- | ------- | ------ | ------- | -------- | -------------- | ------- | ----------- | ------------ |
+| J01 | signup → callback → authenticated Home | unobserved | — | a4960cc6c8fd716cf38b74a5cbe604278aedd454 | — | — | table published before stack startup | Auth c883 |
+| J02 | sign in → refresh/session review → sign out | unobserved | — | a4960cc6c8fd716cf38b74a5cbe604278aedd454 | — | — | table published before stack startup | Auth c883 |
+| J03 | recover access → sign in → old credential/session loses authority | unobserved | — | a4960cc6c8fd716cf38b74a5cbe604278aedd454 | — | — | table published before stack startup | Auth c883 |
+| J04 | security → fresh step-up → manage and revoke credentials/tokens | unobserved | — | a4960cc6c8fd716cf38b74a5cbe604278aedd454 | — | — | table published before stack startup | Auth c883 |
+| J05 | own profile → edit/save → independent public readback | unobserved | — | a4960cc6c8fd716cf38b74a5cbe604278aedd454 | — | — | table published before stack startup | Identity 4ff |
+| J06 | accounts → create organization → manage memberships/roles | unobserved | — | a4960cc6c8fd716cf38b74a5cbe604278aedd454 | — | — | table published before stack startup | Accounts |
+| J07 | managed organization → transfer control → new owner manages it | unobserved | — | a4960cc6c8fd716cf38b74a5cbe604278aedd454 | — | — | table published before stack startup | Accounts |
+| J08 | managed account → rename → new address works/old address retires | unobserved | — | a4960cc6c8fd716cf38b74a5cbe604278aedd454 | — | — | table published before stack startup | Accounts |
+| J09 | accounts → create software agent → operator/delegated caller uses held permissions | unobserved | — | a4960cc6c8fd716cf38b74a5cbe604278aedd454 | — | — | table published before stack startup | Accounts |
+| J10 | consent → grant requested authority → revoke → next operation reflects it | unobserved | — | a4960cc6c8fd716cf38b74a5cbe604278aedd454 | — | — | table published before stack startup | Auth c883 |
+| J11 | account verification → verify/unverify address → independent publication readback | unobserved | — | a4960cc6c8fd716cf38b74a5cbe604278aedd454 | — | — | table published before stack startup | Identity 4ff |
+| J12 | public person/organization/agent page → identity without private data | unobserved | — | a4960cc6c8fd716cf38b74a5cbe604278aedd454 | — | — | table published before stack startup | Identity 4ff |
+| J13 | public eligible target → follow → Following → unfollow, including stored unavailable target | unobserved | — | a4960cc6c8fd716cf38b74a5cbe604278aedd454 | — | — | table published before stack startup | Accounts |
+| J14 | own follow counts → current count; unrelated reader lacks the private aggregate | unobserved | — | a4960cc6c8fd716cf38b74a5cbe604278aedd454 | — | — | table published before stack startup | Accounts |
+| J15 | Realm/Space → join → protected read → leave → next read reflects authority | unobserved | — | a4960cc6c8fd716cf38b74a5cbe604278aedd454 | — | — | table published before stack startup | Authority 89 |
+| J16 | membership management → ban/revoke → affected reads change before cleanup; authorized readmission works | unobserved | — | a4960cc6c8fd716cf38b74a5cbe604278aedd454 | — | — | table published before stack startup | Authority 89 |
+| J17 | Settings → per-kind preference save/reopen → actual notice send-time eligibility | unobserved | — | a4960cc6c8fd716cf38b74a5cbe604278aedd454 | — | — | table published before stack startup | Preferences 4776 |
+| J18 | delete account → fresh confirmation → terminal erasure and retained attribution across consumers | unobserved | — | a4960cc6c8fd716cf38b74a5cbe604278aedd454 | — | — | table published before stack startup | Accounts |
+| J19 | operator grants → open/revoke product capability → viewer operation discovery and actual access agree | unobserved | — | a4960cc6c8fd716cf38b74a5cbe604278aedd454 | — | — | table published before stack startup | Authority 89 |
+
 Every capability uses the `privacy` fixture contract from `docs/research/api-acceptance-gaps.md`, produced by accounts and each participating producer. It includes a bearer held from before suspension, suspended sign-in, revoked token, unscoped actor and delegated agent. Fixture identities are created by native test support in `services/kernel/test/support/personas.ts`.
 
 ## authentication
