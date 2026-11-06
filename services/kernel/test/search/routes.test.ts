@@ -43,6 +43,16 @@ const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(databaseUrl);
 const opening = Bun.randomUUIDv7();
+let stubPoolOpen = true;
+async function closeStubPool() {
+  if (!stubPoolOpen) return;
+  stubPoolOpen = false;
+  try {
+    await pool.query('DELETE FROM access.exposure_opening WHERE transaction_id = $1', [opening]);
+  } finally {
+    await pool.end();
+  }
+}
 beforeAll(async () => {
   // These dispatch cases use stub actors, not native write identities. Set only their
   // exposure fixture; release-exposure.test.ts proves real governor admission separately.
@@ -56,13 +66,7 @@ beforeAll(async () => {
     }
   }
 });
-afterAll(async () => {
-  try {
-    await pool.query('DELETE FROM access.exposure_opening WHERE transaction_id = $1', [opening]);
-  } finally {
-    await pool.end();
-  }
-});
+afterAll(closeStubPool);
 
 const tokens: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(9)]]) };
 const routeKey = new Uint8Array(32).fill(13);
@@ -474,6 +478,7 @@ test('HTTP forwards one resolved kernel instant to hits, ratings and facets whil
 });
 
 describe('bounded native kind metadata and checked-hit witnesses', () => {
+  // Release the stub HTTP pool before cloning the check database; leftover sessions block TEMPLATE.
   const database = process.env.DATABASE_URL;
   const url = process.env.OPENSEARCH_URL;
   if (!database || !url) throw new Error('DATABASE_URL and OPENSEARCH_URL must name the check database and node');
@@ -517,6 +522,7 @@ describe('bounded native kind metadata and checked-hit witnesses', () => {
   };
   const subjects: IndexedSubject[] = [];
   beforeAll(async () => {
+    await closeStubPool();
     driver = await createSemanticDriver();
     // Canonical admission consumes native identity mappings, even when this test owns
     // a deliberately small index/source projection for metadata witness counts.
@@ -568,11 +574,17 @@ describe('bounded native kind metadata and checked-hit witnesses', () => {
     await native.request('POST', '/_aliases', { actions: [{ add: { index, alias: subjectAlias(prefix) } }] });
   }, 600_000);
   afterAll(async () => {
-    await native.request('DELETE', `/${index}`);
-    for (const name of [HIT_TEMPLATE, SEARCH_TEMPLATE, SUGGEST_TEMPLATE, FACET_TEMPLATE])
-      await native.request('DELETE', `/_scripts/${prefix}${name}`);
-    await driver?.close();
-    await closeOwnedSemanticAuth();
+    try {
+      await native.request('DELETE', `/${index}`);
+      for (const name of [HIT_TEMPLATE, SEARCH_TEMPLATE, SUGGEST_TEMPLATE, FACET_TEMPLATE])
+        await native.request('DELETE', `/_scripts/${prefix}${name}`);
+    } finally {
+      try {
+        await driver?.close();
+      } finally {
+        await closeOwnedSemanticAuth();
+      }
+    }
   }, 600_000);
   const request = { sort: 'id' as const, languages: ['en'], limit: 4 };
   test('initial counts reuse at most two unique current hits, once, without count reads or extra engine execution', async () => {
