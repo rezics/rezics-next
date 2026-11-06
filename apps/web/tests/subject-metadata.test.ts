@@ -1,15 +1,20 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
-import { renderToString } from 'react-dom/server';
+import { renderSubject } from './helpers/subject-render';
 import { createKernelClient } from '@rezics/client';
 import type { CoverSummary } from '@rezics/ui/cover';
 import recorded from '../src/kernel/recorded/subject-page.json';
 import missing from '../src/kernel/recorded/missing-subject-page.json';
-import { loadSubjectPage, SubjectPage, subjectBody, type SubjectPageData } from '../src/features/pages/subject';
-import { subjectHead } from '../src/features/pages/subject-head';
+import type { SubjectPageData } from '../src/features/pages/subject';
 import type { Stmt } from '../src/features/pages/shared';
 import type { Related } from '../src/subject/types';
 import { subjectHref } from '../src/subject/subject-href';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { loadSubjectPage, SubjectPage, subjectBody } = await import('../src/features/pages/subject');
+const { subjectHead } = await import('../src/features/pages/subject-head');
+const { subjectFrame, loadViewPages } = await import('../src/features/pages/subject-frame');
+const { QUESTION } = await import('../src/features/pages/subject-ratings');
 
 const origin = 'https://public.example.test';
 const id = recorded.subject;
@@ -92,14 +97,20 @@ test('the recorded native page joins its visible creators and editions without a
   });
   const loaded = await loadSubjectPage(client, id);
   if (loaded.kind !== 'page') throw new Error('Expected the recorded public page');
-  const html = renderToString(
+  const html = await renderSubject(
     createElement(SubjectPage, { page: loaded.page, locale: 'en', messages, renderJsonLd: false }),
+    `/en/subjects/${id}`,
   );
   const result = head(loaded.page);
   const json = JSON.parse(result.scripts[0]!.children);
   const creatorLabel = recorded.reads.r0.body.related[creator].labels.en;
   const creatorPath = subjectHref({ id: creator, label: creatorLabel }, 'en').href;
-  expect(html).toContain(`href="${creatorPath}"`);
+  const creatorVisit = new URL(creatorPath, origin);
+  creatorVisit.searchParams.set(
+    'via',
+    `${subjectHref({ id, label: recorded.reads.r0.body.subject.labels.en }, 'en').href}#literary-reader`,
+  );
+  expect(html).toContain(`href="${creatorVisit.pathname}${creatorVisit.search}"`);
   expect(json.author).toEqual({
     '@id': `https://rezics.com/id/${creator}`,
     '@type': 'Person',
@@ -125,11 +136,14 @@ test('the recorded native page joins its visible creators and editions without a
   expect(sent).toEqual(['POST /v1/pages:read']);
 });
 
-test('the head and structured image use only the currently authorized visible cover variants and localized title', () => {
+test('the head and structured image use only the currently authorized visible cover variants and localized title', async () => {
   const page = fixture({ cover });
   const result = head(page, 'ja');
   const json = JSON.parse(result.scripts[0]!.children);
-  const html = renderToString(createElement(SubjectPage, { page, locale: 'ja', messages, renderJsonLd: false }));
+  const html = await renderSubject(
+    createElement(SubjectPage, { page, locale: 'ja', messages, renderJsonLd: false }),
+    `/ja/subjects/${id}`,
+  );
   expect(html).toContain('/media/current-public-cover/webp-1200');
   expect(meta(result, 'og:image')).toBe(`${origin}/media/current-public-cover/webp-1200`);
   expect(meta(result, 'og:image:width')).toBe('1200');
@@ -184,6 +198,15 @@ test('identity, rank, native ratings and related failures retain the public disc
     locale: 'en',
     path: '/subjects/current',
     ratings: {
+      figure: {
+        questionId: QUESTION,
+        populationId: GLOBAL,
+        scale: { min: 0, max: 40, displayStep: 4 },
+        state: 'ready',
+        count: 4,
+        mean: null,
+        score: null,
+      },
       figures: [
         { population: GLOBAL, count: 4, remaining: 1 },
         { population: 'private', count: 60, mean: 18 },
@@ -231,4 +254,76 @@ test('unavailable public targets retain truthful failures and cannot populate a 
   expect(meta(result, 'og:image')).toBe(`${origin}/cards/default.png`);
   expect(meta(result, 'og:image:alt')).toBe('REZICS');
   expect(JSON.stringify(result)).not.toContain(recorded.reads.r0.body.subject.labels.en);
+});
+
+test('a native default role remains the selected stream when a full view continues', async () => {
+  const sent: unknown[] = [];
+  const page = fixture();
+  page.document = {
+    root: { props: {} },
+    content: [
+      { type: 'SubjectHeader', props: { id: 'header' } },
+      {
+        type: 'Credits',
+        props: { id: 'author', property: 'schema:author', direction: 'forward', paged: true, limit: 8 },
+      },
+      {
+        type: 'Credits',
+        props: { id: 'director', property: 'schema:director', direction: 'forward', paged: true, limit: 8 },
+      },
+    ],
+  };
+  page.streams = {
+    entries: [
+      { node: 'author', property: 'schema:author', direction: 'forward' },
+      { node: 'director', property: 'schema:director', direction: 'forward' },
+    ],
+    selected: 'director',
+  };
+  const client = createKernelClient('https://kernel.invalid', {
+    fetch: async (input, init) => {
+      const request = await new Request(input, init).json();
+      sent.push(request);
+      return Response.json(request.target.view ? page : recorded);
+    },
+  });
+  const loaded = await loadViewPages(client, id, 'credits', 'en', 'next-director');
+  expect(loaded.kind).toBe('page');
+  if (loaded.kind !== 'page') throw new Error('Expected the recorded full view');
+  expect(loaded.node).toBe('director');
+  expect(loaded.page.streams?.selected).toBe('director');
+  expect(sent).toEqual([
+    { target: { subject: id, view: 'credits' }, languages: ['en'] },
+    {
+      target: { subject: id, view: 'credits' },
+      continuation: { node: 'director', cursor: 'next-director' },
+      languages: ['en'],
+    },
+    { target: { subject: id }, languages: ['en'] },
+  ]);
+});
+
+test('title years use the reader and structured-data date meaning', () => {
+  const value = {
+    time: '+2099-01-01T00:00:00Z',
+    precision: 11,
+    calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+  };
+  for (const [content, year] of [
+    [value, true],
+    [{ ...value, time: '+2099-00-00T00:00:00Z', precision: 9 }, true],
+    [{ ...value, time: '+2099-99-99T00:00:00Z' }, false],
+    [{ ...value, precision: 12 }, false],
+    [{ ...value, calendarmodel: 'http://www.wikidata.org/entity/Q1985786' }, false],
+    [{ ...value, timezone: 60 }, false],
+    [{ ...value, before: 1 }, false],
+  ] as const) {
+    const page = fixture({
+      statements: { 'schema:datePublished': [statement('schema:datePublished', 'time', content)] },
+    });
+    const result = head(page);
+    expect(subjectFrame(page, 'en')?.date?.includes('2099') ?? false).toBe(year);
+    expect(meta(result, 'og:title')!.includes('2099')).toBe(year);
+    expect(Object.hasOwn(JSON.parse(result.scripts[0]!.children), 'datePublished')).toBe(year);
+  }
 });

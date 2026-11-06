@@ -2801,3 +2801,30 @@ uncertain command recovery remain under their original owners. Return uses exist
 focus owner; no inner return effect or focus scheduler is added. Exact Sources receiving remains unsupported.
 Cost is one bounded descriptor and the existing chosen profile or public return read: no menu read, extra native
 window, membership scan, hydration, history retention or SQL.
+
+## Complete Subject stream composition
+
+Full Credits and Works views declare every released credit property, preserving each role's original native order,
+qualified names, Character, position and spoiler disclosure. Forward credit previews reuse the bounded current
+Subject facts and their native relation counts. Large role directories select one window at a time rather than
+spending the page budget on every role. The native page response identifies the selected node and its declared
+property/direction; another role starts its first window. `node` and `cursor` retain the exact selected full view,
+locale and Context across destination/return links. The immutable profile remains the read-plan authority.
+For an initial large forward directory, the existing native Subject counts choose the first populated declared role;
+an explicit node or continuation always wins. This adds no discovery read and never reorders rows.
+
+Decision: receive the Concept control/return corrections and public metadata date correction as supporting source;
+retain the existing Person correction lifetime. Pin native stream selection and public rendering with focused tests,
+and repair the existing 105-target fixture through native statements and current hidden-target moderation. Editions
+use released dates, contents use native names, and credits retain released position qualifiers. Recipe and game
+release templates expose their released descriptive properties. Relation previews reuse the current Subject, while
+full views retain separate forward and inverse windows. Unsupported calendars, precision and uncertainty no longer
+produce a Gregorian date in the public title or compact frame.
+
+Dates remain single-valued: accepting a competing sourced candidate does not replace the selected date. Candidate
+comparison is explicitly opened after session preparation; Changes exposes the native revision trail without
+inserting private review data into public HTML. Its signed-in interaction requires browser acceptance, rather than
+asserting both candidates in a static public response. Served anonymous/editor/verified-agent
+traversal, private correction resumption and responsive browser acceptance are deferred to integration. This work
+read the corresponding Web capability row, Web guide, Subject reading/relations/return contracts, the reference
+index and Schema.org 30.1's contributor, exampleOfWork and isPartOf vocabulary before implementation.

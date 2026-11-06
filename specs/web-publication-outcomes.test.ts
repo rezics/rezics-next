@@ -90,9 +90,12 @@ async function follow(html: string, url: string, persona: Persona = 'anonymous')
   expect((await links(html)).map((a) => a.href)).toContain(absolute(url));
   return document(url, persona);
 }
-async function traverse(view: RelationView) {
-  const overview = await document(view === 'inverse' ? fixture.subjects.person : fixture.subjects.book);
+async function traverse(view: RelationView, persona: Persona) {
   const first = fixture.views[view];
+  const origin = new URL(first);
+  origin.pathname = origin.pathname.replace(/\/[^/]+$/, '');
+  origin.search = '';
+  const overview = await document(origin.href, persona);
   expect((await links(overview.html)).map((a) => a.href)).toContain(absolute(first));
   const targets = Array.from({ length: data.traversal.countPerView }, (_, index) => {
     const url = fixture.subjects[`${view}-${String(index + 1).padStart(3, '0')}`];
@@ -109,9 +112,19 @@ async function traverse(view: RelationView) {
     expect(seenPages.has(next)).toBe(false);
     seenPages.add(next);
     expect(seenPages.size).toBeLessThanOrEqual(targets.length + 1);
-    const page = await document(next);
+    const page = await document(next, persona);
     const pageLinks = await links(page.html);
-    const emitted = pageLinks.filter((a) => targets.includes(a.href)).map((a) => a.href);
+    const destination = (href: string) => {
+      const url = new URL(href);
+      url.searchParams.delete('via');
+      return url.href;
+    };
+    const targetLinks = pageLinks.filter((a) => targets.includes(destination(a.href)));
+    const emitted = targetLinks.map((a) => destination(a.href));
+    if (targetLinks.length && reached.length === 0) {
+      const target = await document(targetLinks[0]!.href, persona);
+      expect((await links(target.html)).map((a) => a.href)).toContain(absolute(next));
+    }
     expect(emitted.length).toBeGreaterThan(0);
     expect(emitted.length).toBeLessThanOrEqual(data.traversal.maximumPageSize);
     expect(pageLinks.map((a) => a.href)).not.toContain(absolute(excluded!));
@@ -126,24 +139,13 @@ async function traverse(view: RelationView) {
 }
 
 describe('subject-traversal', () => {
-  test('subject-traversal: editions are reachable once in declared order across full pages', async () => {
-    await traverse('editions');
-  });
-  test('subject-traversal: contents are reachable once in declared order across full pages', async () => {
-    await traverse('contents');
-  });
-  test('subject-traversal: cast is reachable once in declared order across full pages', async () => {
-    await traverse('cast');
-  });
-  test('subject-traversal: crew is reachable once in declared order across full pages', async () => {
-    await traverse('crew');
-  });
-  test('subject-traversal: inverse credits are reachable once in declared order across full pages', async () => {
-    await traverse('inverse');
-  });
-  test('subject-traversal: relations are reachable once in declared order across full pages', async () => {
-    await traverse('relations');
-  });
+  for (const persona of ['anonymous', 'editor'] as const) {
+    for (const view of data.traversal.views) {
+      test(`subject-traversal: ${persona} reaches ${view} once in native order across full pages`, async () => {
+        await traverse(view, persona);
+      });
+    }
+  }
   test('subject-traversal: credit character credited name position and spoiler retain their meaning', async () => {
     const page = await document(fixture.qualifiedCredit);
     const credit = data.traversal.credit;
@@ -161,18 +163,23 @@ describe('subject-traversal', () => {
     // closed control and appears nowhere else in the document's reading text.
     expect(page.visible.split(credit.spoiler).length - 1).toBe(1);
   });
-  test('subject-traversal: Details reaches competing sourced date and editorial history', async () => {
+  test('subject-traversal: competing native evidence stays separate from public facts and private history shells', async () => {
     await driver.proposeCompetingDate();
     await driver.settle();
     const overview = await document(fixture.subjects.book);
     const details = await follow(overview.html, fixture.details, 'editor');
     const date = data.traversal.date;
-    for (const value of [date.original, date.competing, date.sourceOriginal, date.sourceCompeting])
-      expect(details.visible).toContain(value);
-    const histories = (await links(details.html)).filter((a) => /history/i.test(a.label));
+    // The driver independently reads accepted native candidate evidence and the
+    // unchanged public selection. Comparison and Changes read after session preparation.
+    for (const value of [date.competing, date.sourceCompeting]) expect(details.visible).not.toContain(value);
+    const sources = await document(`${fixture.subjects.book}/sources`);
+    for (const value of [date.original, date.sourceOriginal]) expect(sources.visible).toContain(value);
+    for (const value of [date.competing, date.sourceCompeting]) expect(sources.visible).not.toContain(value);
+    const histories = (await links(overview.html)).filter((a) => /changes/i.test(a.label));
     expect(histories.length).toBeGreaterThan(0);
     const history = await document(histories[0]!.href, 'editor');
-    for (const value of [date.original, date.competing, date.sourceCompeting]) expect(history.visible).toContain(value);
+    expect(history.visible).toContain(data.subjects.book.title);
+    for (const value of [date.competing, date.sourceCompeting]) expect(history.visible).not.toContain(value);
   });
 });
 

@@ -452,6 +452,7 @@ export const platformRegistry = defineRegistry({
       type: 'OutgoingRelations',
       props: Type.Object({ title: Type.Optional(localizedText({ maxLength: 120 })), ...linkProps }, closed),
       read: (props, page) => {
+        if (props.paged !== true) return readSubject(props, page);
         const read = readLinks(props, page);
         return read?.kind === 'links' ? { ...read, kind: 'relations' } : read;
       },
@@ -473,8 +474,17 @@ export const platformRegistry = defineRegistry({
     },
     {
       type: 'Credits',
-      props: Type.Object({ direction: Type.Optional(enumeration(['forward', 'inverse'])), ...linkProps }, closed),
-      read: readDirected,
+      props: Type.Object(
+        {
+          ...linkProps,
+          title: Type.Optional(localizedText({ maxLength: 120 })),
+          direction: Type.Optional(enumeration(['forward', 'inverse'])),
+        },
+        closed,
+      ),
+      // Current Subject previews already carry bounded native rows and their counts, independent of role count.
+      read: (props, page) =>
+        props.direction === 'forward' && props.paged !== true ? readSubject(props, page) : readDirected(props, page),
     },
     {
       type: 'RatingSummary',

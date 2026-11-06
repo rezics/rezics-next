@@ -1,3 +1,4 @@
+import { selectedStreamDocument, type SubjectStreams } from './subject-streams';
 import { mangaObservedOrigin } from '../catalogue/manga-public-visit';
 import { SubjectArtworkSession } from '../catalogue/subject-artwork/session';
 import { supportsReleasedWorkNames } from '../catalogue/work-names/model';
@@ -155,6 +156,7 @@ export type SubjectPageData = {
   /** BFF cache identity of this reading; never native read authority. */
   requestedReader?: string | null | undefined;
   continuation?: PageContinuation | undefined;
+  streams?: SubjectStreams | undefined;
   community?: SubjectCommunity;
   profile: string;
   template: { scope: 'base' | 'generic' | 'route' | 'type'; key: string | null };
@@ -301,6 +303,7 @@ export async function loadSubjectPage(
   options: {
     realm?: string | undefined;
     continuation?: PageContinuation | undefined;
+    stream?: string | undefined;
     authorization?: string | undefined;
     signal?: SubjectPageReadLifetime | undefined;
   } = {},
@@ -311,6 +314,7 @@ export async function loadSubjectPage(
     {
       target: { subject: id, ...(view ? { view } : {}), ...(options.realm ? { realm: options.realm } : {}) },
       ...(options.continuation ? { continuation: options.continuation } : {}),
+      ...(options.stream ? { stream: options.stream } : {}),
       languages: requestLanguages(locale),
     },
     {
@@ -1245,7 +1249,8 @@ export function SubjectPage({
       </Empty>
     ) : null;
   const header = placesSlot(page.document.content, 'header');
-  const composition = overview && !framed ? splitHeaderDocument(page.document) : { remaining: page.document };
+  const renderedDocument = selectedStreamDocument(page.document, page.streams);
+  const composition = overview && !framed ? splitHeaderDocument(renderedDocument) : { remaining: renderedDocument };
   const afterHeader = overview ? (
     <>
       {bar}
