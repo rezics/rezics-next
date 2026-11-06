@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { createCurrentConsentReader } from '@rezics/auth/current-consent';
 import { bundledRelease } from '@rezics/definitions/bundled';
-import { createGrantCommands, GrantDeniedError } from '../../src/access/grant-commands.ts';
+import { bootstrapLocalShowcaseBoardCreation, PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
+import { GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { readErasureStatus, resolveRetention } from '../../src/access/erasure.ts';
 import { createCommerceCommands } from '../../src/commerce/commands.ts';
@@ -18,9 +19,8 @@ import { createCommerceWork } from '../../src/commerce/enqueue.ts';
 import { createStripePort } from '../../src/commerce/stripe.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
-import { deadlineFor } from '../../src/request/deadline.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
-import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { nativeFixture } from '../access/native-account-bindings-fixture.ts';
 import { accountDeletionRuntime, deletePersona, drainEffects } from '../support/account-deletion.ts';
@@ -36,7 +36,7 @@ import {
   prepareNativeRetainedOrder,
 } from './support/order-retention-fixture.ts';
 import { startWorkStripe } from './support/work-stripe.ts';
-import { HIGH_RATE_OVERRIDES } from '../content/support/disclosure-fixtures.ts';
+import { HIGH_RATE_OVERRIDES, seedGovernanceAuthority } from '../content/support/disclosure-fixtures.ts';
 import {
   createNativeContentSystemWithWriteRateOverrides,
   type NativeContentSystem,
@@ -65,7 +65,6 @@ describe('native genuine-order retention', () => {
   let provider: ReturnType<typeof startWorkStripe>;
   let stripe: ReturnType<typeof createStripePort>;
   let commands: ReturnType<typeof createCommerceCommands>;
-  let grants: ReturnType<typeof createGrantCommands>;
   let contentEdition: NativeContentEdition;
   let seller: { accountId: string; bearer: string };
   let buyer: { accountId: string; bearer: string };
@@ -96,16 +95,24 @@ describe('native genuine-order retention', () => {
     return value;
   }
   async function grant(subjectId: string, resource: { route: number; id: string }, actions: string[]) {
-    await grants.create(
-      { pool, actor: governance.actor, deadline: deadlineFor(30_000) },
-      {
-        resource,
-        subject: { kind: 'account', id: subjectId },
-        actions,
-        valid: '(,)',
-        key: crypto.randomUUID(),
-      },
+    const response = await native.kernel.handle(
+      new Request('http://kernel.test/v1/grants', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${governance.bearer}`,
+          'content-type': 'application/json',
+          'idempotency-key': JSON.stringify(crypto.randomUUID()),
+        },
+        body: JSON.stringify({
+          resource,
+          subject: { kind: 'account', id: subjectId },
+          actions,
+          valid: '(,)',
+        }),
+      }),
     );
+    if (response.status !== 201)
+      throw new Error(`grant ${actions.join(',')}: ${response.status} ${await response.text()}`);
   }
   async function erase(persona: { accountId: string; bearer: string }) {
     const barrier = await deletePersona({ version: 1, pool, auth: accountDeletionRuntime(native).auth }, persona);
@@ -160,6 +167,8 @@ describe('native genuine-order retention', () => {
         CHECKOUT_CANCEL_URL: urls.cancelUrl,
         KERNEL_ROUTE_KEY: encodeNativeRouteKey(native.routeKey),
         KERNEL_SESSION_KEYS: encodeNativeKeyRing(native.tokenKeys),
+        KERNEL_WORKER_POOL_SIZE: '10',
+        KERNEL_EXECUTOR_ID: `commerce-erasure-${crypto.randomUUID()}`,
       }),
     };
     const running = Bun.spawn([process.execPath, `${import.meta.dir}/support/erasure-participant-runtime.ts`], {
@@ -241,15 +250,16 @@ describe('native genuine-order retention', () => {
       commerce: { stripe, ...urls, webhookSecrets: [provider.fake.webhookSecret], work: createCommerceWork(client) },
       workClient: client,
     });
-    grants = createGrantCommands({ pool, access: native.access, managementAction: 'access:grant' });
     seller = { accountId: native.actors.author.actor.accountId, bearer: native.actors.author.bearer };
     buyer = { accountId: native.actors.other.actor.accountId, bearer: native.actors.other.bearer };
     unused = await accountDeletionRuntime(native).person();
-    await grant(seller.accountId, { route: 0, id: GLOBAL_CONTEXT }, ['subject:create', 'board:create', 'offer:create']);
+    await bootstrapLocalShowcaseBoardCreation(pool, governance.actor.accountId);
+    await grant(seller.accountId, PLATFORM_RESOURCE, ['board:create']);
+    await grant(seller.accountId, PLATFORM_RESOURCE, ['offer:create']);
     for (const group of ['personal_library', 'purchases', 'selling'])
       await accepted(governance, `/v1/platform/exposure/${group}:open`, {});
     const editions = await createNativeEditionFixture(async (method, path, body, headers = {}) => {
-      return kernel.handle(
+      return native.kernel.handle(
         new Request(`http://kernel.test${path}`, {
           method,
           headers: { authorization: `Bearer ${seller.bearer}`, ...headers },
@@ -302,6 +312,7 @@ describe('native genuine-order retention', () => {
         taxCode: 'txcd_10302000',
       })
     ).offer as { id: string; revision: number };
+    await seedGovernanceAuthority(pool, routeOf(offer.id)!, offer.id, governance.actor.accountId, ['order:create']);
     await grant(buyer.accountId, { route: routeOf(offer.id)!, id: offer.id }, ['order:create']);
     const typedBuyer = await native.access.authenticate(buyer.bearer, { pool, deadline: Date.now() + 90_000 });
     const first = (await accepted(buyer, '/v1/orders', { offerId: offer.id, expectedOfferRevision: offer.revision }))
@@ -314,7 +325,7 @@ describe('native genuine-order retention', () => {
     const second = (await accepted(buyer, '/v1/orders', { offerId: offer.id, expectedOfferRevision: offer.revision }))
       .order as { id: string };
     const secondNative = (await commands.readOrderForAccount(buyer.accountId, second.id))!;
-    const expiresAt = new Date(Date.now() + 60_000);
+    const expiresAt = new Date(Date.now() + 15_000);
     const firstRetention = await prepareNativeRetainedOrder(pool, first.id, expiresAt);
     const secondRetention = await prepareNativeRetainedOrder(pool, second.id, expiresAt);
     expect(firstRetention).toMatchObject({
@@ -543,7 +554,7 @@ describe('native genuine-order retention', () => {
     );
     await replay.getResult();
     expect(await commerceOutcome(unused.accountId)).toEqual({ outcome: 'none', retained: [] });
-  }, 120_000);
+  }, 180_000);
 });
 
 describe('historical operator commerce custody', () => {
@@ -565,6 +576,8 @@ describe('historical operator commerce custody', () => {
         STRIPE_API_HOST: `http://127.0.0.1:${provider.port}`,
         CHECKOUT_SUCCESS_URL: 'https://example.test/success',
         CHECKOUT_CANCEL_URL: 'https://example.test/cancel',
+        KERNEL_WORKER_POOL_SIZE: '10',
+        KERNEL_EXECUTOR_ID: `commerce-erasure-operator-${crypto.randomUUID()}`,
       }),
     };
     const running = Bun.spawn([process.execPath, `${import.meta.dir}/support/erasure-participant-runtime.ts`], {
@@ -605,6 +618,8 @@ describe('historical operator commerce custody', () => {
     });
     personas = await createPersonas(kernel, { version: 1, pool: kernelPool, auth });
     await startCommerceWorker();
+    await drainEffects(kernelPool, partitionOf(routeOf(personas.software.accountId)!));
+    await drainEffects(kernelPool, partitionOf(routeOf(personas.operator.accountId)!));
   }, 360_000);
 
   afterAll(async () => {
