@@ -4,7 +4,7 @@ import { sourceDigest } from '../../../packages/conversion/src/support.ts';
 import { citedProviderBinding, type GraphEdgeDraft } from './cross-media-bindings.ts';
 
 type Row = Record<string, unknown>;
-export const vndbWorkLinkConverterRevision = 'vndb-work-links@1';
+export const vndbWorkLinkConverterRevision = 'vndb-work-links@2';
 
 export type SelectedVndbWorkJoin = {
   join: { id: string; link: number };
@@ -62,6 +62,7 @@ function admittedBangumiWorkId(site: string, value: string): BangumiWorkIdAdmiss
 /** Join only bounded selected VN rows to their exact dictionary entries. */
 export function attachShowcaseWorkLinks(input: {
   alias: string;
+  bangumiAlias: string;
   records: readonly SourceRecord[];
   joins: ReadonlyMap<string, readonly SelectedVndbWorkJoin[]>;
   dictionary: ReadonlyMap<number, SelectedVndbWorkDictionaryRow>;
@@ -143,9 +144,9 @@ export function attachShowcaseWorkLinks(input: {
           table: 'extlinks',
           holder: record.key,
           target: reference.id,
-          property: 'wdt:P5732',
+          property: 'rezics:crossMediaCounterpart',
+          targetAlias: input.bangumiAlias,
           url: external.value.value,
-          targetKind: 'literal',
           membership: 'referenced',
           record: rawSourceRecord,
           fields: ['vn_extlinks.id', 'vn_extlinks.link', 'extlinks.id', 'extlinks.site', 'extlinks.value'],

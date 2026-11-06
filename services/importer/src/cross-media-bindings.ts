@@ -32,6 +32,8 @@ export type GraphEdgeDraft = {
   property: string;
   url: string;
   targetKind?: 'subject' | 'literal';
+  /** Exact independently retained provider claim for a selected counterpart. */
+  targetAlias?: string;
   qualifiers?: { property: string; content: unknown }[];
   membership: GraphMembership;
   record: Record<string, unknown>;
@@ -98,6 +100,14 @@ export type ReleaseEndpointCurrentness =
   | 'identity_mismatch'
   | 'unavailable';
 export type RelationEndpointCurrentness = ReleaseEndpointCurrentness;
+export type GraphRelationSnapshot = {
+  provider: Provider;
+  table?: string;
+  currentKeys: readonly string[];
+  scope: readonly string[];
+  digest: string;
+  complete: boolean;
+};
 export type GraphMappingGap = SourceVocabularyGap & {
   sourceSubject: string;
   sourceEndpoint: string;
@@ -207,6 +217,7 @@ export function graphEdgeKey(draft: GraphEdgeDraft): string {
     draft.holder,
     draft.target,
     draft.property,
+    ...(draft.targetAlias ? [draft.targetAlias] : []),
     sourceDigest(draft.record),
     ...(draft.relation ? [draft.relation.mappingRevision, sourceDigest(draft.relation.evidence)] : []),
     // Another member can invalidate this volume's ordinal without changing its own source rows.
@@ -358,8 +369,17 @@ export class CrossMediaGraph {
       digest: string;
       complete: boolean;
     };
+    relationSnapshots?: readonly GraphRelationSnapshot[];
   }): Promise<{ proposed: ProposedEdge[]; unresolved: UnresolvedEdge[]; gaps: GraphMappingGap[]; unchanged: number }> {
     const drafts = this.planned();
+    const snapshots =
+      input.relationSnapshots ??
+      (input.relationSnapshot ? [{ provider: 'bangumi' as const, ...input.relationSnapshot }] : []);
+    const currentRelations = snapshots.map((snapshot) => ({
+      ...snapshot,
+      keys: new Set(snapshot.currentKeys),
+      owners: new Set(snapshot.scope),
+    }));
     const proposed: ProposedEdge[] = [];
     const unresolved: UnresolvedEdge[] = [];
     const gaps: GraphMappingGap[] = [];
@@ -387,12 +407,39 @@ export class CrossMediaGraph {
       return fence;
     };
     for (const draft of drafts) {
+      // The previous work-link producer sealed an identifier forbidden on Visual Novels. Native admission
+      // rejects that exact shape with 400; retain its bytes for inspection without resending it on reopen.
+      if (
+        draft.source === 'vndb' &&
+        draft.table === 'extlinks' &&
+        draft.targetKind === 'literal' &&
+        draft.property === 'wdt:P5732' &&
+        draft.converterRevision === 'vndb-work-links@1'
+      ) {
+        mark.run('unsupported', null, graphEdgeKey(draft));
+        unresolved.push({ ...draft, reason: 'unsupported_work_link_identity' });
+        continue;
+      }
+      const snapshot = currentRelations.find(
+        (snapshot) => snapshot.provider === draft.source && (!snapshot.table || snapshot.table === draft.table),
+      );
+      if (
+        (draft.relation || draft.vndbRelation || draft.targetAlias) &&
+        snapshot?.complete &&
+        !snapshot.keys.has(graphEdgeKey(draft)) &&
+        (snapshot.owners.has(draft.holder) || snapshot.owners.has(draft.target)) &&
+        !this.command(graphEdgeKey(draft))?.bytes
+      ) {
+        // No send was sealed for this old row. A newly resolved dependency cannot revive removed evidence.
+        // Sealed commands still replay exactly below, then retire through the ordinary candidate command.
+        continue;
+      }
       const releaseSupersession = isVndbReleaseSupersession(draft);
       const holder = input.claim({ source: draft.alias, external_id: draft.holder });
       const target =
         draft.targetKind === 'literal'
           ? { state: 'bound' as const, subject: draft.target }
-          : input.claim({ source: draft.alias, external_id: draft.target });
+          : input.claim({ source: draft.targetAlias ?? draft.alias, external_id: draft.target });
       if (holder?.state !== 'bound' || target?.state !== 'bound') {
         const unresolvedOwner = holder?.state !== 'bound' ? holder : target;
         const externalId = holder?.state !== 'bound' ? draft.holder : draft.target;
@@ -455,6 +502,29 @@ export class CrossMediaGraph {
       if (sourceFactOwner !== undefined) {
         if ((await currentFactFence(draft.alias, sourceFactOwner)).fenced) {
           unresolved.push({ ...draft, reason: 'fenced_source_facts' });
+          mark.run('unresolved', null, graphEdgeKey(draft));
+          continue;
+        }
+      }
+      if (draft.targetAlias) {
+        const endpoints = [
+          { alias: draft.alias, externalId: draft.holder, subject: holder.subject },
+          { alias: draft.targetAlias, externalId: draft.target, subject: target.subject },
+        ];
+        const reads = await Promise.all(
+          endpoints.map(({ alias, externalId, subject }) =>
+            input.currentRelationEndpoint(externalId, subject, input.nativeType(externalId, alias)),
+          ),
+        );
+        const fences = await Promise.all(endpoints.map(({ alias, externalId }) => currentFactFence(alias, externalId)));
+        const stale = reads.findIndex((status) => status !== 'current');
+        if (fences.some((fence) => fence.fenced) || stale !== -1) {
+          unresolved.push({
+            ...draft,
+            reason: fences.some((fence) => fence.fenced)
+              ? 'fenced_relation_holder'
+              : `current_relation_endpoint_${reads[stale]}:${endpoints[stale]!.externalId}`,
+          });
           mark.run('unresolved', null, graphEdgeKey(draft));
           continue;
         }
@@ -855,7 +925,8 @@ export class CrossMediaGraph {
         statement,
       };
       const edgeKey = graphEdgeKey(draft);
-      const prior = releaseSupersession ? this.command(edgeKey) : null;
+      const journaled = releaseSupersession || draft.targetAlias !== undefined;
+      const prior = journaled ? this.command(edgeKey) : null;
       let sealedCommand = command;
       if (prior?.bytes) {
         const exact = (JSON.parse(prior.bytes) as { commands?: BatchCommand[] }).commands?.[0];
@@ -875,7 +946,7 @@ export class CrossMediaGraph {
           continue;
         }
         sealedCommand = exact;
-      } else if (releaseSupersession && input.journal) {
+      } else if (journaled && input.journal) {
         const prepared = input.journal.prepare(command);
         const exact = (JSON.parse(prepared.bytes) as { commands?: BatchCommand[] }).commands?.[0];
         if (!exact || exact.op !== 'propose') throw new TypeError('Cross-media release journal is invalid');
@@ -907,6 +978,7 @@ export class CrossMediaGraph {
           const receipt = result.results[index];
           const status = receipt?.status;
           const journaled = !!(
+            entry.draft.targetAlias ||
             entry.draft.relation ||
             entry.draft.producerParent ||
             entry.draft.vndbRelation ||
@@ -950,7 +1022,13 @@ export class CrossMediaGraph {
               unresolved.push({ ...entry.draft, reason: 'unknown_delivery' });
               continue;
             }
-            throw new TypeError(`Cross-media relation write failed: ${status}`);
+            throw new TypeError(
+              `Cross-media relation write failed: ${status}: ${JSON.stringify({
+                route: '/v1/subjects:batchWrite',
+                command: entry.command,
+                receipt,
+              })}`,
+            );
           }
           if (!receipt || !('value' in receipt))
             throw new TypeError('Cross-media relation write omitted its native receipt');
@@ -976,7 +1054,7 @@ export class CrossMediaGraph {
         }
       }
     }
-    if (input.relationSnapshot) {
+    if (snapshots.length) {
       unresolved.push(
         ...(await this.retractMissingRelations(
           {
@@ -987,7 +1065,7 @@ export class CrossMediaGraph {
             currentFactFence,
             ...(input.journal ? { journal: input.journal } : {}),
           },
-          input.relationSnapshot,
+          snapshots,
         )),
       );
     }
@@ -1013,14 +1091,18 @@ export class CrossMediaGraph {
         acknowledge(command: BatchCommand, result: BatchWriteResult['results'][number]): void;
       };
     },
-    snapshot: { currentKeys: readonly string[]; scope: readonly string[]; digest: string; complete: boolean },
+    snapshots: readonly GraphRelationSnapshot[],
   ): Promise<UnresolvedEdge[]> {
     const unresolved: UnresolvedEdge[] = [];
-    const currentKeys = new Set(snapshot.currentKeys);
-    const scope = new Set(snapshot.scope);
+    const currentRelations = snapshots.map((snapshot) => ({
+      ...snapshot,
+      keys: new Set(snapshot.currentKeys),
+      owners: new Set(snapshot.scope),
+    }));
     const prior = this.database
       .prepare(`SELECT edge_key,payload,command_payload,native_candidate,retraction_key,retraction_payload
-        FROM cross_media_graph WHERE table_name='subject-relations' AND status='proposed' AND native_candidate IS NOT NULL`)
+        FROM cross_media_graph WHERE table_name IN ('subject-relations','vn_relations','extlinks')
+        AND status='proposed' AND native_candidate IS NOT NULL`)
       .all() as {
       edge_key: string;
       payload: string;
@@ -1031,21 +1113,26 @@ export class CrossMediaGraph {
     }[];
     const pending: { edgeKey: string; command: BatchCommand; bytes: string }[] = [];
     for (const row of prior) {
-      const hasPendingRetraction = row.retraction_payload !== null;
-      if (!hasPendingRetraction && currentKeys.has(row.edge_key)) continue;
       const draft = JSON.parse(row.payload) as GraphEdgeDraft;
+      const relation = draft.relation ?? draft.vndbRelation;
+      const snapshot = currentRelations.find(
+        (snapshot) => snapshot.provider === draft.source && (!snapshot.table || snapshot.table === draft.table),
+      );
+      if ((!relation && !draft.targetAlias) || !snapshot) continue;
+      const hasPendingRetraction = row.retraction_payload !== null;
+      if (!hasPendingRetraction && snapshot.keys.has(row.edge_key)) continue;
       if (
-        !draft.relation ||
-        (!hasPendingRetraction && (!snapshot.complete || (!scope.has(draft.holder) && !scope.has(draft.target))))
+        !hasPendingRetraction &&
+        (!snapshot.complete || (!snapshot.owners.has(draft.holder) && !snapshot.owners.has(draft.target)))
       )
         continue;
       const original = (JSON.parse(row.command_payload) as { commands: BatchCommand[] }).commands[0];
       if (!original || original.op !== 'propose') continue;
-      const relation = draft.relation;
-      const endpoints = [relation.sourceSubject, relation.sourceEndpoint];
-      const claims = endpoints.map((externalId) => ({
+      const endpoints = relation ? [relation.sourceSubject, relation.sourceEndpoint] : [draft.holder, draft.target];
+      const aliases = [draft.alias, draft.targetAlias ?? draft.alias];
+      const claims = endpoints.map((externalId, index) => ({
         externalId,
-        claim: input.claim({ source: draft.alias, external_id: externalId }),
+        claim: input.claim({ source: aliases[index]!, external_id: externalId }),
       }));
       const subjects = claims.map(({ claim }) => (claim?.state === 'bound' ? claim.subject : null));
       const missingIndex = subjects.findIndex((subject) => subject === null);
@@ -1062,7 +1149,7 @@ export class CrossMediaGraph {
       }
       const current = await Promise.all(
         claims.map(({ externalId }, index) =>
-          input.currentRelationEndpoint(externalId, subjects[index]!, input.nativeType(externalId, draft.alias)),
+          input.currentRelationEndpoint(externalId, subjects[index]!, input.nativeType(externalId, aliases[index]!)),
         ),
       );
       const currentFailure = current.findIndex((status) => status !== 'current');
@@ -1073,7 +1160,9 @@ export class CrossMediaGraph {
         });
         continue;
       }
-      const fences = await Promise.all(endpoints.map((externalId) => input.currentFactFence(draft.alias, externalId)));
+      const fences = await Promise.all(
+        endpoints.map((externalId, index) => input.currentFactFence(aliases[index]!, externalId)),
+      );
       if (fences.some((fence) => fence.fenced)) {
         unresolved.push({ ...draft, reason: 'fenced_relation_holder' });
         continue;
@@ -1105,7 +1194,9 @@ export class CrossMediaGraph {
           source: original.source.source,
           external_id: original.source.external_id,
           record_revision: original.source.record_revision,
-          converter_revision: `${bangumiVocabularyRevision}:relation-retract`,
+          converter_revision: draft.relation
+            ? `${bangumiVocabularyRevision}:relation-retract`
+            : `${original.source.converter_revision}:retract`,
           digest: snapshot.digest,
           field_group: 'facts',
         },

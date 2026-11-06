@@ -651,7 +651,13 @@ export function buildShowcaseManifest(input: {
     const edgeEnvelope = envelopeKey(source);
     if (edge.alias !== aliases[provider]) continue;
     graphEnvelopeKeys.add(edgeEnvelope);
-    const acknowledgement = acknowledgementsByKey.get(graphEdgeCommandKey(edge));
+    const expectedKeys = new Set([
+      graphEdgeCommandKey(edge),
+      `${edge.alias}:${edge.holder}:${graphEdgeCommandKey(edge)}`,
+    ]);
+    const acknowledgement = [...expectedKeys]
+      .map((key) => acknowledgementsByKey.get(key))
+      .find((ack) => ack !== undefined);
     if (!acknowledgement || !candidateAssertion(acknowledgement)) {
       omissions.push({ provider, sourceKey: edge.holder, code: 'candidate-ack-missing' });
       continue;
@@ -661,7 +667,9 @@ export function buildShowcaseManifest(input: {
       continue;
     }
     const ownerKey = `${provider}\0${edge.holder}`;
-    const targetKey = `${provider}\0${edge.target}`;
+    const targetProvider =
+      edge.targetAlias === aliases.bangumi ? 'bangumi' : edge.targetAlias === aliases.vndb ? 'vndb' : provider;
+    const targetKey = `${targetProvider}\0${edge.target}`;
     const owner = selectedBySourceKey.get(ownerKey);
     const ownerSubject = currentSubject(readingIndex.get(ownerKey));
     const command = acknowledgement.command;
@@ -683,7 +691,7 @@ export function buildShowcaseManifest(input: {
       }
       if (
         command.op !== 'propose' ||
-        command.key !== graphEdgeCommandKey(edge) ||
+        !expectedKeys.has(command.key) ||
         command.subject !== ownerSubject.id ||
         command.statement.property.id !== edge.property ||
         value?.type !== 'value' ||
@@ -704,7 +712,7 @@ export function buildShowcaseManifest(input: {
     }
     if (
       command.op !== 'propose' ||
-      command.key !== graphEdgeCommandKey(edge) ||
+      !expectedKeys.has(command.key) ||
       command.subject !== ownerSubject.id ||
       command.statement.property.id !== edge.property ||
       value?.type !== 'value' ||
@@ -716,11 +724,11 @@ export function buildShowcaseManifest(input: {
     }
     eligibleGraphCommandKeys.add(command.key);
     graphTargetsByCommandKey.set(command.key, {
-      provider,
+      provider: targetProvider,
       sourceKey: edge.target,
       subjectId: targetSubject.id,
       nativeType: targetSubject.type,
-      ...(edge.vndbRelation ? { factsFence: true as const } : {}),
+      ...(edge.vndbRelation || edge.targetAlias ? { factsFence: true as const } : {}),
     });
   }
 

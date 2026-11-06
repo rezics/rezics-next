@@ -10,6 +10,7 @@ import {
   nativePolicyCatalogueForAccess,
   type NativePermissionProjection,
 } from '../../src/access/policy-core.ts';
+import { nativePermissionProjectionBound } from '../../src/access/permission-projection.ts';
 import { AccessUnavailableError, createResourcePublicEligibility } from '../../src/access/index.ts';
 import {
   accessCheck,
@@ -112,12 +113,13 @@ async function context(actor: Actor = identity(), deadline = Date.now() + 5000) 
     account: actor.kind === 'account' ? await readAccount(pool, routeOf(actor.accountId), actor.accountId) : null,
   };
 }
+const resourceRoles = {
+  roles: { 'fixture.subject.reader': [action] },
+  types: { subject: { owner: 'fixture.subject.reader', standing: [] } },
+};
 const access = createAccess({
   actions,
-  resourceRoles: {
-    roles: { 'fixture.subject.reader': [action] },
-    types: { subject: { owner: 'fixture.subject.reader', standing: [] } },
-  },
+  resourceRoles,
   accountEvidence: (_actor, ctx) => ctx.account,
 });
 async function prepare(actor: Actor = identity(), verb = action, target = resource, deadline?: number) {
@@ -285,31 +287,33 @@ test('resource, actor and action must match; operators and first-party preconsen
   expect(await run(identity({ scopes: [action, 'arbitrary:read'] }), 'arbitrary:read')).toBe(false);
 });
 
-test('a missing required primitive remains unavailable even when the grant facts are positive', () => {
+test('current deadline and delegated assignment remain required even when the grant facts are positive', () => {
   const catalogue = nativePolicyCatalogueForAccess(access)!;
-  const projection = {
-    assignmentValid: null,
-    live: true,
-    localDenied: false,
+  const projection: NativePermissionProjection = {
+    ...nativePermissionProjectionBound,
+    assignmentValid: true,
+    deadlineLive: true,
     actorActionGrant: true,
-    actorResourceRoleGrant: false,
-  } as unknown as NativePermissionProjection;
-  expect(
-    decideNativePermission(
-      catalogue,
-      {
-        action,
-        resourceType: 'subject',
-        anonymous: false,
-        hasPrincipal: false,
-        authenticatedBenefit: false,
-        scope: true,
-        floor: false,
-        mode: 'ordinary',
-      },
-      projection,
-    ).decision,
-  ).toBe('unavailable');
+    principalActionGrant: true,
+  };
+  const input = {
+    action,
+    resourceType: 'subject',
+    anonymous: false,
+    hasPrincipal: false,
+    authenticatedBenefit: false,
+    scope: true,
+    floor: false,
+    mode: 'ordinary' as const,
+  };
+  const decide = (row: NativePermissionProjection, hasPrincipal = false) =>
+    decideNativePermission(catalogue, { ...input, hasPrincipal }, row).decision;
+  expect(decide(projection)).toBe('allow');
+  expect(decide({ ...projection, deadlineLive: null })).toBe('unavailable');
+  // The native projection supplies a complete assignment proof, including ordinary bearers.
+  expect(decide({ ...projection, assignmentValid: null })).toBe('unavailable');
+  expect(decide(projection, true)).toBe('allow');
+  expect(decide({ ...projection, assignmentValid: null }, true)).toBe('unavailable');
 });
 
 test('exact own-account and registered Global profiles retain their native ceilings and provenance', async () => {
@@ -367,7 +371,7 @@ test('the already-read actor state and epoch fail closed without an actor reread
     expect(await check(pool)).toBe(true);
   });
   expect(await access.authorize(pool, actor, action, resource)).toBe(false);
-  const missing = createAccess({ actions, accountEvidence: () => null });
+  const missing = createAccess({ actions, resourceRoles, accountEvidence: () => null });
   expect(await (await accessCheck(missing, actor, action, resource, ctx))(pool)).toBe(false);
 });
 
@@ -376,6 +380,7 @@ test('unresolved account, grant, assignment and membership reads deny at the pro
   await unavailable('account', async () => {
     const missing = createAccess({
       actions,
+      resourceRoles,
       accountEvidence: () => {
         throw new Error('unresolved account');
       },
