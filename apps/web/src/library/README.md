@@ -331,6 +331,8 @@ withhold a changed Source (`target: null`) while keeping the own edge. Return fr
 list cursor, kind and row from this visit's history state with the current session; the destination URL never carries
 the private cursor. Command replay resends the original credential, idempotency key and body. Fewest tests: one typed
 transport bind and one return-frontier pin; native/browser/growth walks remain later integration.
+The destination click captures the selected list kind, never its localized row label. Focus recovery accepts only
+the DOM query capability it uses, so Worker HTML-rewriter declarations do not widen its parent-node requirement.
 
 # Progress return navigation
 

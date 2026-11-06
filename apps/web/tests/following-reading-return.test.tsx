@@ -4,6 +4,12 @@ import { deferred, follow, mountFollowing, page, realmId, spaceId } from './help
 test('keyboard close restores only the current trigger; ordinary links keep the localized destination and native continuation', async () => {
   const h = await mountFollowing({ ...page(follow('subject')), next: 'opaque/page+' });
   try {
+    const destination = h.host.querySelector<HTMLAnchorElement>('[data-follow-target-type="subject"] a')!;
+    destination.addEventListener('click', (event) => event.preventDefault(), { once: true });
+    await h.settle(() =>
+      destination.dispatchEvent(new h.window.MouseEvent('click', { button: 0, bubbles: true, cancelable: true })),
+    );
+    expect(h.window.history.state.followingReturn.kind).toBe('all');
     const trigger = await h.inspect(spaceId);
     expect(h.window.document.activeElement?.id).toBe('following-inspection-title');
     const link = h.host.querySelector<HTMLAnchorElement>('[role="dialog"] a')!;
