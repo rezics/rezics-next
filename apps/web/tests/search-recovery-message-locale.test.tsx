@@ -1,7 +1,7 @@
 import { afterAll, afterEach, expect, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement, type ComponentProps } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderToStaticMarkup, renderToString } from 'react-dom/server';
 import { m } from '../src/paraglide/messages.js';
 import { getLocale, setLocale } from '../src/paraglide/runtime.js';
 import { SearchRecovery } from '../src/search/search-recovery-view';
@@ -98,12 +98,32 @@ const previousGlobals = new Map(
 for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 
-const { createRoot } = await import('react-dom/client');
+const { createRoot, hydrateRoot } = await import('react-dom/client');
 const { DiscoveryKinds } = await import('../src/search/discovery-kinds');
 type Props = ComponentProps<typeof DiscoveryKinds>;
 const host = document.createElement('main');
 document.body.append(host);
 let root: ReturnType<typeof createRoot>;
+
+test('Retry-After expiry during hydration enables only a manual retry without replacing the server tree', async () => {
+  const clock = Date.now;
+  const received = clock();
+  let requests = 0;
+  const errors: unknown[] = [];
+  const element = createElement(SearchRecovery, { state: { status: 'index-not-ready', retryAt: received + 1000 }, retryHref, restartHref, locale: 'en', onRetry: () => requests++ });
+  try {
+    Date.now = () => received;
+    host.innerHTML = renderToString(element);
+    expect(host.querySelector('button')!.disabled).toBe(true);
+    Date.now = () => received + 2000;
+    await act(async () => { root = hydrateRoot(host, element, { onRecoverableError: (error) => errors.push(error) }); });
+    expect(errors).toEqual([]);
+    expect(host.querySelector('button')!.disabled).toBe(false);
+    expect(requests).toBe(0);
+    await act(async () => host.querySelector('button')!.click());
+    expect(requests).toBe(1);
+  } finally { Date.now = clock; }
+});
 
 function kinds(): Props['initial'] {
   return {

@@ -33,6 +33,7 @@ Decision: one composition runtime; lost SDK responses keep publication outcomes 
 Decision: delayed-index disclosure recovers through the same ordinary relay. Withholding an unsafe kind preserves independently current kinds; unsafe combined execution remains withheld through sibling projection and cursor construction.
 
 Native Search fixture setup delegates permissions through ordinary grant commands on the requested anchor. Existing real-runtime cases cover setup; a refused delegation records its exact actions and anchor rather than adding a duplicate fixture-only test.
+Search Retry-After recovery keeps the same initial markup through hydration, then settles the deadline on the client; expiry enables only the reader's manual retry. One hydration test covers the observed expiry between server rendering and client attachment.
 
 Decision: Empty Search recovery drafts bind to the executed request, reader, locale, checkpoint and native page response; valid text uses shared query admission, and explicit retry focuses only the still-current result owner after settlement.
 Decision: released CreativeWork inheritance selects ordinary-page tag metadata; Web passes definitions to the shared reader only when the catalogue digest matches the Subject's exact release.

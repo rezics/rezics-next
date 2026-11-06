@@ -11,11 +11,19 @@ export function searchRetryAt(value: string | null, now: number): number | undef
 
 /** Enable a manual action after the native delay, without fetching or polling. */
 export function useSearchRetryWait(retryAt?: number): boolean {
-  const [now, setNow] = useState(Date.now);
+  // SSR and the first hydrated render must agree even if the delay expired
+  // while the document and its scripts were travelling to the reader.
+  const [now, setNow] = useState<number>();
   useEffect(() => {
-    if (retryAt === undefined || retryAt <= Date.now()) return;
-    const timer = setTimeout(() => setNow(Date.now()), Math.min(retryAt - Date.now(), 2_147_483_647));
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const settle = () => {
+      const current = Date.now();
+      setNow(current);
+      if (retryAt !== undefined && retryAt > current)
+        timer = setTimeout(settle, Math.min(retryAt - current, 2_147_483_647));
+    };
+    settle();
     return () => clearTimeout(timer);
-  }, [retryAt, now]);
-  return retryAt !== undefined && retryAt > Math.max(now, Date.now());
+  }, [retryAt]);
+  return retryAt !== undefined && (now === undefined || retryAt > now);
 }
