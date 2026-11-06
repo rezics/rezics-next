@@ -184,6 +184,19 @@ export function searchRoutes<App>(
               ),
             ),
             text: t.Optional(t.String()),
+            textField: t.Optional(t.Literal('credited_creator')),
+            creditQualifiers: t.Optional(
+              t.Array(
+                t.Object(
+                  {
+                    property: t.String({ minLength: 1, maxLength: 256 }),
+                    value: t.String({ minLength: 1, maxLength: 256 }),
+                  },
+                  object,
+                ),
+                { minItems: 1, maxItems: 4 },
+              ),
+            ),
             filter: t.Optional(t.Any()),
             population: t.Optional(t.Object({ realm: t.String({ format: 'uuid' }) }, object)),
             spoilerThreshold: t.Optional(t.Integer({ minimum: 0, maximum: 2 })),
@@ -226,6 +239,16 @@ export function searchRoutes<App>(
       },
       async ({ body, authorize, admission, job, actor, set }) => {
         const { emptyRecoveryActions: _emptyRecoveryActions, ...nativeBody } = body;
+        // Guard: without discovery-v1 the legacy grammar would ignore credited fields and answer catalogue text.
+        if (
+          body.representation !== 'discovery-v1' &&
+          (body.textField !== undefined || body.creditQualifiers !== undefined)
+        )
+          throw new ProblemError('unsupported_query', {
+            errors: [
+              { pointer: body.textField === undefined ? '/creditQualifiers' : '/textField', code: 'unsupported' },
+            ],
+          });
         if (body.population !== undefined || body.representation === 'discovery-v1')
           set.headers['cache-control'] = 'private, no-store';
         if (body.representation === 'discovery-v1' && body.population !== undefined)
@@ -448,6 +471,19 @@ export function searchRoutes<App>(
         body: t.Object(
           {
             text: t.Optional(t.String()),
+            textField: t.Optional(t.Literal('credited_creator')),
+            creditQualifiers: t.Optional(
+              t.Array(
+                t.Object(
+                  {
+                    property: t.String({ minLength: 1, maxLength: 256 }),
+                    value: t.String({ minLength: 1, maxLength: 256 }),
+                  },
+                  object,
+                ),
+                { minItems: 1, maxItems: 4 },
+              ),
+            ),
             filter: t.Optional(t.Any()),
             conditions: t.Optional(t.Any()),
             kinds: t.Optional(

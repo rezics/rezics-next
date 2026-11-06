@@ -50,6 +50,46 @@ test('private, unknown and oversized queries never emit partial portable documen
   expect(prepareQueryShare({ filter: { type: { in: ['rezics:Book'] } } }).action).toBe('allowed');
 });
 
+test('credited work shares preserve the executed name, same-credit role, kinds, languages and threshold', () => {
+  const role = '0196a000-0000-7000-8000-000000000001';
+  const result = prepareQueryShare(
+    {
+      representation: 'discovery-v1',
+      text: '  Aki  ',
+      textField: 'credited_creator',
+      creditQualifiers: [{ property: 'wdt:P3831', value: role }],
+      filter: { kind: { in: ['schema:Book', 'wd:Q123'] } },
+      languages: ['ja', 'en'],
+      spoilerThreshold: 1,
+      sort: 'relevance',
+    },
+    {},
+  );
+  expect(result.action).toBe('allowed');
+  expect(result.document).toMatchObject({
+    text: '  Aki  ',
+    textField: 'credited_creator',
+    creditQualifiers: [{ property: 'wdt:P3831', value: role }],
+    spoilerThreshold: 1,
+  });
+  const parameters = new URLSearchParams(result.parameters!);
+  expect(parameters.get('mode')).toBe('works');
+  expect(parameters.get('name')).toBe('  Aki  ');
+  expect(parameters.get('role')).toBe(role);
+  expect(parameters.getAll('kinds')).toEqual(['schema:Book', 'wd:Q123']);
+  expect(parameters.getAll('language')).toEqual(['ja', 'en']);
+  expect(parameters.get('threshold')).toBe('1');
+  expect(parameters.get('sort')).toBe('relevance');
+  expect(
+    prepareQueryShare({
+      representation: 'discovery-v1',
+      text: 'Aki',
+      textField: 'credited_creator',
+      filter: { and: [{ kind: { in: ['schema:Book'] } }, { type: { in: ['schema:Book'] } }] },
+    }).action,
+  ).toBe('disabled');
+});
+
 // Exercise the mounted contract and its ordinary current-reader authorization, not a second share authority.
 import { afterAll, beforeAll } from 'bun:test';
 import { createPool } from '../../src/database/pool.ts';
@@ -72,6 +112,9 @@ afterAll(async () => {
 });
 let permitted = true;
 let executions = 0;
+let facetRequest: unknown;
+let discoveryRequest: unknown;
+let discoveries = 0;
 const access: Access = {
   async authenticate() {
     throw new Error('not used');
@@ -93,14 +136,100 @@ const search: SearchService = {
     await context?.complete(page);
     return page;
   },
-  async facets() {
-    return { facets: [], as_of: new Date().toISOString() };
+  async facets(_principal, request) {
+    facetRequest = request;
+    return {
+      facets: request.facets.map(({ property }) => ({ property, values: [], next: null })),
+      as_of: new Date().toISOString(),
+    };
   },
   async suggest() {
     return { subjects: [], as_of: new Date().toISOString() };
   },
 };
-const app = createKernel({ pool, access, routeKey: new Uint8Array(32), receiptKeys: testReceiptKeys(), search });
+const app = createKernel({
+  pool,
+  access,
+  routeKey: new Uint8Array(32),
+  receiptKeys: testReceiptKeys(),
+  search,
+  discovery: async (_principal, request) => {
+    discoveries++;
+    discoveryRequest = request;
+    return { hits: [], kinds: { values: [], next: null, omitted: [] }, next: null, as_of: new Date().toISOString() };
+  },
+});
+test('the mounted credited share executes the request and returns a portable works URL', async () => {
+  permitted = true;
+  const role = '0196a000-0000-7000-8000-000000000001';
+  const response = await app.handle(
+    new Request('http://kernel.test/v1/subjects:search', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        representation: 'discovery-v1',
+        text: 'Aki',
+        textField: 'credited_creator',
+        creditQualifiers: [{ property: 'wdt:P3831', value: role }],
+        filter: { kind: { in: ['schema:Book'] } },
+        languages: ['ja'],
+        spoilerThreshold: 1,
+        sort: 'relevance',
+        prepareShare: true,
+      }),
+    }),
+  );
+  expect(response.status).toBe(200);
+  const share = await response.json();
+  expect(share).toMatchObject({
+    action: 'allowed',
+    document: {
+      text: 'Aki',
+      textField: 'credited_creator',
+      creditQualifiers: [{ property: 'wdt:P3831', value: role }],
+      spoilerThreshold: 1,
+    },
+  });
+  const parameters = new URLSearchParams(share.parameters);
+  expect(parameters.get('mode')).toBe('works');
+  expect(parameters.get('name')).toBe('Aki');
+  expect(parameters.get('role')).toBe(role);
+  expect(parameters.get('kinds')).toBe('schema:Book');
+  expect(discoveryRequest).toMatchObject({
+    textField: 'credited_creator',
+    creditQualifiers: [{ property: 'wdt:P3831', value: role }],
+    filter: { kind: { in: ['schema:Book'] } },
+  });
+  expect(discoveries).toBe(1);
+});
+
+test('the mounted facet route accepts and returns credited work refinements', async () => {
+  permitted = true;
+  const response = await app.handle(
+    new Request('http://kernel.test/v1/subjects:facets', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        text: 'Aki',
+        textField: 'credited_creator',
+        creditQualifiers: [{ property: 'wdt:P3831', value: '0196a000-0000-7000-8000-000000000001' }],
+        facets: [{ property: 'type', size: 8 }],
+      }),
+    }),
+  );
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({
+    facets: [{ property: 'type', values: [], next: null }],
+    as_of: expect.any(String),
+  });
+  expect(facetRequest).toMatchObject({
+    text: 'Aki',
+    textField: 'credited_creator',
+    creditQualifiers: [{ property: 'wdt:P3831', value: '0196a000-0000-7000-8000-000000000001' }],
+    facets: [{ property: 'type', size: 8 }],
+  });
+});
+
 test('mounted preparation executes native admission and a recipient denial cannot acquire a portable query', async () => {
   const send = () =>
     app.handle(

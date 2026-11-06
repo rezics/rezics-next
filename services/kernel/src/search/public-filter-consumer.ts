@@ -649,6 +649,7 @@ import type { DiscoveryConsumerQuery, DiscoveryEngineHit } from './discovery.ts'
 import { compileDiscoveryConsumerCapture } from './discovery-filter.ts';
 import { compileDiscoveryCapture } from './discovery-filter.ts';
 import { readDiscoveryEngineResult } from './discovery-query.ts';
+import { readDiscoveryDocumentCodec } from './indices.ts';
 
 const emptyConsumerCost = (): CustodyCost => ({
   inputKeys: 0,
@@ -1381,6 +1382,9 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       if (!config.registry) throw new ConsumerFailure('dependency_unavailable');
       await mixedGeneration(m);
       const compiled = compileDiscoveryConsumerCapture(plan, meaning, config.registry);
+      // Credited text needs the credit codec: an older physical mapping would return no credited hit, not readiness.
+      if (compiled.creditEvidence && (await readDiscoveryDocumentCodec(m.native, target)) !== 'mixed-credit-v1')
+        throw new ConsumerFailure('dependency_unavailable');
       const sort =
         plan.sort === 'relevance'
           ? [{ _score: 'desc' }, { id: 'asc' }, { kind: 'asc' }, { identity: 'asc' }]
@@ -1419,6 +1423,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         filter: {},
         ...(after === undefined ? {} : { after }),
         ...(compiled.matchEvidence ? { matchEvidence: compiled.matchEvidence } : {}),
+        ...(compiled.creditEvidence ? { creditEvidence: true } : {}),
       }).hits;
       m.cost.engineIteratorSteps += iteratorSteps(body);
       return { queried: current, raw, exhausted: raw.length < size, total: undefined };
@@ -2332,7 +2337,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     const registry = await nativeDiscoveryRegistry(
       m.pool,
       origin.routeKey,
-      createRatedSubjectSource(m.pool, origin.routeKey).source,
+      createRatedSubjectSource(m.pool, origin.routeKey, config.creditSearch).source,
       { release: config.meaning.release },
     );
     return createDiscoveryRepairWriter({
@@ -2393,7 +2398,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         search: m.native,
         index: target,
         consumer: subjectConsumer(subjectTarget[1]!, Number(subjectTarget[2])),
-        source: createRatedSubjectSource(m.pool, origin.routeKey).source,
+        source: createRatedSubjectSource(m.pool, origin.routeKey, config.creditSearch).source,
         listing: subjectListingSource(m.pool),
       });
     }

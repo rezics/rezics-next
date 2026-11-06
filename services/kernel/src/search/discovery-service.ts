@@ -325,15 +325,21 @@ function executeDiscoverySearch(
   const execute: DiscoverySearch = async (principal, request, context) => {
     const { registry, release, digest } = await config.resolve(request);
     const admitted = admitDiscoveryRequest(request, registry, release);
-    context = { ...context, ...(admitted.text === undefined ? {} : { textQuery: admitted.text }) };
+    context = {
+      ...context,
+      ...(admitted.text === undefined ? {} : { textQuery: admitted.text }),
+      ...(admitted.textField === undefined ? {} : { textField: admitted.textField }),
+    };
     // The visible Collection directory is accepted only when its native owner has registered the
     // current listing predicates and ordering. Missing Commerce operands mean preparation, never an
     // unfiltered or index-hint-only response.
     if (admitted.collectionDirectory && !registry.domains?.('collection').includes('collectionDirectory'))
       throw ready();
-    const matchEvidencePlan = admitted.text
-      ? compileMatchEvidence(compileText(admitted.text, { field: 'search_text', prefix: 't' }))
-      : undefined;
+    // Credited text is evidenced by its nested inner hits, so catalogue match evidence is not compiled for it.
+    const matchEvidencePlan =
+      admitted.text && admitted.textField === undefined
+        ? compileMatchEvidence(compileText(admitted.text, { field: 'search_text', prefix: 't' }))
+        : undefined;
     const spacePopulation = (context as DiscoveryContextWithSpace).spacePopulation;
     if (
       (request.spaceId === undefined) !== (spacePopulation === undefined) ||
@@ -449,7 +455,10 @@ function executeDiscoverySearch(
             sort: admitted.sort,
             size: Math.min(200, 2 * admitted.limit + 1),
             pageSize: admitted.limit,
-            ...(request.text === undefined ? {} : { boost: request.text }),
+            ...(request.text === undefined || admitted.textField !== undefined ? {} : { boost: request.text }),
+            ...(admitted.textField === undefined
+              ? {}
+              : { textField: admitted.textField, creditQualifiers: admitted.creditQualifiers ?? [] }),
           },
           registry,
           release,
@@ -467,7 +476,7 @@ function executeDiscoverySearch(
       }
       if (kindPhysical !== undefined && kindPhysical !== canonicalize(queried.consumer))
         throw new ProblemError('search_restart_required');
-      if (admitted.text !== undefined && config.currentTextMatches) {
+      if (admitted.text !== undefined && admitted.textField === undefined && config.currentTextMatches) {
         const physicalTarget = queried.consumer.physicalTarget;
         const currentTextMatches = (subject: IndexedSubject, query: TextNode) =>
           config.currentTextMatches!(physicalTarget, subject, query);
@@ -675,7 +684,10 @@ function executeDiscoverySearch(
                 sort: countSort,
                 size: countSize,
                 pageSize: admitted.limit,
-                ...(request.text === undefined ? {} : { boost: request.text }),
+                ...(request.text === undefined || admitted.textField !== undefined ? {} : { boost: request.text }),
+                ...(admitted.textField === undefined
+                  ? {}
+                  : { textField: admitted.textField, creditQualifiers: admitted.creditQualifiers ?? [] }),
               },
               registry,
               release,

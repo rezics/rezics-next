@@ -2,6 +2,9 @@
  * Historical generations and analyzer/sort definitions are never mutated. */
 export const CREDIT_SEARCH_INDEX_FORMAT = 1;
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
 export function creditSearchIndexDefinition(base: Record<string, unknown>): Record<string, unknown> {
   const result = structuredClone(base);
   const mappings = result.mappings as Record<string, unknown> | undefined;
@@ -39,4 +42,16 @@ export function creditSearchIndexDefinition(base: Record<string, unknown>): Reco
     },
   };
   return result;
+}
+
+/** A physical mapping carries the credit successor only with its metadata and both root fields. */
+export function hasCreditIndexFormat(mappings: unknown): boolean {
+  if (!isRecord(mappings) || !isRecord(mappings._meta) || !isRecord(mappings.properties)) return false;
+  const credited = mappings.properties.credited_names;
+  return (
+    mappings._meta.credit_search_format === CREDIT_SEARCH_INDEX_FORMAT &&
+    isRecord(credited) &&
+    credited.type === 'nested' &&
+    Object.hasOwn(mappings.properties, 'credit_search_complete')
+  );
 }

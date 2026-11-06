@@ -236,7 +236,20 @@ command, wait for normal relay freshness, and assert the new text matches withou
 Retain the existing raw-query cursor binding, old-cursor behavior and current disclosure during publication lag.
 
 Decision: `textField` defaults to this existing all-catalogue text; `credited_creator` is an explicit choice limited
-to complete, currently public outgoing credits and remains part of query-share and cursor bindings.
+to complete, currently public outgoing credits and remains part of query-share, facet and cursor bindings. The direct
+discovery path serves it on credit-codec generations with producer-confirmed hits. Facet pages and kind refinements
+retain the same nested predicate and qualifiers; bounded kind counts stay lower bounds and incomplete current
+evidence remains readiness ([Search](../services/kernel/src/search/README.md#credited-name-projection-consumer)).
+
+Search composition injects `createKernelCreditSearchSource(pool, routeKey)` into its rated Subject source. Semantic's
+`subjectSource` remains independent of Search, and the rated decorator only forwards the supplied producer to HTTP
+and default-worker consumers; no second credit producer is introduced.
+Decision: credited works place selected kinds in AND leaf 0 so remaining-predicate kind counts keep the nested
+same-credit text; a bare kind filter is not an admitted count leaf.
+Decision: the fewest focused tests pin credited request/facet/share agreement, same-credit qualifiers, current
+incomplete cuts, subject-family credit writes and works-mode role selection.
+Decision: kind-count credited admission fixtures a discovery registry that lists the selected kind; text-only
+admission does not consult entries. Works mode consumes published KernelClient credit request and hit fields.
 
 Decision: public document text is an explicit `textField: public_document` choice; catalogue text remains the default
 and the selected field is bound to opaque cursors.

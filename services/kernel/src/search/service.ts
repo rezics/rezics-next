@@ -35,7 +35,7 @@ import {
 import { validateRequestSourceSnapshot } from './request-source-snapshot.ts';
 import { checkHits, type FactClause, type Hit as CheckedHit } from './disclosure/check.ts';
 import { createCurrentTextDisclosure } from './disclosure/current-text.ts';
-import { admitFacets, validateFacets, type FacetRequest } from './facets.ts';
+import { admitFacetCreditQualifiers, admitFacets, validateFacets, type FacetRequest } from './facets.ts';
 import { compileFilter } from './filter.ts';
 import { createFreshness } from './freshness.ts';
 import { searchObservation, type SearchFreshness } from './search-context.ts';
@@ -132,6 +132,10 @@ import {
 
 export type SearchRequest = {
   text?: string;
+  /** `credited_creator` matches `text` against names of Persons credited on works. */
+  textField?: 'credited_creator';
+  /** Same-credit released qualifiers; admitted only with `textField: 'credited_creator'`. */
+  creditQualifiers?: readonly { property: string; value: string }[];
   filter?: unknown;
   sort?: SearchPlan['sort'];
   spoilerThreshold?: number;
@@ -1894,6 +1898,8 @@ export function createSearchService({
       const positions = await authenticateFacetCursors(cursors, {
         principal,
         text,
+        ...(request.textField === undefined ? {} : { textField: request.textField }),
+        ...(request.creditQualifiers === undefined ? {} : { creditQualifiers: request.creditQualifiers }),
         originalFilter: filter === undefined ? undefined : catalogueFilter(filter),
         ...(kinds ? { kinds } : {}),
         facets,
@@ -1902,6 +1908,7 @@ export function createSearchService({
       });
       const current = await release();
       if (!current) throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
+      const creditQualifiers = admitFacetCreditQualifiers(request, current);
       validateFacetCursorRelease(positions, current);
       const admitted = await admitQuery(text, filter, current, false, undefined, true);
       const catalogue = admitted === undefined ? undefined : catalogueFilter(admitted);
@@ -1917,6 +1924,8 @@ export function createSearchService({
         {
           principal,
           text,
+          ...(request.textField === undefined ? {} : { textField: request.textField }),
+          ...(creditQualifiers === undefined ? {} : { creditQualifiers }),
           filter: catalogue,
           originalFilter: filter === undefined ? undefined : catalogueFilter(filter),
           ...(kinds ? { kinds } : {}),

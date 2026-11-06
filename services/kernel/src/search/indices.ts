@@ -2,12 +2,12 @@ import { readFileSync } from 'node:fs';
 import { isDeepStrictEqual } from 'node:util';
 import { OpenSearchError, SearchUnavailableError, type OpenSearch, type SearchRequestWork } from './opensearch.ts';
 import {
-  mixedCalendarDiscoveryIndexDefinition as nativeDiscoveryDefinition,
+  mixedCreditDiscoveryIndexDefinition as nativeDiscoveryDefinition,
   mixedDiscoveryDocumentCodec,
   type MixedDiscoveryDocumentCodec,
 } from './discovery-documents.ts';
 import { calendarIndexDefinition, hasCalendarIndexFormat } from './release-search-calendar.ts';
-import { creditSearchIndexDefinition } from './credit-search-mapping.ts';
+import { creditSearchIndexDefinition, hasCreditIndexFormat } from './credit-search-mapping.ts';
 import { MAX_SUBJECT_GENERATIONS } from './generation-limit.ts';
 
 const PREFIX_PATTERN = /^[a-z0-9][a-z0-9-]{0,47}$/;
@@ -211,6 +211,7 @@ type SubjectMappingObservation = {
   metadata: Record<string, unknown>;
   sortFormat: number | null;
   calendarFormat: 1 | null;
+  creditFormat: 1 | null;
   activatedAt: string | null;
   ratingCompatible: boolean;
 };
@@ -245,6 +246,7 @@ async function readSubjectMapping(
   }
 
   const calendarFormat = hasCalendarIndexFormat(mappings) ? 1 : null;
+  const creditFormat = hasCreditIndexFormat(mappings) ? 1 : null;
 
   let sortFormat: number | null = null;
   if (Object.hasOwn(metadata, 'name_sort_format')) {
@@ -267,6 +269,7 @@ async function readSubjectMapping(
     metadata,
     sortFormat,
     calendarFormat,
+    creditFormat,
     activatedAt,
     ratingCompatible:
       compatible(properties.rating_score, 'double') && compatible(properties.rating_prior_epoch, 'long'),
@@ -282,12 +285,30 @@ export async function readSubjectCalendarMappingFormat(
   return (await readSubjectMapping(search, prefix, generation)).calendarFormat;
 }
 
+/** Credit writes follow the target mapping; historical generations without `credited_names` keep their shape. */
+export async function readSubjectCreditMappingFormat(
+  search: OpenSearch,
+  prefix: string,
+  generation: number,
+): Promise<1 | null> {
+  return (await readSubjectMapping(search, prefix, generation)).creditFormat;
+}
+
 export async function readSubjectCalendarMappingFormatForIndex(search: OpenSearch, index: string): Promise<1 | null> {
   const match = /^([a-z0-9][a-z0-9-]{0,47})subjects-g([1-9][0-9]*)$/.exec(index);
   const generation = Number(match?.[2]);
   if (!match || !Number.isSafeInteger(generation))
     throw new SearchUnavailableError('Subject generation name is invalid');
   return readSubjectCalendarMappingFormat(search, match[1]!, generation);
+}
+
+/** Credit writes follow the immutable physical target mapping, never the mutable alias. */
+export async function readSubjectCreditMappingFormatForIndex(search: OpenSearch, index: string): Promise<1 | null> {
+  const match = /^([a-z0-9][a-z0-9-]{0,47})subjects-g([1-9][0-9]*)$/.exec(index);
+  const generation = Number(match?.[2]);
+  if (!match || !Number.isSafeInteger(generation))
+    throw new SearchUnavailableError('Subject generation name is invalid');
+  return readSubjectCreditMappingFormat(search, match[1]!, generation);
 }
 
 /** A calendar projection is searchable only after full population marked the exact physical UUID ready. */

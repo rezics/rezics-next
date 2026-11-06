@@ -5,6 +5,7 @@ import { subjectPartition, type IndexedStatement, type IndexedSubject, type Subj
 import { discoveryIdentity, type AccountSnapshot } from './discovery.ts';
 import { DOCUMENT_TEXT_COST, DOCUMENT_TEXT_RECIPE } from './document-text.ts';
 import { publicNames } from './document-names.ts';
+import { creditSearchFields, type CreditedNameDocument, type CreditSearchFields } from './credit-search-document.ts';
 
 export const MISSING_NAME = '\u{10FFFF}';
 export const MAX_NAME_SORT_CHARACTERS = 512;
@@ -42,6 +43,9 @@ export type SubjectDocument = {
   /** Published Global standard-question score and prior identity; absent figures omit both fields. */
   rating_score?: number | null;
   rating_prior_epoch?: number | null;
+  /** Present only for generations carrying the credit mapping; an incomplete cut publishes no names. */
+  credit_search_complete?: boolean;
+  credited_names?: CreditedNameDocument[];
   /** Coverage remains explicit when a bounded native projection is incomplete or unavailable. */
   document_text_coverage?: 'complete' | 'partial' | 'unsupported' | 'preparing' | 'unavailable';
   /** Opaque current native Subject observation chosen by the page reference selector. */
@@ -193,7 +197,12 @@ function documentTextFields(
   };
 }
 
-function subjectDocument(partition: number, subject: IndexedSubject, calendarFormat?: 1): SubjectDocument {
+function subjectDocument(
+  partition: number,
+  subject: IndexedSubject,
+  calendarFormat?: 1,
+  credit?: CreditSearchFields,
+): SubjectDocument {
   // The source owns standard-question proof; this boundary validates Global and exact subject binding.
   const rating =
     subject.publicRating === undefined
@@ -220,6 +229,7 @@ function subjectDocument(partition: number, subject: IndexedSubject, calendarFor
     ...(subject.relationFacetOverflow === undefined || subject.relationFacetOverflow.length === 0
       ? {}
       : { relation_facet_overflow: uniqueValues(subject.relationFacetOverflow) }),
+    ...(credit ?? {}),
   };
 }
 
@@ -229,6 +239,8 @@ export function documentActions(
   counts?: ReadonlyMap<string, number>,
   /** Explicit successor projection; legacy physical writers retain their historical shape. */
   calendarFormat?: 1,
+  /** Explicit credit successor; only generations whose mapping carries `credited_names` receive the fields. */
+  creditFormat?: 1,
 ): IndexAction[] {
   const subjects = new Map<string, IndexedSubject>();
   for (const subject of snapshot.subjects) {
@@ -244,7 +256,8 @@ export function documentActions(
     seen.add(id);
     const subject = subjects.get(id);
     if (subject?.visibility === 'visible' && subject.redirect === null) {
-      const document = subjectDocument(snapshot.partition, subject, calendarFormat);
+      const credit = creditFormat === 1 ? creditSearchFields(snapshot.creditSearch?.get(id)) : undefined;
+      const document = subjectDocument(snapshot.partition, subject, calendarFormat, credit);
       actions.push({
         op: 'index',
         id,
@@ -305,8 +318,10 @@ export function discoverySubjectActions(
   snapshot: SubjectSnapshot,
   ids: readonly string[],
   counts?: ReadonlyMap<string, number>,
+  calendarFormat?: 1,
+  creditFormat?: 1,
 ): IndexAction<DiscoverySubjectDocument>[] {
-  return documentActions(snapshot, ids, counts).map((action) => {
+  return documentActions(snapshot, ids, counts, calendarFormat, creditFormat).map((action) => {
     const id = discoveryIdentity('semantic', action.id);
     if (action.op === 'delete') return { ...action, id };
     if (action.document.type === 'account') throw new TypeError('Discovery kind collision');

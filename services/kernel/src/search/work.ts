@@ -29,6 +29,7 @@ import { registerSearchErasure, markSearchPersonalErasure, stepSearchErasure } f
 import type { ScopeRuntime } from './service-scope.ts';
 import { isAdmittedSearchPrefix } from './consumer-name.ts';
 import type { SubjectSource } from './source.ts';
+import type { CreditSearchSource } from './credit-search.ts';
 
 export type SearchConfig = { url: string; prefix: string };
 
@@ -105,10 +106,12 @@ type SearchRuntimeDefaults = Required<
   >
 >;
 type SearchRuntimeDefaultsComposer = (input: { env: NodeJS.ProcessEnv; clock: KernelClock }) => SearchRuntimeDefaults;
+type CreditSearchSourceComposer = (pool: Pool, routeKey: Uint8Array) => CreditSearchSource;
 
 export function createSearchWorkModule(
   composeDiscovery: SearchDiscoveryComposer,
   composeRuntimeDefaults: SearchRuntimeDefaultsComposer,
+  composeCreditSearch?: CreditSearchSourceComposer,
 ): WorkModule {
   return {
     name: 'search',
@@ -302,11 +305,12 @@ export function createSearchWorkModule(
         };
       });
       const config = readSearchConfig(context.env);
-      const bindErasureAccess = registerSearchErasure(context, config);
+      const bindErasureAccess = registerSearchErasure(context, config, composeCreditSearch);
       if (!config) return;
       const routeKey = readMembershipRouteKey(context.env);
+      const creditSearch = composeCreditSearch?.(context.pool, routeKey);
       const search = createOpenSearch(config.url);
-      const source = createRatedSubjectSource(context.pool, routeKey).source;
+      const source = createRatedSubjectSource(context.pool, routeKey, creditSearch).source;
       collectionPublicationScopeRuntimes.set(context, {
         pool: context.pool,
         client: search,
@@ -396,6 +400,7 @@ export function createSearchWorkModule(
                 search,
                 prefix: config.prefix,
                 clock: context.clock,
+                ...(creditSearch === undefined ? {} : { creditSearch }),
               });
             },
           });

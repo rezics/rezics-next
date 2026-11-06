@@ -19,6 +19,11 @@ export type FacetScopeCursorBinding = Readonly<{
 }>;
 export type FacetDiscoveryRequest = {
     text?: string;
+    textField?: 'credited_creator';
+    creditQualifiers?: {
+        property: string;
+        value: string;
+    }[];
     filter?: unknown;
     /** Exact Discovery result-kind selection, retained as a separate predicate in the native Search request. */
     kinds?: string[];

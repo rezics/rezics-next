@@ -4,7 +4,7 @@ import { ProblemError } from '../http/problem.ts';
 import { readIdentityHome, type HomeIdentity } from '../semantic/identity-basis.ts';
 import { withConnection } from '../database/pool.ts';
 import { createSubjectIndexer } from './indexer.ts';
-import { readSubjectCalendarMappingFormat } from './indices.ts';
+import { readSubjectCalendarMappingFormat, readSubjectCreditMappingFormat } from './indices.ts';
 import { createCoverageStore, type HomeGuard } from './coverage-store.ts';
 import * as codec from './coverage-store-codec.ts';
 import type {
@@ -118,6 +118,7 @@ export function createCoverageProjection(options: ProjectionOptions): Pick<Subje
         incarnation.prefix,
         incarnation.generation,
       );
+      const creditFormat = await readSubjectCreditMappingFormat(options.search, options.prefix, incarnation.generation);
       const indexer = createSubjectIndexer({
         pool: options.pool,
         search,
@@ -126,6 +127,7 @@ export function createCoverageProjection(options: ProjectionOptions): Pick<Subje
         index: incarnation.index,
         consumer: incarnation.consumer,
         ...(calendarFormat === null ? {} : { calendarFormat }),
+        ...(creditFormat === null ? {} : { creditFormat }),
         aroundApply: async (_home, envelopes, apply) => {
           const last = envelopes.at(-1)!;
           slot = {

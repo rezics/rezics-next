@@ -35,8 +35,14 @@ import type {
   PublicFilterQueriedObservation,
   PublicSuggestionCaptureInput,
 } from './public-filter-consumer-contract.ts';
-import { subjectGenerations, subjectIndexName, readSubjectCalendarMappingFormat } from './indices.ts';
+import {
+  subjectGenerations,
+  subjectIndexName,
+  readSubjectCalendarMappingFormat,
+  readSubjectCreditMappingFormat,
+} from './indices.ts';
 import type { OpenSearch } from './opensearch.ts';
+import type { CreditSearchSource } from './credit-search.ts';
 import type { FacetDiscoveryProvider } from './facet-discovery-native.ts';
 import { createFacetNativeOperations } from './facet-discovery-operations.ts';
 import { createScopedFacetSource } from './scoped-facet-source.ts';
@@ -48,6 +54,7 @@ export type DefaultPublicFilterRuntimeConfig = Readonly<{
   search: OpenSearch;
   prefix: string;
   clock: KernelClock;
+  creditSearch?: CreditSearchSource;
 }>;
 export type BoundPublicRequest = Readonly<{
   operations: PublicFilterConsumerOperations;
@@ -111,7 +118,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
   const binding = createPublicFilterSourceBinding(config.pool, config.routeKey, config.access);
   const sourceKeys = createSubjectSourceKeyPages(config.pool, config.routeKey, config.access);
   const custody = createPublicFilterCustody(config.pool);
-  const nativeSource = createRatedSubjectSource(config.pool, config.routeKey).source;
+  const nativeSource = createRatedSubjectSource(config.pool, config.routeKey, config.creditSearch).source;
   const listing = subjectListingSource(config.pool);
   const owned = new Set<{ close(): Promise<void> }>();
   const pending = new Set<Promise<unknown>>();
@@ -144,6 +151,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
     )
       notReady();
     const calendarFormat = await readSubjectCalendarMappingFormat(config.search, config.prefix, generation);
+    const creditFormat = await readSubjectCreditMappingFormat(config.search, config.prefix, generation);
     return createSearchGenerationPublication({
       pool: config.pool,
       search: config.search,
@@ -160,6 +168,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
         source: nativeSource,
         listing,
         ...(calendarFormat === null ? {} : { calendarFormat }),
+        ...(creditFormat === null ? {} : { creditFormat }),
       }),
     });
   }
@@ -209,6 +218,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
     const operations = await createPublicFilterConsumerOperations({
       pool: config.pool,
       source,
+      ...(config.creditSearch === undefined ? {} : { creditSearch: config.creditSearch }),
       binding,
       search: config.search,
       clock: config.clock,

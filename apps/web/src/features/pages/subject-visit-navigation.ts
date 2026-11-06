@@ -21,6 +21,7 @@ const musicContextDestination = new RegExp(
 const realmDestination = new RegExp(`^/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)/realms/${uuid}$`);
 const copiesDestination = new RegExp(`^/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)/library/copies$`);
 const importDestination = /^\/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)\/library\/import-vndb$/;
+const characterPersonDestination = /^\/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)\/search\/characters$/;
 const returnAddressCap = 32768;
 const literaryHistoryLimit = 8;
 const collectionDestination = new RegExp(`^/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)/collections/${uuid}$`);
@@ -699,6 +700,53 @@ function sourceConceptReturn(url: URL, locale?: string): string | undefined {
   return `${url.pathname}${url.search}`;
 }
 
+function characterPersonSearchReturn(url: URL, locale?: string): string | undefined {
+  const match = characterPersonDestination.exec(url.pathname);
+  if (!match || (locale !== undefined && match[1] !== locale) || url.hash) return;
+  const allowed = new Set(['mode', 'name', 'role', 'language', 'threshold', 'sort', 'cursor', 'kinds']);
+  const keys = [...url.searchParams.keys()];
+  if (keys.some((key) => !allowed.has(key))) return;
+  for (const key of ['mode', 'name', 'role', 'threshold', 'sort', 'cursor'])
+    if (url.searchParams.getAll(key).length > 1) return;
+  if (url.searchParams.get('mode') !== 'works') return;
+  const name = url.searchParams.get('name');
+  const role = url.searchParams.get('role');
+  const threshold = url.searchParams.get('threshold');
+  const sort = url.searchParams.get('sort');
+  const cursor = url.searchParams.get('cursor');
+  const submittedLanguages = url.searchParams.getAll('language');
+  let languages = submittedLanguages;
+  if (submittedLanguages.length === 1 && submittedLanguages[0]?.startsWith('[')) {
+    try {
+      const decoded: unknown = JSON.parse(submittedLanguages[0]);
+      if (!Array.isArray(decoded)) return;
+      languages = decoded;
+    } catch {
+      return;
+    }
+  }
+  const kinds = url.searchParams.getAll('kinds');
+  if (
+    !name ||
+    new TextEncoder().encode(name).byteLength > 512 ||
+    (role !== null && !new RegExp(`^${uuid}$`, 'i').test(role)) ||
+    (threshold !== null && !['0', '1', '2'].includes(threshold)) ||
+    (sort !== null && !['name', 'relevance'].includes(sort)) ||
+    (cursor !== null && (!cursor || cursor.length > 4864)) ||
+    (submittedLanguages.length > 0 && languages.length < 1) ||
+    languages.length > 8 ||
+    new Set(languages).size !== languages.length ||
+    languages.some(
+      (value) => typeof value !== 'string' || !/^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/.test(value) || value.length > 35,
+    ) ||
+    kinds.length > 100 ||
+    new Set(kinds).size !== kinds.length ||
+    kinds.some((value) => !value || value.length > 128 || /[\u0000-\u001f\u007f]/u.test(value))
+  )
+    return;
+  return `${url.pathname}${url.search}`;
+}
+
 /** A public return address may restore one admitted Subject or Collection view window. */
 /** Keep one existing nested Subject return intent, but never grow an unbounded URL history. */
 function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested: boolean): string | undefined {
@@ -723,6 +771,8 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
     )
       return;
     const url = new URL(value, 'https://rezics.invalid');
+    const characterSearch = characterPersonSearchReturn(url, locale);
+    if (url.origin === 'https://rezics.invalid' && characterSearch) return characterSearch;
     const concept = sourceConceptReturn(url, locale);
     if (url.origin === 'https://rezics.invalid' && concept) return concept;
     const importPath = importDestination.exec(url.pathname);

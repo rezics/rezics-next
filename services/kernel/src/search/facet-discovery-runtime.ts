@@ -12,6 +12,7 @@ import type { FacetDiscoveryProvider, FacetNativePlan, FacetNativeRead } from '.
 import { codeFacet, typeFacetLabels, type Facet } from './facets.ts';
 import { chooseTexts } from './hits.ts';
 import type { TextNode } from './text.ts';
+import type { CreditQualifierOperand } from './credit-search-query.ts';
 import { scopedFacetIdentityKey, type ScopedFacetAdmission } from './scoped-facet-source.ts';
 
 const operation = 'POST /v1/subjects:facets';
@@ -33,6 +34,8 @@ type Position = Readonly<{
 export type FacetDiscoveryInput = Readonly<{
   principal: 'anonymous' | `account:${string}`;
   text: TextNode | undefined;
+  textField?: 'credited_creator';
+  creditQualifiers?: readonly CreditQualifierOperand[];
   filter: FilterDocument | undefined;
   originalFilter: FilterDocument | undefined;
   kinds?: readonly string[];
@@ -63,14 +66,25 @@ export function admitFacetPage(facets: readonly Facet[]) {
     candidates,
     points: 16 * facets.length + 8 * candidates,
     rows: 64 * facets.length + 16 * candidates,
-    engineReads: 2 * facets.length,
+    // Capture plus each of the 256 bounded preparation steps (index anchor, text membership,
+    // and credited witness confirmation) and current page/lookahead witnesses share one ledger.
+    engineReads: 4 * facets.length + 3 * 256 * facets.length + facets.reduce((sum, facet) => sum + facet.size + 1, 0),
     statements: 8 + 4 * facets.length,
   };
 }
 
 export type FacetCursorInput = Pick<
   FacetDiscoveryInput,
-  'principal' | 'text' | 'originalFilter' | 'kinds' | 'languages' | 'facets' | 'now' | 'scopeBinding'
+  | 'principal'
+  | 'text'
+  | 'textField'
+  | 'creditQualifiers'
+  | 'originalFilter'
+  | 'kinds'
+  | 'languages'
+  | 'facets'
+  | 'now'
+  | 'scopeBinding'
 >;
 export function facetCursorReleaseBinding(release: FilterRelease, scopeBinding?: FacetScopeCursorBinding): string {
   const canonical = canonicalize(scopeBinding ? { release, admission: scopeBinding.admission } : release);
@@ -84,6 +98,8 @@ export function facetCursorBinding(input: FacetCursorInput, facet: Facet): Searc
     principal: input.principal,
     request: {
       text: input.text ?? null,
+      textField: input.textField ?? null,
+      creditQualifiers: input.textField ? (input.creditQualifiers ?? []) : null,
       filter: input.originalFilter ?? null,
       kinds: input.kinds ?? null,
       property: facet.property,
@@ -161,6 +177,9 @@ function consumerBinding(read: FacetNativeRead): string {
     consumer: read.queried.consumer,
     meaning: read.plan.meaning.digest,
     kinds: read.plan.kinds ?? null,
+    text: read.plan.text ?? null,
+    textField: read.plan.textField ?? null,
+    creditQualifiers: read.plan.creditQualifiers ?? null,
     ...(read.plan.scope ? { scope: scopedFacetIdentityKey(read.plan.scope.identity) } : {}),
   });
   if (canonical === undefined) throw ready();
@@ -267,6 +286,8 @@ export async function readFacetDiscovery(
     const plan: FacetNativePlan = {
       filterDocument: input.filter,
       text: input.text,
+      ...(input.textField === undefined ? {} : { textField: input.textField }),
+      ...(input.creditQualifiers === undefined ? {} : { creditQualifiers: input.creditQualifiers }),
       property: facet.property,
       valueKind: facet.property === 'type' ? 'type' : codeFacet(input.release, facet.property) ? 'code' : 'item',
       meaning: provider.meaning,
@@ -297,7 +318,13 @@ export async function readFacetDiscovery(
         previous.generation !== snapshot.generation.toString())
     )
       throw restart();
-    const read = { plan, queried: captured.queried, size: facet.size, after: previous?.key ?? null };
+    const read = {
+      plan,
+      queried: captured.queried,
+      ...(captured.textObservation ? { textObservation: captured.textObservation } : {}),
+      size: facet.size,
+      after: previous?.key ?? null,
+    };
     if (previous && previous.consumer !== consumerBinding(read)) throw restart();
     reads.push(read);
   }

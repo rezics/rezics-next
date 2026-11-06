@@ -150,3 +150,6 @@ export {
 } from './identity-public-output-capture.ts';
 export { lockPublicIdentityOutputCaptureDisposition } from './identity-scoped-public-source.ts';
 export type * from './identity-public-output-types.ts';
+export { createCreditSearchSource, receiveCreditSearch, receiveCreditSearchMatch } from './credit-search.ts';
+export type { CreditSearchMatch, CreditSearchReceipt } from './credit-search.ts';
+export { workCreditProperties } from './list-presentation-work-context.ts';

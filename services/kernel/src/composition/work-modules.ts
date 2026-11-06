@@ -67,8 +67,9 @@ export function createKernelWorkModules(
   composeRuntimeDefaults: Parameters<typeof createSearchWorkModule>[1],
   composeSemantic: SemanticDomainComposer,
   ambient?: ContentWorkAmbient,
+  composeCreditSearch?: Parameters<typeof createSearchWorkModule>[2],
 ): readonly WorkModule[] {
-  const searchWorkModule = createSearchWorkModule(composeDiscovery, composeRuntimeDefaults);
+  const searchWorkModule = createSearchWorkModule(composeDiscovery, composeRuntimeDefaults, composeCreditSearch);
   const semanticWorkModule = createSemanticWorkModule(composeSemantic);
   const contentWorkModule = contentDeclaration().work(contentWorkAmbient(ambient));
   return [

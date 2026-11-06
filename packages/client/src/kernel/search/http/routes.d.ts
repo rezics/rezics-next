@@ -165,6 +165,11 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                             order: "popular" | "recent";
                         };
                         text?: string;
+                        textField?: "credited_creator";
+                        creditQualifiers?: {
+                            property: string;
+                            value: string;
+                        }[];
                         filter?: any;
                         population?: {
                             realm: string;
@@ -993,6 +998,12 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                                 filter: string | null;
                                 languages: string[];
                                 sort: string | null;
+                                textField?: "credited_creator";
+                                creditQualifiers?: {
+                                    property: string;
+                                    value: string;
+                                }[];
+                                spoilerThreshold?: number;
                             } | null;
                             parameters: string | null;
                             selections: {
@@ -1487,6 +1498,19 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                                         }[];
                                         overflow: boolean;
                                     };
+                                };
+                                creditMatch?: {
+                                    statementId: string;
+                                    property: string;
+                                    targetId: string;
+                                    name: {
+                                        language: string;
+                                        value: string;
+                                    };
+                                    qualifiers: {
+                                        property: string;
+                                        value: string;
+                                    }[];
                                 };
                             } | {
                                 key: {
@@ -2099,6 +2123,11 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                 post: {
                     body: {
                         text?: string;
+                        textField?: "credited_creator";
+                        creditQualifiers?: {
+                            property: string;
+                            value: string;
+                        }[];
                         filter?: any;
                         conditions?: any;
                         kinds?: string[];

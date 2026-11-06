@@ -31,6 +31,8 @@ import { publicAliases } from './document-names.ts';
 import { chooseTexts, projectHit } from './hits.ts';
 import { ProblemError } from '../http/problem.ts';
 import { projectMatchEvidence } from './match-evidence.ts';
+import type { CreditSearchWitness } from './credit-search.ts';
+import { creditMatchView, verifyCreditedHit } from './credit-hit.ts';
 
 function unavailable(): never {
   throw new SearchUnavailableError('Current discovery owner evidence is unavailable or malformed');
@@ -258,11 +260,27 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
   const semantic = candidates.filter(
     (candidate) =>
       candidate.key.owner === 'semantic' &&
-      (context.textQuery === undefined || context.currentTextMatches !== undefined),
+      (context.textQuery === undefined ||
+        context.textField === 'credited_creator' ||
+        context.currentTextMatches !== undefined),
   );
   const snapshots = new Map<number, SubjectSnapshot>();
   const source = registry.entries.find((entry) => entry.owner === 'semantic')?.source;
   if (semantic.length && !source) unavailable();
+  // Credited text is verified per candidate against the producer; the engine's nominations are never proof.
+  const creditEvidence = new Map(
+    candidates.map((candidate) => [candidate.key.id, candidate.creditEvidence ?? []] as const),
+  );
+  const creditWitnesses = new Map<string, CreditSearchWitness>();
+  let creditChanged = false;
+  const creditedText = async (subject: IndexedSubject): Promise<boolean> => {
+    const check = await verifyCreditedHit(source?.creditSearch, subject.id, creditEvidence.get(subject.id) ?? []);
+    if (check.state === 'changed') creditChanged = true;
+    if (check.state === 'unavailable') unavailable();
+    if (check.state !== 'current') return false;
+    creditWitnesses.set(subject.id, check.witness);
+    return true;
+  };
   if (source) {
     for (const [partition, group] of partitioned(semantic.map(({ key }) => key))) {
       const subjects: IndexedSubject[] = [];
@@ -321,11 +339,13 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
       });
       const checked = await checkHits(cached, hits, new Map(), {
         ...(currentFilter === true ? {} : { filter: currentFilter }),
-        ...(context.textQuery === undefined
-          ? {}
-          : {
-              currentText: (subject: IndexedSubject) => context.currentTextMatches!(subject, context.textQuery!),
-            }),
+        ...(context.textField === 'credited_creator'
+          ? { currentText: creditedText }
+          : context.textQuery === undefined
+            ? {}
+            : {
+                currentText: (subject: IndexedSubject) => context.currentTextMatches!(subject, context.textQuery!),
+              }),
         relationProperties: Object.keys(release.properties).filter((property) =>
           relationFacetProperty(release, property),
         ),
@@ -335,6 +355,8 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
           : { observeRelationRelease: context.observeRelationRelease }),
         ...(context.conceptFilter ? { conceptFilter: context.conceptFilter } : {}),
       });
+      // A changed credit cut retires this window; unavailable proof removes its candidate, never a positive match.
+      if (creditChanged) throw new ProblemError('search_restart_required');
       if (checked.relationRejected) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
       for (const { subject } of checked.passed)
         if (subject.type === entry.kind) checkedSubjects.set(subject.id, subject);
@@ -409,6 +431,9 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
             : {}),
           ...(contexts === null ? {} : { contexts }),
           matchEvidence: projectMatchEvidence(subject, candidate.engineEvidence, context.matchEvidencePlan),
+          ...(creditWitnesses.has(subject.id)
+            ? { creditMatch: creditMatchView(creditWitnesses.get(subject.id)!) }
+            : {}),
         };
         admitDiscoveryHit(hit);
         passed.set(candidate, hit);

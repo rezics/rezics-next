@@ -27,10 +27,18 @@ export function characterPersonSelectionMetadata(
       : [];
   const roleTargets = (property: string) =>
     release.properties[property]?.qualifiers?.includes('wdt:P3831') ? targets : [];
+  // Works mode matches credits to Persons: any released Person-targeted statement that admits the role qualifies.
+  const creditRoleAdmitted = Object.values(release.properties).some(
+    (property) => property.qualifiers?.includes('wdt:P3831') && property.targets?.includes('schema:Person'),
+  );
   return {
     release: release.digest,
     workTargets,
-    roleTargets: { characters: roleTargets('wdt:P453'), people: roleTargets('wdt:P725') },
+    roleTargets: {
+      characters: roleTargets('wdt:P453'),
+      people: roleTargets('wdt:P725'),
+      works: creditRoleAdmitted ? targets : [],
+    },
   };
 }
 
@@ -45,9 +53,10 @@ export type CharacterPersonSelectionEdit =
 export function editCharacterPersonSelection(
   value: CharacterPersonSelection,
   edit: CharacterPersonSelectionEdit,
+  mode: CharacterPersonMode = 'characters',
 ): CharacterPersonSelection {
   if (edit.kind === 'mode') return { ...value, role: '' };
-  if (edit.kind === 'role') return { ...value, role: value.works.length ? edit.id : '' };
+  if (edit.kind === 'role') return { ...value, role: mode === 'works' || value.works.length ? edit.id : '' };
   if (edit.kind === 'remove-work') return { works: value.works.filter((_, at) => at !== edit.index), role: '' };
   const id = edit.id.toLowerCase();
   if (value.works.some((work) => work.toLowerCase() === id) || value.works.length >= CHARACTER_PERSON_WORK_LIMIT)

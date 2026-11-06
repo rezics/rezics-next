@@ -15,6 +15,7 @@ import type {
 } from './discovery.ts';
 import { discoveryKindDirectory } from './discovery-registry.ts';
 import { compileText } from './text.ts';
+import { compileCreditedText } from './credit-search-query.ts';
 import { compileMatchEvidence, type MatchEvidenceQuery } from './match-evidence.ts';
 import { discoveryNativeQuery } from './discovery-native-query.ts';
 import { compileFilter } from './filter.ts';
@@ -28,6 +29,12 @@ const none: Query = { match_none: {} };
 const and = (queries: Query[]): Query => ({ bool: { filter: queries } });
 const or = (queries: Query[]): Query => ({ bool: { should: queries, minimum_should_match: 1 } });
 const not = (query: Query): Query => ({ bool: { must_not: [query] } });
+
+/** Credited-creator text is one nested credit query; catalogue text keeps its existing search_text field. */
+function compileRequestText(input: Pick<DiscoveryConsumerCaptureInput, 'text' | 'textField' | 'creditQualifiers'>) {
+  if (input.textField === 'credited_creator') return compileCreditedText(input.text!, input.creditQualifiers ?? []);
+  return compileText(input.text!, { field: 'search_text', prefix: 't' });
+}
 
 /** Both polarities are compiled: NOT unknown must never become an Account complement. */
 export function compileDiscoveryFilter(
@@ -185,7 +192,7 @@ export function compileDiscoveryCapture(
       )
     : undefined;
   const compiled = filterDocument ? compileDiscoveryFilter(filterDocument, registry, release) : undefined;
-  const text = input.text ? compileText(input.text, { field: 'search_text', prefix: 't' }) : undefined;
+  const text = input.text ? compileRequestText(input) : undefined;
   const filter = compiled?.query ?? discoveryPopulation(registry);
   if (
     (input.query !== undefined && !isDeepStrictEqual(input.query, text?.query)) ||
@@ -223,6 +230,8 @@ export function compileDiscoveryConsumerCapture(
   query: Query;
   dependencyKeys: readonly PublicFilterDependencyKey[];
   matchEvidence?: MatchEvidenceQuery;
+  /** Credited-name matches arrive as nested inner hits; the consumer must read them for current verification. */
+  creditEvidence?: true;
 }> {
   if (!Object.hasOwn(input, 'filterDocument') || !Object.hasOwn(input, 'text'))
     throw new TypeError('Mixed capture requires the exact root');
@@ -278,15 +287,22 @@ export function compileDiscoveryConsumerCapture(
       { kind: 'field', field: 'aliases' },
       { kind: 'field', field: 'descriptions' },
     );
-  const text = input.text === undefined ? undefined : compileText(input.text, { field: 'search_text', prefix: 't' });
-  const matchEvidence = text ? compileMatchEvidence(text) : undefined;
+  const credited = input.textField === 'credited_creator';
+  // Credit names and creator statements decide credited matches, so their releases must invalidate the capture.
+  if (credited)
+    for (const [property, definition] of Object.entries(meaning.release.properties))
+      if (definition.relation !== undefined) keys.push({ kind: 'property', property });
+  const text = input.text === undefined ? undefined : compileRequestText(input);
+  // Catalogue text keeps its names evidence; credited text is evidenced by the nested credit inner hits.
+  const matchEvidence = text && !credited ? compileMatchEvidence(text) : undefined;
   return {
     query: discoveryNativeQuery({
       filter: plan.filter ?? none,
-      ...(text ? { query: matchEvidence!.query } : {}),
-      ...(input.boost === undefined ? {} : { boost: input.boost }),
+      ...(text ? { query: credited ? text.query : matchEvidence!.query } : {}),
+      ...(input.boost === undefined || credited ? {} : { boost: input.boost }),
     }),
     ...(matchEvidence ? { matchEvidence } : {}),
+    ...(credited ? { creditEvidence: true as const } : {}),
     dependencyKeys: keys,
   };
 }
