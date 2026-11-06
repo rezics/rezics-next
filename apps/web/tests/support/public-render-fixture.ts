@@ -1,7 +1,6 @@
-import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
+import { startDevServer } from './dev-server.ts';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import { createStoryRecordedKernelFetch } from '../../src/kernel/fake';
@@ -171,7 +170,7 @@ const kernel = Bun.serve({
     return recorded(request);
   },
 });
-let child: ChildProcess | undefined;
+let server: Awaited<ReturnType<typeof startDevServer>> | undefined;
 let browser: Browser | undefined;
 let started: Promise<string> | undefined;
 let directory: string | undefined;
@@ -207,18 +206,11 @@ export function publicRenderSite(): Promise<string> {
       };
     `,
     );
-    const port = await new Promise<number>((resolve, reject) => {
-      const probe = createServer();
-      probe.once('error', reject);
-      probe.listen(0, '127.0.0.1', () => {
-        const port = (probe.address() as { port: number }).port;
-        probe.close(() => resolve(port));
-      });
-    });
-    let output = '';
-    child = spawn(
-      'bun',
-      [
+    server = await startDevServer({
+      exclusive: true,
+      cwd: app,
+      command: ({ port }) => [
+        'bun',
         'run',
         'dev',
         '--configLoader',
@@ -231,33 +223,17 @@ export function publicRenderSite(): Promise<string> {
         String(port),
         '--strictPort',
       ],
-      {
-        cwd: app,
-        detached: true,
-        stdio: ['ignore', 'pipe', 'pipe'],
-        env: {
-          ...process.env,
-          KERNEL_ORIGIN: kernel.url.origin,
-          AUTH_ISSUER: `${fake.url.origin}/auth`,
-          WEBSITE_CLIENT_ID: clientId,
-          WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
-          API_RESOURCE: resource,
-          WEBSITE_SCOPES: scopes.join(' '),
-        },
+      env: {
+        KERNEL_ORIGIN: kernel.url.origin,
+        AUTH_ISSUER: `${fake.url.origin}/auth`,
+        WEBSITE_CLIENT_ID: clientId,
+        WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
+        API_RESOURCE: resource,
+        WEBSITE_SCOPES: scopes.join(' '),
       },
-    );
-    child.stdout!.on('data', (chunk) => (output = (output + chunk).slice(-12000)));
-    child.stderr!.on('data', (chunk) => (output = (output + chunk).slice(-12000)));
-    const origin = `http://127.0.0.1:${port}`;
-    const deadline = Date.now() + 150_000;
-    while (Date.now() < deadline) {
-      if (child.exitCode !== null) throw new Error(output);
-      try {
-        if ((await fetch(`${origin}/en`)).status === 200) return origin;
-      } catch {}
-      await Bun.sleep(250);
-    }
-    throw new Error(output);
+      warmUpPaths: [],
+    });
+    return server.origin;
   })());
 }
 export async function publicRenderPage(options: BrowserContextOptions = {}) {
@@ -280,10 +256,7 @@ export async function closePublicRenderFixture() {
   if (closed) return;
   closed = true;
   await browser?.close();
-  if (child?.pid)
-    try {
-      process.kill(-child.pid, 'SIGTERM');
-    } catch {}
+  await server?.stop();
   kernel.stop(true);
   fake.stop(true);
   if (directory) await rm(directory, { recursive: true, force: true });

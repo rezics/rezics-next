@@ -1,14 +1,13 @@
 import { afterAll, expect, test } from 'bun:test';
-import { spawn } from 'node:child_process';
+import { startDevServer } from './support/dev-server.ts';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
-import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { chromium, type Browser, type Page } from 'playwright';
 import { createStoryRecordedKernelFetch } from '../src/kernel/fake';
 import { readSessionState } from '../src/session/state';
 import type { SessionEnv } from '../src/session/client';
-import { cleanupAll, ownNodeProcess, withCleanup, type ProcessCustody } from './support/server-custody.ts';
+import { cleanupAll, withCleanup } from './support/server-custody.ts';
 
 const app = join(import.meta.dir, '..');
 const timeout = 300_000;
@@ -60,7 +59,7 @@ const backend = Bun.serve({
     return recorded(request);
   },
 });
-let custody: ProcessCustody | undefined;
+let server: Awaited<ReturnType<typeof startDevServer>> | undefined;
 let directory: string | undefined;
 let started: Promise<string> | undefined;
 type ResourceScope = 'suite' | 'test';
@@ -162,7 +161,6 @@ async function closePage(page: Page): Promise<void> {
 }
 function site() {
   return (started ??= (async () => {
-    let siteCustody: ProcessCustody | undefined;
     try {
       if (teardownStarted) throw new Error('Signed-in-routes Vite acquisition began after suite teardown');
       const root = resolve(app, '../..');
@@ -189,43 +187,32 @@ function site() {
       };
       `,
       );
-      const port = await new Promise<number>((done, reject) => {
-        const probe = createServer();
-        probe.once('error', reject);
-        probe.listen(0, '127.0.0.1', () => {
-          const { port } = probe.address() as { port: number };
-          probe.close(() => done(port));
-        });
-      });
-      const origin = `http://127.0.0.1:${port}`;
       if (teardownStarted) throw new Error('Signed-in-routes Vite acquisition began after suite teardown');
-      const child = spawn(
-        'bun',
-        ['run', 'dev', '--config', config, '--host', '127.0.0.1', '--port', String(port), '--strictPort'],
-        {
-          cwd: app,
-          detached: true,
-          stdio: ['ignore', 'pipe', 'pipe'],
-          env: { ...process.env, KERNEL_ORIGIN: backend.url.origin, PUBLIC_ORIGIN: 'https://www.rezics.test' },
-        },
-      );
-      siteCustody = ownNodeProcess(child, { label: 'Signed-in-routes Vite server', outputLimit: 12_000 });
-      custody = siteCustody;
-      const deadline = Date.now() + 150_000;
-      while (Date.now() < deadline) {
-        if (teardownStarted) throw new Error('Signed-in-routes Vite readiness ended when suite teardown began');
-        if (child.exitCode !== null) throw new Error(siteCustody.diagnostics());
-        try {
-          if ((await fetch(`${origin}/en`, { signal: AbortSignal.timeout(60_000) })).status === 200) return origin;
-        } catch {}
-        await Bun.sleep(250);
-      }
-      throw new Error(`dev server did not serve /en in time:\n${siteCustody.diagnostics()}`);
+      const running = await startDevServer({
+        exclusive: true,
+        cwd: app,
+        command: ({ port }) => [
+          'bun',
+          'run',
+          'dev',
+          '--config',
+          config,
+          '--host',
+          '127.0.0.1',
+          '--port',
+          String(port),
+          '--strictPort',
+        ],
+        env: { KERNEL_ORIGIN: backend.url.origin, PUBLIC_ORIGIN: 'https://www.rezics.test' },
+        warmUpPaths: [],
+      });
+      server = running;
+      return running.origin;
     } catch (error) {
-      if (siteCustody) {
+      if (server) {
         await withCleanup(async () => {
           throw error;
-        }, [{ label: 'Signed-in-routes Vite startup', run: () => siteCustody!.close(), timeoutMs: 7000 }]);
+        }, [{ label: 'Signed-in-routes Vite startup', run: () => server!.stop(), timeoutMs: 7000 }]);
       } else if (directory) {
         const partialDirectory = directory;
         await withCleanup(async () => {
@@ -253,7 +240,7 @@ afterAll(async () => {
         () => cleanupAll(resourceCleanupActions('test')),
         [
           ...resourceCleanupActions('suite'),
-          { label: 'Signed-in-routes Vite server', run: () => custody?.close(), timeoutMs: 7000 },
+          { label: 'Signed-in-routes Vite server', run: () => server?.stop(), timeoutMs: 7000 },
           { label: 'Signed-in-routes fixture backend', run: () => backend.stop(true), timeoutMs: 5000 },
         ],
       ),
@@ -263,7 +250,7 @@ afterAll(async () => {
         run: async () => {
           if (!directory) return;
           await started?.catch(() => {});
-          if (!directory || (custody && !custody.settled)) return;
+          if (!directory) return;
           const ownedDirectory = directory;
           await rm(ownedDirectory, { recursive: true, force: true });
           if (directory === ownedDirectory) directory = undefined;

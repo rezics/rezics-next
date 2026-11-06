@@ -1,6 +1,5 @@
 import { afterAll, expect, test } from 'bun:test';
-import { spawn } from 'node:child_process';
-import { createServer } from 'node:net';
+import { startDevServer } from './support/dev-server.ts';
 import { join, resolve } from 'node:path';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
@@ -14,7 +13,7 @@ import thread from '../src/kernel/recorded/thread.json';
 import threadPosts from '../src/kernel/recorded/thread-posts.json';
 import collection from '../src/kernel/recorded/library-collection.json';
 import { threadHref } from '../src/threads/thread-href';
-import { cleanupAll, ownNodeProcess, withCleanup, type ProcessCustody } from './support/server-custody.ts';
+import { cleanupAll, withCleanup } from './support/server-custody.ts';
 
 const app = join(import.meta.dir, '..');
 const root = resolve(app, '../..');
@@ -115,7 +114,7 @@ const kernel = Bun.serve({
   },
 });
 
-let custody: ProcessCustody | undefined;
+let server: Awaited<ReturnType<typeof startDevServer>> | undefined;
 let started: Promise<string> | undefined;
 let directory: string | undefined;
 type ResourceScope = 'suite' | 'test';
@@ -208,20 +207,8 @@ function reset() {
   credentialReads = 0;
 }
 
-function freePort(): Promise<number> {
-  return new Promise((resolvePort, reject) => {
-    const probe = createServer();
-    probe.once('error', reject);
-    probe.listen(0, '127.0.0.1', () => {
-      const port = (probe.address() as { port: number }).port;
-      probe.close(() => resolvePort(port));
-    });
-  });
-}
-
 function site(): Promise<string> {
   return (started ??= (async () => {
-    let siteCustody: ProcessCustody | undefined;
     try {
       if (teardownStarted) throw new Error('Anonymous-reads Vite acquisition began after suite teardown');
       await mkdir(join(root, '.temp'), { recursive: true });
@@ -253,46 +240,40 @@ function site(): Promise<string> {
       };
       `,
       );
-      const port = await freePort();
-      const origin = `http://localhost:${port}`;
       if (teardownStarted) throw new Error('Anonymous-reads Vite acquisition began after suite teardown');
-      const child = spawn(
-        'bun',
-        ['run', 'dev', '--config', config, '--host', '127.0.0.1', '--port', String(port), '--strictPort'],
-        {
-          cwd: app,
-          detached: true,
-          stdio: ['ignore', 'pipe', 'pipe'],
-          env: {
-            ...process.env,
-            KERNEL_ORIGIN: kernel.url.origin,
-            PUBLIC_ORIGIN: origin,
-            AUTH_ISSUER: `${kernel.url.origin}/auth`,
-            WEBSITE_CLIENT_ID: 'rezics-anonymous-reads',
-            WEBSITE_CLIENT_KEY: JSON.stringify({ kty: 'EC', crv: 'P-256', d: 'fixture', kid: 'anonymous-reads' }),
-            API_RESOURCE: 'https://api.rezics.test',
-            WEBSITE_SCOPES: 'media:create media:read media:complete media:erase',
-          },
+      const running = await startDevServer({
+        exclusive: true,
+        cwd: app,
+        command: ({ port }) => [
+          'bun',
+          'run',
+          'dev',
+          '--config',
+          config,
+          '--host',
+          '127.0.0.1',
+          '--port',
+          String(port),
+          '--strictPort',
+        ],
+        env: {
+          KERNEL_ORIGIN: kernel.url.origin,
+          PUBLIC_ORIGIN: 'http://localhost:0',
+          AUTH_ISSUER: `${kernel.url.origin}/auth`,
+          WEBSITE_CLIENT_ID: 'rezics-anonymous-reads',
+          WEBSITE_CLIENT_KEY: JSON.stringify({ kty: 'EC', crv: 'P-256', d: 'fixture', kid: 'anonymous-reads' }),
+          API_RESOURCE: 'https://api.rezics.test',
+          WEBSITE_SCOPES: 'media:create media:read media:complete media:erase',
         },
-      );
-      siteCustody = ownNodeProcess(child, { label: 'Anonymous-reads Vite server', outputLimit: 12_000 });
-      custody = siteCustody;
-      const deadline = Date.now() + 150_000;
-      while (Date.now() < deadline) {
-        if (teardownStarted) throw new Error('Anonymous-reads Vite readiness ended when suite teardown began');
-        if (child.exitCode !== null)
-          throw new Error(`dev server exited with ${child.exitCode}:\n${siteCustody.diagnostics()}`);
-        try {
-          if ((await fetch(`${origin}/en`, { signal: AbortSignal.timeout(60_000) })).status < 500) return origin;
-        } catch {}
-        await Bun.sleep(250);
-      }
-      throw new Error(`dev server did not start:\n${siteCustody.diagnostics()}`);
+        warmUpPaths: [],
+      });
+      server = running;
+      return running.origin;
     } catch (error) {
-      if (siteCustody) {
+      if (server) {
         await withCleanup(async () => {
           throw error;
-        }, [{ label: 'Anonymous-reads Vite startup', run: () => siteCustody!.close(), timeoutMs: 7000 }]);
+        }, [{ label: 'Anonymous-reads Vite startup', run: () => server!.stop(), timeoutMs: 7000 }]);
       } else if (directory) {
         const partialDirectory = directory;
         await withCleanup(async () => {
@@ -359,7 +340,7 @@ afterAll(async () => {
         () => cleanupAll(resourceCleanupActions('test')),
         [
           ...resourceCleanupActions('suite'),
-          { label: 'Anonymous-reads Vite server', run: () => custody?.close(), timeoutMs: 7000 },
+          { label: 'Anonymous-reads Vite server', run: () => server?.stop(), timeoutMs: 7000 },
           { label: 'Anonymous-reads kernel fake', run: () => kernel.stop(true), timeoutMs: 5000 },
         ],
       ),
@@ -369,7 +350,7 @@ afterAll(async () => {
         run: async () => {
           if (!directory) return;
           await started?.catch(() => {});
-          if (!directory || (custody && !custody.settled)) return;
+          if (!directory) return;
           const ownedDirectory = directory;
           await rm(ownedDirectory, { recursive: true, force: true });
           if (directory === ownedDirectory) directory = undefined;

@@ -325,6 +325,7 @@ test('isolates concurrent shared-helper and legacy Vite Worker state, sessions, 
     const directPort = await freePort();
     const [helperStart, legacyStart] = await Promise.allSettled([
       startDevServer({
+        exclusive: true,
         firstPath: '/en/no-such-page',
         warmUpPaths: [],
         env: { WORKER_INSPECTOR_PORT: String(await freePort()) },
@@ -359,6 +360,7 @@ test('isolates concurrent shared-helper and legacy Vite Worker state, sessions, 
 
     const abortController = new AbortController();
     aborted = await startDevServer({
+      exclusive: true,
       firstPath: '/en/no-such-page',
       warmUpPaths: [],
       signal: abortController.signal,
@@ -440,6 +442,7 @@ test('preserves caller-owned session state across a sequential Vite restart and 
     });
     first = await startDevServer({
       ...serverOptions,
+      exclusive: true,
       env: { ...serverOptions.env, WORKER_INSPECTOR_PORT: String(await freePort()) },
     });
     const firstPath = configuredPersistencePath(first.diagnostics(), resolve(explicitState, 'v3'));
@@ -454,6 +457,7 @@ test('preserves caller-owned session state across a sequential Vite restart and 
 
     restarted = await startDevServer({
       ...serverOptions,
+      exclusive: true,
       env: { ...serverOptions.env, WORKER_INSPECTOR_PORT: String(await freePort()) },
     });
     expect(configuredPersistencePath(restarted.diagnostics(), resolve(explicitState, 'v3'))).toBe(firstPath);

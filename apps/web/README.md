@@ -86,7 +86,7 @@ Source read for this surface: the native edition model, routes, reads and fixed-
 edition publication route/controls and shell-integrated stories; and the existing creator-offer list transport/view.
 No external reference-project source applies to this metadata list.
 Local Worker values are opt-in: `bun run check --prepare-only` creates ignored `.dev.vars` from `.dev.vars.example` only when absent. Normal checks and isolated test startup leave it untouched.
-Vite pre-bundles browser dependencies by scanning the site routes and their imported components before the first page load. A focused check compiles the message catalogues once: the Vite config reuses Paraglide output that is current instead of compiling again. The Cloudflare plugin denies the dependencies of `cloudflare.config.ts` to browsers; the dev server lets only the Worker environment load the denied file the Worker imports (`src/session/website-scopes.ts`), and the browser read stays denied. A cold dev Worker start takes minutes because the plugin loads the whole Worker graph before the port listens.
+Vite pre-bundles browser dependencies by scanning the site routes and their imported components before the first page load. The Worker environment does not scan its server graph: it pre-bundles only React, TanStack's server set and the paraglide polyfill, and loads other packages directly, so the first Worker request does not wait for a whole-graph scan. A focused check compiles the message catalogues once: the Vite config reuses Paraglide output that is current, including every catalogue leaf, instead of compiling again. The Cloudflare plugin denies the dependencies of `cloudflare.config.ts` to browsers; the Worker environment still loads the denied file the Worker imports (`src/session/website-scopes.ts`).
 Run `bun run storybook` to browse the page stories. Run `bun run record` to create committed page recordings; it needs Docker with permission to start a disposable PostgreSQL container and Bun, and does not use a development kernel or database.
 The Worker inspector is off by default; `WORKER_INSPECTOR_PORT=<port> bun run dev` opens it on that port for DevTools.
 
@@ -94,20 +94,52 @@ The Worker inspector is off by default; `WORKER_INSPECTOR_PORT=<port> bun run de
 
 Decision: native test defaults in `tests/factories` derive from generated client responses; renderer projections use their consumer types. Only this factory directory joins ordinary Web compilation. Malformed boundary inputs remain explicit in journey tests.
 
-For a focused fake, component, route-loader or story-render test that does not need native services, run it locally:
+For a focused fake, component, route-loader or story-render test that does not need native services, run it locally
+from the repository root. Browser files that start the public app use `--private-network` so Vite and the tests share
+one loopback namespace:
 
 ```sh
-bun scripts/focused.ts -- bun test tests/<focused-file>.test.ts
+bun apps/web/scripts/focused.ts --private-network -- bun test tests/<focused-file>.test.ts
 ```
+
+From `apps/web`, the same runner is `bun scripts/focused.ts --private-network -- bun test tests/<focused-file>.test.ts`.
+The controller retains check-host placement and physical custody; this focused path is the execution command.
 
 Session BFF caller identity is asserted by `tests/session-bff-identity.test.ts`. The Vite `session.test.ts` and Playwright `session-controls.test.ts` suites remain integration evidence.
 
 The focused runner prepares generated messages and routes, gives the command an owned temporary Worker state root, and
 removes that root after its process tree stops. It runs directly on the worker and does not request stack placement,
-database leases, Docker, a database or remote dispatch. Add `--private-network` before `--` when a focused browser test
-needs the normal loopback-only browser namespace. An explicit `bun test tests/*.host.test.ts` through this runner uses
-the same `--path-ignore-patterns=node_modules/**` override as `bun run test:host`, so bunfig's host-file exclusion does
-not hide a named file.
+database leases, Docker, a database or remote dispatch. A `bun test` command starts one shared Web dev server for that
+invocation; test files acquire it through `tests/support/dev-server.ts` and keep their own browser, context and Worker
+fixture overlay. Decision: pre-bundle client and SSR `optimizeDeps` before the private-network namespace; `vite optimize
+--force` plus a middleware-mode SSR warm under Node publish a host-local cache keyed by `bun.lock` bytes, actual `patches/`
+contents and optimizer include/entries. Cloudflare's config loader refuses Bun; the Vite CLI and this warm process use Node.
+The SSR warm sets Worker resolve conditions and the pinned include list without starting Miniflare or loading worktree
+source modules, so equivalent worktrees share dependency output only. A lock, patch or optimizer change
+builds its own directory. Each run copies the published cache, and a pre plugin restamps lockfile mtime, worktree `root` and
+serve plugin hashes immediately before `depsOptimizer.init`, including when Cloudflare's own pre
+`configureServer` creates the optimizer or calls init, so those volatile hashes cannot force a cold re-optimize inside
+the isolated network. Generated
+Paraglide output is current only when `messages.js` and every catalogue leaf, including `access_account.js`, exist and
+are at least as new as the catalogues; `messages.js` mtime alone is not enough. The Worker environment loads
+Cloudflare-denied `cloudflare.config.ts` dependencies from disk; the browser deny list stays unchanged. The shared Vite
+process fills missing Worker bindings from `.dev.vars.example` without writing `.dev.vars`, forces local Cloudflare
+bindings, and pins the Worker `optimizeDeps` after plugin merge so an isolated network never crawls the Worker graph.
+Per-file overlays still replace those bindings on each request. Source modules stay worktree-current; only the
+dependency output is shared until the lock changes. The runner stops that Vite process tree, including descendants that
+left the process group, when the invocation ends or is interrupted. Lifecycle, fixture-lock and lock-hash cache tests
+pin that composed-run behaviour; existing browser page assertions stay unchanged. Decision: wrap optimizer init from a
+pre plugin so Cloudflare cannot re-optimize before restamp; keep those few tests as the pin for shared-server
+acquisition, lock-keyed cache reuse and optimizer restamp; no extra stories for this runner. Decision: Web typecheck
+declares `reylo` 0.7.0 beside its `contentMappers` entry so the mapper resolves from this workspace; it does not
+compile Kernel, Auth or Importer scripts. Commerce Copies owns Workerd urlpattern ESM entry, Worker `import` conditions and child-output custody; this
+runner keeps shared-server and lock-keyed cache identity, and overlapping Vite config is train reconciliation. Decision:
+Vite `server.fs.allow` is the Node-resolved install roots of packages the client and Worker actually load, collapsed to
+the smallest covering directories including shared bun stores and linked packages; lexical `node_modules` paths and a
+hardcoded react-start/font list do not establish that closure. Serving proof is an admitted dependency HTTP response and
+denial of a file outside those roots; host TMPDIR is not an external fixture. An explicit
+`bun test tests/*.host.test.ts` through this runner uses the same `--path-ignore-patterns=node_modules/**` override as
+`bun run test:host`, so bunfig's host-file exclusion does not hide a named file.
 
 Browser tests wait for `html[data-hydrated]` before interacting with a page.
 Browser tests start the dev server through `tests/support/dev-server.ts`, whose errors name the phase that failed; a test never imports another test file.
