@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { failure, issuerPage, loadDetail, loadInventory, readCursors } from '../src/accounts/management/data';
 import { AccountManagementPage, ManagedAccountsPage } from '../src/accounts/management/pages';
 import { inventoryExample, detailExample, organization, human, automation } from '../src/accounts/management/story-api';
-import { getLocale, locales, setLocale } from '../src/paraglide/runtime.js';
+import { getLocale, locales, overwriteGetLocale } from '../src/paraglide/runtime.js';
 import { m } from '../src/paraglide/messages.js';
 import { isSignedInPath } from '../src/session/guard';
 import { managedAccountHref } from '../src/settings/managed-accounts-read';
@@ -88,7 +88,7 @@ test('issuer links retain the two supported page profiles and account routes are
 });
 
 test('Legacy account and organization management reaches the current selected Settings target without inferring permission or another fetch', async () => {
-  const previousLocale = getLocale();
+  const previousLocale = getLocale;
   const requests: Request[] = [];
   const targets = [
     detailExample(human.id),
@@ -112,7 +112,7 @@ test('Legacy account and organization management reaches the current selected Se
       const page = await loadDetail(client, 'Bearer current-viewer', value.account.id, {});
       const requestCount = requests.length;
       for (const locale of locales) {
-        setLocale(locale, { reload: false });
+        overwriteGetLocale(() => locale);
         const html = renderToStaticMarkup(
           createElement(AccountManagementPage, {
             page: { ...page, issuer: 'https://auth.example.test', organizationsAvailable: null },
@@ -144,7 +144,7 @@ test('Legacy account and organization management reaches the current selected Se
       });
       const page = await loadDetail(client, 'Bearer current-viewer', organization.id, {});
       for (const locale of locales) {
-        setLocale(locale, { reload: false });
+        overwriteGetLocale(() => locale);
         const html = renderToStaticMarkup(createElement(AccountManagementPage, { page, retry() {} }));
         expect(html).not.toContain('managedAccount=');
         expect(html).not.toContain(organization.id);
@@ -152,7 +152,7 @@ test('Legacy account and organization management reaches the current selected Se
       }
     }
   } finally {
-    setLocale(previousLocale, { reload: false });
+    overwriteGetLocale(previousLocale);
   }
 });
 

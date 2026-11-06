@@ -277,7 +277,7 @@ test('reconciled results leave normally and permission loss revokes a draft with
     throw new Error(`Unexpected permission-loss read: ${input}`);
   }) as typeof fetch;
   await page.navigate();
-  expect(page.host.querySelector('dialog')).toBeNull();
+  expect(page.host.querySelector('dialog')?.outerHTML ?? null).toBeNull();
   expect(page.unload()).toBe(false);
 });
 
