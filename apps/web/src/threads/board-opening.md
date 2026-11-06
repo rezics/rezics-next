@@ -88,6 +88,8 @@ points to render; the native command remains authoritative. Membership's existin
 verification remain in its owner. Pin, watch, and slow-mode commands remain with their existing owners. Readability,
 membership labels, and successful reads do not grant contribution or moderation authority.
 
+Decision: the thread receiver consumes the mounted reading page's exact-revision review citation, mention and image projections without browser-side enrichment; historical question metadata stays unavailable, and local revisions cannot borrow the previous document's projections.
+
 ## Evidence boundary
 
 Decision: accept the Board-to-thread reading journey only after anonymous and ordinary signed-up members traverse
@@ -113,6 +115,8 @@ Decision: Board previews show one admitted opening image and keep spoiler text a
 
 Decision: Community membership advice supplies no Realm visibility, so the membership owner receives `unknown` visibility with the exact join/leave advice; signed-in Board reactions are admitted only for native allowed advice, a current viewer slot, and the reader bound to the current Board page, then settle through the owner's exact target readback.
 
+Decision: hydrated Join/Leave and Board start-thread use the current signed-in session plus the mounted Board page's join and create-thread advice, and start-thread also requires that page's viewer participation when supplied; they stay visible before CSRF/command readiness. NativeRealmHomeObservation stays Realm-home-only and is not invented from Board community join.
+
 Authors are scoped to each card's separate thread/opening projections. A disclosed identity elsewhere in the response
 does not fill a withheld projection. Media comes only from the same opening response and the opening post's declared
 media IDs; no presentation or author requests are issued. Explicit pin refresh uses the same generated opening method
@@ -122,6 +126,10 @@ Missing reader, page currentness, native permission or a current viewer slot lea
 admitted write always settles through the owner's exact current read, which must meet the selected count watermark
 when one was supplied; the owner keeps the original retry operands and discards late reads after source retirement.
 
+Decision: composed Subject community cards block further reaction choices while their explicit command is pending.
+The shared control keeps its mounted queue and optimistic view during this lock; equal component registries
+cannot replace the native command owner or its retry operands.
+
 A thread return descriptor may retain the disclosed row ID for focus. It carries no title, author or credentials.
 Returning reads the current Board source before focusing that surviving row, or the feed heading if it disappeared.
 The continuation bound is the installed 4,096-character Board cursor limit.
@@ -129,3 +137,7 @@ The continuation bound is the installed 4,096-character Board cursor limit.
 Consumer measurements at selected cohorts 1/10/25 report one request per read, selected rows, serialized response bytes
 and retained rows. Varying unrelated prepared rows tests consumer independence only. It is not a native physical-growth
 measurement. Content persona, revocation, physical-plan and independent-cache first-paint deferrals remain unchanged.
+
+Decision: a prepared Subject summary without a session provider retains one stable unknown observation. Public
+reading can render without opening viewer actions or creating a subscription render loop. Community fixtures carry
+the installed card projection and pin generation; command operands retain their original native identities.

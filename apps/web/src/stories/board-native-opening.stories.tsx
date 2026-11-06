@@ -59,6 +59,7 @@ function Opening({ state }: { state: State }) {
         <BoardStartThread
           board={page.board}
           advice={page.actions.createThread}
+          viewer={page.viewer}
           returnTo={`/${locale}/boards/${boardOpeningId}`}
         />
       )}

@@ -525,14 +525,15 @@ export async function resumeReplyImageUpload(
     if (!isPostImageType(file.type)) throw new UploadRefusal('type');
     if (!Number.isSafeInteger(file.size) || file.size < 1) throw new UploadRefusal('unavailable');
     if (file.size > postImageByteLimit) throw new UploadRefusal('too-large');
-    if (intent && (intent.file !== file || !('containerId' in intent.body))) throw new UploadRefusal('unavailable');
+    const expectedContainer = intent && 'containerId' in intent.body ? intent.body.containerId : null;
+    if (intent && (intent.file !== file || expectedContainer === null)) throw new UploadRefusal('unavailable');
     onStage?.('processing', mediaId);
     const current = await readReservation(mediaId, signal, credential, onResponseWait);
     throwIfAborted(signal);
     if (
       current.mediaType !== file.type ||
       current.byteCount !== file.size ||
-      (intent && current.containerId !== ('containerId' in intent.body ? intent.body.containerId : undefined))
+      (expectedContainer !== null && current.containerId !== expectedContainer)
     )
       throw new UploadRefusal('unavailable');
     if (current.state === 'rejected') throw new UploadRefusal('rejected');

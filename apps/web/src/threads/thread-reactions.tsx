@@ -103,6 +103,8 @@ export type ThreadReactionsProps = {
   returnTo: string;
   onMutation?: (kind: ReactionKind | null) => Promise<void>;
   personalReady?: boolean;
+  /** Selected community cards keep one explicit command pending instead of accepting queued choices. */
+  queueChanges?: boolean;
   canStart?: boolean;
   /** Stable native operation lease: aggregate readback cannot replace an uncertain owner. */
   readAuthority?: object;
@@ -279,6 +281,7 @@ function ReactionCaller({
   onDiscard,
   commandRecovery,
   requireWatermark,
+  queueChanges = true,
 }: ThreadReactionsProps & {
   admitted: boolean;
   disabled: boolean;
@@ -570,6 +573,7 @@ function ReactionCaller({
     >
       <Reactions
         key={generation}
+        queueChanges={queueChanges}
         counts={resolved?.snapshot.counts ?? counts}
         disabled={disabled || !canStart || discarded || recovery !== null || recovering}
         {...(allowedKinds ? { allowedKinds } : {})}

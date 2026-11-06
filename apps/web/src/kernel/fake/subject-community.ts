@@ -91,6 +91,35 @@ export function communityThread(
     },
     reactions: { upvote: 3, like: 2, insightful: 1 },
     viewerReaction: 'like',
+    card: {
+      state: 'current',
+      authors: {
+        thread: {
+          state: 'current',
+          identity: { handle: communityAuthor.handle, displayName: communityAuthor.displayName, avatar: null },
+        },
+        openingPost: {
+          state: 'current',
+          identity: { handle: communityAuthor.handle, displayName: communityAuthor.displayName, avatar: null },
+        },
+      },
+      presentation: { state: 'current', language: 'en', spoiler: false },
+      media: { state: 'none', images: [] },
+      comments: { state: 'unavailable' },
+      actions: { state: 'unavailable', retryable: true, references: [] },
+      reply: { state: 'unavailable' },
+      watch: { state: 'unavailable', retryable: true },
+      currentness: {
+        source: 'current',
+        place: 'current',
+        authors: 'current',
+        reactions: 'current',
+        actions: 'unavailable',
+        watch: 'unavailable',
+        media: 'not_applicable',
+        comments: 'unavailable',
+      },
+    },
   };
 }
 
@@ -100,6 +129,7 @@ export function communityThreadPage(
   threads: unknown[],
   next: string | null,
   place = GLOBAL,
+  entry?: unknown,
 ) {
   const context = {
     subject: {
@@ -119,7 +149,13 @@ export function communityThreadPage(
           },
     kind,
   };
-  return { threads, next, reactionsAsOf: { epoch: 1, position: '1' }, context };
+  return {
+    threads,
+    next,
+    reactionsAsOf: { epoch: 1, position: '1' },
+    context,
+    entry: entry ?? { state: 'not_selected', request: { subjectId: subject.id, placeId: place, kind } },
+  };
 }
 
 type Board = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['boards']>['get']>>['data']>['board'];
@@ -135,6 +171,22 @@ export function communityBoard(kind: CommunityKind): Board {
     availability: 'available',
     securityRevision: '1',
     createdAt: '2026-10-24T00:00:00.000Z',
+  };
+}
+
+/** Selected Board is independent of any readable card's boardId. */
+export function communityCurrentEntry(
+  kind: CommunityKind,
+  subject: typeof communitySubject,
+  place = GLOBAL,
+  createThread: 'allowed' | 'denied' | 'sign-in' | 'unavailable' = 'allowed',
+) {
+  const boardId = id(kind === 'review' ? '70' : '71');
+  return {
+    state: 'current' as const,
+    request: { subjectId: subject.id, placeId: place, kind, selectedBoardId: boardId },
+    board: { id: boardId, availability: 'available' as const, visibility: 'published' as const },
+    actions: { createThread },
   };
 }
 

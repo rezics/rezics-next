@@ -8,20 +8,27 @@ import type { CommunityBoardPage } from './board-feed-data';
 import type { BoardCommunitySource } from './board-community-source';
 import { SignInPrompt } from './write-prompts';
 
-type Board = CommunityBoardPage['board'];
+type Board = Pick<CommunityBoardPage['board'], 'id' | 'availability' | 'visibility'>;
 type BoardAdvice = CommunityBoardPage['actions']['createThread'];
+type BoardViewer = CommunityBoardPage['viewer'];
 
-/** The mounted page's current advice controls the entry; the composer command remains authoritative. */
+function currentSignedIn(session: string, subject: string | null | undefined): boolean {
+  return session === 'signed-in' && typeof subject === 'string' && subject.length > 0;
+}
+
+/** The mounted page's current advice and viewer participation control the entry; the composer command remains authoritative. */
 export function BoardStartThread({
   board,
   advice,
   returnTo,
   preparedReturnTo,
+  viewer,
 }: {
   board: Board;
   advice: BoardAdvice;
   returnTo: string;
   preparedReturnTo?: string;
+  viewer?: BoardViewer;
 }) {
   const { state: session, subject } = useSession();
   const available =
@@ -29,19 +36,23 @@ export function BoardStartThread({
   if (!available) return null;
   if (session === 'unavailable' || session === 'unknown') return null;
   if (session === 'signed-in' && !subject) return null;
+  const participation = viewer?.participation;
   if (session === 'signed-out')
-    return advice === 'sign-in' ? (
+    return advice === 'sign-in' || participation === 'sign-in' ? (
       <SignInPrompt returnTo={returnTo} label={m.board_sign_in_to_start()} compact />
     ) : null;
-  if (advice === 'unavailable')
+  if (participation === 'denied' || participation === 'unavailable') return null;
+  if (advice === 'unavailable' || participation === 'sign-in')
     return (
       <p role="status" className="text-sm text-muted-foreground">
         {m.realm_membership_unavailable()}
       </p>
     );
-  if (advice !== 'allowed') return null;
+  if (advice !== 'allowed' || (participation !== undefined && participation !== 'allowed')) return null;
+  if (!currentSignedIn(session, subject)) return null;
   return (
     <Link
+      data-slot="create-thread"
       to="/boards/$id/new"
       params={{ id: board.id }}
       search={preparedReturnTo ? { returnTo: preparedReturnTo } : {}}
@@ -54,11 +65,12 @@ export function BoardStartThread({
 }
 
 export function BoardParticipation({ community, returnTo }: { community: BoardCommunitySource; returnTo: string }) {
-  const { state: session } = useSession();
+  const { state: session, subject } = useSession();
   if (community?.state !== 'available') return null;
   if (session === 'unknown' || session === 'unavailable') return null;
   const { realmId, join } = community.value;
   if (join.action === null) return null;
+  if (join.action !== 'sign-in' && !currentSignedIn(session, subject)) return null;
   return (
     <RealmMembership
       realm={{ id: realmId, visibility: 'unknown', viewer: null }}

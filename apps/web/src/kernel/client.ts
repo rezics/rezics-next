@@ -29,12 +29,16 @@ export const preparePrivatePage = createIsomorphicFn()
   })
   .client(() => undefined);
 
+function resolvedKernelOrigin(): string | undefined {
+  return kernelOrigin() ?? (env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN;
+}
+
 export function hasKernelOrigin(): boolean {
-  return Boolean(kernelOrigin());
+  return Boolean(resolvedKernelOrigin());
 }
 
 export function configuredKernelOrigin(): string | undefined {
-  return kernelOrigin();
+  return resolvedKernelOrigin();
 }
 
 /** Carry the owner's restrictive cache policy through SSR, including nested server functions. */
@@ -87,7 +91,7 @@ export function kernelClient(
     ...(language === undefined ? {} : { 'accept-language': acceptLanguage(language) }),
     ...(authorization === undefined ? {} : { authorization }),
   };
-  const origin = kernelOrigin();
+  const origin = resolvedKernelOrigin();
   if (origin)
     return withPlatformClosedRecognition(
       createKernelClient(origin, { headers, fetch: pageFetch(decorateFetch(globalThis.fetch)) }),

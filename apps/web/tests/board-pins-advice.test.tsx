@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { boardPinAdviceInput, receiveBoardPinAdvice, type BoardPinAdviceQuery } from '../src/threads/board-pins/advice';
 import { readBoardPinAdviceRequest } from '../src/threads/board-pins/native';
+import { productionBoardPinProducer } from '../src/threads/board-pins/producer';
 import { SESSION_COOKIE } from '../src/session/cookies';
 
 const boardId = '01a17a3b-09b4-77bf-a24b-1234ebeab5b3';
@@ -24,6 +25,32 @@ const ready = () => ({
   management: 'allowed',
   threads: [{ threadId, pinned: true, actions: ['unpin'] }],
 });
+const sessionEnv = (subject = viewerId) =>
+  ({
+    AUTH_ISSUER: 'https://auth.test',
+    API_RESOURCE: 'https://kernel.test',
+    WEBSITE_SCOPES: 'openid',
+    WEBSITE_CLIENT_ID: 'web',
+    WEBSITE_CLIENT_KEY: 'secret',
+    SESSIONS: {
+      idFromName: (id: string) => id,
+      get: () => ({
+        credential: async () => ({
+          status: 'active',
+          subject,
+          accessToken: 'native-access',
+          csrfToken: 'csrf',
+        }),
+      }),
+    },
+  }) as never;
+const sessionRequest = (signal?: AbortSignal) =>
+  new Request('https://web.test/board-pin-advice', {
+    ...(signal ? { signal } : {}),
+    headers: { cookie: `${SESSION_COOKIE}=${'a'.repeat(43)}` },
+  });
+const adviceInput = { boardId, viewerId, selected, pinRevision: '4' as const };
+
 test('selected advice input rejects duplicates, foreign parents, malformed revisions and open fields', () => {
   const invalid = [
     { selected: [...selected, ...selected] },
@@ -67,6 +94,7 @@ test('malformed advice, denial and full capacity never invent selected actions',
 
 test('the installed callable receives the admitted generation and current session through no-store transport', async () => {
   const calls: { url: string; method: string; headers: Headers; body: unknown; cache?: RequestCache }[] = [];
+  let body: unknown = ready();
   const client = createKernelClient('https://kernel.test', {
     fetch: async (input, init) => {
       const request = new Request(input, init);
@@ -77,33 +105,10 @@ test('the installed callable receives the admitted generation and current sessio
         body: await request.json(),
         cache: init?.cache,
       });
-      return Response.json(ready());
+      return Response.json(body);
     },
   });
-  const env = {
-    AUTH_ISSUER: 'https://auth.test',
-    API_RESOURCE: 'https://kernel.test',
-    WEBSITE_SCOPES: 'openid',
-    WEBSITE_CLIENT_ID: 'web',
-    WEBSITE_CLIENT_KEY: 'secret',
-    SESSIONS: {
-      idFromName: (id: string) => id,
-      get: () => ({
-        credential: async () => ({
-          status: 'active',
-          subject: viewerId,
-          accessToken: 'native-access',
-          csrfToken: 'csrf',
-        }),
-      }),
-    },
-  } as never;
-  const request = new Request('https://web.test/board-pin-advice', {
-    headers: { cookie: `${SESSION_COOKIE}=${'a'.repeat(43)}` },
-  });
-  expect(
-    await readBoardPinAdviceRequest({ boardId, viewerId, selected, pinRevision: '4' }, request, env, client, true),
-  ).toEqual(ready());
+  expect(await readBoardPinAdviceRequest(adviceInput, sessionRequest(), sessionEnv(), client, true)).toEqual(ready());
   expect(calls).toHaveLength(1);
   expect(calls[0]).toMatchObject({
     url: `/v1/boards/${boardId}/pin-advice`,
@@ -112,6 +117,17 @@ test('the installed callable receives the admitted generation and current sessio
     body: { selected, pinRevision: '4' },
   });
   expect(calls[0]?.headers.get('authorization')).toBe('Bearer native-access');
+  body = { ...ready(), management: 'denied', threads: [{ threadId, pinned: true, actions: [] }] };
+  expect(await readBoardPinAdviceRequest(adviceInput, sessionRequest(), sessionEnv(), client, true)).toEqual(body);
+  body = { state: 'stale' };
+  expect(await readBoardPinAdviceRequest(adviceInput, sessionRequest(), sessionEnv(), client, true)).toEqual(body);
+  body = { ...ready(), viewer: { kind: 'account', id: threadId } };
+  expect(await readBoardPinAdviceRequest(adviceInput, sessionRequest(), sessionEnv(), client, true)).toEqual({
+    state: 'unavailable',
+  });
+  expect(await readBoardPinAdviceRequest(adviceInput, new Request('https://web.test'), sessionEnv(), client, true)).toEqual(
+    { state: 'denied' },
+  );
 });
 
 test('session mismatch is denied before transport and aborted advice is withheld', async () => {
@@ -122,34 +138,32 @@ test('session mismatch is denied before transport and aborted advice is withheld
       return Response.json(ready());
     },
   });
-  const env = {
-    AUTH_ISSUER: 'https://auth.test',
-    API_RESOURCE: 'https://kernel.test',
-    WEBSITE_SCOPES: 'openid',
-    WEBSITE_CLIENT_ID: 'web',
-    WEBSITE_CLIENT_KEY: 'secret',
-    SESSIONS: {
-      idFromName: (id: string) => id,
-      get: () => ({
-        credential: async () => ({
-          status: 'active',
-          subject: threadId,
-          accessToken: 'wrong-access',
-          csrfToken: 'csrf',
-        }),
-      }),
-    },
-  } as never;
-  const request = new Request('https://web.test/board-pin-advice', {
-    headers: { cookie: `${SESSION_COOKIE}=${'a'.repeat(43)}` },
-  });
   expect(
-    await readBoardPinAdviceRequest({ boardId, viewerId, selected, pinRevision: '4' }, request, env, client, true),
+    await readBoardPinAdviceRequest(adviceInput, sessionRequest(), sessionEnv(threadId), client, true),
   ).toEqual({ state: 'denied' });
   expect(calls).toBe(0);
   const controller = new AbortController();
   controller.abort();
+  expect(await productionBoardPinProducer.inspectSelected?.({ ...query(), signal: controller.signal })).toEqual({
+    state: 'unavailable',
+  });
   expect(receiveBoardPinAdvice({ ...query(), signal: controller.signal }, 200, ready())).toEqual({
     state: 'unavailable',
   });
+  expect(await readBoardPinAdviceRequest(adviceInput, sessionRequest(controller.signal), sessionEnv(), client, true)).toEqual(
+    { state: 'unavailable' },
+  );
+  expect(calls).toBe(0);
+  const late = new AbortController();
+  const lateClient = createKernelClient('https://kernel.test', {
+    fetch: async () => {
+      calls += 1;
+      late.abort();
+      return Response.json(ready());
+    },
+  });
+  expect(await readBoardPinAdviceRequest(adviceInput, sessionRequest(late.signal), sessionEnv(), lateClient, true)).toEqual({
+    state: 'unavailable',
+  });
+  expect(calls).toBe(1);
 });

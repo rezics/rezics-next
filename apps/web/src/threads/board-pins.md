@@ -51,7 +51,7 @@ retry and refresh while source, cohort and browser-session retirement close old 
 source supplies its observed `pinRevision` on initial and continued pages and rejects changed generations at final
 admission. Pin/unpin and generation-change refresh continue through their installed owners.
 
-Decision: Advice uses each displayed available opening post's native `revisionId` as `sourceRevisionId` and the admitted Board page's observed `pinRevision`. Selected advice recognizes the public `session_unavailable` problem code locally and does not import Web's private session module.
+Decision: Advice uses each displayed available opening post's native `revisionId` as `sourceRevisionId` and the admitted Board page's observed `pinRevision`. Selected advice recognizes the public `session_unavailable` problem code locally and does not import Web's private session module. Abort and visit retirement discard late advice without changing command recovery. Native denial leaves readable discussions intact; a stale generation requires current-state refresh.
 
 Decision: Pin/unpin confirmation is an expandable in-row group tied to its toggle; cancel restores toggle focus, while completion focuses the current status or the Board's announced recovery target.
 

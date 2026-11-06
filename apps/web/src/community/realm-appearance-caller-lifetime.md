@@ -31,3 +31,7 @@ the complete Auth06 and Community07 acceptance.
 Decision: keep those focused checks plus the existing session-cache, Board-image identity and native attachment cases;
 add no page stories for this source landing. Check 6284aa99's thirteen failures and one error stay with shared
 startup owner 2e0b5513.
+Decision: the site reservation forwards the caller's `idempotency-key` unchanged to the mounted Realm media route,
+so a repeated exact reservation command returns the same reservation. The site mints a key only when the caller
+supplies none. A retry with a known reservation resumes that reservation and never reserves another object; a
+retry without a known reservation is a new selection.

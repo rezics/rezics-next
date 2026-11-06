@@ -29,12 +29,12 @@ export async function readBoardPinAdviceRequest(
   client: KernelClient,
   originConfigured: boolean,
 ): Promise<BoardPinAdviceResult> {
+  if (!originConfigured || request.signal.aborted) return { state: 'unavailable' };
   const selection = boardPinAdviceInput(input.boardId, {
     selected: input.selected,
     ...(input.pinRevision === undefined ? {} : { pinRevision: input.pinRevision }),
   });
-  if (!selection || !selection.pinRevision || !validBoardPinId(input.viewerId) || !originConfigured)
-    return { state: 'unavailable' };
+  if (!selection || !selection.pinRevision || !validBoardPinId(input.viewerId)) return { state: 'unavailable' };
   try {
     await prepareSession(request, sessionEnv);
   } catch (error) {
@@ -55,7 +55,7 @@ export async function readBoardPinAdviceRequest(
         fetch: { cache: 'no-store', redirect: 'manual', signal: request.signal },
       },
     );
-    if (result.response === undefined) return { state: 'unavailable' };
+    if (result.response === undefined || request.signal.aborted) return { state: 'unavailable' };
     return receiveBoardPinAdvice(query, result.status, result.error ?? result.data);
   } catch (error) {
     if (isPlatformClosedError(error)) return { state: 'unavailable' };

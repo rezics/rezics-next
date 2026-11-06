@@ -60,10 +60,13 @@ No native card starts author enrichment. The shared author batch remains availab
 
 The installed card does not supply historical scale/lifecycle/original-target provenance. Its reviewContext remains
 current; a review's recorded citation therefore stays explicitly unavailable unless the separate historical extension
-below is present. The default route does not manufacture that extension. The controller retains generation and
-native publication. Reply/reaction/watch retain their existing owners; admitted overflow mounts `PostActions` with
-the route's existing verification configuration and the original canonical thread target. Without configuration it
-links to that thread's owner. Opening-post revision replacement retires the card even if its normalized advice is unchanged.
+below is present. The default route does not manufacture that extension. Recorded `{questionId,units,revision}` stays
+on the opening post and is shown as units with historical question metadata unavailable. Reply/reaction/watch retain
+their existing owners; admitted overflow mounts `PostActions` with the route's existing verification configuration
+and the original canonical thread target. Without configuration it links to that thread's owner. Opening-post
+revision replacement retires the card even if its normalized advice is unchanged. Create-thread binds only native
+`entry.current` Board advice from this page; a readable card's `boardId` is never a creation target.
+Native `entry` uses the same `COMMUNITY_CARD_BYTES` bound as the historical card seam.
 
 ## Consumer card seam
 
@@ -90,9 +93,8 @@ provenance is unavailable. Reaction counts require a non-null watermark from the
 seven native kinds without a local total; omitted kinds inside an admitted object are zero. Omitted counts or
 viewer slot remain unavailable; explicit null viewer reaction means no selection. Public projection removes viewer
 slots. Reply, existing-thread post creation, reaction, watch and overflow controls require current native advice bound
-to the exact thread and first-post revision; readable cards and Board destinations do not confer it. A new-thread
-composer stays unavailable until Content supplies a concrete Board target. Shared Board and command owners remain
-unchanged.
+to the exact thread and first-post revision; readable cards and Board destinations do not confer it. A new-thread composer stays unavailable until this page's native `entry` is `current` with create-thread advice.
+Shared Board and command owners remain unchanged.
 
 Every completed read gets one fresh local observation UUID, including same-URL replacement. Retirement observes
 existing session/CSRF and exposure caches without reads. Account, successful session observation, exposure,
