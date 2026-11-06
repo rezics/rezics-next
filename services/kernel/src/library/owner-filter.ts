@@ -1,3 +1,4 @@
+import { statementBytes } from '../database/statement-bytes.ts';
 import { admitFilter, FilterError, parseFilter, walkFilter, type FilterDocument, type OwnerLeaf } from '@rezics/filter';
 import type { Release } from '@rezics/definitions';
 import type { Pool, PoolClient } from 'pg';
@@ -147,7 +148,7 @@ async function nativePoint<T>(
     witnessKeys: 1,
     statements: 1,
     emptySeeks: 1,
-    bytes: Buffer.byteLength(query.sql) + Buffer.byteLength(JSON.stringify(input)) + outputBytes,
+    bytes: statementBytes(query) + Buffer.byteLength(JSON.stringify(input)) + outputBytes,
   });
   reservation.dispatch();
   let row: T | null;

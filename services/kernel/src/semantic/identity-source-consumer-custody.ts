@@ -1,4 +1,5 @@
 import { memoizedValue } from '../memoized.ts';
+import { statementBytes } from '../database/statement-bytes.ts';
 import type { Pool, QueryResultRow } from 'pg';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
@@ -231,13 +232,7 @@ export function IDENTITY_SOURCE_LOCAL_READ_DECLARATIONS() {
       Object.fromEntries(
         Object.entries(sourceLiterals()).map(([name, literal]) => [
           name,
-          sourcePrice(
-            literal.rows,
-            literal.points,
-            1,
-            Buffer.byteLength(literal.sql) + literal.binds + literal.output,
-            1,
-          ),
+          sourcePrice(literal.rows, literal.points, 1, statementBytes(literal) + literal.binds + literal.output, 1),
         ]),
       ) as Readonly<Record<keyof ReturnType<typeof sourceLiterals>, ReturnType<typeof sourcePrice>>>,
     ),
@@ -258,7 +253,7 @@ export function IDENTITY_SOURCE_LOCAL_MUTATION_COMPONENTS() {
           1,
           1,
           1,
-          Buffer.byteLength(insert.sql) + 2 + 17 + 18 * 2 + 6 * (160 + 64 + 19 * 3 + 36 * 5 + 128 + 9 + 128) + 5 * 10,
+          statementBytes(insert) + 2 + 17 + 18 * 2 + 6 * (160 + 64 + 19 * 3 + 36 * 5 + 128 + 9 + 128) + 5 * 10,
           1,
         ),
         foreignKeys: Object.freeze([
@@ -275,7 +270,7 @@ export function IDENTITY_SOURCE_LOCAL_MUTATION_COMPONENTS() {
           1,
           1,
           1,
-          Buffer.byteLength(appendSQL.sql) + 2 + 21 + 22 * 2 + 6 * (19 * 8 + 11 + 2048 * 2 + 64 * 2 + 36 * 3) + 6 * 10,
+          statementBytes(appendSQL) + 2 + 21 + 22 * 2 + 6 * (19 * 8 + 11 + 2048 * 2 + 64 * 2 + 36 * 3) + 6 * 10,
           1,
         ),
         foreignKeys: Object.freeze([
@@ -1909,7 +1904,7 @@ export async function lockIdentitySourceHistoryAuthority(
         ? {
             ...IDENTITY_SOURCE_HISTORY_GUARD_COST,
             bytes:
-              Buffer.byteLength(historySQL.sql) +
+              statementBytes(historySQL) +
               Buffer.byteLength(json([serialized, expectedJSON])) +
               historyAuthorityOutputBytes,
           }
@@ -1917,7 +1912,7 @@ export async function lockIdentitySourceHistoryAuthority(
       {
         ...IDENTITY_SOURCE_HISTORY_GUARD_DECLARATION().work,
         bytes:
-          Buffer.byteLength(historySQL.sql) +
+          statementBytes(historySQL) +
           Buffer.byteLength(json([serialized, expectedJSON])) +
           historyAuthorityOutputBytes,
       },
@@ -1950,7 +1945,7 @@ export function IDENTITY_SOURCE_HISTORY_GUARD_DECLARATION() {
         nativePoints: 15,
         witnessKeys: 0,
         statements: 2,
-        bytes: Buffer.byteLength(historySQL.sql) + 6 * (2048 + 4096) + 7 + historyAuthorityOutputBytes,
+        bytes: statementBytes(historySQL) + 6 * (2048 + 4096) + 7 + historyAuthorityOutputBytes,
         emptySeeks: 1,
       }),
     }),

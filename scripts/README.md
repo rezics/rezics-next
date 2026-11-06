@@ -311,12 +311,16 @@ Kernel SQL analysis uses the immutable host-local Reylo cache described in the [
 Phase receipts separate database image, migrations, SQL analysis and TypeScript checking so the measured cache effect
 can be compared without timing assertions.
 
-Observation: On 2026-11-06, source `4c0a85d9d68e785e298a445f0979b08e526d3d39` on check host a, a cold
-`bun run --cwd services/kernel typecheck` took 219.53s admitted-command time: database image 9.87s, migrations 6.85s,
-SQL analysis 182.75s for 1,994 files, and TypeScript 17.81s. The warm run on the same host and source reused all 1,994
-analyses and took 36.16s admitted-command time: database image 1.70s, migrations 6.70s, SQL analysis 3.51s, and
-TypeScript 22.35s. Its wrapper took 78.6s including 50.2s dependency setup. Both commands returned the unchanged
-Kernel diagnostics (exit 2); the focused cache test also asserts an identical cold/warm diagnostic string.
+Observation: On 2026-11-06, host b, a cold same-tree comparison used one migrated database, fresh projects and
+2,001 Kernel queries. Reproduce: `bun services/kernel/scripts/benchmark-reylo.ts` (isolated 0.6.0 dependencies).
+
+| Reylo | SQL analysis | TypeScript | Kernel typecheck (sum) |
+| ----- | -----------: | ---------: | ---------------------: |
+| 0.6.0 |     197.24 s |    23.47 s |               220.71 s |
+| 0.7.0 |     213.52 s |    22.05 s |               235.57 s |
+
+Analysis was 8.3% slower; total 6.7% slower. This sample shows no speedup. Setup/admission are excluded. Both
+compilers exited 2: base diagnostics plus 0.7 JSON errors later adapted. These measure time to diagnostics.
 
 Observation: On 2026-11-05 (UTC), a focused `bun run --cwd services/kernel check scripts/check.test.ts` on check host c, with the analysis for this toolchain and schema already warm, took 71.7s of admitted-command time. Before its tests started it spent 22.4s in the database image, 15.6s in migrations, 2.7s in the schema dump, 1.1s in SQL analysis (2,001 files, none analysed, no entries written) and 16.6s in the compiler: 58.4s in total. Cold runs of the same code, reached by a comment-only edit to the cache module that changes the toolchain identity and was then reverted, analysed all 2,001 files in 240.3s on host c (1,995 statement entries written; database image 68.4s, migrations 12.6s, compiler 19.9s) and in 264.1s on host b, where the database image took 234.8s under that host's load. A changed schema dump starts a cold analysis for the new schema.
 

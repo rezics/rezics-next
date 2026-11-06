@@ -1,4 +1,5 @@
 import { memoizedValue } from '../memoized.ts';
+import { statementBytes } from '../database/statement-bytes.ts';
 import ordinalPage from './collection-source-native-ordinal.sql';
 import { types, type Pool, type PoolClient, type QueryResult, type QueryConfig } from 'pg';
 import { declareBound, type Bound } from '@rezics/bounds';
@@ -82,6 +83,7 @@ type Header = Ref & {
   stateId: string | null;
   ruleRevision?: string | null;
   ruleReleaseDigest?: string | null;
+  ruleSource?: 'owner' | 'catalogue' | null;
   ruleReady?: boolean;
 };
 /** Private observation only. Possession grants no source or subject access. */
@@ -146,7 +148,7 @@ export function nativeCollectionOrdinalPageBound(limit: number): NativeCollectio
     throw new RangeError('Native source limit must be 1..100');
   const maxUuid = 'ffffffff-ffff-ffff-ffff-ffffffffffff';
   const requestValues = [65535, maxUuid, '~'.repeat(48), maxUuid, limit];
-  const requestBytes = Buffer.byteLength(ordinalPage.sql) + Buffer.byteLength(JSON.stringify(requestValues));
+  const requestBytes = statementBytes(ordinalPage) + Buffer.byteLength(JSON.stringify(requestValues));
   const resultBytes = 512 * limit;
   const projection = Object.freeze({
     candidateKeys: limit,
@@ -515,11 +517,14 @@ async function observe(client: QueryClient, ref: Ref): Promise<NativeCollectionM
         ).rows[0] ?? null)
       : null;
   const outputGeneration = outputPublication?.generation ?? null;
+  // A catalogue save has no Library owner population: its members come from Search, never the owner capture.
   const authority =
     row.membershipKind === 'curated'
       ? 'curated'
       : row.visibility === 'private'
-        ? 'private_builtin'
+        ? row.ruleSource === 'catalogue'
+          ? 'unavailable_output'
+          : 'private_builtin'
         : outputGeneration
           ? 'activated_output'
           : 'unavailable_output';
@@ -546,6 +551,8 @@ async function observe(client: QueryClient, ref: Ref): Promise<NativeCollectionM
 async function observeWorking(client: QueryClient, ref: Ref) {
   const metadata = await observe(client, ref);
   if (!metadata || metadata.membershipKind !== 'dynamic' || metadata.visibility === 'private') return metadata;
+  // A catalogue save has no owner working population to publish; its complete output needs the catalogue producer.
+  if (metadata.ruleSource === 'catalogue') return null;
   if (
     !metadata.curatorAccountId ||
     !(metadata.ruleReady || (metadata.builtinKind !== null && metadata.releaseDigest !== null))

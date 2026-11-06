@@ -402,6 +402,10 @@ with `id` order; private meaning stays private, with no new grammar, sort family
 Decision: Search-origin catalogue saves retain an explicit catalogue Source descriptor alongside the shared filter
 and accepted release; Library-origin saves retain Commerce's native private OWNER Source. Source selection is stored
 separately from the predicate tree and must survive direct reads, retained preparation, replay and catalogue refresh.
+Decision: saved catalogue Members reuse Search's installed complete public consumer and retained preparation,
+with the accepted release and saved identity bound to continuation; Commerce's private OWNER capture is never its population.
+Decision: the saved rule's Source selector reaches the Library Source header, working observation and preparation key. Owner keys keep their retained six-part basis; a catalogue key adds one element. A catalogue save has no Library working population, so its Source authority is `unavailable_output`, never the owner capture.
+Decision: Library reaches saved catalogue members only through the Search service's `savedCatalogueMembers` entry; the consumer module stays Search-internal, and Library maps a superseded saved cursor to its stale members response.
 Decision: Web reads ordinary saved identities through the existing Dynamic Collection reader and members GET;
 owner-only rule edit stays off the public page, and 202/empty 200/503/stale-cursor recovery follow
 [saved-query results](../apps/web/src/library/saved-query-results.md).
@@ -412,10 +416,12 @@ index excludes retained deleted assignments from this negative witness. Its sour
 native plan evidence are recorded in the [Library cost entry](../services/kernel/src/library/cost-saved-query-evaluation.md).
 
 Saved dynamic Collections use `POST /v1/collections` with the closed body
-`{membershipKind:'dynamic',title,description?,visibility,rule:{filter,sort?},presentationKind?,coverMediaId?}`.
-`PUT /v1/collections/{collectionId}/rule` takes the closed body `{revision,filter,sort?}` and returns
+`{membershipKind:'dynamic',title,description?,visibility,rule:{filter,sort?,source?},presentationKind?,coverMediaId?}`.
+`PUT /v1/collections/{collectionId}/rule` takes the closed body `{revision,filter,sort?,source?}` and returns
 `200 {collection}`. The numeric revision is the current Collection CAS. A rule edit increments the rule's own
-revision and Source generation once; a title/cover edit does not edit its rule. Curated creation and metadata
+revision and Source generation once. Source is the closed `{kind:'owner'|'catalogue'}` descriptor; omission retains
+owner compatibility, and GET rule always returns the stored Source. A title/cover edit does not edit its rule.
+Curated creation and metadata
 operations retain their existing bodies and grants. Both operations use the same
 closed catalogue grammar and semantic admission; this document does not create a second catalogue predicate AST.
 The retained expanded AST and immutable release reference keep accepted meaning after another release activates.

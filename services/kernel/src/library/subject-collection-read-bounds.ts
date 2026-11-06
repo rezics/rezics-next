@@ -1,3 +1,4 @@
+import { statementBytes } from '../database/statement-bytes.ts';
 import { declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
 import page from './listing-page.sql';
 import counts from './listing-counts.sql';
@@ -60,7 +61,7 @@ export function subjectCollectionPairPlan(input: PageInput): SubjectCollectionPa
         // This leaf dispatches only listing-page.sql, never Search.
         engineRequests: 0,
       }),
-      bytes(Buffer.byteLength(page.sql) + Buffer.byteLength(JSON.stringify(original)) + 2),
+      bytes(statementBytes(page) + Buffer.byteLength(JSON.stringify(original)) + 2),
       repeatBound(bytes(projectedPairBytes), input.limit),
     ),
   });
@@ -93,7 +94,7 @@ export function subjectCollectionCountPlan(input: Parameters<typeof counts.run>[
       emptySeeks: keys,
       engineRequests: 0,
     }),
-    bytes(Buffer.byteLength(counts.sql) + Buffer.byteLength(JSON.stringify(original)) + 2),
+    bytes(statementBytes(counts) + Buffer.byteLength(JSON.stringify(original)) + 2),
     repeatBound(
       bytes(
         Buffer.byteLength(

@@ -1,3 +1,4 @@
+import { jsonParameter } from '../database/json.ts';
 import {
   beginSemanticRecordSourceSet,
   collectSemanticRecordFacts,
@@ -321,7 +322,7 @@ export async function writeProposal(
       slot_id: input.fact.slot_id,
       property: input.property,
       rank: (input.fact.body as { rank: string }).rank,
-      statement: factBody,
+      statement: jsonParameter(factBody),
       release: options.release.digest,
       relation: isRelationProperty(options.release.release, input.property),
       revision,

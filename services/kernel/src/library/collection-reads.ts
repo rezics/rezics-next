@@ -1,3 +1,4 @@
+import { statementBytes } from '../database/statement-bytes.ts';
 import { EMPTY_ACCESS_WORK, type AccessWorkAccounting } from '../access/work.ts';
 import outputHeadForRetention from './collection-source-output-head.sql';
 import { createBuiltinRuntime, type BuiltinCollectionView } from './builtin-runtime.ts';
@@ -70,8 +71,6 @@ import type { ViewerPersonalActionsReader, ViewerPersonalActionsPage } from './v
 import { readSubjectSummaryObservation } from '../semantic/summaries.ts';
 import { MAX_VIEWER_FACTS_ROWS } from './viewer-facts-schema.ts';
 import { specializeCollectionListPolicy } from './collection-list-policy.ts';
-import { createSearchScopeForService } from '../search/service-scope.ts';
-import { scopeAllowance, ScopeWork } from '../search/scope-execution.ts';
 
 type CuratorPageOptions = {
   curatorAccountId: string | null;
@@ -344,7 +343,7 @@ function readEligibility(route: number, id: string, sink: Sink) {
     witnesses: declared.witnessKeys,
     emptySeeks: declared.emptySeeks,
     // Access holds binds/projection; transport adds the literal SQL surface.
-    bytes: declared.bytes - Buffer.byteLength(collectionRead.sql),
+    bytes: declared.bytes - statementBytes(collectionRead),
   });
   return createResourcePublicEligibility({
     work: {
@@ -1209,9 +1208,6 @@ export function createCollectionReads(
     if (admission.source === 'catalogue') {
       if (!dependencies.search || !dependencies.routeKey) throw new ProblemError('dependency_unavailable');
       const limit = options.limit ?? DEFAULT_PAGE_SIZE;
-      const reservationId = `library.collection.rule:${collectionId}:${saved.revision}`;
-      const work = new ScopeWork(scopeAllowance(limit + 1, reservationId));
-      const allowance = () => ({ reservationId, remaining: work.remaining().remaining });
       const time = await withConnection(pool, (client) =>
         mintReadTime(deadlineClient(client, deadline), dependencies.clock),
       );
@@ -1239,100 +1235,44 @@ export function createCollectionReads(
         };
         const firstLifetime = await lifetime();
         await authorize(time);
-        const search = createSearchScopeForService(dependencies.search, {
-          access,
-          actor: viewer,
-          routeKey: dependencies.routeKey,
-          nativeT: time,
-          deadline,
-        });
-        const prepared = await search.prepare(admission.filter!, {
-          releaseDigest: saved.releaseDigest,
-          allowance: allowance(),
-          readOnly: true,
-        });
-        work.native(search.work(prepared));
-        const cursorBinding: CursorBinding = {
-          operation: 'library.collection.saved-catalogue-members',
-          parameters: {
-            collectionId,
-            viewerAccountId: viewer.accountId,
-            collectionRevision: saved.collectionRevision,
-            ruleRevision: saved.revision,
-            sourceGeneration: saved.sourceGeneration,
-            releaseDigest: saved.releaseDigest,
-            queryDigest: admission.queryDigest,
+        return await dependencies.search
+          .savedCatalogueMembers({
+            actor: viewer,
+            collection: {
+              id: collectionId,
+              revision: collection.revision,
+              ruleRevision: saved.revision,
+              sourceGeneration: saved.sourceGeneration,
+              reader: firstLifetime,
+            },
+            filter: admission.filter!,
+            release: { digest: saved.releaseDigest, release: admission.release! },
             limit,
-            view: options.view ?? 'BASIC',
-          },
-        };
-        let afterSubject: string | null = null;
-        const token = cursorToken(options.cursor ?? null);
-        if (token !== null) {
-          const decoded = decodeCursor(tokens, cursorBinding, token);
-          if (
-            !decoded.ok ||
-            decoded.after.length !== 5 ||
-            decoded.after.some((value) => typeof value !== 'string') ||
-            typeof decoded.after[0] !== 'string' ||
-            typeof decoded.after[1] !== 'string' ||
-            typeof decoded.after[2] !== 'string' ||
-            typeof decoded.after[3] !== 'string' ||
-            typeof decoded.after[4] !== 'string' ||
-            routeOf(decoded.after[3]) === null
-          )
-            throw invalidCursor();
-          if (
-            decoded.epoch !== collection.revision ||
-            decoded.after[0] !== prepared.basis.query ||
-            decoded.after[1] !== prepared.basis.canonical ||
-            decoded.after[2] !== firstLifetime.operator ||
-            decoded.after[4] !== firstLifetime.minimumAuthnEpoch ||
-            routeOf(decoded.after[3]) === null
-          )
-            throw new ProblemError('stale_cursor');
-          afterSubject = decoded.after[3];
-        }
-        const page = await search.prefix(prepared, {
-          afterSubject,
-          quota: limit,
-          budget: limit + 1,
-          allowance: allowance(),
-        });
-        if (page.basis.query !== prepared.basis.query || page.basis.canonical !== prepared.basis.canonical)
-          throw new ProblemError('stale_cursor');
-        work.native(page.usage.work!);
-        const finalTime = await withConnection(pool, (client) =>
-          mintReadTime(deadlineClient(client, deadline), dependencies.clock),
-        );
-        try {
-          await authorize(finalTime);
-          const finalLifetime = await lifetime();
-          if (
-            finalLifetime.minimumAuthnEpoch !== firstLifetime.minimumAuthnEpoch ||
-            finalLifetime.operator !== firstLifetime.operator
-          )
-            throw new ProblemError('stale_cursor');
-        } finally {
-          releaseOperationalTime(finalTime);
-        }
-        const last = page.hits.at(-1);
-        return {
-          members: page.hits.map((hit) => ({ kind: 'dynamic' as const, subjectId: hit.id })),
-          next:
-            page.exhausted || !last
-              ? null
-              : encodeCursor(tokens, cursorBinding, {
-                  epoch: collection.revision,
-                  after: [
-                    page.basis.query,
-                    page.basis.canonical,
-                    firstLifetime.operator,
-                    last.id,
-                    firstLifetime.minimumAuthnEpoch,
-                  ],
-                }),
-        };
+            ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
+            scope: { access, actor: viewer, routeKey: dependencies.routeKey, nativeT: time, deadline },
+            async revalidate() {
+              const finalTime = await withConnection(pool, (client) =>
+                mintReadTime(deadlineClient(client, deadline), dependencies.clock),
+              );
+              try {
+                await authorize(finalTime);
+                const finalLifetime = await lifetime();
+                if (
+                  finalLifetime.minimumAuthnEpoch !== firstLifetime.minimumAuthnEpoch ||
+                  finalLifetime.operator !== firstLifetime.operator
+                )
+                  throw new ProblemError('stale_cursor');
+              } finally {
+                releaseOperationalTime(finalTime);
+              }
+            },
+          })
+          .catch((error: unknown) => {
+            // Search's restart from a superseded saved cursor is this members cursor's stale response.
+            if (options.cursor != null && error instanceof ProblemError && error.code === 'search_restart_required')
+              throw new ProblemError('stale_cursor');
+            throw error;
+          });
       } finally {
         releaseOperationalTime(time);
       }

@@ -1,4 +1,5 @@
 import { memoizedValue } from '../memoized.ts';
+import { jsonParameter } from '../database/json.ts';
 import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import { HANDLE_LOOKUP_PATTERN, isClaimHandle, isReservedHandle } from './handle-policy.ts';
 import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
@@ -1609,7 +1610,7 @@ export function createLifecycleCommands(config: Boundary & { access: Access }) {
               await updateStatement.run(tx, {
                 route,
                 account_id: input.accountId,
-                patch,
+                patch: jsonParameter(patch),
                 transaction_id: transactionId,
               }),
             ),
