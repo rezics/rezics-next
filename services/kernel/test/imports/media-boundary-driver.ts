@@ -41,25 +41,28 @@ async function sqlLoader() {
   // A host has already compiled the same migrated SQL before it starts its
   // worker. Carry only that compiler output into the child's private loader.
   if (process.env.MEDIA_SQL_CACHE) {
-    const entries = JSON.parse(await readFile(process.env.MEDIA_SQL_CACHE, 'utf8')) as [
+    const entries = (await readFile(process.env.MEDIA_SQL_CACHE, 'utf8'))
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line)) as [
       string,
       { source: string; code: string },
     ][];
     for (const [file, value] of entries) compiledSql.set(file, value);
   }
   const directory = await mkdtemp(resolve(import.meta.dir, '../../../../.temp/media-sql-'));
-  const cache = `${directory}/compiled.json`;
+  const cache = `${directory}/compiled.jsonl`;
   const loader = `${directory}/loader.ts`;
   const config = `${directory}/bunfig.toml`;
   try {
     await writeFile(config, '');
-    await writeFile(cache, JSON.stringify([...compiledSql]));
+    await writeFile(cache, [...compiledSql].map((entry) => JSON.stringify(entry) + '\n').join(''));
     await writeFile(
       loader,
-      `import { readFileSync, renameSync, writeFileSync } from 'node:fs';
+      `import { appendFileSync, readFileSync } from 'node:fs';
 import compiler from ${JSON.stringify(import.meta.resolve('reylo/jest'))};
 const path = ${JSON.stringify(cache)};
-const compiled = new Map(JSON.parse(readFileSync(path, 'utf8')));
+const compiled = new Map(readFileSync(path, 'utf8').split('\\n').filter(Boolean).map((line) => JSON.parse(line)));
 Bun.plugin({ name: 'native-reylo-cache', setup(build) {
   build.onLoad({ filter: /\\.sql$/ }, ({ path: file }) => {
     const source = readFileSync(file, 'utf8');
@@ -67,8 +70,8 @@ Bun.plugin({ name: 'native-reylo-cache', setup(build) {
     if (previous?.source === source) return { loader: 'js', contents: previous.code };
     const { code } = compiler.process(source, file, { supportsStaticESM: true, configString: '' });
     compiled.set(file, { source, code });
-    writeFileSync(path + '.pending', JSON.stringify([...compiled]));
-    renameSync(path + '.pending', path);
+    // Persist each new compilation once, without rewriting the growing cache.
+    appendFileSync(path, JSON.stringify([file, { source, code }]) + '\\n');
     return { loader: 'js', contents: code };
   });
 } });
@@ -80,7 +83,10 @@ Bun.plugin({ name: 'native-reylo-cache', setup(build) {
       cache,
       async close() {
         try {
-          const entries = JSON.parse(await readFile(cache, 'utf8')) as [string, { source: string; code: string }][];
+          const entries = (await readFile(cache, 'utf8'))
+            .split('\n')
+            .filter(Boolean)
+            .map((line) => JSON.parse(line)) as [string, { source: string; code: string }][];
           for (const [file, value] of entries) compiledSql.set(file, value);
         } finally {
           await rm(directory, { recursive: true, force: true });
@@ -143,7 +149,7 @@ export async function launchBoundaryProcess(mode: 'host' | 'worker', env: Record
   const errors = (async () => {
     for await (const chunk of child.stderr) {
       const text = new TextDecoder().decode(chunk);
-      errorOutput += text;
+      errorOutput = (errorOutput + text).slice(-8192);
       if (process.env.MEDIA_DEBUG) process.stderr.write(text);
     }
     return errorOutput;
@@ -151,7 +157,7 @@ export async function launchBoundaryProcess(mode: 'host' | 'worker', env: Record
   const ready = Promise.withResolvers<string>();
   const reading = (async () => {
     for await (const chunk of child.stdout) {
-      output += new TextDecoder().decode(chunk);
+      output = (output + new TextDecoder().decode(chunk)).slice(-8192);
       const address = output.match(/^MEDIA_READY (http:\/\/127\.0\.0\.1:\d+)$/m)?.[1];
       if (address) ready.resolve(address);
     }
@@ -164,15 +170,21 @@ export async function launchBoundaryProcess(mode: 'host' | 'worker', env: Record
       ready.promise,
       new Promise<never>((_, reject) => {
         startupTimer = setTimeout(
-          () => reject(new Error(`Media ${mode} startup exceeded its fixture deadline`)),
+          () => reject(new Error(`Media ${mode} startup exceeded its fixture deadline\n${errorOutput}\n${output}`)),
           110_000,
         );
       }),
     ]);
   } catch (error) {
     child.kill();
-    await child.exited;
-    await sql.close();
+    const timer = setTimeout(() => child.kill('SIGKILL'), 10_000);
+    try {
+      await child.exited;
+      await reading;
+    } finally {
+      clearTimeout(timer);
+      await sql.close();
+    }
     throw error;
   } finally {
     clearTimeout(startupTimer);
@@ -817,10 +829,12 @@ async function mediaGrowth(
 }
 
 async function workerHost(): Promise<RpcHost> {
+  console.error('MEDIA_STARTUP loading worker modules');
   const { KERNEL_WORK_MODULES } = await import('../support/default-work-modules.ts');
+  console.error('MEDIA_STARTUP opening worker database');
   const database = await openGrowthDatabase();
   const observer = await observeMediaPool(database.pool);
-  const client = await createWorkClient(database.url, database.openPool());
+  const client = await createWorkClient(database.url, database.pool);
   const originalFetch = globalThis.fetch;
   const endpoint = new URL(process.env.MEDIA_EXTERNAL_ENDPOINT!);
   const names: string[] = [];
@@ -926,6 +940,7 @@ async function workerHost(): Promise<RpcHost> {
       'OPENSEARCH_URL',
     ])
       delete env[name];
+    console.error('MEDIA_STARTUP composing worker');
     work = await composeWork(KERNEL_WORK_MODULES, {
       databaseUrl: database.url,
       pool: database.pool,
@@ -942,7 +957,9 @@ async function workerHost(): Promise<RpcHost> {
     if (!effectsQueue || !importQueue) throw new Error('Missing native import queue');
     await effectsQueue.setMinPollingIntervalMs(1);
     await importQueue.setMinPollingIntervalMs(1);
+    console.error('MEDIA_STARTUP launching worker');
     await work.launch();
+    console.error('MEDIA_STARTUP worker launched');
     const executor = DBOSExecutor.globalInstance;
     if (!executor) throw new Error('Missing work executor');
     // The timeout sweep issues a statement on a one-second timer. Leaving it on
