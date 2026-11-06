@@ -10,7 +10,11 @@ import type { WorkExecutionOriginal } from '../command/execution-contract.ts';
 import type { NativeSourceIdentity } from './native-source-custody.ts';
 import type { CollectionSourceObservation } from './collection-source.ts';
 import { type OperationalWorkRegistration, type OperationalWorkTransfer } from '../history/contract/index.ts';
-/** Internal admitted meaning, never an HTTP DTO or an execution/disclosure certificate. */
+/** Saved population selector. Owner keys keep the retained six-part basis; a catalogue key adds one element. */
+export type PreparationSource = Readonly<{
+    kind: 'owner' | 'catalogue';
+}>;
+/** Admitted meaning, never an HTTP DTO or an execution/disclosure certificate. Its source is always resolved. */
 export type PreparationDefinition = Readonly<{
     filter: FilterDocument;
     sort: 'id' | 'ordinal';
@@ -18,10 +22,17 @@ export type PreparationDefinition = Readonly<{
         digest: string;
         value: FilterRelease;
     }>;
-    /** Saved population selector. Owner keys keep the retained six-part basis; a catalogue key adds one element. */
-    source: Readonly<{
-        kind: 'owner' | 'catalogue';
+    source: PreparationSource;
+}>;
+/** A caller's definition at the boundary. An omitted source is owner-compatible execution. */
+export type PreparationDefinitionInput = Readonly<{
+    filter: FilterDocument;
+    sort: 'id' | 'ordinal';
+    release: Readonly<{
+        digest: string;
+        value: FilterRelease;
     }>;
+    source?: PreparationSource;
 }>;
 export type PreparationDefinitionBasis = Readonly<{
     definition: PreparationDefinition;
@@ -29,7 +40,7 @@ export type PreparationDefinitionBasis = Readonly<{
     basisDigest: Uint8Array;
 }>;
 /** Normalize accepted definitions to their exact shared expansion before native deduplication. */
-export declare function preparationDefinitionBases(ownerAccountId: string, collectionId: string, definitions: readonly PreparationDefinition[]): readonly PreparationDefinitionBasis[];
+export declare function preparationDefinitionBases(ownerAccountId: string, collectionId: string, definitions: readonly PreparationDefinitionInput[]): readonly PreparationDefinitionBasis[];
 export type PreparationLocator = Readonly<{
     route: number;
     ownerAccountId: string;
@@ -74,7 +85,7 @@ export type MembersPreparationHistory = Readonly<{
 }>;
 export interface MembersPreparation {
     /** One Collection's distinct definitions, bounded by the common-page read authority. */
-    reserve(actor: Actor, collectionId: string, definitions: readonly PreparationDefinition[], options?: {
+    reserve(actor: Actor, collectionId: string, definitions: readonly PreparationDefinitionInput[], options?: {
         deadline?: number;
         history?: never;
         runtime?: boolean;
@@ -114,7 +125,7 @@ export declare function createMembersPreparation(config: {
     clock?: KernelClock;
 }): MembersPreparation;
 /** Canonical definition identity only; never current Source authority. */
-export declare function preparationBasis(owner: string, collection: string, definition: PreparationDefinition): string;
+export declare function preparationBasis(owner: string, collection: string, definition: PreparationDefinitionInput): string;
 export declare const validPreparationLocator: typeof validLocator;
 /** Exact native step binding; no Actor or reusable disclosure grant. */
 export declare function lockPreparationStep(tx: OperationalTransaction, locator: PreparationLocator): Promise<string | null>;

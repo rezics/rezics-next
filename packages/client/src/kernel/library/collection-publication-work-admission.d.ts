@@ -1,6 +1,7 @@
 /** SERVER ONLY. Original Library whole-query publication seam, distinct from Members and Kind. */
 import type { FilterDocument, FilterRelease } from '@rezics/filter';
 import { type OperationalTransaction } from '../command/operational.ts';
+import type { CollectionRuleSource } from './collection-rules.ts';
 import type { IdentityNativeReceipt } from '../semantic/identity-epoch-contract.ts';
 import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
 import type { CollectionPublicationCreation, CollectionPublicationInputRef, CollectionPublicationPhase, CollectionPublicationRuleRef, CollectionPublicationTargetRef } from './collection-publication-episode-contract.ts';
@@ -23,6 +24,8 @@ export type CollectionPublicationDefinition = Readonly<{
         digest: string;
         value: FilterRelease;
     }>;
+    /** The stored Source selects the population: the owner's private Library, or Search's public catalogue. */
+    source: CollectionRuleSource;
 }>;
 /** Data on the SAME live Core client after independent native admission, not a completion receipt.
  * input and target MUST name the SAME actual Collection explicitly; input remains private working
