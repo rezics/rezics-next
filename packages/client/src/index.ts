@@ -297,12 +297,12 @@ export type {
   ReviewedPersonOperation,
 } from './reviewed-person-identity.ts';
 
-export type {
-  SubjectIdentityOperation,
-  SubjectIdentityOperationAdmission,
-  SubjectIdentityOperationRead,
-  SubjectIdentityOperationRoutes,
-} from './kernel/semantic/http/identity-operations.d.ts';
+export type SubjectIdentityOperationRoutes = ReturnType<
+  typeof subjectRoutes
+>['~Routes']['v1']['subjectIdentityOperations'];
+export type SubjectIdentityOperationRead = SubjectIdentityOperationRoutes[':id']['get']['response'][200];
+export type SubjectIdentityOperation = SubjectIdentityOperationRead['operation'];
+export type SubjectIdentityOperationAdmission = SubjectRoutes['$merge']['post']['response'][202];
 
 export type OwnVotesPage = Routes['me']['rating-votes']['get']['response'][200];
 export type OwnVoteEntry = OwnVotesPage['votes'][number];

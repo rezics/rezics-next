@@ -19,6 +19,9 @@ import {
   type NoticeInboxItem,
   type NoticeInboxPage,
   type SubjectRead,
+  type SubjectIdentityOperation,
+  type SubjectIdentityOperationAdmission,
+  type SubjectIdentityOperationRead,
   type UnreadNoticeSummary,
 } from '../src/index.ts';
 
@@ -375,6 +378,8 @@ test('reviewed Person evidence accepts exactly the four source keys with their i
 });
 
 test('installed identity operation poll types distinguish pending from published results', async () => {
+  type Admission = NonNullable<Awaited<ReturnType<KernelClient['subjects']['$merge']['post']>>['data']>;
+  expectTypeOf<SubjectIdentityOperationAdmission>().toEqualTypeOf<Admission>();
   const OTHER = '019a1b2c-3d4e-7f00-8a00-000000000002';
   const remote = kernel([
     () => json(200, { operation: { id: ID, done: false } }),
@@ -392,6 +397,8 @@ test('installed identity operation poll types distinguish pending from published
   expect(pending.status).toBe(200);
   expect(pending.data?.operation).toEqual({ id: ID, done: false });
   const published = await reviewed.operation(ID);
+  expectTypeOf(published.data!).toEqualTypeOf<SubjectIdentityOperationRead>();
+  expectTypeOf(published.data!.operation).toEqualTypeOf<SubjectIdentityOperation>();
   expect(published.data?.operation).toEqual({
     id: ID,
     done: true,
