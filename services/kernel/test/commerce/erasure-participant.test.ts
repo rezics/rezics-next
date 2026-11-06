@@ -447,7 +447,8 @@ describe('native genuine-order retention', () => {
       expect(Date.parse(retainedSecond!.expiresAt)).toBe(expiresAt.getTime());
       const minimizedOrders = (
         await pool.query(
-          `SELECT order_id,checkout_session_id,checkout_url,checkout_expires_at,checkout_minimized_at,
+          `SELECT order_id,checkout_session_id,checkout_url,checkout_expires_at,
+                  to_char(checkout_minimized_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS checkout_minimized_at,
                   settlement,unit_amount_minor::text AS unit_amount_minor,currency
            FROM commerce.purchase_order WHERE route=$1 AND order_id=ANY($2::uuid[]) ORDER BY order_id`,
           [routeOf(buyer.accountId), [first.id, second.id]],

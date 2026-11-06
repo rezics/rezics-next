@@ -110,6 +110,10 @@ function textFields(value: SqlTextList): string[] | null {
   return value as string[];
 }
 
+function instantMs(value: string | Date): number {
+  return new Date(value).getTime();
+}
+
 function routeForAccount(accountId: string): number {
   const route = routeOf(accountId);
   if (route === null) throw new Error('Invalid commerce erasure account');
@@ -187,7 +191,7 @@ export async function prepareCommerceOrderRetention(pool: Pool, input: { orderId
       },
     },
     async (tx, { time }) => {
-      if (Date.parse(expiresAt) <= Date.parse(authoritativeTimeValue(time)))
+      if (instantMs(expiresAt) <= instantMs(authoritativeTimeValue(time)))
         throw new Error('Native Commerce retention expiry must be after configuration');
       const owner = row<OwnerRow>(await readRetentionOwner.run(tx, ownerKey));
       if (!owner) throw new Error('Order retention configuration requires a genuine active native order');
@@ -195,7 +199,7 @@ export async function prepareCommerceOrderRetention(pool: Pool, input: { orderId
       if (
         prior &&
         (prior.purpose !== NATIVE_TEST_ORDER_RETENTION_PURPOSE ||
-          Date.parse(prior.expiresAt) !== Date.parse(expiresAt) ||
+          instantMs(prior.expiresAt) !== instantMs(expiresAt) ||
           fieldKey(prior.fields) !== fields.join('\0'))
       )
         throw new Error('A buyer account has one exact Commerce order-retention policy');
@@ -218,7 +222,7 @@ export async function prepareCommerceOrderRetention(pool: Pool, input: { orderId
       if (
         !retained ||
         retained.purpose !== NATIVE_TEST_ORDER_RETENTION_PURPOSE ||
-        Date.parse(retained.expiresAt) !== Date.parse(expiresAt) ||
+        instantMs(retained.expiresAt) !== instantMs(expiresAt) ||
         fieldKey(retained.fields) !== fields.join('\0')
       )
         throw new Error('Commerce order retention configuration did not commit exactly');
@@ -274,7 +278,7 @@ export async function advanceCommerceErasure(pool: Pool, accountId: string): Pro
       if (progress.phase === 'pending') return noEffect('pending' as const);
       if (progress.phase === 'retained') {
         const now = authoritativeTimeValue(time);
-        if (progress.retentionExpiresAt !== null && Date.parse(progress.retentionExpiresAt) <= Date.parse(now)) {
+        if (progress.retentionExpiresAt !== null && instantMs(progress.retentionExpiresAt) <= instantMs(now)) {
           const retained = listed<KeyRow>(
             await pageRetained.run(tx, {
               ...key,
@@ -436,7 +440,7 @@ export async function advanceCommerceErasure(pool: Pool, accountId: string): Pro
           }
           const priorExpiry = retainedPolicy.retentionExpiresAt;
           if (
-            (priorExpiry !== null && Date.parse(priorExpiry) !== Date.parse(order.expiresAt)) ||
+            (priorExpiry !== null && instantMs(priorExpiry) !== instantMs(order.expiresAt)) ||
             (retainedPolicy.retentionPurpose !== null && retainedPolicy.retentionPurpose !== order.purpose) ||
             (retainedPolicy.retentionFields !== null &&
               fieldKey(retainedPolicy.retentionFields) !== fieldKey(order.fields))
@@ -561,7 +565,7 @@ export function registerCommerceErasure({ pool, client, addEffects }: WorkContex
         ),
       );
       if (!progress?.expiresAt) throw new Error('Commerce retained-order deadline unavailable');
-      return Math.max(0, Date.parse(progress.expiresAt) - Date.now());
+      return Math.max(0, instantMs(progress.expiresAt) - Date.now());
     },
     { name: 'commerce.erasure.retentionDeadline' },
   );

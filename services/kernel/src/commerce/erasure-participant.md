@@ -106,7 +106,9 @@ policy removal and progress checkpoint commit in one buyer-home command. Durable
 purpose and deadline. Entitlements, acquisition slots and copied `money_observation` evidence are removed in
 account-leading pages of at most 100 keys. Exact private readers and new Checkout writes remain fenced at T.
 
-The retained Checkout row is inspectable only by an exact internal owner locator; there is no buyer-facing read. At
+The retained Checkout row is inspectable only by an exact internal owner locator; there is no buyer-facing read.
+Deadline instants are projected as UTC ISO with microseconds (`YYYY-MM-DDTHH24:MI:SS.USZ`), the same form as
+command T, so inspect, Access acknowledgement and `Date.parse` keep the configured millisecond. At
 its configured deadline, the existing Commerce workflow waits on durable work, purges eligible retained rows in
 bounded pages, and commits that purge before calling Access `resolveRetention` in a separate platform command. A
 restart between minimization/checkpoint or purge/resolve replays the durable phase and exact owner locator. Late paid
@@ -185,7 +187,8 @@ replays the committed payment.
 `contentEditionId` and ordinary commercial terms; `targetSubjectId` is the historical-replay body and is rejected
 on the same object. Native `POST /v1/orders` binds `expectedOfferRevision` from public `GET /v1/offers/:offerId`;
 seller create and mutation DTOs stay revisionless. Acceptance is that one purchase/retention/expiry case on two
-quantity-one editions, so refund and late paid keep distinct genuine orders, plus unused-actor operator history. A living buyer still acquires the
+quantity-one editions, so refund and late paid keep distinct genuine orders, plus unused-actor operator history.
+No extra stories: those two cases pin paid minimization, expiry purge, restricted readback and late paid/refund. A living buyer still acquires the
 paid edition after the deleted buyer's entitlement is gone; seller termination then refuses a new order.
 
 The Auth/persona/fresh-deletion fixture stays in the test parent. Only kernel worker setup runs in a child using
