@@ -15,7 +15,6 @@ import {
   type ZoneStarter,
 } from '@rezics/composition';
 import type { FilterDocument } from '@rezics/filter';
-import type { Pool } from 'pg';
 import bookZoneStarter from '../../../../../packages/definitions/presentation/book/zone.json';
 import recipeZoneStarter from '../../../../../packages/definitions/presentation/recipe/zone.json';
 import type { CollectionView, DynamicCollectionView } from '../../../../../specs/dynamic-collections-driver.ts';
@@ -27,6 +26,7 @@ import {
   type ReleasedLibraryPopulation,
 } from '../../library/support/released-library-population.ts';
 import { discoveryKey, type CreatedSubject, type ReleasedDiscoveryFixture } from '../../support/released-discovery.ts';
+import { openGrowthDatabase, type GrowthDatabase } from '../../support/growth.ts';
 import { COMPOSED_READS, COMPOSED_SLOT_EACH, COMPOSED_SLOTS, PAGE_SLOTS } from './composed-discovery-bounds.ts';
 import { PUBLIC_JOBS, jobFilter, jobType, type JobFilterSet, type PublicJob } from './composed-discovery-matrix.ts';
 
@@ -213,6 +213,7 @@ export type PublicSource = Awaited<ReturnType<ReleasedLibraryPopulation['sources
 export type ComposedDiscoveryWorld = Readonly<{
   population: ReleasedLibraryPopulation;
   fixture: ReleasedDiscoveryFixture;
+  database: GrowthDatabase;
   books: Awaited<ReturnType<ReleasedDiscoveryFixture['books']>>;
   recipes: Awaited<ReturnType<ReleasedDiscoveryFixture['recipes']>>;
   classification: Awaited<ReturnType<ReleasedDiscoveryFixture['classification']>>;
@@ -227,6 +228,7 @@ export type ComposedDiscoveryWorld = Readonly<{
   documents: Readonly<Record<PublicJob | 'composed', CompositionDocument>>;
   typelistRoutes: Readonly<Record<PublicJob, string>>;
   duplicateNotes: readonly string[];
+  close(): Promise<void>;
 }>;
 
 async function subjectLabel(fixture: ReleasedDiscoveryFixture, subject: CreatedSubject): Promise<string> {
@@ -355,14 +357,46 @@ async function builtinCollection(
   return choices[0]!.id;
 }
 
+async function settleComposedWorld(
+  population: ReleasedLibraryPopulation | undefined,
+  database: GrowthDatabase | undefined,
+  cause?: unknown,
+): Promise<void> {
+  const errors: unknown[] = [];
+  try {
+    await population?.close();
+  } catch (error) {
+    errors.push(error);
+  }
+  // Driver close already ends the instrumented runtime pool; only the admin checkout remains.
+  try {
+    await database?.admin.end();
+  } catch (error) {
+    errors.push(error);
+  }
+  if (cause && errors.length)
+    throw new AggregateError([cause, ...errors], 'Composed discovery world setup and cleanup failed', { cause });
+  if (cause) throw cause;
+  if (errors.length === 1) throw errors[0];
+  if (errors.length) throw new AggregateError(errors, 'Composed discovery world cleanup failed');
+}
+
 export async function createComposedDiscoveryWorld(options: {
   version: 1;
   search: 'native';
-  kernelPool: (url: string) => Pool | Promise<Pool>;
 }): Promise<ComposedDiscoveryWorld> {
-  const population = await createReleasedLibraryPopulation(options);
-  const fixture = population.base;
+  let database: GrowthDatabase | undefined;
+  let population: ReleasedLibraryPopulation | undefined;
   try {
+    population = await createReleasedLibraryPopulation({
+      version: options.version,
+      search: options.search,
+      async kernelPool(url) {
+        database = await openGrowthDatabase(url);
+        return database.pool;
+      },
+    });
+    const fixture = population.base;
     await fixture.setup.openFeatures(['search', 'search_advanced', 'personal_library', 'reading_progress']);
     const [books, recipes, classification, diet] = await Promise.all([
       fixture.books(),
@@ -500,9 +534,12 @@ export async function createComposedDiscoveryWorld(options: {
         'Conceal own state',
       );
     }
+    if (!database) throw new Error('Composed discovery world requires the instrumented growth database');
+    let closed = false;
     return {
       population,
       fixture,
+      database,
       books,
       recipes,
       classification,
@@ -525,13 +562,14 @@ export async function createComposedDiscoveryWorld(options: {
       },
       typelistRoutes,
       duplicateNotes,
+      async close() {
+        if (closed) return;
+        closed = true;
+        await settleComposedWorld(population, database);
+      },
     };
   } catch (error) {
-    try {
-      await population.close();
-    } catch (cleanup) {
-      throw new AggregateError([error, cleanup], 'Composed discovery world setup and cleanup failed');
-    }
+    await settleComposedWorld(population, database, error);
     throw error;
   }
 }

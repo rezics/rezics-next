@@ -41,7 +41,7 @@ import {
   revokeDuringPreparation,
   surfacePages,
 } from './support/composed-discovery-plans.ts';
-import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { checkGrowth, type GrowthDatabase } from '../support/growth.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { discoveryKey, type CreatedSubject } from '../support/released-discovery.ts';
 
@@ -49,7 +49,7 @@ const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 
 let world: ComposedDiscoveryWorld | undefined;
-let database: GrowthDatabase | undefined;
+let database: GrowthDatabase;
 let fixture: ComposedDiscoveryWorld['fixture'];
 let books: ComposedDiscoveryWorld['books'];
 let recipes: ComposedDiscoveryWorld['recipes'];
@@ -60,11 +60,8 @@ beforeAll(async () => {
   world = await createComposedDiscoveryWorld({
     version: 1,
     search: 'native',
-    async kernelPool(url) {
-      database = await openGrowthDatabase(url);
-      return database.pool;
-    },
   });
+  database = world.database;
   fixture = world.fixture;
   books = world.books;
   recipes = world.recipes;
@@ -72,8 +69,7 @@ beforeAll(async () => {
 }, 180_000);
 
 afterAll(async () => {
-  await database?.admin.end();
-  await world?.population.close();
+  await world?.close();
 }, 180_000);
 
 test('derived composed 16-read 128-slot bound matches the published Cost table before repair', () => {

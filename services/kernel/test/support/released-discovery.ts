@@ -1057,9 +1057,15 @@ export async function createReleasedDiscoveryFixture(
       },
       close: async () => {
         closed = true;
-        // Settle any admitted setup and its ordinary journal cleanup before closing the original driver.
-        await Promise.allSettled([importedHarem, statementConsent]);
-        return driver.close();
+        const errors: unknown[] = [];
+        await Promise.allSettled([importedHarem, statementConsent, nativeStart]);
+        try {
+          await driver.close();
+        } catch (cleanup) {
+          errors.push(cleanup);
+        }
+        if (errors.length === 1) throw errors[0];
+        if (errors.length) throw new AggregateError(errors, 'Released discovery cleanup failed');
       },
     };
     if (native) {
@@ -1070,11 +1076,14 @@ export async function createReleasedDiscoveryFixture(
     }
     return fixture;
   } catch (error) {
+    const errors: unknown[] = [];
+    await Promise.allSettled([nativeStart]);
     try {
       await driver.close();
     } catch (cleanup) {
-      throw new AggregateError([error, cleanup], 'Released discovery setup and cleanup failed');
+      errors.push(cleanup);
     }
+    if (errors.length) throw new AggregateError([error, ...errors], 'Released discovery setup and cleanup failed', { cause: error });
     throw error;
   }
 }
