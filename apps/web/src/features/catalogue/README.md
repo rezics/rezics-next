@@ -33,7 +33,7 @@ Correction lists render the existing `recipeEvidenceChanges` current/next observ
 replaced and removed groups, without claiming stable citation identities. Returning to a field retires unsent
 review; explicit revised review uses sanitized evidence while an uncertain command retains its original operands.
 
-Decision: Mounted Zone editor lifecycle is one session-owned intent against the current resource reading; the fewest tests pin Delete1/Restore2, save-then-lifecycle, repeated activation, uncertain replay and owner replacement on the actual route/editor. Helper fixtures do not establish a mounted native/browser pass.
+Decision: Mounted Zone editor lifecycle is one session-owned intent against the current resource reading; the fewest tests pin Delete1/Restore2, save-then-lifecycle, repeated activation, uncertain replay and owner replacement on the actual route/editor. Helper fixtures do not establish a mounted native/browser pass. A replacement capture remounts the admitted editor on admission and session signature.
 Decision: publication uses the generated native Kernel client and the existing catalogue session port. Release/source
 imports publish immutable Release1 bodies; an installed versioned catalogue pin starts its native build, continues by
 returned root, and activates against the separately read catalogue head. A missing artifact keeps its exact digest

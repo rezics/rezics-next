@@ -98,7 +98,7 @@ export function ZoneEditorRoute({
 
   return (
     <AdmittedZoneEditor
-      key={`${route}:${snapshot.incarnation}`}
+      key={`${route}:${snapshot.incarnation}:${capture.observation.admission}:${capture.sessionSignature}`}
       id={id}
       locale={locale}
       initial={initial}
