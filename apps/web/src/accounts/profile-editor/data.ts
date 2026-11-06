@@ -1,4 +1,3 @@
-import { withProfileDeadline } from '../../settings/profile-request-deadline';
 import type { KernelClient } from '@rezics/client';
 import * as v from 'valibot';
 import {
@@ -6,16 +5,15 @@ import {
   EditableProfileReadError,
   nativeProfileFailure,
   parseProfilePatchAck,
-  type EditableProfileFailure,
-} from '../../settings/editable-profile-source';
-import { settingsCommandKeyHeader } from '../../settings/command-headers';
-import {
+  settingsCommandKeyHeader,
   loadProfileRecord,
+  profileFieldErrors,
   profilePatchAdmitted,
+  withProfileDeadline,
+  type EditableProfileFailure,
   type ObservedProfile,
   type ProfilePatch,
-} from '../../settings/profile-data';
-import { profileFieldErrors } from '../../settings/profile-write';
+} from '../../settings/preferences';
 
 const id = v.pipe(v.string(), v.regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/));
 export const selection = v.strictObject({ accountId: id, viewerId: id });

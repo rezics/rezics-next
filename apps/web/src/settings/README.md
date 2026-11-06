@@ -32,9 +32,10 @@ scan. Profile editing retains one bounded profile, one draft and one original co
 at most four flags. Native Accounts and Content own the GET's nested authority and avatar work. Existing native
 watch listing, removal identity/revision and receipt contracts remain unchanged.
 
-Decision: keep the delivered native Profile and Watches contracts; enforce applicable field and public-view flag
-advice in controls and both write paths, preserve deliberate post-dispatch notification intent, and prove saved-preview
-and ten-second recovery behavior in the existing focused suites. Add no stories for these existing states.
+**Decision:** Apply native Profile field and public-view advice in controls and both write paths, keep action results
+serializable, and preserve deliberate post-dispatch notification intent. Pin these corrections, saved-preview state
+and ten-second recovery in the existing focused suites without adding stories. The combined Profile–Watches–Profile
+and public Profile journeys remain unaccepted; integration owns their native, browser and root verification.
 
 The profile reader accepts additive top-level response fields while keeping the consumed profile and editing advice
 closed, bounded and identity-bound. Editing advice stays in the private reader result; the command retains its strict
