@@ -42,6 +42,10 @@ export const nativePermissionProjectionBound = Object.freeze({
   explicitGlobalPrincipalAuthenticatedBenefitGrant: false,
 });
 
+/** Primitive grant columns plus statement-level `live`. Policy-core maps
+ * `PolicyFacts.deadlineLive` from `live`; SQL also aliases `deadlineLive` once.
+ */
 export type NativePermissionProjection = Readonly<{
   [K in keyof typeof nativePermissionProjectionBound]: boolean | null;
-}>;
+}> &
+  Readonly<{ live: boolean | null }>;
