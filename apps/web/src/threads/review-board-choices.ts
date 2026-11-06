@@ -10,14 +10,7 @@ export type ReviewDestinationItem = ReviewDestinationPage['items'][number];
 type ReviewDestinationContext = NonNullable<ReviewDestinationPage['context']>;
 type ReviewDestinationSource = ReviewDestinationContext['subject']['source'];
 
-const destinationStates = new Set<unknown>([
-  'choices',
-  'sparse',
-  'no-destinations',
-  'exhausted',
-  'denied',
-  'expired',
-]);
+const destinationStates = new Set<unknown>(['choices', 'sparse', 'no-destinations', 'exhausted', 'denied', 'expired']);
 const viewerStates = new Set<unknown>(['current', 'denied']);
 
 function isDestinationState(value: unknown): value is ReviewDestinationPage['state'] {
@@ -57,8 +50,7 @@ function parseContext(value: unknown): ReviewDestinationContext | null {
   if (
     typeof subject.id !== 'string' ||
     source === null ||
-    (label !== null &&
-      (!record(label) || typeof label.value !== 'string' || typeof label.language !== 'string')) ||
+    (label !== null && (!record(label) || typeof label.value !== 'string' || typeof label.language !== 'string')) ||
     typeof realm.id !== 'string' ||
     typeof realm.title !== 'string' ||
     typeof realm.spaceId !== 'string' ||

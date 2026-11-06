@@ -10,9 +10,7 @@ import subjectRecording from '../src/kernel/recorded/subject.json';
 import type { ReviewDestinationPage } from '../src/threads/review-board-choices';
 
 type ReviewDestinationsRoute = ReturnType<KernelClient['realms']>['review-destinations'];
-type InstalledReviewDestinationPage = NonNullable<
-  Awaited<ReturnType<ReviewDestinationsRoute['get']>>['data']
->;
+type InstalledReviewDestinationPage = NonNullable<Awaited<ReturnType<ReviewDestinationsRoute['get']>>['data']>;
 expectTypeOf<ReviewDestinationPage>().toEqualTypeOf<InstalledReviewDestinationPage>();
 
 const reader = 'story-viewer';
