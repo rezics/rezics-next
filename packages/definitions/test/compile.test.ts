@@ -1,12 +1,6 @@
 import { expect, test } from 'bun:test';
 import { admitImportedDocument, CatalogueError, compileCatalogue } from '../src/compile.ts';
-import {
-  compareReleases,
-  reconcileActivation,
-  releaseDigest,
-  validateRelease,
-  valueSchema,
-} from '../src/index.ts';
+import { compareReleases, reconcileActivation, releaseDigest, validateRelease, valueSchema } from '../src/index.ts';
 
 const prefixes = `prefixes:
   linkml: https://w3id.org/linkml/
@@ -326,7 +320,10 @@ test('imported sources compile to a release identity and name the repairable sou
   expect(missing.diagnostics.some((diagnostic) => diagnostic.file === 'presentation/en')).toBe(true);
   expect(missing.diagnostics.some((diagnostic) => diagnostic.pointer.includes('ex:Extra'))).toBe(true);
   const unknown = await admitImportedDocument({ format: 'nope' });
-  expect(unknown).toEqual({ kind: 'invalid', diagnostics: [{ pointer: '/document', code: 'invalid_type', file: null }] });
+  expect(unknown).toEqual({
+    kind: 'invalid',
+    diagnostics: [{ pointer: '/document', code: 'invalid_type', file: null }],
+  });
   const compared = compareReleases(compiled, {
     ...compiled,
     types: {
