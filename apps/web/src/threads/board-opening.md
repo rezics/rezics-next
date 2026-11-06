@@ -91,6 +91,8 @@ points to render; the native command remains authoritative. Membership's existin
 verification remain in its owner. Pin, watch, and slow-mode commands remain with their existing owners. Readability,
 membership labels, and successful reads do not grant contribution or moderation authority.
 
+Decision: the thread receiver consumes the mounted reading page's exact-revision review citation, mention and image projections without browser-side enrichment; historical question metadata stays unavailable, and local revisions cannot borrow the previous document's projections.
+
 ## Evidence boundary
 
 The source schema and mounted route establish the producer implementation. The generated client and Web reader are

@@ -12,6 +12,8 @@ export function authoredReadingPage(
     viewer: { kind: 'anonymous' },
     query: { cursor: null, limit: 20 },
     thread,
+    documentMedia: { state: 'available', documents: [] },
+    conversationActivity: { state: 'unavailable', retryable: true },
     replies: { items, next: null },
     authors: { state: 'current', retryable: false, items: authors },
     actions: { state: 'unavailable', retryable: true, references: [], reply: { state: 'unavailable' } },

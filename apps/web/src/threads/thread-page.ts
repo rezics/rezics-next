@@ -3,7 +3,6 @@ export { isThreadPageCursorError } from './thread-page-errors';
 import type { KernelClient, ReadingPageResponse } from '@rezics/client';
 import type { DocumentMentions } from '@rezics/ui/document-body';
 import { boardProblemCode } from './board-reading';
-import { readDocumentMentions } from '../kernel/mentions';
 import { notFound } from '@tanstack/react-router';
 import type { VerificationConfig } from '../report/turnstile';
 import type { SessionEnv } from '../session/client';
@@ -11,7 +10,14 @@ import type { ReadCredentialMode } from '../kernel/credential';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 import { boardRealmId, readBoardRealm, type BoardRealm } from './board-context';
 import { sameThreadSlug, threadTitle } from './thread-href';
-import { readThreadDocumentMedia, type ThreadDocumentMedia } from './document-media-read';
+import type { ThreadDocumentMedia } from './document-media-read';
+import {
+  readingPageDocumentMedia,
+  readingPageDocumentMentions,
+  readingPageMentions,
+  readingPageReviewContext,
+  type ThreadDocumentMentions,
+} from './thread-page-context';
 import { readingConversationActivity, type ConversationActivityDisplay } from './activity';
 
 type ThreadResource = ReturnType<KernelClient['threads']>;
@@ -24,7 +30,7 @@ export type ThreadPost = ReadingPage['thread']['firstPost'] | ReadingPage['repli
 export type ThreadPageAuthor = ReadingPage['authors']['items'][number];
 export type ThreadPageObservation = Pick<
   ReadingPage,
-  'target' | 'viewer' | 'query' | 'actions' | 'watch' | 'slowMode' | 'currentness' | 'reactionsAsOf'
+  'target' | 'viewer' | 'query' | 'actions' | 'watch' | 'slowMode' | 'currentness' | 'reactionsAsOf' | 'reviewContext'
 >;
 
 type PageInput = { id: string; cursor?: string; post?: string };
@@ -42,6 +48,7 @@ export type LoadedThreadPage = {
   conversationActivity?: ConversationActivityDisplay;
   authors: import('../identity/read').PageAuthors;
   mentions: DocumentMentions;
+  documentMentions?: ThreadDocumentMentions;
   documentMedia?: ThreadDocumentMedia;
   viewerId?: string;
   verification: VerificationConfig;
@@ -177,13 +184,10 @@ export async function loadThreadPage(
     !posts.posts.some((post) => post.id === data.post && post.availability === 'available')
   )
     linkedPostUnavailable = true;
-  const [mentions, documentMedia] = await Promise.all([
-    readDocumentMentions(
-      client,
-      posts.posts.map((post) => post.body),
-    ),
-    readThreadDocumentMedia(client, posts.posts, authorization, signal),
-  ]);
+  const mentions = readingPageMentions(readingPage);
+  const documentMentions = readingPageDocumentMentions(readingPage);
+  const documentMedia = readingPageDocumentMedia(readingPage);
+  const reviewContext = readingPageReviewContext(readingPage);
   signal.throwIfAborted();
   // Only identities named by readable posts can enter this page's byline map.
   const disclosed = new Set(posts.posts.flatMap((post) => (post.availability === 'available' ? [post.authorId] : [])));
@@ -196,9 +200,20 @@ export async function loadThreadPage(
   const { target, viewer, query, actions, watch, slowMode, currentness, reactionsAsOf } = readingPage;
   return {
     authors,
-    composed: { target, viewer, query, actions, watch, slowMode, currentness, reactionsAsOf },
+    composed: {
+      target,
+      viewer,
+      query,
+      actions,
+      watch,
+      slowMode,
+      currentness,
+      reactionsAsOf,
+      ...(reviewContext ? { reviewContext } : {}),
+    },
     conversationActivity: readingConversationActivity(readingPage),
     mentions,
+    documentMentions,
     documentMedia,
     thread,
     ...context,

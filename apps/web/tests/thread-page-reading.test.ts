@@ -4,6 +4,7 @@ import { fromPlainText } from '@rezics/document';
 import { authoredReadingPage } from '../src/kernel/fake/thread-reading-page';
 import type { ReadingPage } from '../src/threads/thread-page';
 import { isThreadPageCursorError, loadThreadPage } from '../src/threads/thread-page';
+import { mentionsForThreadPost } from '../src/threads/thread-page-context';
 
 const threadId = '11111111-1111-4111-8111-111111111111';
 const boardId = '22222222-2222-4222-8222-222222222222';
@@ -61,22 +62,35 @@ test('the Web receiver maps the mounted page while preserving a selected reply a
     [reply],
     [{ id: authorId, displayName: 'Disclosed author', handle: null, avatar: null }],
   );
+  response.mentions = {
+    state: 'current',
+    retryable: false,
+    overflow: false,
+    sources: [
+      {
+        postId: openingId,
+        threadId,
+        revisionId: opening.revisionId,
+        sha256: opening.sha256,
+        pageIndex: 0,
+        references: [authorId],
+        overflow: false,
+      },
+    ],
+    identities: [
+      { id: authorId, state: 'active', handle: 'reader' },
+      { id: boardId, state: 'active', handle: 'unrelated' },
+    ],
+  };
   const paths: string[] = [];
   let failed = false;
   let missingLocation = false;
   let abortRead: AbortController | undefined;
-  let abortMedia: AbortController | undefined;
-  let mediaSignal: AbortSignal | null | undefined;
   const client = createKernelClient('https://kernel.test', {
     fetch: async (input, init) => {
       const url = new URL(new Request(input, init).url);
       paths.push(`${url.pathname}${url.search}`);
       expect(new Request(input, init).headers.has('authorization')).toBe(false);
-      if (url.pathname === '/v1/media/presentations') {
-        mediaSignal = init?.signal;
-        abortMedia?.abort(new Error('Image reading visit ended'));
-        return new Response(null, { status: 503 });
-      }
       if (url.pathname.endsWith('/location'))
         return missingLocation
           ? new Response(null, { status: 404 })
@@ -112,6 +126,8 @@ test('the Web receiver maps the mounted page while preserving a selected reply a
   ]);
   expect(page.posts.posts.map(({ body }) => body)).toEqual([opening.body, reply.body]);
   expect(page.authors?.[authorId]).toEqual(response.authors.items[0]);
+  expect(page.mentions).toEqual({ [authorId]: { handle: 'reader' } });
+  expect(mentionsForThreadPost(page.documentMentions!, { ...opening, revisionId: reply.revisionId })).toEqual({});
   expect(page.composed).toMatchObject({
     currentness: response.currentness,
     actions: response.actions,
@@ -232,19 +248,17 @@ test('the Web receiver maps the mounted page while preserving a selected reply a
       { sitekey: '', scriptUrl: '' },
       'anonymous',
     );
+  response.documentMedia = { state: 'unavailable', documents: [] };
   const optionalFailure = await selectedRead();
   expect(optionalFailure.posts.posts[0]?.body).toEqual(response.thread.firstPost.body);
   expect(optionalFailure.documentMedia).toEqual({ kind: 'unavailable' });
   expect(optionalFailure.posts.next).toBe('sparse-next');
   expect(optionalFailure.linkedPostUnavailable).toBe(false);
   expect(optionalFailure.posts.posts[1]?.body).toEqual(reply.body);
-  abortMedia = new AbortController();
-  await expect(selectedRead(abortMedia.signal)).rejects.toThrow('Image reading visit ended');
-  expect(mediaSignal?.aborted).toBe(true);
-  expect(paths.slice(-4)).toEqual([
+  expect(paths.some((path) => path.startsWith('/v1/media/'))).toBe(false);
+  expect(paths.slice(-3)).toEqual([
     `/v1/threads/${threadId}/posts/${replyId}/location`,
     `/v1/threads/${threadId}/reading-page?cursor=selected-reply-cursor`,
     `/v1/boards/${boardId}`,
-    '/v1/media/presentations',
   ]);
 });

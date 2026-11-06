@@ -8,6 +8,8 @@ type DocumentImageProps = {
   image: DocumentImagePresentation | null;
   alt: string;
   locale: string;
+  /** Native media identity named by the current document, even when its presentation is unavailable. */
+  mediaId?: string;
   /** Callers without a mounted disclosed-reader lifetime can leave inspection disabled. */
   inspectable?: boolean;
 };
@@ -20,7 +22,7 @@ export function NativeDocumentImage(props: DocumentImageProps) {
   return <DocumentImageDisclosure key={identity} {...props} />;
 }
 
-function DocumentImageDisclosure({ image, alt, locale, inspectable = true }: DocumentImageProps) {
+function DocumentImageDisclosure({ image, alt, locale, mediaId, inspectable = true }: DocumentImageProps) {
   const [phase, setPhase] = useState<'initial' | 'ready' | 'failed' | 'retrying'>('initial');
   const current = useRef<HTMLImageElement | null>(null);
   const options = { locale: locale as never };
@@ -60,6 +62,7 @@ function DocumentImageDisclosure({ image, alt, locale, inspectable = true }: Doc
   return (
     <figure
       data-slot="document-image"
+      data-media-id={image?.id ?? mediaId}
       data-state={available ? 'ready' : 'unavailable'}
       aria-busy={recovering || undefined}
       className="my-5 min-w-0 max-w-full space-y-2"
