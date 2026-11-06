@@ -20,6 +20,9 @@ async function main(): Promise<void> {
   // native SQL loader explicitly, then import the SQL-bearing module dynamically;
   // a static import would be linked before this runtime registration executes.
   await import('reylo/register');
+  // Command process composition installs the native History binding, as server and worker startup do.
+  const { installNativeHistoryPreload } = await import('../src/composition/preload.ts');
+  installNativeHistoryPreload();
   const { bootstrapGovernance } = await import('../src/access/bootstrap-governance.ts');
   const pool = createPool(url);
   try {
