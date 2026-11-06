@@ -50,27 +50,28 @@ export const ORDER_RETENTION_BLOCKER =
   'Order retention policy is not configured uniformly for every buyer order before the account barrier';
 
 const ZERO = '00000000-0000-0000-0000-000000000000';
+type SqlTextList = (string | null)[] | null;
 type Progress = {
   hadData: boolean;
   cursor: string;
   phase: string;
   blocker: string | null;
   retentionStore: string | null;
-  retentionFields: string[] | null;
+  retentionFields: SqlTextList;
   retentionPurpose: string | null;
   retentionExpiresAt: string | null;
 };
 type Advance = 'none' | 'more' | 'pending' | 'retained' | 'resolve';
-type PolicyRow = { fields: string[]; purpose: string; expiresAt: string };
+type PolicyRow = { fields: SqlTextList; purpose: string; expiresAt: string };
 type OwnerRow = { buyerAccountId: string };
 type AccountRow = { state: string };
 type ObligationRow = { version: number; at: string };
 type ProofRow = { hasData: boolean };
 type UnsupportedRow = { unsupportedData: boolean };
-type KeyRow = { id: string };
+type KeyRow = { id: string | null };
 type RetentionRow = {
   store: string | null;
-  fields: string[] | null;
+  fields: SqlTextList;
   purpose: string | null;
   expiresAt: string | null;
 };
@@ -78,7 +79,7 @@ type OrderPageRow = {
   id: string;
   hasCheckoutUrl: boolean;
   minimized: boolean;
-  fields: string[] | null;
+  fields: SqlTextList;
   purpose: string | null;
   expiresAt: string | null;
 };
@@ -90,6 +91,15 @@ function listed<T>(value: T | T[] | null | undefined): T[] {
 
 function row<T>(value: T | T[] | null | undefined): T | null {
   return listed(value)[0] ?? null;
+}
+
+function requiredId(value: string | null | undefined): string {
+  if (value == null) throw new Error('Commerce erasure page key is missing');
+  return value;
+}
+
+function fieldKey(value: SqlTextList): string {
+  return (value ?? []).join('\0');
 }
 
 function routeForAccount(accountId: string): number {
@@ -178,7 +188,7 @@ export async function prepareCommerceOrderRetention(pool: Pool, input: { orderId
         prior &&
         (prior.purpose !== NATIVE_TEST_ORDER_RETENTION_PURPOSE ||
           Date.parse(prior.expiresAt) !== Date.parse(expiresAt) ||
-          prior.fields.join('\0') !== fields.join('\0'))
+          fieldKey(prior.fields) !== fields.join('\0'))
       )
         throw new Error('A buyer account has one exact Commerce order-retention policy');
       const inserted = listed(
@@ -201,7 +211,7 @@ export async function prepareCommerceOrderRetention(pool: Pool, input: { orderId
         !retained ||
         retained.purpose !== NATIVE_TEST_ORDER_RETENTION_PURPOSE ||
         Date.parse(retained.expiresAt) !== Date.parse(expiresAt) ||
-        retained.fields.join('\0') !== fields.join('\0')
+        fieldKey(retained.fields) !== fields.join('\0')
       )
         throw new Error('Commerce order retention configuration did not commit exactly');
       const value = {
@@ -268,7 +278,7 @@ export async function advanceCommerceErasure(pool: Pool, accountId: string): Pro
             const removed = listed<KeyRow>(
               await purgeRetained.run(tx, {
                 ...key,
-                ids: retained.map((item) => item.id),
+                ids: retained.map((item) => requiredId(item.id)),
                 now,
               }),
             );
@@ -282,7 +292,13 @@ export async function advanceCommerceErasure(pool: Pool, accountId: string): Pro
                 : 'resolve';
           await checkpoint.run(
             tx,
-            checkpointInput(key, progress, retained.at(-1)?.id ?? progress.cursor, nextPhase, progress.blocker),
+            checkpointInput(
+              key,
+              progress,
+              retained.at(-1)?.id ?? progress.cursor,
+              nextPhase,
+              progress.blocker,
+            ),
           );
           return {
             value: nextPhase === 'retained' ? ('more' as const) : nextPhase,
@@ -305,14 +321,20 @@ export async function advanceCommerceErasure(pool: Pool, accountId: string): Pro
         const keys = listed<KeyRow>(await pageEntitlements.run(tx, { ...key, after: progress.cursor }));
         if (keys.length) {
           const removed = listed<KeyRow>(
-            await purgeEntitlements.run(tx, { ...key, ids: keys.map((item) => item.id) }),
+            await purgeEntitlements.run(tx, { ...key, ids: keys.map((item) => requiredId(item.id)) }),
           );
           if (removed.length !== keys.length) throw new Error('Commerce entitlement purge was incomplete');
         }
         const full = keys.length === 100;
         await checkpoint.run(
           tx,
-          checkpointInput(key, progress, full ? keys.at(-1)!.id : ZERO, full ? 'entitlements' : 'acquisitions', ''),
+          checkpointInput(
+            key,
+            progress,
+            full ? requiredId(keys.at(-1)!.id) : ZERO,
+            full ? 'entitlements' : 'acquisitions',
+            '',
+          ),
         );
         return {
           value: 'more' as const,
@@ -324,7 +346,7 @@ export async function advanceCommerceErasure(pool: Pool, accountId: string): Pro
         const keys = listed<KeyRow>(await pageAcquisitions.run(tx, { ...key, after: progress.cursor }));
         if (keys.length) {
           const removed = listed<KeyRow>(
-            await purgeAcquisitions.run(tx, { ...key, ids: keys.map((item) => item.id) }),
+            await purgeAcquisitions.run(tx, { ...key, ids: keys.map((item) => requiredId(item.id)) }),
           );
           if (removed.length !== keys.length) throw new Error('Commerce acquisition-slot purge was incomplete');
         }
@@ -334,7 +356,7 @@ export async function advanceCommerceErasure(pool: Pool, accountId: string): Pro
           checkpointInput(
             key,
             progress,
-            full ? keys.at(-1)!.id : ZERO,
+            full ? requiredId(keys.at(-1)!.id) : ZERO,
             full ? 'acquisitions' : 'money-observations',
             '',
           ),
@@ -398,7 +420,7 @@ export async function advanceCommerceErasure(pool: Pool, accountId: string): Pro
             order.fields === null ||
             order.purpose === null ||
             order.expiresAt === null ||
-            order.fields.join('\0') !== NATIVE_TEST_ORDER_RETENTION_FIELDS.join('\0') ||
+            fieldKey(order.fields) !== NATIVE_TEST_ORDER_RETENTION_FIELDS.join('\0') ||
             order.purpose !== NATIVE_TEST_ORDER_RETENTION_PURPOSE
           ) {
             blocker = ORDER_RETENTION_BLOCKER;
@@ -409,7 +431,7 @@ export async function advanceCommerceErasure(pool: Pool, accountId: string): Pro
             (priorExpiry !== null && Date.parse(priorExpiry) !== Date.parse(order.expiresAt)) ||
             (retainedPolicy.retentionPurpose !== null && retainedPolicy.retentionPurpose !== order.purpose) ||
             (retainedPolicy.retentionFields !== null &&
-              retainedPolicy.retentionFields.join('\0') !== order.fields.join('\0'))
+              fieldKey(retainedPolicy.retentionFields) !== fieldKey(order.fields))
           ) {
             blocker = ORDER_RETENTION_BLOCKER;
             continue;
@@ -470,7 +492,7 @@ export async function advanceCommerceErasure(pool: Pool, accountId: string): Pro
     const exceptions: RetentionException[] = [];
     if (retained.store !== null) {
       if (
-        retained.fields?.join('\0') !== NATIVE_TEST_ORDER_RETENTION_FIELDS.join('\0') ||
+        fieldKey(retained.fields) !== NATIVE_TEST_ORDER_RETENTION_FIELDS.join('\0') ||
         retained.purpose !== NATIVE_TEST_ORDER_RETENTION_PURPOSE ||
         !retained.expiresAt
       )

@@ -157,7 +157,9 @@ retained Checkout record, not a whole-account disposition.
 Genuine purchase targets are published Content editions on Content's isolated native system. Access grants
 `board:create`/`offer:create` as account subjects on Global through the ordinary grant command after the governance
 account holds `board:create` via the native local-showcase bootstrap. Buyer `order:create` uses the same grant command
-after the governance account holds that action on the offer. Grants, publication and Commerce HTTP share one composed
+after the governance account holds that action on the offer. Protected source threads are not a public read floor;
+the native fixture seeds `thread:read` for each buyer on those exact threads, matching acquisition's sale-authority
+setup, because `grant.create` cannot admit that action. Grants, publication and Commerce HTTP share one composed
 kernel. Content's native Access is already compiled from that complete catalogue, including Commerce, and
 authenticates through Score `nativeAuth.handler`. The composed kernel reuses that same Access instance and the
 ordinary Auth client (which omits `media:complete`). A second Access on the same pool is what produced

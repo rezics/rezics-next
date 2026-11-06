@@ -39,7 +39,7 @@ import {
   prepareNativeRetainedOrder,
 } from './support/order-retention-fixture.ts';
 import { startWorkStripe } from './support/work-stripe.ts';
-import { HIGH_RATE_OVERRIDES } from '../content/support/disclosure-fixtures.ts';
+import { HIGH_RATE_OVERRIDES, seedGovernanceAuthority } from '../content/support/disclosure-fixtures.ts';
 import {
   createNativeContentSystemWithWriteRateOverrides,
   type NativeContentSystem,
@@ -294,6 +294,15 @@ describe('native genuine-order retention', () => {
       subjectTitle: 'Native erasure sequel source',
       body: 'Second exact native content edition bytes',
     });
+    // Protected source threads are not a public floor. Sale capture re-reads them as
+    // the buyer, so the native fixture seeds thread:read the same way acquisition does.
+    // grant.create cannot admit thread:read: it is not a platform-reach action.
+    for (const edition of [paidEdition, lateEdition]) {
+      const threadRoute = routeOf(edition.threadId);
+      if (threadRoute === null) throw new Error('Native edition thread locator is missing');
+      for (const accountId of [buyer.accountId, living.accountId])
+        await seedGovernanceAuthority(pool, threadRoute, edition.threadId, accountId, ['thread:read']);
+    }
     commands = createCommerceCommands({
       pool,
       access,

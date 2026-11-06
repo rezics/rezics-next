@@ -10,6 +10,13 @@ function keepCommerceTombstone<T extends Effect | NativeEffect>(effect: T): T | 
   return types.length === 0 ? null : { ...effect, types };
 }
 
+function keepCommerceTombstones<T extends Effect | NativeEffect>(effects: T[]): T[] {
+  return effects.flatMap((effect) => {
+    const kept = keepCommerceTombstone(effect);
+    return kept ? [kept] : [];
+  });
+}
+
 // Live default composition supplies Content ambient and the Semantic domain. Foreign tombstone
 // consumers are not subscribed, so Semantic's overflowing Subject-source page and other unfinished
 // participants cannot occupy the shared effects executor that Commerce's participant needs.
@@ -22,23 +29,15 @@ await startWorker(
         return module.register({
           ...context,
           addEffects(effects) {
-            context.addEffects(
-              effects.flatMap((effect) => {
-                const kept = keepCommerceTombstone(effect);
-                return kept ? [kept] : [];
-              }),
-            );
+            context.addEffects(keepCommerceTombstones(effects));
           },
-          addNativeEffects: context.addNativeEffects
-            ? (effects) => {
-                context.addNativeEffects!(
-                  effects.flatMap((effect) => {
-                    const kept = keepCommerceTombstone(effect);
-                    return kept ? [kept] : [];
-                  }),
-                );
+          ...(context.addNativeEffects
+            ? {
+                addNativeEffects: (effects: NativeEffect[]) => {
+                  context.addNativeEffects!(keepCommerceTombstones(effects));
+                },
               }
-            : undefined,
+            : {}),
         });
       },
     })),
