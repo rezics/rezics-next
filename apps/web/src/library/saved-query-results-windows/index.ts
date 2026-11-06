@@ -14,7 +14,7 @@ type StoredFocusHandoff = ResultsWindowFocusHandoff & { release: () => void };
 type StagedMove = {
   target: ResultsCursor;
   move: ResultsWindowMove;
-  focus?: StoredFocusHandoff;
+  focus?: StoredFocusHandoff | undefined;
   failed: boolean;
 };
 type Reading = {
@@ -265,7 +265,8 @@ export function cancelSavedQueryResultsWindowFocus(
   cursor: ResultsCursor,
 ): boolean {
   const staged = visits.get(client)?.readings[mode];
-  if (!staged || staged.scope !== scope || staged.staged?.target !== cursor || !staged.staged.focus) return false;
+  if (!staged || staged.scope !== scope || !staged.staged || staged.staged.target !== cursor || !staged.staged.focus)
+    return false;
   staged.staged.focus.release();
   staged.staged.focus = undefined;
   return true;

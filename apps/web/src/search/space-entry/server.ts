@@ -22,10 +22,8 @@ export const writeSearchSpaceFollow = createServerFn({ method: 'POST' })
   })
   .handler(async ({ data }): Promise<FollowWriteResult> => {
     setResponseHeader('cache-control', 'private, no-store');
-    const [{ env }, { kernelClient }] = await Promise.all([
-      import('cloudflare:workers'),
-      import('../../kernel/client'),
-    ]);
+    const { env } = await import('cloudflare:workers');
+    const { kernelClient } = await import('../../kernel/client');
     const request = getRequest();
     const authorization = await prepareExpectedReader(request, env, data);
     if (!authorization) return { ok: false, reason: 'unauthorized' };

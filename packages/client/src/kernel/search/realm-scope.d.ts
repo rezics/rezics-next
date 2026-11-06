@@ -1,6 +1,6 @@
 import { type DiscoveryFilterDocument, type FilterRelease } from '@rezics/filter';
 import type { Pool } from 'pg';
-import type { WorkAllowance, WorkReceipt } from '../library/collection-source.ts';
+import type { WorkAllowance, WorkReceipt } from '../library/contract/work-dimensions.ts';
 import type { LeafOptions } from '../semantic/scope-leaf-evidence.ts';
 import type { RelationFacetMatch } from './source.ts';
 import { type RealmSubjectSource, type RealmSubjectDisclosure, type RealmSubjectMaintenance } from '../content/realm-subject-source.ts';

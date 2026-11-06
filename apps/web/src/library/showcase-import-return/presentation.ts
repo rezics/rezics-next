@@ -24,6 +24,8 @@ export function importLibraryLabels(page: ImportLibraryPage, locale: string, rel
   });
 }
 
+type CurrentImportViewerFacts = Extract<NonNullable<ImportLibraryPage['viewerFacts']>, { state: 'current' }>;
+
 export type ImportLibraryRow = {
   /** Local occurrence key includes page position; two entries for one disclosed Subject are distinct rows. */
   key: string;
@@ -34,8 +36,8 @@ export type ImportLibraryRow = {
   state: string;
   stateLanguage?: string;
   progress: ProgressView | null;
-  vote: NonNullable<ImportLibraryPage['viewerFacts']>['rows'][number]['vote'] | null;
-  voteQuestion: NonNullable<ImportLibraryPage['viewerFacts']>['question'];
+  vote: CurrentImportViewerFacts['rows'][number]['vote'] | null;
+  voteQuestion: CurrentImportViewerFacts['question'];
 };
 
 /** Only current facts supplied by this FULL page participate. No source XML, receipts or point reads. */
@@ -44,6 +46,7 @@ export function importLibraryRows(
   locale: string,
   labels?: readonly ImportLibraryLabels[],
 ): ImportLibraryRow[] {
+  const facts = page.viewerFacts?.state === 'current' ? page.viewerFacts : undefined;
   return page.libraryEntries.map((entry, index) => {
     const subject = subjectOf(entry.subject);
     const title = subject
@@ -58,8 +61,8 @@ export function importLibraryRows(
       state: labels?.[index]?.state ?? m.library_other({}, { locale: locale as Locale }),
       ...(labels?.[index]?.stateLanguage ? { stateLanguage: labels[index]!.stateLanguage } : {}),
       // The native projection preserves input occurrence order, including repeated Subjects.
-      vote: page.viewerFacts?.rows[index]?.vote ?? null,
-      voteQuestion: page.viewerFacts?.question ?? null,
+      vote: facts?.rows[index]?.vote ?? null,
+      voteQuestion: facts?.question ?? null,
       progress: progressView('activeProgressSession' in entry ? (entry.activeProgressSession ?? null) : null, locale),
     };
   });

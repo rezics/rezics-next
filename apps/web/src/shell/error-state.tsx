@@ -6,7 +6,9 @@ import { pageHead, type HeadContext } from './head';
 type ErrorMatch = { status: string; error?: unknown; _notFound?: boolean };
 
 function failureStatus(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isInteger(value) && value >= 400 && value <= 599 ? value : undefined;
+  return typeof value === 'number' && Number.isInteger(value) && (value === 202 || (value >= 400 && value <= 599))
+    ? value
+    : undefined;
 }
 
 function errorStatus(error: unknown): number | undefined {
@@ -24,7 +26,7 @@ export function routeFailure(matches: readonly ErrorMatch[], nativeStatus = 200)
     (matches.length === 1 && !failed) ||
     matches.some((match) => match._notFound || match.status === 'notFound' || isNotFound(match.error));
   if (!failed && !missing) return undefined;
-  const status = closed ? 403 : missing ? 404 : (failureStatus(nativeStatus) ?? errorStatus(failed?.error) ?? 500);
+  const status = closed ? 403 : missing ? 404 : (errorStatus(failed?.error) ?? failureStatus(nativeStatus) ?? 500);
   const headers =
     failed?.error && typeof failed.error === 'object' && 'headers' in failed.error
       ? (failed.error.headers as HeadersInit | undefined)

@@ -35,8 +35,8 @@ export function QuerySharePreview(props: PreviewProps) {
 
 type Visit = {
   share?: QueryShare;
-  preparation?: AbortController;
-  clipboard?: object;
+  preparation?: AbortController | undefined;
+  clipboard?: object | undefined;
 };
 
 function ShareVisit({ locale, changed, prepare, reader }: PreviewProps & { reader: AddressLease }) {

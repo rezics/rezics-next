@@ -111,6 +111,7 @@ export function boardOpeningExample(state: BoardOpeningExample = 'current', size
     next: boardOpeningCursor,
     rankRefreshedAt: boardOpeningNow,
     reactionsAsOf: null,
+    pinRevision: '1',
     viewer: { participation: 'sign-in' },
     actions: { createThread: 'sign-in' },
   };

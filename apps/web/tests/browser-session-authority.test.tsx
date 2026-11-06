@@ -195,7 +195,7 @@ test('session hydration stays private on the server and guard-seeded data become
     const serverTree = createElement(QueryClientProvider, { client }, content);
 
     const markup = renderToString(serverTree);
-    expect(markup).toContain('"state":"unknown"');
+    expect(serverSession(markup).state).toBe('unknown');
     expect(sessionCsrfToken()).toBeNull();
     expect(sessionReads).toBe(1);
 
@@ -239,7 +239,7 @@ test('a successful null-CSRF read stays signed in through the real guard, hook, 
     const content = createElement(SessionProbe, { name: 'main' });
     const serverTree = createElement(QueryClientProvider, { client }, content);
     const markup = renderToString(serverTree);
-    expect(markup).toContain('"state":"unknown"');
+    expect(serverSession(markup).state).toBe('unknown');
     expect(sessionCsrfToken()).toBeNull();
 
     ui.host.innerHTML = markup;
@@ -323,7 +323,7 @@ test('background reads keep successful null-CSRF data usable until failure, then
     expect(client.getQueryState(sessionQuery.queryKey)?.status).toBe('error');
     expect(client.getQueryData(sessionQuery.queryKey)).toEqual(viewer('reader-one', null));
     await ui.flush();
-    expect(ui.session('main').state).toBe('unknown');
+    expect(ui.session('main').state).toBe('unavailable');
     expect(sessionCsrfToken()).toBeNull();
     expect(await captureUploadToken()).toBe('');
 
@@ -346,7 +346,7 @@ test('failed retained data, recovery, transitions, malformed observations, and r
     await ui.flush();
     expect(client.getQueryState(sessionQuery.queryKey)?.status).toBe('error');
     expect(client.getQueryData(sessionQuery.queryKey)).toEqual(viewer());
-    expect(ui.session('main').state).toBe('unknown');
+    expect(ui.session('main').state).toBe('unavailable');
     expect(await captureUploadToken()).toBe('');
 
     const query = client.getQueryCache().find({ queryKey: sessionQuery.queryKey, exact: true });
@@ -515,7 +515,7 @@ test('replacement clients, delayed old results, abandoned renders, and anonymous
       { client: abandonedClient },
       createElement(SessionProbe, { name: 'abandoned' }),
     );
-    expect(renderToString(abandoned)).toContain('"state":"unknown"');
+    expect(serverSession(renderToString(abandoned)).state).toBe('unknown');
     expect(sessionCsrfToken()).toBe('current-csrf');
     expect(abandonedCounts.subscribed).toBe(0);
     expect(sessionReads).toBe(2);
@@ -714,3 +714,10 @@ afterAll(async () => {
   }
   mock.restore();
 });
+
+/** SSR escapes JSON as HTML text; inspect the same decoded text the browser hydrates. */
+function serverSession(markup: string): Session {
+  const host = document.createElement('div');
+  host.innerHTML = markup;
+  return JSON.parse(host.querySelector('output')!.textContent!);
+}

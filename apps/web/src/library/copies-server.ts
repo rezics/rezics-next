@@ -5,6 +5,11 @@ export type NativeCopyListQuery = NonNullable<NonNullable<Parameters<KernelClien
 
 export type NativeCopy = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['copies']>['get']>>['data']>['copy'];
 export type NativeCopyPresentation = NonNullable<NativeCopy['presentation']>;
+// The decoded view carries labels and status choices only; the web does not read condition facts yet.
+export type DecodedCopyPresentation = Omit<
+  NativeCopyPresentation,
+  'mediaCondition' | 'packagingCondition' | 'conditionEditing'
+>;
 type DetailOptions = NonNullable<Parameters<ReturnType<KernelClient['copies']>['get']>[0]>;
 export type CopyDetailQuery = NonNullable<DetailOptions['query']>;
 
@@ -46,7 +51,7 @@ function isStatusEditing(value: unknown): value is NativeCopyPresentation['statu
   );
 }
 
-function isPresentation(value: unknown): value is NativeCopyPresentation {
+function isPresentation(value: unknown): value is DecodedCopyPresentation {
   return (
     isRecord(value) &&
     onlyKeys(value, [
@@ -56,6 +61,9 @@ function isPresentation(value: unknown): value is NativeCopyPresentation {
       'statusLabel',
       'statusLabelLanguage',
       'statusEditing',
+      'mediaCondition',
+      'packagingCondition',
+      'conditionEditing',
     ]) &&
     (value.meaning === 'known' || value.meaning === 'unknown' || value.meaning === 'unavailable') &&
     labelPair(value, 'kindLabel', 'kindLabelLanguage') &&
@@ -65,7 +73,7 @@ function isPresentation(value: unknown): value is NativeCopyPresentation {
 }
 
 /** Decode only the declared owner DTO; current choices never supply historical labels. */
-export function nativeCopyPresentation(copy: NativeCopy): NativeCopyPresentation {
+export function nativeCopyPresentation(copy: NativeCopy): DecodedCopyPresentation {
   const presentation = copy.presentation;
   if (!isPresentation(presentation)) return { meaning: 'unavailable', statusEditing: { state: 'unavailable' } };
   const { meaning, statusEditing } = presentation;

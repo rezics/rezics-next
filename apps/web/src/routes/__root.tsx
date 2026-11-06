@@ -1,12 +1,5 @@
-import {
-  createRootRouteWithContext,
-  HeadContent,
-  isNotFound,
-  Outlet,
-  Scripts,
-  useRouter,
-  useRouterState,
-} from '@tanstack/react-router';
+import { CurrentReadingHead, CurrentReadingOutlet } from '../shell/current-reading';
+import { createRootRouteWithContext, isNotFound, Scripts, useRouter, useRouterState } from '@tanstack/react-router';
 import type { BuyerHistoryVisit } from '../checkout/buyer-history-visit';
 import type { QueryClient } from '@tanstack/react-query';
 import { createIsomorphicFn } from '@tanstack/react-start';
@@ -148,7 +141,7 @@ export const Route = createRootRouteWithContext<{
 function RootRoutes() {
   return (
     <OwnVotesReturnProvider>
-      <Outlet />
+      <CurrentReadingOutlet />
     </OwnVotesReturnProvider>
   );
 }
@@ -226,7 +219,7 @@ function Root({ children }: { children: ReactNode }) {
       <head>
         {nonce ? <meta property="csp-nonce" content={nonce} /> : null}
         <PreferencesScript />
-        <HeadContent />
+        <CurrentReadingHead />
       </head>
       <body>
         <script nonce={nonce} dangerouslySetInnerHTML={{ __html: clientLoadRecovery }} />

@@ -13,7 +13,7 @@ export declare function LIBRARY_ARCHIVE_MERGE_LIMITS(): {
     readonly pageRows: 16;
     readonly uploadBytes: number;
     readonly depth: 32;
-    readonly sections: 17;
+    readonly sections: 21;
     readonly page: 100;
     readonly reviewItems: 20;
     readonly applyItems: 20;

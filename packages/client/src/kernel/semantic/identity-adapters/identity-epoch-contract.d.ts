@@ -52,11 +52,23 @@ export type IdentityAdmissionInput = Readonly<{
         release: Release;
     }>;
 }>;
+/** The caller's authority. Every store command runs on one native partition.
+ * Colocated callers keep a single `authorization`. HTTP merge supplies `authorizationFor`
+ * because admission home and the redirected Subject partition can differ. */
 export type IdentityAdmissionAuthority = Readonly<{
     basis?: CommandBasis;
     authorization?: CommandAuthorization;
+    authorizationFor?: (partition: number) => Promise<CommandAuthorization>;
     deadline?: number;
     clock?: () => Date;
+}>;
+/** Command options for one store command on `partition`, with the caller's authorization prepared for it. */
+export declare function commandAuthorityAt(authority: IdentityAdmissionAuthority, partition: number): Promise<{
+    partition: number;
+    basis?: CommandBasis;
+    deadline?: number;
+    clock?: () => Date;
+    authorization?: CommandAuthorization;
 }>;
 export type IdentityEpochStore = Readonly<{
     /** Bootstrap topology home. Job control homes are encoded in native job IDs. */

@@ -55,7 +55,9 @@ export declare function admitMergeSubjects(pool: Pool, options: {
         digest: string;
         release: Release;
     };
+    /** The redirect command's authorization, prepared for the redirected Subject's partition. */
     authorization: CommandAuthorization;
+    /** Authorizations for the admission's own partitions; the store asks for each one it runs on. */
     authorizationFor: (partition: number) => Promise<CommandAuthorization>;
     deadline?: number;
     clock?: () => Date;

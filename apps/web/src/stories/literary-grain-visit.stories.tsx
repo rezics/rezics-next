@@ -9,6 +9,13 @@ const realm = '0192f3a0-6c1e-7b2a-9d4e-000000000941';
 const realmContext = '0192f3a0-6c1e-7b2a-9d4e-000000000942';
 const context = { id: realmContext, population: { kind: 'realm' as const, id: realm, title: 'Harbour shelf' } };
 
+// The example factory widens the population kind to string; every grain example is the global population.
+function grainExample(type?: 'schema:Book' | 'schema:BookSeries' | 'bf:Instance') {
+  const population: { kind: 'global' } = { kind: 'global' };
+  const example = literaryGrainExample(type);
+  return { ...example, context: { ...example.context, population } };
+}
+
 function Addressed({ args, search = '' }: { args: ComponentProps<typeof LiteraryReaderEntry>; search?: string }) {
   const original = useRef<string | undefined>(undefined);
   useEffect(() => {
@@ -36,14 +43,14 @@ function Addressed({ args, search = '' }: { args: ComponentProps<typeof Literary
 const meta = {
   title: 'Pages/Subjects/Literary grain visit',
   component: LiteraryReaderEntry,
-  args: literaryGrainExample(),
+  args: grainExample(),
   render: (args) => <Addressed args={args} />,
 } satisfies Meta<typeof LiteraryReaderEntry>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const SeriesAndVolume: Story = {};
-export const VolumeAndEdition: Story = { args: literaryGrainExample('schema:Book') };
+export const VolumeAndEdition: Story = { args: grainExample('schema:Book') };
 export const PhoneLight: Story = { ...SeriesAndVolume, globals: { viewport: { value: 'phone390' }, theme: 'light' } };
 export const PhoneDark: Story = { ...SeriesAndVolume, globals: { viewport: { value: 'phone390' }, theme: 'dark' } };
 export const DesktopLight: Story = {
@@ -55,7 +62,7 @@ export const DesktopDark: Story = {
   globals: { viewport: { value: 'desktop1440' }, theme: 'dark' },
 };
 
-const concealed = literaryGrainExample();
+const concealed = grainExample();
 const concealedWindow = concealed.windows[0]!;
 const concealedRow = literaryGrainRow(concealedWindow.rows[0]);
 export const SpoilerConcealed: Story = {
@@ -83,12 +90,12 @@ export const SpoilerConcealed: Story = {
   },
 };
 
-const book = literaryGrainExample('schema:Book');
+const book = grainExample('schema:Book');
 export const EditionUnavailable: Story = {
   args: { ...book, windows: [{ ...book.windows[0]!, status: 503 }] },
 };
 
-const instance = literaryGrainExample('bf:Instance');
+const instance = grainExample('bf:Instance');
 export const SourceSuppliedWorkOnly: Story = {
   args: {
     ...instance,
@@ -96,7 +103,7 @@ export const SourceSuppliedWorkOnly: Story = {
   },
 };
 
-const datedEdition = literaryGrainExample('bf:Instance');
+const datedEdition = grainExample('bf:Instance');
 export const PartialPublicationDate: Story = {
   args: {
     ...datedEdition,
@@ -126,7 +133,7 @@ export const PartialPublicationDate: Story = {
   },
 };
 
-const longLabels = literaryGrainExample();
+const longLabels = grainExample();
 export const LongNamesAndJapaneseLabels: Story = {
   args: {
     ...longLabels,
@@ -198,7 +205,7 @@ export const RetiredContext: Story = {
   render: (args) => <Addressed args={args} search={`?realm=${realm}&context=0192f3a0-6c1e-7b2a-9d4e-000000000949`} />,
 };
 
-const independent = literaryGrainExample('schema:Book');
+const independent = grainExample('schema:Book');
 const memberStatement = independent.work.statements['wdt:P179']![0]!;
 const memberWindow = {
   ...independent.windows[0]!,

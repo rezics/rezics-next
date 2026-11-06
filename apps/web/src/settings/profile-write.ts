@@ -162,7 +162,7 @@ export class ProfileEditor {
   captureReturn() {
     const { known, draft, readAuthority } = this.state;
     if (!this.current() || readAuthority !== 'allowed' || !known || !draft) return null;
-    return { known, draft, lastFocus: this.lastFocus };
+    return { known, draft, ...(this.lastFocus === undefined ? {} : { lastFocus: this.lastFocus }) };
   }
   restoreReturn(snapshot: { known: ProfileValues; draft: ProfileValues; lastFocus?: string }) {
     if (!this.canWrite() || this.state.readAuthority !== 'allowed' || !this.state.known) return;

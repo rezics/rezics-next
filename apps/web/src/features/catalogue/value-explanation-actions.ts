@@ -6,13 +6,10 @@ export const loadValueExplanation = createServerFn({ method: 'POST', strict: fal
   .validator(valueRequest)
   .handler(async ({ data }): Promise<ValueRead> => {
     setResponseHeader('cache-control', 'private, no-store');
-    const [{ env }, { prepareSession, sessionSubject, viewerCredential }, { kernelClient }, { loadReader }] =
-      await Promise.all([
-        import('cloudflare:workers'),
-        import('../../session/request'),
-        import('../../kernel/client'),
-        import('../../subject/load-reader'),
-      ]);
+    const { env } = await import('cloudflare:workers');
+    const { prepareSession, sessionSubject, viewerCredential } = await import('../../session/request');
+    const { kernelClient } = await import('../../kernel/client');
+    const { loadReader } = await import('../../subject/load-reader');
     const request = getRequest();
     await prepareSession(request, env as Partial<import('../../session/client').SessionEnv>);
     const authorization = viewerCredential(request);

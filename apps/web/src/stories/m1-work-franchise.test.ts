@@ -1,5 +1,6 @@
 import { expect, mock, test } from 'bun:test';
 import type { ProfileRelationWindow } from '../features/pages/views';
+import type { RelationDefinition } from '../subject/relations';
 
 // The projection needs no Workers bindings; match the existing Bun component-control environment.
 mock.module('cloudflare:workers', () => ({ env: {} }));
@@ -101,7 +102,7 @@ test('cyclic and high-degree returned windows stay bounded without expanding the
     ),
   );
   const definitions = Object.fromEntries(
-    properties.map((property) => [
+    properties.map((property): [string, RelationDefinition] => [
       property,
       {
         label: property,

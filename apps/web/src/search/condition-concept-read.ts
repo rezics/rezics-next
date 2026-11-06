@@ -79,7 +79,8 @@ export async function readConditionConcept(
   if (!UUID.test(id) || digest.length < 1 || digest.length > 256) return unavailable;
   request.signal.throwIfAborted();
   try {
-    const [{ kernelClient }, release] = await Promise.all([import('../kernel/client.ts'), readRelease()]);
+    const { kernelClient } = await import('../kernel/client.ts');
+    const release = await readRelease();
     if (request.signal.aborted) return unavailable;
     if (!release.digest || release.digest !== digest) return { status: 'restart', id };
     const locale = new URL(request.url).searchParams.get('locale') ?? requestLocale(request) ?? 'en';

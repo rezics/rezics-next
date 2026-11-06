@@ -68,6 +68,9 @@ function port(): BangumiImportPort {
     async delete() {
       return { kind: 'unavailable' as const };
     },
+    async inspect() {
+      return { entry: { status: 'unavailable' as const, reason: 'story' }, vote: null };
+    },
     async tags(command: Extract<BangumiCommand, { kind: 'tags' }>) {
       return {
         kind: 'tags' as const,

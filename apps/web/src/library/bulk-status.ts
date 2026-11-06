@@ -206,7 +206,9 @@ const previewNativeBulkStatus = createServerFn({ method: 'POST', strict: false }
     const result = await client.libraryOperations.post(JSON.parse(data.body) as NativePreviewRequest, {
       headers: { 'idempotency-key': data.idempotencyKey },
     });
-    return responseData(result).operation as BulkStatusOperation;
+    const response = responseData(result);
+    if ('preparing' in response) throw new Error('The native Shelf operation is still preparing.');
+    return response.operation as BulkStatusOperation;
   });
 
 const confirmNativeBulkStatus = createServerFn({ method: 'POST', strict: false })

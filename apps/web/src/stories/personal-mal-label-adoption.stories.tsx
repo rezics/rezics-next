@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { MalRowReview } from '../library/personal-mal-import/row';
+import { MalRowReview, draftFromRow } from '../library/personal-mal-import/row';
 import { MalConfirmPage } from '../library/personal-mal-import/confirm';
 import { MalResultPage } from '../library/personal-mal-import/results';
 import { labelReviewRow as row } from '../library/personal-mal-import/labels.fixture';
@@ -20,11 +20,16 @@ const meta = {
 } satisfies Meta<typeof MalRowReview>;
 export default meta;
 type Story = StoryObj<typeof meta>;
-export const Review: Story = {};
-export const Confirmation: Story = {
+export const Review: Story = {
+  args: { draft: draftFromRow(row), question: null, onChange: () => {}, onReadCurrent: () => {} },
+};
+export const Confirmation: StoryObj = {
   render: () => (
     <MalConfirmPage
       rows={[row]}
+      drafts={{}}
+      question={null}
+      voteReadbacks={new Map()}
       busy={false}
       confirmPrivacy={false}
       confirmTimestamps={false}
@@ -34,7 +39,7 @@ export const Confirmation: Story = {
     />
   ),
 };
-export const PartialResults: Story = {
+export const PartialResults: StoryObj = {
   render: () => (
     <MalResultPage
       result={{
@@ -61,13 +66,18 @@ export const PartialResults: Story = {
           },
         ],
       }}
+      rows={[row]}
+      questionId={null}
+      voteReadbacks={new Map()}
       titles={new Map([[0, row.title]])}
       admissions={new Map()}
       busy={false}
       canRetry={false}
+      canRetrySource={false}
       onRetry={() => {}}
+      onRetrySource={() => {}}
       onReview={() => {}}
-      onRefresh={() => {}}
+      onReadVote={() => {}}
     />
   ),
 };

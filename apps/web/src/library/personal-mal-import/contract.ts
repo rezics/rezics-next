@@ -74,6 +74,17 @@ export type MalReviewInput = Omit<NativeMalReviewInput, 'score' | 'labels'> & {
 export type MalQuestion = RatingQuestion;
 export type MalOwnVoteReadback = OwnVoteReadback;
 
+/** Score review accepts only the standard question at revision 1 (docs/library-import-mal.md). */
+export const MAL_STANDARD_QUESTION_ID = '00000000-0000-7000-8000-000000000001' as const;
+export const MAL_STANDARD_QUESTION_REVISION = 1 as const;
+
+/** The review identity of a question, or null when the question is not the standard one and cannot be reviewed. */
+export function standardMalQuestion(question: { id: string; revision: number }) {
+  return question.id === MAL_STANDARD_QUESTION_ID && question.revision === MAL_STANDARD_QUESTION_REVISION
+    ? { questionId: MAL_STANDARD_QUESTION_ID, questionRevision: MAL_STANDARD_QUESTION_REVISION }
+    : null;
+}
+
 export type MalQuestionResult = { kind: 'question'; question: MalQuestion } | MalFailure;
 export type MalVoteReadResult = { kind: 'vote'; value: MalOwnVoteReadback } | MalFailure;
 

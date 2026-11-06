@@ -39,10 +39,8 @@ export async function readTrendingSearches(
   return result.data;
 }
 const read = createServerOnlyFn(async (request: Request): Promise<TrendingPage> => {
-  const [{ kernelClient }, { viewerCredential }] = await Promise.all([
-    import('../kernel/client'),
-    import('../session/request'),
-  ]);
+  const { kernelClient } = await import('../kernel/client');
+  const { viewerCredential } = await import('../session/request');
   const language = new URL(request.url).searchParams.get('language') ?? '';
   if (language.length > 35 || !/^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$/.test(language))
     throw problem(400, 'invalid_request', 'Invalid language');
@@ -51,10 +49,8 @@ const read = createServerOnlyFn(async (request: Request): Promise<TrendingPage> 
 export async function trendingResponse(request: Request, env: Partial<SessionEnv>, load = read): Promise<Response> {
   if (request.method !== 'GET') return new Response(null, { status: 405, headers: { allow: 'GET' } });
   try {
-    const [{ prepareSession, viewerCredential }, { carriesSession }] = await Promise.all([
-      import('../session/request'),
-      import('../session/csrf'),
-    ]);
+    const { prepareSession, viewerCredential } = await import('../session/request');
+    const { carriesSession } = await import('../session/csrf');
     if (await prepareSession(request, env)) throw problem(401, 'invalid_credentials', 'Sign in again');
     if (carriesSession(request) && !viewerCredential(request))
       throw problem(503, 'dependency_unavailable', 'Session unavailable');

@@ -175,7 +175,7 @@ export function SearchResultsRegion({
           </a>
         </p>
       )}
-      {data?.queryState && (
+      {data?.queryState && windowNavigation && (
         <SearchWindowControls
           window={windowNavigation}
           cursor={data.queryState.cursor}
@@ -279,10 +279,10 @@ export function SearchResultsRegion({
                 ownerKey={recoveryOwnerKey}
                 observation={result.emptyRecovery}
                 labels={{
-                  typeLabels: data.typeLabels ?? {},
-                  typeChoices: data.typeChoices,
-                  selectedFacetLabels: data.selectedFacetLabels,
-                  groups: data.groups,
+                  typeLabels: data?.typeLabels ?? {},
+                  typeChoices: data?.typeChoices ?? [],
+                  selectedFacetLabels: data?.selectedFacetLabels ?? {},
+                  groups: data?.groups ?? [],
                 }}
                 onNavigate={onNavigate}
                 onRetry={onRetry}

@@ -218,7 +218,9 @@ const previewNativeBulkLibraryRemoval = createServerFn({ method: 'POST', strict:
       headers: { 'idempotency-key': data.idempotencyKey },
       fetch: { cache: 'no-store', redirect: 'manual' },
     });
-    return responseData(result).operation;
+    const response = responseData(result);
+    if ('preparing' in response) throw new Error('The native library removal operation is still preparing.');
+    return response.operation;
   });
 
 const confirmNativeBulkLibraryRemoval = createServerFn({ method: 'POST', strict: false })

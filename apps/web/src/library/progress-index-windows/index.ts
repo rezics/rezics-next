@@ -14,7 +14,7 @@ export type ProgressIndexWindowTarget = {
   kind: ProgressIndexWindowMove;
   from: ProgressIndexCoordinate;
   to: ProgressIndexCoordinate;
-  sourceLocation: string;
+  sourceLocation: string | undefined;
   sourceRead: string;
   keyboard: boolean;
 };
@@ -22,8 +22,8 @@ export type ProgressIndexWindowState = {
   predecessors: ProgressIndexCoordinate[];
   current: ProgressIndexCoordinate | undefined;
   identity: string;
-  staged?: ProgressIndexWindowTarget;
-  lastMovement?: string;
+  staged?: ProgressIndexWindowTarget | undefined;
+  lastMovement?: string | undefined;
 };
 export type ProgressIndexWindowRouteState = {
   visit: string;
@@ -95,7 +95,7 @@ export function admitProgressIndexWindow(
     move?: string;
     requested: ProgressIndexCoordinate;
     admitted: ProgressIndexCoordinate;
-    restarted?: boolean;
+    restarted?: boolean | undefined;
     eligible: boolean;
   },
 ): ProgressIndexWindowState {

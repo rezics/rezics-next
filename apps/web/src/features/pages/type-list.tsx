@@ -6,8 +6,9 @@ import { CoverList } from './cover-list';
 import { OverviewContext, type Item } from './overview';
 import { pageText, linkClass, linkColor } from './shared';
 import { typeListHref, type TypeListTarget } from './type-list-model';
-import { nativeTypeListPage } from './type-list-page-admission';
+import { PageReadState } from './page-read-state';
 import { useSearchRetryWait } from '../../search/search-recovery-retry';
+import { nativeTypeListPage } from './type-list-page-admission';
 import { subjectHref } from '../../subject/subject-href';
 import { admittedCatalogueWorkId } from '../feed/home-work-library/contract';
 import { HomeWorkLibraryAction, useHomeWorkLibraryEnabled } from '../feed/home-work-library/view';
@@ -29,7 +30,6 @@ export function TypeList(props: Record<string, unknown>) {
   const homeLibraryEnabled = useHomeWorkLibraryEnabled();
   const id = String(props.id);
   const section = value?.sections.get(id);
-  const retryWaiting = useSearchRetryWait(section && !section.ok ? section.retryAt : undefined);
   if (!value) return null;
   if (section && !section.ok && section.status === 204) return null;
   const title = pageText(props.title, value.locale);
@@ -80,23 +80,12 @@ export function TypeList(props: Record<string, unknown>) {
         )}
       </div>
       {!page ? (
-        <p role="alert" className="[overflow-wrap:anywhere]">
-          {m.subject_section_failed({}, options)}{' '}
-          {href &&
-            (retryWaiting ? (
-              <button
-                type="button"
-                disabled
-                className={`${controlClass} disabled:cursor-not-allowed disabled:opacity-60`}
-              >
-                {m.subject_section_retry({}, options)}
-              </button>
-            ) : (
-              <a href={href} className={controlClass}>
-                {m.subject_section_retry({}, options)}
-              </a>
-            ))}
-        </p>
+        <PageReadState
+          key={JSON.stringify(section)}
+          failure={section && !section.ok ? section : {}}
+          locale={value.locale}
+          {...(href ? { href } : {})}
+        />
       ) : (
         <>
           {items.length ? (
@@ -115,7 +104,7 @@ export function TypeList(props: Record<string, unknown>) {
                 : {})}
             />
           ) : (
-            <p role="status">{m.search_no_results({}, options)}</p>
+            <p role="status">{page.next ? m.public_read_sparse({}, options) : m.search_no_results({}, options)}</p>
           )}
           {next && (
             <a data-slot="next-page" href={next} className={controlClass}>

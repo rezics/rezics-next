@@ -35,7 +35,20 @@ export function editableProfile({
 }
 
 export function profileEnvelope(profile = editableProfile()): Envelope {
-  return officialProfileRead(structuredClone(profile)) as Envelope;
+  const read = officialProfileRead(structuredClone(profile));
+  return {
+    ...read,
+    editing: {
+      ...read.editing,
+      fields: {
+        ...read.editing.fields,
+        publicViews: {
+          ...read.editing.fields.publicViews,
+          flags: ['posts', 'reviews', 'collections', 'realms'] as const,
+        },
+      },
+    },
+  } as Envelope;
 }
 
 export function profileAvatar(): NonNullable<Profile['avatar']> {

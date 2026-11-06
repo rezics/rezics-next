@@ -78,12 +78,11 @@ export async function changeBoardPinRequest(
   const authorization = viewerCredential(request);
   if (!authorization) return { state: 'denied' };
   const resource = client.boards({ id: command.boardId }).threads({ threadId: command.threadId }).pin;
+  // The installed command types only the idempotency key; the session credential still travels with the write.
+  const headers = { authorization, 'idempotency-key': JSON.stringify(command.key) };
   let result: Awaited<ReturnType<typeof resource.post>>;
   try {
-    result = await resource.post(
-      { pinned: action === 'pin' },
-      { headers: { authorization, 'idempotency-key': JSON.stringify(command.key) } },
-    );
+    result = await resource.post({ pinned: action === 'pin' }, { headers });
   } catch (error) {
     if (isPlatformClosedError(error)) return { state: 'unavailable' };
     return { state: 'unknown' };

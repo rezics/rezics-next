@@ -60,8 +60,10 @@ export async function prepareShelfTitleStep(
   authorization: string,
   key: string,
 ): Promise<ShelfTitlePreparationReceipt> {
+  // The mounted route types declare only the idempotency-key header; binding first avoids an excess-property error.
+  const headers = { authorization, 'idempotency-key': key };
   const response = await client.libraryShelfTitlePreparation.post(undefined, {
-    headers: { authorization, 'idempotency-key': key },
+    headers,
     fetch: { cache: 'no-store', redirect: 'manual' },
   });
   if (response.error || !response.data) throw new Error('Library title preparation failed');
@@ -72,8 +74,10 @@ export async function prepareShelfScoreStep(
   authorization: string,
   key: string,
 ): Promise<ShelfScorePreparationReceipt> {
+  // The mounted route types declare only the idempotency-key header; binding first avoids an excess-property error.
+  const headers = { authorization, 'idempotency-key': key };
   const response = await client.libraryShelfScorePreparation.post(undefined, {
-    headers: { authorization, 'idempotency-key': key },
+    headers,
     fetch: { cache: 'no-store', redirect: 'manual' },
   });
   if (response.error || !response.data) throw new Error('Library score preparation failed');

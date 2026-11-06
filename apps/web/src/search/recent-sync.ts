@@ -114,7 +114,8 @@ const transport: RecentSearchTransport = {
     return readRecent({ data: cursor, signal });
   },
   async write(input, signal) {
-    const [{ writeRecent }, { sessionCsrfToken }] = await Promise.all([import('./recent'), import('../session/query')]);
+    const { writeRecent } = await import('./recent');
+    const { sessionCsrfToken } = await import('../session/query');
     signal.throwIfAborted();
     return writeRecent({ data: input, signal, headers: { 'X-CSRF-Token': sessionCsrfToken() ?? '' } });
   },

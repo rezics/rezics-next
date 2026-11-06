@@ -28,11 +28,9 @@ export const loadCreditRevision = createServerFn({ method: 'POST', strict: false
   })
   .handler(async ({ data }): Promise<DetailRead> => {
     setResponseHeader('cache-control', 'private, no-store');
-    const [{ env }, { prepareSession, sessionSubject, viewerCredential }, { kernelClient }] = await Promise.all([
-      import('cloudflare:workers'),
-      import('../../../session/request'),
-      import('../../../kernel/client'),
-    ]);
+    const { env } = await import('cloudflare:workers');
+    const { prepareSession, sessionSubject, viewerCredential } = await import('../../../session/request');
+    const { kernelClient } = await import('../../../kernel/client');
     const request = getRequest();
     await prepareSession(request, env as import('../../../session/client').SessionEnv);
     const reader = sessionSubject(request);

@@ -6434,6 +6434,7 @@
   "home_space_retry": "Retry Space lookup",
   "home_space_invalid": "Enter a Space address or a link to it from this site.",
   "home_space_unavailable": "We couldn't load this Space. Try again or clear it.",
+  "home_space_not_found": "This Space was not found. Check the address or clear it.",
   "home_space_changed": "This Space changed, so Home is updating your results.",
   "home_feed_sparse": "No items on this page. Continue to the next page.",
   "home_feed_public_discovery_unavailable": "Public Collection, review, and Space discovery are not yet available from the native feed.",
@@ -11509,5 +11510,13 @@
   "library_archive_progress_open_session": "Open the current Session",
   "library_archive_progress_restart": "Start another recovery with the original archive",
   "exposure_grants_link": "Review tester grants",
-  "exposure_grants_help": "Use Resource access to grant or revoke gate permissions on the Global Context. That page checks your current grant authority. Closing a capability preserves tester grants; revoke a grant to end that tester’s access."
+  "exposure_grants_help": "Use Resource access to grant or revoke gate permissions on the Global Context. That page checks your current grant authority. Closing a capability preserves tester grants; revoke a grant to end that tester’s access.",
+  "public_read_preparing": "Preparing this view",
+  "public_read_sparse": "No visible entries on this page. Continue to read the next page.",
+  "public_read_denied": "You do not have access to this reading.",
+  "public_read_empty": "This list is empty",
+  "library_archive_observation_correct": "Preserve or correct an existing observation",
+  "library_archive_observation_admit": "Admit a new observation",
+  "library_archive_observation_revision": "Current observation revision",
+  "library_archive_observation_admit_help": "Admission uses every archived field, including explicit clears. Native review checks that no observation exists."
 }

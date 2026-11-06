@@ -1,5 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
-import type { WorkDimensions } from '../library/collection-source.ts';
+import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
 import type { HistoryRegistry } from '../history/registry.ts';
 import type { WorkClient } from '../work/client.ts';
 import { NativeCollectionWork } from '../library/collection-source-work.ts';

@@ -25,17 +25,10 @@ export const Route = createFileRoute('/library/progress/')({
     cursor: search.cursor,
   }),
   loader: ({ deps }) => readCurrentViewerProgressIndex({ data: deps }),
-  shouldReload: ({ deps, prevDeps, location }) => {
+  // The router no longer supplies the previous deps; a cached match is keyed by its exact deps.
+  shouldReload: ({ location }) => {
     const movement = progressIndexWindowRouteState(location.state);
-    return !(
-      movement &&
-      prevDeps &&
-      movement.to === (location.search.cursor ?? null) &&
-      deps.subjectId === prevDeps.subjectId &&
-      deps.state === prevDeps.state &&
-      deps.mode === prevDeps.mode &&
-      deps.profileId === prevDeps.profileId
-    );
+    return !(movement && movement.to === ((location.search as Record<string, unknown>).cursor ?? null));
   },
   staleTime: 0,
   head: ({ match }) =>

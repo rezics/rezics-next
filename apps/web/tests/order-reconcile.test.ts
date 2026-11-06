@@ -77,6 +77,17 @@ test('native denial, conflict, unavailable and lost responses retain their contr
   ]);
 });
 
+test('a 202 response for another order or without the queued receipt never admits reconciliation', async () => {
+  for (const body of [{ orderId: key, reconciliation: 'queued' }, { orderId }, { orderId, reconciliation: 'paid' }]) {
+    const client = createKernelClient('https://kernel.test', {
+      fetch: async () => Response.json(body, { status: 202 }),
+    });
+    expect(await nativeOrderReconcile(client, 'Bearer buyer', { orderId, idempotencyKey: key })).toEqual({
+      kind: 'unavailable',
+    });
+  }
+});
+
 test('status reconciliation starts only on explicit action and retains its distinct key after a timeout', async () => {
   const calls: ReconciliationIntent[] = [];
   const request = createReconciliationRequest(

@@ -24,14 +24,15 @@ function* walk(nodes: readonly Node[]): Generator<Node> {
 }
 const home = () => resolveTemplate(platformProfile(), { route: '/' });
 
-test('the site home is a route page with search and a popular list per vertical', () => {
+test('the site home has its personal slot and a popular list per vertical', () => {
   const page = home();
   expect(page).toMatchObject({ scope: 'route', key: '/' });
   expect(validateComposition(platformRegistry, page.document)).toEqual([]);
   expect(validateDocumentFilters(platformRegistry, page.document, bundledRelease)).toEqual([]);
   const nodes = [...walk(page.document.content as Node[])];
-  expect(nodes.slice(0, 2).map((node) => node.type)).toEqual(['Heading', 'SearchBox']);
-  expect(nodes.some(({ type }) => type === 'LinkGrid')).toBe(false);
+  expect(nodes.slice(0, 2).map((node) => node.type)).toEqual(['Heading', 'Slot']);
+  expect(nodes[1]).toMatchObject({ type: 'Slot', props: { name: 'personal', children: [] } });
+  expect(nodes.some(({ type }) => type === 'SearchBox' || type === 'LinkGrid')).toBe(false);
   const reads = Object.values(planReads(platformRegistry, page.document, { subject: null }).reads);
   expect(
     reads.map((read) => (read.kind === 'search' && 'type' in read.body.filter ? read.body.filter.type.in : [])),
@@ -60,7 +61,7 @@ test('every home text is written in all eight locales', () => {
     if (node.type === 'TypeList' || node.type === 'Heading' || node.type === 'Text')
       texts.push(node.props.title ?? node.props.text);
   }
-  expect(texts.length).toBeGreaterThanOrEqual(6);
+  expect(texts.length).toBeGreaterThanOrEqual(5);
   for (const text of texts) {
     expect(Object.keys(text as object).sort()).toEqual([...UI_LOCALES].sort());
     for (const value of Object.values(text as Record<string, string>)) expect(value.trim().length).toBeGreaterThan(0);

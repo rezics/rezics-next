@@ -442,12 +442,14 @@ export function EditionPublication({
       {origin ? (
         <CreatorEditionOriginPanel
           resolution={origin}
-          onReturn={origin.kind === 'current' ? returnToInventory : undefined}
           onRestart={restartInventory}
-          editionId={origin.kind === 'current' ? origin.receipt.editionId : undefined}
-          sourceRevisionId={
-            origin.kind === 'current' ? (state.identity?.revisionId ?? initialSource?.revisionId ?? null) : undefined
-          }
+          {...(origin.kind === 'current'
+            ? {
+                onReturn: returnToInventory,
+                editionId: origin.receipt.editionId,
+                sourceRevisionId: state.identity?.revisionId ?? initialSource?.revisionId ?? null,
+              }
+            : {})}
         />
       ) : null}
       <header className="space-y-3">

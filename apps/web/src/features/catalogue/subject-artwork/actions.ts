@@ -1,8 +1,5 @@
 import { createServerFn } from '@tanstack/react-start';
-import { kernelClient } from '../../../kernel/client';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
-import { env } from 'cloudflare:workers';
-import { prepareSession, sessionSubject, viewerCredential } from '../../../session/request';
 import { canonicalMediaId, artworkResponseBudget, readSubjectArtwork, type ArtworkResult } from './read';
 
 async function readArtworkPage(data: {
@@ -10,6 +7,9 @@ async function readArtworkPage(data: {
   locale: string;
   expectedReader: string | null;
 }): Promise<ArtworkResult> {
+  const { env } = await import('cloudflare:workers');
+  const { prepareSession, sessionSubject, viewerCredential } = await import('../../../session/request');
+  const { kernelClient } = await import('../../../kernel/client');
   setResponseHeader('cache-control', 'private, no-store');
   const request = getRequest();
   await prepareSession(request, env);

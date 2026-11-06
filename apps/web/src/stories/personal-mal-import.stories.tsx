@@ -24,7 +24,6 @@ const target = '0192f3a0-6c1e-7b2a-9d4e-000000000091';
 const questionId = '0192f3a0-6c1e-7b2a-9d4e-000000000092';
 const question = {
   id: questionId,
-  realmId: null,
   meaning: 'A personal rating for this work.',
   revision: 1,
   lifecycle: { state: 'active', revision: 1 },
@@ -43,7 +42,7 @@ const row = {
   status: { kind: 'value', value: 'Completed', raw: 'Completed' },
   role: 'active',
   score: { kind: 'value', value: 8, raw: '8', scale: { min: 1, max: 10, step: 1 } },
-  progress: {},
+  progress: null,
   dates: {},
   notes: { kind: 'missing' },
   tags: { kind: 'missing' },
@@ -70,6 +69,7 @@ const row = {
     source: { release: 'r1', epoch: '1', acceptingType: 'ex:Child' },
     conflict: false,
     unsupported: null,
+    fingerprint: 'native-review-fingerprint',
     score: {
       action: 'adopt',
       source: { kind: 'value', value: 8, raw: '8', scale: { min: 1, max: 10, step: 1 } },
@@ -98,6 +98,11 @@ const row = {
     },
   },
   outcome: null,
+  tagEvidence: { grammar: 'mal-comma-v1', kind: 'missing', values: [], reason: null },
+  dateReview: null,
+  dateOutcome: null,
+  labelOutcomes: [],
+  progressMeasures: [],
   scoreReviewState: 'observations-match',
   currentScoreVote: { units: 0, revision: 3, at: '2026-10-01T12:00:00.000Z' },
 } satisfies MalPreviewRow;

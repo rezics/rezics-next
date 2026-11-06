@@ -26,10 +26,8 @@ const canonicalManga = createServerFn({ method: 'GET', strict: false })
     setResponseHeader('cache-control', 'private, no-store');
     const path = `/${encodeURIComponent(data.locale)}/subjects/${encodeURIComponent(data.id)}/${encodeURIComponent(data.slug)}/manga`;
     const visit = parseMangaPublicVisit(data.search, data.id, data.locale, path);
-    const [{ kernelClient }, { loadSubject }] = await Promise.all([
-      import('../../kernel/client'),
-      import('../../subject/load-subject'),
-    ]);
+    const { kernelClient } = await import('../../kernel/client');
+    const { loadSubject } = await import('../../subject/load-subject');
     const canonical = await loadSubject(kernelClient(data.locale), data.id, data.locale as never);
     if (canonical.kind === 'missing') throw notFound();
     if (canonical.value.id !== data.id || canonical.value.slug !== data.slug)

@@ -80,7 +80,21 @@ covered merely by linking a kernel test.
 ## Page states
 
 - **User job**: Distinguish preparation, outage, denial, hidden resources and a genuinely empty list, with useful
-  retry guidance. A successful filtered page is useful or exhausted; empty nonterminal success is unacceptable.
+  retry guidance. A successful sparse native page, including one with no visible entries, retains its exact opaque
+  continuation and offers an explicit next read. Only the native terminal frontier establishes exhaustion;
+  recovery never refills a sparse page or turns it into known empty.
+- **Decision**: Retire withdrawn public bodies, metadata and callbacks together; explicit recovery admits a new
+  native reading with current locale/viewer/CSRF provenance, without reusing a retired continuation.
+  Preserve native observation timestamps and subject action advice; route viewer identity supplies no subject grants.
+  Question directory and caption-history windows share the existing Stay/Leave control; an equal address
+  rerender keeps the admitted read and its keyboard focus, while a changed address retires its authority.
+  Empty is the terminal frontier only: a nonterminal sparse page keeps its continuation and renders as sparse.
+  Typecheck repairs in the web workspace change types only; test assertions and runtime authority stay as they were.
+  Native identity recovery admits only HTTP 202, polls its supplied Location under the current session until
+  `done:true`, and then follows the supplied canonical return. Keep native producers and reader ownership;
+  integrated typing closes the diagnostic sweep, while native, served-persona and promoted acceptance remain separate.
+  Land the retained recovery with main's published client types, typed repairs and closed notification-kind decoder;
+  finish diagnostic work at the normal changed-workspace check, with strict settlement and server-boundary tests.
 - **Personas**: Anonymous, Alice, native suspended persona; real dependency outage and projection barrier.
 - **Fixture data**: Cold subject view held behind its real worker, unavailable owner, private/unknown Collection,
   empty public list, native `suspended` persona from `services/kernel/test/support/personas.ts` with a

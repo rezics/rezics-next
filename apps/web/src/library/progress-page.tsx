@@ -350,7 +350,7 @@ export function CurrentViewerProgressIndexPage({
     identity: string;
     visit: string;
     addressKey: string;
-    locationKey: string;
+    locationKey: string | undefined;
     search: Record<string, unknown>;
   } | null>(null);
   const oldVisit = visitRef.current?.visit;
@@ -360,7 +360,7 @@ export function CurrentViewerProgressIndexPage({
     !previousVisit ||
     previousVisit.identity !== windowIdentity ||
     (previousVisit.addressKey !== address.key && !sameRouteMove) ||
-    (previousVisit.locationKey !== location.key &&
+    (previousVisit.locationKey !== location.state.__TSR_key &&
       !sameRouteMove &&
       !onlyDisplayLayoutChanged(previousVisit.search, location.search as Record<string, unknown>));
   if (resetVisit) {
@@ -368,14 +368,14 @@ export function CurrentViewerProgressIndexPage({
       identity: windowIdentity,
       visit: sameRouteMove && routeWindow ? routeWindow.visit : crypto.randomUUID(),
       addressKey: address.key,
-      locationKey: location.key,
+      locationKey: location.state.__TSR_key,
       search: location.search as Record<string, unknown>,
     };
   } else if (visitRef.current) {
     visitRef.current = {
       ...visitRef.current,
       addressKey: address.key,
-      locationKey: location.key,
+      locationKey: location.state.__TSR_key,
       search: location.search as Record<string, unknown>,
     };
   }
@@ -391,7 +391,7 @@ export function CurrentViewerProgressIndexPage({
   }, [client, oldVisit, visit.visit]);
   useLayoutEffect(() => {
     const unsubscribe = router.subscribe('onBeforeNavigate', ({ fromLocation, toLocation }) => {
-      if (!fromLocation.pathname.replace(/\/$/, '').endsWith('/library/progress')) return;
+      if (!fromLocation || !fromLocation.pathname.replace(/\/$/, '').endsWith('/library/progress')) return;
       const targetWindow = progressIndexWindowRouteState(toLocation.state);
       const stagedWindow = targetWindow
         ? client.getQueryData<ProgressIndexWindowState>(progressIndexWindowQueryKey(targetWindow.visit))
@@ -402,12 +402,13 @@ export function CurrentViewerProgressIndexPage({
         stagedWindow.staged?.id === targetWindow.move &&
         stagedWindow.staged.from === targetWindow.from &&
         stagedWindow.staged.to === targetWindow.to &&
-        stagedWindow.staged.sourceLocation === fromLocation.key &&
+        stagedWindow.staged.sourceLocation === fromLocation.state.__TSR_key &&
         sourceReadIsCurrent(stagedWindow.staged.sourceRead);
       const sameAddress =
         progressIndexWindowAddress(fromLocation.search as never) ===
           progressIndexWindowAddress(toLocation.search as never) &&
-        (fromLocation.search.cursor ?? null) === (toLocation.search.cursor ?? null);
+        ((fromLocation.search as Record<string, unknown>).cursor ?? null) ===
+          ((toLocation.search as Record<string, unknown>).cursor ?? null);
       const layoutOnly = onlyDisplayLayoutChanged(
         fromLocation.search as Record<string, unknown>,
         toLocation.search as Record<string, unknown>,
@@ -517,7 +518,7 @@ export function CurrentViewerProgressIndexPage({
       kind,
       from: base.current,
       to: target,
-      sourceLocation: location.key,
+      sourceLocation: location.state.__TSR_key,
       sourceRead: JSON.stringify(queryKey),
       keyboard,
     });
@@ -537,7 +538,7 @@ export function CurrentViewerProgressIndexPage({
     });
     void navigation.finally(() => {
       const currentLocation = router.state.location;
-      if (currentLocation.key === location.key) {
+      if (currentLocation.state.__TSR_key === location.state.__TSR_key) {
         const current = client.getQueryData<ProgressIndexWindowState>(windowKey);
         if (current?.staged?.id === move) {
           const { staged: _staged, ...accepted } = current;

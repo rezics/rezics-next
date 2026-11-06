@@ -1,3 +1,4 @@
+import type { NativePageBody } from './page-read-failure';
 import type { KernelClient } from '@rezics/client';
 import {
   PAGE_GLOBAL_CONTEXT,
@@ -93,7 +94,7 @@ export async function readMemberList(
   );
   if (response.status !== 200 || !response.data)
     return failedMemberRead(response.status, 'headers' in response ? response.headers : undefined);
-  const page = response.data;
+  const page = response.data as NativePageBody;
   const contextId = page.context?.id ?? PAGE_GLOBAL_CONTEXT;
   const population = page.context?.population;
   const populationKind = population?.kind ?? 'global';

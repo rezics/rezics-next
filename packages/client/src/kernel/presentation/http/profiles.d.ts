@@ -165,6 +165,13 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
                 readonly 'cache-control': import("typebox").TString;
             };
         };
+        202: import("typebox").TObject<{
+            preparing: import("typebox").TLiteral<true>;
+        }> & {
+            headers: {
+                readonly 'retry-after': import("typebox").TString;
+            };
+        };
         308: import("typebox").TObject<{
             redirect: import("typebox").TObject<{
                 from: import("typebox").TString;
@@ -362,6 +369,9 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
                 status: "denied";
             };
         };
+        202: {
+            preparing: true;
+        };
         308: {
             redirect: {
                 from: string;
@@ -520,6 +530,9 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             } | {
                 status: "denied";
             };
+        };
+        202: {
+            preparing: true;
         };
         308: {
             redirect: {
@@ -687,6 +700,13 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             }> & {
                 headers: {
                     readonly 'cache-control': import("typebox").TString;
+                };
+            };
+            202: import("typebox").TObject<{
+                preparing: import("typebox").TLiteral<true>;
+            }> & {
+                headers: {
+                    readonly 'retry-after': import("typebox").TString;
                 };
             };
             308: import("typebox").TObject<{
@@ -928,6 +948,13 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
         }> & {
             headers: {
                 readonly 'cache-control': import("typebox").TString;
+            };
+        };
+        202: import("typebox").TObject<{
+            preparing: import("typebox").TLiteral<true>;
+        }> & {
+            headers: {
+                readonly 'retry-after': import("typebox").TString;
             };
         };
         308: import("typebox").TObject<{
@@ -1179,6 +1206,13 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
                 readonly 'cache-control': import("typebox").TString;
             };
         };
+        202: import("typebox").TObject<{
+            preparing: import("typebox").TLiteral<true>;
+        }> & {
+            headers: {
+                readonly 'retry-after': import("typebox").TString;
+            };
+        };
         308: import("typebox").TObject<{
             redirect: import("typebox").TObject<{
                 from: import("typebox").TString;
@@ -1376,6 +1410,9 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
                 status: "denied";
             };
         };
+        202: {
+            preparing: true;
+        };
         308: {
             redirect: {
                 from: string;
@@ -1534,6 +1571,9 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             } | {
                 status: "denied";
             };
+        };
+        202: {
+            preparing: true;
         };
         308: {
             redirect: {
@@ -1701,6 +1741,13 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             }> & {
                 headers: {
                     readonly 'cache-control': import("typebox").TString;
+                };
+            };
+            202: import("typebox").TObject<{
+                preparing: import("typebox").TLiteral<true>;
+            }> & {
+                headers: {
+                    readonly 'retry-after': import("typebox").TString;
                 };
             };
             308: import("typebox").TObject<{
@@ -1942,6 +1989,13 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
         }> & {
             headers: {
                 readonly 'cache-control': import("typebox").TString;
+            };
+        };
+        202: import("typebox").TObject<{
+            preparing: import("typebox").TLiteral<true>;
+        }> & {
+            headers: {
+                readonly 'retry-after': import("typebox").TString;
             };
         };
         308: import("typebox").TObject<{

@@ -40,10 +40,8 @@ export const loadSubjectSources = createServerFn({ method: 'GET', strict: false 
   )
   .handler(async ({ data }): Promise<SourcesResult> => {
     setResponseHeader('cache-control', 'private, no-store');
-    const [{ kernelClient }, { readRelease }] = await Promise.all([
-      import('../../kernel/client'),
-      import('../../subject/definitions'),
-    ]);
+    const { kernelClient } = await import('../../kernel/client');
+    const { readRelease } = await import('../../subject/definitions');
     // Start independent reads together; missing labels must not hide permitted citations.
     const definitions = readRelease().catch(() => undefined);
     if (!data.realm)
@@ -99,10 +97,8 @@ export const readCurrentSubjectSources = createServerFn({ method: 'POST', strict
     await prepareSession(request, env);
     if ((sessionSubject(request) ?? null) !== data.expectedReader) return { kind: 'denied' };
     const authorization = viewerCredential(request) ?? undefined;
-    const [{ kernelClient }, { readRelease }] = await Promise.all([
-      import('../../kernel/client'),
-      import('../../subject/definitions'),
-    ]);
+    const { kernelClient } = await import('../../kernel/client');
+    const { readRelease } = await import('../../subject/definitions');
     const result = await readSubjectSources(
       kernelClient(data.locale, authorization),
       data.id,

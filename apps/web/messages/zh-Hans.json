@@ -6360,6 +6360,7 @@
   "home_space_retry": "重试 Space 查找",
   "home_space_invalid": "请输入 Space 地址或本站的 Space 链接。",
   "home_space_unavailable": "无法加载此 Space。请重试或清除该选择。",
+  "home_space_not_found": "找不到此 Space。请检查地址或清除该选择。",
   "home_space_changed": "此 Space 已更改，正在更新主页结果。",
   "home_feed_sparse": "本页没有条目。请继续下一页。",
   "home_feed_public_discovery_unavailable": "原生信息流暂不支持发现公开合集、评论和 Space。",
@@ -11225,5 +11226,13 @@
   "library_archive_progress_open_session": "打开当前的 Session",
   "library_archive_progress_restart": "用原始归档再开始一次恢复",
   "exposure_grants_link": "Review tester grants",
-  "exposure_grants_help": "Use Resource access to grant or revoke gate permissions on the Global Context. That page checks your current grant authority. Closing a capability preserves tester grants; revoke a grant to end that tester’s access."
+  "exposure_grants_help": "Use Resource access to grant or revoke gate permissions on the Global Context. That page checks your current grant authority. Closing a capability preserves tester grants; revoke a grant to end that tester’s access.",
+  "public_read_preparing": "正在准备此视图",
+  "public_read_sparse": "此页没有可显示的条目。请继续读取下一页。",
+  "public_read_denied": "你无权访问此内容。",
+  "public_read_empty": "此列表为空",
+  "library_archive_observation_correct": "保留或修正现有观察记录",
+  "library_archive_observation_admit": "录入新的观察记录",
+  "library_archive_observation_revision": "当前观察记录修订版本",
+  "library_archive_observation_admit_help": "录入会使用归档中的所有字段，包括明确清除的值。原生审核会确认没有现有记录。"
 }

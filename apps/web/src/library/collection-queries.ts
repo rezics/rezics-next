@@ -1,3 +1,4 @@
+import { captureCollectionRead, admitCollectionRead } from './collection-public-reading/failure';
 import { collectionComparisonDefinitions } from './collection-comparison/model';
 import { readCollectionTypeOptions } from './collection-presentation';
 import { queryOptions } from '@tanstack/react-query';
@@ -76,138 +77,147 @@ function hasActiveFilter(search: object | undefined): boolean {
   });
 }
 
-export const readCollectionPage = createServerFn({ method: 'GET' })
+const readCollectionPageRequest = createServerFn({ method: 'GET' })
   .validator(validatePageInput)
-  .handler(async ({ data }): Promise<CollectionPageResult> => {
-    setResponseHeader('cache-control', 'private, no-store');
-    const request = getRequest();
-    recordPublicPageCachePolicy(request, 'private');
-    const configuredFilters = (env as { COLLECTION_FILTERS?: boolean | string }).COLLECTION_FILTERS;
-    const filtersOn =
-      configuredFilters === undefined
-        ? import.meta.env.DEV
-        : configuredFilters === true || configuredFilters === 'true';
-    const release = await readRelease().catch(() => null);
-    let filter: ReturnType<typeof readCollectionFilterParams> | undefined;
-    let filterStatus: 'failed' | undefined = !filtersOn && data.filterActive ? 'failed' : undefined;
-    let filterProperties: CollectionFilterProperty[] = [];
-    let filterReleaseKey: string | undefined;
-    const requested = data.search ?? {};
-    const type = typeof requested.type === 'string' ? requested.type : undefined;
-    if (filtersOn) {
-      try {
-        if (!release) throw new Error('Definitions unavailable');
-        filterReleaseKey = release.digest;
-        const locale = requestLocale() ?? 'en';
-        filterProperties = refinementProperties(release, type)
-          .filter((property) => property.property !== 'type' && property.mode !== 'unsupported')
-          .map((property) => ({
-            id: property.property,
-            datatype: property.datatype,
-            mode: property.mode,
-            labels: property.labels,
-            units: property.units,
-            label:
-              property.labels[locale] ??
-              property.labels[locale.split('-')[0]!] ??
-              property.labels.en ??
-              m.collection_filters(),
-            ...(property.units[0] ? { unit: property.units[0] } : {}),
-            ...(release.properties[property.property]?.targets
-              ? { targets: release.properties[property.property]!.targets }
-              : {}),
-          }));
-        const admission = readCollectionFilterAddress(requested, release, type);
-        filter = admission.filterParams;
-        filterStatus = admission.filterStatus;
-      } catch {
-        if (data.filterActive) filterStatus = 'failed';
+  .handler(async ({ data }) =>
+    captureCollectionRead(async (): Promise<CollectionPageResult> => {
+      setResponseHeader('cache-control', 'private, no-store');
+      const request = getRequest();
+      recordPublicPageCachePolicy(request, 'private');
+      const configuredFilters = (env as { COLLECTION_FILTERS?: boolean | string }).COLLECTION_FILTERS;
+      const filtersOn =
+        configuredFilters === undefined
+          ? import.meta.env.DEV
+          : configuredFilters === true || configuredFilters === 'true';
+      const release = await readRelease().catch(() => null);
+      let filter: ReturnType<typeof readCollectionFilterParams> | undefined;
+      let filterStatus: 'failed' | undefined = !filtersOn && data.filterActive ? 'failed' : undefined;
+      let filterProperties: CollectionFilterProperty[] = [];
+      let filterReleaseKey: string | undefined;
+      const requested = data.search ?? {};
+      const type = typeof requested.type === 'string' ? requested.type : undefined;
+      if (filtersOn) {
+        try {
+          if (!release) throw new Error('Definitions unavailable');
+          filterReleaseKey = release.digest;
+          const locale = requestLocale() ?? 'en';
+          filterProperties = refinementProperties(release, type)
+            .filter((property) => property.property !== 'type' && property.mode !== 'unsupported')
+            .map((property) => ({
+              id: property.property,
+              datatype: property.datatype,
+              mode: property.mode,
+              labels: property.labels,
+              units: property.units,
+              label:
+                property.labels[locale] ??
+                property.labels[locale.split('-')[0]!] ??
+                property.labels.en ??
+                m.collection_filters(),
+              ...(property.units[0] ? { unit: property.units[0] } : {}),
+              ...(release.properties[property.property]?.targets
+                ? { targets: release.properties[property.property]!.targets }
+                : {}),
+            }));
+          const admission = readCollectionFilterAddress(requested, release, type);
+          filter = admission.filterParams;
+          filterStatus = admission.filterStatus;
+        } catch {
+          if (data.filterActive) filterStatus = 'failed';
+        }
       }
-    }
-    const page = await loadEditableCollectionPage(
-      kernelClient(),
-      request,
-      env as Partial<SessionEnv>,
-      {
-        ...data,
-        ...(filter?.document ? { filter: filter.document } : {}),
-        ...(filterStatus ? { filterStatus } : {}),
-        ...(filter
+      const page = await loadEditableCollectionPage(
+        kernelClient(),
+        request,
+        env as Partial<SessionEnv>,
+        {
+          ...data,
+          ...(filter?.document ? { filter: filter.document } : {}),
+          ...(filterStatus ? { filterStatus } : {}),
+          ...(filter
+            ? {
+                filterIgnored: filter.ignored,
+                ...(type ? { filterType: type } : {}),
+                filterProperties,
+                filterParams: filter,
+              }
+            : {}),
+          ...(filterReleaseKey ? { filterReleaseKey } : {}),
+        },
+        data.credentialMode,
+      );
+      await nameSubjectTypes(
+        [...page.members, ...(!('preparing' in page) ? (page.filteredMembers ?? []) : [])].map(
+          (member) => member.subject,
+        ),
+      );
+      const typeRatios = release
+        ? Object.fromEntries(
+            Object.entries(release.types).flatMap(([id, type]) => (type.coverRatio ? [[id, type.coverRatio]] : [])),
+          )
+        : {};
+      const listPresentations = release
+        ? Object.fromEntries(
+            Object.entries(release.types).flatMap(([id, type]) =>
+              type.listPresentation ? [[id, type.listPresentation]] : [],
+            ),
+          )
+        : {};
+      const result = {
+        ...page,
+        // Provenance binds caller operands. The admitted native filter is derived within this request.
+        ...(page.provenance ? { provenance: { ...page.provenance, request: collectionRequestVariant(data) } } : {}),
+        filterActive: data.filterActive,
+        typeRatios,
+        listPresentations,
+        ...(release
           ? {
-              filterIgnored: filter.ignored,
-              ...(type ? { filterType: type } : {}),
-              filterProperties,
-              filterParams: filter,
+              comparisonDefinitions: collectionComparisonDefinitions(
+                [...page.members, ...(!('preparing' in page) ? (page.filteredMembers ?? []) : [])],
+                listPresentations,
+                release.properties,
+              ),
             }
           : {}),
-        ...(filterReleaseKey ? { filterReleaseKey } : {}),
-      },
-      data.credentialMode,
-    );
-    await nameSubjectTypes(
-      [...page.members, ...(!('preparing' in page) ? (page.filteredMembers ?? []) : [])].map(
-        (member) => member.subject,
-      ),
-    );
-    const typeRatios = release
-      ? Object.fromEntries(
-          Object.entries(release.types).flatMap(([id, type]) => (type.coverRatio ? [[id, type.coverRatio]] : [])),
-        )
-      : {};
-    const listPresentations = release
-      ? Object.fromEntries(
-          Object.entries(release.types).flatMap(([id, type]) =>
-            type.listPresentation ? [[id, type.listPresentation]] : [],
-          ),
-        )
-      : {};
-    const result = {
-      ...page,
-      // Provenance binds caller operands. The admitted native filter is derived within this request.
-      ...(page.provenance ? { provenance: { ...page.provenance, request: collectionRequestVariant(data) } } : {}),
-      filterActive: data.filterActive,
-      typeRatios,
-      listPresentations,
-      ...(release
-        ? {
-            comparisonDefinitions: collectionComparisonDefinitions(
-              [...page.members, ...(!('preparing' in page) ? (page.filteredMembers ?? []) : [])],
-              listPresentations,
-              release.properties,
-            ),
-          }
-        : {}),
-      ...(!('preparing' in page)
-        ? {
-            ...(page.visibility !== null
-              ? { presentationTypes: release ? readCollectionTypeOptions(release) : null }
-              : {}),
-          }
-        : {}),
-      ...(filtersOn
-        ? {
-            filterProperties,
-            filterParams: filter ?? { selected: {}, selectedLabels: {}, ranges: {}, ignored: [] },
-            ...(filterReleaseKey ? { filterReleaseKey } : {}),
-          }
-        : {}),
-    };
-    if (data.credentialMode === 'anonymous') {
-      const policy = collectionRenderPolicy(result);
-      recordPublicPageCachePolicy(request, policy.cache);
-      if (isPublicCacheRender(request) && policy.cache === 'public')
-        setResponseHeader('cache-control', publicPageCacheControl);
-      const notReady =
-        'preparing' in result
-          ? result.preparing || result.unavailable
-          : result.memberState !== undefined && result.memberState !== 'ready';
-      if (notReady && isPublicCacheRender(request)) {
-        setResponseStatus(503, 'Service Unavailable');
-        setResponseHeader('retry-after', '1');
+        ...(!('preparing' in page)
+          ? {
+              ...(page.visibility !== null
+                ? { presentationTypes: release ? readCollectionTypeOptions(release) : null }
+                : {}),
+            }
+          : {}),
+        ...(filtersOn
+          ? {
+              filterProperties,
+              filterParams: filter ?? { selected: {}, selectedLabels: {}, ranges: {}, ignored: [] },
+              ...(filterReleaseKey ? { filterReleaseKey } : {}),
+            }
+          : {}),
+      };
+      if (data.credentialMode === 'anonymous') {
+        const policy = collectionRenderPolicy(result);
+        recordPublicPageCachePolicy(request, policy.cache);
+        if (isPublicCacheRender(request) && policy.cache === 'public')
+          setResponseHeader('cache-control', publicPageCacheControl);
+        const notReady =
+          'preparing' in result
+            ? result.preparing || result.unavailable
+            : result.memberState !== undefined && result.memberState !== 'ready';
+        if (notReady && isPublicCacheRender(request)) {
+          setResponseStatus(503, 'Service Unavailable');
+          setResponseHeader('retry-after', '1');
+        }
       }
-    }
-    return result;
-  });
+      return result;
+    }),
+  );
+
+/** Native failures cross the server function as data, then become typed route errors at the caller. */
+export async function readCollectionPage(
+  options: Parameters<typeof readCollectionPageRequest>[0],
+): Promise<CollectionPageResult> {
+  return admitCollectionRead(await readCollectionPageRequest(options));
+}
 
 export const readDynamicCollectionMembers = createServerFn({ method: 'GET' })
   .validator(function validateDynamicMembersInput(input: unknown) {

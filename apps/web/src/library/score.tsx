@@ -14,7 +14,13 @@ export type LibraryScoreQuestion = {
   lifecycleRevision: number;
 };
 
-export type LibraryViewerFacts = CollectionViewerFacts;
+type CurrentCollectionViewerFacts = Extract<CollectionViewerFacts, { state: 'current' }>;
+/** Entry shelves and Collection members publish the same vote facts; only Collection rows also carry actions. */
+export type LibraryViewerFacts =
+  | (Omit<CurrentCollectionViewerFacts, 'rows'> & {
+      rows: readonly Omit<CurrentCollectionViewerFacts['rows'][number], 'actions'>[];
+    })
+  | Extract<CollectionViewerFacts, { state: 'unavailable' }>;
 
 const displayScale = (question: LibraryScoreQuestion | { scale: { min: number; max: number; displayStep: number } }) =>
   'scale' in question
@@ -29,10 +35,10 @@ export function formatOwnScore(units: number, question: Parameters<typeof displa
 
 export function ownScoreUnits(input: {
   subjectId: string;
-  rowKey?: string;
-  personalScore?: number | null;
-  scoreQuestion?: LibraryScoreQuestion | null;
-  viewerFacts?: LibraryViewerFacts;
+  rowKey?: string | undefined;
+  personalScore?: number | null | undefined;
+  scoreQuestion?: LibraryScoreQuestion | null | undefined;
+  viewerFacts?: LibraryViewerFacts | undefined;
 }):
   | {
       units: number | null;

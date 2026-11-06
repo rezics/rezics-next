@@ -365,8 +365,8 @@ export function SubjectFrame({
               {(frame.type === 'schema:Person' || frame.type === 'schema:Organization') && (
                 <PeopleProfileEntry id={frame.id} label={title} locale={locale} />
               )}
-              {frame.type === 'schema:Organization' && (
-                <ProducerHistoryEntry id={frame.id} label={title} locale={locale} />
+              {frame.type === 'schema:Organization' && observedContext && (
+                <ProducerHistoryEntry id={frame.id} label={title} locale={locale} context={observedContext} />
               )}
               {view === 'credits' && <PeopleProfileEntry work={frame.id} locale={locale} />}
               <GameProfileEntry id={frame.id} type={frame.type} label={title} locale={locale} />

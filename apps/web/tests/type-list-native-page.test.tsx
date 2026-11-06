@@ -1,8 +1,11 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
-import { OverviewContext } from '../src/features/pages/overview';
-import { TypeList, TypeListContext } from '../src/features/pages/type-list';
+
+import { m } from '../src/paraglide/messages.js';
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { OverviewContext } = await import('../src/features/pages/overview');
+const { TypeList, TypeListContext } = await import('../src/features/pages/type-list');
 
 const node = 'books';
 const id = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e06';
@@ -74,4 +77,18 @@ test('sparse summaries, native continuation and terminal empty pages render', ()
   const empty = renderPage({ subjects: [], next: null });
   expect(empty).toContain('role="status"');
   expect(empty).not.toContain('role="alert"');
+});
+
+test('a successful sparse native window keeps its exact continuation and never claims known empty', () => {
+  const cursor = ' opaque/+==?f.=a&cursor=other#二% ';
+  const sparse = renderPage({ subjects: [], next: cursor });
+  expect(sparse).toContain(m.public_read_sparse());
+  expect(sparse).not.toContain(m.search_no_results());
+  const encoded =
+    /href="([^"]*)"[^>]*data-slot="next-page"/.exec(sparse)?.[1] ??
+    /data-slot="next-page"[^>]*href="([^"]*)"/.exec(sparse)?.[1];
+  expect(encoded).toBeDefined();
+  const url = new URL(encoded!.replaceAll('&amp;', '&'), 'https://site.test');
+  expect(url.searchParams.get('cursor')).toBe(cursor);
+  expect(renderPage({ subjects: [], next: null })).toContain(m.search_no_results());
 });

@@ -25,10 +25,8 @@ function address(value: unknown) {
 }
 async function context(locale: string, expectedReader: string | null) {
   setResponseHeader('cache-control', 'private, no-store');
-  const [{ env }, { prepareSession, sessionSubject, viewerCredential }] = await Promise.all([
-    import('cloudflare:workers'),
-    import('../../session/request'),
-  ]);
+  const { env } = await import('cloudflare:workers');
+  const { prepareSession, sessionSubject, viewerCredential } = await import('../../session/request');
   const request = getRequest();
   await prepareSession(request, env as import('../../session/client').SessionEnv);
   const reader = sessionSubject(request);
