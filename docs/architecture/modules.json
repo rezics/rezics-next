@@ -1162,6 +1162,7 @@
         "apps/web/src/session/reader.ts",
         "apps/web/src/subject/reader.ts",
         "apps/web/src/subject/definitions.ts",
+        "apps/web/src/subject/load-subject.ts",
         "apps/web/src/subject/quantity-presentation.ts",
         "apps/web/src/subject/reading-state/index.tsx",
         "apps/web/src/shell/current-reading.tsx",

@@ -12,7 +12,7 @@ import { validatePageRealm } from '../../features/pages/view-cursor';
 import { getLocale } from '../../paraglide/runtime.js';
 import { m } from '../../paraglide/messages.js';
 import { candidateContext } from '../../subject/candidates';
-import { canonicalRedirect, keepSearch } from '../../subject/subject-href';
+import { canonicalRedirect, keepSearch } from '../../subject/load-subject';
 
 const canonicalCharacterRelationships = createServerFn({ method: 'GET', strict: false })
   .validator((input: { id: string; slug: string; locale: string; search: string }) => {

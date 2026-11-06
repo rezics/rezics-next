@@ -9,7 +9,7 @@ import {
   validatePeopleCurrentVisitSearch,
 } from '../../features/catalogue/people-current-visit';
 import { PeopleCurrentVisitView } from '../../features/catalogue/people-current-visit-view';
-import { canonicalRedirect, keepSearch } from '../../subject/subject-href';
+import { canonicalRedirect, keepSearch } from '../../subject/load-subject';
 
 const canonicalPeopleProfile = createServerFn({ method: 'GET', strict: false })
   .validator((input: { id: string; slug: string; locale: string; search: string }) => {
