@@ -10,9 +10,12 @@ import { conceptWorksAdmission } from '../src/features/catalogue/source-concept-
 import {
   boundedConceptWorksState,
   conceptWorksExactEmpty,
+  conceptWorksKindOptions,
+  conceptWorksNativeKindLabels,
   conceptWorksRequest,
   conceptWorksTypeLabel,
   readConceptWorksPage,
+  receiveConceptWorksPage,
 } from '../src/features/catalogue/concept-works';
 import type { DiscoveryState } from '../src/search/discovery';
 import { ConceptWeightRange } from '../src/search/condition-weight';
@@ -396,10 +399,28 @@ test('the mounted Concept list and type control receive native Search kind label
   );
   const page = parseDiscoveryPage(recorded);
   if (!page) throw new Error('Recorded tagged-work page must parse');
-  expect(conceptWorksTypeLabel({ id: 'schema:Book', labels: { en: 'Book' } }, page.kinds.values, 'en')).toBe(
+  const received = receiveConceptWorksPage({ status: 'ready', page });
+  expect(
+    received.hits.some((hit) => hit.summary.kind === 'subject' && hit.summary.value.label?.value === 'Mira’s Atlas'),
+  ).toBe(true);
+  expect(conceptWorksNativeKindLabels(page, 'schema:Book', 'en')).toBe('Bound volume');
+  expect(conceptWorksTypeLabel({ id: 'schema:Book', labels: { en: 'Book' } }, received.kinds, 'en')).toBe(
     'Bound volume (2+)',
   );
-  expect(conceptWorksTypeLabel({ id: 'schema:Movie', labels: { en: 'Movie' } }, page.kinds.values, 'en')).toBe('Movie');
+  expect(conceptWorksTypeLabel({ id: 'schema:Movie', labels: { en: 'Movie' } }, received.kinds, 'en')).toBe('Movie');
+  expect(
+    conceptWorksKindOptions(
+      [
+        { id: 'schema:Book', labels: { en: 'Book' } },
+        { id: 'schema:Movie', labels: { en: 'Movie' } },
+      ],
+      received.kinds,
+      'en',
+    ),
+  ).toEqual([
+    { id: 'schema:Book', label: 'Bound volume (2+)' },
+    { id: 'schema:Movie', label: 'Movie' },
+  ]);
   const markup = renderToStaticMarkup(
     createElement(DiscoveryResults, { state: { status: 'ready', page }, locale: 'en' }),
   );

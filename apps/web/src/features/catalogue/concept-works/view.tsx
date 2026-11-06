@@ -19,9 +19,10 @@ import { subjectVisitHref } from '../../pages/source-concept-reading/navigation'
 import {
   boundedConceptWorksState,
   conceptWorksExactEmpty,
+  conceptWorksKindOptions,
   conceptWorksRequest,
-  conceptWorksTypeLabel,
   publicConceptWorksState,
+  receiveConceptWorksPage,
   type ConceptWorksSelection,
 } from './index';
 import { readPublicConceptWorks } from './actions';
@@ -270,19 +271,21 @@ function ConceptWorksVisit({
           >
             <NativeSelectOption value="">{m.search_all_subject_types({}, options)}</NativeSelectOption>
             {read.works?.state === 'available' &&
-              read.works.types
-                .filter((type) => {
+              conceptWorksKindOptions(
+                read.works.types.filter((type) => {
                   const propertyId = route.property ?? read.requestedRole;
                   return (
                     !propertyId ||
                     read.works?.properties.find((entry) => entry.id === propertyId)?.types.includes(type.id)
                   );
-                })
-                .map((type) => (
-                  <NativeSelectOption key={type.id} value={type.id}>
-                    {conceptWorksTypeLabel(type, page?.kinds.values, locale)}
-                  </NativeSelectOption>
-                ))}
+                }),
+                receiveConceptWorksPage(source).kinds,
+                locale,
+              ).map((type) => (
+                <NativeSelectOption key={type.id} value={type.id}>
+                  {type.label}
+                </NativeSelectOption>
+              ))}
           </NativeSelect>
         </Field>
         <Field>

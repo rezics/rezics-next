@@ -6,8 +6,11 @@ import { createDiscoveryRegistry } from '../../src/search/discovery-registry.ts'
 import { admitDiscoveryRequest } from '../../src/search/discovery-request.ts';
 import {
   admitTaggedWorkPlan,
+  taggedWorkCaptureSize,
   taggedWorkCatalogueFilter,
   taggedWorkCountFilter,
+  taggedWorkHitScanBound,
+  taggedWorkKindTypeFilter,
   taggedWorkRemainingHasConcept,
 } from '../../src/search/tagged-work-plan.ts';
 
@@ -145,4 +148,20 @@ test('tagged-work discovery admits rating when the remaining conjunct is a conce
   expect(admitted.sort).toBe('rating');
   expect(admitted.kindCountLeaf).toBe(1);
   expect(admitted.countFilter).toEqual({ and: [conceptLeaf, words] });
+});
+
+test('direct name order admits a finite capture window and designated kind as a type leaf', () => {
+  const plan = admitTaggedWorkPlan({
+    filter,
+    kindCountLeaf: 1,
+    sort: 'id',
+    limit: 24,
+    registeredKinds: kinds,
+  });
+  expect(plan.sort).toBe('id');
+  expect(plan.execution).toBe('direct');
+  expect(taggedWorkKindTypeFilter(plan)).toEqual({ type: { in: ['schema:Book'] } });
+  expect(taggedWorkCaptureSize(plan)).toBe(Math.min(200, plan.scanBound));
+  expect(taggedWorkHitScanBound(plan, 24)).toBe(plan.scanBound);
+  expect(taggedWorkHitScanBound(undefined, 24)).toBe(Math.min(600, 6 * 24 + 3));
 });

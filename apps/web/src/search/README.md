@@ -119,6 +119,7 @@ The current quantity matcher requires exact unit identity and applies present `g
 omitting either endpoint leaves that side open. Display labels do not convert values or change admission.
 Decision: Catalogue tagged-works mounts Search's public weight control, which uses this numeric grammar and unit
 text; native kind labels there use composition pickText over Search kind metadata, not Search results chrome.
+The mounted list receives recorded native hits and kind chips; admission type maps are only a pre-page fallback.
 
 Property changes preserve values only when released datatypes and value definitions match, ranges only when both
 definitions support the selected unit, and statement qualifiers only when both properties allow the same released

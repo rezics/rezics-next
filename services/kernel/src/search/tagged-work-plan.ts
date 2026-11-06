@@ -189,3 +189,15 @@ export function taggedWorkCountFilter(plan: TaggedWorkPlan): DiscoveryFilterDocu
 export function taggedWorkCatalogueFilter(plan: TaggedWorkPlan): FilterDocument | undefined {
   return catalogueRemaining(plan.remaining);
 }
+
+export function taggedWorkKindTypeFilter(plan: TaggedWorkPlan): FilterDocument {
+  return { type: { in: [...plan.selectedKinds] } };
+}
+
+export function taggedWorkCaptureSize(plan: TaggedWorkPlan): number {
+  return Math.min(200, plan.scanBound);
+}
+
+export function taggedWorkHitScanBound(plan: TaggedWorkPlan | undefined, limit: number): number {
+  return plan?.scanBound ?? Math.min(600, 6 * limit + 3);
+}

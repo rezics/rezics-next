@@ -50,7 +50,7 @@ import type {
 import { finishDiscoveryDisclosure } from './disclosure/discovery.ts';
 import { openPublicFilterCoveragePage } from './public-filter-coverage-page.ts';
 import type { KindCountEvidence } from './discovery-api.ts';
-import { admitTaggedWorkPlan, taggedWorkRemainingHasConcept } from './tagged-work-plan.ts';
+import { admitTaggedWorkPlan, taggedWorkHitScanBound, taggedWorkRemainingHasConcept } from './tagged-work-plan.ts';
 import { attachKindCountMetadata, proveCurrentKindCounts } from './type-facet.ts';
 
 const ready = () => new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
@@ -355,6 +355,7 @@ function executeDiscoverySearch(
             registeredKinds: new Set(kindDirectory.map((entry) => entry.kind)),
           });
     if (taggedWork?.execution === 'preparing') throw ready();
+    const taggedScanBound = taggedWorkHitScanBound(taggedWork, admitted.limit);
     const registryDigest = createHash('sha256')
       .update(
         canonicalize({
@@ -586,7 +587,7 @@ function executeDiscoverySearch(
           )
             throw ready();
           examined += window.examined;
-          if (examined > discoveryCandidateScanBound(admitted.limit)) throw ready();
+          if (examined > taggedScanBound) throw ready();
           const inSpace = new Set<string>();
           if (spacePopulation) {
             const subjects = result.hits.filter((candidate) => candidate.key.owner === 'semantic');
@@ -626,7 +627,7 @@ function executeDiscoverySearch(
           await coverage.consume(batch.execution, consumed);
           exhausted = consumed === window.examined && window.exhausted;
           if (exhausted || hits.length === admitted.limit) break;
-          const remaining = discoveryCandidateScanBound(admitted.limit) - examined;
+          const remaining = taggedScanBound - examined;
           if (remaining < 1) break;
           refill = {
             execution: batch.execution,
@@ -651,7 +652,7 @@ function executeDiscoverySearch(
           let countQueried: PublicFilterQueriedObservation | undefined;
           let countFailed = false;
           try {
-            const countSize = Math.min(200, taggedWork?.scanBound ?? discoveryCandidateScanBound(admitted.limit));
+            const countSize = Math.min(200, taggedScanBound);
             const countSort = admitted.text ? 'relevance' : 'name';
             const countPlan = compileDiscoveryCapture(
               {

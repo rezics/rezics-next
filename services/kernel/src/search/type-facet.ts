@@ -9,6 +9,16 @@ export type TypeFacetDirectoryEntry = Readonly<{
   kind: string;
   metadata: { id: string; labels: Record<string, string>; icon: string };
 }>;
+export type TypeFacetPropertyValue = Readonly<{
+  value: string;
+  labels?: Record<string, string>;
+  count?: number;
+}>;
+export type TypeFacetPropertyPage = Readonly<{
+  property: string;
+  values: readonly TypeFacetPropertyValue[];
+  total?: number;
+}>;
 
 /**
  * Kind chips are the designated-leaf exception: counts come from current disclosed rows that already
@@ -62,4 +72,69 @@ export function nativeTypeFacetLabels(
   for (const language of languages) if (labels[language]) return { [language]: labels[language]! };
   const first = Object.entries(labels)[0];
   return first ? { [first[0]]: first[1] } : {};
+}
+
+/** Configured kind directory in owner order, labelled from the active release. */
+export function nativeKindDirectory(
+  release: FilterRelease,
+  kinds: readonly string[],
+  languages?: readonly string[],
+  icons: Readonly<Record<string, string>> = {},
+): TypeFacetDirectoryEntry[] {
+  return kinds.map((kind) => ({
+    kind,
+    metadata: {
+      id: kind,
+      labels: nativeTypeFacetLabels(release, kind, languages),
+      icon: icons[kind] ?? 'catalogue',
+    },
+  }));
+}
+
+export function presentKindChips(
+  release: FilterRelease,
+  kinds: readonly string[],
+  counts: ReadonlyMap<string, KindCountEvidence>,
+  languages?: readonly string[],
+  icons: Readonly<Record<string, string>> = {},
+): Array<TypeFacetDirectoryEntry['metadata'] & { count: KindCountEvidence }> {
+  return attachKindCountMetadata(nativeKindDirectory(release, kinds, languages, icons), counts);
+}
+
+export function kindChipLabel(
+  metadata: { id: string; labels: Record<string, string>; count?: KindCountEvidence },
+  locale: string,
+): string {
+  const label = metadata.labels[locale] ?? Object.values(metadata.labels)[0] ?? metadata.id;
+  const count = metadata.count;
+  if (!count || !('value' in count)) return label;
+  return `${label} (${count.value}${count.exact ? '' : '+'})`;
+}
+
+/** Ordinary property facets stay count-free; kind chips are the only count exception. */
+export function countFreeFacetValues<Value extends { count?: unknown }>(
+  values: readonly Value[],
+): Array<Omit<Value, 'count'>> {
+  return values.map((value) => {
+    const { count: _count, ...rest } = value;
+    return rest;
+  });
+}
+
+export function countFreePropertyFacets(
+  pages: readonly TypeFacetPropertyPage[],
+): Array<Omit<TypeFacetPropertyPage, 'total' | 'values'> & { values: Array<Omit<TypeFacetPropertyValue, 'count'>> }> {
+  return pages.map((page) => ({
+    property: page.property,
+    values: countFreeFacetValues(page.values),
+  }));
+}
+
+export function omitPublicSearchTotal<Page extends { total?: unknown }>(page: Page): Omit<Page, 'total'> {
+  const { total: _total, ...rest } = page;
+  return rest;
+}
+
+export function kindCountIsUnavailable(evidence: KindCountEvidence | undefined): boolean {
+  return !evidence || 'unavailable' in evidence || ('value' in evidence && evidence.value === 0);
 }

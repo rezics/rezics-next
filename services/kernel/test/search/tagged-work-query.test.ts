@@ -1,10 +1,14 @@
 import { expect, test } from 'bun:test';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import type { FilterDocument } from '@rezics/filter';
 import {
   bookWordsGreaterThanOneMillion,
   compileTaggedWorkFilter,
   currentTaggedWorkSubjects,
   evaluateTaggedWorkPredicate,
+  pageTaggedWorkSubjects,
+  proveTaggedWorkKindCounts,
+  releasedTaggedWorkMeaning,
 } from '../../src/search/tagged-work-query.ts';
 import { proveCurrentKindCounts, attachKindCountMetadata } from '../../src/search/type-facet.ts';
 import type { IndexedStatement, IndexedSubject } from '../../src/search/source.ts';
@@ -210,6 +214,54 @@ test('id order continues the remaining form/tag page after the first current row
   );
 });
 
+test('released meaning IDs come from the bundled Book facet and quantity units', () => {
+  const meaning = releasedTaggedWorkMeaning(bundledRelease);
+  expect(meaning.words).toBe('schema:wordCount');
+  expect(meaning.form).toBe('wdt:P7937');
+  expect(meaning.wordUnit).toBe('1');
+  expect(meaning.weight).toBe('rezics:sourceTagWeight');
+  expect(meaning.weightMetric).toBe('vndbTagsRating');
+  expect(bundledRelease.types['schema:Book']!.facets).toContain(meaning.words);
+  expect(bundledRelease.properties[meaning.words]!.units).toEqual(['1']);
+});
+
+test('id order pages through LN+HAREM and prepares when the disclosed prefix is incomplete', () => {
+  const matched = currentTaggedWorkSubjects(books, formHarem);
+  const first = pageTaggedWorkSubjects({
+    subjects: books,
+    remaining: formHarem,
+    sort: 'id',
+    limit: 1,
+    scanBound: 32,
+  });
+  expect(first.status).toBe('ready');
+  if (first.status !== 'ready') return;
+  expect(first.hits.map((row) => row.id)).toEqual([id(1)]);
+  expect(first.next).toEqual({ id: id(1) });
+  const rest = pageTaggedWorkSubjects({
+    subjects: books,
+    remaining: formHarem,
+    sort: 'id',
+    limit: 2,
+    scanBound: 32,
+    after: first.next!,
+  });
+  expect(rest.status).toBe('ready');
+  if (rest.status !== 'ready') return;
+  expect(rest.hits.map((row) => books.find((book) => book.id === row.id)?.name)).toEqual(['B-edge', 'B-characters']);
+  expect(rest.next).toBeNull();
+  expect(matched).toHaveLength(3);
+  const preparing = pageTaggedWorkSubjects({
+    subjects: books.slice(0, 2),
+    remaining: formHarem,
+    sort: 'id',
+    limit: 3,
+    scanBound: 32,
+    exhausted: false,
+  });
+  expect(preparing).toEqual({ status: 'preparing', examined: 2 });
+});
+
 test('kind chips prove current remaining-predicate membership as N+ and never infer zero', () => {
   const remaining = currentTaggedWorkSubjects(books, { and: [tagged, words] });
   const counts = proveCurrentKindCounts({
@@ -238,4 +290,12 @@ test('kind chips prove current remaining-predicate membership as N+ and never in
       count: { kind: 'schema:Movie', unavailable: true },
     },
   ]);
+  expect(
+    proveTaggedWorkKindCounts({
+      subjects: books,
+      remaining: { and: [tagged, words] },
+      directory: ['schema:Book', 'schema:Movie'],
+      complete: false,
+    }).get('schema:Book'),
+  ).toEqual({ kind: 'schema:Book', value: 1, exact: false });
 });

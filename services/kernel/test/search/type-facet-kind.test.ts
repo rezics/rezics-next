@@ -2,7 +2,12 @@ import { expect, test } from 'bun:test';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import {
   attachKindCountMetadata,
+  countFreePropertyFacets,
+  kindChipLabel,
+  nativeKindDirectory,
   nativeTypeFacetLabels,
+  omitPublicSearchTotal,
+  presentKindChips,
   proveCurrentKindCounts,
   typeFacetLabels,
 } from '../../src/search/type-facet.ts';
@@ -40,4 +45,35 @@ test('type labels come from the released definition owner, not a Search fixture 
   expect(Object.keys(chinese)).toHaveLength(1);
   expect(chinese['zh-Hans'] ?? chinese.en).toBeTruthy();
   expect(typeFacetLabels(bundledRelease, 'schema:UnknownType')).toBeUndefined();
+});
+
+test('kind chips use released labels; property facets and totals stay count-free', () => {
+  const directory = nativeKindDirectory(bundledRelease, ['schema:Book', 'schema:Movie'], ['en']);
+  expect(directory[0]?.metadata.labels.en).toBe(typeFacetLabels(bundledRelease, 'schema:Book')?.en);
+  const counts = proveCurrentKindCounts({
+    subjects: [{ id: 'a', type: 'schema:Book' }],
+    directory: ['schema:Book', 'schema:Movie'],
+    complete: false,
+  });
+  const chips = presentKindChips(bundledRelease, ['schema:Book', 'schema:Movie'], counts, ['en']);
+  expect(kindChipLabel(chips[0]!, 'en')).toMatch(/\+$/);
+  expect(chips[1]?.count).toEqual({ kind: 'schema:Movie', unavailable: true });
+  expect(
+    countFreePropertyFacets([
+      {
+        property: 'schema:genre',
+        total: 9,
+        values: [
+          { value: 'a', labels: { en: 'Fantasy' }, count: 4 },
+          { value: 'b', count: 0 },
+        ],
+      },
+    ]),
+  ).toEqual([
+    {
+      property: 'schema:genre',
+      values: [{ value: 'a', labels: { en: 'Fantasy' } }, { value: 'b' }],
+    },
+  ]);
+  expect(omitPublicSearchTotal({ hits: [], total: 12, next: null })).toEqual({ hits: [], next: null });
 });

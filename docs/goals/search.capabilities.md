@@ -107,9 +107,11 @@ and properties≤8 do not supply a continuation schema. Owner adoption is pendin
 **Native wrapper/command:** [Search wrapper](../../services/kernel/test/search/outcomes.test.ts) and
 [relation wrapper](../../services/kernel/test/search/relation-facet-outcomes.test.ts), with the Search driver;
 `bun run --cwd services/kernel check test/search/outcomes.test.ts test/search/relation-facet-outcomes.test.ts`.
-Path 7 tagged-work admission, remaining-predicate kind proof and same-statement quantity matching are
-`test/search/tagged-work-plan.test.ts`, `test/search/tagged-work-query.test.ts` and `test/search/type-facet-kind.test.ts`;
-the mounted Concept list and Search weight control are `apps/web/tests/concept-tagged-works.test.ts`.
+Path 7 tagged-work admission, remaining-predicate kind proof, same-statement quantity matching and cursor
+traversal are `test/search/tagged-work-plan.test.ts`, `test/search/tagged-work-query.test.ts` and
+`test/search/type-facet-kind.test.ts`; the mounted Concept list and Search weight control are
+`apps/web/tests/concept-tagged-works.test.ts`. Released meaning IDs come from Definitions; LN/HAREM Concept
+UUIDs and crossed platform/language tuples stay Semantic `classification()`/`platform` prerequisites.
 No complete six-surface catalogue command is registered. Semantic/Imports first supply released definitions and
 builder/pins; Commerce adopts owner query, then consumers reuse those records. Unsupported required requests remain
 failures of the job; typed422 only passes deliberately unsupported controls. No title matching or fake release. Seeded
