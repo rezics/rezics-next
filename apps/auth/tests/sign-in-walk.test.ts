@@ -33,20 +33,33 @@ function clean(value: string): string {
 function record(step: Omit<Step, 'ok'> & { ok?: boolean }) {
   const entry: Step = { ok: true, ...step, ...(step.url ? { url: clean(step.url) } : {}) };
   steps.push(entry);
-  console.log(`[walk] ${entry.persona} | ${entry.step} | ${entry.ok ? 'ok' : 'FAILED'}${entry.detail ? ` | ${entry.detail}` : ''}`);
+  console.log(
+    `[walk] ${entry.persona} | ${entry.step} | ${entry.ok ? 'ok' : 'FAILED'}${entry.detail ? ` | ${entry.detail}` : ''}`,
+  );
 }
 
 function writeEvidence() {
   mkdirSync(EVIDENCE_DIR, { recursive: true, mode: 0o700 });
-  writeFileSync(resolve(EVIDENCE_DIR, 'walk.json'), JSON.stringify({ finishedAt: new Date().toISOString(), steps, failures }, null, 2), {
-    mode: 0o600,
-  });
+  writeFileSync(
+    resolve(EVIDENCE_DIR, 'walk.json'),
+    JSON.stringify({ finishedAt: new Date().toISOString(), steps, failures }, null, 2),
+    {
+      mode: 0o600,
+    },
+  );
 }
 
 function stackTail(pattern: RegExp, limit: number): string {
   if (!existsSync(STACK_LOG)) return '(no walk stack log)';
-  const lines = readFileSync(STACK_LOG, 'utf8').split('\n').filter((line) => pattern.test(line));
-  return lines.slice(-limit).map((line) => line.slice(0, 300)).join('\n') || '(no matching walk stack log lines)';
+  const lines = readFileSync(STACK_LOG, 'utf8')
+    .split('\n')
+    .filter((line) => pattern.test(line));
+  return (
+    lines
+      .slice(-limit)
+      .map((line) => line.slice(0, 300))
+      .join('\n') || '(no matching walk stack log lines)'
+  );
 }
 
 async function probe(url: string, accepted: number[]): Promise<boolean> {
@@ -80,13 +93,15 @@ async function providePersona() {
     stdout: 'ignore',
     stderr: 'inherit',
   });
-  if ((await child.exited) !== 0) throw new Error(`persona provisioning exited ${child.exitCode}; its output is withheld`);
+  if ((await child.exited) !== 0)
+    throw new Error(`persona provisioning exited ${child.exitCode}; its output is withheld`);
   record({ persona: 'stack', step: 'development persona provisioned on the walk stack', ok: true });
 }
 
 function developerCredentials(): Creds {
   const keys = JSON.parse(readFileSync(resolve(ROOT, '.temp/local-stack/keys.json'), 'utf8')) as { password?: unknown };
-  if (typeof keys.password !== 'string') throw new Error('the development persona password is missing from the local keys file');
+  if (typeof keys.password !== 'string')
+    throw new Error('the development persona password is missing from the local keys file');
   return { email: 'developer@rezics.test', password: keys.password };
 }
 
@@ -95,7 +110,10 @@ function newCredentials(): Creds {
   return { email: `${handle}@rezics.test`, password: `Walk-${randomBytes(12).toString('base64url')}-9` };
 }
 
-async function openPage(browser: Browser, options: { width: number; height: number; colorScheme?: 'light' | 'dark' }): Promise<{ context: BrowserContext; page: Page }> {
+async function openPage(
+  browser: Browser,
+  options: { width: number; height: number; colorScheme?: 'light' | 'dark' },
+): Promise<{ context: BrowserContext; page: Page }> {
   const context = await browser.newContext({
     viewport: { width: options.width, height: options.height },
     locale: 'en',
@@ -151,15 +169,27 @@ async function securityPage(page: Page, persona: string) {
   await page.goto(`${ISSUER}/security`, { waitUntil: 'load' });
   await page.getByRole('heading', { name: 'Account security', exact: true }).waitFor();
   record({ persona, step: 'security settings render for the signed-in account', ok: true, url: page.url() });
-  await page.getByRole('heading', { name: 'Permissions you granted', exact: true }).first().waitFor({ timeout: 180_000 });
-  record({ persona, step: 'consent inventory lists the permissions granted to the Web client', ok: true, url: page.url() });
+  await page
+    .getByRole('heading', { name: 'Permissions you granted', exact: true })
+    .first()
+    .waitFor({ timeout: 180_000 });
+  record({
+    persona,
+    step: 'consent inventory lists the permissions granted to the Web client',
+    ok: true,
+    url: page.url(),
+  });
 }
 
 // Failure evidence: where the browser stopped, the visible text and controls. Never includes field values.
 async function dumpControls(page: Page): Promise<string> {
   const controls = await page
     .locator('button, a[href], h1, h2, [role="alert"], [role="status"]')
-    .evaluateAll((elements) => elements.slice(0, 80).map((element) => `${element.tagName} ${(element.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 60)}`))
+    .evaluateAll((elements) =>
+      elements
+        .slice(0, 80)
+        .map((element) => `${element.tagName} ${(element.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 60)}`),
+    )
     .catch(() => ['(controls unavailable)']);
   const text = await page
     .evaluate(() => (document.body?.innerText || '').replace(/\s+/g, ' ').slice(0, 300))
@@ -186,13 +216,19 @@ async function memberWalk(browser: Browser, creds: Creds) {
     expect(loginCookie, 'the Web login transaction cookie is set before the issuer redirect').toBeDefined();
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();
     await waitForPrivateLibrary(page);
-    record({ persona, step: 'password sign-in returns through the issuer callback to the private destination', ok: true, url: page.url() });
+    record({
+      persona,
+      step: 'password sign-in returns through the issuer callback to the private destination',
+      ok: true,
+      url: page.url(),
+    });
     await securityPage(page, persona);
     await signOutFromWeb(page);
     await expectNoWebSession(context);
     record({ persona, step: 'sign-out removes the Web session', ok: true });
     await page.goto(`${WEB}/en/library`, { waitUntil: 'domcontentloaded' });
-    if (new URL(page.url()).origin === ISSUER && new URL(page.url()).pathname === '/login') await submitPassword(page, creds);
+    if (new URL(page.url()).origin === ISSUER && new URL(page.url()).pathname === '/login')
+      await submitPassword(page, creds);
     await waitForPrivateLibrary(page);
     record({ persona, step: 'safe re-entry returns to the private destination', ok: true, url: page.url() });
     expect(callbackUrl, 'the callback URL was observed for the replay check').toBeDefined();
@@ -216,7 +252,12 @@ async function replayConsumedCallback(
     const response = await page.goto(callbackUrl, { waitUntil: 'domcontentloaded' });
     expect(response?.status(), 'a consumed callback is refused without replaying material').toBe(400);
     await expectNoWebSession(context);
-    record({ persona, step: 'consumed callback replay is refused and starts no session', ok: true, detail: `status ${response?.status()}` });
+    record({
+      persona,
+      step: 'consumed callback replay is refused and starts no session',
+      ok: true,
+      detail: `status ${response?.status()}`,
+    });
     await page.goto(`${WEB}/en/library`, { waitUntil: 'domcontentloaded' });
     await submitPassword(page, creds);
     await waitForPrivateLibrary(page);
@@ -249,7 +290,12 @@ async function newAccountWalk(browser: Browser) {
     await page.locator('input[name="password"]').fill(creds.password);
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();
     await waitForPrivateLibrary(page);
-    record({ persona, step: 'new account signs in through the issuer callback to the private destination', ok: true, url: page.url() });
+    record({
+      persona,
+      step: 'new account signs in through the issuer callback to the private destination',
+      ok: true,
+      url: page.url(),
+    });
     await securityPage(page, persona);
   } finally {
     await context.close();
@@ -314,17 +360,30 @@ async function outageWalk(browser: Browser, creds: Creds) {
         route.fulfill({
           status: 503,
           contentType: 'application/json',
-          body: JSON.stringify({ type: `https://rezics.com/problems/${code}`, title: 'Unavailable', status: 503, code, retryable: true }),
+          body: JSON.stringify({
+            type: `https://rezics.com/problems/${code}`,
+            title: 'Unavailable',
+            status: 503,
+            code,
+            retryable: true,
+          }),
         }),
       );
       await page.getByRole('link', { name: 'Continue', exact: true }).first().click();
-      await page.waitForURL((url) => url.origin === WEB && url.pathname === '/en/library/continue', { timeout: 120_000 });
+      await page.waitForURL((url) => url.origin === WEB && url.pathname === '/en/library/continue', {
+        timeout: 120_000,
+      });
       await page.waitForTimeout(3_000);
       const privateContent = await page.getByRole('link', { name: 'Tracked entries', exact: true }).count();
       expect(privateContent, `an indeterminate or unavailable session (${code}) starts no private loader`).toBe(0);
       const recovery = page.locator('a[href^="/auth/sign-in"], button').filter({ hasText: /sign in|try again|retry/i });
       expect(await recovery.count(), `the ${code} prompt offers a safe sign-in or retry control`).toBeGreaterThan(0);
-      record({ persona, step: `${code}: client navigation shows the unavailable prompt and starts no private loader`, ok: true, url: page.url() });
+      record({
+        persona,
+        step: `${code}: client navigation shows the unavailable prompt and starts no private loader`,
+        ok: true,
+        url: page.url(),
+      });
     } finally {
       await context.close();
     }
@@ -338,9 +397,16 @@ async function phoneLayoutWalk(browser: Browser, creds: Creds) {
     await page.goto(`${WEB}/en/library`, { waitUntil: 'domcontentloaded' });
     await submitPassword(page, creds);
     await waitForPrivateLibrary(page);
-    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
     expect(overflow, 'the private library has no horizontal overflow at 390px').toBeLessThanOrEqual(1);
-    record({ persona, step: 'phone 390px dark private library has no horizontal overflow', ok: true, detail: `overflow ${overflow}px` });
+    record({
+      persona,
+      step: 'phone 390px dark private library has no horizontal overflow',
+      ok: true,
+      detail: `overflow ${overflow}px`,
+    });
   } finally {
     await context.close();
   }
@@ -362,11 +428,15 @@ async function runPersona(name: string, work: () => Promise<void>) {
 test.skipIf(!enabled)(
   'account entry, consent, security and safe Web return walk on a walk stack',
   async () => {
-    if (!process.env.REZICS_LOCAL_STACK_WEB_ORIGIN) throw new Error('run this walk through `dev-stack.ts walk`, which supplies the stack origins');
+    if (!process.env.REZICS_LOCAL_STACK_WEB_ORIGIN)
+      throw new Error('run this walk through `dev-stack.ts walk`, which supplies the stack origins');
     try {
       await providePersona();
       const developer = developerCredentials();
-      const browser = await chromium.launch({ headless: true, channel: existsSync('/usr/bin/google-chrome') ? 'chrome' : undefined });
+      const browser = await chromium.launch({
+        headless: true,
+        channel: existsSync('/usr/bin/google-chrome') ? 'chrome' : undefined,
+      });
       const stepUp: { session?: StepUpSession } = {};
       try {
         await runPersona('member-step-up', async () => {
