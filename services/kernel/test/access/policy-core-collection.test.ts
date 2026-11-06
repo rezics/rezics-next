@@ -157,8 +157,15 @@ test('mounted production actions retain complete board ownership and exact defin
   const resolved = resolveResourceRoles(mounted);
   expect(resolved.roles.get('content.board.owner')).toEqual(['board:read', 'thread:create']);
   expect(resolved.types.get('content.board')?.owner).toBe('content.board.owner');
+  expect(resolved.roles.get('library.collection.owner')).toEqual([
+    'collection:delete',
+    'collection:read',
+    'collection:update',
+  ]);
+  expect(resolved.types.get('library.collection')?.owner).toBe('library.collection.owner');
   const production = compileNativePolicyCatalogue(mounted, resolved);
   for (const [action, resourceType] of [
+    ['collection:read', 'library.collection'],
     ['board:read', 'content.board'],
     ['thread:create', 'content.board'],
     ['definitions:activate', 'semantic.context'],

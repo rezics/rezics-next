@@ -25,10 +25,10 @@ const globalParent = { resource: GLOBAL, resourceType: 'semantic.context', valid
 // The actor's account row, read once after its fixture insert; the evidence callback returns it for every check.
 let account: Awaited<ReturnType<typeof readAccount>>;
 const access = createAccess({
-  actions: new Map([[action, { anonymous: false, 'x-resource-types': ['content.post'] }]]),
+  actions: new Map([[action, { anonymous: false, 'x-resource-types': ['fixture.post'] }]]),
   resourceRoles: {
     roles: { 'fixture.post.owner': [action] },
-    types: { 'content.post': { owner: 'fixture.post.owner', standing: [] } },
+    types: { 'fixture.post': { owner: 'fixture.post.owner', standing: [] } },
   },
   accountEvidence: () => account,
 });

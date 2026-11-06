@@ -5,6 +5,7 @@ import { createAuthHost, type AuthService } from '@rezics/auth';
 import { exportJWK, generateKeyPair } from 'jose';
 import { createAccess } from '../../src/access/index.ts';
 import { authoritativeTimeValue } from '../../src/command/command.ts';
+import { readAssignment } from '../../src/access/delegation-commands.ts';
 import { createGrantCommands } from '../../src/access/grant-commands.ts';
 import { createRegistrationPorts } from '../support/registration-ports.ts';
 import { createAuthBindings } from '../../src/access/auth-bindings.ts';
@@ -44,7 +45,7 @@ test('the actual mounted kernel catalogue contains the nonanonymous grant admini
     ['/v1/roleGrants/$change', 'role_grant.change'],
     ['/v1/roleGrants/$revoke', 'role_grant.revoke'],
   ]) {
-    const mounted = app.routes.filter((route) => route.path === path);
+    const mounted = app.routes.filter((route) => route.method === 'POST' && route.path === path);
     expect(mounted).toHaveLength(1);
     expect(mounted[0]!.hooks.detail).toMatchObject({
       operationId,
@@ -180,9 +181,18 @@ beforeAll(async () => {
     routeKey,
     tokens,
     clock: () => new Date(now),
-    access: (config) => {
-      expect([...config.actions]).toEqual([...actionCatalogue(kernel)]);
-      return access;
+    access: (config) =>
+      createAccess({
+        ...config,
+        auth: {
+          issuer,
+          audience,
+          jwksUrl: `${issuer}/.well-known/jwks.json`,
+          fetch: async () => service.handler(new Request(`${issuer}/.well-known/jwks.json`)),
+        },
+      }),
+    onAccessReady: (resolved) => {
+      access = resolved;
     },
     writeRate: {
       async spend(...args) {
@@ -201,15 +211,6 @@ beforeAll(async () => {
     ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
     kid: 'grant-routes',
   };
-  access = createAccess({
-    actions,
-    auth: {
-      issuer,
-      audience,
-      jwksUrl: `${issuer}/.well-known/jwks.json`,
-      fetch: async () => service.handler(new Request(`${issuer}/.well-known/jwks.json`)),
-    },
-  });
   grants = createGrantCommands({ pool: db.pool, access, managementAction: 'access:grant' });
   // Compose the existing native human registration ports directly. The full
   // account binding also requires unmounted operator-management routes, which
@@ -228,11 +229,14 @@ beforeAll(async () => {
     audience,
     secret: 'grant-routes-auth-persistent-secret-32bytes',
     signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
-    trustedAccess: createAuthBindings({
-      pool: db.pool,
-      ...registration,
-      verifyPendingIdentity: registration.verifyNativePendingIdentity,
-    }),
+    trustedAccess: {
+      ...createAuthBindings({
+        pool: db.pool,
+        ...registration,
+        verifyPendingIdentity: registration.verifyNativePendingIdentity,
+      }),
+      readAssignment: (reference, actorId) => readAssignment(db.pool, reference, actorId),
+    },
     access: registrationPorts,
     stagingKey: new Uint8Array(32).fill(73),
     maintenanceSchedule: '0 0 1 1 *',

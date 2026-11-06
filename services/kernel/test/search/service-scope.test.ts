@@ -71,7 +71,7 @@ describe('real constructor binding and native reuse', () => {
   let sourceReads = 0;
   const paths: string[] = [];
   const contexts: unknown[][] = [];
-  const prefix = `test-service-scope-${randomUUID().replaceAll('-', '')}-`;
+  const prefix = `test-scope-${randomUUID().replaceAll('-', '')}-`;
   let engine: OpenSearch;
   let indexCreated = false;
   let templatesCreated = false;

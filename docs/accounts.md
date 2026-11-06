@@ -841,3 +841,5 @@ external or backup erasure. No provider, retention schedule or deleted-account r
 [auth-boundary]: ../services/auth/README.md#application-boundary-and-configuration
 [auth-host]: ../services/auth/README.md#ordinary-native-host-assembly
 [auth-workflows]: ../services/auth/README.md#durable-account-workflow-host
+
+Native receiving uses the complete mounted catalogue, including native container actions, for grant HTTP fixtures; Auth-issued delegated tokens resolve current native assignments. Test-only resource extensions use distinct type names, and native kernel fixtures supply shared receipt keys. Source original-work admission remains unavailable until its owner publishes the complete declaration.
