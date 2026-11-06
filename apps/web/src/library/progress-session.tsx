@@ -713,8 +713,8 @@ function ProgressHistoryLink({
         if (!target || !navigation) return search;
         return historySearch(previous, search);
       }}
-      state={(previous) => previous}
-      hash={(previous) => previous}
+      state={true}
+      hash={true}
       preload={false}
       onClick={(event) => {
         if (!current()) {
@@ -740,8 +740,8 @@ function ProgressHistoryLink({
               to: '/library/progress/$id',
               params: { id },
               search: nextSearch,
-              state: (previous) => previous,
-              hash: (previous) => previous,
+              state: true,
+              hash: true,
             })
             .then(cancel);
         }

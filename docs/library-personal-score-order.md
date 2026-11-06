@@ -138,7 +138,7 @@ Decision: native Library grants keep compiled `platform.governance` plus `access
 token, not grant-routes' complete catalogue plus `gate:any`. The fixture posts the unique typed Global grant
 (`PLATFORM_RESOURCE`, `{kind:'account',id}`, open interval) on `POST /v1/grants`. Access still types and checks the
 permission row's `live` column; `permission-check.sql` aliases `deadline_live` once as `deadlineLive` so Reylo can
-type the row. policy-core maps `PolicyFacts.deadlineLive` from `row.live`. Those Access operands stay with Accounts.
+type the row. policy-core maps `PolicyFacts.deadlineLive` from that unique alias. Those Access operands stay with Accounts.
 Host-walk tests pin the seeded voter, second-account and anonymous score journey; product lines cover the native
 order, own-vote currentness and public aggregate.
 
@@ -158,3 +158,7 @@ loopback proxy and a blocked-host analysis probe.
 Decision: the composed landing runs Kernel/Auth unit files, then Web unit files, then the native host walk in
 separate processes. One bun heap must not keep unit-test modules while Vite, Kernel, Auth and PostgreSQL share the
 6 GiB slot; that mix was killed at the Worker probe. Access deadlineLive mapping stays with Accounts.
+
+Decision: Progress window history identity uses the installed router history key with href fallback; absent optional
+window fields are omitted. Host-walk tests pin the seeded voter/second-account/anonymous score journey; product lines
+cover native order, own-vote currentness and public aggregate. Fewer test lines than product lines.
