@@ -190,6 +190,7 @@ export async function createProfileEntryFixture(
     expect(access).toBeDefined();
     const projection = linkProjection(pool);
     const partitions = new Set([0]);
+    let identityHomesReady = false;
     // Run the real relay for scenarios that consume Semantic link projections.
     // Direct source-reference scenarios can leave this unrelated worker asynchronous.
     async function drainSubjectLinks() {
@@ -203,6 +204,13 @@ export async function createProfileEntryFixture(
         if (!pending) return;
       }
       throw new Error('Native Semantic link projection did not drain');
+    }
+    async function catchUpIdentity(home: number) {
+      for (let n = 0; n < 1000; n++) {
+        const progress = await stepIdentityEpochBootstrap(pool, home);
+        if (progress.state === 'caught-up') return;
+      }
+      throw new Error('Native identity bootstrap did not finish');
     }
     const commands = createEntryCommands({ pool, access, tokens, ...options });
     const context = (actor: AccountActor) => ({ pool, actor, deadline: deadlineFor(30_000) });
@@ -239,7 +247,8 @@ export async function createProfileEntryFixture(
         key = entryKey();
         accountId = lifecycle.registrationTarget(key);
       }
-      partitions.add(partitionOf(routeOf(accountId)!));
+      const home = partitionOf(routeOf(accountId)!);
+      partitions.add(home);
       const handle = `profile_${key.replaceAll('-', '')}`;
       const reservation = await lifecycle.reserveHandle({ accountId, handle, key });
       const input = { accountId, handle, reservationId: reservation.value.reservationId, key };
@@ -258,6 +267,7 @@ export async function createProfileEntryFixture(
       // Each native command still supplies and enforces its own physical operation deadline.
       // Use wall time, not deadlineFor: a leaked request ALS deadline is the kernel's 30s budget.
       const actor = await authenticateAccount(access, { pool, deadline: Date.now() + 300_000 }, claims);
+      if (identityHomesReady) await catchUpIdentity(home);
       return { actor, bearer: await accountToken(claims) };
     }
     // Grant-routes and outcome-driver admit platform.governance only on a token
@@ -368,14 +378,8 @@ export async function createProfileEntryFixture(
     // Extend its standing creation authority through ordinary, fully authorized grants.
     await grantOnDeadline({ kind: 'active_accounts' }, ['subject:create', 'statement:propose']);
     await installIdentityEpochBootstrap(pool);
-    async function catchUpIdentity(home: number) {
-      for (let n = 0; n < 1000; n++) {
-        const progress = await stepIdentityEpochBootstrap(pool, home);
-        if (progress.state === 'caught-up') return;
-      }
-      throw new Error('Native identity bootstrap did not finish');
-    }
-    await catchUpIdentity(0);
+    identityHomesReady = true;
+    for (const home of partitions) await catchUpIdentity(home);
     const grantAccountActions = (accountId: string, actions: readonly string[]) =>
       grantOnDeadline({ kind: 'account', id: accountId }, actions);
 
@@ -387,9 +391,6 @@ export async function createProfileEntryFixture(
       extraHeaders: HeadersInit = {},
     ) {
       await drainSubjectLinks();
-      for (const home of partitions) {
-        if (home !== 0) await catchUpIdentity(home);
-      }
       const bearer =
         persona === 'owner'
           ? owner.bearer
@@ -487,6 +488,11 @@ export async function createProfileEntryFixture(
       throw new Error('Native merge mapping did not finish');
     }
     async function admitSubjectMerge(canonical: string, selected: string) {
+      for (const id of [canonical, selected]) {
+        const home = partitionOf(routeOf(id)!);
+        partitions.add(home);
+        await catchUpIdentity(home);
+      }
       const opened = await send('steward', 'POST', '/v1/platform/exposure/subject_identity:open');
       expect(opened.status).toBe(200);
       const mergeActions = ['subject:merge', 'gate:subject_identity'] as const;
@@ -532,6 +538,8 @@ export async function createProfileEntryFixture(
       home = partitionOf(routeOf(person.actor.accountId)!),
       label: string = vertical,
     ) {
+      partitions.add(home);
+      await catchUpIdentity(home);
       const key = homeKey(person.actor.accountId, home);
       const response = await send(
         person.bearer,
