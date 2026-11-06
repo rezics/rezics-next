@@ -28,17 +28,12 @@ import {
   stackPhaseLine,
   stackStartPlan,
   walkProcessEnvironment,
-  walkReadyResponse,
-  hydrationMonitorMessage,
   SEEDED_WEB_READY_PATH,
   walkStackNames,
   walkStackPorts,
   WALK_DOCKER_REMOVE_MS,
-  WALK_READY_DEADLINE_MS,
-  WALK_READY_POLL_MS,
-  walkReadyFetchTimeoutMs,
   stopSpawned,
-  walkOriginListening,
+  waitUntilWalkReady,
   type WalkNames,
 } from '../../../scripts/walk-stack.ts';
 
@@ -972,49 +967,7 @@ async function untilReady(
   starting: ReturnType<typeof Bun.spawn> | readonly ReturnType<typeof Bun.spawn>[],
 ): Promise<void> {
   const processes = Array.isArray(starting) ? starting : [starting as ReturnType<typeof Bun.spawn>];
-  const deadline = Date.now() + WALK_READY_DEADLINE_MS;
-  const failed = () => {
-    const exited = processes.find((child) => child.exitCode !== null || child.signalCode !== null);
-    if (exited)
-      throw new Error(`walk: the local stack exited (${exited.exitCode ?? exited.signalCode}) before it was ready`);
-    if (Date.now() >= deadline)
-      throw new Error(`walk: the local stack was not ready after ${WALK_READY_DEADLINE_MS} ms (${urls.join(', ')})`);
-  };
-  let lastReport = 0;
-  const report = (waiting: string[]) => {
-    if (Date.now() - lastReport < 30_000) return;
-    console.error(`walk: waiting for ${waiting.join(', ')}`);
-    lastReport = Date.now();
-  };
-  for (;;) {
-    failed();
-    const listening = await Promise.all(urls.map(async (url) => [url, await walkOriginListening(url)] as const));
-    if (listening.every(([, open]) => open)) break;
-    report(
-      listening
-        .filter(([, open]) => !open)
-        .map(
-          ([url]) =>
-            hydrationMonitorMessage(url, Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' })) ??
-            url,
-        ),
-    );
-    await Bun.sleep(WALK_READY_POLL_MS);
-  }
-  for (;;) {
-    failed();
-    const remaining = deadline - Date.now();
-    const ready = await Promise.all(
-      urls.map(
-        async (url) =>
-          [url, await walkReadyResponse(url, Math.min(remaining, walkReadyFetchTimeoutMs(remaining)))] as const,
-      ),
-    );
-    failed();
-    if (ready.every(([, ok]) => ok)) return;
-    report(ready.filter(([, ok]) => !ok).map(([url]) => url));
-    await Bun.sleep(WALK_READY_POLL_MS);
-  }
+  await waitUntilWalkReady({ urls, children: processes });
 }
 
 /**

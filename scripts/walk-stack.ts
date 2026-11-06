@@ -69,22 +69,34 @@ export function walkReadyFetchTimeoutMs(remainingMs: number): number {
   return Math.max(WALK_READY_FETCH_MS, remainingMs);
 }
 
+export type WalkOriginProbe = { listening: true } | { listening: false; error: NodeJS.ErrnoException };
+
 /** True when something already accepts TCP on the origin; connection refused is not a hung compile. */
 export function walkOriginListening(url: string, timeoutMs = 500): Promise<boolean> {
+  return walkOriginProbe(url, timeoutMs).then((result) => result.listening);
+}
+
+/** Probe the origin and keep the socket error or timeout; never substitute ECONNREFUSED. */
+export function walkOriginProbe(url: string, timeoutMs = 500): Promise<WalkOriginProbe> {
   const parsed = new URL(url);
   return new Promise((resolve) => {
     let settled = false;
     const socket = createConnection({ host: parsed.hostname, port: Number(parsed.port) });
-    const done = (open: boolean) => {
+    const done = (result: WalkOriginProbe) => {
       if (settled) return;
       settled = true;
       socket.removeAllListeners();
       socket.destroy();
-      resolve(open);
+      resolve(result);
     };
-    socket.once('connect', () => done(true));
-    socket.once('error', () => done(false));
-    socket.setTimeout(timeoutMs, () => done(false));
+    socket.once('connect', () => done({ listening: true }));
+    socket.once('error', (error: NodeJS.ErrnoException) => done({ listening: false, error }));
+    socket.setTimeout(timeoutMs, () =>
+      done({
+        listening: false,
+        error: Object.assign(new Error(`connect timeout ${url}`), { code: 'ETIMEDOUT' }),
+      }),
+    );
   });
 }
 
@@ -188,11 +200,149 @@ export async function walkReadyResponse(url: string, budgetMs = 2_000): Promise<
   return walkUrlNeedsHtml(url) ? walkUsefulPageResponse(url, budgetMs) : walkHttpAnswers(url, budgetMs);
 }
 
-/** Extra hydration monitor: connection refused while Vite compiles `/en` is startup, not a finished process. */
+/** Extra hydration monitor: an observed ECONNREFUSED while Vite compiles `/en` is startup, not a finished process. */
 export function hydrationMonitorMessage(url: string, error: unknown): string | undefined {
-  if (!isStartupTransportError(error)) return undefined;
-  const code = (error as NodeJS.ErrnoException | undefined)?.code ?? 'startup';
+  const code = (error as NodeJS.ErrnoException | undefined)?.code;
+  if (code !== 'ECONNREFUSED') return undefined;
   return `stack: hydration ${url} ${code}`;
+}
+
+export type WalkFetchObservation =
+  | { ready: true }
+  | { ready: false; error?: unknown; status?: number };
+
+export type WalkReadyWaiting =
+  | { kind: 'probe'; url: string; error: unknown }
+  | { kind: 'fetch'; url: string; error?: unknown; status?: number }
+  | { kind: 'child-exit'; url: string; code: string };
+
+export type WalkReadyChild = {
+  exitCode: number | null;
+  signalCode: number | NodeJS.Signals | null;
+};
+
+/** Fetch the origin and keep HTTP status or the rejected cause; a closed probe is not this path. */
+export async function walkReadyFetchObservation(url: string, budgetMs = 2_000): Promise<WalkFetchObservation> {
+  try {
+    return await Promise.race([
+      fetch(url, { signal: AbortSignal.timeout(budgetMs) }).then(
+        async (response): Promise<WalkFetchObservation> => {
+          if (walkUrlNeedsHtml(url)) {
+            if (response.status !== 200) return { ready: false, status: response.status };
+            const type = response.headers.get('content-type') ?? '';
+            if (type && !/html|text\/plain/i.test(type) && !/json/i.test(type))
+              return { ready: false, status: response.status };
+            return walkPageBodyIsUseful(await response.text())
+              ? { ready: true }
+              : { ready: false, status: response.status };
+          }
+          return response.status < 500 ? { ready: true } : { ready: false, status: response.status };
+        },
+        (error: unknown): WalkFetchObservation => ({ ready: false, error }),
+      ),
+      Bun.sleep(budgetMs + 500).then(
+        (): WalkFetchObservation => ({
+          ready: false,
+          error: Object.assign(new Error(`fetch timeout ${url}`), { code: 'ETIMEDOUT' }),
+        }),
+      ),
+    ]);
+  } catch (error) {
+    return { ready: false, error };
+  }
+}
+
+/** Progress text for one not-ready origin: observed probe, fetch or child-exit, never an invented ECONNREFUSED. */
+export function walkReadyWaitingMessage(waiting: WalkReadyWaiting): string {
+  if (waiting.kind === 'child-exit') return `stack: child exited ${waiting.code} waiting for ${waiting.url}`;
+  const error = waiting.error;
+  const hydration = error !== undefined ? hydrationMonitorMessage(waiting.url, error) : undefined;
+  if (hydration) return hydration;
+  if (waiting.kind === 'probe') {
+    const code = (waiting.error as NodeJS.ErrnoException | undefined)?.code ?? 'closed';
+    return `stack: probe ${waiting.url} ${code}`;
+  }
+  if (waiting.status !== undefined) return `stack: fetch ${waiting.url} HTTP ${waiting.status}`;
+  return `stack: fetch ${waiting.url} not ready`;
+}
+
+/**
+ * Wait until every URL answers, reporting the observed probe, fetch or child-exit cause. A closed listener is not
+ * rewritten as ECONNREFUSED; Management's hydration monitor applies only to an actual startup transport error.
+ */
+export async function waitUntilWalkReady(options: {
+  urls: string[];
+  children: readonly WalkReadyChild[];
+  deadlineMs?: number;
+  pollMs?: number;
+  now?: () => number;
+  sleep?: (ms: number) => Promise<void>;
+  probe?: (url: string) => Promise<WalkOriginProbe>;
+  fetchReady?: (url: string, budgetMs: number) => Promise<WalkFetchObservation>;
+  report?: (waiting: string[]) => void;
+}): Promise<void> {
+  const urls = options.urls;
+  const deadlineMs = options.deadlineMs ?? WALK_READY_DEADLINE_MS;
+  const pollMs = options.pollMs ?? WALK_READY_POLL_MS;
+  const now = options.now ?? Date.now;
+  const sleep = options.sleep ?? ((ms: number) => Bun.sleep(ms));
+  const probe = options.probe ?? ((url: string) => walkOriginProbe(url));
+  const fetchReady = options.fetchReady ?? ((url: string, budgetMs: number) => walkReadyFetchObservation(url, budgetMs));
+  const deadline = now() + deadlineMs;
+  const childExit = (): WalkReadyWaiting | undefined => {
+    const exited = options.children.find((child) => child.exitCode !== null || child.signalCode !== null);
+    if (!exited) return undefined;
+    return { kind: 'child-exit', url: urls[0] ?? '', code: String(exited.exitCode ?? exited.signalCode) };
+  };
+  const throwIfFailed = (waiting: WalkReadyWaiting | undefined): void => {
+    if (waiting?.kind === 'child-exit')
+      throw new Error(`walk: the local stack exited (${waiting.code}) before it was ready`);
+    if (now() >= deadline)
+      throw new Error(`walk: the local stack was not ready after ${deadlineMs} ms (${urls.join(', ')})`);
+  };
+  let lastReport = 0;
+  const report = (waiting: string[]): void => {
+    if (options.report) {
+      options.report(waiting);
+      return;
+    }
+    if (now() - lastReport < 30_000) return;
+    console.error(`walk: waiting for ${waiting.join(', ')}`);
+    lastReport = now();
+  };
+
+  for (;;) {
+    throwIfFailed(childExit());
+    const listening = await Promise.all(urls.map(async (url) => [url, await probe(url)] as const));
+    throwIfFailed(childExit());
+    if (listening.every(([, result]) => result.listening)) break;
+    report(
+      listening.flatMap(([url, result]) =>
+        result.listening ? [] : [walkReadyWaitingMessage({ kind: 'probe', url, error: result.error })],
+      ),
+    );
+    await sleep(pollMs);
+  }
+  for (;;) {
+    throwIfFailed(childExit());
+    const remaining = deadline - now();
+    const ready = await Promise.all(
+      urls.map(async (url) => {
+        const budget = Math.min(remaining, walkReadyFetchTimeoutMs(remaining));
+        return [url, await fetchReady(url, budget)] as const;
+      }),
+    );
+    throwIfFailed(childExit());
+    if (ready.every(([, result]) => result.ready)) return;
+    report(
+      ready.flatMap(([url, result]) =>
+        result.ready
+          ? []
+          : [walkReadyWaitingMessage({ kind: 'fetch', url, error: result.error, status: result.status })],
+      ),
+    );
+    await sleep(pollMs);
+  }
 }
 
 /** The variables that give one admitted stack its own names, ports and origins. */

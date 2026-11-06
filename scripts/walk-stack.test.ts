@@ -13,8 +13,11 @@ import {
   seedJournalDatabaseIdentity,
   seedJournalsNameDifferentDatabase,
   stackStartPlan,
+  waitUntilWalkReady,
+  walkOriginProbe,
   walkPageBodyIsUseful,
   walkReadyResponse,
+  walkReadyWaitingMessage,
   walkStackPortsAvailable,
   walkUrlNeedsHtml,
   walkUsefulPageResponse,
@@ -69,7 +72,7 @@ test('admitted stacks launch Kernel without watch, fetch JWKS from native Auth, 
   expect(stackStartPlan({}, origins).deferPages).toBe(false);
 });
 
-test('seed journals that name another database are stale, and ECONNREFUSED is startup', () => {
+test('seed journals that name another database are stale, and observed ECONNREFUSED is startup', () => {
   const current = seedJournalDatabaseIdentity('postgres://rezics:rezics@127.0.0.1:20024/rezics');
   expect(current).toBe('127.0.0.1:20024/rezics');
   expect(seedJournalsNameDifferentDatabase('127.0.0.1:54329/rezics', current)).toBe(true);
@@ -85,6 +88,84 @@ test('seed journals that name another database are stale, and ECONNREFUSED is st
     ),
   ).toBe('stack: hydration http://127.0.0.1:20000/en ECONNREFUSED');
   expect(firstRedactedDiagnostic('secret-line\nlater', ['secret-line'])).toBe('[redacted]');
+});
+
+test('a closed origin probe keeps the socket error instead of a boolean false', async () => {
+  const result = await walkOriginProbe('http://127.0.0.1:1/');
+  expect(result.listening).toBe(false);
+  if (result.listening) throw new Error('expected a closed probe');
+  expect(result.error.code).toBe('ECONNREFUSED');
+});
+
+test('untilReady retains observed probe, fetch and child-exit causes instead of inventing ECONNREFUSED', async () => {
+  const url = 'http://127.0.0.1:20000/en';
+  const refused = Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' });
+  const timedOut = Object.assign(new Error('connect timeout'), { code: 'ETIMEDOUT' });
+  expect(walkReadyWaitingMessage({ kind: 'probe', url, error: refused })).toBe(`stack: hydration ${url} ECONNREFUSED`);
+  expect(walkReadyWaitingMessage({ kind: 'probe', url, error: timedOut })).toBe(`stack: probe ${url} ETIMEDOUT`);
+  expect(walkReadyWaitingMessage({ kind: 'probe', url, error: timedOut })).not.toContain('ECONNREFUSED');
+  expect(walkReadyWaitingMessage({ kind: 'probe', url, error: new Error('listener closed') })).toBe(
+    `stack: probe ${url} closed`,
+  );
+  expect(walkReadyWaitingMessage({ kind: 'fetch', url, status: 503 })).toBe(`stack: fetch ${url} HTTP 503`);
+  expect(walkReadyWaitingMessage({ kind: 'child-exit', url, code: '1' })).toBe(`stack: child exited 1 waiting for ${url}`);
+
+  const reports: string[][] = [];
+  await waitUntilWalkReady({
+    urls: [url],
+    children: [{ exitCode: null, signalCode: null }],
+    deadlineMs: 5_000,
+    pollMs: 0,
+    probe: async () => ({ listening: false, error: timedOut }),
+    fetchReady: async () => ({ ready: true }),
+    report: (waiting) => reports.push(waiting),
+    sleep: async () => {
+      throw new Error('stop after the observed probe report');
+    },
+  }).catch((error: Error) => error);
+  expect(reports[0]).toEqual([`stack: probe ${url} ETIMEDOUT`]);
+  expect(JSON.stringify(reports)).not.toContain('ECONNREFUSED');
+
+  const closed: string[][] = [];
+  await waitUntilWalkReady({
+    urls: [url],
+    children: [{ exitCode: null, signalCode: null }],
+    deadlineMs: 5_000,
+    pollMs: 0,
+    probe: async () => ({ listening: false, error: new Error('listener closed') }),
+    fetchReady: async () => ({ ready: true }),
+    report: (waiting) => closed.push(waiting),
+    sleep: async () => {
+      throw new Error('stop after the closed-listener report');
+    },
+  }).catch((error: Error) => error);
+  expect(closed[0]).toEqual([`stack: probe ${url} closed`]);
+  expect(JSON.stringify(closed)).not.toContain('ECONNREFUSED');
+
+  await expect(
+    waitUntilWalkReady({
+      urls: [url],
+      children: [{ exitCode: 7, signalCode: null }],
+      probe: async () => ({ listening: true }),
+      fetchReady: async () => ({ ready: true }),
+    }),
+  ).rejects.toThrow('walk: the local stack exited (7) before it was ready');
+
+  const fetches: string[][] = [];
+  await waitUntilWalkReady({
+    urls: [url],
+    children: [{ exitCode: null, signalCode: null }],
+    deadlineMs: 5_000,
+    pollMs: 0,
+    probe: async () => ({ listening: true }),
+    fetchReady: async () => ({ ready: false, status: 503 }),
+    report: (waiting) => fetches.push(waiting),
+    sleep: async () => {
+      throw new Error('stop after the fetch report');
+    },
+  }).catch((error: Error) => error);
+  expect(fetches[0]).toEqual([`stack: fetch ${url} HTTP 503`]);
+  expect(JSON.stringify(fetches)).not.toContain('ECONNREFUSED');
 });
 
 test('seeded Web is ready only on useful /en HTML, not a Vite missing-module overlay', async () => {

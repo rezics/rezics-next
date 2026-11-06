@@ -84,7 +84,8 @@ Python cleanup uses those same 120s/5s bounds and does not classify a `docker rm
 SIGTERM removal is detached. Compiler identity includes the installed Reylo mapper and Web/Auth manifests so local and
 remote typing share one workspace. Mapper-enabled workspace typechecks run one at a time so Kernel, Auth and Web
 compilers do not share an admitted 6GiB slice. Vite starts only after complete Paraglide modules exist, and `/en` is
-ready only as HTML without a missing-module overlay; ECONNREFUSED during that wait is hydration startup. Original
+ready only as HTML without a missing-module overlay. Readiness reports the observed probe, fetch or child-exit
+cause; only an actual ECONNREFUSED is hydration startup. Original
 remote context stays on those same tests. Management walk idle-in-transaction
 is that lifetime, not a second launcher. Original walks remain open.
 `GROWTH_PROFILE`, when set to a file inside the workspace, is forwarded to stack runs on check hosts as a
@@ -919,7 +920,7 @@ Validation failure restores the previous drop-in and does not reload sshd.
 Start with a small slice and slot count. Allow at least two effective slots for ordinary runs and three for gates.
 The controller machine reaches the check hosts through its local proxy (`~/.ssh/config`: `ProxyCommand` with
 `ncat --proxy 127.0.0.1:7897 --proxy-type socks5`, falling back to a direct connection). The direct route lost 20-40%
-of packets at about 290 ms on 2026-11-06. Control probes wait 20 s by default, because fresh SSH setup takes 3 to 7 s.
+of packets at about 290 ms on 2026-11-06. Control probes wait 90 s by default: ConnectTimeout covers TCP only, and a cold master on a loaded host has taken 57 s.
 Install the `rezics-docker-prune.timer` system unit on every host. Every 15 minutes it runs
 `docker container prune -f --filter until=1h`. Check code from older worktrees starts throwaway databases without
 `--rm`, and on 2026-11-06 about 475 stopped containers on host b slowed `docker run` past its 120 s startup limit.

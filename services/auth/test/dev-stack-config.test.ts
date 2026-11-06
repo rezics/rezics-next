@@ -28,11 +28,11 @@ import { developmentEnv } from '../../kernel/scripts/database.ts';
 import { rateLimitBudgets } from '../../kernel/src/access/write-rate-budgets.ts';
 import { readPoolAcquireTimeoutMillis } from '../../kernel/src/database/pool.ts';
 
-test('seeded frontends wait for useful /en HTML and keep hydration ECONNREFUSED as startup', async () => {
+test('seeded frontends wait for useful /en HTML through waitUntilWalkReady', async () => {
   const source = await readFile(resolve(import.meta.dir, '../scripts/dev-stack.ts'), 'utf8');
   expect(source).toContain('SEEDED_WEB_READY_PATH');
-  expect(source).toContain('walkReadyResponse');
-  expect(source).toContain('hydrationMonitorMessage');
+  expect(source).toContain('waitUntilWalkReady');
+  expect(source).not.toContain("code: 'ECONNREFUSED'");
   expect(source).toContain('${origins.web}${SEEDED_WEB_READY_PATH}');
 });
 

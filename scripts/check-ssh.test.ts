@@ -15,6 +15,7 @@ import {
   acquireHostControl,
   activeHostControlCount,
   controlSocketDirectoryPath,
+  DEFAULT_CONTROL_PROBE_TIMEOUT_MS,
   dropStaleHostMaster,
   ensureSshControlDirectory,
   hostControlSocketPath,
@@ -58,6 +59,10 @@ function writeFakeSsh(directory: string, script: string): string {
   chmodSync(ssh, 0o755);
   return bin;
 }
+
+test('a cold control probe waits past ConnectTimeout so banner and key exchange can finish', () => {
+  expect(DEFAULT_CONTROL_PROBE_TIMEOUT_MS).toBe(90_000);
+});
 
 test('each configured host has one short control socket independent of worktree path length', () => {
   const workspace = fixture();

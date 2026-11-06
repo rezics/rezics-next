@@ -300,9 +300,9 @@ Decision: an admitted stack gates on native JWKS and Kernel only. Its Auth pages
 through `startSeededFrontends`, and are killed on exit; the Home and VN-realm walks use it, and a stack's Vite never
 compiles while the seed runs.
 
-Decision: generate Paraglide modules before Vite starts, wait for useful `/en` HTML, and treat ECONNREFUSED during
-that hydration as startup. A barrel without `messages/access_account.js` is not current. Original native walks remain
-open.
+Decision: generate Paraglide modules before Vite starts, wait for useful `/en` HTML, and report the observed probe,
+fetch or child-exit cause. Only an actual ECONNREFUSED is hydration startup; a closed-listener probe does not invent
+that code. A barrel without `messages/access_account.js` is not current. Original native walks remain open.
 
 Decision: keep one causal binding regression and the existing launcher assertions. Kernel setup persists the selected
 loopback Auth issuer, audience, JWKS URL, Kernel host and API port in `services/kernel/.env`; start applies the same

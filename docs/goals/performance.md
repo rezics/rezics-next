@@ -139,5 +139,6 @@ Decision: mapper-enabled workspace typechecks run one at a time so Kernel, Auth 
 admitted 6GiB slice; remaining workspaces stay parallel. The compiler database uses 32MB shared_buffers. Pin that
 order with the existing root typecheck unit file. Original native acceptance remains open.
 Decision: generate Paraglide messages before Vite starts and treat `/en` as ready only when it returns HTML without a
-missing-module overlay; ECONNREFUSED during that wait is hydration startup. Pin with the existing walk-stack,
+missing-module overlay. Readiness reports the observed probe, fetch or child-exit cause; only an actual ECONNREFUSED
+is hydration startup. A closed-listener probe does not invent that code. Pin with the existing walk-stack,
 messages-ready and storybook-dev unit files. Original native acceptance remains open.
