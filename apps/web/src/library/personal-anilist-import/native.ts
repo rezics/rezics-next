@@ -1,6 +1,6 @@
 import { aniListLabelRequests } from './label-native';
 import type { KernelClient } from '@rezics/client';
-import { readSubjectLabelAssignments } from '../subject-labels';
+import { readSubjectLabelAssignments } from '../subject-labels.ts';
 import { archiveTransportLost } from '../archive-entry-recovery/native';
 import { isPlatformClosedError } from '../../kernel/platform-closed';
 import { QUESTION } from '../../features/pages/subject-ratings';
@@ -64,9 +64,7 @@ function asSurface(value: unknown): AniListSurface | undefined {
 
 /** Bind installed `libraryImports.anilist` methods. Missing methods stay unavailable. */
 export function nativeAniListImport(client: KernelClient): AniListSurface | undefined {
-  const imports = client.libraryImports;
-  if (!imports || typeof imports !== 'object' || !('anilist' in imports)) return undefined;
-  return asSurface(Reflect.get(imports, 'anilist'));
+  return asSurface(client.libraryImports?.anilist);
 }
 
 function publicDetail(detail: unknown): string | undefined {

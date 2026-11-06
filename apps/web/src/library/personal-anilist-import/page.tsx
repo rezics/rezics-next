@@ -31,7 +31,12 @@ export function PersonalAniListImportPage({ visit }: { visit?: AniListVisit | nu
   const current = visit === undefined ? observed : visit;
   useOperation('library_entry.put');
   if (!current) return <AniListSignedOut />;
-  return <AniListImportSession key={`${current.subject}:${current.csrfToken}:${getLocale()}`} visit={current} />;
+  return (
+    <AniListImportSession
+      key={`${current.identity ?? ''}:${current.subject}:${current.csrfToken}:${getLocale()}`}
+      visit={current}
+    />
+  );
 }
 
 function AniListImportSession({ visit }: { visit: AniListVisit }) {
