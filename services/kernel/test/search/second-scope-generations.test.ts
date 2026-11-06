@@ -235,6 +235,62 @@ test('the installed Space capability survives JSON and cannot bind another physi
   expect(replacement.space?.generation).not.toBe(witnesses.space?.generation);
 });
 
+test('an allocated review owner omitted later retires the generation instead of looping as unsupported', async () => {
+  const account = { owner: 'accounts', kind: 'account' };
+  const target = {
+    prefix: 'search',
+    generation: 1,
+    uuid: 'physical',
+    incarnation: 'allocation',
+    state: 'populating',
+    kinds: ['account'],
+    capability: {
+      physicalTarget: 'searchdiscovery-g1',
+      uuid: 'physical',
+      incarnation: 'allocation',
+      witnesses: {},
+    },
+  };
+  const statements: string[] = [];
+  const pool = {
+    connect: async () => ({
+      async query(sql: string) {
+        statements.push(sql);
+        if (sql === DISCOVERY_LIVE_GENERATIONS_SQL) return { rows: [target] };
+        if (sql.includes('SELECT partition_no AS partition,owner'))
+          return {
+            rows: [
+              {
+                partition: 10,
+                owner: 'review',
+                after_route: null,
+                after_id: null,
+                continuation: null,
+                position: '0',
+                indexed: '0',
+                reconcile_position: null,
+                native_complete: false,
+                native_epoch: null,
+              },
+            ],
+          };
+        return { rows: [], rowCount: 1 };
+      },
+      release() {},
+    }),
+  } as unknown as Pool;
+  await advanceDiscovery({
+    pool,
+    search: {} as unknown as OpenSearch,
+    prefix: target.prefix,
+    listing: {} as never,
+    registry: { entries: [account], get: () => account } as unknown as DiscoveryRegistry,
+    requiredKinds: [],
+    metadataProducers: {},
+  });
+  expect(statements.some((sql) => sql.includes("SET state='retiring'"))).toBe(true);
+});
+
 test('a retired signed Review cut requests fresh population instead of retrying the opaque continuation', async () => {
   const producers = createDiscoveryProducerEntry({
     clock: () => new Date(),

@@ -679,9 +679,8 @@ async function populationPage(pool: Pool, projection: DiscoveryProjection, row: 
     next = rows.length === 257 && last ? { route: last.route, id: last.id } : null;
     position = 0n;
   } else {
-    const producer = projection.metadataProducers?.[row.owner];
-    if (!producer)
-      throw new DiscoveryProducerCoverageError({ missingKinds: [], unsupportedKinds: [row.owner], duplicateKinds: [] });
+    const producer = await retainedMetadataProducer(pool, projection, row.owner);
+    if (!producer) return true;
     await assertDiscoveryCapabilityBinding(pool, target, projection.metadataProducers);
     const after = row.after_id === null ? null : { route: row.after_route!, id: row.after_id };
     const page = await nativePopulationPage(pool, target, producer, partition, after, row.continuation);
@@ -923,10 +922,9 @@ async function reconcileMetadataDiscoveryPage(
   const { target, registry } = projection;
   const kind = row.owner as DiscoveryMetadataKind;
   const owner = kind === 'collection' ? 'commerce' : 'content';
+  const producer = await retainedMetadataProducer(pool, projection, kind);
+  if (!producer) return true;
   await assertDiscoveryCapabilityBinding(pool, target, projection.metadataProducers);
-  const producer = projection.metadataProducers[kind];
-  if (!producer)
-    throw new DiscoveryProducerCoverageError({ missingKinds: [], unsupportedKinds: [kind], duplicateKinds: [] });
   // Replay the native raw population first: target hits cannot discover a newly eligible identity.
   if (!row.native_complete) {
     const after = row.after_id === null ? null : { route: row.after_route!, id: row.after_id };
@@ -1066,6 +1064,18 @@ async function retireDiscoveryCapability(pool: Pool, target: DiscoveryTarget) {
       [target.prefix, target.generation, target.uuid, target.incarnation],
     ),
   );
+}
+
+/** An allocated owner later omitted as preparing/unavailable retires this generation; it must not loop as unsupported. */
+async function retainedMetadataProducer(
+  pool: Pool,
+  projection: DiscoveryProjection,
+  kind: DiscoveryMetadataKind,
+): Promise<DiscoveryMetadataProducer | null> {
+  const producer = projection.metadataProducers[kind];
+  if (producer) return producer;
+  await retireDiscoveryCapability(pool, projection.target);
+  return null;
 }
 
 async function nativePopulationPage(

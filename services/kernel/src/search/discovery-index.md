@@ -31,7 +31,8 @@ The owner adapters use localized labels for Collections, Reviews and Spaces with
 The retained generation runner maintains up to five independent producer frontiers: Accounts, semantic Subjects,
 Collections, reviews and Spaces. An absent producer or one reporting `preparing` or `unavailable` is omitted from its
 candidate and current-reader slot. The omission appears with the available kind directory. A producer that becomes
-unready during native work invalidates that work; wrong owners, duplicate registrations, changed witnesses and
+unready during native work invalidates that work; an in-flight generation whose allocated owner is later omitted
+retires rather than looping as unsupported kinds. Wrong owners, duplicate registrations, changed witnesses and
 incomplete registered coverage remain errors. Each admitted producer advances only after its exact actions are visible
 at the captured physical UUID. Existing active generations and relays remain available while a replacement prepares.
 Native census or source-fence capability remains typed unavailable; neither counts nor empty scans certify it.

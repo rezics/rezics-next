@@ -122,7 +122,8 @@ settles acquired fixture resources on setup failure as well as completion. Relea
 recipes share one promise each and run on one editor stream so concurrent composed setup cannot double-create
 subjects. Empty classification-ballot cleanup after Access lifecycle still emits a command event; the follow-up
 is no-effect, and exact replay is receipt-only. Charge command/outbox/relay and that terminal no-effect, including
-empty and repeated-empty/replay, in Rating's lifecycle-cleanup Cost.
+empty and repeated-empty/replay, in Rating's lifecycle-cleanup Cost. An in-flight discovery generation whose allocated
+review owner is later omitted as preparing retires rather than looping as unsupported kinds.
 
 **Remaining evidence limits:** Native public cells at 64/512/4096 execute through that isolated Auth/Access/History
 composition and the installed released fixture. `quick-vegetarian-not-cooked` and `bulk-long-harem-light-novels`
