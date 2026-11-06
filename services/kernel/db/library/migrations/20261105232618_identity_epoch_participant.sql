@@ -1,3 +1,4 @@
+-- migrate:up
 -- Bounded receiving progress for the installed fixed Library participant.
 ALTER TABLE library.identity_epoch_participant_work
   ADD COLUMN follow_after uuid,
