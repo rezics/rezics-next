@@ -54,7 +54,7 @@ async function withReader(run: (fixture: ReaderFixture) => Promise<void>, produc
   window.scrollTo = () => {};
   const matchMedia = ((media: string) => ({
     media,
-    matches: false,
+    matches: media.includes('pointer: coarse'),
     addEventListener: () => {},
     removeEventListener: () => {},
     addListener: () => {},
@@ -257,7 +257,8 @@ async function withReader(run: (fixture: ReaderFixture) => Promise<void>, produc
     entry,
   };
   function languageOption(name: RegExp) {
-    return body.queryByRole('menuitemradio', { name }) ?? body.getByRole('radio', { name });
+    const query = { hidden: true, name };
+    return body.queryByRole('menuitemradio', query) ?? body.getByRole('radio', query);
   }
   async function openLanguage(name: RegExp | string = /Language|言語/) {
     const trigger = body.getByRole('button', { name });
