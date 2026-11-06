@@ -1,7 +1,11 @@
 import { expect, test } from 'bun:test';
 import { AccessUnavailableError } from '../../src/access/unavailable.ts';
 import { createDiscoveryProducerEntry } from '../../src/composition/discovery.ts';
-import { classifyDiscoveryMetadataProducers } from '../../src/search/generations.ts';
+import {
+  classifyDiscoveryMetadataProducers,
+  discoveryCapabilityWitnesses,
+  DiscoveryPopulationCutChangedError,
+} from '../../src/search/generations.ts';
 
 test('review population readiness follows native pageWithCut and omits a preparing producer', async () => {
   const page = (state: 'ready' | 'preparing' | 'unavailable') => ({
@@ -39,6 +43,31 @@ test('review population readiness follows native pageWithCut and omits a prepari
   });
   expect(classification.availableKinds).toEqual([]);
   expect(classification.omittedKinds).toContainEqual({ kind: 'review', state: 'preparing' });
+});
+
+test('a preparing review page retires the generation instead of claiming the kind is unsupported', async () => {
+  const producers = createDiscoveryProducerEntry({
+    pool: {} as never,
+    routeKey: new Uint8Array(32),
+    access: {} as never,
+    reviewSource: {
+      pageWithCut: async () => ({
+        state: 'preparing',
+        partition: 0,
+        position: 0n,
+        reviews: [],
+        next: null,
+        missing: 'lifecycle-invalidation',
+      }),
+      read: async () => {
+        throw new Error('preparing pages must not read reviews');
+      },
+    } as never,
+  });
+  expect(await discoveryCapabilityWitnesses({ review: producers.metadataProducers.review! })).toEqual({});
+  await expect(producers.metadataProducers.review!.page(0, null, null, 100)).rejects.toBeInstanceOf(
+    DiscoveryPopulationCutChangedError,
+  );
 });
 
 test('review population readiness treats an Access deadline as preparing', async () => {

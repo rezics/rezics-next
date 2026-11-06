@@ -224,13 +224,7 @@ function createReviewPopulationProducer(source: ReviewDiscoverySource | undefine
         throw new TypeError('Review continuation has no native full-key frontier');
       const cursor = continuation === null ? null : { ...after!, token: continuation };
       const page = await source.pageWithCut(partition, cursor, Math.min(limit, REVIEW_DISCOVERY_PAGE_LIMIT));
-      if (page.state === 'changed') throw new DiscoveryPopulationCutChangedError('review');
-      if (page.state !== 'ready')
-        throw new DiscoveryProducerCoverageError({
-          missingKinds: [],
-          unsupportedKinds: ['review'],
-          duplicateKinds: [],
-        });
+      if (page.state !== 'ready') throw new DiscoveryPopulationCutChangedError('review');
       if (page.next && (typeof page.next.token !== 'string' || !page.next.token))
         throw new TypeError('Content review population returned an invalid opaque continuation');
       return {

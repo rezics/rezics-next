@@ -234,8 +234,11 @@ bun services/auth/scripts/dev-stack.ts walk -- <command...>
 2. Names the stack's containers and volumes `rezics-walk-<task>-database` and `rezics-walk-<task>-search`, and gives
    it its slot's loopback ports: `20000 + 10 × slot` plus 0 for Web, 1 for the Auth pages, 2 for native Auth, 3 for
    Kernel, 4 for PostgreSQL and 5 for search.
-3. Runs `db up`, `search up` and `setup`, starts the processes `dev` starts, and waits until Web and the Auth pages
-   answer, for at most ten minutes. Its output goes to `.temp/walk/<task>/stack.log`.
+3. Runs `db up`, `search up` and `setup`, starts the processes `dev` starts, and waits until Web, the Auth pages and
+   Kernel answer, for at most twenty minutes. Each readiness fetch may run for thirty seconds so Web's first compile
+   can finish; aborting it every few hundred milliseconds prevents Vite from ever listening. `db up` and `search up`
+   retry once. Teardown removes this task's containers with a bounded `docker rm` and does not hang the next start on a
+   Dead container. Its output goes to `.temp/walk/<task>/stack.log`.
 4. Runs `<command>` in the caller's directory with the stack's names, ports and origins. Persona and seed steps belong
    inside `<command>`, for example `dev-stack.ts persona` followed by `task seed:dev`.
 5. Stops the processes, removes the stack's containers and volumes, and releases the slot when the command ends or the
@@ -253,6 +256,8 @@ another interrupted task after its lease was released. It leaves those processes
 when no slot has free ports; port collisions do not authorize stopping another task's stack.
 Walk stacks do not inherit check-host cgroup placement; OpenSearch and database run on the host's ordinary container
 slice. Worker checks still run on hosts a and b.
+Decision: walk readiness keeps a long first-compile fetch and bounded docker removal so a Vite SSR abort loop or a
+Dead OpenSearch container cannot replace a seeded product walk.
 
 ## Cross-media dump cache
 

@@ -50,6 +50,17 @@ export function walkStackPorts(index: number): WalkPorts {
   return { web: base, issuer: base + 1, native: base + 2, kernel: base + 3, database: base + 4, search: base + 5 };
 }
 
+/** HTTP origins the walk waits on before the journey command. Kernel is included so Web's first compile is not the only signal. */
+export function walkReadyUrls(ports: WalkPorts): string[] {
+  return [`http://127.0.0.1:${ports.web}/`, `http://127.0.0.1:${ports.issuer}/`, `http://127.0.0.1:${ports.kernel}/`];
+}
+
+/** First Web compile can exceed two seconds; aborting it on every poll prevents Vite from ever listening. */
+export const WALK_READY_DEADLINE_MS = 1_200_000;
+export const WALK_READY_FETCH_MS = 30_000;
+export const WALK_READY_POLL_MS = 2_000;
+export const WALK_DOCKER_REMOVE_MS = 60_000;
+
 /** A released lease may leave another task's containers behind; never claim their listening ports. */
 export async function walkPortsAvailable(ports: Iterable<number>): Promise<boolean> {
   const reservations: Server[] = [];

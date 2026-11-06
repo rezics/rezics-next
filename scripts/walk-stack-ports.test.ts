@@ -2,8 +2,26 @@ import { expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { createServer, type AddressInfo } from 'node:net';
 import { acquireStackSlot } from './stack-lease.ts';
-import { walkPortsAvailable, walkProcessEnvironment } from './walk-stack.ts';
+import {
+  walkPortsAvailable,
+  walkProcessEnvironment,
+  walkReadyUrls,
+  walkStackPorts,
+  WALK_READY_FETCH_MS,
+  WALK_READY_POLL_MS,
+} from './walk-stack.ts';
 import { cgroupArgs } from '../services/kernel/scripts/search.ts';
+
+test('walk readiness waits on web, issuer and kernel without aborting a first compile', () => {
+  const ports = walkStackPorts(5);
+  expect(walkReadyUrls(ports)).toEqual([
+    'http://127.0.0.1:20050/',
+    'http://127.0.0.1:20051/',
+    'http://127.0.0.1:20053/',
+  ]);
+  expect(WALK_READY_FETCH_MS).toBeGreaterThan(WALK_READY_POLL_MS);
+  expect(WALK_READY_FETCH_MS).toBeGreaterThanOrEqual(30_000);
+});
 
 test('walk process environment does not inherit check-host cgroup placement', () => {
   const env = walkProcessEnvironment('6a6ca25b-b24d-431b-bc8f-615cef277eda', 3, {
