@@ -30,9 +30,18 @@ if (resource.resource.kind === 'ready') {
   resource.resource.value.zone.deletedAt = null;
   resource.resource.value.zone.restoreUntil = null;
 }
-const lifecycleCalls: { data: Omit<LifecycleMutation, 'csrf'> & { locale: string }; csrf: string | undefined }[] = [];
+const lifecycleCalls: {
+  data: Omit<LifecycleMutation, 'csrf'> & { locale: string; expectedReader?: string; admission?: string };
+  csrf: string | undefined;
+}[] = [];
 const mutateCalls: Mutation[] = [];
 let nextLifecycle: 'unavailable' | undefined;
+let heldLifecycle:
+  | {
+      promise: Promise<Result<LifecycleReading>>;
+      resolve: (value: Result<LifecycleReading>) => void;
+    }
+  | undefined;
 function observation(data: { expectedReader?: string; admission?: string }): OwnerReadObservation | undefined {
   return data.expectedReader && data.admission ? { reader: data.expectedReader, admission: data.admission } : undefined;
 }
@@ -87,6 +96,11 @@ mock.module('../src/features/zones/editor/server', () => ({
     const ownerObservation = observation(data);
     if (!ownerObservation || headers?.['X-CSRF-Token'] !== csrf)
       return { kind: 'failure', status: 403, code: 'forbidden' };
+    if (heldLifecycle) {
+      const pending = heldLifecycle;
+      heldLifecycle = undefined;
+      return pending.promise;
+    }
     if (nextLifecycle === 'unavailable') {
       nextLifecycle = undefined;
       return { kind: 'failure', status: 503, code: 'dependency_unavailable', ownerObservation };
@@ -355,15 +369,18 @@ test('Mounted Zone editor Delete1 Restore2 save and uncertain replay share the c
       button(host, 'Delete zone').click();
     });
     await until(() => lifecycleCalls.length >= 1 && !host.querySelector('[aria-busy="true"]'));
-    expect(new Set(lifecycleCalls.map((call) => `${call.data.key}:${call.data.revision}:${call.data.operation}`)).size).toBe(
-      1,
-    );
+    expect(
+      new Set(lifecycleCalls.map((call) => `${call.data.key}:${call.data.revision}:${call.data.operation}`)).size,
+    ).toBe(1);
     expect(lifecycleCalls[0]!.data).toMatchObject({ id: zoneId, revision: '1', operation: 'delete' });
     expect(lifecycleCalls[0]!.csrf).toBe(csrf);
     expect(button(host, 'Restore zone').textContent).toBe('Restore zone');
     expect(host.textContent).toContain(m.zone_editor_saved_head({ revision: '2' }));
     await settle(() => button(host, 'Restore zone').click());
-    await until(() => lifecycleCalls.some((call) => call.data.operation === 'restore') && !host.querySelector('[aria-busy="true"]'));
+    await until(
+      () =>
+        lifecycleCalls.some((call) => call.data.operation === 'restore') && !host.querySelector('[aria-busy="true"]'),
+    );
     const restore = lifecycleCalls.find((call) => call.data.operation === 'restore')!;
     expect(restore.data.revision).toBe('2');
     expect(restore.data.key).not.toBe(lifecycleCalls[0]!.data.key);
@@ -386,6 +403,77 @@ test('Mounted Zone editor Delete1 Restore2 save and uncertain replay share the c
     expect(lifecycleCalls[before]!.data.revision).toBe('4');
     expect(button(host, 'Restore zone')).toBeTruthy();
     expect(host.textContent).toContain(m.zone_editor_saved_head({ revision: '5' }));
+  } finally {
+    await settle(() => root.unmount());
+    host.remove();
+  }
+});
+
+test('mounted editor lifecycle does not adopt a replaced owner visit', async () => {
+  setLocale('en', { reload: false });
+  resource = structuredClone(fixture.initial);
+  if (resource.resource.kind === 'ready') {
+    resource.resource.value.zone.id = zoneId;
+    resource.resource.value.zone.revision = '1';
+    resource.resource.value.zone.deletedAt = null;
+    resource.resource.value.zone.restoreUntil = null;
+  }
+  lifecycleCalls.length = 0;
+  let resolveHeld!: (value: Result<LifecycleReading>) => void;
+  heldLifecycle = {
+    promise: new Promise((resolve) => {
+      resolveHeld = resolve;
+    }),
+    resolve: (value) => resolveHeld(value),
+  };
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  queryClient.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'owner', csrfToken: csrf });
+  const rootRoute = createRootRouteWithContext<{ queryClient: InstanceType<typeof QueryClient> }>()({
+    component: () => <Outlet />,
+  });
+  const editRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/my/zones/$id/edit',
+    loader: ({ params, context }) => loadZoneEditor(params.id, 'en', context.queryClient),
+    component: function Edit() {
+      const { initial, requestedOwner } = useLoaderData({ strict: false }) as Awaited<
+        ReturnType<typeof loadZoneEditor>
+      >;
+      return <ZoneEditorRoute id={zoneId} locale="en" initial={initial} requestedOwner={requestedOwner} />;
+    },
+  });
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([editRoute]),
+    history: createMemoryHistory({ initialEntries: [`/my/zones/${zoneId}/edit`] }),
+    context: { queryClient },
+  });
+  const host = document.createElement('main');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await settle(() =>
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>,
+      ),
+    );
+    await until(() => !!host.querySelector('#zone-label-en'));
+    await settle(() => button(host, 'Delete zone').click());
+    await until(() => lifecycleCalls.length === 1);
+    await settle(() =>
+      queryClient.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'other', csrfToken: csrf }),
+    );
+    resolveHeld({
+      kind: 'ready',
+      value: { revision: '2', deletedAt: '2026-11-06T00:00:00.000Z', restoreUntil: '2026-12-06T00:00:00.000Z' },
+      ownerObservation: {
+        reader: lifecycleCalls[0]!.data.expectedReader!,
+        admission: lifecycleCalls[0]!.data.admission!,
+      },
+    });
+    await flush();
+    expect(host.textContent).not.toContain('Restore zone');
   } finally {
     await settle(() => root.unmount());
     host.remove();
