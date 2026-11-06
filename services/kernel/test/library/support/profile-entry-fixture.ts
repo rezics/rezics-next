@@ -36,7 +36,6 @@ import {
   createProfileReceiptObservations,
 } from './profile-historical-native-fixture.ts';
 import { testReceiptKeys } from '../../support/receipt-keys.ts';
-import { installIdentityGrants, installResourceGrants } from '../../support/trusted-grants.ts';
 
 export type ProfileVertical = 'game' | 'recipe' | 'record' | 'unprofiled';
 export const entryTypes = { game: 'ex:Child', recipe: 'ex:Recipe', record: 'ex:Record', unprofiled: 'ex:Person' };
@@ -279,20 +278,27 @@ export async function createProfileEntryFixture(
     const other = await identity(entryScopes);
     await bootstrapGovernance(pool, steward.actor.accountId);
     const grants = createGrantCommands({ pool, access, managementAction: 'access:grant', ...options });
-    // Fixture parent permissions install as trusted rows. Ordinary product commands
-    // still run Access checks; platform.governance reach is not a grant-command token.
-    await installIdentityGrants(pool, global.id, steward.actor.accountId, [
+    async function grantGlobal(
+      subject: { kind: 'account'; id: string } | { kind: 'active_accounts' },
+      actions: readonly string[],
+    ) {
+      await grants.create(context(steward.actor), {
+        resource: global,
+        subject,
+        actions: [...actions],
+        valid: '(,)',
+        key: entryKey(),
+      });
+    }
+    // platform.governance is the first Global holder. Ordinary grant commands then
+    // create the steward's definition and library grants; no test-only grant rows.
+    await grantGlobal({ kind: 'account', id: steward.actor.accountId }, [
       'definitions:publish',
       'definitions:activate',
       'subject:merge',
       'gate:personal_library',
     ]);
-    await installResourceGrants(
-      pool,
-      global.id,
-      { kind: 'active_accounts', id: '00000000-0000-0000-0000-000000000000' },
-      ['subject:create', 'statement:propose'],
-    );
+    await grantGlobal({ kind: 'active_accounts' }, ['subject:create', 'statement:propose']);
 
     async function sendWithHeaders(
       persona: 'owner' | 'other' | 'steward' | 'anonymous' | string,
@@ -485,7 +491,7 @@ export async function createProfileEntryFixture(
       },
       setLibraryOpen,
       async grantLibraryGate(accountId: string) {
-        await installIdentityGrants(pool, global.id, accountId, ['gate:personal_library']);
+        await grantGlobal({ kind: 'account', id: accountId }, ['gate:personal_library']);
       },
       async revokeLibraryGate(accountId: string) {
         await grants.revoke(context(steward.actor), {
