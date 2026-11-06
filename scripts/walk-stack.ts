@@ -235,7 +235,6 @@ export type StackStartPlan = {
   kernel: string[];
   nativeReady: string[];
   kernelReady: string[];
-  pageReady: string[];
   deferPages: boolean;
 };
 
@@ -247,10 +246,6 @@ export function stackStartPlan(
     kernel: kernelLaunchCommand(env),
     nativeReady: [nativeJwksUrl(origins.native)],
     kernelReady: [`${origins.kernel.replace(/\/$/, '')}/v1/definitions`],
-    pageReady: [
-      `${origins.issuer.replace(/\/$/, '')}/.well-known/openid-configuration`,
-      `${origins.web.replace(/\/$/, '')}/`,
-    ],
     deferPages: Boolean(env.REZICS_WALK_STACK_SLOT),
   };
 }

@@ -296,6 +296,10 @@ SIGTERM, and bounded docker kill then removal so a Vite SSR abort loop, a stuck 
 cannot replace a seeded product walk. Walk `start` waits for the walk signal rather than the first child exit.
 `stopSpawned` accepts Bun subprocesses whose `signalCode` may be a number or a signal name.
 
+Decision: an admitted stack gates on native JWKS and Kernel only. Its Auth pages and Web start after the journey's seed,
+through `startSeededFrontends`, and are killed on exit; the Home and VN-realm walks use it, and a stack's Vite never
+compiles while the seed runs.
+
 Decision: keep one causal binding regression and the existing launcher assertions. Kernel setup persists the selected
 loopback Auth issuer, audience, JWKS URL, Kernel host and API port in `services/kernel/.env`; start applies the same
 tuple after reading that file, overriding a previous stack's identity. Native Library growth and browser qualification

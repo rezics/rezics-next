@@ -3,7 +3,11 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { retainOriginalAndCleanupFailure, runDocker } from '../../../scripts/compiler-database.ts';
+import {
+  DOCKER_BUILD_TIMEOUT_MS,
+  retainOriginalAndCleanupFailure,
+  runDocker,
+} from '../../../scripts/compiler-database.ts';
 import { workerLocalContainerError } from '../../../scripts/stack-run.ts';
 
 const directory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -130,7 +134,8 @@ async function up(): Promise<void> {
   } else {
     docker(['volume', 'create', volume]);
     try {
-      docker(searchRunArgs(image));
+      // `docker run` also pulls the image when it is absent; a busy daemon exceeds the 120s run bound on a loaded host.
+      runDocker(searchRunArgs(image), { cwd: directory, timeout: DOCKER_BUILD_TIMEOUT_MS });
     } catch (error) {
       try {
         docker(['rm', '-f', '-v', container]);
