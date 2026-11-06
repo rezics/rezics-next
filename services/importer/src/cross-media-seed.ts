@@ -4557,7 +4557,7 @@ export async function runCrossMediaSeedCli(
             readPublic: (id) => publicClient.readSubject(id),
           })
         : undefined;
-    const characterBindings = publicClient
+    const adoptedCharacters = publicClient
       ? combinedResult.readings.flatMap((reading) => {
           const identity = characterIdentityForSource(
             reading.source,
@@ -4569,9 +4569,9 @@ export async function runCrossMediaSeedCli(
         })
       : [];
     const characterCurrents =
-      publicClient && characterBindings.length
+      publicClient && adoptedCharacters.length
         ? await readAdoptedCharacters({
-            characters: characterBindings,
+            characters: adoptedCharacters,
             readPublic: (id) => publicClient.readSubject(id),
             authorizeMediaVariant: (mediaId, variant) => importPort.authorizeMediaVariant(mediaId, variant),
           })

@@ -544,12 +544,6 @@ export function validateVndbCreditVocabularyReferences(
   return { schemeId: value.schemeId, concepts };
 }
 
-export {
-  observePersonIdentity,
-  personIdentityForSource,
-  rereadCanonicalPersonIdentities,
-} from './showcase-person-identity.ts';
-
 export async function prepareShowcaseVndbCredits(
   plan: CrossMediaPlan,
   port: Pick<CrossMediaPort, 'readReviewedSubject'>,

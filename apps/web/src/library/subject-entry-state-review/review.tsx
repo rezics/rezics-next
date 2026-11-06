@@ -184,7 +184,7 @@ function ReceivedValue({
   entry,
   label,
 }: {
-  entry: Pick<SubjectSlotEntry, 'subjectId' | 'state' | 'revision' | 'incarnationId'> | null;
+  entry: EntryStateBasis;
   label: string;
 }) {
   return <span data-entry-state-received-value>{entry ? label : m.library_entry_review_absent()}</span>;

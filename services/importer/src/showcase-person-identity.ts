@@ -569,12 +569,14 @@ export async function readAdoptedCharacters(input: {
   const currents: AdoptedCharacterCurrent[] = [];
   const unconfirmed: CharacterIdentity[] = [];
   for (const entry of input.characters) {
+    const appearances = input.appearances?.[entry.identity.externalId];
+    const performers = input.performers?.[entry.identity.externalId];
     const observed = await readAdoptedCharacter({
       ...entry,
       readPublic: input.readPublic,
-      authorizeMediaVariant: input.authorizeMediaVariant,
-      appearances: input.appearances?.[entry.identity.externalId],
-      performers: input.performers?.[entry.identity.externalId],
+      ...(input.authorizeMediaVariant ? { authorizeMediaVariant: input.authorizeMediaVariant } : {}),
+      ...(appearances ? { appearances } : {}),
+      ...(performers ? { performers } : {}),
     });
     if (observed.state !== 'current') {
       unconfirmed.push(entry.identity);
