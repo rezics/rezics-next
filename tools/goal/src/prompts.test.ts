@@ -162,10 +162,24 @@ function goldenCases(): { name: string; rendered: RenderedPrompt }[] {
         evidence: retryEvidence(),
       }),
     },
+    {
+      name: 'minimal-verification.txt',
+      rendered: renderWorkerPrompt({
+        task: worker(contract({ markdown: 'Complete the source.' })),
+        mainCheckout: MAIN,
+        stateDirectory: minimalState(),
+      }),
+    },
   ];
 }
 
-test('every template renders within its byte budget for the six golden tasks, and the renders equal the committed golden files', () => {
+function minimalState(): string {
+  const directory = mkdtempSync(join(tmpdir(), 'prompt-minimal-state-'));
+  writeFileSync(join(directory, 'verification-mode'), 'minimal\n');
+  return directory;
+}
+
+test('every template renders within its byte budget for the seven golden tasks, and the renders equal the committed golden files', () => {
   const update = process.env.UPDATE_PROMPT_GOLDENS === '1';
   if (update) mkdirSync(GOLDEN_DIRECTORY, { recursive: true });
   for (const { name, rendered } of goldenCases()) {

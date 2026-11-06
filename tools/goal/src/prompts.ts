@@ -64,8 +64,10 @@ const WAIT =
 const OWN_TESTS =
   "After your last edit, run the test files you created or changed once, with the landing's command (`bun test <files>`; services/kernel: `bun run --cwd services/kernel check <files>`; apps/web: `bun apps/web/scripts/focused.ts --private-network -- bun test <files>`), and fix failures you caused.";
 const REGRESSION = `Do not run the root typecheck or other regression suites yourself; the landing runs them. ${OWN_TESTS}`;
+const MINIMAL_SESSION_COMMANDS =
+  'Commands that finish locally in under a minute (`bun test` of a few plain unit files, oxfmt, tsc on tools/goal) still run in the session.';
 const PROTOCOL_FOOTER: Partial<Record<ConditionId, string>> = {
-  'minimal-verification': `${WAIT} ${OWN_TESTS}`,
+  'minimal-verification': `${MINIMAL_SESSION_COMMANDS} ${OWN_TESTS} ${WRAPPER_RESULT}`.trimEnd(),
   'local-placement': `${WAIT} ${REGRESSION}`,
   wrapper: `${WAIT} ${REGRESSION}`,
   'no-wrapper': `${WAIT} ${REGRESSION}`,
@@ -358,7 +360,7 @@ function promptView(input: WorkerPromptInput): PromptView {
       ? 'This base has no scripts/worker-check.ts; do not add one. Run your focused validation command in the foreground from the worktree root and let it finish; it gives no check id and no waiting result.'
       : 'This base has no scripts/worker-check.ts; do not add one. Run the acceptance command in the foreground from the worktree root and let it finish, then report its actual exit status; it gives no check id and no waiting result.',
     ownedNoWrapperTail: owned ? ' Do not report success unless the chosen validation actually exits zero.' : '',
-    wrapperInvocation: runner ? `${runner} -- <command...>` : '',
+    wrapperInvocation: runner ? `${runner} -- <command...>` : 'bun scripts/worker-check.ts -- <command...>',
     wrapperResult: local && runner ? WRAPPER_RESULT : '',
     localRun,
     minimalOwned: owned

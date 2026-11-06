@@ -24,8 +24,9 @@ say so. Budgets bound what loads at session start. An agent may read further whe
 of a reference.
 
 Role templates in `tools/goal/prompts/` are the role text. Condition byte budgets count filled condition template
-bodies; the shared wait and own-tests footer is appended once per check condition and counted in the session total.
-Runtime command argv and wrapper-result lines are extras, not condition-template bytes.
+bodies; check-condition footers are appended once and counted in the session total. Minimal verification omits the
+open-session wait footer and routes check-host commands through the wrapper; other check conditions keep the wait
+footer. Runtime command argv and wrapper-result lines are extras, not condition-template bytes.
 
 ### Rules
 

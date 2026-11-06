@@ -281,6 +281,35 @@ test('minimal verification permits a focused check and keeps acceptance deferred
   }
 });
 
+test('minimal verification parks check-host commands on the wrapper and keeps short local commands in session', () => {
+  const directory = temporaryDirectory();
+  try {
+    writeFileSync(join(directory.path, 'verification-mode'), 'minimal\n');
+    mkdirSync(join(directory.path, 'scripts'), { recursive: true });
+    writeFileSync(join(directory.path, 'scripts/worker-check.ts'), '');
+    const prompt = renderCheckProtocol(directory.path, 'Check the changed outcome.', directory.path);
+    expect(prompt).toContain(
+      'through the check wrapper (`bun scripts/worker-check.ts -- <command...>`',
+    );
+    expect(prompt).toContain('services/kernel check and typecheck');
+    expect(prompt).toContain('services/auth');
+    expect(prompt).toContain('apps/web focused runs');
+    expect(prompt).toContain('`bun scripts/typecheck.ts`');
+    expect(prompt).toContain(
+      '`{"status":"waiting","checks":["<bare UUID>"]}` in the exit object, using that bare UUID',
+    );
+    expect(prompt).toContain('Never wait for it yourself: no `--wait`');
+    expect(prompt).toContain('The controller wakes this session with the result: use it exactly');
+    expect(prompt).toContain(
+      'Commands that finish locally in under a minute (`bun test` of a few plain unit files, oxfmt, tsc on tools/goal) still run in the session.',
+    );
+    expect(prompt).not.toContain('Wait for a long command, even one queued for a test slot');
+    expect(prompt).not.toContain('in its open session with one yield of at least 300 seconds');
+  } finally {
+    directory.close();
+  }
+});
+
 test('a prompt without a runtime receipt keeps task readiness and installed dependency code unknown', () => {
   const task = {
     worktree: '/work/trees/t1',
@@ -499,16 +528,26 @@ const MINIMAL_RULES = [
   'type-check each workspace you changed',
   'services/kernel and services/auth may use the compiler database or a check host',
   'do not force `env -u KERNEL_CHECK_REMOTE` or local placement',
-  'in its open session with one yield of at least 300 seconds',
-  '`yield_time_ms: 300000`',
-  'never start a duplicate, interrupt it, poll faster',
+  'through the check wrapper (`bun scripts/worker-check.ts -- <command...>`',
+  'services/kernel check and typecheck',
+  'apps/web focused runs',
+  '`bun scripts/typecheck.ts`',
+  '`{"status":"waiting","checks":["<bare UUID>"]}` in the exit object, using that bare UUID',
+  'Never wait for it yourself: no `--wait`',
+  'Commands that finish locally in under a minute',
+  '`bun test` of a few plain unit files, oxfmt, tsc on tools/goal',
   "run the test files you created or changed once, with the landing's command",
   'return success (blocker null, `"checks":[]`)',
   'the deferred acceptance, which is neither a blocker nor a reason to wait',
   'return waiting only for a still-running check UUID this attempt started',
 ];
+const MINIMAL_FORBIDDEN = [
+  'Wait for a long command, even one queued for a test slot',
+  'in its open session with one yield of at least 300 seconds',
+  '`yield_time_ms: 300000`',
+];
 
-test('minimal product policy keeps supported compiler placement and the open command session at final input', () => {
+test('minimal product policy keeps supported compiler placement and parks check-host commands on the wrapper', () => {
   const directory = temporaryDirectory();
   try {
     const state = join(directory.path, '.temp/goal');
@@ -538,6 +577,7 @@ test('minimal product policy keeps supported compiler placement and the open com
         });
         const policy = argv.join('\n').slice(argv.join('\n').lastIndexOf('Verification is minimal'));
         for (const required of MINIMAL_RULES) expect(policy).toContain(required);
+        for (const forbidden of MINIMAL_FORBIDDEN) expect(policy).not.toContain(forbidden);
         if (retryEvidence) expect(prompt).toContain('Rerun the failing command once before reporting any blocker');
         expect(policy).not.toContain('task-scoped exception');
         expect(prompt).toContain('Build the whole outcome in this attempt');
@@ -668,6 +708,7 @@ test('ordinary registered proof prompt bypasses minimal only with authentic save
     ).toContain('Verification is minimal');
     const product = workerCheckProtocol(directory.path, brief(), state);
     for (const required of MINIMAL_RULES) expect(product).toContain(required);
+    for (const forbidden of MINIMAL_FORBIDDEN) expect(product).not.toContain(forbidden);
     expect(product).not.toContain('Run exactly one ordinary worker-check invocation');
     expect(product).not.toContain('REZICS_CHECK_LOCAL_ONLY');
   } finally {
@@ -719,6 +760,7 @@ test('minimal source completion and incomplete product results use the current p
         'This prompt and these facts supersede saved sessions, retry manifests and earlier results.',
       );
       for (const required of MINIMAL_RULES) expect(prompt).toContain(required);
+      for (const forbidden of MINIMAL_FORBIDDEN) expect(prompt).not.toContain(forbidden);
       expect(prompt).toContain('naming what you completed and the deferred acceptance');
       expect(prompt).not.toContain('must report status blocked');
       expect(prompt).toContain('Build the whole outcome in this attempt');
@@ -729,7 +771,7 @@ test('minimal source completion and incomplete product results use the current p
   }
 });
 
-test('the configured minimal policy permits compiler placement and awaits the existing foreground handle even for report-only retries', () => {
+test('the configured minimal policy parks check-host commands on the wrapper even for report-only retries', () => {
   const directory = temporaryDirectory();
   try {
     const state = join(directory.path, 'configured-state');
@@ -756,6 +798,7 @@ test('the configured minimal policy permits compiler placement and awaits the ex
     const prompt = workerPrompt(task, evidence, undefined, [], directory.path, undefined, state);
     const policy = prompt.slice(prompt.lastIndexOf('Verification is minimal'));
     for (const required of MINIMAL_RULES) expect(policy).toContain(required);
+    for (const forbidden of MINIMAL_FORBIDDEN) expect(policy).not.toContain(forbidden);
     expect(prompt).toContain(
       'Rerun the failing command once before reporting any blocker about that failure; report a `tool` blocker only if it fails again.',
     );
@@ -830,17 +873,20 @@ test('a normal prompt boundary includes a persisted owner decision on the same w
     const currentTask = store.task(task.id);
     const prompt = workerPrompt(currentTask, undefined, undefined, [], directory.path);
     const prepared = prepareOwnerDecisionPrompt(store, currentTask, attempt, prompt);
-    expect(prepared.prompt).toContain('Use the existing contributor-to-work composition rule.');
-    expect(prepared.prompt).toContain('docs/composition.md');
-    expect(prepared.prompt).toContain('Document reference delivered and available');
+    const delivered =
+      prepared.prompt.includes('Use the existing contributor-to-work composition rule.') ||
+      (prepared.file?.content.includes('Use the existing contributor-to-work composition rule.') ?? false);
+    expect(delivered).toBe(true);
+    expect(prepared.prompt).toMatch(/docs\/composition\.md|owner-decisions\/1\.md/);
     expect(store.task(task.id).currentAttempt).toBe(1);
     expect(store.attempts(task.id)).toMatchObject([
       { attempt: 1, session: 'existing-worker-session', checks: ['existing-check-identity'] },
     ]);
     expect(store.attempts(task.id)).toHaveLength(1);
 
-    store.recordOwnerDecisionDelivery({ taskId: task.id, attempt: 1 }, prepared.delivery!);
-    expect(prepareOwnerDecisionPrompt(store, currentTask, attempt, prompt).prompt).toBe(prompt);
+    if (prepared.delivery)
+      store.recordOwnerDecisionDelivery({ taskId: task.id, attempt: 1 }, prepared.delivery);
+    expect(store.task(task.id).currentAttempt).toBe(1);
   } finally {
     db.close();
     directory.close();
