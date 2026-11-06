@@ -37,13 +37,7 @@ import {
 } from './zone-read';
 import { zoneAppearanceAttributes, zonePageDocument, type ZonePublic } from './appearance';
 import { advanceZoneCallback, type ZoneCallbackIdentity } from './callback';
-import {
-  zoneVisitFromRequest,
-  zoneVisitHref,
-  zoneVisitReturn,
-  zoneVisitWithoutCursor,
-  type ZoneVisit,
-} from './visit';
+import { zoneVisitFromRequest, zoneVisitHref, zoneVisitReturn, zoneVisitWithoutCursor, type ZoneVisit } from './visit';
 import type { ReceivedZonePage } from './receive';
 import { projectZoneSlots } from './slots';
 import { kernelClient } from '../kernel/client';
@@ -167,11 +161,7 @@ export function ZoneReadBoundary({
     initial.kind === 'page' ? initial.page.zone.revision : '0',
   );
   callbackRef.current = callback;
-  const requestKey = JSON.stringify([
-    callback.key,
-    request.credentialMode ?? null,
-    request.cursor ?? null,
-  ]);
+  const requestKey = JSON.stringify([callback.key, request.credentialMode ?? null, request.cursor ?? null]);
   const visitRef = useRef({ requestKey, initial, revision: 0 });
   if (visitRef.current.requestKey !== requestKey || visitRef.current.initial !== initial) {
     visitRef.current = {
