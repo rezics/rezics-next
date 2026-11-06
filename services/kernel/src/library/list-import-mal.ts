@@ -252,6 +252,7 @@ type Document = {
   dateIntents: Record<string, DateIntent>;
   labelIntents?: Record<string, LabelIntent>;
   metadataReviews?: Record<string, EntryImportMetadataReview[]>;
+  scoreGuards?: Record<string, string>;
   canceled: boolean;
 };
 
@@ -1014,6 +1015,9 @@ export function createMalImport(deps: Dependencies) {
       delete doc.intents[input.row];
       if (doc.labelIntents) delete doc.labelIntents[input.row];
       doc.reviews[input.row] = proposed;
+      if (proposed.score?.guard) {
+        doc.scoreGuards = { ...doc.scoreGuards, [key]: JSON.stringify(proposed.score.guard) };
+      }
     });
     // A receipt for an older review cannot reinstall it after a refresh.
     const current = await load(actor, id, deadline);
@@ -1082,17 +1086,22 @@ export function createMalImport(deps: Dependencies) {
     if (!reviewed.profileCurrent || reviewed.importReviewVersion !== imported.version) return false;
     const observation = await observe(actor, row, imported.binding ? null : imported.target, deadline);
     if (!sameReviewContext(imported, observation)) return false;
-    const fact = await journal.inspectSession(actor, reviewed.occurrence.sessionId);
-    if (
-      fact.session.subjectId !== reviewed.target ||
-      fact.session.state === 'retired' ||
-      fact.session.versionSubjectId !== reviewed.occurrence.versionSubjectId ||
-      hash(fact.pin) !== reviewed.occurrence.profilePinDigest ||
-      !profilePinMatches(fact.pin, observation.source)
-    )
-      return false;
-    const current = await journal.readSessionJournal(actor, reviewed.occurrence.sessionId);
-    return current.revision === reviewed.journalRevision;
+    try {
+      const fact = await journal.inspectSession(actor, reviewed.occurrence.sessionId);
+      if (
+        fact.session.subjectId !== reviewed.target ||
+        fact.session.state === 'retired' ||
+        fact.session.versionSubjectId !== reviewed.occurrence.versionSubjectId ||
+        hash(fact.pin) !== reviewed.occurrence.profilePinDigest ||
+        !profilePinMatches(fact.pin, observation.source)
+      )
+        return false;
+      const current = await journal.readSessionJournal(actor, reviewed.occurrence.sessionId);
+      return current.revision === reviewed.journalRevision;
+    } catch (error) {
+      if (error instanceof LibraryNotFoundError) return false;
+      throw error;
+    }
   }
   async function applyLabels(
     actor: Actor,
@@ -1507,6 +1516,9 @@ export function createMalImport(deps: Dependencies) {
             const checkpoint = intent.score!;
             const observation = malVoteObservation(scoreReview);
             const retry = checkpoint.started === true && !!checkpoint.command && !!checkpoint.commandActor;
+            const storedGuard = doc.scoreGuards?.[r.version]
+              ? (JSON.parse(doc.scoreGuards[r.version]!) as VoteReviewGuard)
+              : scoreReview.guard;
             if (!observation || !scoreReview.guard) {
               outcome.score = {
                 action: scoreReview.action,
@@ -1524,7 +1536,7 @@ export function createMalImport(deps: Dependencies) {
                   questionId: scoreReview.question.id,
                   targetId: r.target!,
                   units: scoreReview.units,
-                  guard: scoreReview.guard,
+                  guard: storedGuard,
                   observation,
                 },
                 checkpoint.key,
@@ -1549,7 +1561,7 @@ export function createMalImport(deps: Dependencies) {
                   reconciled ??
                   (await votes.putVoteOutcome(
                     commandActor,
-                    command.input,
+                    { ...command.input, ...(storedGuard ? { guard: storedGuard } : {}) },
                     command.receipt.requestKey,
                     scoreAdmission(commandActor, id, selected.row, r.version, checkpoint.key),
                   ));

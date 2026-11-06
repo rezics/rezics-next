@@ -183,7 +183,7 @@ test('mounted own upload, admitted identifier match, explicit resolution, confli
   await sessions.patchSessionJournal(
     importer.actor,
     repeats[0]!.value.id,
-    { revision: 1, startDate: { year: 2022 } },
+    { revision: 0, startDate: { year: 2022 } },
     entryKey(),
   );
   expect((await applyDates(firstDateReview)).outcomes[0].status).toBe('stale');

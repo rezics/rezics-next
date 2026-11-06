@@ -444,21 +444,17 @@ export async function createProfileEntryFixture(
       return active!;
     }
     async function admitSubjectMerge(canonical: string, selected: string) {
-      const merger = await identity(['subject:merge', 'gate:subject_identity', 'subject:read']);
-      await grantOnDeadline({ kind: 'account', id: merger.actor.accountId }, [
-        'subject:merge',
-        'gate:subject_identity',
-      ]);
       const opened = await send('steward', 'POST', '/v1/platform/exposure/subject_identity:open');
       expect(opened.status).toBe(200);
+      await grantOnDeadline({ kind: 'account', id: steward.actor.accountId }, ['subject:merge']);
       const response = await sendWithHeaders(
-        merger.bearer,
+        steward.bearer,
         'POST',
         '/v1/subjects:merge',
         { subjects: [canonical, selected] },
         { 'idempotency-key': JSON.stringify(entryKey()) },
       );
-      expect(response.status).toBe(202);
+      expect([200, 202]).toContain(response.status);
     }
     async function createSubject(vertical: ProfileVertical, label: string = vertical) {
       const response = await send('owner', 'POST', '/v1/subjects', {

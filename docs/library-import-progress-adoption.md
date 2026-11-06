@@ -37,7 +37,8 @@ clear choice targets one existing measure and is never inferred from absent or u
 ## Occurrence selection and confirmation
 
 The owner may select a session from the existing subject-filtered `/v1/progressSessions` pages or request an explicit
-new occurrence during row review. Each selected existing session is inspected by its supplied ID only. Review binds
+new occurrence during row review. Each selected existing session is inspected by its supplied ID only, through the native session fact rather than
+presentation labels. Review binds
 owner/upload/row and source fingerprint, subject and current profile identity, session ID and immutable creation
 identity, shared revision, selected units, source amounts and current amounts. The service never searches an owner's
 history to guess a target. A new occurrence is not created by preview or review; the confirmed apply first uses the
@@ -87,7 +88,8 @@ AniList keeps `POST /v1/libraryImports/anilist/:importId:review`, `:apply` and i
 accepts the same occurrence and per-measure choices alongside its existing source-field selection. Apply continues
 to confirm the stored review ID. Both APIs return `stale` for a changed shared revision, current profile or selected
 occurrence; separate start and measure receipts expose an admitted partial occurrence when a later measure fails.
-Failed or uncertain effects retry the original native receipt and operands. The row page adds the private field/unit
+Failed or uncertain effects retry the original native receipt and operands. A definite native invalid, denied or
+unavailable write throws; it is not recorded as an uncertain retry. The row page adds the private field/unit
 matrix and per-measure result.
 
 Both provider methods use the native `GET /v1/progressSessions?subjectId=...` bounded selection pages,

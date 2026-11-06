@@ -1,11 +1,13 @@
 import type { Actor } from '../request/access.ts';
 import { createHash } from 'node:crypto';
+import { GrantDeniedError } from '../access/grant-commands.ts';
+import { AccessUnavailableError } from '../access/unavailable.ts';
 import { ProblemError } from '../http/problem.ts';
 import { nativeProgressUnit, type LibraryProfileDescriptor, type LibraryProfilePin } from './profile.ts';
 import { parseProgressMeasureCreate, parseRecord, parseSessionCreate, type ProgressSessionCreate } from './progress.ts';
-import type { ProgressPresentation, ProgressSession } from './progress-model.ts';
+import type { ProgressSession } from './progress-model.ts';
 import type { createSessionCommands } from './sessions.ts';
-import { ProgressConflictError } from './sessions.ts';
+import { ProgressConflictError, ProgressInvalidError } from './sessions.ts';
 import { LibraryConflictError } from './entries.ts';
 import { LibraryNotFoundError } from './command-support.ts';
 
@@ -96,11 +98,7 @@ export type ProgressAdoptionCheckpoint = {
 };
 
 type SessionCommands = ReturnType<typeof createSessionCommands>;
-type Presented = {
-  session: ProgressSession;
-  presentation: ProgressPresentation;
-  measurePresentations: readonly { unit: string; presentation: ProgressPresentation }[];
-};
+type Presented = { session: ProgressSession };
 type NativeCommand =
   | Awaited<ReturnType<SessionCommands['startSession']>>
   | Awaited<ReturnType<SessionCommands['recordProgress']>>;
@@ -186,19 +184,15 @@ function hasUnit(session: ProgressSession, unit: string): boolean {
   return session.unit === unit || Boolean(session.measures?.some((measure) => measure.unit === unit));
 }
 
-function recordingFor(presented: Presented, unit: string) {
-  return unit === presented.session.unit
-    ? presented.presentation.recording.state
-    : (presented.measurePresentations.find((measure) => measure.unit === unit)?.presentation.recording.state ??
-        'unavailable');
+function recordingFor(session: ProgressSession, unit: string) {
+  return session.state === 'active' && session.mode === 'scalar_amount' && hasUnit(session, unit)
+    ? 'supported'
+    : 'unavailable';
 }
 
 async function inspect(sessions: SessionCommands, actor: Actor, sessionId: string): Promise<Presented> {
-  return sessions.readPresentedSession(actor, sessionId, async (session, presentation, _disclosure, measures) => ({
-    session,
-    presentation,
-    measurePresentations: measures,
-  }));
+  const fact = await sessions.inspectSession(actor, sessionId);
+  return { session: fact.session };
 }
 
 export async function reviewProgressAdoption(
@@ -260,7 +254,7 @@ export async function reviewProgressAdoption(
           current.state !== 'active'
             ? 'selected-occurrence-is-not-active'
             : 'selected-occurrence-does-not-contain-unit';
-      } else if (recordingFor(presented!, source.unit!) !== 'supported') {
+      } else if (recordingFor(presented!.session, source.unit!) !== 'supported') {
         eligibility = 'unsupported';
         reason = 'selected-occurrence-unit-is-not-currently-recordable';
       }
@@ -273,7 +267,7 @@ export async function reviewProgressAdoption(
       current.state === 'active' &&
       current.mode === 'scalar_amount' &&
       hasUnit(current, source.unit ?? '') &&
-      recordingFor(presented!, source.unit!) === 'supported'
+      recordingFor(presented!.session, source.unit!) === 'supported'
     ) {
       eligibility = 'ready';
       reason = null;
@@ -582,7 +576,7 @@ export async function executeProgressAdoption(
         latest.session.startedAt !== occurrence.startedAt ||
         latest.session.state !== 'active' ||
         latest.session.mode !== 'scalar_amount' ||
-        recordingFor(latest, measure.unit) !== 'supported'
+        recordingFor(latest.session, measure.unit) !== 'supported'
       ) {
         await stopRemaining(index, 'stale', 'selected-occurrence-or-measure-changed');
         break;
@@ -680,7 +674,7 @@ export async function executeProgressAdoption(
         actor,
         occurrence.sessionId,
         {
-          revision,
+          revision: Number(revision),
           measureId: measure.unit,
           ...(measure.action === 'clear' ? { clear: true } : { amount: measure.amount }),
         },
@@ -711,6 +705,13 @@ export async function executeProgressAdoption(
         await stopRemaining(index, 'stale', 'native-measure-write-was-refused');
         break;
       }
+      if (
+        error instanceof ProgressInvalidError ||
+        error instanceof GrantDeniedError ||
+        error instanceof TypeError ||
+        error instanceof AccessUnavailableError
+      )
+        throw error;
       const failed: ProgressAdoptionMeasureResult = {
         field: measure.field,
         unit: measure.unit,

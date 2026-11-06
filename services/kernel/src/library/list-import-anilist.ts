@@ -1696,19 +1696,24 @@ export function createAniListImport(deps: Dependencies) {
       hash({ epoch: live.epoch, pin: live.pin, binding: live.profileBinding }) !== review.profileDigest
     )
       return false;
-    const session = await sessions.readPresentedSession(actor, review.occurrence.sessionId, async (value) => value),
-      occurrenceFact = await sessions.inspectSession(actor, review.occurrence.sessionId),
-      journal = await sessions.readSessionJournal(actor, review.occurrence.sessionId);
-    return (
-      session.id === review.occurrence.sessionId &&
-      session.subjectId === review.occurrence.subjectId &&
-      session.versionSubjectId === review.occurrence.versionSubjectId &&
-      session.startedAt === review.occurrence.startedAt &&
-      session.transactionId === review.occurrence.transactionId &&
-      session.state !== 'retired' &&
-      hash(occurrenceFact.pin) === hash(review.occurrenceProfileBinding) &&
-      journal.revision === review.journalRevision
-    );
+    try {
+      const session = await sessions.readPresentedSession(actor, review.occurrence.sessionId, async (value) => value),
+        occurrenceFact = await sessions.inspectSession(actor, review.occurrence.sessionId),
+        journal = await sessions.readSessionJournal(actor, review.occurrence.sessionId);
+      return (
+        session.id === review.occurrence.sessionId &&
+        session.subjectId === review.occurrence.subjectId &&
+        session.versionSubjectId === review.occurrence.versionSubjectId &&
+        session.startedAt === review.occurrence.startedAt &&
+        session.transactionId === review.occurrence.transactionId &&
+        session.state !== 'retired' &&
+        hash(occurrenceFact.pin) === hash(review.occurrenceProfileBinding) &&
+        journal.revision === review.journalRevision
+      );
+    } catch (error) {
+      if (error instanceof LibraryNotFoundError) return false;
+      throw error;
+    }
   }
   async function applyConsumptionDates(
     actor: Actor,

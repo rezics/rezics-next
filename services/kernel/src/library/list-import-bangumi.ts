@@ -473,7 +473,7 @@ export function createBangumiImport(deps: Dependencies) {
           {
             type: 'com.rezics.library.bangumi.changed.v1',
             subject: owner(actor).accountId,
-            data: { operation: kind },
+            data: { operation: kind.slice(0, 16) },
           },
         ],
       }),

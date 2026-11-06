@@ -87,7 +87,9 @@ retain original guards and keys across uncertain delivery, and require native re
 Frozen vote observations use Content's meaning, or the question label when meaning is absent.
 Confirmation calls `preparePutVote(actor, input, key, admission?)` once with the captured actor, frozen observation and
 source-document admission, persists `score.started` with that command, then `putVoteOutcome` with those operands; an
-uncertain retry first uses `reconcilePutVote(actor, receipt)`. A Rating redirect of the Library-selected Subject stores
+uncertain retry first uses `reconcilePutVote(actor, receipt)`.
+Decision: retain each reviewed vote guard as an opaque JSON string keyed by review version so document canonicalize
+cannot reorder identity operands; apply parses that encoding into preparePutVote and putVoteOutcome. A Rating redirect of the Library-selected Subject stores
 no vote guard and requires an explicit new target review. Native stale/unavailable errors are definitive typed
 outcomes. Unexpected delivery/readback errors throw and retain that checkpoint for exact command retry; current reads
 cannot settle uncertain delivery. A review refresh cannot replace a started unresolved score, including when labels are

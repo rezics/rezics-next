@@ -74,6 +74,8 @@ Decision: receipt-only score recovery denies a current actor without `rating:vot
 read, and reads back only the receipt's question and target. Kernel source-admission retries keep the first captured
 credential envelope, key and body.
 
+Decision: native score, merge and receipt-recovery checks reuse the fixture steward and extra-scoped identities on the same Global bootstrap; a second operator bootstrap is unavailable. Closed Bangumi change events carry `operation` at most 16 characters; writers slice the command kind to that bound. Expired source scrub pages skip already-empty evidence so remaining ordinals advance.
+
 ## Web HTTP contract
 
 All methods require an authenticated current owner, the personal_library gate, existing Library scopes,

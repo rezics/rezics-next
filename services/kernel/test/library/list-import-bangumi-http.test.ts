@@ -53,6 +53,29 @@ async function setState(state: string) {
     randomUUID(),
   );
 }
+async function voteOwner() {
+  const identity = await f.identity([...f.owner.actor.scopes, 'rating:vote']);
+  await f.grantLibraryGate(identity.actor.accountId);
+  return identity;
+}
+async function createVoterSubject(bearer: string) {
+  const response = await f.send(bearer, 'POST', '/v1/subjects', { type: 'ex:Child', labels: { en: 'game' } });
+  expect(response.status).toBe(201);
+  return (await response.json()).subject.id as string;
+}
+function voteFixture(voter: Awaited<ReturnType<typeof voteOwner>>) {
+  return {
+    pool: f.pool,
+    access: f.access,
+    tokens: f.tokens,
+    commands: f.commands,
+    owner: voter,
+    admitSubjectMerge: (canonical: string, selected: string) => f.admitSubjectMerge(canonical, selected),
+    createSubject: (_vertical = 'game') => createVoterSubject(voter.bearer),
+    send: (persona: string, method: string, path: string, body?: unknown) =>
+      f.send(persona === 'owner' ? voter.bearer : persona, method, path, body),
+  };
+}
 async function admitBangumiClaim(externalId: number, label: string, digest = 'a'.repeat(64), revision = 'v0') {
   const importer = await f.identity(['subject:batch_write', 'subject:create', 'subject:read']);
   await f.grantAccountActions(importer.actor.accountId, ['subject:batch_write', 'subject:create']);
@@ -319,19 +342,28 @@ test('conflict preservation, guarded replacement, stale review refresh and origi
   await f.activate(f.originalDigest);
 });
 test('lost native acknowledgement replays the original receipt and a changed provider claim stales fresh adoption', async () => {
-  const { uploadId } = await preview([record()]);
+  const replayId = 900201;
+  const replayTarget = await admitBangumiClaim(replayId, 'Replay subject');
+  const { uploadId } = await preview([record(replayId)]);
   const reviewed = await review(uploadId, 0);
+  expect(reviewed.target).toBe(replayTarget);
   const confirmed = [choice(0, reviewed)];
   const accepted = await apply(uploadId, confirmed);
   expect(accepted.outcomes[0].status).toBe('applied');
-  await setState('paused');
+  const current = await f.commands.readEntry(f.owner.actor, replayTarget);
+  await f.commands.putEntry(
+    f.owner.actor,
+    replayTarget,
+    { state: 'paused', revision: current.revision, incarnationId: current.incarnationId },
+    randomUUID(),
+  );
   await f.pool.query(
     `UPDATE library.bangumi_upload_row SET outcome=NULL
      WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=0`,
     [routeOf(f.owner.actor.accountId), f.owner.actor.accountId, uploadId],
   );
   expect(await apply(uploadId, confirmed)).toEqual(accepted);
-  expect((await f.commands.readEntry(f.owner.actor, matched)).state).toBe('paused');
+  expect((await f.commands.readEntry(f.owner.actor, replayTarget)).state).toBe('paused');
 
   const lateId = 900103;
   const changedTarget = await f.createSubject('game');
@@ -453,8 +485,8 @@ test('absolute expiry denies fresh source work while scheduled cleanup scrubs th
   ).toEqual([]);
 });
 test('score review retains source scale and native vote while requiring separate consent', async () => {
-  const score = await createProfileEntryFixture({ ownerScopes: ['rating:vote'] });
-  try {
+  const score = voteFixture(await voteOwner());
+  {
     const setTarget = await score.createSubject('game');
     const clearTarget = await score.createSubject('game');
     const unsupportedTarget = await score.createSubject('game');
@@ -477,7 +509,7 @@ test('score review retains source scale and native vote while requiring separate
     const reviews = [];
     const targets = [setTarget, clearTarget, setTarget, unsupportedTarget];
     for (let ordinal = 0; ordinal < rows.length; ordinal++) {
-      const response = await score.send('owner', 'POST', `/${uploadId}:review`, {
+      const response = await score.send('owner', 'POST', `${root}/${uploadId}:review`, {
         ordinal,
         target: targets[ordinal],
         score:
@@ -505,7 +537,7 @@ test('score review retains source scale and native vote while requiring separate
     expect(typeof reviews[0].score.native.question.meaning).toBe('string');
     expect(reviews[3].score.source.reason).toContain('integer');
 
-    const missingConsent = await score.send('owner', 'POST', `/${uploadId}:apply`, {
+    const missingConsent = await score.send('owner', 'POST', `${root}/${uploadId}:apply`, {
       rows: [
         {
           ordinal: 0,
@@ -517,11 +549,11 @@ test('score review retains source scale and native vote while requiring separate
       ],
     });
     expect(missingConsent.status).toBe(400);
-    const preserved = await score.send('owner', 'POST', `/${uploadId}:apply`, {
+    const preserved = await score.send('owner', 'POST', `${root}/${uploadId}:apply`, {
       rows: [{ ordinal: 2, reviewToken: reviews[2].token, state: 'omit', skip: false }],
     });
     expect((await ok(preserved)).outcomes[0].score).toMatchObject({ action: 'preserve', status: 'skipped' });
-    const changedChoice = await score.send('owner', 'POST', `/${uploadId}:apply`, {
+    const changedChoice = await score.send('owner', 'POST', `${root}/${uploadId}:apply`, {
       rows: [
         {
           ordinal: 0,
@@ -533,7 +565,7 @@ test('score review retains source scale and native vote while requiring separate
       ],
     });
     expect(changedChoice.status).toBe(409);
-    const applied = await score.send('owner', 'POST', `/${uploadId}:apply`, {
+    const applied = await score.send('owner', 'POST', `${root}/${uploadId}:apply`, {
       rows: [
         {
           ordinal: 0,
@@ -553,7 +585,7 @@ test('score review retains source scale and native vote while requiring separate
     expect(await votes.readVoteReview(score.owner.actor, STANDARD_QUESTION_ID, setTarget)).toMatchObject({
       currentVote: { state: 'counted', units: 0 },
     });
-    const preservedAfterSet = await score.send('owner', 'POST', `/${uploadId}:apply`, {
+    const preservedAfterSet = await score.send('owner', 'POST', `${root}/${uploadId}:apply`, {
       rows: [{ ordinal: 2, reviewToken: reviews[2].token, state: 'omit', skip: false }],
     });
     expect((await ok(preservedAfterSet)).outcomes[0].score).toMatchObject({
@@ -561,7 +593,7 @@ test('score review retains source scale and native vote while requiring separate
       status: 'skipped',
       reason: 'existing_native_vote_preserved',
     });
-    const clear = await score.send('owner', 'POST', `/${uploadId}:apply`, {
+    const clear = await score.send('owner', 'POST', `${root}/${uploadId}:apply`, {
       rows: [
         {
           ordinal: 1,
@@ -579,7 +611,7 @@ test('score review retains source scale and native vote while requiring separate
     expect(await votes.readVoteReview(score.owner.actor, STANDARD_QUESTION_ID, clearTarget)).toMatchObject({
       currentVote: { state: 'clear' },
     });
-    const unsupported = await score.send('owner', 'POST', `/${uploadId}:apply`, {
+    const unsupported = await score.send('owner', 'POST', `${root}/${uploadId}:apply`, {
       rows: [
         {
           ordinal: 3,
@@ -601,7 +633,7 @@ test('score review retains source scale and native vote while requiring separate
     ).uploadId;
     const changedReview = (
       await ok(
-        await score.send('owner', 'POST', `/${changedUpload}:review`, {
+        await score.send('owner', 'POST', `${root}/${changedUpload}:review`, {
           ordinal: 0,
           target: setTarget,
           score: { action: 'preserve' },
@@ -612,13 +644,11 @@ test('score review retains source scale and native vote while requiring separate
       source: { state: 'score', value: 9 },
       native: { currentVote: { state: 'set', units: 0 }, admission: { status: 'reviewed' } },
     });
-  } finally {
-    await score.close();
   }
 });
 test('native redirect requires a deliberate review of the canonical Bangumi target', async () => {
-  const score = await createProfileEntryFixture({ ownerScopes: ['rating:vote'] });
-  try {
+  const score = voteFixture(await voteOwner());
+  {
     const subjects = [await score.createSubject('game'), await score.createSubject('game')].sort();
     const canonical = subjects[0]!;
     const selected = subjects[1]!;
@@ -697,13 +727,11 @@ test('native redirect requires a deliberate review of the canonical Bangumi targ
     expect(await native.readVoteReview(score.owner.actor, STANDARD_QUESTION_ID, canonical)).toMatchObject({
       currentVote: { state: 'counted', units: 13 },
     });
-  } finally {
-    await score.close();
   }
 });
 test('uncertain score delivery retains exact native operands and a changed own vote is stale on retry', async () => {
-  const score = await createProfileEntryFixture({ ownerScopes: ['rating:vote'] });
-  try {
+  const score = voteFixture(await voteOwner());
+  {
     const target = await score.createSubject('game');
     const native = createVoteCommands({ pool: score.pool, access: score.access });
     const attempts: {
@@ -808,13 +836,11 @@ test('uncertain score delivery retains exact native operands and a changed own v
     expect(await native.readVoteReview(score.owner.actor, STANDARD_QUESTION_ID, target)).toMatchObject({
       currentVote: { state: 'clear' },
     });
-  } finally {
-    await score.close();
   }
 });
 test('source scrub retains only a started vote receipt and reconciles it with current Rating readback', async () => {
-  const score = await createProfileEntryFixture({ ownerScopes: ['rating:vote'] });
-  try {
+  const score = voteFixture(await voteOwner());
+  {
     const target = await score.createSubject('game');
     const native = createVoteCommands({ pool: score.pool, access: score.access });
     const interrupted = createBangumiImport({
@@ -925,8 +951,6 @@ test('source scrub retains only a started vote receipt and reconciles it with cu
       score: { action: 'set', status: 'applied', vote: { units: 0 } },
     });
     expect(after.currentVote).toEqual(before.currentVote);
-  } finally {
-    await score.close();
   }
 });
 test('bounds, invalid values, cancellation, deletion and terminal authority denial', async () => {
