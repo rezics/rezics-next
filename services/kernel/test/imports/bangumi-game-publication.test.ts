@@ -3,7 +3,6 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { converter_revision } from '../../../../packages/conversion/src/bangumi.ts';
-import { converter_revision as entityRevision } from '../../../../packages/conversion/src/cross-media-entities.ts';
 import { crossMediaBangumiRevision } from '../../../importer/src/source-registry.ts';
 import { crossMediaAliases, emptyCrossMediaPlan, seedCrossMedia } from '../../../importer/src/cross-media-seed.ts';
 import { createPublicBulkClient } from '../../../importer/src/public-bulk-client.ts';
