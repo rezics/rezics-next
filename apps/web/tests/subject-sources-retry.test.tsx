@@ -109,7 +109,12 @@ test('actual Sources retry returns focus locally and retires focus across reader
         });
         expect(calls).toHaveLength(2);
         expect(calls[1]).toEqual({ id: page.id, locale: 'en', realm, reader: 'alice' });
-        expect(host.querySelector('article')?.getAttribute('aria-busy'), mode).toBe('true');
+        // Suspense can retain the error article hidden alongside the visible pending presentation.
+        const visibleArticles = Array.from(host.querySelectorAll('article')).filter(
+          (article) => !article.closest('[style*="display: none"]'),
+        );
+        expect(visibleArticles, mode).toHaveLength(1);
+        expect(visibleArticles[0]!.getAttribute('aria-busy'), `${mode}: ${host.innerHTML}`).toBe('true');
         if (mode === 'moved') outside.focus();
         if (mode === 'tab') document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
         if (mode === 'blur') window.dispatchEvent(new window.Event('blur'));
