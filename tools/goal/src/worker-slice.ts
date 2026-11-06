@@ -11,6 +11,8 @@ export const WORKER_SLICE_PREPARATION_TIMEOUT_MS = defaultPolicy.workerResources
 // Binary unit conversion, independent of admission policy.
 const GIB = 1024 ** 3;
 const CHECK_SLICE = 'rezics-check.slice';
+/** One attempt's scope: a runaway test (22 GB on 2026-11-06) is killed inside its own scope instead of filling the host. */
+export const WORKER_SCOPE_MEMORY_MAX = '12G';
 
 type Run = (command: string, args: string[], options: SpawnSyncOptions) => SpawnSyncReturns<Buffer>;
 type ReadMeminfo = () => string;
@@ -75,6 +77,7 @@ export class WorkerSlice {
         '--collect',
         '--quiet',
         `--slice=${WORKER_SLICE}`,
+        `--property=MemoryMax=${WORKER_SCOPE_MEMORY_MAX}`,
         `--unit=${workerUnit(taskId, attempt)}`,
         command,
         ...args,
