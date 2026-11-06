@@ -1158,6 +1158,10 @@ History private callback/command adapter and Library selected declaration resolv
 those specific operands. Whole-parent completeness follows the reached owner declarations, never
 getter presence alone. Accounts' fully spent local allowance is not reused.
 
+Decision: original-source native cases admit the Accounts job through `prepareAdmission` and keep
+the original intent. Accounts verify/unverify resume stays on worker-installed Search and Library
+participants.
+
 The additional fixture cases cover genuine one-original/two-attempt/overlap/reentry,
 unavailable/failure and real Core rollback, exact counter/ledger/deadline behavior,
 zero/one-effect verifier guard arithmetic, strict literal rejection and disjoint

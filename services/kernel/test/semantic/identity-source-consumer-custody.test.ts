@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
-import { mergeVerifiedAgent } from '../../src/access/agent-verification.ts';
 import { noEffect, runCommand } from '../../src/command/command.ts';
 import { verifyAgentIdentityRecoveryArtifactReadiness } from '../../src/history/adapters/agent-identity-recovery-receiving.ts';
 import {
@@ -40,6 +39,15 @@ import type { IdentityPrearmTicketData } from '../../src/semantic/identity-epoch
 import type { LibraryScopeEffectSeal } from '../../src/library/identity-scope-effects.ts';
 import { IdentityHistoryWorkUnavailable } from '../../src/history/contract/errors.ts';
 
+/** Admit the original Accounts job. Verify resume still needs worker Search and Library. */
+async function admitOriginalAccountIdentity(pool: Pool, account: string, receiptId: string) {
+  const { loadAccountIdentitySource } = await import('../../src/access/agent-verification-identity.ts');
+  const { identityEpochStore } = await import('../../src/semantic/identity-adapters/index.ts');
+  const receipt = { kind: 'account-agent.verify' as const, account, receipt: receiptId };
+  await identityEpochStore().prepareAdmission(pool, {}, (await loadAccountIdentitySource(pool, receipt)).input);
+  return receipt;
+}
+
 // Authored native cases only. Run through the existing kernel fixture runner after integration.
 let f: Awaited<ReturnType<typeof cutoverFixture>>;
 let reference: IdentitySourceConsumerReference;
@@ -48,12 +56,7 @@ beforeAll(async () => {
   const catalogue = (await f.create('Custody verification catalogue')).subject.id;
   const approved = await approvedVerification(f, catalogue);
   await ensureAccountAgent(f.pool, { account: approved.account, kind: 'person', name: null });
-  await mergeVerifiedAgent(f.pool, approved.workflow);
-  const receipt = {
-    kind: 'account-agent.verify' as const,
-    account: approved.account,
-    receipt: approved.workflow.receiptId,
-  };
+  const receipt = await admitOriginalAccountIdentity(f.pool, approved.account, approved.workflow.receiptId);
   const accepted = await readAccountIdentityUndo(f.pool, receipt);
   reference = {
     receipt,
@@ -554,8 +557,7 @@ test('The original Source owner durably guards exact History readiness and closu
   const workflow = { ...saved, receiptId: saved.decisionReceiptId };
   await recordPendingAgentVerification(f.pool, workflow, () => new Date());
   await ensureAccountAgent(f.pool, { account: accounts.person, kind: 'person', name: null });
-  await mergeVerifiedAgent(f.pool, workflow);
-  const receipt = { kind: 'account-agent.verify' as const, account: accounts.person, receipt: workflow.receiptId };
+  const receipt = await admitOriginalAccountIdentity(f.pool, accounts.person, workflow.receiptId);
   const accepted = await readAccountIdentityUndo(f.pool, receipt);
   const erased = (
     await f.admin.query(
