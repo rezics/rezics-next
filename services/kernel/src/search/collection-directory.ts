@@ -1,5 +1,9 @@
 import { partitionOf, routeOf } from '../route/route.ts';
-import type { CollectionDiscoveryKey, CollectionDiscoveryQuery, CollectionDiscoverySource } from '../library/collection-discovery-source.ts';
+import type {
+  CollectionDiscoveryKey,
+  CollectionDiscoveryQuery,
+  CollectionDiscoverySource,
+} from '../library/collection-discovery-source.ts';
 import type { PublicCollectionDiscoveryOperand } from '../library/collection-discovery-summaries.ts';
 import {
   COLLECTION_DISCOVERY_BATCH_SIZE,
@@ -314,7 +318,12 @@ export async function executeCollectionDirectory(input: CollectionDirectoryExecu
   const hydrated = await hydrateCollectionDirectory(input.readCurrent, input.identities, input.context);
   const current = await input.revalidate(hydrated, input.context);
   const order = collectionDirectoryOrder(input.selection);
-  const paged = pageCollectionDirectory(sortCollectionDirectory(collectionDirectoryRows(current), order), order, input.after, input.limit);
+  const paged = pageCollectionDirectory(
+    sortCollectionDirectory(collectionDirectoryRows(current), order),
+    order,
+    input.after,
+    input.limit,
+  );
   return {
     items: paged.items,
     nextAfter: paged.nextAfter,

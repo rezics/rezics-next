@@ -109,10 +109,10 @@ owner recency or the selected publication generation.
   are landing checks, not a production native execution or measured three-scale growth claim.
   Focused native tests pin catalogue unique members, directory recency/popularity order, composition slot skip and
   TypeList Search-page admission; browser walks remain deferred.
-Decision: the fewest tests pin capability absent/present, an identity-page tail, recency ties, popularity, owner
-removal, a resumed sort-keyset cursor, query-wide currentness, lost-response reconcile against native
-generation/uuid/index, selected A lookup after a later working identity, and one native directory/publication
-group on released public owners and the live subject index. Browser and main acceptance stay held.
+  Decision: the fewest tests pin capability absent/present, an identity-page tail, recency ties, popularity, owner
+  removal, a resumed sort-keyset cursor, query-wide currentness, lost-response reconcile against native
+  generation/uuid/index, selected A lookup after a later working identity, and one native directory/publication
+  group on released public owners and the live subject index. Browser and main acceptance stay held.
 
 Decision: catalogue Collection publication snapshots public Search population into selected A through
 `observeCataloguePublication`/`readCataloguePublicationPage`/`lookupCataloguePublication`. A lost OpenSearch
