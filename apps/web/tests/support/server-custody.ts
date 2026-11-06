@@ -1,4 +1,5 @@
 import type { ChildProcess } from 'node:child_process';
+import { readdirSync, readFileSync } from 'node:fs';
 
 export type ProcessOutputStream = 'stdout' | 'stderr';
 export type BunProcessStreams = {
@@ -75,22 +76,125 @@ function bounded<T>(promise: PromiseLike<T>, timeoutMs: number, description: str
   ]).finally(() => clearTimeout(timer));
 }
 
-function processGroupExists(pid: number): boolean {
+function processState(pid: number): string | undefined {
   try {
-    process.kill(-pid, 0);
-    return true;
+    const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+    return stat.slice(stat.lastIndexOf(')') + 2).trim()[0];
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
+  }
+}
+
+function pidIsLive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
     if (code === 'ESRCH') return false;
     if (code === 'EPERM') return true;
     throw error;
   }
+  return processState(pid) !== 'Z';
 }
 
-async function waitForGroupExit(pid: number, timeoutMs: number, pollIntervalMs: number): Promise<boolean> {
+function childPids(pid: number): number[] {
+  try {
+    const children = readFileSync(`/proc/${pid}/task/${pid}/children`, 'utf8').trim();
+    return children
+      ? children
+          .split(/\s+/)
+          .map(Number)
+          .filter((value) => Number.isSafeInteger(value) && value > 0)
+      : [];
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT' || code === 'ESRCH') return [];
+    throw error;
+  }
+}
+
+function collectTree(root: number, into: Set<number>): void {
+  const queue = [root];
+  while (queue.length > 0) {
+    const pid = queue.pop()!;
+    if (into.has(pid)) continue;
+    into.add(pid);
+    queue.push(...childPids(pid));
+  }
+}
+
+function signalPid(pid: number, signal: NodeJS.Signals, errors: unknown[]): void {
+  try {
+    process.kill(pid, signal);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ESRCH') errors.push(error);
+  }
+}
+
+function signalPids(pids: Iterable<number>, signal: NodeJS.Signals, errors: unknown[]): void {
+  for (const pid of pids) signalPid(pid, signal, errors);
+}
+
+function treeIsLive(pids: Iterable<number>): boolean {
+  for (const pid of pids) if (pidIsLive(pid)) return true;
+  return false;
+}
+
+function processGroupId(pid: number): number | undefined {
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+    const pgrp = Number(
+      stat
+        .slice(stat.lastIndexOf(')') + 2)
+        .trim()
+        .split(/\s+/)[2],
+    );
+    return Number.isSafeInteger(pgrp) && pgrp > 0 ? pgrp : undefined;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
+  }
+}
+
+function processGroupHasLiveMember(group: number): boolean {
+  try {
+    process.kill(-group, 0);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ESRCH') return false;
+    if (code === 'EPERM') return true;
+    throw error;
+  }
+  if (pidIsLive(group) || childPids(group).some(pidIsLive)) return true;
+  try {
+    for (const name of readdirSync('/proc')) {
+      if (!/^\d+$/.test(name)) continue;
+      const member = Number(name);
+      if (!pidIsLive(member)) continue;
+      if (processGroupId(member) === group) return true;
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+  return false;
+}
+
+function processGroupExists(pid: number): boolean {
+  return processGroupHasLiveMember(pid);
+}
+
+async function waitUntilIdle(
+  pid: number | undefined,
+  tree: Set<number>,
+  timeoutMs: number,
+  pollIntervalMs: number,
+): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
-    if (!processGroupExists(pid)) return true;
+    if (pid !== undefined) collectTree(pid, tree);
+    const groupGone = pid === undefined || !processGroupExists(pid);
+    if (groupGone && !treeIsLive(tree)) return true;
     const remaining = deadline - Date.now();
     if (remaining <= 0) return false;
     await wait(Math.min(pollIntervalMs, remaining));
@@ -132,6 +236,8 @@ function makeProcessCustody(
     let groupSettled = pid === undefined;
     let childSettled = false;
     let outputIsSettled = false;
+    const tree = new Set<number>();
+    if (pid !== undefined) collectTree(pid, tree);
     const signalGroup = (signal: NodeJS.Signals) => {
       if (pid === undefined) return;
       try {
@@ -140,18 +246,23 @@ function makeProcessCustody(
         if ((error as NodeJS.ErrnoException).code !== 'ESRCH') cleanupErrors.push(error);
       }
     };
+    const signalOwned = (signal: NodeJS.Signals) => {
+      if (pid !== undefined) collectTree(pid, tree);
+      signalGroup(signal);
+      signalPids(tree, signal, cleanupErrors);
+    };
 
     if (pid !== undefined) {
-      signalGroup('SIGTERM');
+      signalOwned('SIGTERM');
       try {
-        groupSettled = await waitForGroupExit(pid, termGraceMs, pollIntervalMs);
+        groupSettled = await waitUntilIdle(pid, tree, termGraceMs, pollIntervalMs);
       } catch (error) {
         cleanupErrors.push(error);
       }
       if (!groupSettled) {
-        signalGroup('SIGKILL');
+        signalOwned('SIGKILL');
         try {
-          groupSettled = await waitForGroupExit(pid, settleTimeoutMs, pollIntervalMs);
+          groupSettled = await waitUntilIdle(pid, tree, settleTimeoutMs, pollIntervalMs);
         } catch (error) {
           cleanupErrors.push(error);
         }
@@ -206,7 +317,10 @@ export function ownBunProcess(child: Bun.Subprocess, options: ProcessCustodyOpti
       );
     }
   };
-  const streams = options.streams ?? { stdout: child.stdout, stderr: child.stderr };
+  const streams = options.streams ?? {
+    stdout: child.stdout instanceof ReadableStream ? child.stdout : null,
+    stderr: child.stderr instanceof ReadableStream ? child.stderr : null,
+  };
   const outputCompletion = Promise.all([drain(streams.stdout, 'stdout'), drain(streams.stderr, 'stderr')]).then(
     () => undefined,
   );

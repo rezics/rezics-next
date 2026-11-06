@@ -124,6 +124,11 @@ if (import.meta.main) {
     process.exitCode = 1;
   } finally {
     for (const [signal, listener] of forwarders) process.off(signal, listener);
-    await server?.stop();
+    try {
+      await server?.stop();
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : error);
+      process.exitCode ||= 1;
+    }
   }
 }

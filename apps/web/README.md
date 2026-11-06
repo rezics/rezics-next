@@ -112,10 +112,11 @@ removes that root after its process tree stops. It runs directly on the worker a
 database leases, Docker, a database or remote dispatch. A `bun test` command starts one shared Web dev server for that
 invocation; test files acquire it through `tests/support/dev-server.ts` and keep their own browser, context and Worker
 fixture overlay. Vite dependency pre-bundling uses a host-local cache keyed by `bun.lock` and is reused across runs and
-worktrees until the lock changes. Lifecycle, fixture-lock and lock-hash cache tests pin that composed-run behaviour;
-existing browser page assertions stay unchanged. An explicit `bun test tests/*.host.test.ts` through this runner uses
-the same `--path-ignore-patterns=node_modules/**` override as `bun run test:host`, so bunfig's host-file exclusion does
-not hide a named file.
+worktrees until the lock changes. The runner stops that Vite process tree, including descendants that left the process
+group, when the invocation ends or is interrupted. Lifecycle, fixture-lock and lock-hash cache tests pin that
+composed-run behaviour; existing browser page assertions stay unchanged. An explicit `bun test tests/*.host.test.ts`
+through this runner uses the same `--path-ignore-patterns=node_modules/**` override as `bun run test:host`, so bunfig's
+host-file exclusion does not hide a named file.
 
 Browser tests wait for `html[data-hydrated]` before interacting with a page.
 Browser tests start the dev server through `tests/support/dev-server.ts`, whose errors name the phase that failed; a test never imports another test file.
