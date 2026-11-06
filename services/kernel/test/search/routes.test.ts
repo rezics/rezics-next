@@ -131,9 +131,6 @@ const service: SearchService = {
       as_of: asOf,
     };
   },
-  async savedCatalogueMembers() {
-    throw new Error('Unexpected saved catalogue members call');
-  },
 };
 const kernel = createKernel({ pool, access, tokens, routeKey, search: service });
 const offline = createKernel({ pool, access, tokens, routeKey });
