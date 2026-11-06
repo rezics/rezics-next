@@ -145,7 +145,7 @@ adoption, reads and their native disclosure remain public through their current 
 Access. Public exposure changes neither those authorities nor admitted command quotas.
 
 Custom definition publish/activate and Context extension publish/activate declare
-`gate:definition_publication`. Subject merge, the mounted identity mutation command, declares
+`gate:definition_publication`. Reviewed Person merges use the current admitted paired contract: both originals must show Global-selected identifiers, and the caller needs `subject:merge` plus `gate:subject_identity` on Global. Subject merge, the mounted identity mutation command, declares
 `gate:subject_identity`. Anonymous and ungranted accounts receive `403 platform_closed` before command
 receipts, revisions or domain effects. A native explicit platform grant admits development commands only;
 the existing action scopes and Global/Context resource authority still apply. Built-in active/release reads
