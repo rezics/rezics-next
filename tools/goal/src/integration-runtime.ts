@@ -5,6 +5,7 @@ import type { SqliteManagerInbox } from './inbox.ts';
 import type { SqliteLandingQueue } from './land.ts';
 import type { ManagerServices, ManagerSpec } from './managers.ts';
 import type { MergeTrain, TrainConfigurationReloader } from './merge-train.ts';
+import type { Settings } from './types.ts';
 
 /** Composition belongs to the caller; this module never reads worker configuration or tables. */
 export type IntegrationRuntime = {
@@ -42,6 +43,8 @@ export type IntegrationRuntime = {
   db: Database;
   mainCheckout: string;
   stateDirectory: string;
+  /** The package/local control policy used by status and controller admission. */
+  policy?: Settings['policy'];
   worktreeRoot: string;
   managerSocket: string;
   supermanager?: string;

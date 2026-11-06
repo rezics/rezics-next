@@ -533,6 +533,9 @@ export class WorkerJob implements GateOutcomeSink {
           policy: this.tasks.settings.policy?.capacity,
           leasePolicy: this.tasks.settings.policy?.leases,
           urgent: task.brief.urgent,
+          goal: task.brief.goal,
+          goalMaxInFlight: this.tasks.settings.policy?.goalMaxInFlight ?? defaultPolicy.goalMaxInFlight,
+          excludeTaskId: task.id,
         },
       );
       let worker: RunningWorker | undefined;

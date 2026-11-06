@@ -97,6 +97,8 @@ These rules were adopted on 2026-10-29. The
 [delivery report on main](https://github.com/rezics/rezics-next/blob/main/tools/goal/reports/delivery-efficiency-20261029.md)
 provides the evidence.
 
+Decision: enforce the six-task per-Goal limit at worker start admission; waiting checks and landing count, dependency-held, urgent and control-plane tasks are exempt, and ready work starts in order when a slot opens.
+
 ## Operating discipline
 
 - Every hour the supermanager checks that each manager session is running and its inbox is read, and renews a paused
@@ -106,8 +108,8 @@ provides the evidence.
   the threshold.
 - Managers challenge any rule or instruction, the supermanager's included, as soon as evidence shows it produces bad
   results.
-Codex runs on the Standard tier (`serviceTier: "default"`). Fast requires the maintainer's explicit permission.
-Keep allowance balances, account selection and operating ceilings in private configuration.
+  Codex runs on the Standard tier (`serviceTier: "default"`). Fast requires the maintainer's explicit permission.
+  Keep allowance balances, account selection and operating ceilings in private configuration.
 
 Token efficiency is a primary measure, beside output: allowance spent per landed product line and per landed
 outcome, tracked per Goal, task class and model profile. It improves in three ways:
