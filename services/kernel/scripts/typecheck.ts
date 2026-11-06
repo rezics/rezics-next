@@ -8,6 +8,7 @@ import {
   compilerEnvironment,
   isLocalTypecheckLanding,
   placeCompilerRun,
+  reclaimAdmittedFileCache,
   type CompilerPlacementDependencies,
 } from '../../../scripts/typecheck.ts';
 import { schemaDumps, validateMigrationVersions } from './database.ts';
@@ -92,6 +93,7 @@ async function typecheck(
   const compilerEnv = analysis.available ? analysis.environment : env;
   const typecheckEnv = { ...compilerEnv };
   if (analysis.available) delete typecheckEnv.DATABASE_URL;
+  reclaimAdmittedFileCache();
   let compiled: number;
   try {
     compiled = await withCommandPhase(

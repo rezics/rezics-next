@@ -3664,6 +3664,21 @@ report_run_memory_kill() {
   fi
   : > ${reported}
 }
+reclaim_run_file_cache() {
+  slice_cgroup=$(systemctl show --property=ControlGroup --value "$REZICS_CHECK_SLICE" 2>/dev/null)
+  case "$slice_cgroup" in /*)
+    reclaim="/sys/fs/cgroup$slice_cgroup/memory.reclaim"
+    if [ -e "$reclaim" ] && [ -w "$reclaim" ]; then
+      inactive=$(awk '/^inactive_file / { print $2; exit }' "/sys/fs/cgroup$slice_cgroup/memory.stat" 2>/dev/null || true)
+      case "$inactive" in ''|*[!0-9]*|0) ;; *)
+        printf '%s\\n' "$inactive" > "$reclaim" 2>/dev/null || true
+        printf 'remote-check: reclaimed %s inactive file bytes in the run slice\\n' "$inactive" >&2
+      ;;
+      esac
+    fi
+    ;;
+  esac
+}
 apply_run_memory_limit`;
 }
 
@@ -3827,6 +3842,7 @@ host=$REMOTE_CHECK_HOST
     if [ "$code" -eq 0 ]; then [ -f ${quote(`${directory}/.bun-install-complete`)} ] || touch ${quote(`${directory}/.bun-install-complete`)}; fi
     install_finished=$(date +%s%N)
     awk -v elapsed="$((install_finished - install_started))" -v host="$host" 'BEGIN { printf "remote-check: bun install %.3f s on %s\\n", elapsed / 1000000000, host }' >&2
+    if [ "$code" -eq 0 ]; then reclaim_run_file_cache; fi
     if [ "$code" -eq 0 ]; then
       export PATH="$(dirname "$bun"):$PWD/node_modules/.bin:$PATH"
       ${preparationScript}
@@ -3885,6 +3901,7 @@ host=$REMOTE_CHECK_HOST
             ;;
         esac
         ${fixedLifecycleExecution(command) ? `export REZICS_LIFECYCLE_REMOTE_RUN=${quote(id)}` : ''}
+        reclaim_run_file_cache
         "$@" &
         command_pid=$!
         (

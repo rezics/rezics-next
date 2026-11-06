@@ -83,7 +83,8 @@ returns a string or a Buffer; cleanup retains the original failure and the exact
 Python cleanup uses those same 120s/5s bounds and does not classify a `docker rm` timeout as install/preparation;
 SIGTERM removal is detached. Compiler identity includes the installed Reylo mapper and Web/Auth manifests so local and
 remote typing share one workspace. Mapper-enabled workspace typechecks run one at a time so Kernel, Auth and Web
-compilers do not share an admitted 6GiB slice. Vite starts only after complete Paraglide modules exist, and `/en` is
+compilers do not share an admitted 6GiB slice. Admitted runs reclaim inactive file pages in that slice after install
+and before each mapper compiler. Vite starts only after complete Paraglide modules exist, and `/en` is
 ready only as HTML without a missing-module overlay. Readiness reports the observed probe, fetch or child-exit
 cause; only an actual ECONNREFUSED is hydration startup. Original
 remote context stays on those same tests. Management walk idle-in-transaction

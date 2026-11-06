@@ -312,7 +312,8 @@ remain separate acceptance outcomes.
 Decision: admitted stacks fetch issuer JWKS from native Auth, start Kernel without watch, and defer Auth pages and Web
 until seeding finishes; Web installs the declared Reylo mapper so local and remote typing share one identity. Cleanup
 keeps the original failure and the exact cleanup diagnostic. Mapper-enabled workspace typechecks run one at a time
-inside an admitted 6GiB slice. Original native acceptance remains open.
+inside an admitted 6GiB slice. Admitted runs reclaim inactive file pages in the run slice after install and before each
+mapper compiler. Original native acceptance remains open.
 
 ## Seeded journey walks
 

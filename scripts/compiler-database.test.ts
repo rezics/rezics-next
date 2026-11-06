@@ -67,6 +67,8 @@ test('the one-run compiler database uses --rm and a labelled volume, not a 1 GiB
   expect(args).not.toContain('--tmpfs');
   expect(args).toContain('-p');
   expect(args).toContain('shared_buffers=32MB');
+  expect(args).toContain('max_connections=40');
+  expect(args).toContain('huge_pages=off');
 });
 
 test('a failed docker run reaps the nonce before the error escapes', () => {

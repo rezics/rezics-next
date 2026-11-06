@@ -4,7 +4,17 @@
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { homedir } from 'node:os';
 import { createHash } from 'node:crypto';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync } from 'node:fs';
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { resolveBunCommand } from './gate.ts';
@@ -466,6 +476,50 @@ export function typecheckRunOrder<W extends { needsDatabase: boolean }>(workspac
   };
 }
 
+export type FileCacheReclaim = {
+  cgroup?: string;
+  readStat?: (path: string) => string;
+  writeReclaim?: (path: string, bytes: string) => void;
+};
+
+function processCgroupDirectory(): string | undefined {
+  try {
+    const match = readFileSync('/proc/self/cgroup', 'utf8').match(/^0::(.+)$/m);
+    return match ? `/sys/fs/cgroup${match[1]}` : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Drop inactive file pages in the admitted run cgroup so Kernel tsc is not sharing a 6GiB cap with install cache.
+ * A missing or unwritable `memory.reclaim` is ignored and never fails typecheck.
+ */
+export function reclaimAdmittedFileCache(options: FileCacheReclaim = {}): number {
+  const directory = options.cgroup ?? processCgroupDirectory();
+  if (!directory) return 0;
+  const statPath = join(directory, 'memory.stat');
+  const reclaimPath = join(directory, 'memory.reclaim');
+  if (!options.writeReclaim && !existsSync(reclaimPath)) return 0;
+  let contents: string;
+  try {
+    contents = options.readStat ? options.readStat(statPath) : readFileSync(statPath, 'utf8');
+  } catch {
+    return 0;
+  }
+  const inactive = contents.match(/^inactive_file (\d+)$/m);
+  const bytes = inactive ? Number(inactive[1]) : 0;
+  if (!Number.isSafeInteger(bytes) || bytes < 1) return 0;
+  const value = `${bytes}\n`;
+  try {
+    if (options.writeReclaim) options.writeReclaim(reclaimPath, value);
+    else writeFileSync(reclaimPath, value);
+  } catch {
+    return 0;
+  }
+  return bytes;
+}
+
 async function runWorkspaces(
   root: string,
   workspaces: readonly Workspace[],
@@ -493,7 +547,10 @@ async function runWorkspaces(
   };
   const { parallel, serial } = typecheckRunOrder(workspaces);
   await Promise.all(parallel.map(runOne));
-  for (const workspace of serial) await runOne(workspace);
+  for (const workspace of serial) {
+    reclaimAdmittedFileCache();
+    await runOne(workspace);
+  }
   for (const block of failures) write(block);
   if (failures.length === 0) return 0;
   return results.some((result) => result.outcome === 'infrastructure') ? 75 : 1;

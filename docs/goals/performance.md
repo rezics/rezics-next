@@ -136,8 +136,9 @@ startup, Docker string|Buffer output, original-plus-cleanup diagnostics, seed-jo
 preload and mapper-resolution seams with the existing compiler-database, walk-stack, Kernel check, Auth stack and
 ratings-walk unit files rather than a second suite. Original native acceptance remains open.
 Decision: mapper-enabled workspace typechecks run one at a time so Kernel, Auth and Web compilers do not share an
-admitted 6GiB slice; remaining workspaces stay parallel. The compiler database uses 32MB shared_buffers. Pin that
-order with the existing root typecheck unit file. Original native acceptance remains open.
+admitted 6GiB slice; remaining workspaces stay parallel. The compiler database uses 32MB shared_buffers and 40
+connections. Admitted runs reclaim inactive file pages in the run slice after install and before each mapper compiler.
+Pin that order with the existing root typecheck and remote-check unit files. Original native acceptance remains open.
 Decision: generate Paraglide messages before Vite starts and treat `/en` as ready only when it returns HTML without a
 missing-module overlay. Readiness reports the observed probe, fetch or child-exit cause; only an actual ECONNREFUSED
 is hydration startup. A closed-listener probe does not invent that code. Pin with the existing walk-stack,

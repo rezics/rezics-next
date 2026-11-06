@@ -16,6 +16,7 @@ import { prepareCompilerDatabase } from './compiler-database.ts';
 import {
   affectedWorkspaces,
   compilerIdentityPaths,
+  reclaimAdmittedFileCache,
   typecheck,
   typecheckRunOrder,
   type StartedDatabase,
@@ -477,6 +478,23 @@ await Bun.write('typechecked', 'ok');
       }),
     ).toBe(0);
     expect(existsSync(overlap)).toBe(false);
+  } finally {
+    remove();
+  }
+});
+
+test('an admitted run reclaims inactive file pages before mapper compilers and ignores a missing reclaim file', () => {
+  const { root, remove } = fixture();
+  try {
+    const cgroup = join(root, 'cgroup');
+    mkdirSync(cgroup);
+    writeFileSync(join(cgroup, 'memory.stat'), 'anon 100\nfile 200\ninactive_file 1048576\n');
+    writeFileSync(join(cgroup, 'memory.reclaim'), '');
+    expect(reclaimAdmittedFileCache({ cgroup })).toBe(1048576);
+    expect(readFileSync(join(cgroup, 'memory.reclaim'), 'utf8')).toBe('1048576\n');
+    expect(reclaimAdmittedFileCache({ cgroup: join(root, 'missing') })).toBe(0);
+    writeFileSync(join(cgroup, 'memory.stat'), 'file 200\n');
+    expect(reclaimAdmittedFileCache({ cgroup })).toBe(0);
   } finally {
     remove();
   }

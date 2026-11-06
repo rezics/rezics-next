@@ -171,6 +171,10 @@ export function compilerDatabaseRunArgs(
     'shared_buffers=32MB',
     '-c',
     'work_mem=8MB',
+    '-c',
+    'max_connections=40',
+    '-c',
+    'huge_pages=off',
   ];
 }
 

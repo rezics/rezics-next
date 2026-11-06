@@ -5286,6 +5286,16 @@ test('each check run executes in its own cgroup with MemoryMax 6 GiB and MemoryS
   expect(script).toContain("slice_properties='--slice-property=MemoryMax=6G --slice-property=MemorySwapMax=0'");
   expect(script).toContain('memory.max');
   expect(script).toContain('memory.swap.max');
+  expect(script).toContain('reclaim_run_file_cache');
+  expect(script).toContain('memory.reclaim');
+  const install = script.indexOf('"$bun" install --frozen-lockfile');
+  const firstReclaim = script.indexOf('reclaim_run_file_cache', install);
+  const command = script.indexOf('\n        "$@"');
+  const secondReclaim = script.lastIndexOf('reclaim_run_file_cache', command);
+  expect(install).toBeGreaterThanOrEqual(0);
+  expect(firstReclaim).toBeGreaterThan(install);
+  expect(command).toBeGreaterThan(secondReclaim);
+  expect(secondReclaim).toBeGreaterThan(firstReclaim);
 });
 
 test('a host memoryPerRunGiB override is the run MemoryMax', () => {
