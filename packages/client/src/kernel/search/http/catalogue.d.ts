@@ -446,4 +446,10 @@ export declare function createCatalogueResponseAdapter({ pool, routeKey }: {
         })[];
     }>;
 };
+/** Stored selected A identities become catalogue shells; a later working B is not in this list. */
+export declare function selectedCataloguePublicationShells(ids: readonly string[]): {
+    id: string;
+    type: string;
+    labels: Record<string, string>;
+}[];
 export {};

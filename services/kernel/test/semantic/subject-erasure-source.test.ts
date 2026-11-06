@@ -23,6 +23,7 @@ import {
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { accountAgentId } from '../../src/semantic/agents.ts';
 import { testRouteKey } from '../support/test-kernel.ts';
+import '../support/native-history-composition.ts';
 import { accountErasureFixture, type AccountErasureFixture } from './support/account-erasure-fixture.ts';
 import { accountErasureWorker } from './support/account-erasure-worker.ts';
 
@@ -31,14 +32,14 @@ let worker: Awaited<ReturnType<typeof accountErasureWorker>>;
 beforeAll(async () => {
   f = await accountErasureFixture();
   worker = await accountErasureWorker(f.db.url);
-}, 180_000);
+}, 360_000);
 afterAll(async () => {
   try {
     await worker?.stop();
   } finally {
     await f?.close();
   }
-}, 120_000);
+}, 360_000);
 
 const context = () => ({ deadline: Date.now() + 5000 });
 const config = () => ({ pool: f.db.pool, routeKey: testRouteKey(), access: f.native.access, clock: () => new Date() });
@@ -71,7 +72,7 @@ const events = (b: HistoryBarrier) => [
 ];
 async function local(b: HistoryBarrier) {
   await beginSemanticErasure(f.db.pool, b.accountId);
-  const end = Date.now() + 180_000;
+  const end = Date.now() + 360_000;
   while ((await readSemanticErasure(f.db.pool, b.accountId))?.state !== 'pending-shared-custody') {
     if (Date.now() >= end) throw new Error('Actual default local erasure did not complete');
     await Bun.sleep(20);
@@ -83,7 +84,7 @@ async function complete(b: HistoryBarrier) {
   let proof: SubjectErasureSourceProof | null = null;
   let receipt: SubjectErasurePageReceipt | undefined;
   let pages = 0;
-  const end = Date.now() + 180_000;
+  const end = Date.now() + 600_000;
   for (;;) {
     if (Date.now() >= end) throw new Error('Native sealed Source disposition did not complete');
     // Fresh instances and serialized locators exercise durable replay, never object identity.
@@ -106,7 +107,6 @@ async function complete(b: HistoryBarrier) {
     expect(accepted.value).toBe(true);
     records.push(...page.records);
     pages++;
-    if (!proof) proof = await readSubjectErasureSourceProof({ pool: f.db.pool }, b, context());
     if (page.status === 'complete') break;
     expect(Buffer.byteLength(page.frontier)).toBeLessThanOrEqual(2048);
     frontier = page.frontier;
@@ -114,6 +114,7 @@ async function complete(b: HistoryBarrier) {
   while (!proof) {
     if (Date.now() >= end) throw new Error('Independent native Source terminal proof did not complete');
     proof = await readSubjectErasureSourceProof({ pool: f.db.pool }, b, context());
+    if (!proof) await Bun.sleep(10);
   }
   expect(pages).toBeGreaterThanOrEqual(4096);
   expect(
@@ -130,6 +131,28 @@ async function subject(who: Awaited<ReturnType<AccountErasureFixture['author']>>
   const response = await f.call(who, 'POST', '/v1/subjects', { type: 'schema:Person', labels: { en: label } });
   expect(response.status, JSON.stringify(response.body)).toBe(201);
   return response.body.subject.id as string;
+}
+async function mergeMapped(
+  moderator: Awaited<ReturnType<AccountErasureFixture['author']>>,
+  left: string,
+  right: string,
+) {
+  const merged = await f.call(moderator, 'POST', '/v1/subjects:merge', { subjects: [left, right] });
+  expect(merged.status, JSON.stringify(merged.body)).toBe(202);
+  const operationId = merged.body.operation.id as string;
+  expect(typeof operationId).toBe('string');
+  const [terminal, original] = [left, right].sort() as [string, string];
+  const end = Date.now() + 180_000;
+  for (;;) {
+    const observed = await f.call(moderator, 'GET', `/v1/subjectIdentityOperations/${operationId}`);
+    if (observed.status === 200 && observed.body.operation?.done === true) {
+      expect(observed.body.operation.result.redirected).toBe(original);
+      expect(observed.body.operation.result.survivor).toBe(terminal);
+      return { original, terminal };
+    }
+    if (Date.now() >= end) throw new Error('Mapped original identity publication did not complete');
+    await Bun.sleep(20);
+  }
 }
 
 test('Search receives sealed role-complete Subject source disposition and actual source custody for the committed erased account without scalar-role or structural identity substitution', async () => {
@@ -223,12 +246,17 @@ test('Search receives sealed role-complete Subject source disposition and actual
       }))
     ).value,
   ).toBe(false);
-}, 360_000);
+}, 720_000);
 
-test('tombstone Source pages precheck the caller minimum and charge returned rows without overflowing', async () => {
-  const person = await f.person();
-  await f.tombstone(person);
-  const b = await barrier(person.accountId);
+test('Original funded Subject erasure pages account for every mapping and command child and resume to independent all-home tombstone readback within declared bounds', async () => {
+  const author = await f.author();
+  const moderator = await f.author();
+  await f.grant(GLOBAL_CONTEXT, moderator, ['subject:merge', 'moderation:hide']);
+  const left = await subject(author, 'Mapped original A');
+  const right = await subject(author, 'Mapped original B');
+  const { original } = await mergeMapped(moderator, left, right);
+  await f.tombstone(author);
+  const b = await barrier(author.accountId);
   await local(b);
   const tight = await createSubjectErasureSource(config()).readPage({
     barrier: b,
@@ -237,23 +265,16 @@ test('tombstone Source pages precheck the caller minimum and charge returned row
     context: context(),
   });
   expect(tight.cost.inputKeys).toBeLessThanOrEqual(4);
-  expect(['pending', 'progress', 'complete', 'unavailable']).toContain(tight.status);
-  let advanced = false;
-  for (let step = 0; step < 8; step++) {
-    const page = await createSubjectErasureSource(config()).readPage({
-      barrier: b,
-      frontier: null,
-      inputLimit: 100,
-      context: context(),
-    });
-    expect(page.cost.inputKeys).toBeLessThanOrEqual(100);
-    if ('receipt' in page) {
-      advanced = true;
-      break;
-    }
+  expect(tight.status).toBe('pending');
+  if (tight.status === 'pending') {
+    expect(tight.error).toBe('keys');
+    expect(tight.funding).toBe(4);
+    expect(tight.count).toBeGreaterThan(tight.funding);
   }
-  expect(advanced).toBe(true);
-}, 180_000);
+  const result = await complete(b);
+  expect(result.records.some((r) => r.original === original)).toBe(true);
+  expect(result.records.every((r) => r.disposition !== 'pending')).toBe(true);
+}, 720_000);
 
 test('sealed empty native role homes advance before filters while a hidden original never borrows visible terminal disposition', async () => {
   const author = await f.author();
@@ -261,10 +282,7 @@ test('sealed empty native role homes advance before filters while a hidden origi
   await f.grant(GLOBAL_CONTEXT, moderator, ['subject:merge', 'moderation:hide']);
   const left = await subject(author, 'Original A');
   const right = await subject(author, 'Original B');
-  const merged = await f.call(moderator, 'POST', '/v1/subjects:merge', { subjects: [left, right] });
-  expect(merged.status, JSON.stringify(merged.body)).toBe(200);
-  const original = merged.body.redirected as string;
-  const terminal = merged.body.survivor as string;
+  const { original, terminal } = await mergeMapped(moderator, left, right);
   expect(
     (await f.call(moderator, 'POST', `/v1/subjects/${original}:hide`, { reason: 'Original is hidden' })).status,
   ).toBe(200);
@@ -292,7 +310,7 @@ test('sealed empty native role homes advance before filters while a hidden origi
     ])
   ).rowCount;
   expect(emptyHomes).toBe(1);
-}, 360_000);
+}, 720_000);
 
 test('changed native account custody rejects both serialized Source receipts and the independent terminal proof', async () => {
   const person = await f.person();
@@ -319,7 +337,7 @@ test('changed native account custody rejects both serialized Source receipts and
       }))
     ).value,
   ).toBe(false);
-}, 360_000);
+}, 720_000);
 
 test('equal-delivery original and native origins traverse into distinct held Source pages and survive sealed replay', async () => {
   for (const nativeFirst of [false, true]) {

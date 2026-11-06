@@ -6,6 +6,7 @@ import { compileText, type TextNode } from './text.ts';
 import { boundMatchEvidencePage, compileMatchEvidence } from './match-evidence.ts';
 import { CollectionDiscoveryReadinessError } from './collection-discovery.ts';
 import {
+  COLLECTION_DIRECTORY_SCAN_BOUND,
   collectionDirectoryQuery,
   executeCollectionDirectory,
   hasCollectionDirectoryCapability,
@@ -508,7 +509,7 @@ function executeDiscoverySearch(
         if (admitted.collectionDirectory) {
           const identities: string[] = [];
           const identitySeen = new Set<string>();
-          const scanBound = discoveryCandidateScanBound(admitted.limit);
+          const scanBound = COLLECTION_DIRECTORY_SCAN_BOUND;
           let refillDirectory = refill;
           for (;;) {
             const batch = await coverage.queryDiscovery(queried, refillDirectory);

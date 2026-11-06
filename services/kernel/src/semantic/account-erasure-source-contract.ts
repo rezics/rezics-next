@@ -39,6 +39,12 @@ export type SubjectErasureSourceRequest = Readonly<{
   inputLimit: number;
   context: PublicFilterReadContext;
 }>;
+/** Financial receiving's overflow operands: the refused bound, the quoted count and the caller's funding. */
+export type SubjectErasureSourceOverflow = Readonly<{
+  error: 'keys' | 'bytes' | 'deadline';
+  count: number;
+  funding: number;
+}>;
 export type SubjectErasureSourcePage =
   | Readonly<{
       status: 'progress';
@@ -54,7 +60,14 @@ export type SubjectErasureSourcePage =
       receipt: SubjectErasurePageReceipt;
       cost: PublicFilterCost;
     }>
-  | Readonly<{ status: 'pending' | 'unavailable'; cost: PublicFilterCost }>;
+  | Readonly<{
+      status: 'pending';
+      cost: PublicFilterCost;
+      count: number;
+      error: SubjectErasureSourceOverflow['error'] | null;
+      funding: number;
+    }>
+  | Readonly<{ status: 'unavailable'; cost: PublicFilterCost }>;
 export type SubjectErasureSource = Readonly<{
   readPage(input: SubjectErasureSourceRequest): Promise<SubjectErasureSourcePage>;
 }>;

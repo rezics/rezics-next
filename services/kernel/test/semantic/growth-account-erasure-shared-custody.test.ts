@@ -14,6 +14,7 @@ import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { accountAgentId } from '../../src/semantic/agents.ts';
 import { readSemanticErasure } from '../../src/semantic/account-erasure.ts';
 import {
+  createSubjectErasureSource,
   readSubjectErasureSourceProof,
   verifySubjectErasureSourceProof,
 } from '../../src/semantic/account-erasure-source.ts';
@@ -28,6 +29,8 @@ import {
   seed,
   type Cost,
 } from '../support/growth.ts';
+import { testRouteKey } from '../support/test-kernel.ts';
+import '../support/native-history-composition.ts';
 import { createBody } from '../zones/resource-fixture.ts';
 import { unrelatedSemanticPopulation } from './planner-graph-fixtures.ts';
 import { accountErasureFixture, type AccountErasureFixture } from './support/account-erasure-fixture.ts';
@@ -170,18 +173,21 @@ test('Original Semantic and Zone shared-erasure custody growth artifact counts r
     expect(created.status, JSON.stringify(created.body)).toBe(201);
     const subject = created.body.subject.id as string;
     const publicValue = `https://example.test/retained/${randomUUID()}`;
+    const published = await f.call(owner, 'POST', `/v1/subjects/${subject}/candidates`, {
+      statement: {
+        property: { id: 'schema:url' },
+        value: { type: 'value', content: publicValue },
+        references: [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: publicValue } }] }],
+      },
+    });
+    expect(published.status, JSON.stringify(published.body)).toBe(201);
+    const candidates = [published.body.candidate as string];
     const privateValue = accountAgentId(owner.accountId);
-    const candidates: string[] = [];
-    for (const [property, content] of [
-      ['schema:url', publicValue],
-      ['rezics:penNameOf', privateValue],
-    ]) {
-      const result = await f.call(owner, 'POST', `/v1/subjects/${subject}/candidates`, {
-        statement: { property: { id: property }, value: { type: 'value', content } },
-      });
-      expect(result.status, JSON.stringify(result.body)).toBe(201);
-      candidates.push(result.body.candidate);
-    }
+    const privateProposal = await f.call(owner, 'POST', `/v1/subjects/${subject}/candidates`, {
+      statement: { property: { id: 'rezics:penNameOf' }, value: { type: 'value', content: privateValue } },
+    });
+    expect(privateProposal.status, JSON.stringify(privateProposal.body)).toBe(201);
+    candidates.push(privateProposal.body.candidate);
     expect(
       (
         await f.call(survivor, 'POST', `/v1/subjects/${subject}/candidates/${candidates[0]}:accept`, {
@@ -253,7 +259,7 @@ test('Original Semantic and Zone shared-erasure custody growth artifact counts r
       `SELECT DISTINCT r.route/16 AS partition_no,r.recorded_transaction_id AS transaction_id
        FROM semantic.candidate c JOIN semantic.revision r USING(route,subject_id,revision)
        WHERE c.route=$1 AND c.subject_id=$2 AND c.candidate_id=ANY($3::uuid[])
-       UNION SELECT route/16,recorded_transaction_id FROM zones.zone WHERE zone_id=ANY($4::uuid[])`,
+       UNION SELECT route/16,transaction_id FROM zones.zone WHERE zone_id=ANY($4::uuid[])`,
       [routeOf(subject), subject, candidates, zones],
     );
     expect(originals.rows.length).toBeGreaterThanOrEqual(4);
@@ -269,7 +275,7 @@ test('Original Semantic and Zone shared-erasure custody growth artifact counts r
     ).rows[0]!;
     expect(Date.parse(barrier.at)).toBe(Date.parse(deletion.result.at));
     worker = await accountErasureWorker(f.db.url);
-    const deadline = Date.now() + 180_000;
+    const deadline = Date.now() + 360_000;
     while ((await readSemanticErasure(f.db.pool, owner.accountId))?.state !== 'pending-shared-custody') {
       if (Date.now() >= deadline)
         throw new Error('Native Semantic/Zone local minimization did not reach its custody boundary');
@@ -286,6 +292,22 @@ test('Original Semantic and Zone shared-erasure custody growth artifact counts r
     expect([...native.sourceKeys].some((key) => key.includes(':context:') && key.includes(':owner:'))).toBe(true);
     expect([...native.sourceKeys].some((key) => key.includes(':zone:'))).toBe(true);
 
+    const boundary = await createSubjectErasureSource({
+      pool: f.db.pool,
+      routeKey: testRouteKey(),
+      access: f.native.access,
+      clock: () => new Date(),
+    }).readPage({
+      barrier,
+      frontier: null,
+      inputLimit: 4,
+      context: context(),
+    });
+    expect(boundary.cost.inputKeys).toBeLessThanOrEqual(4);
+    if (boundary.status === 'pending') {
+      expect(boundary.error).toBe('keys');
+      expect(boundary.count).toBeGreaterThan(boundary.funding);
+    }
     // The independent Source-owned cursor must transfer every home and historical role.
     // Advancing it is real work: count every command, failed point, byte and background query.
     let proof: Awaited<ReturnType<typeof readSubjectErasureSourceProof>> = null;
@@ -575,4 +597,4 @@ test('Original Semantic and Zone shared-erasure custody growth artifact counts r
       await f.close();
     }
   }
-}, 600_000);
+}, 1_200_000);

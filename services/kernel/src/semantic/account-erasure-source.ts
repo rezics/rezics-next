@@ -10,10 +10,21 @@ import {
   runCommand,
   type CommandTransaction,
 } from '../command/command.ts';
+import { SOURCE_FENCE_COMMAND_DISPATCH_CONTROLS as FENCE } from '../command/dispatch-lifetime.ts';
 import { withReadTransaction } from './read.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
-import { readIdentityMappings } from './identity-adapters/identity-epoch-read.ts';
+import {
+  classifyIdentityMappings,
+  comparableIdentityEvidence,
+  type IdentityControlEvidence,
+  type IdentityMappingEvidence,
+  type IdentityOwnerEvidence,
+  type IdentityPendingEvidence,
+  type IdentitySourceEvidence,
+} from './identity-core/index.ts';
+import type { IdentityMapping } from './identity-adapters/identity-epoch-contract.ts';
+import { identitySourceSupportJob } from './identity-source-support-scope.ts';
 import { refreshSemanticErasureSourceRecord, SEMANTIC_ERASURE_PROGRESS } from './account-erasure.ts';
 import { readSemanticSourceDisposition, recordSemanticSourceCommit } from './erasure-producer.ts';
 import type {
@@ -24,13 +35,20 @@ import type {
 import type {
   SubjectErasurePageReceipt,
   SubjectErasureSourceFactory,
+  SubjectErasureSourceOverflow,
   SubjectErasureSourcePage,
   SubjectErasureSourceRecord,
   SubjectErasureSourceProof,
 } from './account-erasure-source-contract.ts';
 import { type HistoryBarrier } from '../history/contract/index.ts';
+import observeOriginalSql from './account-erasure-source-observe.sql';
+import mappingRecheckSql from './account-erasure-source-mapping.sql';
+import ownersSql from './identity-epoch-read-owners.sql';
+import sourcesSql from './identity-epoch-read-sources.sql';
+import pendingSql from './identity-epoch-read-pending.sql';
+import currentSql from './identity-terminal-closure-current.sql';
 
-export type { SubjectErasureSourceProof } from './account-erasure-source-contract.ts';
+export type { SubjectErasureSourceOverflow, SubjectErasureSourceProof } from './account-erasure-source-contract.ts';
 
 /** Advance a separate Source-owned cursor. Search discovery/consumption cannot mint this proof.
  * Each call transfers at most one native role or one sealed home under the same 100-input budget.
@@ -95,64 +113,61 @@ class BudgetEnded extends Error {
 }
 
 const WIRE_BYTES = 65536;
+/** fence.sql always writes editorial.write_basis when this producer supplies platform basis. */
+const BASIS_CHILD = 1;
+const SELECT_BODY = 2;
+const SEEK_BODY = 2;
+const HOLD_EOF_BODY = 3;
+const HOLD_ROLE_BODY = 6;
+const HOLD_OBSERVE_BODY = 7;
+const HOLD_CROSS_BODY = 4;
+const TRANSFER_BODY = 5;
+const READ_BODY = 1;
+const MAPPING_SOURCE_BODY = 2;
+const MAPPING_CONTROL_BODY = 3;
+const STATEMENT_BYTES = 256;
+const effectFence = () => ({
+  keys: FENCE.eventFence.work.nativeRows + BASIS_CHILD,
+  bytes:
+    FENCE.eventFence.work.bytes +
+    FENCE.eventShape.work.bytes +
+    FENCE.eventSerialization.work.bytes +
+    FENCE.eventValidation.work.bytes,
+});
+const bodyBytes = (keys: number) => keys * STATEMENT_BYTES;
+const wireBytes = (...values: unknown[]) => Math.max(STATEMENT_BYTES, Buffer.byteLength(JSON.stringify(values)));
 
-/** Precheck the statement minimum, then charge returned rows and wire bytes. Empty pages get no extra
- * allowance: a statement that cannot afford its floor does not start. ROLLBACK stays possible after.
- */
-function meteredPool(pool: Pool, cost: PublicFilterCost, limit: number, deadline: number): Pool {
-  let bytes = 0;
-  const mutable = cost as { -readonly [K in keyof PublicFilterCost]: PublicFilterCost[K] };
-  const ended = (
-    bound: 'keys' | 'bytes' | 'deadline',
-    count: number,
-    funding = bound === 'bytes' ? WIRE_BYTES : limit,
-  ) => new BudgetEnded(bound, count, funding, deadline);
-  return new Proxy(pool, {
-    get(target, key) {
-      if (key !== 'connect') {
-        const value = Reflect.get(target, key);
-        return typeof value === 'function' ? value.bind(target) : value;
+class PageBudget {
+  bytes = 0;
+  constructor(
+    readonly cost: { -readonly [K in keyof PublicFilterCost]: PublicFilterCost[K] },
+    readonly funding: number,
+    readonly deadline: number,
+  ) {}
+  afford(keys: number, bytes: number) {
+    if (Date.now() >= this.deadline) throw new BudgetEnded('deadline', Date.now(), this.funding, this.deadline);
+    if (this.cost.inputKeys + keys > this.funding)
+      throw new BudgetEnded('keys', this.cost.inputKeys + keys, this.funding, this.deadline);
+    if (this.bytes + bytes > WIRE_BYTES) throw new BudgetEnded('bytes', this.bytes + bytes, WIRE_BYTES, this.deadline);
+  }
+  reserve(keys: number, bytes: number) {
+    this.afford(keys, bytes);
+    this.cost.inputKeys += keys;
+    this.cost.dependencyPoints++;
+    this.bytes += bytes;
+  }
+}
+
+function pendingPage(budget: PageBudget, ended?: BudgetEnded): SubjectErasureSourcePage {
+  return ended
+    ? {
+        status: 'pending',
+        cost: budget.cost,
+        count: ended.count,
+        error: ended.bound,
+        funding: ended.funding,
       }
-      return async () => {
-        if (Date.now() >= deadline) throw ended('deadline', Date.now());
-        if (mutable.inputKeys >= limit) throw ended('keys', mutable.inputKeys);
-        const client = await target.connect();
-        return new Proxy(client, {
-          get(native, field) {
-            if (field !== 'query') {
-              const value = Reflect.get(native, field);
-              return typeof value === 'function' ? value.bind(native) : value;
-            }
-            return async (...args: [string, unknown[]?]) => {
-              const sql = typeof args[0] === 'string' ? args[0] : '';
-              const rollback = sql === 'ROLLBACK';
-              const control = /^(BEGIN|COMMIT|ROLLBACK|SET\b)/.test(sql);
-              // A native commit writes partition/outbox/basis as well as its returned fence row.
-              const minimum = control || rollback ? 0 : sql.includes('basis_write AS') ? 4 : 1;
-              if (!rollback) {
-                if (Date.now() >= deadline) throw ended('deadline', Date.now());
-                if (mutable.inputKeys + minimum > limit) throw ended('keys', mutable.inputKeys + minimum);
-              }
-              const requestBytes = Buffer.byteLength(JSON.stringify(args));
-              if (!rollback && bytes + requestBytes > WIRE_BYTES) throw ended('bytes', bytes + requestBytes);
-              mutable.dependencyPoints++;
-              bytes += requestBytes;
-              const result = await native.query(args[0], args[1]);
-              const returned = control ? 0 : Math.max(result.rows.length, result.rowCount ?? 0);
-              if (!control) mutable.inputKeys += returned;
-              bytes += Buffer.byteLength(JSON.stringify(result.rows));
-              if (!rollback) {
-                if (Date.now() >= deadline) throw ended('deadline', Date.now());
-                if (mutable.inputKeys > limit) throw ended('keys', mutable.inputKeys);
-                if (bytes > WIRE_BYTES) throw ended('bytes', bytes);
-              }
-              return result;
-            };
-          },
-        });
-      };
-    },
-  });
+    : { status: 'pending', cost: budget.cost, count: budget.cost.inputKeys, error: null, funding: budget.funding };
 }
 
 type NativeCustody = { epoch: number; position: bigint; transactionId: string };
@@ -428,29 +443,91 @@ function sourceFactory(
         return { status: 'unavailable', cost };
       const { barrier } = input;
       const accountHome = partitionOf(barrier.accountRoute);
-      const pool = meteredPool(config.pool, cost, input.inputLimit, deadline);
+      const pool = config.pool;
+      const budget = new PageBudget(cost, input.inputLimit, deadline);
       const command = <T>(
         partition: number,
+        body: number,
         run: (tx: CommandTransaction) => Promise<import('../command/command.ts').CommandResult<T>>,
       ) => {
-        if (Date.now() >= deadline) throw new BudgetEnded('deadline', Date.now(), input.inputLimit, deadline);
-        if (cost.inputKeys + 1 > input.inputLimit)
-          throw new BudgetEnded('keys', cost.inputKeys + 1, input.inputLimit, deadline);
+        const fence = effectFence();
+        budget.reserve(fence.keys + body, fence.bytes + bodyBytes(body));
         return runCommand(pool, { partition, basis: platform, clock: config.clock, deadline }, run);
       };
-      const mappingOf = async (original: string) => {
-        if (cost.inputKeys + 1 > input.inputLimit)
-          throw new BudgetEnded('keys', cost.inputKeys + 1, input.inputLimit, deadline);
-        const mapping = (await readIdentityMappings(config.pool, [original]))[0];
-        (cost as { -readonly [K in keyof PublicFilterCost]: PublicFilterCost[K] }).inputKeys += 1;
-        return mapping;
+      const mappingOf = async (original: string): Promise<IdentityMapping | undefined> => {
+        const originalRoute = routeOf(original);
+        if (originalRoute === null) throw new TypeError('Identity original must be a native routed ID');
+        const sourceHome = partitionOf(originalRoute);
+        const collect = async (): Promise<IdentityMappingEvidence> => {
+          const sourceOwners: IdentityOwnerEvidence[] = [];
+          const sourceRows: IdentitySourceEvidence[] = [];
+          budget.reserve(MAPPING_SOURCE_BODY, wireBytes([[sourceHome]], [[original], [originalRoute]]));
+          await withReadTransaction(pool, async (tx) => {
+            sourceOwners.push(...(await tx.query(ownersSql.sql, [[sourceHome]])).rows);
+            sourceRows.push(...(await tx.query(sourcesSql.sql, [[original], [originalRoute]])).rows);
+          });
+          const available = sourceRows.filter(
+            (row) => row.original && row.control_partition !== null && row.control_group,
+          );
+          const controlOwners: IdentityOwnerEvidence[] = [];
+          const pendingRows: IdentityPendingEvidence[] = [];
+          const currentRows: IdentityControlEvidence[] = [];
+          for (const home of new Set(available.map((row) => row.control_partition!))) {
+            const group = available.filter((row) => row.control_partition === home);
+            const owners = [[home]];
+            const pending = [group.map(() => home), group.map((row) => row.control_group)];
+            const current = [
+              group.map(() => home),
+              group.map((row) => row.control_group),
+              group.map((row) => row.original),
+            ];
+            budget.reserve(MAPPING_CONTROL_BODY, wireBytes(owners, pending, current));
+            await withReadTransaction(pool, async (tx) => {
+              controlOwners.push(...(await tx.query(ownersSql.sql, owners)).rows);
+              pendingRows.push(...(await tx.query(pendingSql.sql, pending)).rows);
+              currentRows.push(...(await tx.query(currentSql.sql, current)).rows);
+            });
+          }
+          return { sourceOwners, sourceRows, controlOwners, pendingRows, currentRows };
+        };
+        const first = await collect();
+        const last = await collect();
+        if (comparableIdentityEvidence(first) !== comparableIdentityEvidence(last))
+          return { state: 'unavailable', reason: 'bootstrap' };
+        return classifyIdentityMappings([{ original, sourceHome }], last, identitySourceSupportJob())[0];
+      };
+      const mappingStill = async (original: string, expected: NonNullable<IdentityMapping>) => {
+        if (expected.state !== 'mapped') return false;
+        const originalRoute = routeOf(original);
+        budget.reserve(READ_BODY, wireBytes([originalRoute, original]));
+        const current = await withReadTransaction(
+          pool,
+          async (tx) =>
+            (await tx.query<{ terminal: string; epoch: string }>(mappingRecheckSql.sql, [originalRoute, original]))
+              .rows[0],
+        );
+        return current?.terminal === expected.terminal && current.epoch === expected.epoch.toString();
       };
       return withRequestDeadline(deadline, async () => {
         try {
-          // Raw seek precedes all eligibility, visibility, role and current-state filtering.
-          const selected = await command(accountHome, async (tx) => {
-            cost.accessPoints++;
-            if (!(await root(tx, barrier))) return noEffect(null);
+          // Snapshot the transferred cursor as a read. Transfer re-takes the account-home share lock.
+          budget.reserve(
+            SELECT_BODY,
+            wireBytes([barrier.accountRoute, barrier.accountId, barrier.version, barrier.at, accountHome]),
+          );
+          cost.accessPoints++;
+          const selected = await withReadTransaction(pool, async (tx) => {
+            const rooted = (
+              await tx.query(
+                `SELECT 1 FROM access.erasure e JOIN semantic.erasure_progress p USING(route,account_id)
+                 JOIN semantic.erasure_fence f USING(route,account_id)
+                 WHERE e.route=$1 AND e.account_id=$2 AND e.version=$3 AND e.at=$4::timestamptz
+                   AND p.at=e.at AND f.at=e.at AND p.source_protocol=1 AND p.source_version=e.version
+                   AND p.partition_no=4096 AND p.state='pending-shared-custody'`,
+                [barrier.accountRoute, barrier.accountId, barrier.version, barrier.at],
+              )
+            ).rowCount;
+            if (!rooted) return null;
             const page = (
               await tx.query<PageRow>(
                 `SELECT id::text,previous_id::text,complete,consumed,source_partition,store,record_key::text,role,delivery_position::text,origin_key,
@@ -462,21 +539,21 @@ function sourceFactory(
                 [barrier.accountRoute, barrier.accountId, barrier.version, barrier.at, accountHome],
               )
             ).rows[0];
-            if (terminalProof) input = { ...input, frontier: page?.consumed ? page.id : (page?.previous_id ?? null) };
-            if (page && !page.consumed && input.frontier === page.previous_id)
-              return noEffect({ previous: page, next: undefined, replay: true });
-            if (input.frontier !== null && (!page || input.frontier !== page.id || !page.consumed))
-              return noEffect(null);
-            if (input.frontier === null && page) return noEffect(null);
-            if (page?.complete) return noEffect({ previous: page, next: undefined });
-            return noEffect({ previous: page, next: undefined });
+            let frontier = input.frontier;
+            if (terminalProof) frontier = page?.consumed ? page.id : (page?.previous_id ?? null);
+            if (page && !page.consumed && frontier === page.previous_id)
+              return { previous: page, frontier, replay: true as const };
+            if (frontier !== null && (!page || frontier !== page.id || !page.consumed)) return null;
+            if (frontier === null && page) return null;
+            return { previous: page, frontier, replay: false as const };
           });
-          if (!selected.value) return { status: 'pending', cost };
-          const { previous } = selected.value;
+          if (!selected) return pendingPage(budget);
+          if (terminalProof) input = { ...input, frontier: selected.frontier };
+          const { previous } = selected;
           // Old transfers did not identify an origin. A current physical locator
           // cannot reconstruct their custody, even when its role name still agrees.
           if (previous && typeof previous.origin_key !== 'string') return { status: 'unavailable', cost };
-          if (('replay' in selected.value && selected.value.replay && previous) || previous?.complete) {
+          if ((selected.replay && previous) || previous?.complete) {
             const record = storedRecord(previous!, barrier);
             const records = record ? [record] : [];
             cost.outputSlots += records.length;
@@ -491,12 +568,18 @@ function sourceFactory(
           const after = previous?.store
             ? [previous.store, previous.record_key, previous.role, previous.delivery_position, previous.origin_key]
             : ['', '0', '', '0', ''];
-          const sought = await command(sourceHome, async (tx) => {
+          const eofFence = effectFence();
+          budget.afford(
+            SEEK_BODY + eofFence.keys + HOLD_EOF_BODY + READ_BODY + eofFence.keys + TRANSFER_BODY,
+            eofFence.bytes * 2 + bodyBytes(SEEK_BODY + HOLD_EOF_BODY + TRANSFER_BODY + READ_BODY),
+          );
+          budget.reserve(SEEK_BODY, wireBytes([sourceHome, barrier.accountId, ...after]));
+          const sought = await withReadTransaction(pool, async (tx) => {
             const seal = await tx.query(
               `SELECT 1 FROM semantic.erasure_source_seal WHERE partition_no=$1 AND account_id=$2 AND version=$3 AND at=$4::timestamptz FOR SHARE`,
               [sourceHome, barrier.accountId, barrier.version, barrier.at],
             );
-            if (!seal.rowCount) return noEffect(null);
+            if (!seal.rowCount) return null;
             const raw = (
               await tx.query<Cursor>(
                 `SELECT partition_no AS source_partition,store,record_key::text,role,delivery_position::text,origin_key
@@ -506,10 +589,10 @@ function sourceFactory(
                 [sourceHome, barrier.accountId, ...after],
               )
             ).rows[0];
-            return noEffect({ raw });
+            return { raw };
           });
-          if (!sought.value) return { status: 'pending', cost };
-          const raw = sought.value.raw;
+          if (!sought) return pendingPage(budget);
+          const raw = sought.raw;
           const next: Cursor = raw ?? {
             source_partition: sourceHome,
             store: '',
@@ -538,6 +621,7 @@ function sourceFactory(
           const id = `${digest.slice(0, 8)}-${digest.slice(8, 12)}-${digest.slice(12, 16)}-${digest.slice(16, 20)}-${digest.slice(20, 32)}`;
           if (raw) {
             // Exact native role/body proof. Read and release this home before any identity control home.
+            budget.reserve(READ_BODY, wireBytes(cursorValues(next)));
             const detail = await withReadTransaction(
               pool,
               async (tx) =>
@@ -566,7 +650,7 @@ function sourceFactory(
                   )
                 ).rows[0],
             );
-            if (!detail?.native_present) return { status: 'pending', cost };
+            if (!detail?.native_present) return pendingPage(budget);
             const refresh = () =>
               refreshSemanticErasureSourceRecord(pool, barrier.accountId, next.source_partition, {
                 store: next.store,
@@ -577,30 +661,34 @@ function sourceFactory(
               });
             if (detail.state !== 'minimized' || detail.custody_pending) {
               await refresh();
-              return { status: 'pending', cost };
+              return pendingPage(budget);
             }
-            const mapping = detail.original ? await mappingOf(detail.original) : null;
-            if (detail.original && mapping?.state !== 'mapped') return { status: 'pending', cost };
             const originalHome = detail.original ? partitionOf(routeOf(detail.original)!) : next.source_partition;
+            const cross = !!detail.original && originalHome !== next.source_partition;
+            const mapping = detail.original ? await mappingOf(detail.original) : null;
+            if (detail.original && mapping?.state !== 'mapped') return pendingPage(budget);
+            const observe = !!detail.original && originalHome === next.source_partition;
+            const holdBody = observe ? HOLD_OBSERVE_BODY : HOLD_ROLE_BODY;
+            const fence = effectFence();
+            budget.afford(
+              fence.keys +
+                holdBody +
+                (cross ? fence.keys + HOLD_CROSS_BODY : 0) +
+                READ_BODY * (cross ? 2 : 1) +
+                (detail.original ? READ_BODY : 0) +
+                fence.keys +
+                TRANSFER_BODY,
+              fence.bytes * (cross ? 3 : 2) +
+                bodyBytes(holdBody + (cross ? HOLD_CROSS_BODY : 0) + TRANSFER_BODY) +
+                bodyBytes(READ_BODY * (cross ? 2 : 1) + (detail.original ? READ_BODY : 0)),
+            );
             const observeOriginal = async (
               tx: CommandTransaction,
               home: number,
             ): Promise<SubjectErasureSourceRecord | null> => {
               if (!detail.original || mapping?.state !== 'mapped') return null;
               const source = (
-                await tx.query<SourceState>(
-                  `SELECT p.epoch,p.position::text,s.subject_id::text,s.visibility,s.security_revision::text,s.current_release,
-                  s.projection_pending,r.revision,m.terminal::text,m.epoch::text AS identity_epoch,m.origin,m.owner_epoch,
-                  g.pending_job::text,coalesce(d.revision,0)::text AS dirty_revision,coalesce(d.captured_revision,0)::text AS captured_revision
-                 FROM semantic.subject s
-                 JOIN core.partition p ON p.partition_no=$1 AND p.write_state='active'
-                 JOIN semantic.identity_epoch_mapping m ON m.route=s.route AND m.original=s.subject_id
-                 LEFT JOIN semantic.identity_epoch_home_gate g ON g.route=s.route AND g.destination=s.subject_id AND g.original=s.subject_id
-                 LEFT JOIN semantic.identity_epoch_dirty d ON d.route=s.route AND d.original=s.subject_id
-                 JOIN LATERAL(SELECT revision FROM semantic.revision WHERE route=s.route AND subject_id=s.subject_id ORDER BY revision DESC LIMIT 1) r ON true
-                 WHERE s.route=$2 AND s.subject_id=$3`,
-                  [home, routeOf(detail.original), detail.original],
-                )
+                await tx.query<SourceState>(observeOriginalSql.sql, [home, routeOf(detail.original), detail.original])
               ).rows[0];
               if (
                 !source ||
@@ -732,7 +820,7 @@ function sourceFactory(
                 );
               });
             };
-            const held = await command<HeldRecord>(next.source_partition, async (tx) => {
+            const held = await command<HeldRecord>(next.source_partition, holdBody, async (tx) => {
               const seal = await tx.query(
                 `SELECT 1 FROM semantic.erasure_source_seal WHERE partition_no=$1 AND account_id=$2 AND version=$3 AND at=$4::timestamptz FOR SHARE`,
                 [next.source_partition, barrier.accountId, barrier.version, barrier.at],
@@ -774,12 +862,12 @@ function sourceFactory(
             });
             if (!held.value.ready) {
               if ('stale' in held.value) await refresh();
-              return { status: 'pending', cost };
+              return pendingPage(budget);
             }
             roleCustody = { epoch: held.epoch, position: held.position, transactionId: held.transactionId };
             let sourceHeld = held;
             if (detail.original && originalHome !== next.source_partition) {
-              sourceHeld = await command<HeldRecord>(originalHome, async (tx) => {
+              sourceHeld = await command<HeldRecord>(originalHome, HOLD_CROSS_BODY, async (tx) => {
                 const seal = await tx.query(
                   `SELECT 1 FROM semantic.erasure_source_seal WHERE partition_no=$1 AND account_id=$2 AND version=$3 AND at=$4::timestamptz FOR SHARE`,
                   [originalHome, barrier.accountId, barrier.version, barrier.at],
@@ -790,7 +878,7 @@ function sourceFactory(
                 hold(tx, originalHome, output);
                 return { value: { ready: true as const, record: output }, events: events(barrier.accountId) };
               });
-              if (!sourceHeld.value.ready) return { status: 'pending', cost };
+              if (!sourceHeld.value.ready) return pendingPage(budget);
             }
             record = sourceHeld.value.record;
             custody = {
@@ -803,23 +891,31 @@ function sourceFactory(
                 ...record,
                 source: { ...record.source, position: sourceHeld.position, epoch: sourceHeld.epoch },
               };
-            if (detail.original && mapping?.state === 'mapped') {
-              const current = await mappingOf(detail.original);
-              if (
-                current?.state !== 'mapped' ||
-                current.terminal !== mapping.terminal ||
-                current.epoch !== mapping.epoch
-              )
-                return { status: 'pending', cost };
-            }
+            if (detail.original && mapping?.state === 'mapped' && !(await mappingStill(detail.original, mapping)))
+              return pendingPage(budget);
           } else {
             // A real native sealed EOF also needs held custody; it is not a caller's empty array.
-            const held = await command(sourceHome, async (tx) => {
+            const eofFence = effectFence();
+            budget.afford(
+              eofFence.keys + HOLD_EOF_BODY + READ_BODY + eofFence.keys + TRANSFER_BODY,
+              eofFence.bytes * 2 + bodyBytes(HOLD_EOF_BODY + TRANSFER_BODY + READ_BODY),
+            );
+            const held = await command(sourceHome, HOLD_EOF_BODY, async (tx) => {
               const seal = await tx.query(
                 `SELECT 1 FROM semantic.erasure_source_seal WHERE partition_no=$1 AND account_id=$2 AND version=$3 AND at=$4::timestamptz FOR SHARE`,
                 [sourceHome, barrier.accountId, barrier.version, barrier.at],
               );
               if (!seal.rowCount) return noEffect(false);
+              const still = (
+                await tx.query<Cursor>(
+                  `SELECT partition_no AS source_partition,store,record_key::text,role,delivery_position::text,origin_key
+             FROM semantic.erasure_source_record WHERE partition_no=$1 AND account_id=$2
+             AND (store,record_key,role,delivery_position,origin_key)>($3,$4::bigint,$5,$6::bigint,$7)
+             ORDER BY store,record_key,role,delivery_position,origin_key LIMIT 1`,
+                  [sourceHome, barrier.accountId, ...after],
+                )
+              ).rows[0];
+              if (still) return noEffect(false);
               registerCommandCallback(tx, async (transactionId) => {
                 await recordSemanticSourceCommit(tx, transactionId);
                 await tx.query(
@@ -831,13 +927,14 @@ function sourceFactory(
               });
               return { value: true, events: events(barrier.accountId) };
             });
-            if (!held.value) return { status: 'pending', cost };
+            if (!held.value) return pendingPage(budget);
             custody = roleCustody = { epoch: held.epoch, position: held.position, transactionId: held.transactionId };
           }
           // Resolve actual durable hold/commit rows while still in their respective homes. The
           // transfer below owns this released custody; account verification never joins homes.
-          const resolveHold = async (home: number, native: NativeCustody) =>
-            withReadTransaction(
+          const resolveHold = async (home: number, native: NativeCustody) => {
+            budget.reserve(READ_BODY, wireBytes([home, id, native.transactionId]));
+            return withReadTransaction(
               pool,
               async (tx) =>
                 (
@@ -866,6 +963,7 @@ function sourceFactory(
                   )
                 ).rowCount === 1,
             );
+          };
           const observedHome = record?.source?.partition ?? next.source_partition;
           if (
             !custody ||
@@ -873,7 +971,7 @@ function sourceFactory(
             !(await resolveHold(next.source_partition, roleCustody)) ||
             (observedHome !== next.source_partition && !(await resolveHold(observedHome, custody)))
           )
-            return { status: 'pending', cost };
+            return pendingPage(budget);
           if (
             Buffer.byteLength(
               JSON.stringify(record, (_key, value) => (typeof value === 'bigint' ? value.toString() : value)),
@@ -882,7 +980,7 @@ function sourceFactory(
             return { status: 'unavailable', cost };
           // Only this private producer can transfer a just-committed native hold. No public boolean,
           // arbitrary receipt constructor, copied body, or current-role count can enter this path.
-          const accepted = await command(accountHome, async (tx) => {
+          const accepted = await command(accountHome, TRANSFER_BODY, async (tx) => {
             cost.accessPoints++;
             if (!(await root(tx, barrier))) return noEffect(false);
             const current = (
@@ -942,7 +1040,7 @@ function sourceFactory(
             });
             return { value: true, events: events(barrier.accountId) };
           });
-          if (!accepted.value) return { status: 'pending', cost };
+          if (!accepted.value) return pendingPage(budget);
           const records = record ? [record] : [];
           cost.outputSlots += records.length;
           const receipt = { id } as SubjectErasurePageReceipt;
@@ -951,7 +1049,7 @@ function sourceFactory(
             : { status: 'complete', records, frontier: null, receipt, cost };
           return result;
         } catch (error) {
-          if (error instanceof BudgetEnded) return { status: 'pending', cost };
+          if (error instanceof BudgetEnded) return pendingPage(budget, error);
           if (classifyUnavailability(error)) return { status: 'unavailable', cost };
           // An unavailable native home is never evidence of absence. Preserve the real failure for
           // the caller/worker rather than converting arbitrary SQL or infrastructure errors to EOF.

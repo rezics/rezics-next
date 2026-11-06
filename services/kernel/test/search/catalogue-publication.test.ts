@@ -52,6 +52,7 @@ type SubjectSearchTemplateRequest = Readonly<{
   id: string;
   params: Readonly<{
     after?: SearchPlan['after'];
+    filter?: { ids?: { values?: readonly string[] } };
   }>;
 }>;
 
@@ -88,8 +89,11 @@ function catalogueClient(options: {
       if (path.endsWith('/_settings')) {
         return { status: 200, body: { [index]: { settings: { index: { uuid: uuidOf() } } } } as T };
       }
-      const after = (_body as SubjectSearchTemplateRequest | undefined)?.params.after?.[0];
-      const selected = typeof after === 'string' ? ids.filter((id) => id > after) : ids;
+      const params = (_body as SubjectSearchTemplateRequest | undefined)?.params;
+      const after = params?.after?.[0];
+      const wanted = params?.filter?.ids?.values;
+      let selected = typeof after === 'string' ? ids.filter((id) => id > after) : [...ids];
+      if (wanted) selected = selected.filter((id) => wanted.includes(id));
       return {
         status: 200,
         body: {
@@ -318,13 +322,28 @@ test('selected catalogue lookup renders stored A and ignores a later working ide
     after: null,
     limit: 3,
     deadline: Date.now() + 30_000,
-    work: allowance(0),
+    work: allowance(),
     expected: selected.observation,
     selected: selected.subjects,
   });
   expect(looked.present).toEqual([first, second]);
   expect(looked.missing).toEqual([]);
   expect(looked.observation).toEqual(selected.observation);
+  const absent = await lookupCataloguePublication({
+    client: catalogueClient({ hits: [first] }),
+    prefix: 'rezics-',
+    filter: { type: { in: ['schema:Book'] } },
+    release: bundledRelease,
+    releaseDigest: digest,
+    after: null,
+    limit: 2,
+    deadline: Date.now() + 30_000,
+    work: allowance(),
+    expected: selected.observation,
+    selected: [first, second],
+  });
+  expect(absent.present).toEqual([first]);
+  expect(absent.missing).toEqual([second]);
   const reread = await readSelectedCataloguePublicationPage({
     client: catalogueClient({}),
     prefix: 'rezics-',
@@ -338,6 +357,63 @@ test('selected catalogue lookup renders stored A and ignores a later working ide
     expected: selected.observation,
   });
   expect(reread.subjects).toEqual(selected.subjects);
+});
+
+test('a lost selected lookup rereads the native observation and retries instead of failing the attempt', async () => {
+  let searches = 0;
+  const expected = (
+    await observeCataloguePublication({
+      client: catalogueClient({}),
+      prefix: 'rezics-',
+      releaseDigest: digest,
+      deadline: Date.now() + 30_000,
+      work: allowance(0),
+    })
+  ).observation;
+  const client = catalogueClient({ hits: [first, second] });
+  const original = client.request.bind(client);
+  client.request = async (method, path, body, options) => {
+    if (path.includes('/_search/template')) {
+      searches += 1;
+      if (searches === 1) throw new SearchUnavailableError('OpenSearch request timed out');
+    }
+    return original(method, path, body, options);
+  };
+  const looked = await lookupCataloguePublication({
+    client,
+    prefix: 'rezics-',
+    filter: { type: { in: ['schema:Book'] } },
+    release: bundledRelease,
+    releaseDigest: digest,
+    after: null,
+    limit: 2,
+    deadline: Date.now() + 30_000,
+    work: allowance(),
+    expected,
+    selected: [first, second],
+  });
+  expect(searches).toBe(2);
+  expect(looked.present).toEqual([first, second]);
+  expect(looked.missing).toEqual([]);
+  expect(looked.observation).toEqual(expected);
+});
+
+test('a lost catalogue observation without a pinned selection stays unknown', async () => {
+  const client = catalogueClient({});
+  const original = client.request.bind(client);
+  client.request = async (method, path, body, options) => {
+    if (path.startsWith('/_resolve/index/')) throw new SearchUnavailableError('OpenSearch request timed out');
+    return original(method, path, body, options);
+  };
+  await expect(
+    observeCataloguePublication({
+      client,
+      prefix: 'rezics-',
+      releaseDigest: digest,
+      deadline: Date.now() + 30_000,
+      work: allowance(0),
+    }),
+  ).rejects.toBeInstanceOf(SearchUnavailableError);
 });
 
 test('a lost catalogue response fails when the native generation changed before retry', async () => {
@@ -449,7 +525,7 @@ describe.skipIf(!searchUrl)('native public catalogue publication', () => {
       after: null,
       limit: 3,
       deadline: Date.now() + 30_000,
-      work: allowance(0),
+      work: allowance(),
       expected: selected.observation,
       selected: selected.subjects,
     });

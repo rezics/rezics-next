@@ -254,6 +254,7 @@ export async function readCataloguePublicationPage(input: CataloguePublicationRe
 /**
  * Lookup the explicitly selected public A through its pinned native observation. The stored selected
  * identities are the render set; a later working B or a live index append is not this selection.
+ * Present/missing are those identities in the pinned generation, not a live population search.
  */
 export async function lookupCataloguePublication(
   input: CataloguePublicationLookup,
@@ -266,13 +267,38 @@ export async function lookupCataloguePublication(
       throw new TypeError('Catalogue publication lookup order is not canonical');
     selected.push(id);
   }
-  const observed = await observeCataloguePublication(input);
+  const searches = selected.length === 0 ? 0 : Math.ceil(selected.length / MAX_PAGE);
+  const meter = new CataloguePublicationMeter(input.work, input.deadline);
+  if (searches > 0 && meter.remaining('candidateKeys') < selected.length)
+    unavailable('Catalogue publication lookup exceeds its reservation');
+  meter.reserve({
+    nativePoints: ENGINE_POINTS,
+    statements: ENGINE_CALLS - 1 + searches,
+    ...(searches === 0 ? {} : { candidateKeys: selected.length }),
+  });
+  const observation = await pinObservation(input, meter);
+  const found = new Set<string>();
+  for (let offset = 0; offset < selected.length; offset += MAX_PAGE) {
+    const batch = selected.slice(offset, offset + MAX_PAGE);
+    const result = await reconcileCatalogueCall(meter, input, observation, () =>
+      searchSubjectHits(input.client, input.prefix, {
+        sort: 'id',
+        filter: { ids: { values: batch } },
+        size: batch.length,
+        generation: observation.generation,
+        work: meter.engine(),
+      }),
+    );
+    for (const hit of result.hits) {
+      if (routeOf(hit.id) === null) continue;
+      found.add(hit.id);
+    }
+  }
   return {
-    present: selected,
-    missing: [],
-    observation: observed.observation,
-    work: observed.work,
-    engineRequests: observed.engineRequests,
+    present: selected.filter((id) => found.has(id)),
+    missing: selected.filter((id) => !found.has(id)),
+    observation,
+    ...meter.page(),
   };
 }
 

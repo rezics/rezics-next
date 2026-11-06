@@ -17,6 +17,9 @@ Landings and attempts are diagnostics; allowance and worker occupancy explain co
 Throughput target: product code landed on the integrated branch, held steadily at 20,000 lines an hour and aiming
 for 40,000. Lines measure throughput; they are not the goal. The target is a lot of good code: quality comes first,
 never write code to raise the count, and never lower throughput to gain quality. Count added product lines only.
+Product lines are added lines under `apps/`, `services/` and `packages/`, excluding tests, stories, fixtures,
+recordings, JSON, snapshots and generated files, including emitted declarations such as `packages/client/src/**/*.d.ts`
+(on 2026-11-06 those were 70% of the lines counted).
 Deleted lines are ignored and never offset output, so deleting bad code (duplicates, dead code, wrong abstractions)
 is encouraged.
 

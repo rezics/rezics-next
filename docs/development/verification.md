@@ -45,6 +45,12 @@ Decision: typecheck repairs preserve existing test assertions and update fixture
 
 Decision: under minimal verification a type error blocks a worker's success, and a failing payment, payout, order settlement, points or balance test blocks it when those paths changed. Other tests are not part of the attempt check; the wrapper refuses a test file, native, browser or growth command before any upload, with a message that tests run after landing in the dev verifier. Type errors, boot failures and payment-path failures keep current verifier handling: type errors and payment-path failures revert the landing, boot failures dispatch an urgent repair without reverting. A test failure outside those paths creates or updates one repair for the owning manager and never reverts the landing.
 
+Decision: environment walks run per Goal, not per outcome. An implementation brief declares no `native` or `browser`
+`acceptance.requires`; its outcome lands on typing like any other. Each Goal keeps at most one walk-and-repair task
+running; it walks dev on a seeded stack as each persona and briefs what fails as repairs. Outcomes that each carried
+their own walk rarely landed: on 2026-11-06, 2 of 81 tasks integrated after 12:00 UTC carried one, while 14 of 29
+running tasks did, at 17 hours and 3.7 attempts on average.
+
 Decision: private follow native/browser/growth capability stays open until the installed controller-owned driver and
 Auth-persona walk pass after integration; typed transport, FULL withhold, frozen command frame and list-frontier
 return land under ordinary clean-workspace typing.

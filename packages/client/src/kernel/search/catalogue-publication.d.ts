@@ -51,6 +51,7 @@ export declare function readCataloguePublicationPage(input: CataloguePublication
 /**
  * Lookup the explicitly selected public A through its pinned native observation. The stored selected
  * identities are the render set; a later working B or a live index append is not this selection.
+ * Present/missing are those identities in the pinned generation, not a live population search.
  */
 export declare function lookupCataloguePublication(input: CataloguePublicationLookup): Promise<CataloguePublicationLookupPage>;
 /** Selected A reread: the pinned observation is required so a working draft cannot stand in for it. */

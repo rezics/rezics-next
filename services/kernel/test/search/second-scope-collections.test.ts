@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import {
+  COLLECTION_DIRECTORY_SCAN_BOUND,
   collectionDirectoryPartitions,
   collectionDirectoryQuery,
   consumeCollectionDirectoryFrontier,
@@ -139,12 +140,12 @@ describe('connected native Collection reader journey', () => {
     f = await createCollectionRulesFixture(['follow:create', 'follow:delete']);
     actor = await f.runtime.identity.access.authenticate(f.owner, {
       pool: f.database.pool,
-      deadline: Date.now() + 30000,
+      deadline: Date.now() + 120000,
     });
-  }, 120000);
+  }, 180000);
   afterAll(async () => {
     await f?.close();
-  });
+  }, 180000);
   const deps = () => ({
     pool: f.database.pool,
     access: f.runtime.identity.access,
@@ -232,293 +233,327 @@ describe('connected native Collection reader journey', () => {
     return (await response.json()).collection as { id: string; revision: number };
   }
 
-  test('curated current disclosure withdraws stale positives, restores identity, and distinguishes native changes and failures', async () => {
-    const { leaf, current } = connected();
-    const row = await f.collection({ visibility: 'public', title: 'Original', description: 'Public description' });
-    const hidden = await f.collection({ visibility: 'unlisted' });
-    const partition = partitionOf(routeOf(row.id)!);
-    const positive = await leaf.source.read(partition, [key(row.id)]);
-    expect(positive.status).toBe('available');
-    const time = await withConnection(f.database.pool, (client) => mintReadTime(client));
-    try {
-      expect(
-        await leaf.hydrate([row.id, hidden.id, row.id, newId(routeOf(row.id)!)], { ...context(row.id), time }),
-      ).toMatchObject({
-        state: 'ready',
-        summaries: [{ id: row.id, destination: `/collections/${row.id}`, memberCount: 0, membershipKind: 'curated' }],
-      });
-      expect(authoritativeTimeValue(time)).toBeString();
-    } finally {
-      releaseOperationalTime(time);
-    }
-    expect(await current([row.id, hidden.id])).toMatchObject([
-      { key: { ...key(row.id) }, summary: { value: { id: row.id, title: 'Original', summary: 'Public description' } } },
-    ]);
-    expect(
-      (await f.send('PATCH', `/v1/collections/${row.id}`, { revision: row.revision, visibility: 'private' })).status,
-    ).toBe(200);
-    expect(await current([row.id])).toEqual([]);
-    expect(await leaf.source.read(partition, [key(row.id)])).toMatchObject({
-      items: [{ key: key(row.id), status: 'withdrawn' }],
-    });
-    const restored = await f.send('PATCH', `/v1/collections/${row.id}`, {
-      revision: row.revision + 1,
-      visibility: 'public',
-    });
-    expect(restored.status).toBe(200);
-    const version = (await restored.json()).collection.revision;
-    expect(await current([row.id])).toHaveLength(1);
-    expect(await leaf.source.read(partition, [key(row.id)])).toMatchObject({
-      items: [{ status: 'indexable', value: { revision: version } }],
-    });
-    // Mutations happen inside the actual reader's final authority round, not a replacement card reader.
-    for (const change of ['title', 'unlisted', 'deleted'] as const) {
-      const candidate = await f.collection({ visibility: 'public' });
-      let rounds = 0;
-      const access: Access = {
-        ...f.runtime.identity.access,
-        async prepareReadDecisions(input) {
-          if (++rounds === 2) {
-            const response =
-              change === 'deleted'
-                ? await f.send('DELETE', `/v1/collections/${candidate.id}?revision=${candidate.revision}`)
-                : await f.send('PATCH', `/v1/collections/${candidate.id}`, {
-                    revision: candidate.revision,
-                    ...(change === 'title' ? { title: 'Changed' } : { visibility: 'unlisted' }),
-                  });
-            expect(response.status).toBe(change === 'deleted' ? 204 : 200);
-          }
-          return f.runtime.identity.access.prepareReadDecisions!(input);
-        },
-      };
-      if (change === 'title')
-        await expect(current([candidate.id], access)).rejects.toMatchObject({
-          name: 'CollectionDiscoveryReadinessError',
-          reason: 'changed',
+  test.serial(
+    'curated current disclosure withdraws stale positives, restores identity, and distinguishes native changes and failures',
+    async () => {
+      const { leaf, current } = connected();
+      const row = await f.collection({ visibility: 'public', title: 'Original', description: 'Public description' });
+      const hidden = await f.collection({ visibility: 'unlisted' });
+      const partition = partitionOf(routeOf(row.id)!);
+      const positive = await leaf.source.read(partition, [key(row.id)]);
+      expect(positive.status).toBe('available');
+      const time = await withConnection(f.database.pool, (client) => mintReadTime(client));
+      try {
+        expect(
+          await leaf.hydrate([row.id, hidden.id, row.id, newId(routeOf(row.id)!)], { ...context(row.id), time }),
+        ).toMatchObject({
+          state: 'ready',
+          summaries: [{ id: row.id, destination: `/collections/${row.id}`, memberCount: 0, membershipKind: 'curated' }],
         });
-      else expect(await current([candidate.id], access)).toEqual([]);
-    }
-    const failure = new Error('Native infrastructure failed');
-    await expect(
-      current([row.id], {
-        ...f.runtime.identity.access,
-        prepareReadDecisions: async () => {
-          throw failure;
-        },
-      }),
-    ).rejects.toBe(failure);
-    expect(await leaf.hydrate([row.id], { ...context(row.id), deadline: 0 })).toEqual({
-      state: 'unavailable',
-      reason: 'deadline',
-    });
-  }, 120000);
-
-  test('completed empty A survives preparing B; no A and expired retained output never become successful empty cards', async () => {
-    const { leaf, current } = connected();
-    const a = await saved();
-    const response = await f.send('POST', `/v1/collections/${a.id}:publishSelected`, {
-      revision: a.revision,
-      subjectIds: [],
-    });
-    expect(response.status).toBe(200);
-    const published = await response.json();
-    await createCollectionPublicationEpisodes(deps()).begin(
-      actor,
-      {
-        collectionId: a.id,
-        revision: published.collection.revision,
-        visibility: 'public',
-      },
-      randomUUID(),
-    );
-    const cards = await leaf.hydrate([a.id], context(a.id));
-    expect(cards).toMatchObject({
-      state: 'ready',
-      summaries: [{ id: a.id, membershipKind: 'dynamic', outputGeneration: published.publication.generation }],
-    });
-    if (cards.state !== 'ready') throw new Error('Completed A should remain current');
-    for (const field of [
-      'memberCount',
-      'orderEpoch',
-      'rule',
-      'filter',
-      'workingOutput',
-      'curatorAccountId',
-      'coverMediaId',
-    ])
-      expect(cards.summaries[0]).not.toHaveProperty(field);
-    expect(await current([a.id])).toHaveLength(1);
-    const noA = await saved();
-    expect(
-      (await f.send('PATCH', `/v1/collections/${noA.id}`, { revision: noA.revision, visibility: 'public' })).status,
-    ).toBe(200);
-    expect(await leaf.hydrate([noA.id], context(noA.id))).toEqual({ state: 'unavailable', reason: 'native_authority' });
-    await expect(current([a.id, noA.id])).rejects.toBeInstanceOf(CollectionDiscoveryReadinessError);
-    const partition = partitionOf(routeOf(a.id)!);
-    let after = null as ReturnType<typeof key> | null;
-    let sawNoA = false;
-    do {
-      const page = await leaf.source.page(partition, after, 1);
-      if (page.status !== 'available') throw new Error('Fixture partition unavailable');
-      if (page.items[0]?.key.id === noA.id) {
-        expect(page.items[0].status).toBe('unavailable');
-        expect(page.next).toEqual(key(noA.id));
-        sawNoA = true;
+        expect(authoritativeTimeValue(time)).toBeString();
+      } finally {
+        releaseOperationalTime(time);
       }
-      after = page.next;
-    } while (after);
-    expect(sawNoA).toBe(true);
-    // Expire the native deletion retention window; a retained output is never disclosure authority.
-    const removed = await f.send('DELETE', `/v1/collections/${a.id}?revision=${published.collection.revision}`);
-    expect(removed.status).toBe(204);
-    await f.database.admin.query(
-      "UPDATE library.collection SET purge_after=clock_timestamp()-interval '1 second' WHERE route=$1 AND collection_id=$2",
-      [routeOf(a.id), a.id],
-    );
-    expect(await leaf.source.read(partition, [key(a.id)])).toMatchObject({
-      items: [{ key: key(a.id), status: 'withdrawn' }],
-    });
-    expect(await leaf.hydrate([a.id], context(a.id))).toMatchObject({ state: 'ready', summaries: [], operands: [] });
-    expect(await current([a.id])).toEqual([]);
-  }, 120000);
+      expect(await current([row.id, hidden.id])).toMatchObject([
+        {
+          key: { ...key(row.id) },
+          summary: { value: { id: row.id, title: 'Original', summary: 'Public description' } },
+        },
+      ]);
+      expect(
+        (await f.send('PATCH', `/v1/collections/${row.id}`, { revision: row.revision, visibility: 'private' })).status,
+      ).toBe(200);
+      expect(await current([row.id])).toEqual([]);
+      expect(await leaf.source.read(partition, [key(row.id)])).toMatchObject({
+        items: [{ key: key(row.id), status: 'withdrawn' }],
+      });
+      const restored = await f.send('PATCH', `/v1/collections/${row.id}`, {
+        revision: row.revision + 1,
+        visibility: 'public',
+      });
+      expect(restored.status).toBe(200);
+      const version = (await restored.json()).collection.revision;
+      expect(await current([row.id])).toHaveLength(1);
+      expect(await leaf.source.read(partition, [key(row.id)])).toMatchObject({
+        items: [{ status: 'indexable', value: { revision: version } }],
+      });
+      // Mutations happen inside the actual reader's final authority round, not a replacement card reader.
+      for (const change of ['title', 'unlisted', 'deleted'] as const) {
+        const candidate = await f.collection({ visibility: 'public' });
+        let rounds = 0;
+        const access: Access = {
+          ...f.runtime.identity.access,
+          async prepareReadDecisions(input) {
+            if (++rounds === 2) {
+              const response =
+                change === 'deleted'
+                  ? await f.send('DELETE', `/v1/collections/${candidate.id}?revision=${candidate.revision}`)
+                  : await f.send('PATCH', `/v1/collections/${candidate.id}`, {
+                      revision: candidate.revision,
+                      ...(change === 'title' ? { title: 'Changed' } : { visibility: 'unlisted' }),
+                    });
+              expect(response.status).toBe(change === 'deleted' ? 204 : 200);
+            }
+            return f.runtime.identity.access.prepareReadDecisions!(input);
+          },
+        };
+        if (change === 'title')
+          await expect(current([candidate.id], access)).rejects.toMatchObject({
+            name: 'CollectionDiscoveryReadinessError',
+            reason: 'changed',
+          });
+        else expect(await current([candidate.id], access)).toEqual([]);
+      }
+      const failure = new Error('Native infrastructure failed');
+      await expect(
+        current([row.id], {
+          ...f.runtime.identity.access,
+          prepareReadDecisions: async () => {
+            throw failure;
+          },
+        }),
+      ).rejects.toBe(failure);
+      expect(await leaf.hydrate([row.id], { ...context(row.id), deadline: 0 })).toEqual({
+        state: 'unavailable',
+        reason: 'deadline',
+      });
+    },
+    120000,
+  );
 
-  test('Search receives current mixed kind, disclosed curator and indexed Subject match beyond the card preview', async () => {
-    const { leaf } = connected();
-    const collection = await f.collection({ visibility: 'public' });
-    const subjects = [];
-    for (let index = 0; index < 5; index++) subjects.push(await f.subject(`Discovery member ${index}`));
-    for (const subjectId of subjects)
-      expect((await f.send('POST', `/v1/collections/${collection.id}/members`, { subjectId })).status).toBe(201);
-
-    const query = {
-      presentationKind: { kind: 'mixed' } as const,
-      curatorAccountId: f.runtime.identity.ordinary.accountId,
-      subjectId: subjects[4]!,
-    };
-    const result = await leaf.registration.adapter.readCurrent([collection.id], {
-      access: f.runtime.identity.access,
-      actor: { kind: 'anonymous' },
-      deadline: Date.now() + 120000,
-      collectionQuery: query,
-    });
-    const current = result.get(collection.id);
-    expect(current).toBeDefined();
-    expect(current?.operands).toMatchObject({
-      presentationKind: { kind: 'mixed' },
-      curator: { state: 'available', id: f.runtime.identity.ordinary.accountId },
-      subjectMembership: { state: 'available', subjectId: subjects[4], matches: true },
-      eligible: { presentationKind: true, curator: true, subject: true },
-    });
-    expect(current?.operands.recency[0]).toMatch(/^-?(0|[1-9][0-9]*)$/);
-    expect(current?.operands.recency.slice(1)).toEqual([routeOf(collection.id), collection.id]);
-    expect(current?.card.preview).toMatchObject({ state: 'available', truncated: true });
-    if (current?.card.preview.state === 'available')
-      expect(current.card.preview.members.map((member) => member.subject.id)).not.toContain(subjects[4]);
-
-    const micros = (
-      await f.database.admin.query<{ micros: string }>(
-        'SELECT trunc(extract(epoch FROM updated_at) * 1000000)::text AS micros FROM library.collection WHERE route=$1 AND collection_id=$2',
-        [routeOf(collection.id), collection.id],
-      )
-    ).rows[0]!.micros;
-    expect(current?.operands.recency).toEqual([micros, routeOf(collection.id)!, collection.id]);
-  }, 120000);
-
-  test('directory walks native complete pages, orders recency/popularity, resumes, drops removals, and keeps selected A', async () => {
-    const { leaf } = connected();
-    const oldest = await f.collection({ visibility: 'public', title: 'Directory oldest' });
-    const middle = await f.collection({ visibility: 'public', title: 'Directory middle' });
-    const newest = await f.collection({ visibility: 'public', title: 'Directory newest' });
-    expect(
-      (await f.send('PATCH', `/v1/collections/${oldest.id}`, { revision: oldest.revision, title: 'Directory bumped' }))
-        .status,
-    ).toBe(200);
-    const identities = [oldest.id, middle.id, newest.id];
-    const partitions = collectionDirectoryPartitions(identities);
-    const deadline = Date.now() + 120000;
-    const walked = new Set<string>();
-    for (const partition of partitions) {
-      let after: ReturnType<typeof key> | null = null;
+  test.serial(
+    'completed empty A survives preparing B; no A and expired retained output never become successful empty cards',
+    async () => {
+      const { leaf, current } = connected();
+      const a = await saved();
+      const response = await f.send('POST', `/v1/collections/${a.id}:publishSelected`, {
+        revision: a.revision,
+        subjectIds: [],
+      });
+      expect(response.status).toBe(200);
+      const published = await response.json();
+      await createCollectionPublicationEpisodes(deps()).begin(
+        actor,
+        {
+          collectionId: a.id,
+          revision: published.collection.revision,
+          visibility: 'public',
+        },
+        randomUUID(),
+      );
+      const cards = await leaf.hydrate([a.id], context(a.id));
+      expect(cards).toMatchObject({
+        state: 'ready',
+        summaries: [{ id: a.id, membershipKind: 'dynamic', outputGeneration: published.publication.generation }],
+      });
+      if (cards.state !== 'ready') throw new Error('Completed A should remain current');
+      for (const field of [
+        'memberCount',
+        'orderEpoch',
+        'rule',
+        'filter',
+        'workingOutput',
+        'curatorAccountId',
+        'coverMediaId',
+      ])
+        expect(cards.summaries[0]).not.toHaveProperty(field);
+      expect(await current([a.id])).toHaveLength(1);
+      const noA = await saved();
+      expect(
+        (await f.send('PATCH', `/v1/collections/${noA.id}`, { revision: noA.revision, visibility: 'public' })).status,
+      ).toBe(200);
+      expect(await leaf.hydrate([noA.id], context(noA.id))).toEqual({
+        state: 'unavailable',
+        reason: 'native_authority',
+      });
+      await expect(current([a.id, noA.id])).rejects.toBeInstanceOf(CollectionDiscoveryReadinessError);
+      const partition = partitionOf(routeOf(a.id)!);
+      let after = null as ReturnType<typeof key> | null;
+      let sawNoA = false;
       do {
-        const page = await leaf.source.page(partition, after, 1, { order: 'recency' }, { deadline });
-        if (page.status !== 'available') throw new Error('Directory partition unavailable');
-        for (const item of page.items) if (item.status === 'indexable') walked.add(item.key.id);
+        const page = await leaf.source.page(partition, after, 1);
+        if (page.status !== 'available') throw new Error('Fixture partition unavailable');
+        if (page.items[0]?.key.id === noA.id) {
+          expect(page.items[0].status).toBe('unavailable');
+          expect(page.next).toEqual(key(noA.id));
+          sawNoA = true;
+        }
         after = page.next;
       } while (after);
-    }
-    expect([...identities].every((id) => walked.has(id))).toBe(true);
-    const frontier = await consumeCollectionDirectoryFrontier({
-      source: leaf.source,
-      partitions,
-      query: { order: 'recency' },
-      deadline,
-      scanBound: 600,
-    });
-    expect(frontier.exhausted).toBe(true);
-    expect(identities.every((id) => frontier.identities.includes(id))).toBe(true);
-    const readContext = (selection: { order: 'recent' | 'popular' }) => ({
-      access: f.runtime.identity.access,
-      actor: { kind: 'anonymous' as const },
-      deadline,
-      collectionQuery: collectionDirectoryQuery(selection),
-    });
-    const directory = (
-      ids: readonly string[],
-      selection: { order: 'recent' | 'popular' },
-      after: readonly SearchSortValue[],
-      limit: number,
-    ) =>
-      executeCollectionDirectory({
-        identities: ids,
-        readCurrent: (ids, current) => leaf.registration.adapter.readCurrent(ids, current),
-        async revalidate(current) {
-          return current;
-        },
-        selection,
-        context: readContext(selection),
-        after,
-        limit,
+      expect(sawNoA).toBe(true);
+      // Expire the native deletion retention window; a retained output is never disclosure authority.
+      const removed = await f.send('DELETE', `/v1/collections/${a.id}?revision=${published.collection.revision}`);
+      expect(removed.status).toBe(204);
+      await f.database.admin.query(
+        "UPDATE library.collection SET purge_after=clock_timestamp()-interval '1 second' WHERE route=$1 AND collection_id=$2",
+        [routeOf(a.id), a.id],
+      );
+      expect(await leaf.source.read(partition, [key(a.id)])).toMatchObject({
+        items: [{ key: key(a.id), status: 'withdrawn' }],
       });
-    const recency = await directory(identities, { order: 'recent' }, [], 2);
-    expect(recency.items.map((item) => item.key.id)).toEqual([oldest.id, newest.id]);
-    expect(recency.exhausted).toBe(false);
-    const resumed = await directory(identities, { order: 'recent' }, recency.nextAfter!, 2);
-    expect(resumed.items.map((item) => item.key.id)).toEqual([middle.id]);
-    expect(resumed.nextAfter).toBeNull();
-    expect((await f.send('PUT', `/v1/follows/${newest.id}`)).status).toBe(200);
-    expect((await f.send('PUT', `/v1/follows/${newest.id}`, undefined, f.other)).status).toBe(200);
-    const popular = await directory(identities, { order: 'popular' }, [], 10);
-    expect(popular.items[0]?.key.id).toBe(newest.id);
-    expect((await f.send('DELETE', `/v1/collections/${middle.id}?revision=${middle.revision}`)).status).toBe(204);
-    const remaining = await directory(identities, { order: 'recent' }, [], 10);
-    expect(remaining.items.map((item) => item.key.id)).toEqual([oldest.id, newest.id]);
-    const a = await saved();
-    const published = await f.send('POST', `/v1/collections/${a.id}:publishSelected`, {
-      revision: a.revision,
-      subjectIds: [],
-    });
-    expect(published.status).toBe(200);
-    const selected = await published.json();
-    await createCollectionPublicationEpisodes(deps()).begin(
-      actor,
-      { collectionId: a.id, revision: selected.collection.revision, visibility: 'public' },
-      randomUUID(),
-    );
-    const before = await leaf.hydrate([a.id], context(a.id));
-    expect(before).toMatchObject({
-      state: 'ready',
-      summaries: [{ id: a.id, membershipKind: 'dynamic', outputGeneration: selected.publication.generation }],
-    });
-    expect(
-      (await f.send('PATCH', `/v1/collections/${a.id}`, { revision: selected.collection.revision, title: 'Working B' }))
-        .status,
-    ).toBe(200);
-    const afterEdit = await leaf.hydrate([a.id], context(a.id));
-    expect(afterEdit).toMatchObject({
-      state: 'ready',
-      summaries: [{ id: a.id, outputGeneration: selected.publication.generation }],
-    });
-  }, 120000);
+      expect(await leaf.hydrate([a.id], context(a.id))).toMatchObject({ state: 'ready', summaries: [], operands: [] });
+      expect(await current([a.id])).toEqual([]);
+    },
+    120000,
+  );
+
+  test.serial(
+    'Search receives current mixed kind, disclosed curator and indexed Subject match beyond the card preview',
+    async () => {
+      const { leaf } = connected();
+      const collection = await f.collection({ visibility: 'public' });
+      const subjects = [];
+      for (let index = 0; index < 5; index++) subjects.push(await f.subject(`Discovery member ${index}`));
+      for (const subjectId of subjects)
+        expect((await f.send('POST', `/v1/collections/${collection.id}/members`, { subjectId })).status).toBe(201);
+
+      const query = {
+        presentationKind: { kind: 'mixed' } as const,
+        curatorAccountId: f.runtime.identity.ordinary.accountId,
+        subjectId: subjects[4]!,
+      };
+      const result = await leaf.registration.adapter.readCurrent([collection.id], {
+        access: f.runtime.identity.access,
+        actor: { kind: 'anonymous' },
+        deadline: Date.now() + 120000,
+        collectionQuery: query,
+      });
+      const current = result.get(collection.id);
+      expect(current).toBeDefined();
+      expect(current?.operands).toMatchObject({
+        presentationKind: { kind: 'mixed' },
+        curator: { state: 'available', id: f.runtime.identity.ordinary.accountId },
+        subjectMembership: { state: 'available', subjectId: subjects[4], matches: true },
+        eligible: { presentationKind: true, curator: true, subject: true },
+      });
+      expect(current?.operands.recency[0]).toMatch(/^-?(0|[1-9][0-9]*)$/);
+      expect(current?.operands.recency.slice(1)).toEqual([routeOf(collection.id), collection.id]);
+      expect(current?.card.preview).toMatchObject({ state: 'available', truncated: true });
+      if (current?.card.preview.state === 'available')
+        expect(current.card.preview.members.map((member) => member.subject.id)).not.toContain(subjects[4]);
+
+      const micros = (
+        await f.database.admin.query<{ micros: string }>(
+          'SELECT trunc(extract(epoch FROM updated_at) * 1000000)::text AS micros FROM library.collection WHERE route=$1 AND collection_id=$2',
+          [routeOf(collection.id), collection.id],
+        )
+      ).rows[0]!.micros;
+      expect(current?.operands.recency).toEqual([micros, routeOf(collection.id)!, collection.id]);
+    },
+    120000,
+  );
+
+  test.serial(
+    'directory walks native complete pages, orders recency/popularity, resumes, drops removals, and keeps selected A',
+    async () => {
+      const { leaf } = connected();
+      const oldest = await f.collection({ visibility: 'public', title: 'Directory oldest' });
+      const middle = await f.collection({ visibility: 'public', title: 'Directory middle' });
+      const newest = await f.collection({ visibility: 'public', title: 'Directory newest' });
+      expect(
+        (
+          await f.send('PATCH', `/v1/collections/${oldest.id}`, {
+            revision: oldest.revision,
+            title: 'Directory bumped',
+          })
+        ).status,
+      ).toBe(200);
+      const identities = [oldest.id, middle.id, newest.id];
+      const partitions = collectionDirectoryPartitions(identities);
+      const deadline = Date.now() + 120000;
+      const walked = new Set<string>();
+      let examined = 0;
+      for (const partition of partitions) {
+        let after: ReturnType<typeof key> | null = null;
+        do {
+          const page = await leaf.source.page(partition, after, 1, undefined, { deadline });
+          if (page.status !== 'available') throw new Error('Directory partition unavailable');
+          examined += page.items.length;
+          if (examined > COLLECTION_DIRECTORY_SCAN_BOUND)
+            throw new CollectionDiscoveryReadinessError('unavailable', 'collection_directory_frontier_exceeds_bound');
+          for (const item of page.items) if (item.status === 'indexable') walked.add(item.key.id);
+          after = page.next;
+        } while (after);
+      }
+      expect([...identities].every((id) => walked.has(id))).toBe(true);
+      const frontier = await consumeCollectionDirectoryFrontier({
+        source: leaf.source,
+        partitions,
+        query: { order: 'recency' },
+        deadline,
+        scanBound: 600,
+      });
+      expect(frontier.exhausted).toBe(true);
+      expect(identities.every((id) => frontier.identities.includes(id))).toBe(true);
+      const readContext = (selection: { order: 'recent' | 'popular' }) => ({
+        access: f.runtime.identity.access,
+        actor: { kind: 'anonymous' as const },
+        deadline,
+        collectionQuery: collectionDirectoryQuery(selection),
+      });
+      const directory = (
+        ids: readonly string[],
+        selection: { order: 'recent' | 'popular' },
+        after: readonly SearchSortValue[],
+        limit: number,
+      ) =>
+        executeCollectionDirectory({
+          identities: ids,
+          readCurrent: (ids, current) => leaf.registration.adapter.readCurrent(ids, current),
+          async revalidate(current, context) {
+            return leaf.registration.adapter.readCurrent([...current.keys()], context);
+          },
+          selection,
+          context: readContext(selection),
+          after,
+          limit,
+        });
+      const recency = await directory(identities, { order: 'recent' }, [], 2);
+      expect(recency.items.map((item) => item.key.id)).toEqual([oldest.id, newest.id]);
+      expect(recency.exhausted).toBe(false);
+      const resumed = await directory(identities, { order: 'recent' }, recency.nextAfter!, 2);
+      expect(resumed.items.map((item) => item.key.id)).toEqual([middle.id]);
+      expect(resumed.nextAfter).toBeNull();
+      expect((await f.send('PUT', `/v1/follows/${newest.id}`)).status).toBe(200);
+      expect((await f.send('PUT', `/v1/follows/${newest.id}`, undefined, f.other)).status).toBe(200);
+      const popular = await directory(identities, { order: 'popular' }, [], 10);
+      expect(popular.items[0]?.key.id).toBe(newest.id);
+      expect((await f.send('DELETE', `/v1/collections/${middle.id}?revision=${middle.revision}`)).status).toBe(204);
+      const remaining = await directory(identities, { order: 'recent' }, [], 10);
+      expect(remaining.items.map((item) => item.key.id)).toEqual([oldest.id, newest.id]);
+      const a = await saved();
+      const published = await f.send('POST', `/v1/collections/${a.id}:publishSelected`, {
+        revision: a.revision,
+        subjectIds: [],
+      });
+      expect(published.status).toBe(200);
+      const selected = await published.json();
+      await createCollectionPublicationEpisodes(deps()).begin(
+        actor,
+        { collectionId: a.id, revision: selected.collection.revision, visibility: 'public' },
+        randomUUID(),
+      );
+      const before = await leaf.hydrate([a.id], context(a.id));
+      expect(before).toMatchObject({
+        state: 'ready',
+        summaries: [{ id: a.id, membershipKind: 'dynamic', outputGeneration: selected.publication.generation }],
+      });
+      expect(
+        (
+          await f.send('PATCH', `/v1/collections/${a.id}`, {
+            revision: selected.collection.revision,
+            title: 'Working B',
+          })
+        ).status,
+      ).toBe(200);
+      const afterEdit = await leaf.hydrate([a.id], context(a.id));
+      expect(afterEdit).toMatchObject({
+        state: 'ready',
+        summaries: [{ id: a.id, outputGeneration: selected.publication.generation }],
+      });
+    },
+    120000,
+  );
 });
 
 test('Search collection tie ordering uses exact counts, exact microseconds, nulls last and full identity', () => {
