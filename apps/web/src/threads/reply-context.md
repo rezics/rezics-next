@@ -49,6 +49,8 @@ The index uses O(N) time and space; bounded paths, related-row lists and total r
 related replies on this page within that bound, never global reply totals or complete descendants. Native page caps
 remain authoritative. No index operation invokes `ReplyParentReader` or walks another page.
 
+Decision: each available native thread post mounts `ReplyButton` after its document so that control selects the existing composer parent; the feed action bar keeps its compact Reply control.
+
 `ConversationBranches` wraps the passed Post component, preserving its existing actions, body and reply callback.
 Every Post remains mounted in native order, including while a related branch is locally hidden. Collapse never changes
 moderation, native disclosure, command state or unsent writing. Unrelated rows remain visible. The controls expose
