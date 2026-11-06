@@ -52,7 +52,6 @@ The subsequent internal service-factory move passed the architecture check again
 supported remote submissions lost their connection during Auth service typing. Only Auth Pages typing
 completed on that revision; service typing and focused native tests have no completed result after the move.
 
-
 ## credential-session-consent
 
 **User job:** Replace a password, enroll/name/remove a passkey, review and revoke sessions, and explicitly approve
@@ -75,7 +74,6 @@ The latest supported run passed suspension, suspended sign-in, defensive bearer,
 consent renewal cases. Session and credential capability fixtures stopped at `KERNEL_RECEIPT_KEYS is required`;
 they do not establish Security
 review/readback or credential effects. Seeded browser and promoted desktop/phone evidence remain open.
-
 
 ## permission-formula
 
