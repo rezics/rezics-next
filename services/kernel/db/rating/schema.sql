@@ -1453,6 +1453,13 @@ CREATE INDEX voter_realm_waiting_idx ON rating.voter_realm USING btree (route, v
 
 
 --
+-- Name: vote identity_rating_repair_later_vote; Type: TRIGGER; Schema: rating; Owner: -
+--
+
+CREATE TRIGGER identity_rating_repair_later_vote AFTER INSERT OR UPDATE OF question_id, target_id ON rating.vote FOR EACH ROW EXECUTE FUNCTION rating.touch_identity_rating_repair_later_vote();
+
+
+--
 -- Name: population_total_component population_total_delivery_writer; Type: TRIGGER; Schema: rating; Owner: -
 --
 
@@ -1494,13 +1501,6 @@ CREATE TRIGGER question_label_revision_immutable BEFORE UPDATE ON rating.questio
 --
 
 CREATE TRIGGER realm_rank_publication_generation AFTER INSERT OR DELETE OR UPDATE ON rating.realm_rank_generation FOR EACH ROW EXECUTE FUNCTION rating.bump_realm_rank_publication_generation();
-
-
---
--- Name: vote identity_rating_repair_later_vote; Type: TRIGGER; Schema: rating; Owner: -
---
-
-CREATE TRIGGER identity_rating_repair_later_vote AFTER INSERT OR UPDATE OF question_id, target_id ON rating.vote FOR EACH ROW EXECUTE FUNCTION rating.touch_identity_rating_repair_later_vote();
 
 
 --
