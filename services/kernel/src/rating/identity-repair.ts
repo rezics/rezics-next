@@ -1,3 +1,4 @@
+import type { RatingCapabilities } from './contract/capabilities.ts';
 import type { Pool } from 'pg';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import type { KernelClock } from '../clock.ts';
@@ -58,10 +59,14 @@ class RepairPending extends Error {
 export function createRatingIdentityRepairCommands(config: {
   pool: Pool;
   clock?: KernelClock;
+  capabilities?: RatingCapabilities;
   producer?: RatingIdentityProducer;
 }) {
   // Same native account, scope and authentication-epoch authorization as ordinary Rating vote commands.
-  const runner = createLibraryCommandRunner(config);
+  const runner = createLibraryCommandRunner({
+    ...config,
+    ...(config.capabilities ? { command: config.capabilities.command, clock: config.capabilities.clock } : {}),
+  });
   const producer = config.producer ?? unavailableRatingIdentityProducer;
   const owner = (actor: Actor): string => {
     if (actor.kind !== 'account' || !actor.scopes.includes('rating:vote')) throw new GrantDeniedError();

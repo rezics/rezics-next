@@ -8,7 +8,7 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import { publicFigureState, type Queryable } from './public-figure.ts';
 import readViews from './public-figure-views.sql';
 import questionRead from './question-read.sql';
-import { STANDARD_QUESTION_ID } from './votes.ts';
+import { STANDARD_QUESTION_ID } from './standard-question.ts';
 
 const closed = { additionalProperties: false } as const;
 const nullableDisplayNumber = t.Union([t.Number({ minimum: 0, maximum: 10 }), t.Null()]);

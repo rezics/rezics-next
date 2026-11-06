@@ -1,10 +1,11 @@
+import { runCommand } from '../command/command.ts';
+import type { RatingCapabilities } from './contract/capabilities.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
 import { Value } from 'typebox/value';
 import { ACCESS_EVENTS } from '../access/events.ts';
 import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
-import { runCommand } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';
 import type { CloudEvent } from '../events/log.ts';
@@ -53,7 +54,7 @@ function eventState(type: EligibilityEvent, current: EligibilityState, purgeVote
 }
 
 /** Consume account eligibility events in the voter's partition and start one shared segment workflow. */
-export function createVoterEligibilityEffect(pool: Pool): Effect {
+export function createVoterEligibilityEffect(pool: Pool, capabilities?: RatingCapabilities): Effect {
   return {
     name: 'rating_voter_eligibility',
     types: [SUSPENDED, REINSTATED, TOMBSTONED],
@@ -69,7 +70,7 @@ export function createVoterEligibilityEffect(pool: Pool): Effect {
       const accountId = (event.data as { accountId: string }).accountId;
       const route = routeOf(accountId);
       if (route === null || event.subject !== accountId) throw new TypeError('Invalid account eligibility address');
-      await runCommand(
+      await (capabilities?.command ?? runCommand)(
         pool,
         {
           partition: partitionOf(route),

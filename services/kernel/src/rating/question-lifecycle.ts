@@ -1,3 +1,11 @@
+import {
+  runCommand,
+  authoritativeTimeValue,
+  commandAttemptDeadline,
+  principalCommandIdentity,
+} from '../command/command.ts';
+import type { RatingCapabilities } from './contract/capabilities.ts';
+import { ratingCapabilities } from './adapters/ambient.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
@@ -5,12 +13,6 @@ import { resourceAuthorization } from '../access/index.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import type { KernelClock } from '../clock.ts';
-import {
-  authoritativeTimeValue,
-  commandAttemptDeadline,
-  principalCommandIdentity,
-  runCommand,
-} from '../command/command.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import realmRead from '../community/realm-read.sql';
 import { partitionReadClient } from '../database/read-snapshot.ts';
@@ -27,7 +29,7 @@ export const QUESTION_LIFECYCLE_CHANGED = 'com.rezics.rating.question.lifecycle-
 export type QuestionLifecycleState = 'active' | 'retired';
 export type QuestionLifecycleInput = Readonly<{ questionId: string; expectedRevision: number }>;
 
-type Dependencies = { pool: Pool; access: Access; clock?: KernelClock };
+type Dependencies = { pool: Pool; access: Access; capabilities?: RatingCapabilities; clock?: KernelClock };
 type LifecycleQuestion = NonNullable<Awaited<ReturnType<typeof questionRead.run>>>;
 type ImmutableQuestion = Pick<
   LifecycleQuestion,
@@ -127,7 +129,7 @@ async function transition(
     context: { pool: deps.pool, deadline: context.deadline, partition: partitionOf(route) },
   });
   const expectedCurrentState = state === 'retired' ? 'active' : 'retired';
-  return runCommand(
+  return (ratingCapabilities(deps).command ?? runCommand)(
     deps.pool,
     {
       ...identity,

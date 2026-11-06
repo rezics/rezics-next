@@ -1,8 +1,10 @@
+import { runCommand, noEffect, principalCommandIdentity, type CommandAuthorization } from '../command/command.ts';
+import type { RatingCapabilities } from './contract/capabilities.ts';
+import { ratingCapabilities } from './adapters/ambient.ts';
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import { within } from '../access/authenticate.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
-import { noEffect, principalCommandIdentity, runCommand, type CommandAuthorization } from '../command/command.ts';
 import { accessCommandAuthorization, type Access, type Actor } from '../request/access.ts';
 import { ProblemError } from '../http/problem.ts';
 import { withReadTransaction } from '../semantic/read.ts';
@@ -51,6 +53,7 @@ export type SourceClassificationConfig = {
   pool: Pool;
   access: Access;
   routeKey: Uint8Array;
+  capabilities?: RatingCapabilities;
   clock?: KernelClock;
 };
 type CommonCommand = {
@@ -156,7 +159,7 @@ export function createSourceClassificationProducer(config: SourceClassificationC
       const first = await heads(input.subjectId, permitted, input.deadline);
       const tuples = [...first.values()].flatMap((head) => ('cleared' in head.payload ? [] : [tuple(head.payload)]));
       const fenceBefore = await fences(tuples, input.deadline);
-      const now = config.clock?.() ?? new Date();
+      const now = ratingCapabilities(config).clock();
       const after = await observe(input.actor, associations, input.deadline);
       const last = await heads(input.subjectId, permitted, input.deadline);
       const fenceAfter = await fences(tuples, input.deadline);
@@ -244,7 +247,7 @@ export function createSourceClassificationProducer(config: SourceClassificationC
         await writer.finalize?.(tx, attempt, prepared.writerEvidence);
       },
     };
-    return runCommand(
+    return (ratingCapabilities(config).command ?? runCommand)(
       config.pool,
       {
         ...principalCommandIdentity(input.actor),

@@ -1,3 +1,5 @@
+import type { RatingCapabilities } from './contract/capabilities.ts';
+import { ratingCapabilities } from './adapters/ambient.ts';
 import type { Pool, PoolClient } from 'pg';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { readAccount } from '../access/account-data.ts';
@@ -140,7 +142,7 @@ export class RatingQuestionRetiredError extends Error {
   }
 }
 
-type Dependencies = { pool: Pool; access: Access; clock?: KernelClock };
+type Dependencies = { pool: Pool; access: Access; capabilities?: RatingCapabilities; clock?: KernelClock };
 type Queryable = Pick<Pool | PoolClient, 'query'>;
 type QuestionRow = NonNullable<Awaited<ReturnType<typeof questionRead.run>>>;
 type VoteRow = NonNullable<Awaited<ReturnType<typeof voteRead.run>>>;
@@ -334,12 +336,16 @@ function normalizePutVoteInput(input: PutVoteInput, participant: IdentityRatingC
 
 /** Writes and reads the signed-in person's current rating vote on the account's partition. */
 export function createVoteCommands(config: Dependencies) {
-  const { pool, clock } = config;
+  const { pool } = config;
+  const capabilities = ratingCapabilities(config);
+  const clock = config.capabilities?.clock ?? config.clock;
   const runner = createLibraryCommandRunner({
+    ...(capabilities.command ? { command: capabilities.command } : {}),
     pool,
     ...(clock === undefined ? {} : { clock }),
   });
   const guardedRunner = createLibraryCommandRunner({
+    ...(capabilities.command ? { command: capabilities.command } : {}),
     pool,
     access: config.access,
     ...(clock === undefined ? {} : { clock }),

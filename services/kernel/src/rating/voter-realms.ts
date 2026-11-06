@@ -1,9 +1,10 @@
+import { runCommand, currentCommand, type CommandTransaction } from '../command/command.ts';
+import type { RatingCapabilities } from './contract/capabilities.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
 import { Value } from 'typebox/value';
 import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
-import { runCommand, type CommandTransaction } from '../command/command.ts';
 import { COMMUNITY_EVENTS } from '../community/events.ts';
 import type { Effect } from '../events/effects.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -56,7 +57,7 @@ export async function finishVoterRealmRemoval(
 ): Promise<VoterRealmJob[]> {
   const row = await readRealm.run(tx, parameters(input));
   if (!row || row.state !== 'removing') throw new Error('Realm removal is not in progress');
-  const transitionId = input.transitionId ?? Bun.randomUUIDv7();
+  const transitionId = input.transitionId ?? currentCommand(tx).transactionId;
   if (!row.rejoin) {
     const promoted = await deleteAndPromote(tx, input, transitionId);
     return promoted ? [promoted] : [];
@@ -75,7 +76,7 @@ export async function finishVoterRealmRemoval(
 }
 
 /** Membership effects and vote writes serialize on the same voter partition. */
-export function createVoterRealmsEffect(pool: Pool): Effect {
+export function createVoterRealmsEffect(pool: Pool, capabilities?: RatingCapabilities): Effect {
   return {
     name: 'rating_voter_realms',
     types: [MEMBERSHIP],
@@ -86,7 +87,7 @@ export function createVoterRealmsEffect(pool: Pool): Effect {
       const route = routeOf(voterId);
       if (route === null || routeOf(realmId) === null) throw new TypeError('Invalid Realm membership address');
       const address = { route, voterId, realmId };
-      await runCommand(
+      await (capabilities?.command ?? runCommand)(
         pool,
         {
           partition: partitionOf(route),

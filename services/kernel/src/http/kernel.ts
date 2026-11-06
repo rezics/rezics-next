@@ -55,8 +55,12 @@ import { readingInsightsRoutes } from '../library/reading-insights-routes.ts';
 import { yearlyCompletionGoalRoutes } from '../library/yearly-goal-routes.ts';
 import { diaryRoutes } from '../library/diary-routes.ts';
 import { createSessionCommands } from '../library/sessions.ts';
-import { ratingRoutes } from '../rating/routes.ts';
-import { sourceStatisticRoutes } from '../rating/source-statistics.ts';
+import {
+  createRatingModule,
+  createNativeRatingCapabilities,
+  type RatingCapabilities,
+  type RatingHttpApp,
+} from '../rating/module.ts';
 import type { ContentBoardDependencies } from '../content/boards.ts';
 import { currentRealmDisclosureScope } from '../content/reads.ts';
 import { mediaRoutes } from '../content/media-routes.ts';
@@ -137,6 +141,7 @@ function compileGuestSecurity(routes: readonly MountedRoute[]) {
 
 export type KernelDependencies = Parameters<typeof createApp>[0] & {
   routeKey: Uint8Array;
+  rating?: RatingCapabilities;
   /** Trusted post-catalogue binding; runs before the host admits any request. */
   onAccessReady?: (
     access: Access,
@@ -836,31 +841,18 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     clock,
     access: () => resolveAccess({ actions: actionCatalogue(pins), realmRoleReader }),
   });
-  let ratings: ReturnType<typeof ratingRoutes>;
-  let sourceStatistics: ReturnType<typeof sourceStatisticRoutes>;
-  ratings = ratingRoutes(pins as unknown as ReturnType<typeof definitionRoutes>, {
+  const rating = createRatingModule({
     pool: dependencies.pool,
+    capabilities: dependencies.rating ?? createNativeRatingCapabilities({ clock }),
+  });
+  let sourceStatistics: RatingHttpApp;
+  sourceStatistics = rating.mount(pins as unknown as Parameters<typeof rating.mount>[0], {
     routeKey: dependencies.routeKey,
     tokens,
     clock,
-    access: () =>
-      resolveAccess({
-        actions: actionCatalogue(sourceStatistics),
-        realmRoleReader,
-      }),
+    access: () => resolveAccess({ actions: actionCatalogue(sourceStatistics), realmRoleReader }),
   });
-  declareKernelWriteRates(ratings);
-  sourceStatistics = sourceStatisticRoutes(ratings as unknown as ReturnType<typeof definitionRoutes>, {
-    pool: dependencies.pool,
-    routeKey: dependencies.routeKey,
-    tokens,
-    clock,
-    access: () =>
-      resolveAccess({
-        actions: actionCatalogue(sourceStatistics),
-        realmRoleReader,
-      }),
-  });
+  declareKernelWriteRates(sourceStatistics);
   const zones = zoneRoutes(sourceStatistics, {
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
@@ -964,8 +956,7 @@ type ZoneComposition = Omit<ReturnType<typeof zoneRoutes>, '~Routes'> & {
 type KernelComposition = ZoneComposition &
   ReturnType<typeof recentSearchRoutes> &
   ReturnType<typeof viewerActionsRoutes> &
-  ReturnType<typeof sourceStatisticRoutes> &
-  ReturnType<typeof ratingRoutes> &
+  RatingHttpApp &
   ReturnType<typeof collectionRoutes> &
   ReturnType<typeof continueRoutes> &
   ReturnType<typeof feedRoutes> &

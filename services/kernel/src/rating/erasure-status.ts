@@ -1,3 +1,4 @@
+import type { RatingCapabilities } from './contract/capabilities.ts';
 import type { Pool } from 'pg';
 import { noEffect, runCommand } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -17,10 +18,15 @@ export async function readRatingErasureDone(deps: { pool: Pool }, accountId: str
 }
 
 /** Called only after every target-partition command for this page has committed. */
-export async function acknowledgeRatingErasurePage(pool: Pool, voterId: string, pageId: string): Promise<void> {
+export async function acknowledgeRatingErasurePage(
+  pool: Pool,
+  voterId: string,
+  pageId: string,
+  capabilities?: RatingCapabilities,
+): Promise<void> {
   const route = routeOf(voterId);
   if (route === null || routeOf(pageId) === null) throw new TypeError('Invalid rating erasure page');
-  const outcome = await runCommand(pool, { partition: partitionOf(route) }, async (tx) => {
+  const outcome = await (capabilities?.command ?? runCommand)(pool, { partition: partitionOf(route) }, async (tx) => {
     const removed = await acknowledgePage.run(tx, { route, voter_id: voterId, page_id: pageId });
     if (removed === null) return noEffect(null);
     return {

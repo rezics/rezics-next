@@ -11,7 +11,7 @@ import { commerceWorkModule } from '../commerce/work-module.ts';
 import { libraryWorkModule } from '../library/work-module.ts';
 import { semanticWorkModule } from '../semantic/work-module.ts';
 import { createSearchWorkModule } from '../search/work.ts';
-import { ratingWorkModule } from '../rating/work-module.ts';
+import { ratingNativeWorkModule } from '../rating/module.ts';
 import { workflowRetentionWorkModule } from './retention.ts';
 import { importsWorkModule } from '../imports/erasure.ts';
 
@@ -50,7 +50,7 @@ export function createKernelWorkModules(
     accountsWorkModule,
     erasureWorkModule,
     sharedHistoryWorkModule,
-    ratingWorkModule,
+    ratingNativeWorkModule,
     commerceWorkModule,
     libraryWorkModule,
     communityWorkModule,

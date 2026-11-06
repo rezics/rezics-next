@@ -1,4 +1,6 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
+import type { RatingAmbient, RatingCapabilityOptions } from './contract/capabilities.ts';
+import { ratingCapabilities } from './adapters/ambient.ts';
+import { createCipheriv, createDecipheriv, createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { deadlineClient } from '../access/authenticate.ts';
 import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
@@ -16,7 +18,7 @@ import {
   type SubjectCanonicalNameKey,
 } from '../semantic/subject-source-key-pages.ts';
 import { seal, unseal, type KeyRing } from '../tokens/seal.ts';
-import { STANDARD_QUESTION_ID } from './votes.ts';
+import { STANDARD_QUESTION_ID } from './standard-question.ts';
 import readFreshness from './aggregate-read-freshness.sql';
 import {
   ratingQuestionIdentity,
@@ -157,7 +159,7 @@ export interface RealmRankOrderSource {
     Readonly<{ partition: number; epoch: number; position: bigint; figures: readonly RealmRankFigureProof[] }>
   >;
 }
-type Dependencies = { pool: Pool; access: Access; tokens: KeyRing };
+type Dependencies = { pool: Pool; access: Access; tokens: KeyRing } & RatingCapabilityOptions;
 type Row = Omit<RealmRankCandidate, 'count' | 'mean' | 'score' | 'asOf'> & {
   count: string;
   mean: string;
@@ -206,8 +208,8 @@ function encryptionKey(tokens: KeyRing, kid: number): Buffer {
   if (!key || key.byteLength < 32) throw new Error('Realm rank cursor key unavailable');
   return createHash('sha256').update('rating.realm-rank.encryption.v1\0').update(key).digest();
 }
-function encode(tokens: KeyRing, scope: string, position: Position): string {
-  const iv = randomBytes(12);
+function encode(tokens: KeyRing, scope: string, position: Position, capabilities: RatingAmbient): string {
+  const iv = Buffer.from(capabilities.randomBytes(12));
   const cipher = createCipheriv('aes-256-gcm', encryptionKey(tokens, tokens.current), iv);
   cipher.setAAD(Buffer.from(scope));
   const data = Buffer.concat([cipher.update(JSON.stringify(position), 'utf8'), cipher.final()]);
@@ -218,7 +220,7 @@ function encode(tokens: KeyRing, scope: string, position: Position): string {
     data: data.toString('base64url'),
   });
 }
-function decode(tokens: KeyRing, scope: string, token: string): Position {
+function decode(tokens: KeyRing, scope: string, token: string, now: number): Position {
   try {
     const value = unseal(tokens, scope, token) as {
       kid: number;
@@ -242,8 +244,8 @@ function decode(tokens: KeyRing, scope: string, token: string): Position {
       !Number.isSafeInteger(position.epoch) ||
       position.epoch < 1 ||
       !Number.isSafeInteger(position.at) ||
-      position.at > Date.now() + 60_000 ||
-      Date.now() - position.at > 900_000 ||
+      position.at > now + 60_000 ||
+      now - position.at > 900_000 ||
       routeOf(position.subject) === null ||
       !/^(?:[0-9]|10)(?:\.[0-9]{1,4})?$/.test(position.score)
     )
@@ -291,6 +293,7 @@ async function generation(client: PoolClient, input: RealmRankRequest): Promise<
 
 /** Production native Search port. No caller-supplied eligibility or disclosure flags are accepted. */
 export function createRealmRankSource(deps: Dependencies): RealmRankSource {
+  const capabilities = ratingCapabilities(deps);
   return {
     async page(actor, input, { deadline }) {
       if (
@@ -332,7 +335,8 @@ export function createRealmRankSource(deps: Dependencies): RealmRankSource {
         limit: input.limit,
         authority: createHash('sha256').update(JSON.stringify(authority)).digest('hex'),
       })}`;
-      const after = input.cursor === undefined ? null : decode(deps.tokens, scope, input.cursor);
+      const after =
+        input.cursor === undefined ? null : decode(deps.tokens, scope, input.cursor, capabilities.clock().getTime());
       if (after && partitionOf(routeOf(after.subject)!) !== input.partition) throw new ProblemError('invalid_cursor');
       const populationRoute = routeOf(input.realmId)!;
       const readPrior = () =>
@@ -450,14 +454,19 @@ export function createRealmRankSource(deps: Dependencies): RealmRankSource {
         // No lookahead, counts or refill. A full consumed batch may lead to one empty terminal page.
         next:
           last && observed.rows.length === input.limit
-            ? encode(deps.tokens, scope, {
-                generation: observed.generation,
-                prior: prior.generation,
-                epoch: observed.epoch,
-                score: last.score,
-                subject: last.subjectId,
-                at: Date.now(),
-              })
+            ? encode(
+                deps.tokens,
+                scope,
+                {
+                  generation: observed.generation,
+                  prior: prior.generation,
+                  epoch: observed.epoch,
+                  score: last.score,
+                  subject: last.subjectId,
+                  at: capabilities.clock().getTime(),
+                },
+                capabilities,
+              )
             : null,
       };
     },

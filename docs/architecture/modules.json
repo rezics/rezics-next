@@ -296,7 +296,11 @@
       "kind": "adapter",
       "owner": "content",
       "paths": ["services/kernel/src/rating/**", "services/kernel/db/rating/**"],
-      "publicEntries": ["services/kernel/src/rating/index.ts"],
+      "publicEntries": [
+        "services/kernel/src/rating/index.ts",
+        "services/kernel/src/rating/module.ts",
+        "services/kernel/src/rating/events.ts"
+      ],
       "allowedDependencies": [
         "kernel-access",
         "kernel-community",
@@ -465,7 +469,13 @@
         "services/kernel/src/memoized.ts",
         "services/kernel/src/request/access.ts",
         "services/kernel/src/route/route.ts",
-        "services/kernel/src/tokens/seal.ts"
+        "services/kernel/src/tokens/seal.ts",
+        "services/kernel/src/command/command.ts",
+        "services/kernel/src/events/log.ts",
+        "services/kernel/src/events/effects.ts",
+        "services/kernel/src/events/relays.ts",
+        "services/kernel/src/request/deadline.ts",
+        "services/kernel/src/work/registry.ts"
       ],
       "allowedDependencies": [
         "bounds",
@@ -513,7 +523,8 @@
         "kernel-library",
         "kernel-platform",
         "kernel-search",
-        "kernel-semantic"
+        "kernel-semantic",
+        "kernel-rating"
       ],
       "capabilities": []
     },

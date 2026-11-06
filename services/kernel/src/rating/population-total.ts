@@ -1,6 +1,7 @@
+import { runCommand, currentCommand, noEffect, type CommandTransaction } from '../command/command.ts';
+import type { RatingCapabilities } from './contract/capabilities.ts';
 import type { Pool, PoolClient } from 'pg';
 import { Value } from 'typebox/value';
-import { currentCommand, noEffect, runCommand, type CommandTransaction } from '../command/command.ts';
 import { partitionReadClient } from '../database/read-snapshot.ts';
 import { withConnection } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';
@@ -14,7 +15,7 @@ import {
   type PopulationTotalEvent,
 } from './events.ts';
 import applyTotal from './population-total-component-apply.sql';
-import { STANDARD_QUESTION_ID } from './votes.ts';
+import { STANDARD_QUESTION_ID } from './standard-question.ts';
 import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
 import {
   assertPopulationDeliveryDelta,
@@ -147,87 +148,89 @@ async function admit(client: Queryable, data: PopulationTotalDelivery): Promise<
 }
 
 /** One exact next receipt per command; gaps stay durable and never advance the frontier. */
-async function receive(pool: Pool, item: Address): Promise<boolean> {
+async function receive(pool: Pool, item: Address, capabilities?: RatingCapabilities): Promise<boolean> {
   const key = address(item);
-  const result = await runCommand(pool, { partition: partitionOf(key[0]) }, async (tx) => {
-    const inbox = await tx.query<{ payload: PopulationTotalDelivery; applied: boolean }>(
-      `SELECT payload,applied FROM rating.population_total_inbox
+  const result = await capabilities
+    .command(pool, { partition: partitionOf(key[0]) }, async (tx) => {
+      const inbox = await tx.query<{ payload: PopulationTotalDelivery; applied: boolean }>(
+        `SELECT payload,applied FROM rating.population_total_inbox
        WHERE route=$1 AND population_id=$2 AND source_partition=$3 AND serial=$4`,
-      key,
-    );
-    const row = inbox.rows[0];
-    if (!row) return noEffect(false);
-    if (row.applied) return noEffect(true);
-    await tx.query(
-      `INSERT INTO rating.population_total_received(route,population_id,source_partition)
-       VALUES($1,$2,$3) ON CONFLICT DO NOTHING`,
-      key.slice(0, 3),
-    );
-    const stream = await tx.query<{ serial: string }>(
-      `SELECT serial::text FROM rating.population_total_received
-       WHERE route=$1 AND population_id=$2 AND source_partition=$3 FOR UPDATE`,
-      key.slice(0, 3),
-    );
-    if (BigInt(stream.rows[0]!.serial) + 1n !== BigInt(item.serial)) {
-      // The initial stream insert must roll back too: noEffect may not conceal a domain write.
-      throw new PredecessorPending();
-    }
-    await tx.query("SELECT set_config('rating.population_total_writer','population-home-v1',true)");
-    // A first delivery may remove a pre-cutover contribution. The retained total is its baseline.
-    // Missing shards are explicitly zero; a negative update fails its CHECK and rolls back the receipt.
-    for (const delta of row.payload.deltas) {
-      await tx.query(
-        `INSERT INTO rating.population_total_component(route,question_id,population_id,shard,count,sum)
-         VALUES($1,$2,$3,$4,0,0) ON CONFLICT DO NOTHING`,
-        [key[0], delta.questionId, item.populationId, delta.shard],
+        key,
       );
-      const updated = await applyTotal.run(tx, {
-        population_route: key[0],
-        question_id: delta.questionId,
-        population_id: item.populationId,
-        shard: delta.shard,
-        count_delta: delta.count,
-        sum_delta: delta.sum,
-        check_epoch: delta.questionId === STANDARD_QUESTION_ID || item.populationId !== GLOBAL_CONTEXT.id,
-      });
-      if (!updated.length)
-        throw new Error('Rating population total shard unavailable or arithmetic exceeded its bound');
-    }
-    await tx.query(
-      `UPDATE rating.population_total_inbox SET applied=true
+      const row = inbox.rows[0];
+      if (!row) return noEffect(false);
+      if (row.applied) return noEffect(true);
+      await tx.query(
+        `INSERT INTO rating.population_total_received(route,population_id,source_partition)
+       VALUES($1,$2,$3) ON CONFLICT DO NOTHING`,
+        key.slice(0, 3),
+      );
+      const stream = await tx.query<{ serial: string }>(
+        `SELECT serial::text FROM rating.population_total_received
+       WHERE route=$1 AND population_id=$2 AND source_partition=$3 FOR UPDATE`,
+        key.slice(0, 3),
+      );
+      if (BigInt(stream.rows[0]!.serial) + 1n !== BigInt(item.serial)) {
+        // The initial stream insert must roll back too: noEffect may not conceal a domain write.
+        throw new PredecessorPending();
+      }
+      await tx.query("SELECT set_config('rating.population_total_writer','population-home-v1',true)");
+      // A first delivery may remove a pre-cutover contribution. The retained total is its baseline.
+      // Missing shards are explicitly zero; a negative update fails its CHECK and rolls back the receipt.
+      for (const delta of row.payload.deltas) {
+        await tx.query(
+          `INSERT INTO rating.population_total_component(route,question_id,population_id,shard,count,sum)
+         VALUES($1,$2,$3,$4,0,0) ON CONFLICT DO NOTHING`,
+          [key[0], delta.questionId, item.populationId, delta.shard],
+        );
+        const updated = await applyTotal.run(tx, {
+          population_route: key[0],
+          question_id: delta.questionId,
+          population_id: item.populationId,
+          shard: delta.shard,
+          count_delta: delta.count,
+          sum_delta: delta.sum,
+          check_epoch: delta.questionId === STANDARD_QUESTION_ID || item.populationId !== GLOBAL_CONTEXT.id,
+        });
+        if (!updated.length)
+          throw new Error('Rating population total shard unavailable or arithmetic exceeded its bound');
+      }
+      await tx.query(
+        `UPDATE rating.population_total_inbox SET applied=true
        WHERE route=$1 AND population_id=$2 AND source_partition=$3 AND serial=$4`,
-      key,
-    );
-    await tx.query(
-      `UPDATE rating.population_total_received SET serial=$4
+        key,
+      );
+      await tx.query(
+        `UPDATE rating.population_total_received SET serial=$4
        WHERE route=$1 AND population_id=$2 AND source_partition=$3`,
-      key,
-    );
-    return {
-      value: true,
-      events: [
-        {
-          type: POPULATION_TOTAL_DELIVERY,
-          data: {
-            action: 'received',
-            sourcePartition: item.sourcePartition,
-            populationId: item.populationId,
-            serial: item.serial,
-          } satisfies PopulationTotalEvent,
-        },
-      ],
-    };
-  }).catch((error: unknown) => {
-    if (error instanceof PredecessorPending) return { value: false };
-    throw error;
-  });
+        key,
+      );
+      return {
+        value: true,
+        events: [
+          {
+            type: POPULATION_TOTAL_DELIVERY,
+            data: {
+              action: 'received',
+              sourcePartition: item.sourcePartition,
+              populationId: item.populationId,
+              serial: item.serial,
+            } satisfies PopulationTotalEvent,
+          },
+        ],
+      };
+    })
+    .catch((error: unknown) => {
+      if (error instanceof PredecessorPending) return { value: false };
+      throw error;
+    });
   return result.value;
 }
 class PredecessorPending extends Error {}
 
 /** Exact source acknowledgment is a second local command, recoverable from either committed event. */
-async function acknowledge(pool: Pool, item: Address): Promise<void> {
-  await runCommand(pool, { partition: item.sourcePartition }, async (tx) => {
+async function acknowledge(pool: Pool, item: Address, capabilities?: RatingCapabilities): Promise<void> {
+  await (capabilities?.command ?? runCommand)(pool, { partition: item.sourcePartition }, async (tx) => {
     const changed = await tx.query(
       `UPDATE rating.population_total_delivery SET pending=false
        WHERE partition_no=$1 AND population_id=$2 AND serial=$3 AND pending RETURNING serial`,
@@ -244,7 +247,7 @@ async function acknowledge(pool: Pool, item: Address): Promise<void> {
   });
 }
 
-async function deliver(pool: Pool, data: PopulationTotalDelivery): Promise<void> {
+async function deliver(pool: Pool, data: PopulationTotalDelivery, capabilities?: RatingCapabilities): Promise<void> {
   await withConnection(pool, async (client) => {
     await client.query('BEGIN');
     try {
@@ -255,7 +258,7 @@ async function deliver(pool: Pool, data: PopulationTotalDelivery): Promise<void>
       throw error;
     }
   });
-  if (await receive(pool, data)) await acknowledge(pool, data);
+  if (await receive(pool, data, capabilities)) await acknowledge(pool, data, capabilities);
 }
 
 /** Shared foreground completion and registered worker recovery use the identical inbox/receipt commands. */
@@ -263,6 +266,7 @@ export async function flushPopulationTotalDeliveries(
   pool: Pool,
   partition: number,
   populations?: readonly string[],
+  capabilities?: RatingCapabilities,
 ): Promise<void> {
   if (populations && (populations.length === 0 || populations.length > MAX_RATING_CHANGE_PAGE))
     throw new RangeError(
@@ -281,11 +285,11 @@ export async function flushPopulationTotalDeliveries(
       );
     });
     if (page.rows.length === 0) return;
-    for (const { payload } of page.rows) await deliver(pool, payload);
+    for (const { payload } of page.rows) await deliver(pool, payload, capabilities);
   }
 }
 
-export function createPopulationTotalEffect(pool: Pool): Effect {
+export function createPopulationTotalEffect(pool: Pool, capabilities?: RatingCapabilities): Effect {
   return {
     name: 'rating_population_total',
     types: [POPULATION_TOTAL_DELIVERY],
@@ -295,8 +299,8 @@ export function createPopulationTotalEffect(pool: Pool): Effect {
     },
     async run(event) {
       const data = parse(event);
-      if (data.action === 'deliver') return deliver(pool, data);
-      await acknowledge(pool, data);
+      if (data.action === 'deliver') return deliver(pool, data, capabilities);
+      await acknowledge(pool, data, capabilities);
       // One successor probe, not a receipt/history scan. Its commit emits its own continuation.
       if (BigInt(data.serial) < MAX_SERIAL) {
         const next = {
@@ -304,7 +308,7 @@ export function createPopulationTotalEffect(pool: Pool): Effect {
           populationId: data.populationId,
           serial: String(BigInt(data.serial) + 1n),
         };
-        if (await receive(pool, next)) await acknowledge(pool, next);
+        if (await receive(pool, next, capabilities)) await acknowledge(pool, next, capabilities);
       }
     },
   };

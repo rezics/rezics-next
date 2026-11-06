@@ -1,5 +1,5 @@
 import type { PoolClient } from 'pg';
-import { STANDARD_QUESTION_ID } from './votes.ts';
+import { STANDARD_QUESTION_ID } from './standard-question.ts';
 import { checkedRatingQuestionScale } from './question-scale.ts';
 import type { ShelfScoreQuestion } from '../library/shelf-contract.ts';
 import { ShelfReadUnavailableError } from '../library/shelf-reader-unavailable.ts';
