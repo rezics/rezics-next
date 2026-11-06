@@ -1234,42 +1234,44 @@ export function createCollectionReads(
         };
         const firstLifetime = await lifetime();
         await authorize(time);
-        return await dependencies.search.savedCatalogueMembers({
-          actor: viewer,
-          collection: {
-            id: collectionId,
-            revision: collection.revision,
-            ruleRevision: saved.revision,
-            sourceGeneration: saved.sourceGeneration,
-            reader: firstLifetime,
-          },
-          filter: admission.filter!,
-          release: { digest: saved.releaseDigest, release: admission.release! },
-          limit,
-          ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
-          scope: { access, actor: viewer, routeKey: dependencies.routeKey, nativeT: time, deadline },
-          async revalidate() {
-            const finalTime = await withConnection(pool, (client) =>
-              mintReadTime(deadlineClient(client, deadline), dependencies.clock),
-            );
-            try {
-              await authorize(finalTime);
-              const finalLifetime = await lifetime();
-              if (
-                finalLifetime.minimumAuthnEpoch !== firstLifetime.minimumAuthnEpoch ||
-                finalLifetime.operator !== firstLifetime.operator
-              )
-                throw new ProblemError('stale_cursor');
-            } finally {
-              releaseOperationalTime(finalTime);
-            }
-          },
-        }).catch((error: unknown) => {
-          // Search's restart from a superseded saved cursor is this members cursor's stale response.
-          if (options.cursor != null && error instanceof ProblemError && error.code === 'search_restart_required')
-            throw new ProblemError('stale_cursor');
-          throw error;
-        });
+        return await dependencies.search
+          .savedCatalogueMembers({
+            actor: viewer,
+            collection: {
+              id: collectionId,
+              revision: collection.revision,
+              ruleRevision: saved.revision,
+              sourceGeneration: saved.sourceGeneration,
+              reader: firstLifetime,
+            },
+            filter: admission.filter!,
+            release: { digest: saved.releaseDigest, release: admission.release! },
+            limit,
+            ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
+            scope: { access, actor: viewer, routeKey: dependencies.routeKey, nativeT: time, deadline },
+            async revalidate() {
+              const finalTime = await withConnection(pool, (client) =>
+                mintReadTime(deadlineClient(client, deadline), dependencies.clock),
+              );
+              try {
+                await authorize(finalTime);
+                const finalLifetime = await lifetime();
+                if (
+                  finalLifetime.minimumAuthnEpoch !== firstLifetime.minimumAuthnEpoch ||
+                  finalLifetime.operator !== firstLifetime.operator
+                )
+                  throw new ProblemError('stale_cursor');
+              } finally {
+                releaseOperationalTime(finalTime);
+              }
+            },
+          })
+          .catch((error: unknown) => {
+            // Search's restart from a superseded saved cursor is this members cursor's stale response.
+            if (options.cursor != null && error instanceof ProblemError && error.code === 'search_restart_required')
+              throw new ProblemError('stale_cursor');
+            throw error;
+          });
       } finally {
         releaseOperationalTime(time);
       }
