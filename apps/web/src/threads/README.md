@@ -660,3 +660,4 @@ Accounts admits identities.
   media/account reads. Native, installed, seeded browser and physical growth acceptance remain separately owned.
   Source-shape thread-page checks follow current owners: Byline holds the edited comparison and wraps long names,
   TopBar the sticky header, Share stays in the post action bar, and FeedActionBar supplies Reply.
+  Decision: lifetime tests wait for the actual page and personal request spies rather than a fixed number of microtasks.

@@ -103,5 +103,6 @@ the safe runtime behavior, but does not claim that private SSR and private hydra
 - Growth check: retain original page and personal bounds, prevent obsolete queued reads and publication, and exercise
   first and repeated healthy refresh, recovery followed by refresh, private-cache discard, exact external successor
   retention and own-cancellation recovery. These paths add only constant per-read ownership and boundary state; they
-  do not add native requests, per-row work, polling or authentication. The connected regressions authored for this
+  do not add native requests, per-row work, polling or authentication. Lifetime tests wait for the actual page and
+  personal request spies rather than a fixed number of microtasks. The connected regressions authored for this
   implementation remain UNRUN until the deferred acceptance pass.

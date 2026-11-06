@@ -49,6 +49,9 @@ const globals = {
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
 for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+Object.defineProperty(window, 'scrollTo', { configurable: true, writable: true, value: () => {} });
+const elementScroll = window.HTMLElement.prototype as { scrollTo?: (x?: number, y?: number) => void };
+if (typeof elementScroll.scrollTo !== 'function') elementScroll.scrollTo = () => {};
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -58,6 +61,27 @@ function deferred<T>() {
     reject = no;
   });
   return { promise, resolve, reject };
+}
+
+const flush = () =>
+  act(async () => {
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+  });
+
+async function until(predicate: () => boolean, label: string, turns = 50) {
+  for (let attempt = 0; attempt < turns; attempt++) {
+    if (predicate()) return;
+    await flush();
+  }
+  throw new Error(`Timed out waiting for ${label}`);
+}
+
+async function settleUntil(predicate: () => boolean, turns = 20) {
+  for (let attempt = 0; attempt < turns; attempt++) {
+    if (predicate()) return true;
+    await flush();
+  }
+  return predicate();
 }
 
 const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
@@ -295,17 +319,22 @@ async function mountRoute({
   );
   await act(async () => {
     root.render(tree());
-    await Promise.resolve();
   });
+  await until(() => pageReads.length >= 1, 'the thread page read');
   const settlePage = async (
     index: number,
     result: ThreadReadingPage | { redirect: { id: string; title: string | null } },
   ) => {
+    const personalBefore = personalReads.length;
     await act(async () => {
       pageReads[index]!.work.resolve(result);
       await operation.catch(() => undefined);
-      await Promise.resolve();
     });
+    if (session.state === 'signed-in' && !('redirect' in result)) {
+      await settleUntil(() => personalReads.length > personalBefore);
+    } else {
+      await flush();
+    }
   };
   const settlePersonal = async (
     index: number,
@@ -313,8 +342,15 @@ async function mountRoute({
   ) => {
     await act(async () => {
       personalReads[index]!.work.resolve(result);
-      await new Promise((resolve) => window.setTimeout(resolve, 0));
     });
+    await until(
+      () =>
+        client
+          .getQueryCache()
+          .findAll({ queryKey: ['thread-personal', personalReads[index]!.data.id] })
+          .some((query) => query.state.status === 'success' && query.state.fetchStatus === 'idle'),
+      'the admitted personal result',
+    );
   };
   const dispose = async () => {
     await act(async () => root.unmount());
@@ -471,8 +507,7 @@ test('the actual route keeps the healthy anonymous page through SSR and a differ
   });
   const operation = router.load();
   void operation.catch(() => undefined);
-  await Promise.resolve();
-  await Promise.resolve();
+  await until(() => pageReads.length >= 1, 'the anonymous SSR page read');
   expect(pageReads).toHaveLength(1);
   expect(pageReads[0]!.data).toEqual({ id: threadId, expectedSlug: slug, credentialMode: 'anonymous' });
   pageReads[0]!.work.resolve(pageFor(threadId, { privateRead: false, body: 'Public anonymous page body' }));
@@ -535,8 +570,7 @@ test('a private server result is redacted on both sides of hydration when browse
   });
   const operation = router.load();
   void operation.catch(() => undefined);
-  await Promise.resolve();
-  await Promise.resolve();
+  await until(() => pageReads.length >= 1, 'the private SSR page read');
   expect(pageReads).toHaveLength(1);
   await act(async () => {
     pageReads[0]!.work.resolve(pageFor(threadId, { privateRead: true }));
@@ -660,6 +694,7 @@ test('the original anonymous page remains usable when the browser prepares a ses
     expect(page.host.textContent).toContain('Public page before session preparation');
     await act(async () => page.client.setQueryData(sessionQuery.queryKey, signedIn()));
     expect(page.host.textContent).toContain('Public page before session preparation');
+    await until(() => personalReads.length >= 1, 'the personal read after session preparation');
     expect(personalReads).toHaveLength(1);
     expect(pageReads).toHaveLength(1);
     await page.settlePersonal(0, personalFor(threadId, id(41)));
@@ -1131,8 +1166,8 @@ test('the actual same-client loader discards private data when locale changes wi
       setLocale('zh-Hant', { reload: false });
       reload = page.router.invalidate();
       page.setOperation(reload);
-      await Promise.resolve();
     });
+    await until(() => pageReads.length >= 2, 'the locale-change page read');
     expect(pageReads).toHaveLength(2);
     expect(pageReads[1]!.data).toEqual({ id: threadId, credentialMode: 'session' });
     const currentQuery = page.client.getQueryCache().find({ queryKey: key, exact: true });
@@ -1171,6 +1206,13 @@ test('remembered-slug ordinary refreshes stay healthy across repeated same-key c
     await page.settlePage(0, erasedPageFor(threadId, 'Initial erased page'));
     if (personalReads.length) await page.settlePersonal(0, personalFor(threadId, id(41)));
 
+    await until(
+      () =>
+        [...page.host.querySelectorAll<HTMLButtonElement>('button')].some(
+          (button) => button.textContent?.trim() === m.thread_post_restore(),
+        ),
+      'the restore control',
+    );
     const firstRestore = [...page.host.querySelectorAll<HTMLButtonElement>('button')].find(
       (button) => button.textContent?.trim() === m.thread_post_restore(),
     );
@@ -1894,8 +1936,7 @@ test('a stale slug read cannot remember a title or perform its 301 after the ses
   });
   const operation = router.load();
   void operation.catch(() => undefined);
-  await Promise.resolve();
-  await Promise.resolve();
+  await until(() => slugReads.length >= 1, 'the remembered-slug read');
   expect(slugReads).toHaveLength(1);
   await act(async () => client.setQueryData(sessionQuery.queryKey, signedIn('replacement-csrf')));
   slugReads[0]!.work.resolve({ id: threadId, title: 'Changed while queued' });
@@ -1982,6 +2023,10 @@ test('mounted composed advice keeps denied actions inert, seeds watch and slow m
       await route.settlePersonal(0, personalFor(threadId, id(41)));
       expect(route.host.textContent).toContain('Composed private author');
       expect(route.host.textContent).toContain(m.thread_watch_watching());
+      await until(
+        () => route.host.textContent?.includes(m.slow_mode_preparing()) ?? false,
+        'composed slow-mode preparing',
+      );
       expect(route.host.textContent).toContain(m.slow_mode_preparing());
       const reply = route.host.querySelector<HTMLButtonElement>('button[data-slot="feed-reply-action"]');
       expect(reply?.disabled).toBe(!allowed);
