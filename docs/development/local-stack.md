@@ -256,7 +256,8 @@ name alone does not admit a container. Walk stacks do not change check placement
 hosts a and b.
 
 Decision: walk stacks are a bounded, queued replacement for the local-container refusal, granted only to workers whose
-brief lists native or browser acceptance.
+brief lists native or browser acceptance. Local stack-lease and walk-admission tests set `KERNEL_CHECK_REMOTE` to a
+missing hosts file before spawn so they exercise the local lease rather than falling back to shared check hosts.
 Admission skips slots whose application or infrastructure ports are already listening, including containers left by
 another interrupted task after its lease was released. It leaves those processes and containers running and queues
 when no slot has free ports; port collisions do not authorize stopping another task's stack.

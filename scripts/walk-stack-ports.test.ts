@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { createServer, type AddressInfo } from 'node:net';
 import { acquireStackSlot } from './stack-lease.ts';
 import {
@@ -98,7 +98,11 @@ test('walk admission skips a foreign listener and leaves it running after releas
   const directory = await mkdtemp(`${import.meta.dir}/../.temp/walk-port-test-`);
   const slot = await acquireStackSlot(
     'walk ports',
-    { REZICS_STACK_LEASE_DIR: directory, REZICS_STACK_SLOTS: '2' },
+    {
+      REZICS_STACK_LEASE_DIR: directory,
+      REZICS_STACK_SLOTS: '2',
+      KERNEL_CHECK_REMOTE: join(directory, 'no-such-hosts.json'),
+    },
     1,
     undefined,
     undefined,
