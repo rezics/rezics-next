@@ -124,8 +124,10 @@ test(
         ),
       );
       expect(reads.map((read) => read.status)).toEqual([200, 200]);
-      const endpoints = reads.map((read) => read.body.reviewedIdentity);
-      expect(endpoints.every((endpoint) => endpoint && endpoint.claimTransactionId)).toBe(true);
+      const endpoints = reads.map(
+        (read) => (read.body as { reviewedIdentity: { claimTransactionId: string } }).reviewedIdentity,
+      );
+      expect(endpoints.every((endpoint) => endpoint.claimTransactionId)).toBe(true);
       const stored = await savePersonalOriginal(d, subjects[1]!);
       const key = quotedKey();
       const first = await d.request(
@@ -155,14 +157,16 @@ test(
       const [, redirected] = [...subjects].sort();
       const hop = await d.request('anonymous', 'GET', `/v1/subjects/${redirected}`);
       expect(hop.status).toBe(308);
-      expect(hop.body.redirect.from).toBe(redirected);
-      const survivor = hop.body.redirect.to as string;
+      const redirect = (hop.body as { redirect: { from: string; to: string } }).redirect;
+      expect(redirect.from).toBe(redirected);
+      const survivor = redirect.to;
       expect(subjects.includes(survivor)).toBe(true);
       expect(routeOf(survivor)).not.toBeNull();
       const publicRead = await d.request('anonymous', 'GET', `/v1/subjects/${survivor}`);
       expect(publicRead.status).toBe(200);
-      expect(publicRead.body.subject.id).toBe(survivor);
-      expect(publicRead.body.subject.type).toBe('schema:Person');
+      const published = (publicRead.body as { subject: { id: string; type: string } }).subject;
+      expect(published.id).toBe(survivor);
+      expect(published.type).toBe('schema:Person');
       expect((await d.request('editor', 'GET', `/v1/subjects/${survivor}`)).status).toBe(200);
       expect(await personalSnapshot(d)).toEqual(stored);
     }),
