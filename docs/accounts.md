@@ -343,9 +343,16 @@ when present and the native operator marking for automation. Delegation does not
 
 `effective permission = actor grants ∩ current client-consented scopes ∩ principal grants (if delegated)`.
 
+Decision: native policy consumes the declared `deadlineLive` fact, while `live` fences read freshness. Grant
+acceptance uses Auth-issued assignment tokens and checks grant/revoke with the same bearer. Own-account authority
+remains explicit advice.
+
 Each operand can deny independently. Unknown actions and missing evidence deny; native resource, time,
 suspension, revocation and fence floors remain. Signed-in identity, a role label, page advice or review link
 establishes no allowed action. Consumers use supported Access preparations rather than reproduce this formula.
+Decision: resource Access retains an uncertain command with its original caller and transport across departure
+and return; only explicit retry may send it, and a later refusal cannot settle the earlier unknown outcome.
+Session replacement retires its callbacks and private observations; it never lends the replacement session to that command.
 The existing anonymous public floor remains resource/catalogue-bound and subject to applicable denials; a
 narrower token does not remove public visibility. Extraction introduces no baseline allowance or old/new allow-OR.
 
@@ -679,7 +686,8 @@ production uses the system clock, without request overrides. Grants, role assign
 use native `tstzrange` validity at T, with `WITHOUT OVERLAPS`; cleanup is not an expiry correctness barrier.
 See [permission-time.sql][permission-time], [permission-check.sql][permission-sql], [schema][schema] and
 [Evaluator time][access-time]. Decision: `permission-check.sql` returns that deadline operand as one
-`deadlineLive` column plus statement-level `live`; the policy adapter reads `live`.
+`deadlineLive` column plus statement-level `live`; the policy adapter reads `deadlineLive`, while the transport
+checks `live` independently. The native projection byte bound reserves both returned fields.
 
 Bearer credentials originate outside the kernel: `iat`, `exp` and every bearer-expiry comparison use wall time.
 Kernel-issued approvals, operator openings, registration proofs, capabilities and cursors use kernel T. An
@@ -855,3 +863,9 @@ external or backup erasure. No provider, retention schedule or deleted-account r
 Native receiving keeps the compiled SQL `deadlineLive` projection as the Access deadline fact. The check
 fixtures invoke the current erasure producer-list function and define each Search service method once;
 these repairs align trusted producers without adding authorization rules or changing account custody.
+
+Composed native grant clients register scopes from the installed action catalogue that Access uses, including the internal actions a delegated role needs. Mounted HTTP actions alone do not define that scope ceiling. Native deadline decisions use the SQL `deadlineLive` operand in scalar, explicit and batch checks; statement freshness (`live`) stays separate. Source original-work admission stays unavailable until its owner publishes the complete declaration; Accounts does not synthesize that ownership.
+
+Decision: the mounted resource-access route imports only declared public entries: Accounts' resource data and recovery visits, and the content-owned post-command session source. It keeps no second session observer.
+
+Decision: a 2xx grant response saves a write only when its body exactly acknowledges the submitted resource, subject, actions or role, and validity. Preparation is the `preparing` problem code or type; `dependency_unavailable` is the only other problem form, and it stays unavailable.

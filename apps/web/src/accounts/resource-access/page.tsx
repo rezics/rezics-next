@@ -525,13 +525,21 @@ function GrantForm({
     </form>
   );
 }
-export function ResourceAccessPage({ initial, io }: { initial: AccessState; io: AccessIO }) {
+export function ResourceAccessPage({
+  initial,
+  io,
+  recovery,
+}: {
+  initial: AccessState;
+  io: AccessIO;
+  recovery?: AccessRecovery;
+}) {
   // A loader's resource and complete acting authority own all controller and form state.
   const scope =
     initial.status === 'ready' ? JSON.stringify([initial.page.resource, initial.page.authority]) : initial.status;
-  const [lifetime, setLifetime] = useState({ scope, io, version: 0 });
-  if (lifetime.scope !== scope || lifetime.io !== io) {
-    setLifetime({ scope, io, version: lifetime.version + 1 });
+  const [lifetime, setLifetime] = useState({ scope, io, recovery, version: 0 });
+  if (lifetime.scope !== scope || lifetime.io !== io || lifetime.recovery !== recovery) {
+    setLifetime({ scope, io, recovery, version: lifetime.version + 1 });
     return null;
   }
   return (
@@ -546,13 +554,21 @@ export function ResourceAccessPage({ initial, io }: { initial: AccessState; io: 
         discardAction: m.thread_authoring_leave(),
       }}
     >
-      <ResourceAccessEditor key={lifetime.version} initial={initial} io={io} />
+      <ResourceAccessEditor key={lifetime.version} initial={initial} io={io} {...(recovery ? { recovery } : {})} />
     </AuthoringDepartureBoundary>
   );
 }
 
-function ResourceAccessEditor({ initial, io }: { initial: AccessState; io: AccessIO }) {
-  const [controller] = useState(() => new AccessRecovery(initial, io));
+function ResourceAccessEditor({
+  initial,
+  io,
+  recovery,
+}: {
+  initial: AccessState;
+  io: AccessIO;
+  recovery?: AccessRecovery;
+}) {
+  const [controller] = useState(() => recovery ?? new AccessRecovery(initial, io));
   useLayoutEffect(controller.activate, [controller]);
   const currentHeading = useRef<HTMLHeadingElement>(null);
   const focusHandoff = useRef(0);
