@@ -68,6 +68,7 @@ import {
 } from './task-workspace.ts';
 import { webModule, WorkspaceController } from './workspace.ts';
 import { captureLaunchContext } from './launch-context.ts';
+import { consumeApplicableBriefProposal, recordReplacementBrief } from './durable-follow-up.ts';
 import { toolIncidentRetryAllowed } from './tool-incidents.ts';
 import { dependencyInstallationMatches } from './shared-dependencies.ts';
 import { prepareInitialDispatch } from './dispatch-preparation.ts';
@@ -998,7 +999,14 @@ export class WorkerTasks {
     options: RetryOptions = {},
     actor: AuthenticatedManager | null | undefined = undefined,
   ): void {
-    const expectedAttempt = options.expectedAttempt ?? this.store.task(taskId).currentAttempt;
+    const task = this.store.task(taskId);
+    const expectedAttempt = options.expectedAttempt ?? task.currentAttempt;
+    if (options.brief) {
+      const submitted = this.validateBrief(options.brief, taskId, actor).brief;
+      if (submitted.goal !== task.brief.goal || submitted.manager !== task.brief.manager)
+        throw new Error('a reshaped brief must keep the same goal and manager');
+      recordReplacementBrief(this.store, task, submitted.markdown, expectedAttempt);
+    }
     const lease = acquireDirectoryLease(
       join(this.settings.stateDirectory, 'leases', taskId),
       this.settings.policy?.leases,
@@ -1064,8 +1072,14 @@ export class WorkerTasks {
   }
   private queueRetryLeased(taskId: string, options: RetryOptions, actor?: AuthenticatedManager | null): void {
     const task = this.store.task(taskId);
-    if (task.currentAttempt !== options.expectedAttempt)
-      throw new StaleAttemptError({ taskId, attempt: options.expectedAttempt! }, task.currentAttempt);
+    if (task.currentAttempt !== options.expectedAttempt) {
+      if (
+        options.brief === undefined ||
+        options.expectedAttempt === undefined ||
+        options.expectedAttempt > task.currentAttempt
+      )
+        throw new StaleAttemptError({ taskId, attempt: options.expectedAttempt! }, task.currentAttempt);
+    }
     if (!['ready', 'running', 'landing', 'stopped', 'held'].includes(task.state))
       throw new Error(`cannot retry ${task.state} task`);
     const nextBrief = options.brief === undefined ? task.brief : this.validateBrief(options.brief, taskId, actor).brief;
@@ -1105,6 +1119,7 @@ export class WorkerTasks {
       if (reshaped.brief.goal !== task.brief.goal || reshaped.brief.manager !== task.brief.manager)
         throw new Error('a reshaped brief must keep the same goal and manager');
       if (sameBriefText(reshaped.brief.markdown, task.brief.markdown)) throw new BriefContractUnchangedError();
+      recordReplacementBrief(this.store, task, reshaped.brief.markdown, options.expectedAttempt ?? task.currentAttempt);
       const briefPath = join(this.settings.stateDirectory, 'briefs', `${taskId}-queued-${crypto.randomUUID()}.md`);
       mkdirSync(dirname(briefPath), { recursive: true });
       writeFileSync(briefPath, reshaped.brief.markdown, { flag: 'wx' });
@@ -1160,6 +1175,8 @@ export class WorkerTasks {
       throw new Error('a reshaped brief must keep the same goal and manager');
     if (reshaped && sameBriefText(reshaped.brief.markdown, task.brief.markdown))
       throw new BriefContractUnchangedError();
+    if (reshaped)
+      recordReplacementBrief(this.store, task, reshaped.brief.markdown, options.expectedAttempt ?? task.currentAttempt);
     const briefPath = reshaped
       ? join(this.settings.stateDirectory, 'briefs', `${taskId}-queued-${crypto.randomUUID()}.md`)
       : undefined;
@@ -1471,6 +1488,19 @@ export class WorkerTasks {
       let task = this.store.task(taskId);
       if (options.expectedAttempt !== undefined && task.currentAttempt !== options.expectedAttempt)
         throw new StaleAttemptError({ taskId, attempt: options.expectedAttempt }, task.currentAttempt);
+      if (options.brief === undefined) {
+        const proposal = consumeApplicableBriefProposal(this.store, task);
+        if (proposal) {
+          const briefPath = join(
+            this.settings.stateDirectory,
+            'briefs',
+            `${taskId}-proposed-${crypto.randomUUID()}.md`,
+          );
+          mkdirSync(dirname(briefPath), { recursive: true });
+          writeFileSync(briefPath, proposal.markdown, { flag: 'wx' });
+          options = { ...options, brief: briefPath };
+        }
+      }
       this.store.assertRetryAllowed({ taskId, attempt: task.currentAttempt });
       if (!task.branch || !task.base) throw new Error('Imported attempts need a dispatchable contract before retry');
       const pageDataRepair = Boolean(options.pageDataRepairKey);
