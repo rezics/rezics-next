@@ -131,8 +131,9 @@ Decision: uncertain own-vote writes keep the optimistic units and original idemp
 command; a stale review rolls back and requires an explicit fresh save.
 Decision: Global distribution uses the native `/ratings` aggregate admission (exact subject identity and freshness);
 a published headline never reconstructs a histogram from an unadmitted source. Disposable native stacks attach
-PostgreSQL to the test loopback namespace when the host network is unshared, so the owned database is reachable
-on that namespace's port 5432 without a published host port.
+PostgreSQL to the test loopback namespace when that namespace has only loopback, differs from PID 1, or cannot
+read PID 1's netns (`unshare --user`), so the owned database is reachable on that namespace's port 5432 without a
+published host port.
 
 The existing route reads one preference snapshot, then prepares shelf, Continue and navigation reads independently
 and accepts only matching viewer/credential origins. Chronological shelf reads request one FULL page of 20 entries;

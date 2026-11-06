@@ -4,10 +4,10 @@ import { fork, spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { request as httpsRequest } from 'node:https';
 import { mkdtemp, rm } from 'node:fs/promises';
-import { readlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
+import { isolatedNetworkNamespacePath, isolatedOwnedPostgresUrl } from './owned-postgres.ts';
 import { exportJWK, generateKeyPair } from 'jose';
 import { resolveBunCommand } from '../../../../scripts/gate.ts';
 import type { SemanticOutcomeDriver } from '../../../../services/kernel/test/semantic/outcome-driver.ts';
@@ -401,15 +401,6 @@ async function startDurableWorker(
   }
 }
 
-function isolatedNetworkNamespacePath(): string | undefined {
-  try {
-    if (readlinkSync('/proc/self/ns/net') === readlinkSync('/proc/1/ns/net')) return undefined;
-    return `/proc/${process.pid}/ns/net`;
-  } catch {
-    return undefined;
-  }
-}
-
 function publishedPostgresUrl(container: string): string {
   const portResult = Bun.spawnSync(['docker', 'port', container, '5432/tcp']);
   if (portResult.exitCode !== 0)
@@ -475,11 +466,12 @@ async function startOwnedPostgres(): Promise<{ container: string; databaseUrl: s
   const container = networkNamespace
     ? startPostgresContainer(docker, { networkNamespace })
     : startPostgresContainer();
-  // Isolated netns loopback is empty; the image listens on 5432 there. A pre-closed
-  // ephemeral host port never became the server port (logs stayed on 5432).
-  const databaseUrl = networkNamespace
-    ? 'postgres://rezics:rezics@127.0.0.1:5432/rezics?sslmode=disable'
-    : publishedPostgresUrl(container);
+  // Unshare --user cannot always read PID 1's netns, so a published host port
+  // stayed on the original loopback (ECONNREFUSED 127.0.0.1:<ephemeral>).
+  const databaseUrl = networkNamespace ? isolatedOwnedPostgresUrl : publishedPostgresUrl(container);
+  reportStackProgress(
+    `Native web stack startup: PostgreSQL ${networkNamespace ? `namespace ${networkNamespace}` : 'published host port'} at ${databaseUrl.replace(/:[^:@]+@/, ':***@')}`,
+  );
   await waitForOwnedPostgres(container, databaseUrl);
   return { container, databaseUrl };
 }
