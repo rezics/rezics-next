@@ -177,8 +177,23 @@ function fixtureAccess(entries: ReturnType<typeof actionCatalogue> = catalogue) 
   });
 }
 
+let mountedActions: ReturnType<typeof actionCatalogue> | undefined;
 function mountedCatalogue() {
-  return actionCatalogue(createKernel({ pool, routeKey: new Uint8Array(32), receiptKeys: testReceiptKeys() }));
+  return (mountedActions ??= actionCatalogue(
+    createKernel({ pool, routeKey: new Uint8Array(32), receiptKeys: testReceiptKeys() }),
+  ));
+}
+
+async function deleteGlobalContext() {
+  const client = await reader.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query("SELECT set_config('semantic.erasure_cleanup', 'on', true)");
+    await client.query('DELETE FROM semantic.context WHERE route=0 AND context_id=$1', [PLATFORM_RESOURCE.id]);
+    await client.query('COMMIT');
+  } finally {
+    client.release();
+  }
 }
 
 beforeAll(async () => {
@@ -417,7 +432,10 @@ test('Auth-issued scopes and installed formula govern delegation, revocation and
     ).rows,
   ).toHaveLength(0);
   for (const action of imports) expect(await allowed(automated, action)).toBe(false);
-  await grants.revokeRole(await context(person, [...actions, 'gate:any']), {
+  const revokeScopes = [...new Set([...actions, ...semanticActions.keys(), 'gate:any'])].filter(
+    (scope) => scope !== 'media:complete',
+  );
+  await grants.revokeRole(await context(person, revokeScopes), {
     resource: PLATFORM_RESOURCE,
     subject: { kind: 'account', id: person },
     role: PLATFORM_GOVERNANCE_ROLE,
@@ -481,17 +499,7 @@ test('missing or nonhuman, inactive or fenced accounts refuse without marker, gr
 
 test('only the seeded real Global row admits installation and native failure rolls everything back', async () => {
   for (const failure of ['missing-global', 'wrong-kind', 'audit']) {
-    if (failure === 'missing-global') {
-      const client = await reader.connect();
-      try {
-        await client.query('BEGIN');
-        await client.query("SELECT set_config('semantic.erasure_cleanup', 'on', true)");
-        await client.query('DELETE FROM semantic.context WHERE route=0 AND context_id=$1', [PLATFORM_RESOURCE.id]);
-        await client.query('COMMIT');
-      } finally {
-        client.release();
-      }
-    }
+    if (failure === 'missing-global') await deleteGlobalContext();
     if (failure === 'wrong-kind')
       await reader.query("UPDATE semantic.context SET kind='community' WHERE route=0 AND context_id=$1", [
         PLATFORM_RESOURCE.id,
@@ -693,8 +701,7 @@ test('local showcase refuses current Global/operator-marker mismatches before re
     if (installed) await bootstrapLocalShowcaseBoardCreation(pool, person);
     for (const failure of ['missing-global', 'wrong-kind', 'missing-marker', 'wrong-operator', 'other-account']) {
       const marker = (await snapshot()).marker[0];
-      if (failure === 'missing-global')
-        await reader.query('DELETE FROM semantic.context WHERE route=0 AND context_id=$1', [PLATFORM_RESOURCE.id]);
+      if (failure === 'missing-global') await deleteGlobalContext();
       if (failure === 'wrong-kind')
         await reader.query("UPDATE semantic.context SET kind='community' WHERE route=0 AND context_id=$1", [
           PLATFORM_RESOURCE.id,

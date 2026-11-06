@@ -35,7 +35,8 @@ withheld pages open `reading_progress` and carry `progress_session:list`; a susp
 unauthenticated. Whitespace-only prefix continuation matches the unfiltered page; authenticated list tokens stay
 unique per issuance. Growth seed encoding resets its visited-node ceiling on each insert batch. Generic prefix plans may
 Bitmap Heap Scan `personal_label_live_name`; Seq Scan stays refused. Assignment Seq Scan oracles stay the
-existing SQL.
+existing SQL. FULL HTTP growth folds native plan notices so Access formula EXPLAIN stays inside the telemetry
+cap; Seq Scan on Library relations stays refused.
 
 ## Collection operation costs
 
