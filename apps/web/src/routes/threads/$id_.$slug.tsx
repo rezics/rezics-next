@@ -319,7 +319,10 @@ export function ThreadPage() {
   const page = activePage;
   const personalOptions = useMemo(() => threadPersonalQuery(id, cursor, postIds), [id, cursor, postIds]);
   const personalAttempt = useMemo(
-    () => caller?.beginPersonalRead(personalOptions.queryKey, JSON.stringify([id, cursor ?? null, ...postIds])),
+    () =>
+      caller && !caller.isRetired() && caller.isConnectedCurrent()
+        ? caller.beginPersonalRead(personalOptions.queryKey, JSON.stringify([id, cursor ?? null, ...postIds]))
+        : undefined,
     [
       caller,
       personalOptions.queryKey,
@@ -331,14 +334,17 @@ export function ThreadPage() {
       caller?.personalRevision,
     ],
   );
+  const personalAdmitted = !!caller && !caller.isRetired();
   const personalQuery = useQuery({
     ...personalOptions,
+    queryKey: personalAdmitted ? personalOptions.queryKey : ['thread-personal', 'inactive', id],
+    gcTime: 0,
     enabled:
       session === 'signed-in' &&
-      !!caller &&
+      personalAdmitted &&
       binding.current &&
-      caller.personalSessionReady() &&
-      caller.isConnectedCurrent(),
+      !!caller?.personalSessionReady() &&
+      !!caller?.isConnectedCurrent(),
     structuralSharing: false,
     queryFn: async (context) => {
       if (!caller || !personalAttempt) throw new ThreadPageCallerRetired();
@@ -372,7 +378,13 @@ export function ThreadPage() {
   useLayoutEffect(() => {
     for (const operation of retiredReadOperations.current.splice(0)) retireObsoleteOperation(operation);
   }, [readScope]);
+  useLayoutEffect(() => {
+    if (personalAdmitted) return;
+    queryClient.removeQueries({ queryKey: personalOptions.queryKey, exact: true });
+  }, [personalAdmitted, personalOptions.queryKey, queryClient]);
   const routeRevision = useRef(0);
+  const callerRef = useRef(caller);
+  callerRef.current = caller;
   useLayoutEffect(() => {
     const unsubscribe = router.subscribe('onBeforeLoad', ({ toLocation }) => {
       const operation = currentRead.current.operation;
@@ -383,6 +395,11 @@ export function ThreadPage() {
       routeRevision.current++;
       currentRead.current.sequence++;
       operation?.retire();
+      const samePlace =
+        toLocation.pathname === router.state.location.pathname &&
+        JSON.stringify(toLocation.search) === JSON.stringify(router.state.location.search);
+      const localeChanged = getLocale() !== callerRef.current?.admission.identity.locale;
+      if (!samePlace || localeChanged) callerRef.current?.retireFromRouteChange();
     });
     return () => {
       unsubscribe();

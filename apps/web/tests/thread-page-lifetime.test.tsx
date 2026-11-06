@@ -343,14 +343,12 @@ async function mountRoute({
     await act(async () => {
       personalReads[index]!.work.resolve(result);
     });
-    await until(
-      () =>
-        client
-          .getQueryCache()
-          .findAll({ queryKey: ['thread-personal', personalReads[index]!.data.id] })
-          .some((query) => query.state.status === 'success' && query.state.fetchStatus === 'idle'),
-      'the admitted personal result',
-    );
+    await until(() => {
+      const read = personalReads[index]!;
+      if (read.signal?.aborted) return true;
+      const queries = client.getQueryCache().findAll({ queryKey: ['thread-personal', read.data.id] });
+      return queries.length === 0 || queries.every((query) => query.state.fetchStatus === 'idle');
+    }, 'the personal read to settle');
   };
   const dispose = async () => {
     await act(async () => root.unmount());
@@ -433,6 +431,18 @@ function threadRefreshButton(host: HTMLElement) {
   return [...host.querySelectorAll<HTMLButtonElement>('button')].find(
     (button) => button.textContent?.trim() === m.thread_post_refresh(),
   );
+}
+
+async function enabledSendButton(host: HTMLElement) {
+  await until(() => {
+    const send = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent?.trim() === m.thread_write_send(),
+    );
+    return !!send && !send.disabled;
+  }, 'the enabled send control');
+  return [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+    (button) => button.textContent?.trim() === m.thread_write_send() && !button.disabled,
+  )!;
 }
 
 async function pauseUnavailableRefresh(
@@ -792,9 +802,11 @@ test('cache retirement hides obsolete page disclosure but keeps the dirty reply 
     const editor = page.host.querySelector<HTMLElement>('.ProseMirror[contenteditable="true"]');
     expect(editor).toBeDefined();
     await act(async () => {
-      const replyToPost = [...page.host.querySelectorAll<HTMLButtonElement>('button')].find(
-        (button) => button.textContent?.trim() === m.thread_reply_to_post(),
-      );
+      const replyToPost =
+        page.host.querySelector<HTMLButtonElement>('[data-slot="feed-reply-action"]') ??
+        [...page.host.querySelectorAll<HTMLButtonElement>('button')].find(
+          (button) => button.textContent?.trim() === m.thread_reply_to_post(),
+        );
       expect(replyToPost).toBeDefined();
       await userSession.click(replyToPost!);
       await Promise.resolve();
@@ -802,11 +814,8 @@ test('cache retirement hides obsolete page disclosure but keeps the dirty reply 
       await userSession.keyboard('A retained reply draft');
       await userSession.tab();
     });
-    const send = [...page.host.querySelectorAll<HTMLButtonElement>('button')].find(
-      (button) => button.textContent?.trim() === m.thread_write_send(),
-    );
-    expect(send).toBeDefined();
-    await act(async () => userSession.click(send!));
+    const send = await enabledSendButton(page.host);
+    await act(async () => userSession.click(send));
     expect(commands).toHaveLength(1);
     expect(commands[0]!.parentId).toBe(id(41));
     const retry = [...page.host.querySelectorAll<HTMLButtonElement>('button')].find(
@@ -1027,12 +1036,12 @@ test('session, query, route, locale and mounted connection retirement reject pen
       } else if (retirement === 'route') {
         const away = page.router.navigate({ href: `/threads/${threadId}/${slug}?cursor=away` });
         page.setOperation(away);
-        await Promise.resolve();
+        await until(() => pageReads.length >= 3, 'the away-route page read');
         expect(pageReads).toHaveLength(3);
         await page.settlePage(2, pageFor(threadId, { privateRead: true, body: 'Away route body' }));
         const back = page.router.navigate({ href: `/threads/${threadId}/${slug}` });
         page.setOperation(back);
-        await Promise.resolve();
+        await until(() => pageReads.length >= 4, 'the returned-route page read');
         expect(pageReads).toHaveLength(4);
         await page.settlePage(3, pageFor(threadId, { privateRead: true, body: 'Returned route body' }));
       } else if (retirement === 'locale') {
@@ -1094,6 +1103,7 @@ test('a superseding refresh owns the result and the earlier response cannot publ
       await Promise.resolve();
       await new Promise((resolve) => window.setTimeout(resolve, 0));
     });
+    await until(() => pageReads.length >= 3, 'the superseding page read');
     expect(pageReads).toHaveLength(3);
 
     await act(async () => {
@@ -1775,7 +1785,7 @@ test('cursor and locale changes retire the original mounted route before its old
     const oldPersonalKey = ['thread-personal', threadId, 'first-cursor', false, id(41)] as const;
     const nextCursorNavigation = page.router.navigate({ href: `/threads/${threadId}/${slug}?cursor=next-cursor` });
     page.setOperation(nextCursorNavigation);
-    await Promise.resolve();
+    await until(() => pageReads.length >= 2, 'the next-cursor page read');
     expect(pageReads).toHaveLength(2);
     expect(pageReads[1]!.data).toEqual({
       id: threadId,
@@ -1796,7 +1806,7 @@ test('cursor and locale changes retire the original mounted route before its old
     const nextSlug = 'next-thread-title';
     const nextThreadNavigation = page.router.navigate({ href: `/threads/${nextThreadId}/${nextSlug}` });
     page.setOperation(nextThreadNavigation);
-    await Promise.resolve();
+    await until(() => pageReads.length >= 3, 'the next-thread page read');
     expect(pageReads).toHaveLength(3);
     expect(pageReads[2]!.data).toEqual({
       id: nextThreadId,
@@ -1845,11 +1855,8 @@ test('a reply completing under a retired caller cannot invalidate or navigate th
       await userSession.keyboard('A reply pending across replacement');
       await userSession.tab();
     });
-    const send = [...page.host.querySelectorAll<HTMLButtonElement>('button')].find(
-      (button) => button.textContent?.trim() === m.thread_write_send(),
-    );
-    expect(send).toBeDefined();
-    await act(async () => userSession.click(send!));
+    const send = await enabledSendButton(page.host);
+    await act(async () => userSession.click(send));
     expect(reply).toHaveBeenCalledTimes(1);
     const routeBeforeReplacement = page.router.state.location.pathname;
 

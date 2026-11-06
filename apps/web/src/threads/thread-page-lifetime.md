@@ -104,5 +104,7 @@ the safe runtime behavior, but does not claim that private SSR and private hydra
   first and repeated healthy refresh, recovery followed by refresh, private-cache discard, exact external successor
   retention and own-cancellation recovery. These paths add only constant per-read ownership and boundary state; they
   do not add native requests, per-row work, polling or authentication. Lifetime tests wait for the actual page and
-  personal request spies rather than a fixed number of microtasks. The connected regressions authored for this
-  implementation remain UNRUN until the deferred acceptance pass.
+  personal request spies rather than a fixed number of microtasks. Decision: owned page publication keeps the Query
+  stamp; external session/cache retirement cancels and removes asynchronously so cancellation cannot escape the
+  cache notification; StrictMode remount reuses the same connection generation. The connected regressions authored
+  for this implementation remain UNRUN until the deferred acceptance pass.

@@ -661,3 +661,4 @@ Accounts admits identities.
   Source-shape thread-page checks follow current owners: Byline holds the edited comparison and wraps long names,
   TopBar the sticky header, Share stays in the post action bar, and FeedActionBar supplies Reply.
   Decision: lifetime tests wait for the actual page and personal request spies rather than a fixed number of microtasks.
+  Decision: owned page publication keeps the Query stamp; external retirement cancels and removes asynchronously; StrictMode remount reuses the same connection generation.
