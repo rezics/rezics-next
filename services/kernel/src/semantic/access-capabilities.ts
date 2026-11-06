@@ -1,5 +1,5 @@
 /** Access-owned Semantic capabilities. Imported only through this public entry. */
-export { accountAgentId } from './agents.ts';
+export { accountAgentId, accountAgentsForSubjects } from './agents.ts';
 export {
   readOriginalAccountAgentIdentity,
   verifyOriginalAccountAgentIdentity,

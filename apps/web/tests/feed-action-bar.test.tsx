@@ -11,6 +11,7 @@ const { Window } = await import(
 const browser = new Window({ url: 'https://site.test/en/' });
 const globals = {
   window: browser,
+  location: browser.location,
   document: browser.document,
   navigator: browser.navigator,
   HTMLElement: browser.HTMLElement,

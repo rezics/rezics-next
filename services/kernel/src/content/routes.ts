@@ -54,6 +54,7 @@ import readLiveReview from './live-review-read.sql';
 import { createBoard, BoardCreationConflictError, BoardCreationInputError } from './board-create.ts';
 import { applyBoardCandidate } from './board-projection.ts';
 import { documentRoutes } from './document-routes.ts';
+import { readContributedPost } from './contribution-present.ts';
 import { sourceFenceRoutes } from './source-fence-routes.ts';
 import { mediaModerationRoutes } from './media-moderation-routes.ts';
 import {
@@ -121,6 +122,7 @@ import {
   RevisionPageResponseSchema,
   PostInputSchema,
   PostResponseSchema,
+  ContributedPostResponseSchema,
   EditionSourceIdentitySchema,
   ReactionInputSchema,
   ReactionResponseSchema,
@@ -1136,7 +1138,10 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       {
         params,
         response: {
-          200: withHeaders(postResponse(), { ...sessionHeader(), etag: t.Optional(t.String()) }),
+          200: withHeaders(strictContentSchema(ContributedPostResponseSchema()), {
+            ...sessionHeader(),
+            etag: t.Optional(t.String()),
+          }),
           ...readFailures(),
         },
         detail: {
@@ -1151,7 +1156,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         contentOperation(() =>
           admission.run('normal', job, async () => {
             const context = { actor, deadline: job.deadline };
-            const post = await exactPost(await containingThread(id, context), id, context);
+            const post = await readContributedPost(dependencies, await containingThread(id, context), id, context);
             session.record(sessionComponent(post.anchor));
             if (!isErasedPlaceholder(post.value)) set.headers.etag = JSON.stringify(post.value.revisionId);
             const [personal] = await withViewerReactions(dependencies, actor, [post.value], job.deadline);

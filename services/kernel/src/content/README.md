@@ -4373,3 +4373,21 @@ Home source loads use the original cursor operands and repeat actual content/Sub
 Space/Realm/publication disclosure; no private overlay can admit its own source. The mounted
 schema extends Library's native facts schema and flows through the existing generated FeedPage
 root export at the complete-input publication stage. Web retains its receiver and writers.
+
+## Exact post contribution attribution
+
+Decision: the ordinary exact post point read receives the public Accounts attribution contract. Native author IDs
+remain required by authorization; `ContributedPostResponseSchema` publishes the separately typed serialization.
+Explicit deletion removes `authorId` and supplies the id-free deletion label. Missing/pending attribution remains null;
+the exact body, licence, revision, digest and references survive. The mapper never asserts a public value is a native
+`PostEntry`. Parent attribution requires the ordinary disclosed parent in the same thread; an inaccessible parent
+adds no identity context. After the shared Accounts batch, retained native authority checks the parent and then the
+original child. A changed child fails closed; loss of optional parent context does not invent a deletion.
+
+Cost: one original post disclosure, at most one original parent disclosure, their retained native rechecks and one
+Accounts batch containing at most two distinct anchors. Accounts partitions the deduplicated batch by actual route,
+with at most two indexed partition reads here (plus normal driver preparation). Each original/retained Content read
+includes its complete ancestry, Board/Realm/Subject/Access and transaction work. There is no per-row page hydration,
+new runner or cost ledger. Native point response coverage reuses the account-erasure authored-post suite; the compact
+projection tests preserve exact bytes and unknown/deleted/parent distinctions. Threads owns broader page/history
+assembly and its native growth and current-reader acceptance; source publication does not close that acceptance.

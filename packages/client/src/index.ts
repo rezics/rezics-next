@@ -1,3 +1,9 @@
+export type {
+  ContributionAttribution,
+  LiveContributionAttribution,
+  DeletedContributionAttribution,
+} from './kernel/access/contribution-attribution';
+export type { ContributedPostEntry } from './kernel/content/contribution-present';
 import { treaty, type Treaty } from '@elysia/eden';
 import type { Static } from 'typebox';
 import type { PublicationPreparationSchema } from './kernel/community/publication-preparation.ts';

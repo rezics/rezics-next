@@ -58,3 +58,7 @@ walk without Worker ambient types.
 Reviewed Person admissions expose `identityOperationLocation` and `identityOperationId` from the public Client entry.
 Consumers retain the native HTTP 202 Location bound to the returned operation identity and poll through
 `reviewedPersonRequests(...).operationAt`; a missing Location cannot become a reconstructed admission.
+
+Decision: exact post point responses publish `ContributedPostEntry` and the Accounts contribution attribution types
+through the official Kernel declaration emitter. The public response may omit `authorId` for explicit deletion;
+native Content authorization types retain their required author. A null attribution carries no deletion assertion.

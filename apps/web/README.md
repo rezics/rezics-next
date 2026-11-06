@@ -3518,3 +3518,9 @@ Same-tab inventory actions may add `editionOrigin`, an opaque receipt token, to 
 Return re-admits the saved native inventory cursor and focuses the exact Edition only when that ID appears on the admitted page. A missing or replaced occurrence requires an explicit inventory restart; the reader never scans other pages or matches by title. Refresh and retry preserve the same native address. Restart clears only the cursor. A full reload, new tab, account or locale change, replacement receipt, or changed authoring address can lose the return context; show the restart path and do not infer the former selection.
 
 Decision: optional origin-panel values may be explicitly absent, and return controls appear only when available. Same-page inventory capture uses the current canonical cursor address; adding the opaque origin token preserves the supplied href's query and fragment behavior.
+
+Decision: message catalogues use code-point key order and the same key set in every locale. Missing translations
+materialize the existing English fallback without replacing supplied translations. The existing messages test pins
+ordering and parity. Reaction controls apply their explicit locale to both number formatting and accessible labels.
+The focused action and provenance suites retain exact counts, score privacy, revision/body and no-added-read checks;
+fixtures provide ordinary browser location and identify headings independently of their CSS attributes.

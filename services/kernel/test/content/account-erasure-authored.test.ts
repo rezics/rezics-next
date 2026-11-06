@@ -435,15 +435,16 @@ test("account erasure keeps a published post with only its current revision and 
       [routeOf(published.id), published.firstPost.revisionId],
     ),
   ).rejects.toMatchObject({ code: '23514' });
-  const read = await http<{ post: { authorId: string; revisionId: string } }>(
+  const read = await http<{ post: { authorId?: string; attribution: { displayName: string }; revisionId: string } }>(
     'moderator',
     'GET',
     `/v1/posts/${published.firstPost.id}`,
   );
   expect(read.post).toMatchObject({
-    authorId: system.actors.author.actor.accountId,
+    attribution: { displayName: 'Deleted account' },
     revisionId: published.firstPost.revisionId,
   });
+  expect(read.post.authorId).toBeUndefined();
 }, 120000);
 
 test("an account erasure page touches only the account's authored items and repeating it changes nothing", async () => {

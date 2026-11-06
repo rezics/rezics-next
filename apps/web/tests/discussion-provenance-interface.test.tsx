@@ -150,7 +150,7 @@ test('discussion readers keep human context primary and exact source data reacha
     createElement(QueryClientProvider, { client: queryClient }, createElement(RouterProvider, { router })),
   );
 
-  expect(exactHtml).toContain(`<h1>${m.exact_revision_heading()}</h1>`);
+  expect(exactHtml.match(/<h1\b[^>]*>(.*?)<\/h1>/s)?.[1]).toBe(m.exact_revision_heading());
   expect(exactHtml).toContain(m.discussion_provenance_details_subject_unavailable());
   expect(exactHtml).toContain('<details');
   expect(exactHtml).toContain('<summary');
