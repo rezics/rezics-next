@@ -35,9 +35,7 @@ test('board and thread titles use the shared page heading size, not the display 
 
 test('a post shows edited only when it was revised after it was published', () => {
   expect(thread).toContain('revisedAt={post.revisedAt}');
-  expect(byline).toMatch(
-    /revisedAt && new Date\(revisedAt\)\.getTime\(\) > new Date\(createdAt\)\.getTime\(\)/,
-  );
+  expect(byline).toMatch(/revisedAt && new Date\(revisedAt\)\.getTime\(\) > new Date\(createdAt\)\.getTime\(\)/);
 });
 
 test('the actual board feed uses heading-style titles and the available opening words for an untitled thread', async () => {

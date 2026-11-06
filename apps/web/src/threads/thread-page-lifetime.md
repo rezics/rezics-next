@@ -106,7 +106,7 @@ the safe runtime behavior, but does not claim that private SSR and private hydra
   stamp; external session/cache retirement cancels and removes asynchronously so cancellation cannot escape the
   cache notification; a delayed cancel or remove leaves a newer live caller and its query object untouched;
   StrictMode remount reuses the same connection generation. An owned cancel/remove boundary stays open until its
-  returned work settles.   Decision: recovery and ordinary refresh await removal settlement before admitting their new
+  returned work settles. Decision: recovery and ordinary refresh await removal settlement before admitting their new
   bounded page read and subsequent personal read; extend the existing recovery assertion with delayed removal.
   Route-change, locale and mounted retirement flush abandon before a successor capture, so a second refresh does not
   join the predecessor fetch. A continuation that has not bound a page query does not retire

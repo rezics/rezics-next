@@ -57,9 +57,11 @@ function readingFor(card: ReturnType<typeof receiveBoardOpeningPage>['openingCar
       obligations: ['cc:Attribution' as const],
     },
   };
-  const page = authoredReadingPage({ ...thread, firstPost }, [], [
-    { id: opening.authorId, displayName: 'Disclosed author', handle: 'disclosed-author', avatar: null },
-  ]);
+  const page = authoredReadingPage(
+    { ...thread, firstPost },
+    [],
+    [{ id: opening.authorId, displayName: 'Disclosed author', handle: 'disclosed-author', avatar: null }],
+  );
   page.query.cursor = cursor;
   page.mentions = {
     state: 'current',

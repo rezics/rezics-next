@@ -624,9 +624,7 @@ export class ThreadPageCaller {
       ownsPageQuery(cancelQuery, this) || ownsPageQuery(liveStamp?.query, this) || liveStamp?.query === cancelQuery;
     if (!owned || !pageKey) return;
     try {
-      void settleCancel(
-        this.client.cancelQueries({ queryKey: pageKey, exact: true }, { silent: true, revert: false }),
-      );
+      void settleCancel(this.client.cancelQueries({ queryKey: pageKey, exact: true }, { silent: true, revert: false }));
     } catch {
       /* Query cancellation must not escape a cache notification. */
     }

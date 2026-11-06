@@ -39,8 +39,7 @@ export async function readBoardPinAdviceRequest(
     await prepareSession(request, sessionEnv);
   } catch (error) {
     if (error instanceof MediaProblem && error.problem.status === 403) return { state: 'denied' };
-    if (error instanceof MediaProblem && error.problem.code === 'session_unavailable')
-      return { state: 'unavailable' };
+    if (error instanceof MediaProblem && error.problem.code === 'session_unavailable') return { state: 'unavailable' };
     if (isPlatformClosedError(error)) return { state: 'unavailable' };
     throw error;
   }
@@ -124,10 +123,7 @@ export async function changeBoardPinRequest(
   const headers = { authorization, 'idempotency-key': JSON.stringify(command.key) };
   let result: Awaited<ReturnType<typeof resource.post>>;
   try {
-    result = await resource.post(
-      { pinned: action === 'pin' },
-      { headers },
-    );
+    result = await resource.post({ pinned: action === 'pin' }, { headers });
   } catch (error) {
     if (isPlatformClosedError(error)) return { state: 'unavailable' };
     return { state: 'unknown' };
