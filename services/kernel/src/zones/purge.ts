@@ -104,7 +104,9 @@ export async function purgeZonePage(input: ZonePurgePageInput): Promise<{ next: 
         await tx.query('DELETE FROM zones.zone WHERE route=$1 AND zone_id=$2', [route, zoneId]);
         return {
           value: { next: null },
-          events: [{ type: 'com.rezics.zone.purged.v1', subject: zoneId, data: { id: zoneId, revision: row.revision } }],
+          events: [
+            { type: 'com.rezics.zone.purged.v1', subject: zoneId, data: { id: zoneId, revision: row.revision } },
+          ],
         };
       }
       await enrollResourceRecordSources(tx, [{ kind: 'zone', zoneId }], { kind: 'zone.purge' });
