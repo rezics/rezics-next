@@ -9,6 +9,7 @@ import { createKernel } from '../../../src/http/kernel.ts';
 import type { CollectionView } from '../../../src/library/collection-reads.ts';
 import { openApiRuntime } from '../../imports/api-runtime.ts';
 import { identitySupport } from '../../imports/identity-fixture.ts';
+import { testReceiptKeys } from '../../support/receipt-keys.ts';
 
 export const collectionScopes = [
   'collection:create',
@@ -82,6 +83,7 @@ export async function createCollectionPresentationFixture() {
     database.pool.options.max = 1;
     const app = createKernel({
       pool: database.pool,
+      receiptKeys: testReceiptKeys(),
       routeKey: identity.routeKey,
       tokens: identity.tokenKeys,
       access: (configuration) => createAccess({ ...configuration, auth: identity.accessConfig.auth! }),
