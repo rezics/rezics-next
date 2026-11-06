@@ -379,9 +379,15 @@ export function personalLabelRoutes(
       },
       async ({ actor, query, admission, job }) => {
         return admission.run('normal', job, async () => {
-          const body = await command(() => assignments().listAssignments(actor, query));
+          const body = await command(() => assignments().listAssignments(actor, query, job.deadline));
           // The owner RR connection is released before standard per-partition summary readers acquire theirs.
-          return fullView({ ...deps, access: deps.access() }, actor, query.labelId ? query.view : 'BASIC', body);
+          return fullView(
+            { ...deps, access: deps.access() },
+            actor,
+            query.labelId ? query.view : 'BASIC',
+            body,
+            { deadline: job.deadline },
+          );
         });
       },
     )

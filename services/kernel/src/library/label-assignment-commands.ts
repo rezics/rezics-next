@@ -26,6 +26,7 @@ import {
   LibraryNotFoundError,
   sameAccountRoute,
   WORK_STEP_DEADLINE_MS,
+  workStepDeadline,
 } from './command-support.ts';
 import { LibraryConflictError } from './entries.ts';
 import { assertAniListLabel, prepareAniListLabel, type AniListLabelGuard } from './list-import-anilist-label-guard.ts';
@@ -546,7 +547,7 @@ export function createLabelAssignmentCommands(deps: {
       ReturnType<typeof minimal>
     >;
   }
-  async function listAssignments(actor: Actor, options: ListOptions) {
+  async function listAssignments(actor: Actor, options: ListOptions, deadline = workStepDeadline()) {
     const account = owner(actor, 'library_entry:read'),
       parsed = object(options, ['labelId', 'subjectId', 'limit', 'cursor', 'view']);
     if ((parsed.labelId === undefined) === (parsed.subjectId === undefined)) throw invalid();
@@ -556,7 +557,6 @@ export function createLabelAssignmentCommands(deps: {
     if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > LABEL_PAGE_MAX) throw invalid();
     if (parsed.view !== undefined && parsed.view !== 'BASIC' && parsed.view !== 'FULL') throw invalid();
     const full = parsed.view === 'FULL';
-    const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
     if (full && labelId) {
       owner(account, 'library_entry:list');
       await admitShelfRead({ ...deps, clock }, account, deadline);

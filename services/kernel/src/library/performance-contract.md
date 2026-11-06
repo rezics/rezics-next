@@ -38,8 +38,11 @@ unique per issuance. Growth seed encoding resets its visited-node ceiling on eac
 Bitmap Heap Scan `personal_label_live_name`; Seq Scan stays refused. Assignment Seq Scan oracles stay the
 existing SQL. FULL empty-shelf gate denials keep raw capture so private Library plans must be absent; FULL HTTP
 growth folds native plan notices so Access formula EXPLAIN stays inside the telemetry cap, charging one
-provenance summary per notice rather than one telemetry entry per EXPLAIN node; Seq Scan
-on Library relations stays refused. The folded FULL warmup still sees 34 `personal_label` parent
+provenance summary per notice rather than one telemetry entry per EXPLAIN node, and walks each notice
+under the per-tree node cap rather than the capture-wide 20 000-node telemetry budget; Seq Scan
+on Library relations stays refused. FULL assignment pages hydrate Subject summaries from the admitted
+request deadline and one Semantic `prepareReadDecisions` page, not per-subject Access point formulas.
+The folded FULL warmup still sees 34 `personal_label` parent
 observations and zero sequential scans. Existing Label command, HTTP and growth suites pin this; no extra
 tests or stories.
 

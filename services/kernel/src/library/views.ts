@@ -23,14 +23,14 @@ import { SubjectSummarySchema } from '../semantic/http/summaries.ts';
 import { readSubjectSummaryObservation, type SubjectSummary } from '../semantic/summaries.ts';
 import { currentCommandWorkAssociation } from '../command/work-context.ts';
 import { authoritativeTimeValue, mintReadTime } from '../command/command.ts';
-import { resolveSubject } from './subject-anchor.ts';
+import { mapSubjectTerminals, resolveSubject } from './subject-anchor.ts';
 import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { createCollectionReads } from './collection-reads.ts';
 import collectionRead from './collection-reads-collection.sql';
 import memberPage from './collection-reads-members.sql';
 import { isOrdinalKey } from './ordinal.ts';
-import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
+import { WORK_STEP_DEADLINE_MS, workStepDeadline } from './command-support.ts';
 
 export const viewQuery = { view: t.Optional(t.Union([t.Literal('BASIC'), t.Literal('FULL')])) };
 const nullableText = t.Union([t.String(), t.Null()]);
@@ -139,21 +139,21 @@ class ViewReader {
 
   async loadSubjects(ids: readonly string[]) {
     const unique = [...new Set(ids)];
-    const resolved = new Map<string, string>();
-    await bounded(unique, async (id) => {
-      const value = await this.resolve(id);
-      if (value) resolved.set(id, value.subjectId);
-      else this.subjects.set(id, null);
-    });
+    for (const id of unique) if (routeOf(id) === null) this.subjects.set(id, null);
+    const resolved = await mapSubjectTerminals(
+      this.deps.pool,
+      unique.filter((id) => routeOf(id) !== null),
+    );
+    for (const id of unique) if (!resolved.has(id) && routeOf(id) !== null) this.subjects.set(id, null);
     const terminals = [...new Set(resolved.values())];
     if (terminals.length === 0) return;
     const observed = await readSubjectSummaryObservation(this.observationDeps(), terminals, { displayFallback: true });
     if (!(await observed.current())) throw new ProblemError('dependency_unavailable');
-    await bounded([...resolved], async ([requested, terminal]) => {
-      const current = await this.resolve(requested);
-      if (current?.subjectId !== terminal) throw new ProblemError('dependency_unavailable');
+    const current = await mapSubjectTerminals(this.deps.pool, [...resolved.keys()]);
+    for (const [requested, terminal] of resolved) {
+      if (current.get(requested) !== terminal) throw new ProblemError('dependency_unavailable');
       this.subjects.set(requested, observed.summaries.get(terminal) ?? null);
-    });
+    }
   }
 
   async account(id: string): Promise<AccountSummary | null> {
@@ -225,7 +225,8 @@ export async function fullView<T>(
   }> = {},
 ): Promise<Embedding<T>> {
   if (view !== 'FULL') return body as Embedding<T>;
-  const reader = new ViewReader(deps, actor, options.deadline ?? deadlineFor(WORK_STEP_DEADLINE_MS), options.follow);
+  const deadline = options.deadline ?? workStepDeadline();
+  const reader = new ViewReader(deps, actor, deadline, options.follow);
   const rows = Object.values(body as Record<string, unknown>).flatMap((value) =>
     Array.isArray(value) ? value : value && typeof value === 'object' ? [value] : [],
   ) as Record<string, unknown>[];
@@ -244,7 +245,7 @@ export async function fullView<T>(
     }
   }
   const followingSpaces = options.followingSpaces
-    ? await options.followingSpaces(actor, [...spaceTargetIds], options.deadline ?? deadlineFor(WORK_STEP_DEADLINE_MS))
+    ? await options.followingSpaces(actor, [...spaceTargetIds], deadline)
     : new Map<string, FollowingSpaceProjection>();
   await reader.loadSubjects([...subjectIds]);
   await bounded([...accountIds], async (id) => {
