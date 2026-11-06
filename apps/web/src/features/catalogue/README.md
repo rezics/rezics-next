@@ -40,3 +40,9 @@ visible. An uncertain command locks replacement imports and retains its original
 Focused tests preserve current profile/route assertions and exercise native transport and mounted publication;
 persona, ten-Type/hundred-manifest growth, installation, independent publication readback and held browser journeys
 remain capability-row acceptance after product landing.
+
+Reading319 receiving uses `catalogueEntries.quotations` as the navigation producer, including its bounded-address
+unsupported result. Graph inspection keeps exact returns when admitted and offers an explicit general quotation
+visit when the combined address exceeds that budget. Album stories consume the editor type from its exporting
+view; Game stories construct statements against the generated native Subject read type. Existing interaction
+assertions remain unchanged; one graph test pins the over-budget return behaviour.
