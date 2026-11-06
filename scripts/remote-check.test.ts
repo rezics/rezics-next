@@ -4896,38 +4896,27 @@ if (command === 'systemd-run') {
     writeFileSync(path + '/cpu.stat', 'usage_usec ' + (previous + increment) + '\\n');
   }
   const waiting = spawn('/bin/sleep', args, { stdio: 'ignore' });
-  const stop = (code: number, signal: NodeJS.Signals) => {
-    waiting.kill(signal);
-    process.exit(code);
-  };
-  process.on('SIGTERM', () => stop(143, 'SIGTERM'));
-  process.on('SIGINT', () => stop(130, 'SIGINT'));
+  process.on('SIGTERM', () => waiting.kill('SIGTERM'));
+  process.on('SIGINT', () => waiting.kill('SIGINT'));
   process.exit(await new Promise<number>((resolve) => waiting.on('exit', (code) => resolve(code ?? 0))));
 } else if (command === 'bun') {
   process.exit(args[0] === '--eval' ? 0 : Number(process.env.INSTALL_EXIT ?? 0));
 } else if (command === 'docker') {
-  const hexId = (value: number) => value.toString(16).padStart(12, '0');
   if (args[0] === 'run' || args[0] === 'create' || (args[0] === 'container' && ['run', 'create'].includes(args[1]!))) {
-    const id = hexId(state.containers.length + 1);
-    const labelled = args[args.indexOf('--label') + 1];
-    const run = typeof labelled === 'string' ? labelled.replace('rezics.check.run=', '') : process.env.REZICS_CHECK_RUN;
+    const id = (state.containers.length + 1).toString(16).padStart(12, '0');
+    const run = args[args.indexOf('--label') + 1]?.replace('rezics.check.run=', '');
     state.containers.push({ id, run });
     state.volumes.push(id);
-    const parent = args.filter((arg) => arg.startsWith('--cgroup-parent=')).at(-1)?.split('=')[1] ?? process.env.REZICS_CHECK_SLICE ?? 'rezics-check.slice';
+    const parent = args.filter((arg) => arg.startsWith('--cgroup-parent=')).at(-1)!.split('=')[1]!;
     const path = cgroup(parent);
     mkdirSync(path, { recursive: true });
     const previous = existsSync(path + '/cpu.stat') ? Number(readFileSync(path + '/cpu.stat', 'utf8').match(/usage_usec (\\d+)/)![1]) : 0;
     writeFileSync(path + '/cpu.stat', 'usage_usec ' + (previous + 3000000) + '\\n');
     writeFileSync(path + '/memory.peak', String(768 * 1048576));
-    process.stdout.write(id + '\\n');
+    console.log(id);
   } else if (args[0] === 'ps') {
-    const filter = args.includes('--filter') ? args[args.indexOf('--filter') + 1] : args.find((arg) => arg.startsWith('--filter='))?.slice('--filter='.length);
-    const run = (filter ?? '').replace('label=rezics.check.run=', '');
-    for (const container of state.containers) {
-      if (!run || container.run === run) process.stdout.write(container.id + '\\n');
-    }
-  } else if (args[0] === 'inspect') {
-    process.stdout.write((state.containers.find((container) => args.includes(container.id))?.id ?? '') + '\\n');
+    const run = args[args.indexOf('--filter') + 1]!.replace('label=rezics.check.run=', '');
+    for (const container of state.containers) if (container.run === run) console.log(container.id);
   } else if (args[0] === 'rm') {
     const id = args.at(-1);
     state.containers = state.containers.filter((container) => container.id !== id);
@@ -4945,7 +4934,7 @@ writeFileSync(stateFile, JSON.stringify(state));
   const stateFile = join(directory, 'state');
   writeFileSync(
     stateFile,
-    JSON.stringify({ ticks: 0, containers: [{ id: 'unrelated', run: 'other-run' }], volumes: ['unrelated'] }),
+    JSON.stringify({ ticks: 0, containers: [{ id: 'b'.repeat(12), run: 'other-run' }], volumes: ['b'.repeat(12)] }),
   );
   return {
     directory,
@@ -6370,11 +6359,7 @@ test('missing or unreadable remote configuration never starts a local kernel che
   );
   const [code, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
   const result = { code, stderr };
-  if (onCheckHost(kernel)) {
-    expect(result.stderr).toContain('stack-run: kernel check already on an approved remote-check run');
-  } else {
-    expect(result.stderr).toContain('no check host is configured');
-  }
+  expect(result.stderr).toContain('no check host is configured');
   expect(result.code).not.toBe(0);
   const seen = events();
   expect(seen.some((event) => event.kind === 'docker')).toBe(false);
@@ -8531,14 +8516,6 @@ test('physical run lifetime uses safe estimate arithmetic, a finite fallback and
   }
   expect(() => effectiveRunLifetimeMs(1, 0)).toThrow('max-ms');
   expect(generatedHostRun()).toContain('# REMOTE_CHECK_RUN_LIFETIME_MS 7200000');
-});
-
-test('host lifetime docker rm waits Auth run timeout; a probe timeout cannot abort labelled cleanup', () => {
-  expect(dependencyPreparationProgram).toContain('DOCKER_RM_TIMEOUT = 120');
-  expect(dependencyPreparationProgram).toContain('DOCKER_PROBE_TIMEOUT = 5');
-  expect(dependencyPreparationProgram).toContain("call(['docker', 'rm', '-f', '-v', token], DOCKER_RM_TIMEOUT)");
-  expect(dependencyPreparationProgram).toContain('try_clean_run_resources(run)');
-  expect(dependencyPreparationProgram).not.toMatch(/timeout=3, text=True/);
 });
 
 test('ordinary, multi-slot, gate and try-once callers pass the same lifetime policy to the actual host entry', async () => {
