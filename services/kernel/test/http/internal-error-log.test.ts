@@ -1,6 +1,7 @@
 import { afterAll, expect, spyOn, test } from 'bun:test';
 import { createPool } from '../../src/database/pool.ts';
 import { createApp } from '../../src/http/app.ts';
+import { AccessUnavailableError } from '../../src/access/unavailable.ts';
 import { ProblemError } from '../../src/http/problem.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -23,6 +24,9 @@ const app = createApp({ pool })
   })
   .get('/deadline', { detail: detail('probe.deadline') }, () => {
     throw new ProblemError('deadline_exceeded');
+  })
+  .get('/unavailable', { detail: detail('probe.unavailable') }, () => {
+    throw new AccessUnavailableError('overloaded');
   })
   .get('/plain', { detail: detail('probe.plain') }, () => {
     throw new Error('plain failure');
@@ -103,4 +107,17 @@ test('a deadline problem writes exactly one attributed line instead of an intern
     contention_retries: 0,
     dominant_phase: 'before_command',
   });
+});
+
+
+test('native dependency failures retain an internal cause without disclosing it in the response', async () => {
+  const { response, text, lines } = await call('GET', '/unavailable?token=query-secret');
+  expect(response.status).toBe(503);
+  expect(JSON.parse(text).code).toBe('overloaded');
+  expect(text).not.toContain('AccessUnavailableError');
+  expect(lines).toHaveLength(1);
+  const line = JSON.parse(lines[0]![0] as string);
+  expect(line).toMatchObject({ event: 'dependency_unavailable', name: 'AccessUnavailableError', route: '/unavailable' });
+  expect(line.stack).toContain('Access unavailable: overloaded');
+  expect(lines[0]![0]).not.toContain('query-secret');
 });
