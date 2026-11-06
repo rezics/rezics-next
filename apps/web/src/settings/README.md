@@ -37,6 +37,21 @@ serializable, and preserve deliberate post-dispatch notification intent. Pin the
 and ten-second recovery in the existing focused suites without adding stories. The combined Profile–Watches–Profile
 and public Profile journeys remain unaccepted; integration owns their native, browser and root verification.
 
+**Decision:** Pin the installed Profile–Watches–Profile walk with the existing focused suites plus return, draft, keyboard
+focus and exact-account cost assertions. Named phone and desktop admission, recovery and keyboard-return stories stay;
+no extra pages. Native, browser and root acceptance remain with integration.
+
+Same-tab Watch visits carry the current Profile draft and last keyboard field. Return restores that draft onto the
+current native profile. Keyboard section return focuses only that exact current field; pointer return leaves focus
+alone. A missing Watch row focuses the admitted watches region without scanning neighbours.
+
+**Cost:** One Profile dispatch examines only the signed-in account: one private advice GET, one PATCH of the captured body
+and key, and one GET readback. There is no directory, watch or profile-history scan. Public-view admission examines at
+most four flags. One editor keeps one bounded profile, one draft and one original command. Nested native GET work stays
+with Accounts `accountEditProfileReadWork` and Content avatar growth. Browser sequential Profile and Watch visits
+release the previous page, requests and callbacks; retained Watch windows stay twenty rows and eight predecessor
+addresses while unrelated accounts and history grow independently.
+
 The profile reader accepts additive top-level response fields while keeping the consumed profile and editing advice
 closed, bounded and identity-bound. Editing advice stays in the private reader result; the command retains its strict
 profile projection and frozen idempotency key.

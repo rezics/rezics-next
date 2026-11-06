@@ -27,8 +27,8 @@ import {
 import type { AccountRenameNavigation } from './account-rename-actions';
 import { settingsCommandKeyHeader } from './command-headers';
 
-// Shared Profile boundary for the Accounts editor.
-export { usePreferenceRetry } from './preference-failure-retry';
+// Shared Profile/retry boundary for the Accounts editor and Settings tests.
+export { preferenceRetryDeadline, usePreferenceRetry } from './preference-failure-retry';
 export { withProfileDeadline } from './profile-request-deadline';
 export { settingsCommandKeyHeader } from './command-headers';
 export {
@@ -643,19 +643,25 @@ function present(preferences: unknown): ReadingPreferences | undefined {
   return advice ? { ...reading, advice } : reading;
 }
 
+const notificationKinds = ['reply', 'mention', 'thread_watch', 'board_activity', 'moderation_decision'] as const;
 function presentPageKind(value: unknown): PreferencePageKind | undefined {
   if (
     !isRecord(value) ||
     !onlyKeys(value, ['kind', 'optional', 'default', 'enabled']) ||
     typeof value.kind !== 'string' ||
-    !/^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/.test(value.kind) ||
+    !notificationKinds.includes(value.kind as (typeof notificationKinds)[number]) ||
     typeof value.optional !== 'boolean' ||
     typeof value.default !== 'boolean' ||
     typeof value.enabled !== 'boolean' ||
     (!value.optional && (!value.default || !value.enabled))
   )
     return undefined;
-  return { kind: value.kind, optional: value.optional, default: value.default, enabled: value.enabled };
+  return {
+    kind: value.kind as PreferencePageKind['kind'],
+    optional: value.optional,
+    default: value.default,
+    enabled: value.enabled,
+  };
 }
 
 function presentPageAction(value: unknown): PreferencePageAction | undefined {

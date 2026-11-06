@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useLocation } from '@tanstack/react-router';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -17,7 +17,8 @@ import { ProfileLinks } from './profile-links';
 import { ProfilePreview } from './profile-preview';
 import type { AvatarResume, AvatarUpload } from './profile-avatar-upload';
 import { ProfileNavigation, useProfileNavigationUpload } from './profile-navigation';
-import { usePreferenceRetry } from './preference-failure-retry';
+import { usePreferenceRetry } from './preferences';
+import { useSettingsSectionFocus } from './settings-return-context';
 
 function profileError(scope: ProfileScope, failure: ProfileEditorState['failure']) {
   const activity = scope === 'views';
@@ -202,6 +203,7 @@ export function ProfileCard({
   const state = useSyncExternalStore(editor.subscribe, editor.snapshot, editor.snapshot);
   const commandWaiting = usePreferenceRetry(undefined, state.commandRetryAt);
   const readWaiting = usePreferenceRetry(undefined, state.readRetryAt);
+  const sectionFocus = useSettingsSectionFocus();
   const canRead = readable ?? writable;
   const profile = canRead && state.readAuthority === 'allowed' ? state.draft : null;
   const ids = useId();
@@ -211,11 +213,24 @@ export function ProfileCard({
   const submittedDraft = useRef<typeof profile>(null);
   const validationErrors = profile ? profileFieldErrors(profile) : {};
   const errors = profile && validationAttempt > 0 ? validationErrors : {};
+  const rememberFocus = (field: 'displayName' | 'biography' | 'avatar' | 'links') => {
+    if (editor.canWrite()) editor.lastFocus = field;
+  };
   useEffect(() => {
     const field = pendingFocus.current;
     pendingFocus.current = undefined;
     if (field && editor.canWrite()) (controls.current[field] ?? document.getElementById(`${ids}-${field}`))?.focus();
   }, [editor, validationAttempt]);
+  useLayoutEffect(() => {
+    const field = editor.pendingReturnFocus;
+    if (!field || !profile) return;
+    const node = controls.current[field] ?? document.getElementById(`${ids}-${field}`);
+    if (!(node instanceof HTMLElement)) return;
+    node.setAttribute('data-settings-return-focus', '');
+    if (node.closest('[inert]')) return;
+    editor.pendingReturnFocus = undefined;
+    if (sectionFocus !== 'pointer') node.focus();
+  }, [editor, ids, profile, sectionFocus, state.draft, state.known]);
   const busy = state.phase === 'saving' || state.phase === 'reloading';
   const unreadable = !canRead || state.readAuthority !== 'allowed' || state.phase === 'unavailable';
   const closed = !writable || unreadable;
@@ -340,6 +355,7 @@ export function ProfileCard({
                 disabled={closed || !admitted('displayName')}
                 aria-invalid={!!errors.displayName}
                 aria-describedby={errors.displayName ? `${ids}-displayName-error` : undefined}
+                onFocus={() => rememberFocus('displayName')}
                 onChange={(event) => editor.edit({ displayName: event.target.value || null })}
               />
               {fieldError('displayName')}
@@ -357,18 +373,27 @@ export function ProfileCard({
                 disabled={closed || !admitted('biography')}
                 aria-invalid={!!errors.biography}
                 aria-describedby={errors.biography ? `${ids}-biography-error` : undefined}
+                onFocus={() => rememberFocus('biography')}
                 onChange={(event) => editor.edit({ biography: event.target.value || null })}
               />
               {fieldError('biography')}
             </label>
-            <ProfileAvatar
-              avatar={profile.avatar}
-              known={state.known?.avatar ?? null}
-              upload={avatar}
-              disabled={unreadable || busy || !!state.attempt}
-              referenceDisabled={closed || busy || !!state.attempt || !admitted('avatar')}
-              saving={state.phase === 'saving' || state.phase === 'reloading' || state.phase === 'uncertain'}
-            />
+            <div
+              id={`${ids}-avatar`}
+              ref={(control) => {
+                controls.current.avatar = control;
+              }}
+              onFocusCapture={() => rememberFocus('avatar')}
+            >
+              <ProfileAvatar
+                avatar={profile.avatar}
+                known={state.known?.avatar ?? null}
+                upload={avatar}
+                disabled={unreadable || busy || !!state.attempt}
+                referenceDisabled={closed || busy || !!state.attempt || !admitted('avatar')}
+                saving={state.phase === 'saving' || state.phase === 'reloading' || state.phase === 'uncertain'}
+              />
+            </div>
             <div
               id={`${ids}-links`}
               ref={(control) => {
@@ -380,6 +405,7 @@ export function ProfileCard({
               aria-invalid={!!errors.links}
               aria-describedby={errors.links ? `${ids}-links-error` : undefined}
               className="min-w-0 space-y-3 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2"
+              onFocusCapture={() => rememberFocus('links')}
             >
               <h3 id={`${ids}-links-heading`} className="font-medium">
                 {m.settings_profile_links()}

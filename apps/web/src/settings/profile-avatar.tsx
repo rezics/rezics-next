@@ -22,7 +22,7 @@ import {
   type AvatarUpload,
 } from './profile-avatar-upload';
 import { ProfileAvatarCrop } from './profile-avatar-crop.tsx';
-import { usePreferenceRetry } from './preference-failure-retry';
+import { usePreferenceRetry } from './preferences';
 
 export function useProfileAvatarUpload(
   editor: ProfileEditor,
