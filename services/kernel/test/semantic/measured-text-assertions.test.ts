@@ -346,10 +346,7 @@ test('edition and characters never become Book work words and incomplete crossst
   await selected(work, admittedWords('+1000000', record));
   expect(fact(await read(work), words).value).toEqual({ type: 'value', content: { amount: '+1000000', unit: '1' } });
   const query = {
-    and: [
-      { type: { in: ['schema:Book'] } },
-      { statement: { property: words, range: { gte: 1000001, unit: '1' } } },
-    ],
+    and: [{ type: { in: ['schema:Book'] } }, { statement: { property: words, range: { gte: 1000001, unit: '1' } } }],
   };
   expect(validateFilter(query, fixture.release.definition), 'Released word-count range admission').toEqual([]);
 }, 120_000);
@@ -437,7 +434,10 @@ test('unknown unmeasured and withheld method or evidence never masquerade as mea
   }
   const absent = await fixture.createSubject('schema:Book', 'Unmeasured body');
   expect((await read(absent)).statements[words] ?? []).toEqual([]);
-  const withheld = await propose(absent, measurement(words, '+1000001', 'method', controlledRecord, new Date().toISOString()));
+  const withheld = await propose(
+    absent,
+    measurement(words, '+1000001', 'method', controlledRecord, new Date().toISOString()),
+  );
   expect(withheld.status, JSON.stringify(withheld.body)).toBe(400);
   expect((await read(absent)).statements[words] ?? []).toEqual([]);
   const noSource = { ...admittedWords('+1000001', controlledRecord), references: [] };
