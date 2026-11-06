@@ -3492,11 +3492,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/community/schemas.ts",
-          "edge": "value import \"../content/realm-media.ts\" #1 => services/kernel/src/content/realm-media.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/community/schemas.ts",
           "edge": "value import \"../content/schemas.ts\" #1 => services/kernel/src/content/schemas.ts"
         },
         {
@@ -7201,11 +7196,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/library/collection-list-facts.ts",
           "edge": "value import \"../semantic/summaries.ts\" #1 => services/kernel/src/semantic/summaries.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/collection-metadata-history.ts",
-          "edge": "type import \"../semantic/summaries.ts\" #1 => services/kernel/src/semantic/summaries.ts"
         },
         {
           "rule": "rule 2",
@@ -25112,11 +25102,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/ratings/question-management/actions.ts",
           "edge": "value import \"../../session/request\" #1 => apps/web/src/session/request.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/ratings/question-management/native.ts",
-          "edge": "value import \"../../../../../services/kernel/src/rating/schemas.ts\" #1 => services/kernel/src/rating/schemas.ts"
         },
         {
           "rule": "rule 2",

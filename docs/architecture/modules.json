@@ -772,6 +772,7 @@
       "publicEntries": [],
       "allowedDependencies": [
         "definitions",
+        "filter",
         "kernel-access",
         "kernel-access-application",
         "kernel-access-contract",
