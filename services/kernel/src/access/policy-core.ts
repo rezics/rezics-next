@@ -10,50 +10,10 @@ import {
 import type { Access, ActionCatalogue } from '../request/access.ts';
 import { isGlobalReachAction } from './governance-reach.ts';
 import { resourceRoleCatalogue, type ResolvedResourceRoles } from './resource-roles.ts';
+import type { NativePermissionProjection } from './permission-projection.ts';
+export type { NativePermissionProjection } from './permission-projection.ts';
 
 const nativePolicyCatalogues = new WeakMap<ResolvedResourceRoles, PolicyCatalogue>();
-
-/** Primitive projection returned by the existing bounded permission statement. */
-export type NativePermissionProjection = Readonly<{
-  assignmentValid: boolean | null;
-  deadlineLive: boolean | null;
-  localDenied: boolean | null;
-  actorActionGrant: boolean | null;
-  actorResourceRoleGrant: boolean | null;
-  actorOwnAccountGrant: boolean | null;
-  actorAuthenticatedBenefitGrant: boolean | null;
-  principalActionGrant: boolean | null;
-  principalResourceRoleGrant: boolean | null;
-  principalOwnAccountGrant: boolean | null;
-  principalAuthenticatedBenefitGrant: boolean | null;
-  globalDenied: boolean | null;
-  globalActorActionGrant: boolean | null;
-  globalActorResourceRoleGrant: boolean | null;
-  globalActorOwnAccountGrant: boolean | null;
-  globalActorAuthenticatedBenefitGrant: boolean | null;
-  globalPrincipalActionGrant: boolean | null;
-  globalPrincipalResourceRoleGrant: boolean | null;
-  globalPrincipalOwnAccountGrant: boolean | null;
-  globalPrincipalAuthenticatedBenefitGrant: boolean | null;
-  explicitLocalDenied: boolean | null;
-  explicitActorActionGrant: boolean | null;
-  explicitActorResourceRoleGrant: boolean | null;
-  explicitActorOwnAccountGrant: boolean | null;
-  explicitActorAuthenticatedBenefitGrant: boolean | null;
-  explicitPrincipalActionGrant: boolean | null;
-  explicitPrincipalResourceRoleGrant: boolean | null;
-  explicitPrincipalOwnAccountGrant: boolean | null;
-  explicitPrincipalAuthenticatedBenefitGrant: boolean | null;
-  explicitGlobalDenied: boolean | null;
-  explicitGlobalActorActionGrant: boolean | null;
-  explicitGlobalActorResourceRoleGrant: boolean | null;
-  explicitGlobalActorOwnAccountGrant: boolean | null;
-  explicitGlobalActorAuthenticatedBenefitGrant: boolean | null;
-  explicitGlobalPrincipalActionGrant: boolean | null;
-  explicitGlobalPrincipalResourceRoleGrant: boolean | null;
-  explicitGlobalPrincipalOwnAccountGrant: boolean | null;
-  explicitGlobalPrincipalAuthenticatedBenefitGrant: boolean | null;
-}>;
 
 function subject(
   row: NativePermissionProjection,
