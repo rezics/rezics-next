@@ -1,6 +1,6 @@
 import { afterAll, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { createHash, generateKeyPairSync, randomBytes, randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { mediaRequest, type MediaEnv } from '../src/media/index.ts';
@@ -143,6 +143,15 @@ let started: Promise<string> | undefined;
 function site(): Promise<string> {
   started ??= (async () => {
     const port = await freePort();
+    const { privateKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      KERNEL_ORIGIN: fake.url.origin,
+      WEBSITE_CLIENT_KEY: JSON.stringify({ ...privateKey.export({ format: 'jwk' }), kid: 'media-worker-test' }),
+    };
+    // This fixture owns the R2 transport; task-local native bindings must not replace its store.
+    delete env.LOCAL_MEDIA_ORIGIN;
+    delete env.LOCAL_MEDIA_TOKEN;
     let output = '';
     const keep = (chunk: Buffer) => {
       output = (output + chunk.toString()).slice(-8000);
@@ -151,19 +160,23 @@ function site(): Promise<string> {
       cwd: app,
       detached: true,
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, KERNEL_ORIGIN: fake.url.origin },
+      env,
     });
     child.stdout!.on('data', keep);
     child.stderr!.on('data', keep);
     const origin = `http://127.0.0.1:${port}`;
+    const missingMedia = `${origin}/media/${randomUUID()}/original`;
     const deadline = Date.now() + 150_000;
     for (;;) {
       if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
       try {
-        const response = await fetch(`${origin}/en`, { redirect: 'manual', signal: AbortSignal.timeout(60_000) });
-        if (response.status < 500) return origin;
+        // The fixture implements media APIs, so readiness must not depend on home-page discovery or rendering.
+        const response = await fetch(missingMedia, { redirect: 'manual', signal: AbortSignal.timeout(5000) });
+        const ready = response.status === 404 && response.headers.get('content-type')?.includes('application/problem+json');
+        await response.body?.cancel();
+        if (ready) return origin;
       } catch {}
-      if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${output}`);
+      if (Date.now() > deadline) throw new Error(`dev server did not serve the media route in time:\n${output}`);
       await Bun.sleep(500);
     }
   })();

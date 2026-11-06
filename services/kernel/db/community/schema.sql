@@ -703,8 +703,7 @@ CREATE FUNCTION community.refresh_space_discovery_tuple_witness(r integer, id uu
     LANGUAGE plpgsql
     AS $$
 DECLARE current_space_revision uuid; current_realm_id uuid; current_realm_revision uuid;
-        current_state text; p integer; next_generation bigint; producer_epoch numeric(20,0);
-        source_position numeric(20,0);
+        current_state text; p integer; next_generation bigint;
 BEGIN
   SELECT s.head_revision_id, h.realm_id, h.head_revision_id
     INTO current_space_revision, current_realm_id, current_realm_revision
@@ -713,7 +712,7 @@ BEGIN
     WHERE s.route=r AND s.space_id=id;
   IF NOT FOUND THEN RETURN; END IF;
   p := r / 16;
-  SELECT state,producer_epoch,source_position INTO current_state,producer_epoch,source_position
+  SELECT state INTO current_state
     FROM community.space_discovery_tuple_witness
     WHERE route=r AND space_id=id FOR UPDATE;
   IF NOT FOUND THEN
