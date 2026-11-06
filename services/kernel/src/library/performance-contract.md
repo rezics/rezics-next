@@ -20,6 +20,9 @@ The Source adapter ABI keeps Search `ScopeWorkContext`; contract `work` stays un
 admission SQL drives from the one-row request through LATERAL LIMIT-1 primary-key points and the 32-row reserved
 source; restore and rename lock the exact parent rather than scanning the owner catalogue. Those growth suites
 remain the oracles; this landing adds no parallel Label suite.
+Decision: native Label fixtures create the steward's Global `definitions:publish` / `definitions:activate` grants
+through the ordinary command after Access bootstrap; Access keeps Global point checks on the SQL evaluator so
+`platform.governance` is the first holder. No test-only grant rows.
 
 ## Collection operation costs
 

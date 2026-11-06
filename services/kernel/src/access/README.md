@@ -41,7 +41,9 @@ and 4 KiB.
 Decision: Kernel uses the pure core for every exact registered action/resource-type pair: points infer a type only
 when it is unique (or a page supplies it), batches use their admitted type, and own-account checks bind to the
 existing `access.account` profile. Point actions without one exact target type retain the SQL evaluator until
-`Resource` carries that operand.
+`Resource` carries that operand. Global Context point checks also keep that SQL evaluator: Global predates ordinary
+resource initialization and is the home of `platform.governance`. Unique-type inference there would send grantor
+must-hold through the core while the role grants already satisfy the formula. Pages and batches may still name a type.
 
 `services/kernel/src/access/policy-core.ts` imports the public `@rezics/access` entry and projects the live
 `ActionCatalogue`, resolved resource roles/types and exact `globalReach` registration. Point/page checks and
@@ -296,7 +298,7 @@ explicitly includes that scope. Auth's host creates a missing `login` client wit
 
 ## Grant rule
 
-A grantor needs `access:grant` and never grants an action they do not hold. Grant, change and ordinary revoke use that same check for every new and previous action. Composed Auth/Access fixtures call these native grant commands rather than a separate HTTP Access app. Ordinary import CLI identities also serialize process-wide Auth workflow setup and isolated media-worker launches, then relaunch Auth for a later identity in the same process. An account may renounce its own direct grant without `access:grant` when its acting client's consented scopes cover every action being revoked; organization-role, `active_accounts`, and another account's grants still require `access:grant`.
+A grantor needs `access:grant` and never grants an action they do not hold. Grant, change and ordinary revoke use that same check for every new and previous action. The first Global holder is the `platform.governance` role installed by operator bootstrap; ordinary grant commands then create further Global grants, including unique-type definition actions, because that role already holds them on Global. Composed Auth/Access fixtures call these native grant commands rather than a separate HTTP Access app. Ordinary import CLI identities also serialize process-wide Auth workflow setup and isolated media-worker launches, then relaunch Auth for a later identity in the same process. An account may renounce its own direct grant without `access:grant` when its acting client's consented scopes cover every action being revoked; organization-role, `active_accounts`, and another account's grants still require `access:grant`.
 
 `gate:<group>` and `gate:any` are direct actions on the Global Context (route 0, id `00000000-0000-8000-8000-000000000000`). Mounted route declarations use `<group>` matching `^[a-z][a-z_]{0,62}$`; native opening and gate-action validation retains `^[a-z][a-z_-]{0,62}$`. On that resource, holding `gate:any` counts as holding every admitted `gate:<group>`. Granting `gate:any` requires `gate:any`. The grantor check adds at most one extra exact `gate:any` check on the Global Context per granted gate action, `O((1+K) log G)` with `K <= 1000`. Other actions are unchanged. There is no caller-supplied grantor and no wildcard for any other action.
 
