@@ -41,6 +41,9 @@ The full Web check invokes this same workspace entry. Browser consumers use inst
 tooling may use the owning services' native interfaces without imposing Worker globals on those services.
 The compiler-root test checks resolved files and ambient types; the supported full compiler runs exercise Reylo,
 whose custom mapper settings are not emitted by TypeScript's `--showConfig` output.
+Existing receiving tests use the mounted reading-page fixture and preserve exact revision, body and no-extra-read
+assertions. Reaction fixtures retain compact and exact localized operands; unavailable Subject reactions remain
+distinct from unavailable Content votes, with neither fixture inventing a score.
 
 ## Prepared remote Web checks
 

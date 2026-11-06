@@ -54,3 +54,7 @@ Reylo mapper cannot load Kernel SQL sources. Diary page types are the installed 
 exports; Web must not import Kernel source for them. Web tooling scripts compile in their own Bun/Node program,
 invoked by the normal Web typecheck; its explicit script roots include the recorder, check runner and seeded Content
 walk without Worker ambient types.
+
+Reviewed Person admissions expose `identityOperationLocation` and `identityOperationId` from the public Client entry.
+Consumers retain the native HTTP 202 Location bound to the returned operation identity and poll through
+`reviewedPersonRequests(...).operationAt`; a missing Location cannot become a reconstructed admission.

@@ -19,6 +19,8 @@ import posts from '../src/kernel/recorded/thread-posts.json';
 import { exactRevisionHref } from '../src/threads/exact-revision-href';
 import { loadThreadPageWithAuthors } from '../src/identity/page-loaders';
 import { subjectHref } from '../src/subject/subject-href';
+import { authoredReadingPage } from '../src/kernel/fake/thread-reading-page';
+import type { ReadingPage } from '../src/threads/thread-page';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { ExactRevisionView } = await import('../src/threads/exact-revision-view');
@@ -39,6 +41,21 @@ async function readingPage(fetchPaths: string[]): Promise<ThreadReadingPage> {
     fetch: async (input, init) => {
       const path = new URL(new Request(input, init).url).pathname;
       fetchPaths.push(path);
+      if (path.endsWith('/reading-page'))
+        return Response.json(
+          authoredReadingPage(
+            thread.thread as ReadingPage['thread'],
+            posts.posts.filter((post) => post.id !== thread.thread.firstPost.id) as ReadingPage['replies']['items'],
+            accounts.accounts
+              .filter((account) => account.state === 'active')
+              .map((account) => ({
+                id: account.id,
+                displayName: 'displayName' in account ? account.displayName : null,
+                handle: 'handle' in account ? account.handle : null,
+                avatar: null,
+              })),
+          ),
+        );
       if (path.endsWith('/posts')) return Response.json(posts);
       if (path.includes('/boards/')) return Response.json(board);
       if (path.endsWith('/accounts')) return Response.json(accounts);
