@@ -112,6 +112,10 @@ test('independent public selected-synopsis reads keep no-store, refuse redirects
     release,
     references: [],
   });
+  for (const kind of ['changed', 'missing', 'unsupported', 'unavailable'] as const)
+    expect(
+      admitSelectedSynopsisSupport({ ...current, selectedSynopsis: { kind } } as never, statement, operands.document),
+    ).toEqual({ kind });
   expect(
     admitSelectedSynopsisSupport(
       {

@@ -80,7 +80,7 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
   let acceptanceRefusalStatus = 503;
   let tagSpoiler = 0;
   const unavailableReviewSubjects = new Set<string>();
-  let selectedSynopsisOverride: 'changed' | 'missing' | 'unavailable' | undefined;
+  let selectedSynopsisOverride: 'changed' | 'missing' | 'unsupported' | 'unavailable' | undefined;
   let omitSelectedSynopsisOperands = false;
   const metadata = sourceRecordMetadataFixture();
 
@@ -635,38 +635,24 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     ).toBe(false);
     omitSelectedSynopsisOperands = false;
 
-    selectedSynopsisOverride = 'changed';
-    const changedCurrentSynopsis = await publishShowcase({
-      plan,
-      result,
-      aliases: crossMediaAliases,
-      journal,
-      review,
-      publicClient,
-      ...tagOptions,
-    });
-    expect(changedCurrentSynopsis.status).toBe('incomplete');
-    expect(changedCurrentSynopsis.omissions).toContainEqual({
-      provider: 'bangumi',
-      sourceKey: '101',
-      code: 'selected-synopsis-not-current',
-    });
-    selectedSynopsisOverride = 'unavailable';
-    const unavailableCurrentSynopsis = await publishShowcase({
-      plan,
-      result,
-      aliases: crossMediaAliases,
-      journal,
-      review,
-      publicClient,
-      ...tagOptions,
-    });
-    expect(unavailableCurrentSynopsis.status).toBe('incomplete');
-    expect(unavailableCurrentSynopsis.omissions).toContainEqual({
-      provider: 'bangumi',
-      sourceKey: '101',
-      code: 'selected-synopsis-not-current',
-    });
+    for (const kind of ['changed', 'missing', 'unsupported', 'unavailable'] as const) {
+      selectedSynopsisOverride = kind;
+      const withheld = await publishShowcase({
+        plan,
+        result,
+        aliases: crossMediaAliases,
+        journal,
+        review,
+        publicClient,
+        ...tagOptions,
+      });
+      expect(withheld.status).toBe('incomplete');
+      expect(withheld.omissions).toContainEqual({
+        provider: 'bangumi',
+        sourceKey: '101',
+        code: 'selected-synopsis-not-current',
+      });
+    }
     selectedSynopsisOverride = undefined;
     const recoveredCurrentSynopsis = await publishShowcase({
       plan,
