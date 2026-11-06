@@ -8,7 +8,13 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
-import { isolatedOwnedPostgresUrl, ownedPostgresIsolated } from './owned-postgres.ts';
+import {
+  isolatedOwnedPostgresUrl,
+  isolatedReyloPostgresUrl,
+  listenOwnedPostgresSocketProxy,
+  ownedPostgresIsolated,
+  type OwnedPostgresSocketProxy,
+} from './owned-postgres.ts';
 import { exportJWK, generateKeyPair } from 'jose';
 import { resolveBunCommand } from '../../../../scripts/gate.ts';
 import type { SemanticOutcomeDriver } from '../../../../services/kernel/test/semantic/outcome-driver.ts';
@@ -524,6 +530,7 @@ async function startStack(): Promise<
   let driver: SemanticOutcomeDriver | undefined;
   let postgresContainer: string | undefined;
   let postgresSocketDirectory: string | undefined;
+  let postgresSocketProxy: OwnedPostgresSocketProxy | undefined;
   let runtimeDirectory: string | undefined;
   let consentServer: { env: Record<string, string>; close(): Promise<void> } | undefined;
   let closeAuth: (() => Promise<void>) | undefined;
@@ -649,6 +656,10 @@ async function startStack(): Promise<
       await attempt(() => driver?.close());
       console.info('Native web stack cleanup: kernel fixture closed');
       if (runtimeDirectory) await attempt(() => rm(runtimeDirectory!, { recursive: true, force: true }));
+      if (postgresSocketProxy) {
+        await attempt(() => postgresSocketProxy!.close());
+        postgresSocketProxy = undefined;
+      }
       if (postgresContainer) {
         console.info('Native web stack cleanup: removing owned PostgreSQL container');
         const removed = Bun.spawnSync(['docker', 'rm', '-fv', postgresContainer]);
@@ -706,8 +717,17 @@ async function startStack(): Promise<
       await admin.end();
     }
     reportStackProgress('Native web stack startup: SQL analysis database cloned');
-    source.pathname = `/${analysisDatabase}`;
-    process.env.REYLO_CONFIG = writeReyloProject(runtimeDirectory, source.href);
+    const socketHost = source.searchParams.get('host');
+    let analysisUrl: string;
+    if (socketHost?.startsWith('/')) {
+      reportStackProgress('Native web stack startup: proxying SQL analysis through loopback');
+      postgresSocketProxy = await listenOwnedPostgresSocketProxy(socketHost);
+      analysisUrl = isolatedReyloPostgresUrl(postgresSocketProxy.port, analysisDatabase);
+    } else {
+      analysisUrl = process.env.DATABASE_URL!.replace(/\/rezics(?=\?|$)/, `/${analysisDatabase}`);
+    }
+    if (analysisUrl === process.env.DATABASE_URL) throw new Error('Native SQL analysis needs its own database copy');
+    process.env.REYLO_CONFIG = writeReyloProject(runtimeDirectory, analysisUrl);
     process.env.KERNEL_POOL_ACQUIRE_TIMEOUT_MS ??= '2000';
     await import('../../../../services/kernel/test/support/fixture-event-types.ts');
     const { workerTestEnv } = await import('../../../../services/kernel/test/support/worker-env.ts');

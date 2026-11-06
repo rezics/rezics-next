@@ -1,6 +1,12 @@
 import { expect, test } from 'bun:test';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { connect, createServer } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   isolatedOwnedPostgresUrl,
+  isolatedReyloPostgresUrl,
+  listenOwnedPostgresSocketProxy,
   nativeOwnedPostgresIsolated,
   networkInterfaceNames,
   ownedPostgresIsolated,
@@ -42,6 +48,49 @@ test('an isolated socket URL uses the host directory instead of a TCP port', () 
   expect(isolatedOwnedPostgresUrl('/tmp/native-owned-pg-socket')).toBe(
     'postgres://rezics:rezics@localhost/rezics?host=/tmp/native-owned-pg-socket&sslmode=disable',
   );
+});
+
+test('Reylo analysis on an isolated socket uses loopback TCP instead of libpq host', () => {
+  expect(isolatedReyloPostgresUrl(54329, 'native_web_analysis_abc')).toBe(
+    'postgres://rezics:rezics@127.0.0.1:54329/native_web_analysis_abc?sslmode=disable',
+  );
+  expect(() => isolatedReyloPostgresUrl(0, 'native_web_analysis_abc')).toThrow('TCP port');
+  expect(() => isolatedReyloPostgresUrl(54329, 'native-web;drop')).toThrow('Unsafe analysis database name');
+});
+
+test('a loopback proxy reaches a unix-socket PostgreSQL listener', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'native-pg-proxy-'));
+  const received: Buffer[] = [];
+  const listener = createServer((socket) => {
+    socket.on('data', (chunk) => received.push(chunk));
+    socket.write('from-socket');
+  });
+  await new Promise<void>((resolve, reject) => {
+    listener.once('error', reject);
+    listener.listen(join(directory, '.s.PGSQL.5432'), () => {
+      listener.off('error', reject);
+      resolve();
+    });
+  });
+  try {
+    const proxy = await listenOwnedPostgresSocketProxy(directory);
+    try {
+      const client = connect({ port: proxy.port, host: '127.0.0.1' });
+      const reply = await new Promise<string>((resolve, reject) => {
+        client.once('error', reject);
+        client.once('data', (chunk) => resolve(chunk.toString()));
+        client.write('from-tcp');
+      });
+      expect(reply).toBe('from-socket');
+      expect(Buffer.concat(received).toString()).toBe('from-tcp');
+      client.end();
+    } finally {
+      await proxy.close();
+    }
+  } finally {
+    await new Promise<void>((resolve) => listener.close(() => resolve()));
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test('/proc/net/dev interface names include loopback', () => {

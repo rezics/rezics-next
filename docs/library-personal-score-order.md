@@ -127,5 +127,6 @@ PostgreSQL through a bind-mounted unix socket when the namespace is loopback-onl
 read PID 1's netns. Docker cannot join that netns, and a host-published port never appears on the unshared loopback.
 The server also listens on `/var/run/postgresql` so the image entrypoint's init `psql` (which clears `PGHOST`) can
 finish. Auth host identity uses that absolute `host` socket directory as the database identity; a TCP `host` or
-`hostaddr` override remains refused. Acceptance remains the existing native host walk; unit tests pin socket isolation
-and the dual listen path.
+`hostaddr` override remains refused. Reylo SQL analysis cannot use that libpq `host` query: postgres.js dials the URL
+hostname, so isolated walks proxy analysis over loopback TCP onto the same unix socket. Acceptance remains the existing
+native host walk; unit tests pin socket isolation, the dual listen path and the Reylo loopback proxy.
