@@ -10,7 +10,11 @@ import {
   recordDurableWorkLocator as nativeRecordDurableWorkLocator,
 } from '../../src/history/adapters/record.ts';
 import { admitSharedHistory as nativeAdmitSharedHistory } from '../../src/history/adapters/shared-history.ts';
-import { advanceSelectedHistoryOriginal as nativeAdvanceSelectedHistoryOriginal } from '../../src/history/adapters/work.ts';
+import { sharedHistoryWorkModule as nativeLocalSharedHistoryWorkModule } from '../../src/history/adapters/shared-history-work.ts';
+import {
+  advanceSelectedHistoryOriginal as nativeAdvanceSelectedHistoryOriginal,
+  sharedHistoryWorkModule as nativeSharedHistoryWorkModule,
+} from '../../src/history/adapters/work.ts';
 
 test('ordinary native composition binds the production adapters themselves', () => {
   installNativeHistory();
@@ -24,4 +28,7 @@ test('ordinary native composition binds the production adapters themselves', () 
   expect(composed.prepareRecordHistoryPurge).toBe(nativePrepareRecordHistoryPurge);
   expect(installed.withPrepaidAgentIdentityHistoryUnit).toBe(nativeWithPrepaid);
   expect(composed.identityHistoryCommandControl).toBe(IDENTITY_HISTORY_COMMAND_CONTROL);
+  expect(installed.sharedHistoryWorkModule).toBe(nativeSharedHistoryWorkModule);
+  expect(installed.localSharedHistoryWorkModule).toBe(nativeLocalSharedHistoryWorkModule);
+  expect(installed.localSharedHistoryWorkModule).not.toBe(installed.sharedHistoryWorkModule);
 });
