@@ -527,7 +527,8 @@ export async function acquireBangumiCoverSources(
       code: 'source-limit',
     });
   const characterRowsByKey = new Map(plan.entities.bangumi.map((row) => [row.key, row]));
-  const characterRows = selectedCharacterKeys.map((key) => characterRowsByKey.get(key)!);
+  // An appearance can name a Character absent from the dump; that Character has no image to request.
+  const characterRows = selectedCharacterKeys.flatMap((key) => characterRowsByKey.get(key) ?? []);
   ensure(
     workRows.length + creatorRows.length + characterRows.length <= BANGUMI_MEDIA_BATCH_LIMIT,
     'Selected Bangumi media source limit exceeded',
