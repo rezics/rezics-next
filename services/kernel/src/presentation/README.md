@@ -266,7 +266,9 @@ The regression is enabled only with a non-`kernel_test_*` `DATABASE_URL` and
 `PAGE_DATA_CHECK_MEMBER_TOKEN`; `KERNEL_ORIGIN` selects the retained Kernel when it is not on the local default.
 
 A TypeList on a route, subject overview, account page or full view may continue by node ID. Its native Search cursor
-is attached before deduplication, so identical sibling lists remain independent after one advances. Other Search,
+is attached before deduplication, so identical sibling lists remain independent after one advances. Zone composed
+Search and Members pages admit the raw row count against the planned limit first, then keep the first native
+occurrence of each canonical identity. A malformed row or leaked owner field still refuses the whole leaf. Other Search,
 links and relation descriptors are unrequested (204) on that continued response. Full-document admission still uses
 16 distinct reads and 128 slots; each configured list retains its published limit of at most 24. `paged:true` is an
 optional preview limit of at most 12, and is not needed to reach later pages.

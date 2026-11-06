@@ -6,6 +6,10 @@ import { fileURLToPath } from 'node:url';
 import { browserRoutes } from './browser-routes.ts';
 
 const app = fileURLToPath(new URL('..', import.meta.url));
+const componentRefs =
+  process.env.STORYBOOK_DISABLE_COMPONENT_REF === '1'
+    ? {}
+    : { ui: { title: 'Components', url: process.env.STORYBOOK_UI_URL ?? 'http://localhost:6007' } };
 
 // A fresh pass also catches deletions/renames and never trusts ignored output after a failed generation.
 const result = spawnSync('node', ['.storybook/generate-routes.ts'], { cwd: app, stdio: 'inherit' });
@@ -44,9 +48,7 @@ const config: StorybookConfig = {
       ],
     },
   ],
-  refs: {
-    ui: { title: 'Components', url: process.env.STORYBOOK_UI_URL ?? 'http://localhost:6007' },
-  },
+  refs: componentRefs,
   addons: ['@storybook/addon-vitest', '@storybook/addon-a11y', '@storybook/addon-mcp', '@storybook/addon-docs'],
   core: { disableTelemetry: true },
   // Generated cover images for the recorded summaries, served where the site's media route would be.

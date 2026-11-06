@@ -18,7 +18,8 @@ export function readingPageDocumentMedia(page: ReadingPageResponse): ThreadDocum
   const posts = [page.thread.firstPost, ...page.replies.items];
   for (const document of media.documents) {
     if (document.state !== 'available') continue;
-    const post = posts.find((post) => post.id === document.postId);
+    const pageIndex = posts.findIndex((post) => post.id === document.postId);
+    const post = pageIndex < 0 ? undefined : posts[pageIndex];
     if (
       post?.availability !== 'available' ||
       post.threadId !== document.threadId ||
@@ -39,11 +40,11 @@ export function readingPageDocumentMedia(page: ReadingPageResponse): ThreadDocum
       images.set(image.id, image.presentation);
     }
     documents.push({
+      pageIndex,
       postId: document.postId,
       threadId: document.threadId,
       revisionId: document.revisionId,
       sha256: document.sha256,
-      pageIndex: posts.indexOf(post),
       mediaIds,
     });
   }

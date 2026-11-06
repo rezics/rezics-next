@@ -43,6 +43,8 @@ test('each recorded JSON response type-checks against the kernel client', async 
     "type BoardResponse = NonNullable<Awaited<ReturnType<BoardResource['get']>>['data']>;",
     "type BoardThreadsResponse = NonNullable<Awaited<ReturnType<BoardResource['threads']['get']>>['data']>;",
     "type AccountsResponse = NonNullable<Awaited<ReturnType<KernelClient['accounts']['get']>>['data']>;",
+    "type PostRoutes = ReturnType<KernelClient['posts']>;",
+    "type PostRevisionsResponse = Data<ReturnType<PostRoutes['revisions']['get']>>;",
     // Eden merges threads/:id with threads/:threadId, so ReturnType of threads() has no get or posts.
     "type Routes = Kernel extends { '~Routes': infer Schema } ? Schema : never;",
     'type ThreadRoutes = Routes extends { v1: { threads: infer Threads } } ? Threads : never;',
@@ -97,6 +99,12 @@ test('each recorded JSON response type-checks against the kernel client', async 
   ];
   const responseType: Record<string, string> = {
     'accounts.json': 'AccountsResponse',
+    'thread-history-accounts.json': 'AccountsResponse',
+    'thread-history-board.json': 'BoardResponse',
+    'thread-history-posts.json': 'PostsResponse',
+    'thread-history-realm.json': 'RealmResponse',
+    'thread-history-revisions.json': 'PostRevisionsResponse',
+    'thread-history-thread.json': 'ThreadResponse',
     'notifications-count.json': 'NotificationsCountResponse',
     'notifications-inbox-empty.json': 'NotificationsInboxResponse',
     'notifications-inbox-thread-watch.json': 'NotificationsInboxResponse',
@@ -170,7 +178,7 @@ test('each recorded JSON response type-checks against the kernel client', async 
     'board-realm-thread-posts.json': 'PostsResponse',
   };
   for (const file of files) {
-    const name = basename(file).replace(/-(?:en|zh-Hans)\.json$/, '.json');
+    const name = basename(file).replace(/-(?:de|en|es|fr|ja|ko|zh-Hans|zh-Hant)\.json$/, '.json');
     const original = basename(file);
     if (name !== original && responseType[name]) responseType[original] = responseType[name]!;
   }
@@ -204,15 +212,22 @@ test('each recorded JSON response type-checks against the kernel client', async 
     expect.arrayContaining([
       'subject.json',
       'missing-subject.json',
+      'home-page-de.json',
+      'home-page-zh-Hant.json',
       'board.json',
       'board-threads.json',
       'thread.json',
       'thread-posts.json',
       'search.json',
       'search-empty.json',
+      'notifications-count.json',
+      'notifications-inbox-empty.json',
+      'notifications-inbox-thread-watch.json',
       'offer.json',
       'order-paid.json',
       'thread-owned.json',
+      'thread-history-thread.json',
+      'thread-history-revisions.json',
       'zone-static-home.json',
       'zone-static-guide.json',
       'zone-static-owner-home.json',

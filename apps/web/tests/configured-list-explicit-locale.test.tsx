@@ -3,10 +3,15 @@ import { dirname } from 'node:path';
 import { act, createContext, createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { queryOptions } from '@tanstack/react-query';
+import * as start from '../.storybook/react-start';
 import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
 import type { SubjectPageData } from '../src/features/pages/subject';
 import { m } from '../src/paraglide/messages.js';
 import { getLocale, setLocale } from '../src/paraglide/runtime.js';
+
+mock.module('@tanstack/react-start', () => start);
+mock.module('@tanstack/react-start/server', () => start);
+mock.module('cloudflare:workers', () => ({ env: {} }));
 
 const reads: Array<{ locale: string; node: string; page: string }> = [];
 const sessionQuery = queryOptions({
@@ -18,6 +23,7 @@ const sessionQuery = queryOptions({
 
 mock.module('../src/session/query', () => ({
   AnonymousSessionContext: createContext(false),
+  sessionCsrfToken: () => null,
   sessionQuery,
   useSession: () => ({ state: 'unknown' as const, csrfToken: null }),
 }));
@@ -53,7 +59,12 @@ const publicPage = JSON.stringify({ route: '/' });
 function listPage(): SubjectPageData {
   const document: CompositionDocument = {
     root: { props: {} },
-    content: [{ type: 'TypeList', props: { id: node, title: { ja: authoredTitle }, types: ['schema:Book'] } }],
+    content: [
+      {
+        type: 'TypeList',
+        props: { id: node, title: { ja: authoredTitle }, types: ['schema:Book'], sort: 'name', limit: 24 },
+      },
+    ],
   };
   const plan = planReads(platformRegistry, document, { subject: null });
   return {

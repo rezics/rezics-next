@@ -530,13 +530,9 @@ export function websiteRoutes(input: {
           if (request.method !== 'GET' || url.search) deny('invalid_request');
           const response = await input.native().handler(request);
           if (!response.ok) return response;
-          let metadata: Record<string, unknown> | undefined;
-          try {
-            metadata = await jsonRecord(response);
-          } catch {
-            return response;
-          }
-          if (!metadata) return response;
+          const metadata = await jsonRecord(response);
+          // Native discovery is third-party JSON; only records can supply website metadata.
+          if (!metadata) return failure('temporarily_unavailable');
           return Response.json(
             {
               ...metadata,

@@ -1,16 +1,24 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { PAGE_GLOBAL_CONTEXT } from '@rezics/composition';
-import { OverviewContext, type OverviewValue } from '../src/features/pages/overview';
-import { TypeList, TypeListContext } from '../src/features/pages/type-list';
-import { typeListHref } from '../src/features/pages/type-list-model';
-import { catalogueRowContext } from '../src/features/pages/catalogue-list-context/model';
-import { catalogueExample, catalogueIds } from '../src/kernel/fake/catalogue-list-context';
-import { defaultReader } from '../src/subject/reader';
-import { PlainLink } from '../src/features/pages/shared';
+import * as start from '../.storybook/react-start';
+import type { OverviewValue } from '../src/features/pages/overview';
+
+mock.module('@tanstack/react-start', () => start);
+mock.module('@tanstack/react-start/server', () => start);
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { PAGE_GLOBAL_CONTEXT } = await import('@rezics/composition');
+const { OverviewContext } = await import('../src/features/pages/overview');
+const { TypeList, TypeListContext } = await import('../src/features/pages/type-list');
+const { typeListHref } = await import('../src/features/pages/type-list-model');
+const { catalogueRowContext } = await import('../src/features/pages/catalogue-list-context/model');
+const { catalogueExample, catalogueIds } = await import('../src/kernel/fake/catalogue-list-context');
+const { defaultReader } = await import('../src/subject/reader');
+const { PlainLink } = await import('../src/features/pages/shared');
 
 const target = { subject: catalogueIds.book, realm: catalogueIds.realm };
+// The configured TypeList and its planned Search descriptor name the same types, sort and limit.
+const configured = { types: ['schema:Book', 'schema:Movie'], sort: 'name', limit: 2 };
 function render(rows: unknown[], options: { failed?: boolean; cursor?: string; locale?: string } = {}) {
   const value = {
     locale: options.locale ?? 'en',
@@ -28,7 +36,10 @@ function render(rows: unknown[], options: { failed?: boolean; cursor?: string; l
           ? { ok: false, status: 503 }
           : {
               ok: true,
-              read: { kind: 'search', body: { limit: 2, sort: 'name', filter: {} } },
+              read: {
+                kind: 'search',
+                body: { filter: { type: { in: configured.types } }, sort: configured.sort, limit: configured.limit },
+              },
               body: { subjects: rows, next: 'source-bound-next' },
             },
       ],
@@ -41,7 +52,7 @@ function render(rows: unknown[], options: { failed?: boolean; cursor?: string; l
       createElement(
         TypeListContext.Provider,
         { value: { target, full: 'works', cursor: options.cursor } },
-        createElement(TypeList, { id: 'works', title: 'Catalogue' }),
+        createElement(TypeList, { id: 'works', title: 'Catalogue', ...configured }),
       ),
     ),
   );

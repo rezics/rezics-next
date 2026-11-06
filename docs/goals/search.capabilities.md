@@ -422,6 +422,12 @@ malicious input and shared public sources. Synthetic Book-with-author alone is n
 | MOUNTED ZONE             | Routed common composition and mount reads obey same registry/admission/authority; starter data is not runtime proof.           |
 | configured TYPELIST      | Every released vertical has a real admitted list and resolved route/type/base/generic fallback; actual HTTP consumer required. |
 
+Decision: the fewest Web tests pin publish/read, TypeList raw-limit admission, mixed sibling Retry-After and public
+ReactionSummary totals; Members keep recorded native duplicates; no extra page stories. Auth website tests pin malformed
+native metadata, non-object token errors and revocation JSON at the protocol boundary. Driver following, entry-review and
+Board consumers type-check with those six existing suites; History README keeps one Foreign Kernel introduction and the
+Zone cleanup paragraph in the Zone receiving section.
+
 **Frozen scenarios and binding:** all six original pages titles in the ledger. Preserve registry limits64KiB,
 256 nodes, depth8,16 reads/128 slots; profile1MiB/128 templates; executable HTML/script/links rejected with pointers.
 [presentation reads](../../services/kernel/test/presentation/reads.test.ts) “each read runs through its standalone
@@ -443,7 +449,7 @@ composition before closing; keep Puck render and aggregate-derived JSON-LD evide
 | --------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | specification validated red             | Six original assertions present; measured red not recorded; all-vertical/native cost expansion not frozen. |
 | native driver registered                | Six-case native pages wrapper registered; Workers publication tests separately present.                    |
-| implementation exposed                  | Profile publish/activation/page read and Workers renderer exist; full consumer matrix incomplete.          |
+| implementation exposed                  | Profile publish/activation/page read, Workers renderer, TypeList raw-limit admission, ReactionSummary public totals and mixed sibling Retry-After exist; full native consumer matrix incomplete. |
 | user-case native pass at named revision | None recorded for this capability, including publication.                                                  |
 | promoted                                | No main closure evidence.                                                                                  |
 

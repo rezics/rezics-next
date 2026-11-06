@@ -10,6 +10,14 @@ not replaced by another catalogue.
 Decision: disclosed work and creator destinations open in a new tab, preserving the original tab's exact native
 type/population/source, locale, cursor, focus and scroll window on return.
 
+Decision: TypeList admission binds a native Search descriptor to the rendered composition node's configured type set,
+sort and effective page limit. A row outside that type set or a descriptor from another list makes the whole page
+unavailable, without rendering a valid prefix or carrying its cursor forward.
+
+Decision: admit the raw native `subjects` count against the planned limit before normalization, then retain the first
+occurrence of each subject identity in native order. This keeps response work bounded without turning a duplicate
+producer row into an empty or unavailable page; the recorded Home books page pins the behavior.
+
 ## Current producer boundary
 
 The bound native `searchResponse` in `services/kernel/src/search/http/routes.ts` can publish selected `facts`,

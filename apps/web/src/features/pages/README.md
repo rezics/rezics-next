@@ -17,6 +17,10 @@ Decision: `CompositionRender` keeps its Puck render config while its registry ha
 
 The anonymous catalogue reads the active native `/` composition once and renders its supplied `TypeList` windows with the existing Search owner, limits and total read budget. A 404 is missing, rejected native requests remain rejected, and 5xx or fetch dependency failures remain unavailable with deliberate reload. The checked-in platform profile continues to declare the four intended populations; changing its source does not activate it. The publisher owns active profile delivery.
 
+Decision: `ReactionSummary` renders public totals from the planned reactions leaf and the recorded native counts page. Each total is one text node (`Like 42`) so the visible label and count stay together. Viewer reaction stays on the header actions slot. A mismatched producer, malformed counts or Retry-After wait makes that leaf unavailable without hiding supported siblings. Mixed configured TypeList recovery uses the same declared slots: a waiting books leaf keeps its own hint while recorded recipes and reactions stay in document order. Zone TypeList uses the same configured Search admission as the catalogue TypeList. The renderer reads `OverviewContext` from the context leaf and admits kinds locally so it does not import overview or threads.
+
+Decision: the fewest Web tests pin those states plus TypeList raw-limit admission. Members keep recorded native duplicates. No extra page stories.
+
 ## Work tag reading
 
 Decision: show at most 12 source-order tag associations per local page, count only labelled tags disclosed in the retained Subject reading, open the original Concept target, and gate each over-threshold association as a whole.

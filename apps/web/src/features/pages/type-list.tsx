@@ -34,7 +34,7 @@ export function TypeList(props: Record<string, unknown>) {
   if (section && !section.ok && section.status === 204) return null;
   const title = pageText(props.title, value.locale);
   const options = { locale: value.locale as never };
-  const page = section?.ok ? nativeTypeListPage(section.read, section.body) : undefined;
+  const page = section?.ok ? nativeTypeListPage(section.read, section.body, props) : undefined;
   const items: Item[] = (page?.subjects ?? []).map((hit) => {
     const label = pageText(hit.labels, value.locale);
     const workId =
@@ -158,7 +158,7 @@ export function ZoneTypeList(props: Record<string, unknown>) {
   if (section && !section.ok && section.status === 204) return null;
   const title = pageText(props.title, value.locale);
   const options = { locale: value.locale as never };
-  const page = section?.ok ? nativeTypeListPage(section.read, section.body) : undefined;
+  const page = section?.ok ? nativeTypeListPage(section.read, section.body, props) : undefined;
   const full = destinations.list === id;
   const items: Item[] = (page?.subjects ?? []).map((hit) => {
     const label = pageText(hit.labels, value.locale);
