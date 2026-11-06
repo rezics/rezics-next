@@ -753,15 +753,29 @@ export function formatConnectionRunSummary(
   return `PostgreSQL connections: peak ${peakTotal}/${maxConnections} max_connections; highest file peaks: ${highest.join(', ') || 'none'}`;
 }
 
-export function startPostgresContainer(dockerCommand: DockerCommand = docker): string {
+export type PostgresContainerOptions = {
+  networkNamespace?: string;
+  listenPort?: number;
+};
+
+export function startPostgresContainer(
+  dockerCommand: DockerCommand = docker,
+  options: PostgresContainerOptions = {},
+): string {
+  if ((options.networkNamespace == null) !== (options.listenPort == null))
+    throw new Error('Disposable PostgreSQL network namespace and listen port must be supplied together');
+  const network =
+    options.networkNamespace && options.listenPort !== undefined
+      ? ['--network', `ns:${options.networkNamespace}`]
+      : ['-p', '127.0.0.1::5432'];
+  const listen = options.listenPort === undefined ? [] : ['-c', `port=${options.listenPort}`];
   return dockerCommand([
     'run',
     '-d',
     ...cgroupArgs(),
     '--label',
     `rezics.kernel.check.pid=${pid}`,
-    '-p',
-    '127.0.0.1::5432',
+    ...network,
     // Keep PostgreSQL data on disk instead of consuming memory that the check slot admission does not reserve.
     '--mount',
     `type=volume,destination=/var/lib/postgresql,volume-label=rezics.kernel.check.pid=${pid}`,
@@ -785,6 +799,7 @@ export function startPostgresContainer(dockerCommand: DockerCommand = docker): s
     `max_connections=${POSTGRES_MAX_CONNECTIONS}`,
     '-c',
     'log_line_prefix=%m [%p] [%e] ',
+    ...listen,
   ]);
 }
 

@@ -4,6 +4,8 @@ import { fork, spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { request as httpsRequest } from 'node:https';
 import { mkdtemp, rm } from 'node:fs/promises';
+import { readlinkSync } from 'node:fs';
+import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
@@ -400,6 +402,99 @@ async function startDurableWorker(
   }
 }
 
+function isolatedNetworkNamespacePath(): string | undefined {
+  try {
+    if (readlinkSync('/proc/self/ns/net') === readlinkSync('/proc/1/ns/net')) return undefined;
+    return `/proc/${process.pid}/ns/net`;
+  } catch {
+    return undefined;
+  }
+}
+
+function allocateLoopbackPort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        server.close();
+        reject(new Error('Could not allocate a loopback port for disposable PostgreSQL'));
+        return;
+      }
+      const port = address.port;
+      server.close((error) => (error ? reject(error) : resolve(port)));
+    });
+  });
+}
+
+function publishedPostgresUrl(container: string): string {
+  const portResult = Bun.spawnSync(['docker', 'port', container, '5432/tcp']);
+  if (portResult.exitCode !== 0)
+    throw new Error(`Could not get owned PostgreSQL port: ${portResult.stderr.toString()}`);
+  const port = Number(portResult.stdout.toString().match(/127\.0\.0\.1:(\d+)/)?.[1]);
+  if (!Number.isInteger(port) || port <= 0)
+    throw new Error(`Could not parse owned PostgreSQL port: ${portResult.stdout.toString()}`);
+  return `postgres://rezics:rezics@127.0.0.1:${port}/rezics?sslmode=disable`;
+}
+
+function postgresContainerLogs(container: string): string {
+  const logs = Bun.spawnSync(['docker', 'logs', '--tail', '80', container]);
+  return `${logs.stdout}${logs.stderr}`;
+}
+
+async function waitForOwnedPostgres(container: string, databaseUrl: string): Promise<void> {
+  const deadline = Date.now() + 60_000;
+  while (true) {
+    const inspect = Bun.spawnSync([
+      'docker',
+      'inspect',
+      '-f',
+      '{{.State.Running}} {{.State.Status}} {{.State.Error}}',
+      container,
+    ]);
+    const status = inspect.stdout.toString().trim();
+    if (inspect.exitCode !== 0 || !status.startsWith('true')) {
+      throw new Error(
+        `Disposable PostgreSQL container is not running (${status || inspect.stderr.toString()}).\n${postgresContainerLogs(container)}`,
+      );
+    }
+    const probe = new Pool({
+      connectionString: databaseUrl,
+      connectionTimeoutMillis: 1500,
+      max: 1,
+    });
+    try {
+      await probe.query('SELECT 1');
+      return;
+    } catch (error) {
+      if (Date.now() >= deadline)
+        throw new Error(`Disposable PostgreSQL did not become ready.\n${postgresContainerLogs(container)}`, {
+          cause: error,
+        });
+      await Bun.sleep(500);
+    } finally {
+      await probe.end();
+    }
+  }
+}
+
+async function startOwnedPostgres(): Promise<{ container: string; databaseUrl: string }> {
+  const { docker, startPostgresContainer } = await import('../../../../services/kernel/scripts/check.ts');
+  const networkNamespace = isolatedNetworkNamespacePath();
+  const listenPort = networkNamespace ? await allocateLoopbackPort() : undefined;
+  const container =
+    networkNamespace && listenPort !== undefined
+      ? startPostgresContainer(docker, { networkNamespace, listenPort })
+      : startPostgresContainer();
+  const databaseUrl =
+    listenPort === undefined
+      ? publishedPostgresUrl(container)
+      : `postgres://rezics:rezics@127.0.0.1:${listenPort}/rezics?sslmode=disable`;
+  await waitForOwnedPostgres(container, databaseUrl);
+  return { container, databaseUrl };
+}
+
 async function startStack(): Promise<
   Omit<NativeWebStack, 'kernel' | 'request' | 'routeAuthPages'> & {
     routeAuthPages(origin?: string): Promise<string>;
@@ -559,40 +654,13 @@ async function startStack(): Promise<
     reportStackProgress('Native web stack startup: kernel SQL modules registered');
     if (!process.env.DATABASE_URL) {
       reportStackProgress('Native web stack startup: starting PostgreSQL');
-      const { startPostgresContainer } = await import('../../../../services/kernel/scripts/check.ts');
       const { migrate } = await import('../../../../services/kernel/scripts/database.ts');
-      postgresContainer = startPostgresContainer();
+      const owned = await startOwnedPostgres();
+      postgresContainer = owned.container;
       if (process.env.NATIVE_WEB_STACK_HOST === '1') process.send?.({ postgresContainer } satisfies HostReply);
-      const portResult = Bun.spawnSync(['docker', 'port', postgresContainer, '5432/tcp']);
-      if (portResult.exitCode !== 0)
-        throw new Error(`Could not get owned PostgreSQL port: ${portResult.stderr.toString()}`);
-      const port = Number(portResult.stdout.toString().match(/127\.0\.0\.1:(\d+)/)?.[1]);
-      if (!Number.isInteger(port) || port <= 0)
-        throw new Error(`Could not parse owned PostgreSQL port: ${portResult.stdout.toString()}`);
-      const databaseUrl = `postgres://rezics:rezics@127.0.0.1:${port}/rezics?sslmode=disable`;
-      const deadline = Date.now() + 60_000;
-      while (true) {
-        const probe = new Pool({
-          connectionString: databaseUrl,
-          connectionTimeoutMillis: 1500,
-          max: 1,
-        });
-        try {
-          await probe.query('SELECT 1');
-          break;
-        } catch (error) {
-          if (Date.now() >= deadline)
-            throw new Error('Disposable PostgreSQL did not become ready.', {
-              cause: error,
-            });
-          await Bun.sleep(500);
-        } finally {
-          await probe.end();
-        }
-      }
-      process.env.DATABASE_URL = databaseUrl;
+      process.env.DATABASE_URL = owned.databaseUrl;
       reportStackProgress('Native web stack startup: PostgreSQL ready; migrating database');
-      migrate(databaseUrl);
+      migrate(owned.databaseUrl);
       reportStackProgress('Native web stack startup: PostgreSQL migration complete');
     }
     reportStackProgress('Native web stack startup: preparing SQL analysis');

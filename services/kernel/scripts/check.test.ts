@@ -154,6 +154,22 @@ test('the check database logs each error with its SQLSTATE', () => {
   expect(args[prefix - 1]).toBe('-c');
 });
 
+test('an isolated network namespace listens inside that namespace instead of publishing a host port', () => {
+  const calls: string[][] = [];
+  startPostgresContainer((args) => (calls.push(args), 'postgres-container'), {
+    networkNamespace: '/proc/1234/ns/net',
+    listenPort: 45432,
+  });
+  const args = calls[0]!;
+  expect(args).toContain('--network');
+  expect(args).toContain('ns:/proc/1234/ns/net');
+  expect(args).toContain('port=45432');
+  expect(args).not.toContain('127.0.0.1::5432');
+  expect(() => startPostgresContainer((next) => next.join(' '), { networkNamespace: '/proc/1/ns/net' })).toThrow(
+    'Disposable PostgreSQL network namespace and listen port must be supplied together',
+  );
+});
+
 test("a failing kernel check prints the database server's errors and fatal messages by SQLSTATE", () => {
   const logLines = [
     '2026-10-28 01:02:03 UTC [100] [53300] ERROR: outside the retained log tail',
