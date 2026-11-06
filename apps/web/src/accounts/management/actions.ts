@@ -62,19 +62,19 @@ export const readAccountManagement = createServerFn({ method: 'GET' })
       const authorization = await reader();
       if (!authorization) return { state: 'signed-out' };
       const page = await loadDetail(kernelClient(), authorization, data.accountId, data, signal);
-      return page.state === 'ready'
-        ? {
-            ...page,
-            issuer: (env as Partial<SessionEnv>).AUTH_ISSUER ?? null,
-            organizationsAvailable: null,
-            authNavigation: projectManagedAuthNavigation(
-              page.value.authActions,
-              page.value,
-              sessionSubject(getRequest())!,
-              env as Partial<SessionEnv>,
-            ),
-          }
-        : page;
+      if (page.state !== 'ready') return page;
+      return {
+        state: 'ready',
+        value: page.value,
+        issuer: (env as Partial<SessionEnv>).AUTH_ISSUER ?? null,
+        organizationsAvailable: null,
+        authNavigation: projectManagedAuthNavigation(
+          page.authActions,
+          page.value,
+          sessionSubject(getRequest())!,
+          env as Partial<SessionEnv>,
+        ),
+      };
     } catch {
       return { state: 'unavailable' };
     }
