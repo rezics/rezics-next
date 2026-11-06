@@ -16,7 +16,7 @@ import { createNativeContentSystemWithWriteRateOverrides, type NativeContentSyst
 import type { ContentCredential } from './support/system.ts';
 
 const hour = 3_600_000;
-const at = Date.now();
+const at = Date.UTC(2030, 0, 1);
 const setupAt = at - 11 * 24 * hour;
 const sorts = ['hot', 'active', 'newest'] as const;
 type Sort = (typeof sorts)[number];
@@ -82,7 +82,7 @@ beforeAll(async () => {
     scopes: system.actors.author.actor.scopes,
   });
   // Native provisioning uses Auth's wall clock. As in the community HTTP fixture,
-  // sign each persona's bearer locally so its lifetime follows the fixed clock.
+  // sign each persona's bearer on the same wall clock, independently of rank time.
   // The kernel still verifies signatures, account state, scopes and permissions.
   const pair = await generateKeyPair('ES256', { extractable: true });
   const jwk = { ...(await exportJWK(pair.publicKey)), kid: 'ranking', alg: 'ES256', use: 'sig' };

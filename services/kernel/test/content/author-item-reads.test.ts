@@ -3,6 +3,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { fromPlainText } from '@rezics/document';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+import { decodeCursor, encodeCursor } from '../../src/tokens/cursor.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
@@ -317,9 +318,15 @@ test('author routes return board summaries and reply entries newest first with s
     id: reply.thread,
     title: null,
   });
-  const partition = authorRoute >>> 4;
-  await db.admin.query('UPDATE core.partition SET epoch=epoch+1 WHERE partition_no=$1', [partition]);
-  await invalid(path(author, 'threads', { cursor: first.body.next }));
+  const binding = {
+    operation: 'author.items.list',
+    parameters: { accountId: author, list: 'threads', kind: null, viewer: null },
+  };
+  const decoded = decodeCursor(tokens, binding, first.body.next);
+  expect(decoded.ok).toBe(true);
+  if (!decoded.ok) throw new Error('Expected the actual author continuation');
+  const stale = encodeCursor(tokens, binding, { epoch: decoded.epoch + 1, after: decoded.after });
+  await invalid(path(author, 'threads', { cursor: stale }));
 });
 
 test('author pages conceal protected Realms, drafts, takedowns and erasure with a four-limit scan cap', async () => {
