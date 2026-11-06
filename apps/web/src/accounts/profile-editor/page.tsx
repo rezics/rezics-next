@@ -20,7 +20,7 @@ import { normalizeSessionObservation } from '../../session/browser-state';
 import { ProfileCard, ProfileFeedback } from '../../settings/profile';
 import { PublicViewsCard } from '../../settings/public-views';
 import { ProfileNavigation } from '../../settings/profile-navigation';
-import { usePreferenceRetry } from '../../settings/preference-failure-retry';
+import { usePreferenceRetry } from '../../settings/preferences';
 import { readAccountProfile, saveAccountProfile } from './actions';
 import { AccountProfileEditor } from './editor';
 import { profilePageReadError, type ProfilePage } from './data';

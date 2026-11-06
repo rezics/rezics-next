@@ -25,6 +25,8 @@ session retirement remain distinct. Every retry rereads exact current native ope
 original body and Structured Field command key; a different current value requires review.
 Failed readback keeps acknowledgement or unknown delivery visible without revealing the retained draft; read
 recovery never replays an acknowledged command. Departure uses the shared profile draft/command navigation decision.
+Read recovery presents the editor's captured Retry-After deadline through the public `settings/preferences` retry
+hook; the disabled reload control becomes available at that deadline without starting another read.
 Missing real `KERNEL_ORIGIN` is unavailable, including development; the editor never consumes the fake kernel.
 
 Integration acceptance remains the contract's web suite and native authority oracles. Web owns visual review.
