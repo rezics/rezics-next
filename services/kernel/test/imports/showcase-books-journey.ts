@@ -1,7 +1,6 @@
-/** Opt-in real Auth/API/media-worker/Web journey. Run through scripts/worker-check.ts. */
+/** Opt-in real Auth/API/media-worker/Web journey. Run with `dev-stack.ts walk -- bun .../showcase-books-journey.ts`. */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createRequire } from 'node:module';
@@ -24,116 +23,29 @@ type Page = any;
 const { chromium } = createRequire(resolve(root, 'apps/web/package.json'))('playwright') as {
   chromium: { launch(options: { headless: boolean }): Promise<any> };
 };
-const directory = resolve(root, '.temp/book-journey');
+const directory = resolve(root, '.temp/book-journey', randomUUID().slice(0, 8));
 await mkdir(directory, { recursive: true, mode: 0o700 });
-const handle = `rezics-books-${randomUUID().slice(0, 8)}`;
-async function freePort() {
-  const server = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: () => new Response() });
-  const port = server.port!;
-  await server.stop(true);
-  return port;
+type StackOrigins = { web: string; issuer: string; native: string; kernel: string };
+function stackOrigins(): StackOrigins {
+  const required = (name: string) => {
+    const value = process.env[name];
+    if (!value) throw new Error(`${name} is missing; run this journey under dev-stack.ts walk`);
+    return new URL(value).origin;
+  };
+  return {
+    web: required('REZICS_LOCAL_STACK_WEB_ORIGIN'),
+    issuer: required('REZICS_LOCAL_STACK_ISSUER_ORIGIN'),
+    native: required('REZICS_LOCAL_STACK_NATIVE_ORIGIN'),
+    kernel: required('REZICS_LOCAL_STACK_KERNEL_ORIGIN'),
+  };
 }
-const [databasePort, searchPort, webPort, issuerPort, nativePort, kernelPort] = await Promise.all(
-  Array.from({ length: 6 }, freePort),
-);
-const origins = {
-  web: `http://127.0.0.1:${webPort}`,
-  issuer: `http://127.0.0.1:${issuerPort}`,
-  native: `http://127.0.0.1:${nativePort}`,
-  kernel: `http://127.0.0.1:${kernelPort}`,
-};
-const env = {
-  ...process.env,
-  KERNEL_DATABASE_CONTAINER: `${handle}-db`,
-  KERNEL_DATABASE_VOLUME: `${handle}-db`,
-  KERNEL_DATABASE_PORT: String(databasePort),
-  KERNEL_SEARCH_CONTAINER: `${handle}-search`,
-  KERNEL_SEARCH_VOLUME: `${handle}-search`,
-  KERNEL_SEARCH_PORT: String(searchPort),
-  REZICS_LOCAL_STACK_WEB_ORIGIN: origins.web,
-  REZICS_LOCAL_STACK_ISSUER_ORIGIN: origins.issuer,
-  REZICS_LOCAL_STACK_NATIVE_ORIGIN: origins.native,
-  REZICS_LOCAL_STACK_KERNEL_ORIGIN: origins.kernel,
-};
-/** Per-stage memory samples, so a bound failure names the stage that grew. */
-const memory: { stage: string; rss: number; cgroup: number | null }[] = [];
-/** The journey's cgroup current usage where the host exposes it; the process RSS is recorded everywhere. */
-function cgroupMemory(): number | null {
-  const path = readFileSync('/proc/self/cgroup', 'utf8')
-    .split('\n')
-    .find((line) => line.startsWith('0::'))
-    ?.slice(3);
-  if (!path) return null;
-  const file = resolve('/sys/fs/cgroup', `.${path}`, 'memory.current');
-  return existsSync(file) ? Number(readFileSync(file, 'utf8').trim()) : null;
-}
-/** Every process under the stack, found through /proc, so a memory sample names what holds the memory. */
-function stackProcesses(rootPid: number): number[] {
-  const parents = new Map<number, number>();
-  for (const entry of readdirSync('/proc')) {
-    if (!/^\d+$/.test(entry)) continue;
-    try {
-      const stat = readFileSync(`/proc/${entry}/stat`, 'utf8');
-      const fields = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
-      parents.set(Number(entry), Number(fields[1]));
-    } catch {
-      // The process exited while the tree was read.
-    }
-  }
-  const found: number[] = [];
-  let frontier = [rootPid];
-  while (frontier.length > 0) {
-    frontier = [...parents].filter(([, ppid]) => frontier.includes(ppid)).map(([pid]) => pid);
-    found.push(...frontier);
-  }
-  return found;
-}
-/** A process's name and resident set in megabytes, for the periodic sample in the check log. */
-function describeProcess(pid: number): string {
-  try {
-    const status = readFileSync(`/proc/${pid}/status`, 'utf8');
-    const megabytes = Math.round(Number(/VmRSS:\s+(\d+) kB/.exec(status)?.[1]) / 1024);
-    const command = readFileSync(`/proc/${pid}/cmdline`, 'utf8').split('\0').slice(0, 3).join(' ').slice(0, 64);
-    return `${pid}:${megabytes}MB:${command}`;
-  } catch {
-    return `${pid}:exited`;
-  }
-}
-function sample(stage: string) {
-  memory.push({ stage, rss: process.memoryUsage().rss, cgroup: cgroupMemory() });
-}
-/** Stage output streams to its log files; a failed stage reports only the final 4 KiB of its error stream. */
+/** The surrounding walk owns infrastructure; this helper only captures journey command output. */
 async function command(args: string[], log: string) {
   const file = resolve(directory, log);
   const errors = `${file}.err`;
-  const child = Bun.spawn(args, { cwd: root, env, stdout: Bun.file(file), stderr: Bun.file(errors) });
+  const child = Bun.spawn(args, { cwd: root, env: process.env, stdout: Bun.file(file), stderr: Bun.file(errors) });
   const code = await child.exited;
-  sample(log);
   assert.equal(code, 0, `${args.join(' ')} exited ${code}: ${await Bun.file(errors).slice(-4096).text()}`);
-}
-async function ready(url: string, child: Bun.Subprocess) {
-  const deadline = Date.now() + 600_000;
-  while (Date.now() < deadline) {
-    assert.equal(child.exitCode, null, 'Local stack exited before readiness');
-    const response = await fetch(url, { signal: AbortSignal.timeout(5000) }).catch(() => undefined);
-    if (response?.ok) {
-      sample(`ready ${url}`);
-      return;
-    }
-    await Bun.sleep(1000);
-  }
-  // What the endpoint answers now separates a rejected boot (an error status) from one still pending (no response).
-  const answer = await fetch(url, { signal: AbortSignal.timeout(5000) }).then(
-    async (response) => `HTTP ${response.status}: ${(await response.text()).slice(0, 512)}`,
-    (error: unknown) => `no response (${error instanceof Error ? error.name : 'error'})`,
-  );
-  // The stack's own output names the phase it reached; only the final 4 KiB of each stream enters the error.
-  const tails = await Promise.all(
-    ['stack.log', 'stack-errors.log'].map(
-      async (name) => `${name}: ${await Bun.file(resolve(directory, name)).slice(-4096).text()}`,
-    ),
-  );
-  throw new Error(`Local stack did not become ready: ${url} (${answer})\n${tails.join('\n')}`);
 }
 const tables: CrossMediaTables = {
   async *rows(provider, table) {
@@ -142,8 +54,6 @@ const tables: CrossMediaTables = {
   },
 };
 const evidence: Record<string, unknown> = {
-  handle,
-  origins,
   snapshot: {
     archive: 'dump-2026-10-20.210332Z.zip',
     sha256: '9fe8de272398ff4bd12994b73e25aac37cca631372383f6aadc503528623aa93',
@@ -152,33 +62,13 @@ const evidence: Record<string, unknown> = {
   visits: [],
 };
 const visits = evidence.visits as Record<string, unknown>[];
-let stack: Bun.Subprocess | undefined;
-let sampler: ReturnType<typeof setInterval> | undefined;
 let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
 let journal: ShowcaseJournal | undefined;
 try {
-  console.log('books journey: starting isolated infrastructure', handle);
-  evidence.memory = memory;
-  sample('start');
-  // The Taskfile's dev:infra and dev:persona steps, without Go Task: check hosts need only Bun and Docker.
-  await command(['bun', 'run', '--cwd', 'services/kernel', 'db', 'up'], 'database.log');
-  await command(['bun', 'services/auth/scripts/dev-stack.ts', 'setup'], 'setup.log');
+  const origins = stackOrigins();
+  evidence.origins = origins;
+  console.log('books journey: using the admitted dev-stack walk');
   await command(['bun', 'services/auth/scripts/dev-stack.ts', 'persona'], 'persona.log');
-  stack = Bun.spawn(['bun', 'services/auth/scripts/dev-stack.ts', 'start'], {
-    cwd: root,
-    env,
-    stdout: Bun.file(resolve(directory, 'stack.log')),
-    stderr: Bun.file(resolve(directory, 'stack-errors.log')),
-  });
-  evidence.stackPid = stack.pid;
-  // Every 30 seconds the check log names the stack's processes and their resident memory, so a limit failure is attributable.
-  sampler = setInterval(() => {
-    const processes = stackProcesses(stack!.pid).map(describeProcess);
-    console.log(`books journey: memory cgroup=${cgroupMemory() ?? '-'} ${processes.join(' | ')}`);
-  }, 30_000);
-  await ready(`${origins.kernel}/v1/definitions`, stack);
-  await ready(`${origins.web}/en`, stack);
-  await ready(`${origins.issuer}/.well-known/openid-configuration`, stack);
   const seedEnv = Object.fromEntries(
     (await readFile(resolve(root, '.temp/local-stack/seed.env'), 'utf8'))
       .trim()
@@ -259,14 +149,36 @@ try {
   evidence.current = Object.fromEntries(subjects);
   const values = (key: string, property: string) => subjects.get(key).statements?.[property] ?? [];
   for (const [key, property, target] of [
+    ['26', 'wdt:P179', '499'],
     ['5329', 'wdt:P179', '2815'],
     ['10862', 'wdt:P179', '2815'],
-    ['2815', 'schema:publisher', 'person:128'],
   ])
     assert(
       values(key!, property!).some((row: any) => row.value.content === ids[target!]!.id),
       `${key} missing ${property} → ${target}`,
     );
+  for (const series of first.selected.series) {
+    const publishers = first.planned.credits.filter(
+      (credit) => credit.kind === 'staff' && credit.work === series && credit.roleCode === 2004,
+    );
+    assert(publishers.length > 0, `series ${series} has no selected publisher source row`);
+    const current = subjects.get(series);
+    for (const credit of publishers) {
+      const identity = ids[credit.person];
+      assert(identity, `series ${series} publisher ${credit.person} has no current identity`);
+      assert.equal(identity.type, 'schema:Organization', `series ${series} publisher is an Organization`);
+      const citation = `https://bgm.tv/subject/${series}#${credit.path}`;
+      const statement = values(series, 'schema:publisher').find((row: any) => row.value?.content === identity.id);
+      assert(statement, `series ${series} lacks current schema:publisher → ${credit.person}`);
+      assert(
+        statement.references?.some((reference: any) =>
+          reference.parts?.some((part: any) => part.value?.content === citation),
+        ),
+        `series ${series} publisher ${credit.person} lacks ${citation}`,
+      );
+    }
+    assert(current, `series ${series} has no independent current read`);
+  }
   // The symmetric counterpart is stored once on its canonical side; the series reads it through its inverse links.
   const counterpart = (await (
     await fetch(
@@ -295,7 +207,7 @@ try {
   browser = await chromium.launch({ headless: true });
   async function visit(page: Page, persona: string, key: string) {
     const identity = ids[key]!;
-    const url = `${origins.web}/en/subjects/${identity.id}/book`;
+    const url = `${origins.web}/en${identity.route}`;
     await page.goto(url, { waitUntil: 'networkidle', timeout: 60_000 });
     await page.locator('h1').waitFor({ timeout: 30_000 });
     const text = await page.locator('body').innerText();
@@ -319,15 +231,26 @@ try {
     }
     for (const series of first.selected.series) {
       await visit(page, persona, series);
+      const familyId = first.families.find((family) => family.seriesId === series)?.id;
       const related = first.planned.members.filter(
         (member) =>
-          member.family === first.families.find((family) => family.seriesId === series)?.id &&
+          member.family === familyId &&
+          ['volume', 'publisher', 'anime'].includes(member.role) &&
           ids[member.key] &&
           member.key !== series,
       );
       for (const member of related) {
         const link = page.locator(`a[href*="/subjects/${ids[member.key]!.id}/"]`).first();
         assert(await link.count(), `${persona} series ${series} lacks navigation to ${member.key}`);
+        const href = await link.getAttribute('href');
+        assert(href, `${persona} series ${series} has an empty target link for ${member.key}`);
+        const destination = new URL(href, origins.web);
+        const via = destination.searchParams.get('via');
+        assert(via, `${persona} series ${series} link to ${member.key} lacks return navigation`);
+        assert(
+          new URL(via, origins.web).pathname.includes(`/subjects/${ids[series]!.id}/`),
+          `${persona} series ${series} return for ${member.key} points at another source page`,
+        );
         await link.click();
         await page.waitForLoadState('networkidle');
         assert(page.url().includes(ids[member.key]!.id), `Wrong destination ${member.key}`);
@@ -352,30 +275,10 @@ try {
   evidence.state = 'passed';
   console.log('books journey: passed anonymous, member and reviewer current API/page walk');
 } finally {
-  clearInterval(sampler);
-  await writeFile(resolve(directory, 'evidence.json'), JSON.stringify(evidence, null, 2), { mode: 0o600 });
   journal?.close();
-  await browser?.close();
-  if (stack) {
-    // The stack tears its own children down within its grace period; this bound covers a stuck parent.
-    stack.kill('SIGTERM');
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const stopped = await Promise.race([
-      stack.exited.then(() => true),
-      new Promise<boolean>((resolve) => {
-        timer = setTimeout(() => resolve(false), 90_000);
-      }),
-    ]);
-    clearTimeout(timer);
-    if (!stopped) stack.kill('SIGKILL');
-    await stack.exited;
-  }
-  // These unique containers were created by this invocation; retained development stacks are never touched.
-  for (const suffix of ['db', 'search']) {
-    const child = Bun.spawn(['docker', 'rm', '-f', '-v', `${handle}-${suffix}`], {
-      stdout: 'ignore',
-      stderr: 'ignore',
-    });
-    await child.exited;
+  try {
+    await browser?.close();
+  } finally {
+    await writeFile(resolve(directory, 'evidence.json'), JSON.stringify(evidence, null, 2), { mode: 0o600 });
   }
 }

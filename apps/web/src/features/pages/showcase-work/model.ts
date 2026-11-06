@@ -7,7 +7,16 @@ import { bestRank, isRecord, type Stmt } from '../shared';
 import { relationItemRows } from '../relation-item-identity';
 import type { ProfileRelationWindow } from '../views';
 
-export type ShowcaseWorkKind = 'visual-novel' | 'game' | 'screen' | 'book' | 'book-series';
+/** Relation target kinds. `showcaseWorkKind` decides whether a Subject is a Work; `workTargetKind` adds people, organizations and episodes. */
+export type ShowcaseWorkKind =
+  | 'visual-novel'
+  | 'game'
+  | 'screen'
+  | 'episode'
+  | 'book'
+  | 'book-series'
+  | 'person'
+  | 'organization';
 
 type Statement = NonNullable<SubjectRead['subject']['statements'][string]>[number];
 type RelatedSubject = NonNullable<Related[string]>;
@@ -30,8 +39,24 @@ export function showcaseWorkKind(
   if (declared.includes('wd:Q689445')) return 'visual-novel';
   if (declared.includes('schema:BookSeries')) return 'book-series';
   if (declared.includes('schema:Book')) return 'book';
+  // Episodes are screen grain, never a Work reader. Keep them as relation targets only.
+  if (declared.includes('schema:Episode')) return;
   if (declared.some(isScreenType)) return 'screen';
   if (gameReaderEntry(type ?? '', types)) return 'game';
+}
+
+/**
+ * The kind of a related target under the released relation definitions. Staff, cast and publishers are people and
+ * organizations, which never make a Subject a Work (`showcaseWorkKind` keeps that gate) but do appear beside the
+ * Work's own statements with their citations.
+ */
+export function workTargetKind(type: string | undefined, types: readonly string[] = []): ShowcaseWorkKind | undefined {
+  const kind = showcaseWorkKind(type, types);
+  if (kind) return kind;
+  const declared = [type, ...types];
+  if (declared.includes('schema:Episode')) return 'episode';
+  if (declared.includes('schema:Person')) return 'person';
+  if (declared.includes('schema:Organization')) return 'organization';
 }
 
 /**
@@ -43,7 +68,9 @@ export function workDestinations(
   related: Related,
   definitions: Record<string, RelationDefinition>,
 ): WorkDestination[] {
-  const destinations: WorkDestination[] = [];
+  // Works and credit targets are capped separately, so people and organizations never displace the Work's own relations.
+  const works: WorkDestination[] = [];
+  const credits: WorkDestination[] = [];
   for (const [property, statements] of Object.entries(subject.statements)) {
     const relation = Object.hasOwn(definitions, property) ? definitions[property] : undefined;
     if (!relation) continue;
@@ -62,13 +89,15 @@ export function workDestinations(
       if (id === subject.id || !Object.hasOwn(related, id)) continue;
       const target = related[id];
       if (!target) continue;
-      const kind = showcaseWorkKind(target.type, target.types);
+      const kind = workTargetKind(target.type, target.types);
       if (!kind) continue;
-      destinations.push({ id, property, statement, relation, target, kind });
-      if (destinations.length === 20) return destinations;
+      const destination = { id, property, statement, relation, target, kind };
+      const group = kind === 'person' || kind === 'organization' ? credits : works;
+      if (group.length < 20) group.push(destination);
+      if (works.length === 20 && credits.length === 20) return [...works, ...credits];
     }
   }
-  return destinations;
+  return [...works, ...credits];
 }
 
 /** A disclosed original assertion, never a fabricated historical Subject/Item. */
@@ -82,6 +111,19 @@ export type DirectedWorkRelation = {
   kind: ShowcaseWorkKind;
   related: Related;
 };
+
+/** Statement destinations the current windows did not already disclose, so publishers and credits stay beside inverse members. */
+export function uncoveredWorkDestinations(
+  subject: Subject,
+  related: Related,
+  definitions: Record<string, RelationDefinition>,
+  relations: readonly DirectedWorkRelation[],
+): WorkDestination[] {
+  const covered = new Set(relations.map((relation) => `${relation.property}\0${relation.id}`));
+  return workDestinations(subject, related, definitions).filter(
+    (destination) => !covered.has(`${destination.property}\0${destination.id}`),
+  );
+}
 
 /** Convert only identity-checked native summaries, including the assertion's own qualifier/citation summaries. */
 export function relationRelated(value: unknown): Related {
@@ -120,7 +162,7 @@ export function directedWorkRelations(
     const original = direction === 'in' ? row.assertion : row.statement;
     const target = direction === 'in' ? row.subject : row.target;
     if (!isRecord(row.summary) || typeof target !== 'string' || !isRecord(original)) continue;
-    const kind = showcaseWorkKind(
+    const kind = workTargetKind(
       typeof row.summary.type === 'string' ? row.summary.type : undefined,
       Array.isArray(row.summary.types)
         ? row.summary.types.filter((type): type is string => typeof type === 'string')

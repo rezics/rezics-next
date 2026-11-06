@@ -15,9 +15,10 @@ export function readingPageDocumentMedia(page: ReadingPageResponse): ThreadDocum
     return { kind: 'unavailable', ...(media.state === 'overflow' ? { reason: 'overflow' as const } : {}) };
   const images = new Map<string, Extract<ThreadDocumentMedia, { kind: 'ready' }>['images'][number]>();
   const documents: Extract<ThreadDocumentMedia, { kind: 'ready' }>['documents'][number][] = [];
+  const posts = [page.thread.firstPost, ...page.replies.items];
   for (const document of media.documents) {
     if (document.state !== 'available') continue;
-    const post = [page.thread.firstPost, ...page.replies.items].find((post) => post.id === document.postId);
+    const post = posts.find((post) => post.id === document.postId);
     if (
       post?.availability !== 'available' ||
       post.threadId !== document.threadId ||
@@ -42,6 +43,7 @@ export function readingPageDocumentMedia(page: ReadingPageResponse): ThreadDocum
       threadId: document.threadId,
       revisionId: document.revisionId,
       sha256: document.sha256,
+      pageIndex: posts.indexOf(post),
       mediaIds,
     });
   }
