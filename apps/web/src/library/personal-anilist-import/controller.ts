@@ -880,7 +880,13 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
     const pending = page.find((item) => item.ordinal === ordinal)?.labelWork;
     if (Object.values(pending ?? {}).some((work) => (work.createStarted || work.assignStarted) && !work.outcome))
       return snapshot();
-    row.labels = { subjectId, selections, review: null, invalidated: true, outcomes: null };
+    row.labels = {
+      subjectId,
+      selections: structuredClone(selections),
+      review: null,
+      invalidated: true,
+      outcomes: null,
+    };
     const visible = page.find((item) => item.ordinal === ordinal);
     if (visible) delete visible.currentLabels;
     return snapshot();
@@ -913,9 +919,12 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
       kind: 'review-labels',
       importId,
       key: newCommandKey(),
-      body: { ordinal, subjectId: labels.subjectId!, selections: labels.selections },
+      body: { ordinal, subjectId: labels.subjectId!, selections: structuredClone(labels.selections) },
       custody: { expectedReader: visit.subject, expectedCredential: visit.csrfToken },
     };
+    labels.review = null;
+    labels.invalidated = true;
+    labels.outcomes = null;
     const response = await run(command, () => port.reviewLabels(command));
     if (response?.kind === 'labels-reviewed') acceptLabelReview(response.ordinal, response.review);
     return snapshot();

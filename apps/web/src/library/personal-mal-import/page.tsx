@@ -62,7 +62,12 @@ export function PersonalMalImportPage({ visit }: { visit?: MalVisit | null }) {
       </main>
     );
   }
-  return <MalImportSession key={`${current.subject}:${current.csrfToken}:${current.locale}`} visit={current} />;
+  return (
+    <MalImportSession
+      key={`${current.identity ?? ''}:${current.subject}:${current.csrfToken}:${current.locale}`}
+      visit={current}
+    />
+  );
 }
 
 function MalImportSession({ visit }: { visit: MalVisit }) {

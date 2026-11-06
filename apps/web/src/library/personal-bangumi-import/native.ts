@@ -5,7 +5,7 @@ import { prepareSession, viewerCredential } from '../../session/request';
 import { mapSourceAdmissionPort } from '../rich-private-entry/admission';
 import { admitPrivateSourceObservation } from '../rich-private-entry/native';
 import { libraryFullQuery } from '../reads';
-import { readSubjectLabelAssignments } from '../subject-labels';
+import { readSubjectLabelAssignments } from '../subject-labels.ts';
 import {
   BANGUMI_PAGE,
   SUBJECT_ID,

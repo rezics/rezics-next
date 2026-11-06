@@ -5,7 +5,7 @@ import { kernelClient } from '../../kernel/client';
 import type { SessionEnv } from '../../session/client';
 import { readSessionIdentity } from '../../session/state';
 import { readSubjectSlotSession } from '../subject-slot';
-import { readSubjectLabelAssignments, searchSubjectLabels } from '../subject-labels';
+import { readSubjectLabelAssignments, searchSubjectLabels } from '../subject-labels.ts';
 import { captureAnnotationCredential, originalAnnotationCredential } from '../rich-private-entry/credential';
 import {
   BANGUMI_APPLY,
