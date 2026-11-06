@@ -8,14 +8,16 @@ let session: { state: string; subject: string | null; csrfToken: string | null }
   subject: 'current-person',
   csrfToken: 'csrf',
 };
-mock.module('../src/session/query', () => ({ useSession: () => session }));
+mock.module('../src/session/query', () => ({
+  useSession: () => session,
+  sessionCsrfToken: () => session.csrfToken,
+}));
 
 const { SubjectCommunityRegion } = await import('../src/features/pages/subject-community-view');
 const { composedCommunityRegion } = await import('../src/features/pages/subject-community');
 const { GLOBAL } = await import('../src/features/pages/subject-ratings');
-const { communityCurrentEntry, communitySubject, communityThread, communityThreadPage } = await import(
-  '../src/kernel/fake/subject-community'
-);
+const { communityCurrentEntry, communitySubject, communityThread, communityThreadPage } =
+  await import('../src/kernel/fake/subject-community');
 const { m } = await import('../src/paraglide/messages.js');
 
 const expected = {

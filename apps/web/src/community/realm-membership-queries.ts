@@ -38,6 +38,7 @@ export const realmMembershipQuery = (realmId: string, subject: string | null, ca
       }
     },
     retry: false,
+    refetchOnMount: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });

@@ -12,7 +12,8 @@ read for the current caller when that revision no longer owns the shared cache. 
 immediately before the native standing read, and after it. Their results are tagged to the revision that completed the
 read, so previously cached standing cannot expose a membership action or Board entry after an observed transition.
 Bootstrap data remains usable until this browser has observed a transition. Hydrated standing stays visible before
-the caller is command-ready; `realm-participation` pins that first-paint edge.
+the caller is command-ready; a remount with current standing does not refetch. `realm-participation` pins that
+first-paint edge and the failed-journey retry that reads standing without resending the command.
 
 Membership command attempts keep their original action, idempotency key and CSRF token. A later explicit retry keeps
 that immutable intent; it never substitutes the replacement token. The retry itself must have a current caller and
