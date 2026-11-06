@@ -663,6 +663,8 @@
         "composition",
         "filter",
         "kernel-access",
+        "kernel-history-application",
+        "kernel-history-contract",
         "kernel-library",
         "kernel-library-contract",
         "kernel-memoized",
