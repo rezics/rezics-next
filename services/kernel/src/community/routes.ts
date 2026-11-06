@@ -20,7 +20,7 @@ import { requestRealmClaim } from './realm-continuity.ts';
 import { readOwnRealmClaimPage } from './realm-claim-status.ts';
 import { listRealmClaimRequests } from './realm-claim-review.ts';
 import { exactRealmPresentationImage } from '../content/realm-media.ts';
-import { approveRealmClaim } from '../access/realm-claim.ts';
+import { approveRealmClaim } from '../access/index.ts';
 import { realmClaimApprovalResponseSchema } from './schemas.ts';
 import {
   discoveryQuerySchema,
@@ -2009,6 +2009,8 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
           'x-exposure': 'public',
           'x-action': 'realm:approve_claim',
           'x-resource-types': ['community.realm'],
+          'x-authority-resource-types': ['semantic.context'],
+          'x-authority-resource-id': '00000000-0000-8000-8000-000000000000',
           'x-rate-limit': writeRate(),
           security: writeSecurity,
         },
