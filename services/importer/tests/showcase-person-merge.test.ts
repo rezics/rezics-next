@@ -12,6 +12,7 @@ import {
   type ReviewedPersonMergeTransport,
 } from '../src/showcase-person-identity.ts';
 import { ShowcaseJournal } from '../src/showcase-publication.ts';
+import { createPublicBulkClient, ReviewedSubjectNotReady } from '../src/public-bulk-client.ts';
 
 const bangumiOriginal = '00000000-0000-4000-8000-00000000000a';
 const vndbOriginal = '00000000-0000-4000-8000-00000000000b';
@@ -257,6 +258,53 @@ test('an original without a coherent reviewed identity withholds the merge befor
       }),
     ).toEqual({ state: 'withheld', reason: 's224 has no coherent reviewed identity' });
     expect(calls.merges).toHaveLength(0);
+  } finally {
+    journal.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 60_000);
+
+test('a not-yet-current Subject read is observed again, while any other read failure stays terminal', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'person-merge-readiness-'));
+  const journal = new ShowcaseJournal(join(directory, 'journal.sqlite'));
+  try {
+    const { native } = transport();
+    let reads = 0;
+    const published = await publishReviewedPersonMerge({
+      pair,
+      transport: native,
+      readPublic: async (id) => {
+        reads += 1;
+        if (reads <= 2) throw new ReviewedSubjectNotReady(id);
+        return publicPerson(survivor);
+      },
+      journal,
+      pause: async () => {},
+    });
+    expect(published).toMatchObject({ state: 'published', survivor });
+    expect(reads).toBe(4);
+    const reader = (type: string) =>
+      createPublicBulkClient({
+        origin: 'https://api.rezics.test',
+        fetch: (async (_input: RequestInfo | URL) => Response.json({ type }, { status: 503 })) as typeof fetch,
+      });
+    await expect(
+      reader('https://rezics.com/problems/semantic_not_ready').readSubject(bangumiOriginal),
+    ).rejects.toBeInstanceOf(ReviewedSubjectNotReady);
+    await expect(reader('https://rezics.com/problems/overloaded').readSubject(bangumiOriginal)).rejects.toThrow(
+      'returned 503',
+    );
+    await expect(
+      publishReviewedPersonMerge({
+        pair,
+        transport: native,
+        readPublic: async () => {
+          throw new Error('gateway unavailable');
+        },
+        journal,
+        pause: async () => {},
+      }),
+    ).rejects.toThrow('gateway unavailable');
   } finally {
     journal.close();
     await rm(directory, { recursive: true, force: true });

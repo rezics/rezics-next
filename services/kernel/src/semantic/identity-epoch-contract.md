@@ -406,7 +406,10 @@ but before its output was journalled. Do not add another Accounts status, decisi
 The current reversal's pending receipt/catalogue comparison still prevents an old delivery undoing newer review.
 
 Ordinary merge uses real Global `subject:merge` through `authorizeSemanticWrite` and `globalContextAnchor` in
-`semantic/http/subjects.ts`, preserving native current required anchor checks. `runCommand` mints native time and
+`semantic/http/subjects.ts`, preserving native current required anchor checks. A cross-partition proof is bound to one
+command partition, so every identity command obtains its own through `authorizationFor(partition)`: receipt lookup and claim
+at the actor partition, admission at the home partition, acceptance at the binding partition, and the terminal merge at
+the redirected partition. `runCommand` mints native time and
 calls `authorization.authorize` before `readReceipt`, even on replay; `currentCommand(tx)` exposes the completed
 binding only on that live transaction. Never serialize that binding as permission. Replaying a user response must
 re-authorize the current request. In contrast, admitted immutable job intent is trusted internal durable work

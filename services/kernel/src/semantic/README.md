@@ -151,7 +151,7 @@ adoption, reads and their native disclosure remain public through their current 
 Access. Public exposure changes neither those authorities nor admitted command quotas.
 
 Custom definition publish/activate and Context extension publish/activate declare
-`gate:definition_publication`. Subject merge, the mounted identity mutation command, declares
+`gate:definition_publication`. Reviewed Person merges use the current admitted paired contract: both originals must show Global-selected identifiers, and the caller needs `subject:merge` plus `gate:subject_identity` on Global. Subject merge, the mounted identity mutation command, declares
 `gate:subject_identity`. Anonymous and ungranted accounts receive `403 platform_closed` before command
 receipts, revisions or domain effects. A native explicit platform grant admits development commands only;
 the existing action scopes and Global/Context resource authority still apply. Built-in active/release reads
@@ -1163,7 +1163,11 @@ Global and community Context subject reads return `summary` beside `subject`. Th
 `statement` and adds `related`. These are current selected source statements, resolved in the selected Context
 from compact facts or the current adoption, with their own stored release, revision, rank and Snak datatypes.
 Projection rows are locators and ordering keys, never qualifier bodies. Related item values use the shared current
-summary authorization and tuple fences, in the same bounded batch as row labels. Concealed item qualifiers and
+summary authorization and tuple fences, in the same bounded batch as row labels. A related item that a merge redirected
+keeps its original id and carries `redirect` with the survivor id; its summary is then the survivor's, and the survivor
+is authorized separately. Receiving routes follow that survivor, so a merged Character or Person stays reachable from its
+links. A hidden original or an unauthorized survivor omits the entry. The survivor lookup is one batched redirect read
+per `/links` and `/relations` call, capped at 256 ids. Concealed item qualifiers and
 references are omitted. Source tuple takedowns omit the statement. Related display fills retain the 256 raw-ID
 bound: main rows take priority and qualifiers without an admitted display fill are omitted. A public page retains
 its aggregate only when an unfiltered first page exhausts and currently discloses the entire counted set. Internal

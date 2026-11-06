@@ -456,7 +456,9 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
           'statement:propose',
           'media:read_reservation',
           'subject:read',
-          ...(options.publication ? ['context:read', 'media:read', 'context:accept', 'context:adopt'] : []),
+          ...(options.publication
+            ? ['context:read', 'media:read', 'context:accept', 'context:adopt', 'subject:merge']
+            : []),
           ...statisticScopes,
         ],
       };

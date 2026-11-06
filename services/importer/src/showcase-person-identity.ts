@@ -8,6 +8,7 @@ import type {
   ReviewedPersonSource,
 } from '@rezics/client';
 import type { ReviewedSubjectRead } from './import-client.ts';
+import { ReviewedSubjectNotReady } from './public-bulk-client.ts';
 import type { Provider } from './cross-media-bindings.ts';
 import type { SourceRecord } from '@rezics/conversion';
 
@@ -267,10 +268,17 @@ export async function publishReviewedPersonMerge(input: {
   )
     throw new TypeError('Invalid native Person publication');
   // The completed operation is final; a public read may still lag behind its visibility, so re-read briefly.
+  // Only the exact not-ready read counts as "not current yet"; any other read failure is terminal.
+  const readCurrentOrNull = (id: string): Promise<ReviewedSubjectRead | null> =>
+    input.readPublic(id).catch((error: unknown) => {
+      if (error instanceof ReviewedSubjectNotReady) return null;
+      throw error;
+    });
   for (let attempt = 0; attempt < MERGE_READ_ATTEMPTS; attempt += 1) {
-    const reads = await Promise.all(input.pair.map((source) => input.readPublic(source.boundSubjectId)));
+    const reads = await Promise.all(input.pair.map((source) => readCurrentOrNull(source.boundSubjectId)));
     const bothIdentitiesCurrentOnBothReads = input.pair.every((source) =>
       reads.every((read) => {
+        if (!read) return false;
         const observed = observePersonIdentity(source.identity, read);
         return observed.state === 'current' && observed.currentSubjectId === survivor;
       }),

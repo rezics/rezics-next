@@ -4,6 +4,19 @@ export const GLOBAL_CONTEXT = '00000000-0000-8000-8000-000000000000';
 const subjectId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 const digest = /^[0-9a-f]{64}$/;
 const releaseDigest = /^sha256:[0-9a-f]{64}$/;
+/** The only Subject read 503 that means "not current yet"; any other 503 is terminal for the reader. */
+export const SUBJECT_NOT_READY_TYPE = 'https://rezics.com/problems/semantic_not_ready';
+
+/** A public read that Semantic reports as not ready. Callers observe the same Subject again later. */
+export class ReviewedSubjectNotReady extends Error {
+  readonly subject: string;
+
+  constructor(subject: string) {
+    super(`Public subject ${subject} is not ready`);
+    this.name = 'ReviewedSubjectNotReady';
+    this.subject = subject;
+  }
+}
 
 export type PublicBulkClient = Readonly<{
   readSubject(id: string, signal?: AbortSignal): Promise<ReviewedSubjectRead>;
@@ -150,7 +163,13 @@ async function readCurrentSubject(
       current = body.redirect.to;
       continue;
     }
-    if (!response.ok) throw new Error(`Public subject read returned ${response.status}`);
+    if (!response.ok) {
+      // A non-JSON 503 from a proxy carries no problem type and stays an ordinary failure.
+      const problem =
+        response.status === 503 ? ((await response.json().catch(() => null)) as { type?: unknown } | null) : null;
+      if (problem?.type === SUBJECT_NOT_READY_TYPE) throw new ReviewedSubjectNotReady(current);
+      throw new Error(`Public subject read returned ${response.status}`);
+    }
     const body = (await response.json()) as ReviewedSubjectRead;
     if (body?.subject?.id !== current) throw new TypeError('Public subject read returned a different identity');
     return body;
