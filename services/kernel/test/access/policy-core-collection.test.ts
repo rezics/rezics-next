@@ -67,7 +67,6 @@ function projection(overrides: Partial<NativePermissionProjection> = {}): Native
     explicitGlobalPrincipalResourceRoleGrant: false,
     explicitGlobalPrincipalOwnAccountGrant: false,
     explicitGlobalPrincipalAuthenticatedBenefitGrant: false,
-    live: true,
     ...overrides,
   };
 }
