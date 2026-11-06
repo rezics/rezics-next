@@ -5,9 +5,15 @@ import { OpenSearchError, SearchUnavailableError, type OpenSearch } from '../../
 import { parseText } from '../../src/search/text.ts';
 import { RELEASED_NAME_ID, releasedMultilingualSubject } from './support/released-names.ts';
 
-function client(request: OpenSearch['request']): OpenSearch {
+function client(
+  request: (
+    method: Parameters<OpenSearch['request']>[0],
+    path: string,
+    body?: unknown,
+  ) => Promise<{ status: number; body: unknown }>,
+): OpenSearch {
   return {
-    request,
+    request: request as OpenSearch['request'],
     bulk: async () => {
       throw new Error('unused');
     },
