@@ -103,6 +103,27 @@ Search retains direct catalogue/prepared public checks; Commerce retains direct 
 the `POST /v1/zones/{id}:readPage` owner retains the per-plan composed-page check. Reuse their native plans and
 evidence rather than duplicate their checks or implement benchmark-only matching.
 
+**Scenario links:** reserved names live in
+`services/kernel/test/performance/composed-discovery-user-cases.test.ts` and
+`services/kernel/test/performance/support/composed-discovery-matrix.ts`. Public jobs
+`long-harem-light-novels` and `quick-vegetarian-recipes` execute on catalogue-direct, catalogue-prepared,
+curated-collection, everything-without-state, own-state, mounted-zone and configured-typelist. Named cases cover
+first/deep/empty pages, sparse and unrelated-history growth at 64/512/4096, composed-page-at-limits (16 reads,
+128 slots), aliases-and-duplicates, preparation-frontier-resume, foreign-dependency-revoked-midway, and
+hidden/denied/suspended/empty controls. Bound derivation is
+`services/kernel/test/performance/support/composed-discovery-bounds.ts` and is computed before repair.
+
+**Test choice:** Fewest tests: one HTTP/native helper per admitted public cell covering first/deep/empty together,
+sparse and unrelated-history growth as independent axes, one composed 16-read page, one alias/duplicate, one resume,
+one revocation, and named control cases; not-cooked and bulk stay frozen on Commerce prerequisites.
+
+**Remaining evidence limits:** `quick-vegetarian-not-cooked` and `bulk-long-harem-light-novels` remain frozen on
+Commerce's unadopted completion/history and owner-query/libraryOperations contracts. Privacy-reduction served-share
+grows hidden unrelated subjects and checks a nondecreasing served share for the selected public job; it does not yet
+prove a production acknowledgement delay `τ`. Original/terminal alias uses native `POST /v1/subjects:merge`; if
+identity publication is still preparing, that cell reports the producer failure rather than a local matcher. Owner
+direct/prepared plans stay with Commerce. Native/browser/root acceptance after integration still owns promotion.
+
 ## private-follow-edge
 
 **User job:** A seeded member follows a supported target, reads the private Following list and current target, pages,
