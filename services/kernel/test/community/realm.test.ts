@@ -214,15 +214,15 @@ test('Space owner with Global realm:create mints a distinct Realm on the Space r
   await f.grant(f.actor.accountId, root, 'realm:create');
   const request = context();
   const preparations: { action: string; context: AccessContext }[] = [];
-  const prepare = f.access.prepare;
-  const preparePage = f.access.preparePage;
+  const prepare = f.access.prepare!.bind(f.access);
+  const preparePage = f.access.preparePage!.bind(f.access);
   f.access.prepare = async (actor, action, resource, context) => {
     preparations.push({ action, context });
-    return prepare!.call(f.access, actor, action, resource, context);
+    return prepare(actor, action, resource, context);
   };
   f.access.preparePage = async (actor, action, page, context) => {
     preparations.push({ action, context });
-    return preparePage!.call(f.access, actor, action, page, context);
+    return preparePage(actor, action, page, context);
   };
   let created;
   try {
@@ -326,10 +326,10 @@ test('missing Global permission, a non-owner, a missing Space or Context and sus
 test('unreadable classification Context denies both create and context changes without writes', async () => {
   const spaceId = await createSpace();
   await f.grant(f.actor.accountId, root, 'realm:create');
-  const prepare = f.access.prepare;
+  const prepare = f.access.prepare!.bind(f.access);
   // Simulate an unavailable public Context observation, retaining production Access for all proofs.
   f.access.prepare = (actor, action, resource, context) =>
-    action === 'context:read' ? Promise.resolve(null) : prepare!.call(f.access, actor, action, resource, context);
+    action === 'context:read' ? Promise.resolve(null) : prepare(actor, action, resource, context);
   let before = await snapshot();
   try {
     expect(await realm.createRealm(deps(), f.actor, { ...input, spaceId }, context()).catch((e) => e)).toBeInstanceOf(
@@ -346,7 +346,7 @@ test('unreadable classification Context denies both create and context changes w
     [contextId],
   );
   f.access.prepare = (actor, action, resource, context) =>
-    action === 'context:read' ? Promise.resolve(null) : prepare!.call(f.access, actor, action, resource, context);
+    action === 'context:read' ? Promise.resolve(null) : prepare(actor, action, resource, context);
   before = await snapshot();
   try {
     expect(
