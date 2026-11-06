@@ -156,6 +156,15 @@ test('list and detail share available actor identity while withheld and system l
   expect(withheldDetail).toContain('Actor details are unavailable.');
   expect(list).toContain('Moderation team');
   expect(systemDetail).toContain('Moderation team');
+  expect(list).not.toContain('src="https://');
+  const { inboxNoticeActorPresentation } = await import('../src/inbox/inbox-notice-actor');
+  expect(
+    inboxNoticeActorPresentation({
+      actor: composed[0]!.actor,
+      actorId: composed[0]!.actorId,
+      actorName: 'Momo',
+    }).avatarUrl,
+  ).toBeNull();
 });
 
 test('sparse continuation preserves its cursor and a failed page remains unavailable', async () => {
@@ -379,10 +388,17 @@ test('composed Inbox work keeps one 20-row body, eight prior addresses and zero 
       ...(await resolveInboxItems(nativeInboxEnvelope(rows, index === 10 ? null : `cursor-${index + 1}`, 'alice'))),
     });
   }
-  const work = inboxPaginationWork(state, { listRequests: 11, countRequests: 1, commandRequests: 0, visits: 3 });
+  const work = inboxPaginationWork(state, {
+    listRequests: 11,
+    countRequests: 1,
+    commandRequests: 0,
+    visits: 3,
+    returnCursor: 'return-range',
+  });
   expect(work).toMatchObject({
     retainedRows: 20,
     priorAddresses: 8,
+    returnReceipts: 1,
     hydrationRequests: 0,
     countRequests: 1,
     content: INBOX_CONTENT_DISCLOSURE_EVIDENCE,

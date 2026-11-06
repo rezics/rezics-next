@@ -2,9 +2,12 @@ import { DEFAULT_INBOX_SELECTION, type InboxPage, type InboxSelection, type Reso
 import { composeInboxWork, MAX_INBOX_PRIOR_ADDRESSES } from './inbox-work';
 export {
   composeInboxWork,
+  deriveInboxBrowserWork,
+  INBOX_BROWSER_GROWTH_SCALES,
   INBOX_CONTENT_DISCLOSURE_EVIDENCE,
   MAX_INBOX_CURSOR_LENGTH,
   MAX_INBOX_PRIOR_ADDRESSES,
+  MAX_INBOX_RETAINED_CURSORS,
 } from './inbox-work';
 
 /** Local to the mounted viewer owner; cursors are native opaque values bound to one selection. */
@@ -136,7 +139,15 @@ export function readableInboxPage(state: InboxPagination): ResolvedInboxPage | n
 /** Command and read engine work for the retained window; nested disclosure cost stays with Content. */
 export function inboxPaginationWork(
   state: InboxPagination,
-  input: { listRequests: number; countRequests: number; commandRequests?: number; visits: number },
+  input: {
+    listRequests: number;
+    countRequests: number;
+    commandRequests?: number;
+    visits: number;
+    returnCursor?: string;
+    unrelatedNotices?: number;
+    discardedCandidates?: number;
+  },
 ) {
   const page = readableInboxPage(state);
   return composeInboxWork({
@@ -146,8 +157,11 @@ export function inboxPaginationWork(
     hydrationRequests: 0,
     retainedRows: page?.items.length ?? 0,
     priorAddresses: state.history.length,
-    cursors: [...state.history.map((address) => address.cursor), state.cursor],
+    cursors: [...state.history.map((address) => address.cursor), state.cursor, input.returnCursor],
     visits: input.visits,
+    unrelatedNotices: input.unrelatedNotices ?? 0,
+    discardedCandidates: input.discardedCandidates ?? 0,
+    returnReceipts: input.returnCursor === undefined ? 0 : 1,
   });
 }
 

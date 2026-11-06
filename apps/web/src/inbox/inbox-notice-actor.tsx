@@ -45,7 +45,8 @@ export function inboxNoticeActorPresentation(input: InboxNoticeActorInput): Inbo
   return {
     label,
     actorId,
-    avatarUrl: available ? actor.avatarUrl : null,
+    // Closed native actors carry avatarUrl: null; stored profile URLs are never admitted media.
+    avatarUrl: null,
     initials: initials(initialSource),
     handle: available ? actor.handle : null,
     hasAvatar: available || (!actor && !hiddenLegacy && actorId !== null),
