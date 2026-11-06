@@ -16,7 +16,9 @@ import type { StackSlot } from '../../../scripts/stack-lease.ts';
 import { walkStackRequired } from '../../../scripts/stack-run.ts';
 import {
   admitWalkStack,
+  walkPortAllocated,
   walkStackEnvironment,
+  walkStackLimit,
   walkStackNames,
   walkStackPorts,
   type WalkNames,
@@ -801,6 +803,38 @@ async function untilReady(urls: string[], starting: ReturnType<typeof Bun.spawn>
   }
 }
 
+class WalkPortAllocated extends Error {
+  readonly index: number;
+  constructor(script: string[], index: number) {
+    super(`walk: ${script.join(' ')} failed`);
+    this.name = 'WalkPortAllocated';
+    this.index = index;
+  }
+}
+
+/** Runs one setup script and keeps its stderr, so a Docker port collision can skip this slot. */
+async function runWalkSetup(
+  script: string[],
+  env: Record<string, string>,
+  onSpawn: (child: ReturnType<typeof Bun.spawn>) => void,
+): Promise<void> {
+  const child = Bun.spawn([process.execPath, ...script], {
+    cwd: root,
+    env,
+    stdin: 'ignore',
+    stdout: 'inherit',
+    stderr: 'pipe',
+  });
+  onSpawn(child);
+  const stderr = await new Response(child.stderr).text();
+  if (stderr) process.stderr.write(stderr);
+  if ((await child.exited) !== 0) {
+    const error = new Error(`walk: ${script.join(' ')} failed`);
+    if (walkPortAllocated(stderr)) (error as Error & { portAllocated: true }).portAllocated = true;
+    throw error;
+  }
+}
+
 /**
  * Runs `command` against one walk stack: admission, the stack `dev:infra` and `dev` start, then teardown when the
  * command ends or the attempt is signalled. Only a worker whose brief lists native or browser acceptance may start one.
@@ -823,47 +857,69 @@ async function walk(command: string[]): Promise<number> {
     process.on(signal, handler);
     return [signal, handler] as const;
   });
+  const blocked = new Set<number>();
   let slot: StackSlot | undefined;
   let code = 0;
   try {
-    slot = await admitWalkStack(task, process.env, root, controller.signal);
-    const env = { ...process.env, ...walkStackEnvironment(task, slot.index!) } as Record<string, string>;
-    const ports = walkStackPorts(slot.index!);
-    let starting: ReturnType<typeof Bun.spawn> | undefined;
-    try {
-      removeWalkStack(names); // an interrupted attempt of this task may have left its stack behind
-      for (const script of [
-        ['services/kernel/scripts/database.ts', 'up'],
-        ['services/kernel/scripts/search.ts', 'up'],
-        ['services/auth/scripts/dev-stack.ts', 'setup'],
-      ]) {
-        current = Bun.spawn([process.execPath, ...script], {
+    removeWalkStack(names); // an interrupted attempt of this task may have left its stack behind
+    while (true) {
+      slot = await admitWalkStack(task, process.env, root, controller.signal, blocked);
+      const env = { ...process.env, ...walkStackEnvironment(task, slot.index!) } as Record<string, string>;
+      const ports = walkStackPorts(slot.index!);
+      let starting: ReturnType<typeof Bun.spawn> | undefined;
+      let failed: unknown;
+      try {
+        for (const script of [
+          ['services/kernel/scripts/database.ts', 'up'],
+          ['services/kernel/scripts/search.ts', 'up'],
+          ['services/auth/scripts/dev-stack.ts', 'setup'],
+        ]) {
+          try {
+            await runWalkSetup(script, env, (child) => {
+              current = child;
+            });
+          } catch (error) {
+            if (
+              error instanceof Error &&
+              (error as Error & { portAllocated?: boolean }).portAllocated &&
+              slot.index != null
+            )
+              throw new WalkPortAllocated(script, slot.index);
+            throw error;
+          }
+        }
+        const log = join(root, '.temp', 'walk', task, 'stack.log');
+        await mkdir(dirname(log), { recursive: true });
+        starting = current = Bun.spawn([process.execPath, 'services/auth/scripts/dev-stack.ts', 'start'], {
           cwd: root,
           env,
           stdin: 'ignore',
-          stdout: 'inherit',
-          stderr: 'inherit',
+          stdout: Bun.file(log),
+          stderr: Bun.file(log),
         });
-        if ((await current.exited) !== 0) throw new Error(`walk: ${script.join(' ')} failed`);
+        await untilReady([`http://127.0.0.1:${ports.web}/`, `http://127.0.0.1:${ports.issuer}/`], starting);
+        current = Bun.spawn(command, { env, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' });
+        code = await current.exited;
+      } catch (error) {
+        failed = error;
       }
-      const log = join(root, '.temp', 'walk', task, 'stack.log');
-      await mkdir(dirname(log), { recursive: true });
-      starting = current = Bun.spawn([process.execPath, 'services/auth/scripts/dev-stack.ts', 'start'], {
-        cwd: root,
-        env,
-        stdin: 'ignore',
-        stdout: Bun.file(log),
-        stderr: Bun.file(log),
-      });
-      await untilReady([`http://127.0.0.1:${ports.web}/`, `http://127.0.0.1:${ports.issuer}/`], starting);
-      current = Bun.spawn(command, { env, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' });
-      code = await current.exited;
-    } finally {
       if (starting && starting.exitCode === null) {
         starting.kill('SIGTERM');
         await starting.exited;
       }
       removeWalkStack(names);
+      if (failed === undefined) break;
+      if (
+        failed instanceof WalkPortAllocated &&
+        interrupted === undefined &&
+        blocked.size + 1 < walkStackLimit(process.env)
+      ) {
+        blocked.add(failed.index);
+        await slot.release();
+        slot = undefined;
+        continue;
+      }
+      throw failed;
     }
   } catch (error) {
     if (interrupted === undefined) throw error;

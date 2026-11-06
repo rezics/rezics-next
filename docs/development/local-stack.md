@@ -220,13 +220,16 @@ bun services/auth/scripts/dev-stack.ts walk -- <command...>
 `walk` runs in this order:
 
 1. Waits for a walk slot. At most `REZICS_WALK_STACKS` stacks (default 6; an integer from 1 to 1000) run on the host
-   at once, counted across worktrees under the main checkout's `.temp/walk-stacks`. A further start waits in arrival
-   order and prints its position, `walk <task> waiting (<held>/<limit> held, <n> ahead)`. It is never refused.
+   at once, counted under `/tmp/rezics-walk-stacks` (`REZICS_WALK_STACK_DIR` overrides; `TMPDIR` does not), including
+   concurrent remote-check checkouts. A further start waits in arrival order and prints its position,
+   `walk <task> waiting (<held>/<limit> held, <n> ahead)`. It is never refused.
 2. Names the stack's containers and volumes `rezics-walk-<task>-database` and `rezics-walk-<task>-search`, and gives
    it its slot's loopback ports: `20000 + 10 × slot` plus 0 for Web, 1 for the Auth pages, 2 for native Auth, 3 for
    Kernel, 4 for PostgreSQL and 5 for search.
-   Admission skips slots whose ports still have listeners, including containers surviving an interrupted launcher.
-   Those listeners remain untouched; when all slots are occupied, the launch keeps its queue position.
+   This task's leftover containers are removed before admission. Admission skips slots whose ports still have
+   listeners or Docker-published mappings, including containers surviving an interrupted launcher. A Docker bind that
+   still reports the port allocated skips that slot and admits another. Those listeners remain untouched; when all
+   slots are occupied, the launch keeps its queue position.
 3. Runs `db up`, `search up` and `setup`, starts the processes `dev` starts, and waits until Web and the Auth pages
    answer, for at most ten minutes. Its output goes to `.temp/walk/<task>/stack.log`.
 4. Runs `<command>` in the caller's directory with the stack's names, ports and origins. Persona and seed steps belong
@@ -244,6 +247,9 @@ brief lists native or browser acceptance. Remote placement forwards the original
 `GOAL_ATTEMPT` and `GOAL_ACCEPTANCE_REQUIRES` into the walk command without rewriting recorded argv. Walk search
 nodes use a 128m heap without mmap, Postgres 32MB shared_buffers, and docker memory ceilings (search 512m, database
 384m) so seeded volume file cache cannot fill the 6 GiB run slice. Kernel and the worker start with bun --smol.
+Walk admission is host-wide at `/tmp/rezics-walk-stacks` so concurrent remote-check checkouts share slots and ports;
+this task's leftover containers are removed before admission, and a Docker bind that still reports the port allocated
+skips that slot.
 
 Decision: keep one causal binding regression and the existing launcher assertions. Kernel setup persists the selected
 loopback Auth issuer, audience, JWKS URL, Kernel host and API port in `services/kernel/.env`; start applies the same

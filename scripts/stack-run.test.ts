@@ -13,7 +13,14 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { LOCAL_CONTAINER_REFUSAL, onCheckHost, runOnCheckHost, workerLocalContainerError } from './stack-run.ts';
+import {
+  LOCAL_CONTAINER_REFUSAL,
+  WALK_STACK_DIRECTORY,
+  onCheckHost,
+  runOnCheckHost,
+  walkStackDirectory,
+  workerLocalContainerError,
+} from './stack-run.ts';
 import {
   REMOTE_TRANSPORT_FAILURE,
   ROOT,
@@ -1290,6 +1297,16 @@ test('six walk stacks run by default, a seventh start waits behind them, and the
     'REZICS_WALK_STACKS must be an integer from 1 to 1000',
   );
 }, 90_000);
+
+test('walk admission is host-wide so concurrent check-host runs share ports', () => {
+  expect(walkStackDirectory(repository, {})).toBe(WALK_STACK_DIRECTORY);
+  expect(walkStackDirectory('/srv/rezics-check/runs/example', { KERNEL_CHECK_ON_REMOTE: '1' })).toBe(
+    WALK_STACK_DIRECTORY,
+  );
+  expect(walkStackDirectory(repository, { REZICS_WALK_STACK_DIR: '/custom', KERNEL_CHECK_ON_REMOTE: '1' })).toBe(
+    '/custom',
+  );
+});
 
 test('a local stack container needs a worker whose brief lists native or browser and a slot lock its launch holds', async () => {
   const dir = join(root, `walk-gate-${counter++}`);

@@ -4,9 +4,10 @@
  * further start waits in arrival order with its position shown. An admitted stack owns its slot's loopback ports and
  * its task's container and volume names, so stacks cannot collide with each other or with a developer's stack.
  */
+import { spawnSync } from 'node:child_process';
+import { createServer } from 'node:net';
 import { type StackSlot, acquireStackSlot } from './stack-lease.ts';
 import { walkStackDirectory } from './stack-run.ts';
-import { createServer } from 'node:net';
 
 export const WALK_STACKS_DEFAULT = 6;
 const WALK_STACKS_MAXIMUM = 1000;
@@ -50,9 +51,36 @@ export function walkStackPorts(index: number): WalkPorts {
   return { web: base, issuer: base + 1, native: base + 2, kernel: base + 3, database: base + 4, search: base + 5 };
 }
 
+/** Host ports Docker has already published, including stopped containers that still hold the mapping. */
+export function publishedHostPorts(dockerPsPorts: string): Set<number> {
+  const ports = new Set<number>();
+  for (const match of dockerPsPorts.matchAll(/:(\d+)->/g)) ports.add(Number(match[1]));
+  return ports;
+}
+
+function dockerPublishedPorts(): Set<number> {
+  try {
+    const result = spawnSync('docker', ['ps', '-a', '--format', '{{.Ports}}'], {
+      encoding: 'utf8',
+      timeout: 5_000,
+    });
+    if (result.status !== 0) return new Set();
+    return publishedHostPorts(result.stdout);
+  } catch {
+    return new Set();
+  }
+}
+
+/** Docker already refused this host port, even when nothing is listening yet. */
+export function walkPortAllocated(text: string): boolean {
+  return /port is already allocated/i.test(text);
+}
+
 /** A surviving container can own a slot's ports after its launcher's flock has been released. */
 export async function walkStackPortsAvailable(ports: WalkPorts): Promise<boolean> {
+  const published = dockerPublishedPorts();
   for (const port of Object.values(ports)) {
+    if (published.has(port)) return false;
     const available = await new Promise<boolean>((resolve, reject) => {
       const server = createServer();
       server.once('error', (error: NodeJS.ErrnoException) => {
@@ -98,13 +126,15 @@ export function walkStackEnvironment(task: string, index: number): Record<string
 
 /**
  * Waits for one of the host's walk slots. The queue is the stack-lease FIFO, in the walk directory with the walk
- * capacity, so developers' stacks and check slots are not counted here.
+ * capacity, so developers' stacks and check slots are not counted here. `blocked` indexes stay skipped for this
+ * launch after Docker refused their published ports.
  */
 export function admitWalkStack(
   task: string,
   env: Record<string, string | undefined>,
   root: string,
   signal?: AbortSignal,
+  blocked: ReadonlySet<number> = new Set(),
 ): Promise<StackSlot> {
   walkStackNames(task);
   return acquireStackSlot(
@@ -114,6 +144,6 @@ export function admitWalkStack(
     undefined,
     POSITION_INTERVAL_MS,
     signal,
-    (index) => walkStackPortsAvailable(walkStackPorts(index)),
+    async (index) => !blocked.has(index) && (await walkStackPortsAvailable(walkStackPorts(index))),
   );
 }

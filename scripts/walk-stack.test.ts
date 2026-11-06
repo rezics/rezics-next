@@ -3,7 +3,12 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { acquireStackSlot } from './stack-lease.ts';
-import { walkStackEnvironment, walkStackPortsAvailable } from './walk-stack.ts';
+import {
+  publishedHostPorts,
+  walkPortAllocated,
+  walkStackEnvironment,
+  walkStackPortsAvailable,
+} from './walk-stack.ts';
 import { databaseRunArgs } from '../services/kernel/scripts/database.ts';
 import { searchRunArgs } from '../services/kernel/scripts/search.ts';
 
@@ -35,6 +40,20 @@ test('walk stacks cap OpenSearch, Postgres and bun heaps inside the host run sli
   expect(() => searchRunArgs('native-policy-test-image', { KERNEL_SEARCH_MEMORY: '1g' })).toThrow(
     'KERNEL_SEARCH_MEMORY',
   );
+});
+
+test('Docker published mappings occupy a walk slot even when nothing is listening', () => {
+  expect(
+    publishedHostPorts('127.0.0.1:20014->5432/tcp\n127.0.0.1:20015->9200/tcp, 127.0.0.1:20020->80/tcp'),
+  ).toEqual(new Set([20014, 20015, 20020]));
+  expect(publishedHostPorts('[::]:20014->5432/tcp')).toEqual(new Set([20014]));
+  expect(publishedHostPorts('5432/tcp')).toEqual(new Set());
+  expect(
+    walkPortAllocated(
+      'docker: Error response from daemon: Bind for 127.0.0.1:20014 failed: port is already allocated.',
+    ),
+  ).toBe(true);
+  expect(walkPortAllocated('walk: services/kernel/scripts/database.ts up failed')).toBe(false);
 });
 
 test('walk admission preserves an occupied slot and reuses it after its listener closes', async () => {
