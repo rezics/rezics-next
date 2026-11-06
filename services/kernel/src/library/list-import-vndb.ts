@@ -26,7 +26,12 @@ import { createLibraryCommandRunner, LibraryNotFoundError, requireRoute } from '
 import { createEntryCommands, LibraryConflictError, LibraryEntryInvalidError } from './entries.ts';
 import { createEntryPersonalCommands } from './entry-personal.ts';
 import type { LabelCommandAdmission } from './label-command-admission.ts';
-import { createSessionCommands, ProgressConflictError, type ProgressSessionJournalAdmission } from './sessions.ts';
+import {
+  createSessionCommands,
+  ProgressConflictError,
+  ProgressInvalidError,
+  type ProgressSessionJournalAdmission,
+} from './sessions.ts';
 import type { Entry } from './entry-model.ts';
 import { readLibraryProfileSourceObservation } from './profile-source.ts';
 import {
@@ -222,7 +227,7 @@ function nativeQuestionView(question: RatingQuestion): NativeQuestion {
   return {
     id: question.id,
     revision: question.revision,
-    meaning: question.meaning,
+    meaning: question.meaning ?? question.label,
     label: question.label,
     grain: question.grain,
     scale: { min: question.minimumUnits, max: question.maximumUnits, step: question.stepUnits },
@@ -1372,7 +1377,14 @@ export function createVndbImport(config: Config) {
                   error instanceof LibraryNotFoundError ||
                   (error instanceof ProblemError &&
                     ['conflict', 'not_found', 'unsupported_library_profile'].includes(error.code)),
-                rethrowError: (error) => error instanceof GrantDeniedError,
+                rethrowError: (error) =>
+                  !(
+                    error instanceof ProblemError ||
+                    error instanceof ProgressInvalidError ||
+                    error instanceof ProgressConflictError ||
+                    error instanceof LibraryConflictError ||
+                    error instanceof LibraryNotFoundError
+                  ),
               },
             );
           return (
@@ -1733,7 +1745,7 @@ export function createVndbImport(config: Config) {
         status = 'skipped';
       } else {
         const startKey = `vndb:${id}:${choice.ordinal}:${choice.reviewId}:entry:start`;
-        await mutation(
+        const started = await mutation(
           actor,
           'apply-entry-start',
           startKey,
@@ -1752,9 +1764,11 @@ export function createVndbImport(config: Config) {
             )
               throw new LibraryConflictError();
             await save(tx, account, id, choice.ordinal, { ...currentDecision, status: 'applying' });
+            return { ordinal: choice.ordinal, reviewId: choice.reviewId };
           },
         );
         decision = { ...decision, status: 'applying' };
+        record(started);
         try {
           const result = await entries.putEntry(
             actor,
@@ -1768,6 +1782,12 @@ export function createVndbImport(config: Config) {
             decision.commandKey,
             decision.guard!,
           );
+          decision.receipt = {
+            partition: result.partition,
+            epoch: result.epoch,
+            position: result.position.toString(),
+            transactionId: result.transactionId,
+          };
           record(result);
           status = 'applied';
         } catch (error) {
@@ -1797,6 +1817,12 @@ export function createVndbImport(config: Config) {
           decision.commandKey,
           decision.guard!,
         );
+        decision.receipt = {
+          partition: result.partition,
+          epoch: result.epoch,
+          position: result.position.toString(),
+          transactionId: result.transactionId,
+        };
         record(result);
         status = 'applied';
       } catch (error) {
@@ -2020,7 +2046,7 @@ export function createVndbImport(config: Config) {
           id: score.question.id,
           revision: score.question.revision,
           grain: score.question.grain,
-          meaning: score.question.meaning!,
+          meaning: score.question.meaning ?? score.question.label,
           scale: {
             min: score.question.scale.min,
             max: score.question.scale.max,

@@ -1,6 +1,12 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
-import { seedShowcasePersonalList } from '../../../importer/src/showcase-personal-list.ts';
+import {
+  applyShowcasePersonalList,
+  readShowcasePersonalLibrary,
+  readShowcasePersonalList,
+  reviewShowcasePersonalList,
+  seedShowcasePersonalList,
+} from '../../../importer/src/showcase-personal-list.ts';
 import { ShowcaseJournal } from '../../../importer/src/showcase-publication.ts';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 import { createGrantCommands } from '../../src/access/grant-commands.ts';
@@ -33,6 +39,7 @@ const apply = (id: string, rows: { ordinal: number; reviewId: string }[]) =>
   json('POST', `${base}/${id}:apply`, { rows });
 beforeAll(async () => {
   f = await createProfileEntryFixture({ gameUnits: ['minute', 'episode'] });
+  expect((await f.send('steward', 'POST', '/v1/platform/exposure/reading_progress:open')).status).toBe(200);
   const producer = await f.identity(['subject:batch_write', 'subject:create', 'subject:read']);
   producerBearer = producer.bearer;
   await createGrantCommands({ pool: f.pool, access: f.access, managementAction: 'access:grant' }).create(
@@ -184,7 +191,10 @@ test('VNDB Progress requires its declared current-profile unit, uses exported pl
         state: 'active',
         unit: 'minute',
         amount: '0',
-        measures: [{ unit: 'episode', amount: '6' }],
+        measures: [
+          { unit: 'minute', amount: '0' },
+          { unit: 'episode', amount: '6' },
+        ],
       },
     },
   });
@@ -196,7 +206,10 @@ test('VNDB Progress requires its declared current-profile unit, uses exported pl
     unit: 'minute',
     amount: '0',
     revision: episode.value.revision + 1,
-    measures: [{ unit: 'episode', amount: '6' }],
+    measures: [
+      { unit: 'minute', amount: '0' },
+      { unit: 'episode', amount: '6' },
+    ],
   });
   expect(applied.outcomes[1].progress.readback.revision).toBe(current.progressSession.revision);
 
@@ -216,7 +229,10 @@ test('VNDB Progress requires its declared current-profile unit, uses exported pl
   expect((await json('GET', `/v1/progressSessions/${started.value.id}`)).progressSession).toMatchObject({
     revision: current.progressSession.revision,
     amount: '0',
-    measures: [{ unit: 'episode', amount: '6' }],
+    measures: [
+      { unit: 'minute', amount: '0' },
+      { unit: 'episode', amount: '6' },
+    ],
   });
   const retained = await json('GET', `${base}/${unsupportedId}`);
   expect(retained.rows[0].fields.progress).toMatchObject({ kind: 'value', raw: '4', value: '4' });
@@ -244,7 +260,10 @@ test('VNDB Progress requires its declared current-profile unit, uses exported pl
     (await apply(missingId, [{ ordinal: 0, reviewId: cleared.reviewId }])).outcomes[0].progress.readback,
   ).toMatchObject({
     amount: null,
-    measures: [{ unit: 'episode', amount: '6' }],
+    measures: [
+      { unit: 'minute', amount: null },
+      { unit: 'episode', amount: '6' },
+    ],
   });
   await json('DELETE', `${base}/${missingId}`);
   const startId = (await upload(xml('', `<length-votes>${vn(vnId, '<minutes>12</minutes>')}</length-votes>`))).uploadId;
@@ -278,13 +297,18 @@ test('a changed export updates the same matched Library entry and current readba
     progress: { value: '4' },
     progressMeasure: { value: 'chapter' },
   });
-  const firstReview = await review(firstUpload.uploadId, { ordinal: 0, action: 'state', state: 'playing' });
+  const firstReview = await review(firstUpload.uploadId, {
+    ordinal: 0,
+    action: 'state',
+    state: 'playing',
+    replace: true,
+  });
   const firstApplied = await apply(firstUpload.uploadId, [{ ordinal: 0, reviewId: firstReview.reviewId }]);
   expect(firstApplied.outcomes[0].status).toBe('applied');
   const firstEntry = await f.commands.readEntry(f.owner.actor, matched);
   expect(firstEntry.state).toBe('playing');
   const afterFirst = await f.inspect();
-  expect(afterFirst.entries).toHaveLength(before.entries.length + 1);
+  expect(afterFirst.entries).toHaveLength(before.entries.length);
 
   const changedUpload = await upload(
     xml(vn(vnId, '<label label="Finished"/><vote>9.2</vote><progress unit="chapter">12</progress>')),
@@ -312,6 +336,129 @@ test('a changed export updates the same matched Library entry and current readba
   expect(afterChanged.sessions).toEqual(before.sessions);
   await json('DELETE', `${base}/${firstUpload.uploadId}`);
   await json('DELETE', `${base}/${changedUpload.uploadId}`);
+}, 120000);
+test('journalled explicit review and changed reimport survive lost delivery and independently return the same Entry and Progress', async () => {
+  const targetId = await f.createSubject('game');
+  const sourceId = 'v999999999991';
+  const journal = new ShowcaseJournal(':memory:');
+  let loseApply = true;
+  const requests: string[] = [];
+  const client = createKernelClient('http://kernel.test', {
+    headers: { authorization: `Bearer ${f.owner.bearer}` },
+    fetch: (async (input, init) => {
+      const request = new Request(input, init);
+      const response = await f.handle(request.clone());
+      if (request.method === 'GET' && !response.ok)
+        throw new Error(`Owner read ${request.url}: ${response.status} ${await response.clone().text()}`);
+      if (new URL(request.url).pathname.endsWith(':apply')) {
+        requests.push(await request.text());
+        if (loseApply) {
+          loseApply = false;
+          throw new TypeError('lost acknowledgement after native commit');
+        }
+      }
+      return response;
+    }) as typeof fetch,
+  });
+  const caller = {
+    client,
+    journal,
+    identity: { origin: 'http://kernel.test', actor: f.owner.actor, credential: { keyId: 'private-list-owner' } },
+  };
+  try {
+    const first = await seedShowcasePersonalList({
+      ...caller,
+      xml: xml(
+        vn(sourceId, '<notes>Do not publish this private export</notes>'),
+        `<length-votes>${vn(sourceId, '<minutes>0</minutes>')}</length-votes>`,
+      ),
+    });
+    if (first.state !== 'uploaded') throw new Error(first.code);
+    expect(first.rows).toBe(3);
+    const preview = await readShowcasePersonalList({ client, uploadId: first.uploadId });
+    if (preview.state !== 'current') throw new Error(preview.code);
+    expect(preview.value.rows[0]?.match.status).toBe('unmatched');
+    expect((await f.send('owner', 'GET', `/v1/libraryEntries/${targetId}`)).status).toBe(404);
+    const state = await reviewShowcasePersonalList({
+      ...caller,
+      intentId: 'first-state',
+      uploadId: first.uploadId,
+      body: { ordinal: 0, action: 'state', targetId, state: 'playing', replace: false },
+    });
+    if (state.state !== 'acknowledged' || !('reviewId' in state.value))
+      throw new Error('State review was not acknowledged');
+    const selection = { rows: [{ ordinal: 0, reviewId: state.value.reviewId }] };
+    const command = { ...caller, intentId: 'first-apply', uploadId: first.uploadId, body: selection };
+    expect((await applyShowcasePersonalList(command)).state).toBe('unknown-delivery');
+    const installed = await f.commands.readEntry(f.owner.actor, targetId);
+    expect(installed.state).toBe('playing');
+    expect((await applyShowcasePersonalList({ ...command, body: { rows: [] } })).state).toBe('acknowledged');
+    expect(requests[1]).toBe(requests[0]);
+    expect(await f.commands.readEntry(f.owner.actor, targetId)).toEqual(installed);
+    const progress = await reviewShowcasePersonalList({
+      ...caller,
+      intentId: 'first-progress',
+      uploadId: first.uploadId,
+      body: {
+        ordinal: 1,
+        action: 'progress',
+        targetId,
+        progress: {
+          occurrence: { kind: 'start', primaryUnit: 'minute' },
+          measures: [{ field: 'minutes', action: 'adopt' }],
+        },
+      },
+    });
+    if (progress.state !== 'acknowledged' || !('reviewId' in progress.value))
+      throw new Error('Progress review was not acknowledged');
+    const progressApplied = await applyShowcasePersonalList({
+      ...caller,
+      intentId: 'first-progress-apply',
+      uploadId: first.uploadId,
+      body: { rows: [{ ordinal: 1, reviewId: progress.value.reviewId }] },
+    });
+    if (progressApplied.state !== 'acknowledged') throw new Error(progressApplied.code);
+    const sessions = await json('GET', `/v1/progressSessions?subjectId=${targetId}&limit=8`);
+    expect(sessions.progressSessions).toHaveLength(1);
+    const sessionId = sessions.progressSessions[0].id;
+    expect(sessionId).toBeString();
+    const changed = await seedShowcasePersonalList({ ...caller, xml: xml(vn(sourceId, '<label label="Finished"/>')) });
+    if (changed.state !== 'uploaded') throw new Error(changed.code);
+    const replacement = await reviewShowcasePersonalList({
+      ...caller,
+      intentId: 'changed-state',
+      uploadId: changed.uploadId,
+      body: { ordinal: 0, action: 'state', targetId, state: 'completed', replace: true },
+    });
+    if (replacement.state !== 'acknowledged' || !('reviewId' in replacement.value))
+      throw new Error('Replacement review was not acknowledged');
+    expect(replacement.value).toMatchObject({
+      baseline: { incarnationId: installed.incarnationId, revision: installed.revision },
+    });
+    const replaced = await applyShowcasePersonalList({
+      ...caller,
+      intentId: 'changed-apply',
+      uploadId: changed.uploadId,
+      body: { rows: [{ ordinal: 0, reviewId: replacement.value.reviewId }] },
+    });
+    expect(replaced.state).toBe('acknowledged');
+    const current = await readShowcasePersonalLibrary({ client });
+    if (current.state !== 'current') throw new Error(current.code);
+    expect(current.value.libraryEntries.find((entry) => entry.subjectId === targetId)).toMatchObject({
+      state: 'completed',
+      incarnationId: installed.incarnationId,
+      activeProgressSession: { id: sessionId, amount: '0', unit: 'minute' },
+    });
+    expect((await json('GET', `/v1/progressSessions/${sessionId}`)).progressSession.amount).toBe('0');
+    expect((await f.send('other', 'GET', `${base}/${first.uploadId}`)).status).toBe(404);
+    const publicRead = await f.send('anonymous', 'GET', `/v1/subjects/${targetId}`);
+    expect(publicRead.status).toBe(200);
+    expect(await publicRead.text()).not.toContain('Do not publish this private export');
+    await json('DELETE', `${base}/${first.uploadId}`);
+    await json('DELETE', `${base}/${changed.uploadId}`);
+  } finally {
+    journal.close();
+  }
 }, 120000);
 test('reviewed conflicts preserve facts, revision and release guards reject stale choices, cancellation stops remaining rows', async () => {
   const target = await f.createSubject('game');
@@ -457,7 +604,7 @@ test('VNDB explicit unmatched score choice commits chosen units, zero and clear 
     '<reviews><review id="r1"><text>private</text></review></reviews>',
   );
   const { uploadId, rows } = await c.importUpload(source);
-  expect(rows).toBe(2);
+  expect(rows).toBe(3);
   const page = await c.send('GET', `${base}/${uploadId}`);
   expect(page.rows[0].match.status).toBe('unmatched');
   expect(page.rows[0].fields.score).toEqual({
@@ -487,7 +634,7 @@ test('VNDB explicit unmatched score choice commits chosen units, zero and clear 
     },
     entryKey(),
   );
-  expect(missingConsent.status).toBe(422);
+  expect(missingConsent.status).toBe(400);
   const retired = await c.scoreReview(uploadId, 0);
   const chosen = await c.scoreReview(uploadId, 15);
   expect(chosen).toMatchObject({
@@ -865,11 +1012,11 @@ test('VNDB typed dates select one repeat, preserve precision, and clear only wit
     rows: [{ ordinal: 0, version: pending.version, fields: ['startDate'] }],
   };
   let acknowledgements = 0;
-  expect(
-    await service.applyConsumptionDates(f.owner.actor, uploadId, selection, () => {
+  await expect(
+    service.applyConsumptionDates(f.owner.actor, uploadId, selection, () => {
       if (++acknowledgements === 2) throw new Error('Lost journal acknowledgement');
     }),
-  ).toMatchObject({ outcomes: [{ status: 'failed' }] });
+  ).rejects.toThrow('Lost journal acknowledgement');
   const accepted = await sessions.readSessionJournal(f.owner.actor, first.id);
   await f.pool.query(
     "UPDATE library.vndb_import SET expires_at=clock_timestamp()-interval '1 second' WHERE account_id=$1 AND upload_id=$2",
@@ -899,13 +1046,11 @@ test('lost state acknowledgement reconciles the original receipt after expiry wi
   const first = await review(id, { ordinal: 0, action: 'state', targetId: target, state: 'planned' });
   const second = await review(id, { ordinal: 1, action: 'state', targetId: untouched, state: 'playing' });
   let acknowledgements = 0;
-  expect(
-    (
-      await service.apply(f.owner.actor, id, [{ ordinal: 0, reviewId: first.reviewId }], () => {
-        if (++acknowledgements === 2) throw new Error('Lost native acknowledgement');
-      })
-    ).outcomes[0]?.status,
-  ).toBe('failed');
+  await expect(
+    service.apply(f.owner.actor, id, [{ ordinal: 0, reviewId: first.reviewId }], () => {
+      if (++acknowledgements === 2) throw new Error('Lost native acknowledgement');
+    }),
+  ).rejects.toThrow('Lost native acknowledgement');
   const accepted = await f.commands.readEntry(f.owner.actor, target),
     effects = await f.inspect();
   await f.pool.query(

@@ -6,8 +6,22 @@ import type { ShowcaseJournal } from './showcase-publication.ts';
 
 type VndbSurface = KernelClient['libraryImports']['vndb'];
 type PreviewResponse = Awaited<ReturnType<VndbSurface['$preview']['post']>>;
+type UploadedVndb = ReturnType<VndbSurface>;
+export type ShowcasePersonalListReview = Parameters<UploadedVndb['$review']['post']>[0];
+export type ShowcasePersonalListSelection = Parameters<UploadedVndb['$apply']['post']>[0];
+type Reviewed = NonNullable<Awaited<ReturnType<UploadedVndb['$review']['post']>>['data']>;
+type Applied = NonNullable<Awaited<ReturnType<UploadedVndb['$apply']['post']>>['data']>;
 
-export const developmentPersonalListScopes = ['library_entry:update'] as const;
+export const developmentPersonalListScopes = [
+  'library_entry:update',
+  'library_entry:read',
+  'library_entry:list',
+  'progress_session:create',
+  'progress_session:read',
+  'progress_session:list',
+  'progress_session:update',
+  'rating:vote',
+] as const;
 const EXPORT_BYTES = 2 * 1024 * 1024;
 const PREVIEW_PATH = '/v1/libraryImports/vndb:preview';
 
@@ -117,4 +131,157 @@ export async function seedShowcasePersonalList(input: {
   input.journal.acknowledgeAction(receiptKey, uploaded.uploadId);
   input.journal.acknowledgeAction(actionKey, uploaded.uploadId);
   return { state: 'uploaded', ...uploaded };
+}
+
+export type ShowcasePersonalListFailure = Exclude<ShowcasePersonalListUpload, { state: 'uploaded' }>;
+export type ShowcasePersonalListRead<T> = { state: 'current'; value: T } | ShowcasePersonalListFailure;
+export type ShowcasePersonalListAcknowledgement<T> = { state: 'acknowledged'; value: T } | ShowcasePersonalListFailure;
+
+type Caller = {
+  client: KernelClient;
+  journal: ShowcaseJournal;
+  identity: ShowcasePersonalListIdentity;
+};
+type ReviewCommand = { kind: 'review'; uploadId: string; body: ShowcasePersonalListReview };
+type ApplyCommand = { kind: 'apply'; uploadId: string; body: ShowcasePersonalListSelection };
+type Command = ReviewCommand | ApplyCommand;
+type SealedCommand = ShowcasePersonalListIdentity & { command: Command };
+
+function sameIdentity(left: ShowcasePersonalListIdentity, right: ShowcasePersonalListIdentity): boolean {
+  return (
+    left.origin === right.origin &&
+    left.actor.accountId === right.actor.accountId &&
+    left.actor.clientId === right.actor.clientId &&
+    left.credential.keyId === right.credential.keyId
+  );
+}
+
+function httpFailure(status: number): ShowcasePersonalListFailure {
+  return {
+    state: status >= 400 && status < 500 && status !== 408 && status !== 429 ? 'refused' : 'unknown-delivery',
+    code: `http-${status}`,
+  };
+}
+
+async function nativeRead<T>(
+  send: () => Promise<{ status: number; error: unknown; data: T | null }>,
+): Promise<ShowcasePersonalListRead<T>> {
+  let response;
+  try {
+    response = await send();
+  } catch (error) {
+    if (!(error instanceof TypeError) && !(error instanceof DOMException) && !(error instanceof SyntaxError))
+      throw error;
+    return { state: 'unknown-delivery', code: 'transport-unavailable' };
+  }
+  if (response.error) return httpFailure(response.status);
+  if (response.status !== 200 || response.data === null) return { state: 'unknown-delivery', code: 'invalid-response' };
+  return { state: 'current', value: response.data };
+}
+
+/** Read only the retained, currently authorized native preview; never reconstruct it from journal receipts. */
+export function readShowcasePersonalList(input: { client: KernelClient; uploadId: string; offset?: number }) {
+  return nativeRead(() =>
+    input.client.libraryImports.vndb({ uploadId: input.uploadId }).get({
+      query: { offset: input.offset ?? 0 },
+      fetch: { cache: 'no-store', redirect: 'manual' },
+    }),
+  );
+}
+
+/** Independent owner return. One FULL page carries current state, Progress and counted own votes. */
+export function readShowcasePersonalLibrary(input: { client: KernelClient; cursor?: string }) {
+  return nativeRead(() =>
+    input.client.libraryEntries.get({
+      query: {
+        view: 'FULL',
+        orderBy: 'lastActivity',
+        direction: 'desc',
+        limit: 8,
+        ...(input.cursor ? { cursor: input.cursor } : {}),
+      },
+      fetch: { cache: 'no-store', redirect: 'manual' },
+    }),
+  );
+}
+
+function sealCommand(input: Caller, intentId: string, command: Command) {
+  const actionKey = `personal-list:vndb:command:${intentId}`;
+  const prior = input.journal.action(actionKey);
+  const sealed = (
+    prior
+      ? JSON.parse(prior.body_json)
+      : input.journal.prepareAction(actionKey, { ...input.identity, command }, randomUUID())
+  ) as SealedCommand;
+  const action = prior ?? input.journal.action(actionKey)!;
+  if (!sameIdentity(sealed, input.identity))
+    return { failure: { state: 'unavailable', code: 'sealed-identity-changed' } as const };
+  // An intent names one operation. Changed form fields cannot replace a pending command, even after reopen.
+  if (sealed.command.kind !== command.kind)
+    return { failure: { state: 'unavailable', code: 'sealed-operation-changed' } as const };
+  if (action.state === 'refused') return { failure: { state: 'refused', code: action.error_code! } as const };
+  return { actionKey, command: sealed.command, key: action.idempotency_key };
+}
+
+function refuseCommand(input: Caller, key: string, failure: ShowcasePersonalListFailure) {
+  if (failure.state === 'refused') input.journal.refuseAction(key, failure.code);
+  return failure;
+}
+
+/** A reviewed proposal is an acknowledgement, not evidence of an installed Library fact. */
+export async function reviewShowcasePersonalList(
+  input: Caller & { intentId: string; uploadId: string; body: ShowcasePersonalListReview },
+): Promise<ShowcasePersonalListAcknowledgement<Reviewed>> {
+  const sealed = sealCommand(input, input.intentId, { kind: 'review', uploadId: input.uploadId, body: input.body });
+  if ('failure' in sealed) return sealed.failure;
+  const command = sealed.command as ReviewCommand;
+  const response = await nativeRead(() =>
+    input.client.libraryImports.vndb({ uploadId: command.uploadId }).$review.post(command.body, {
+      headers: { 'idempotency-key': JSON.stringify(sealed.key) },
+      fetch: { cache: 'no-store', redirect: 'manual' },
+    }),
+  );
+  if (response.state !== 'current') return refuseCommand(input, sealed.actionKey, response);
+  // Replaying still passes current native authorization. Only the review identity is immutable;
+  // an apply receipt or subsequent current read may legitimately report later progress.
+  const reviewId = 'reviewId' in response.value ? response.value.reviewId : undefined;
+  const prior = input.journal.action(sealed.actionKey)!;
+  if (prior.result_id && prior.result_id !== reviewId)
+    return { state: 'unknown-delivery', code: 'review-response-changed' };
+  input.journal.acknowledgeAction(sealed.actionKey, reviewId);
+  return { state: 'acknowledged', value: response.value };
+}
+
+/** Explicit confirmation only; state/Progress review IDs and independent score review IDs stay separate. */
+export async function applyShowcasePersonalList(
+  input: Caller & { intentId: string; uploadId: string; body: ShowcasePersonalListSelection },
+): Promise<ShowcasePersonalListAcknowledgement<Applied>> {
+  const sealed = sealCommand(input, input.intentId, { kind: 'apply', uploadId: input.uploadId, body: input.body });
+  if ('failure' in sealed) return sealed.failure;
+  const command = sealed.command as ApplyCommand;
+  const response = await nativeRead(() =>
+    input.client.libraryImports.vndb({ uploadId: command.uploadId }).$apply.post(command.body, {
+      fetch: { cache: 'no-store', redirect: 'manual' },
+    }),
+  );
+  if (response.state !== 'current') return refuseCommand(input, sealed.actionKey, response);
+  const expected = new Set(
+    command.body.rows.flatMap((row) => [
+      ...(row.reviewId ? [`${row.ordinal}:state:${row.reviewId}`] : []),
+      ...(row.scoreReviewId ? [`${row.ordinal}:score:${row.scoreReviewId}`] : []),
+    ]),
+  );
+  const received = response.value.outcomes.map((row) =>
+    'scoreReviewId' in row ? `${row.ordinal}:score:${row.scoreReviewId}` : `${row.ordinal}:state:${row.reviewId}`,
+  );
+  // A truncated or misaddressed HTTP response cannot acknowledge a different confirmation.
+  if (
+    response.value.uploadId !== command.uploadId ||
+    new Set(received).size !== received.length ||
+    received.some((key) => !expected.has(key)) ||
+    (response.value.stopped === null && received.length !== expected.size)
+  )
+    return { state: 'unknown-delivery', code: 'apply-response-changed' };
+  if (response.value.stopped === null) input.journal.acknowledgeAction(sealed.actionKey, command.uploadId);
+  return { state: 'acknowledged', value: response.value };
 }
