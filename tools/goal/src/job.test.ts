@@ -68,7 +68,7 @@ test('A worker whose run log stays empty but whose worktree files or branch head
     expect(active.store.attempt({ taskId: task.id, attempt: 1 }).failureKind).toBeNull();
     expect(landings).toHaveLength(1);
   } finally {
-    active.dispose();
+    await active.disposeAsync();
   }
 
   const idle = harness(idleEmptyLogCli);
@@ -83,6 +83,6 @@ test('A worker whose run log stays empty but whose worktree files or branch head
     expect(first.failureKind).toBe('tool');
     expect(first.result).toBe('stalled: no output for 1 minute');
   } finally {
-    idle.dispose();
+    await idle.disposeAsync();
   }
 }, 30_000);

@@ -40,6 +40,7 @@ installProcessOwnershipAdapter(fixtureProcessOwnershipAdapter);
 
 const FIXTURE_TERM_GRACE_MS = 300;
 const FIXTURE_KILL_WAIT_MS = 1500;
+const FIXTURE_GROUP_VISIBILITY_MS = 500;
 const FIXTURE_FAKE_WORKER_LIFETIME_MS = 60_000;
 const fixtureDisposals = new Map<string, () => void | Promise<void>>();
 afterEach(async () => {
@@ -62,8 +63,21 @@ function boundedFixtureWorkerScript(script: string): string {
   return script.replace(/^(#![^\n]*\n)/, `$1${guard}`);
 }
 
+function fixtureGroupMembersInvisible(error: unknown): boolean {
+  return error instanceof Error && error.message.includes('no live members visible');
+}
+
 function checkedFixtureGroup(identity: ProcessIdentity, _allowLeaderExit = false): ProcessIdentity[] {
-  return checkedProcessGroup(identity);
+  const deadline = Date.now() + FIXTURE_GROUP_VISIBILITY_MS;
+  for (;;) {
+    try {
+      return checkedProcessGroup(identity);
+    } catch (error) {
+      // Members can leave /proc before kill(-pgid, 0) returns ESRCH; wait for the group to go absent.
+      if (!fixtureGroupMembersInvisible(error) || Date.now() >= deadline) throw error;
+      Bun.sleepSync(Math.min(20, Math.max(1, deadline - Date.now())));
+    }
+  }
 }
 
 async function signalFixtureGroup(identity: ProcessIdentity, signal: NodeJS.Signals): Promise<void> {
