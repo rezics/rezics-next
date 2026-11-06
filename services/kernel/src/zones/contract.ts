@@ -244,6 +244,19 @@ export const ZoneTakedownInputSchema = t.Object(
   closed,
 );
 export type ZoneTakedownInput = Static<typeof ZoneTakedownInputSchema>;
+const reasonSchema = t.String({ minLength: 1, maxLength: 2000 });
+export const ZoneHoldInputSchema = t.Object({ reason: reasonSchema }, closed);
+export type ZoneHoldInput = Static<typeof ZoneHoldInputSchema>;
+export const ZonePurgeInputSchema = t.Object(
+  { reason: t.Optional(reasonSchema), order: t.Optional(t.String({ minLength: 1, maxLength: 255 })) },
+  closed,
+);
+export type ZonePurgeInput = Static<typeof ZonePurgeInputSchema>;
+export const ZoneHoldResponseSchema = t.Object({ id: routedUuidSchema, held: t.Boolean() }, closed);
+export const ZonePurgeResponseSchema = t.Object(
+  { id: routedUuidSchema, state: t.Literal('purge_pending') },
+  closed,
+);
 export type ZoneOwned = Static<ReturnType<typeof ZoneOwnedSchema>>;
 export type ZoneResponse = Static<ReturnType<typeof ZoneResponseSchema>>;
 export type ZoneMetadataResponse = Static<ReturnType<typeof ZoneMetadataResponseSchema>>;

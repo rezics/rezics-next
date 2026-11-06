@@ -4,7 +4,7 @@ import type { Pool } from 'pg';
 import { commandAccessContext } from '../access/command-admission.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { parentCreationAuthorization } from '../access/parent-creation.ts';
-import { resourceAuthorization } from '../access/resource-authorization.ts';
+import { resourceAuthorizationPage } from '../access/resource-authorization.ts';
 import { initializeResourceGrants } from '../access/resource-initialization.ts';
 import {
   authoritativeTimeValue,
@@ -21,9 +21,16 @@ import { createCollectionReads } from '../library/collection-reads.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { globalContextAnchor } from '../semantic/context.ts';
-import { activeRelease } from '../semantic/definitions.ts';
+import { activeRelease, GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import type { ZoneConfigureInput, ZoneCreateInput, ZonePublishInput, ZoneTakedownInput } from './contract.ts';
+import type {
+  ZoneConfigureInput,
+  ZoneCreateInput,
+  ZoneHoldInput,
+  ZonePublishInput,
+  ZonePurgeInput,
+  ZoneTakedownInput,
+} from './contract.ts';
 import { requireZoneAccount, zoneIdentity, zoneOwned } from './resource-reads.ts';
 import {
   compareAndSetZone,
@@ -34,9 +41,11 @@ import {
   zoneOwnerIsActive,
   type ZoneHead,
 } from './resource-store.ts';
+import { liveCoverage, withPurgeIntent } from './cleanup-intent.ts';
 import { changeTakedown, rebindWithholding, withholdingJson } from './takedown.ts';
 
 export type ZoneMutation = 'configure' | 'publish' | 'delete' | 'restore' | 'takedown' | 'release_takedown';
+export type ZonePlatformMutation = 'hold' | 'release_hold' | 'purge';
 
 export function zoneIfMatch(value: string | undefined): string {
   if (
@@ -239,34 +248,48 @@ export function createZoneCommands(dependencies: { pool: Pool; access: Access; t
   ) {
     requireZoneAccount(actor);
     const resource = zoneIdentity(id);
-    // Takedown is a platform moderation decision, so Access checks it on Global Context rather than the owner's Zone.
+    // Point Resources omit their type. moderation:takedown is also a Realm action, so unique inference
+    // would evaluate Global Context as community.realm and deny a current Context grant. Name the type.
     const platform = operation === 'takedown' || operation === 'release_takedown';
     const action = platform ? 'moderation:takedown' : `zone:${operation}`;
-    const authority = platform ? globalContextAnchor.resource : resource;
-    const base = resourceAuthorization({
-      access,
-      actor,
-      action,
-      anchor: platform
-        ? globalContextAnchor
-        : {
-            resource,
+    const context = { pool, deadline, partition: partitionOf(resource.route) };
+    const base = platform
+      ? resourceAuthorizationPage({
+          access,
+          actor,
+          action,
+          anchor: {
+            route: 0,
+            resourceType: 'semantic.context',
+            ids: Object.freeze([GLOBAL_CONTEXT]),
+            validate: (client, time) => globalContextAnchor.validate(client, time),
+          },
+          context,
+        })
+      : resourceAuthorizationPage({
+          access,
+          actor,
+          action,
+          anchor: {
+            route: resource.route,
+            resourceType: 'semantic.zone',
+            ids: Object.freeze([id]),
             async validate(client) {
               const row = await readZoneHead(client, resource.route, id);
               if (!row || row.state === 'purged') throw new ProblemError('not_found');
               return true;
             },
           },
-      context: { pool, deadline, partition: partitionOf(resource.route) },
-    });
+          context,
+        });
     const prepared = prepareConfiguration(
       base,
       actor,
       operation === 'configure' ? (input as ZoneConfigureInput) : null,
       deadline,
-      authority,
+      platform ? globalContextAnchor.resource : resource,
       action,
-      true,
+      false,
     );
     // Ownership restrictions apply BEFORE receipt lookup, including restore replays.
     const authorization: CommandAuthorization = {
@@ -317,6 +340,7 @@ export function createZoneCommands(dependencies: { pool: Pool; access: Access; t
             next.state = 'active';
             next.deletedAt = null;
             next.restoreUntil = null;
+            next.withholding = withPurgeIntent(row, null);
           } else if (platform) {
             // Takedown keeps state, visibility, configuration and the deletion clock; only decisions change.
             next.withholding = withholdingJson(
@@ -371,5 +395,91 @@ export function createZoneCommands(dependencies: { pool: Pool; access: Access; t
       throw error;
     }
   }
-  return { create, mutate };
+
+  async function platform(
+    actor: Actor,
+    id: string,
+    operation: ZonePlatformMutation,
+    input: ZoneHoldInput | ZonePurgeInput | Record<string, never>,
+    key: string,
+    deadline: number,
+  ) {
+    requireZoneAccount(actor);
+    const resource = zoneIdentity(id);
+    const authorization = resourceAuthorizationPage({
+      access,
+      actor,
+      action: 'zone:purge',
+      anchor: {
+        route: 0,
+        resourceType: 'semantic.context',
+        ids: Object.freeze([GLOBAL_CONTEXT]),
+        validate: (client, time) => globalContextAnchor.validate(client, time),
+      },
+      context: { pool, deadline, partition: partitionOf(resource.route) },
+    });
+    const kind = operation === 'release_hold' ? 'zone.release_hold' : `zone.${operation}`;
+    try {
+      return await runCommand(
+        pool,
+        {
+          ...principalCommandIdentity(actor),
+          partition: partitionOf(resource.route),
+          deadline,
+          clock,
+          authorization,
+          receipt: {
+            kind,
+            key,
+            digest: requestDigest(kind, actor, { id, input }),
+          },
+        },
+        async (tx, command) => {
+          const row = await lockZoneHead(tx, resource.route, id);
+          if (!row || row.state === 'purged') throw new ProblemError('not_found');
+          if (!(await zoneOwnerIsActive(tx, row))) throw new ProblemError('not_found');
+          const at = authoritativeTimeValue(command.time);
+          const next: ZoneHead = { ...row };
+          if (operation === 'hold') {
+            if (row.held) throw new ProblemError('conflict');
+            next.held = true;
+          } else if (operation === 'release_hold') {
+            if (!row.held) throw new ProblemError('conflict');
+            next.held = false;
+          } else {
+            if (row.held) throw new ProblemError('conflict');
+            const order = 'order' in input && typeof input.order === 'string' ? input.order : undefined;
+            if (row.state === 'active' && !order) throw new ProblemError('invalid_request');
+            if (liveCoverage(row).length > 0 && !order) throw new ProblemError('conflict');
+            next.withholding = withPurgeIntent(row, {
+              branch: order ? 'legal_order' : 'early_privacy',
+              ...(order ? { order } : {}),
+            });
+          }
+          await enrollResourceRecordSources(tx, [{ kind: 'zone', zoneId: id }], { kind });
+          const updated = await compareAndSetZone(tx, row, next, { at, transactionId: command.transactionId });
+          if (!updated) throw new ProblemError('precondition_failed');
+          const event =
+            operation === 'hold'
+              ? 'held'
+              : operation === 'release_hold'
+                ? 'hold_released'
+                : 'purge_pending';
+          return {
+            value:
+              operation === 'purge'
+                ? { id, state: 'purge_pending' as const }
+                : { id, held: operation === 'hold' },
+            events: [
+              { type: `com.rezics.zone.${event}.v1`, subject: id, data: { id, revision: updated.revision } },
+            ],
+          };
+        },
+      );
+    } catch (error) {
+      if (error instanceof GrantDeniedError) throw new ProblemError('forbidden');
+      throw error;
+    }
+  }
+  return { create, mutate, platform };
 }
