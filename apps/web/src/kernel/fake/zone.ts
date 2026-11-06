@@ -5,6 +5,7 @@ import {
   staticZoneHomeFake as staticHome,
   staticZoneOwnerFake as staticOwnerHome,
 } from '../../zones/static-fakes';
+import recordedSubject from '../recorded/subject.json';
 import subjectPage from '../recorded/zone-subject-page.json';
 import subjectReactions from '../recorded/subject-reactions.json';
 
@@ -17,6 +18,7 @@ const alternateZoneId = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e06';
 const recoveringZoneId = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e07';
 const revokedZoneId = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e08';
 const subjectId = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e01';
+const recordedSubjectId = recordedSubject.subject.id;
 const staticZoneId = staticHome.zone.id;
 const staticOwnerZoneId = staticOwnerHome.zone.id;
 const recoveringReads = new Map<string, number>();
@@ -48,8 +50,36 @@ function homeDocument() {
           links: [{ href: `/subjects/${subjectId}/kokoro`, label: { en: 'Kokoro', 'zh-Hans': '心' } }],
         },
       },
+      {
+        type: 'TypeList',
+        props: {
+          id: 'books',
+          title: { en: 'Books', 'zh-Hans': '书籍' },
+          types: ['schema:Book'],
+          sort: 'name',
+          limit: 12,
+        },
+      },
     ],
   };
+}
+
+function typeListReads(id: string, labels: Record<string, string>) {
+  return {
+    r0: {
+      status: 200,
+      body: {
+        subjects: [{ id, type: 'schema:Book', labels, summary: null }],
+        next: null,
+      },
+    },
+  };
+}
+
+function admittedSubject(zone: string, subject: string): boolean {
+  if (zone === hiddenZoneId || zone === unavailableZoneId || zone === withinBudgetZoneId) return false;
+  if (zone === preparingZoneId || zone === recoveringZoneId || zone === revokedZoneId) return false;
+  return subject === subjectId || subject === recordedSubjectId;
 }
 
 function guideDocument() {
@@ -81,7 +111,7 @@ function zoneResponse(id: string, target: ZoneTarget): KernelRecording {
     profile: 'sha256:zone-story',
     template: { scope: 'route', key: route || null },
     document: route === 'guide' ? guideDocument() : homeDocument(),
-    reads: {},
+    reads: route === 'guide' ? {} : typeListReads(subjectId, { en: 'Kokoro', 'zh-Hans': '心' }),
     zone: {
       id,
       revision: '1',
@@ -125,6 +155,18 @@ async function response(request: Request, match: RegExpExecArray | null): Promis
   }
   const target = isRecord(body) ? body.target : undefined;
   if (!isRecord(target)) return { status: 400, code: 'invalid_request' };
+  if (typeof target.subject === 'string') {
+    if (!admittedSubject(id, target.subject)) return problem(404, { 'cache-control': 'no-store' });
+    const home = id === staticZoneId ? staticHome : zoneResponse(id, { route: '' });
+    if (!isRecord(home.zone)) return problem(404, { 'cache-control': 'no-store' });
+    return {
+      ...subjectPage,
+      status: 200,
+      subject: target.subject,
+      views: ['overview', 'details'],
+      zone: home.zone,
+    };
+  }
   if (typeof target.route !== 'string') return problem(404, { 'cache-control': 'no-store' });
   if (id === staticOwnerZoneId)
     return request.headers.has('authorization') && target.route === ''
@@ -175,13 +217,29 @@ async function subjectPageResponse(request: Request): Promise<KernelRecording | 
     return undefined;
   }
   if (!isRecord(target)) return undefined;
-  if (target.subject !== subjectId) return undefined;
+  if (target.subject !== subjectId && target.subject !== recordedSubjectId) return undefined;
   if (target.view !== undefined && target.view !== 'overview' && target.view !== 'details') return undefined;
   return {
     ...subjectPage,
     status: 200,
-    subject: subjectId,
+    subject: target.subject,
     views: ['overview', 'details'],
+  };
+}
+
+async function subjectsResponse(request: Request, match: RegExpExecArray | null): Promise<KernelRecording | undefined> {
+  const id = match?.[1] ? decodeURIComponent(match[1]) : undefined;
+  if (!id) return undefined;
+  if (id === hiddenZoneId) return problem(404, { 'cache-control': 'no-store' });
+  if (id === unavailableZoneId) return problem(503, { 'cache-control': 'no-store', 'retry-after': '1' });
+  if (id === staticOwnerZoneId && !request.headers.has('authorization'))
+    return problem(404, { 'cache-control': 'no-store' });
+  const listed = id === staticZoneId ? recordedSubjectId : subjectId;
+  const labels = id === staticZoneId ? recordedSubject.subject.labels : { en: 'Kokoro', 'zh-Hans': '心' };
+  return {
+    status: 200,
+    subjects: [{ id: listed, type: 'schema:Book', labels, summary: null }],
+    next: null,
   };
 }
 
@@ -201,7 +259,14 @@ const subjectPageRoute: FakeRoute = {
 const subjectReactionsRoute: FakeRoute = {
   method: 'GET',
   path: /^\/v1\/subjects\/([^/]+)\/reactions$/,
-  story: ({ match }) => (match?.[1] === subjectId ? subjectReactions : undefined),
+  story: ({ match }) => (match?.[1] === subjectId || match?.[1] === recordedSubjectId ? subjectReactions : undefined),
 };
 
-export const routes = [route, subjectPageRoute, subjectReactionsRoute];
+const subjectsRoute: FakeRoute = {
+  method: 'GET',
+  path: /^\/v1\/zones\/([^/]+)\/subjects$/,
+  story: ({ request, match }) => subjectsResponse(request, match),
+  fixture: ({ request, match }) => subjectsResponse(request, match),
+};
+
+export const routes = [route, subjectsRoute, subjectPageRoute, subjectReactionsRoute];

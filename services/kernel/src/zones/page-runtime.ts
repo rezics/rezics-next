@@ -1,4 +1,10 @@
-import { documentRead, planReads, platformRegistry, readCost } from '@rezics/composition';
+import {
+  documentRead,
+  planReads,
+  platformRegistry,
+  readCost,
+  type PageRead as CompositionPageRead,
+} from '@rezics/composition';
 import { parseFilter, type FilterDocument } from '@rezics/filter';
 import canonicalize from 'canonicalize';
 import { isDeepStrictEqual } from 'node:util';
@@ -8,14 +14,14 @@ import { ProblemError, PROBLEMS } from '../http/problem.ts';
 import { createBuiltinRuntime } from '../library/builtin-runtime.ts';
 import { activeProfile } from '../presentation/profiles.ts';
 import { semanticPageView } from '../presentation/semantic-page.ts';
-import { PageReadBudget, readPage } from '../presentation/reads.ts';
+import { PageReadBudget, readPage, type PageRead } from '../presentation/reads.ts';
 import type { Actor } from '../request/access.ts';
-import { validateHitOptions } from '../search/hits.ts';
+import { validateHitOptions, validateSearchLimit } from '../search/hits.ts';
 import { activeRelease } from '../semantic/definitions.ts';
-import { readSubjectSummaries } from '../semantic/summaries.ts';
+import { readSubjectSummaries, readSubjectSummaryObservation } from '../semantic/summaries.ts';
 import { decodeSession, type SessionComponent } from '../tokens/session.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import type { ZonePageRequest, ZonePageResponse } from './contract.ts';
+import type { ZonePageRequest, ZonePageResponse, ZoneSubjectListItem, ZoneSubjectListResponse } from './contract.ts';
 import { createZoneReads } from './resource-reads.ts';
 import {
   createZoneMembership,
@@ -23,10 +29,88 @@ import {
   zoneUnavailable,
   zoneWork,
   type ZoneMembership,
+  type ZonePending,
   type ZoneSourceDependencies,
 } from './membership.ts';
 import { advanceZoneUnion, initialUnionPosition, revalidateZoneUnion, type ZoneUnionPosition } from './union.ts';
 import { zonePageWork, type ZonePagePosition } from './page-work.ts';
+
+/** Match `readPage`'s search canonical form so Zone-restricted results cannot leak into a global TypeList dispatch. */
+export function zoneObservedReadKey(descriptor: PageRead, languages?: readonly string[]): string {
+  if (descriptor.kind !== 'search') return canonicalize(descriptor)!;
+  return canonicalize({
+    ...descriptor,
+    kind: 'search',
+    body: {
+      ...descriptor.body,
+      limit: validateSearchLimit((descriptor.body as { limit?: unknown }).limit),
+      ...(languages === undefined ? {} : { languages: [...languages] }),
+    },
+  })!;
+}
+
+/** TypeList and Members descriptors inherit the Zone's admitted source union and native order. */
+async function zoneTypeListMembership(
+  dependencies: ZoneSourceDependencies,
+  input: Parameters<typeof createZoneMembership>[1] & {
+    descriptor: Extract<CompositionPageRead, { kind: 'search' } | { kind: 'members' }>;
+  },
+): Promise<ZoneMembership | { status: 404; body: { code: 'not_found' } }> {
+  const { descriptor, ...base } = input;
+  if (descriptor.kind === 'search') {
+    return createZoneMembership(dependencies, {
+      ...base,
+      order: descriptor.body.sort,
+      filter: parseFilter(descriptor.body.filter),
+      pageSize: descriptor.body.limit,
+    });
+  }
+  const source =
+    descriptor.source.kind === 'collection'
+      ? { id: descriptor.source.id }
+      : await createBuiltinRuntime({ pool: dependencies.pool }).resolve(input.actor, descriptor.source, input.deadline);
+  if (!source) return { status: 404, body: { code: 'not_found' } };
+  const union = await createZoneMembership(dependencies, base);
+  const sourceMembership = await createZoneMembership(dependencies, {
+    ...base,
+    sources: { ...input.sources, scopes: [], mounts: [source.id] },
+    pageSize: descriptor.limit,
+    ...(descriptor.filter ? { filter: parseFilter(JSON.parse(descriptor.filter) as FilterDocument) } : {}),
+  });
+  const streams = sourceMembership.streams.map((stream) => ({
+    ...stream,
+    async member(id: string, pending?: ZonePending) {
+      const own = await stream.member(id, pending?.conjunct === 'zone' ? undefined : pending);
+      if (own.value !== true)
+        return {
+          ...own,
+          ...(own.pending ? { pending: { ...own.pending, source: 0, conjunct: 'source' as const } } : {}),
+        };
+      const match = await union.contains(
+        id,
+        pending?.conjunct === 'zone' ? { ...pending, source: pending.zoneSource ?? -1 } : undefined,
+      );
+      return {
+        ...match,
+        ...(match.pending
+          ? {
+              pending: { ...match.pending, source: 0, zoneSource: match.pending.source, conjunct: 'zone' as const },
+            }
+          : {}),
+      };
+    },
+  }));
+  return {
+    ...sourceMembership,
+    streams,
+    basis: zoneDigest([sourceMembership.basis, union.basis]),
+    async contains(id, pending) {
+      if (!streams[0]) return { value: false };
+      const match = await streams[0].member(id, pending);
+      return { ...match, source: 0 };
+    },
+  };
+}
 
 /** The sole mounted composition. Static routes need neither exposure nor owner-source construction. */
 async function composeZonePage(
@@ -40,12 +124,20 @@ async function composeZonePage(
     deadline: number;
     clientAction: string;
   },
-): Promise<{
-  value: ZonePageResponse | { next: string };
-  status: 200 | 202;
-  component: SessionComponent;
-  components: SessionComponent[];
-}> {
+): Promise<
+  | {
+      value: ZonePageResponse;
+      status: 200;
+      component: SessionComponent;
+      components: SessionComponent[];
+    }
+  | {
+      value: { next: string };
+      status: 202;
+      component: SessionComponent;
+      components: SessionComponent[];
+    }
+> {
   const route = 'route' in input.body.target ? input.body.target.route : null;
   if (route?.split('/')[0] === 'subjects')
     throw new ProblemError('invalid_request', { errors: [{ pointer: '/target/route', code: 'invalid_format' }] });
@@ -113,7 +205,7 @@ async function composeZonePage(
   let template: ZonePageResponse['template'] = { scope: 'route', key: route };
   const components: SessionComponent[] = [];
   let direct: ZoneMembership | undefined;
-  let directPending: import('./membership.ts').ZonePending | undefined;
+  let directPending: ZonePending | undefined;
   const preparation = await zonePageWork(dependencies, {
     id: input.id,
     actor: input.actor,
@@ -189,69 +281,19 @@ async function composeZonePage(
     if (descriptor.kind !== 'search' && descriptor.kind !== 'members') continue;
     budget.charge(readCost(descriptor));
     work.select(key, descriptor.kind === 'search' ? descriptor.body.sort : 'id', readCost(descriptor));
-    let membership: ZoneMembership;
-    if (descriptor.kind === 'search') {
-      membership = await createZoneMembership(dependencies, {
-        ...base,
-        order: descriptor.body.sort,
-        filter: parseFilter(descriptor.body.filter),
-        pageSize: descriptor.body.limit,
-      });
-    } else {
-      const source =
-        descriptor.source.kind === 'collection'
-          ? { id: descriptor.source.id }
-          : await createBuiltinRuntime({ pool: dependencies.pool }).resolve(
-              input.actor,
-              descriptor.source,
-              input.deadline,
-            );
-      if (!source) {
-        observed.set(canonicalize(descriptor)!, { status: 404, body: { code: 'not_found' } });
-        continue;
-      }
-      const union = await createZoneMembership(dependencies, base);
-      const sourceMembership = await createZoneMembership(dependencies, {
-        ...base,
-        sources: { ...selected.sources, scopes: [], mounts: [source.id] },
-        ...(descriptor.filter ? { filter: parseFilter(JSON.parse(descriptor.filter) as FilterDocument) } : {}),
-      });
-      // MemberSource is an essential conjunct, not another OR arm. Its ordinary native provider retains
-      // occurrence/fact truth. Only canonical browsing locators enter this page's disposable preparation.
-      const streams = sourceMembership.streams.map((stream) => ({
-        ...stream,
-        async member(id: string, pending?: import('./membership.ts').ZonePending) {
-          const own = await stream.member(id, pending?.conjunct === 'zone' ? undefined : pending);
-          if (own.value !== true)
-            return {
-              ...own,
-              ...(own.pending ? { pending: { ...own.pending, source: 0, conjunct: 'source' as const } } : {}),
-            };
-          const match = await union.contains(
-            id,
-            pending?.conjunct === 'zone' ? { ...pending, source: pending.zoneSource ?? -1 } : undefined,
-          );
-          return {
-            ...match,
-            ...(match.pending
-              ? {
-                  pending: { ...match.pending, source: 0, zoneSource: match.pending.source, conjunct: 'zone' as const },
-                }
-              : {}),
-          };
-        },
-      }));
-      membership = {
-        ...sourceMembership,
-        streams,
-        basis: zoneDigest([sourceMembership.basis, union.basis]),
-        async contains(id, pending, _preferred) {
-          if (!streams[0]) return { value: false };
-          const match = await streams[0].member(id, pending);
-          return { ...match, source: 0 };
-        },
-      };
+    const preparedMembership = await zoneTypeListMembership(dependencies, {
+      actor: input.actor,
+      at: selected.time,
+      deadline: input.deadline,
+      sources: selected.sources,
+      work,
+      descriptor,
+    });
+    if ('status' in preparedMembership) {
+      observed.set(zoneObservedReadKey(descriptor, languages), preparedMembership);
+      continue;
     }
+    const membership = preparedMembership;
     const saved = position.reads[key];
     const before = saved?.basis === membership.basis ? saved : initialUnionPosition(membership.basis);
     const step = await advanceZoneUnion(
@@ -309,11 +351,7 @@ async function composeZonePage(
       };
     });
     const next = null;
-    const shaped =
-      descriptor.kind === 'search' && languages
-        ? { ...descriptor, body: { ...descriptor.body, languages: [...languages] } }
-        : descriptor;
-    observed.set(canonicalize(shaped)!, {
+    observed.set(zoneObservedReadKey(descriptor, languages), {
       status: 200,
       body:
         read.kind === 'search'
@@ -427,3 +465,147 @@ export async function readZonePage(...args: Parameters<typeof composeZonePage>):
 
 // Retain the original internal import while every route uses the one composition.
 export const readStaticZonePage = readZonePage;
+
+const LIST_ROUTE = 'GET /v1/zones/:id/subjects';
+
+export type ZoneSubjectListResult =
+  | {
+      value: ZoneSubjectListResponse;
+      status: 200;
+      component: SessionComponent;
+      components: SessionComponent[];
+    }
+  | {
+      value: { next: string };
+      status: 202;
+      component: SessionComponent;
+      components: SessionComponent[];
+    };
+
+async function composeZoneSubjects(
+  dependencies: ZoneSourceDependencies & { tokens: KeyRing },
+  input: {
+    actor: Actor;
+    id: string;
+    limit?: number;
+    cursor?: string;
+    deadline: number;
+    clientAction: string;
+  },
+): Promise<ZoneSubjectListResult> {
+  const limit = input.limit ?? 20;
+  requireAccessDeadline(input.deadline);
+  const reads = createZoneReads(dependencies);
+  const selected = await reads.page(input.actor, input.id, null, input.deadline);
+  await admitGroup({
+    pool: dependencies.pool,
+    access: () => dependencies.access,
+    actor: input.actor,
+    group: 'zone_sources',
+    clientAction: input.clientAction,
+    deadline: input.deadline,
+    clock: dependencies.clock,
+  });
+  const work = zoneWork(input.deadline);
+  work.select('list', 'id', limit);
+  const membership = await createZoneMembership(dependencies, {
+    actor: input.actor,
+    at: selected.time,
+    deadline: input.deadline,
+    sources: selected.sources,
+    work,
+  });
+  const basis = zoneDigest({
+    operation: LIST_ROUTE,
+    sources: selected.sources,
+    streams: membership.streams.map((stream) => stream.basis),
+    profile: selected.zone.revision,
+  });
+  const preparation = await zonePageWork(dependencies, {
+    id: input.id,
+    actor: input.actor,
+    body: { operation: LIST_ROUTE, limit },
+    work,
+    basis,
+    route: LIST_ROUTE,
+    profile: 'default',
+    query: { zone: input.id, limit },
+    unusable: 'stale',
+    ...(input.cursor ? { cursor: input.cursor } : {}),
+  });
+  const position = structuredClone(preparation.position);
+  const saved = position.reads.list;
+  const before = saved?.basis === membership.basis ? saved : initialUnionPosition(membership.basis);
+  const step = await advanceZoneUnion(membership, before, limit, () => work.allowance().remaining.candidateKeys);
+  position.reads.list = step.position;
+  if (!step.complete) {
+    if (!step.advanced) return zoneUnavailable();
+    return {
+      status: 202,
+      value: { next: await preparation.progress(position) },
+      component: selected.component,
+      components: [],
+    };
+  }
+  work.select('list', 'id', limit);
+  const prior = zoneDigest(step.position);
+  if (!(await revalidateZoneUnion(membership, step.position))) {
+    if (zoneDigest(step.position) === prior) return zoneUnavailable();
+    position.reads.list = step.position;
+    return {
+      status: 202,
+      value: { next: await preparation.progress(position) },
+      component: selected.component,
+      components: [],
+    };
+  }
+  const ids = [...new Set(step.position.rows.map((row) => row.id))];
+  const observation = await readSubjectSummaryObservation(
+    { ...dependencies, actor: input.actor, deadline: input.deadline },
+    ids,
+  );
+  for (const id of ids) if (!observation.summaries.get(id)) return zoneUnavailable();
+  if (!(await observation.current())) return zoneUnavailable();
+  const current = await reads.page(input.actor, input.id, null, input.deadline);
+  if (!isDeepStrictEqual(current.sources, selected.sources)) return zoneUnavailable();
+  requireAccessDeadline(input.deadline);
+  const subjects: ZoneSubjectListItem[] = step.position.rows.map((row) => {
+    const summary = observation.summaries.get(row.id)!;
+    return {
+      id: row.id,
+      type: summary.type,
+      labels: summary.label ? { [summary.label.language]: summary.label.value } : {},
+      summary,
+    };
+  });
+  let next: string | null = null;
+  if (!step.position.exhausted) {
+    const following = structuredClone(position);
+    following.reads.list = { ...step.position, rows: [], exhausted: false };
+    next = await preparation.progress(following);
+  } else await preparation.finish();
+  return {
+    status: 200,
+    value: { subjects, next },
+    component: selected.component,
+    components: [...observation.components],
+  };
+}
+
+export async function readZoneSubjects(
+  dependencies: ZoneSourceDependencies & { tokens: KeyRing },
+  input: Parameters<typeof composeZoneSubjects>[1],
+): Promise<ZoneSubjectListResult> {
+  try {
+    return await composeZoneSubjects(dependencies, input);
+  } catch (error) {
+    if (!(error instanceof ProblemError) || PROBLEMS[error.code].status !== 503) throw error;
+    throw new ProblemError(error.code, {
+      ...(error.detail === undefined ? {} : { detail: error.detail }),
+      ...(error.errors === undefined ? {} : { errors: error.errors }),
+      ...(error.extensions === undefined ? {} : { extensions: error.extensions }),
+      ...(error.effectStatus === undefined ? {} : { effectStatus: error.effectStatus }),
+      headers: { 'retry-after': '1', ...error.headers, 'cache-control': 'private, no-store' },
+    });
+  }
+}

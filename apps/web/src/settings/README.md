@@ -37,6 +37,21 @@ serializable, and preserve deliberate post-dispatch notification intent. Pin the
 and ten-second recovery in the existing focused suites without adding stories. The combined Profile–Watches–Profile
 and public Profile journeys remain unaccepted; integration owns their native, browser and root verification.
 
+**Decision:** Pin the installed Profile–Watches–Profile walk with the existing focused suites plus return, draft, keyboard
+focus and exact-account cost assertions. Named phone and desktop admission, recovery and keyboard-return stories stay;
+no extra pages. Native, browser and root acceptance remain with integration.
+
+Same-tab Watch visits carry the current Profile draft and last keyboard field. Return restores that draft onto the
+current native profile. Keyboard section return focuses only that exact current field; pointer return leaves focus
+alone. A missing Watch row focuses the admitted watches region without scanning neighbours.
+
+**Cost:** One Profile dispatch examines only the signed-in account: one private advice GET, one PATCH of the captured body
+and key, and one GET readback. There is no directory, watch or profile-history scan. Public-view admission examines at
+most four flags. One editor keeps one bounded profile, one draft and one original command. Nested native GET work stays
+with Accounts `accountEditProfileReadWork` and Content avatar growth. Browser sequential Profile and Watch visits
+release the previous page, requests and callbacks; retained Watch windows stay twenty rows and eight predecessor
+addresses while unrelated accounts and history grow independently.
+
 The profile reader accepts additive top-level response fields while keeping the consumed profile and editing advice
 closed, bounded and identity-bound. Editing advice stays in the private reader result; the command retains its strict
 profile projection and frozen idempotency key.
@@ -53,7 +68,45 @@ Applicant verification requests use the same ten-second account budget, includin
 
 **Decision:** Viewer preparation, client construction and native transport or body failures for current-status, request and withdraw return the same private success/failure envelope as subject search, with native wait metadata when the response supplied it. A timeout or matching current fields still does not prove native cancellation or commitment.
 
+**Decision:** Pin the combined Settings safety→subject request→revisit→withdraw→safety walk in the existing named suites. Keep current-status, recovery and safety stories. Native, browser and root acceptance stay deferred until that seeded walk passes under existing Auth-app login and admission.
+
 **Decision:** Applicant verification is proven by the existing recovery, chooser and journey checks plus one setup-envelope and receipt-without-retry assertion; named current-status and recovery stories stay, with no extra stories.
+
+### Cost: session preparation
+
+- Touches: one current website session credential read through `prepareSession`, including headers and body, under the existing ten-second managed deadline and the caller's cancellation.
+- Bound: constant work on the current session identity. Settings does not list Auth sessions, passkeys or consent pages.
+- Growth check: Auth `test/growth-sessions.test.ts` measures native session inventory, not this website credential lookup. Examined-row evidence for the website session read as unrelated Auth sessions grow is unavailable here.
+
+### Cost: exact-account verification status and advice
+
+- Touches: one `GET /v1/accounts/{accountId}/verification` for the signed-in account. Nested Accounts work is the latest-request point read plus closed `viewerActions` for `account.request_verification` and `account.withdraw_verification`. Empty advice is a complete negative. Missing authority still returns the latest request.
+- Bound: one exact account; independent of other accounts' request history. One current snapshot; a later read replaces it. Ten-second deadline, independent of command and title reads.
+- Growth check: Accounts `test/access/growth-agent-verification.test.ts` names request insert (`agent verification request stays bounded as decided requests grow`) and the pending review page, not this latest GET. Examined-row evidence for the consumer status read as unrelated request history grows is unavailable. Do not infer it from browser call counts.
+
+### Cost: admitted Subject suggestion
+
+- Touches: one `GET /v1/subjects:suggest` at limit 8 for the current 100-code-unit term, then one active-definition digest and one matching release read only when that page is nonempty. Ineligible types are dropped in memory. A newer term aborts the previous search.
+- Bound: at most one in-flight suggestion read, at most eight returned subjects, no shared cache across sessions. Empty native pages skip eligibility. Unavailable eligibility is a retryable failure, never an empty catalogue.
+- Growth check: Search Suggest (`test/search/service.test.ts` “typeahead suggests only subjects that pass the final check”; `test/search/disclosure.test.ts` “partitions are read once each with bounded concurrency”; `test/semantic/growth-search-source.test.ts` Source snapshot bounds). Eligibility uses Semantic `test/semantic/growth-definitions.test.ts` “Active definition lookup stays within its bound as D grows” and “Definition read stays within its bound as D grows”. Settings adds no Settings-owned native growth suite.
+
+### Cost: request and withdraw commands
+
+- Touches: one `POST /v1/accounts/{accountId}:requestVerification` or `:withdrawVerification` with the frozen original body, credential and JSON-string idempotency key. Nested Accounts work is the anchored account read, unique pending probe and insert on request, or the exact pending-request decision on withdraw.
+- Bound: one unresolved original; later draft edits and later advice cannot rewrite it. Ten-second deadline, independent of status and suggestion reads. Cancellation does not prove completion.
+- Growth check: request insert as above; withdraw is `Agent verification decisions stay within their bound as decided requests and pointer history grow` in the same Accounts suite. Review, revoke and release commands are not this consumer.
+
+### Cost: current-read and title enhancement
+
+- Touches: the same exact-account status GET after an acknowledged command. Optional `GET /v1/subjects/{id}` for labels is a separate cancellable read and cannot empty an admitted request.
+- Bound: one current snapshot; a validated receipt remains acknowledged through a failed readback. Matching current payload without a receipt does not manufacture one. Ten-second deadline, independent of the original command wait.
+- Growth check: status GET evidence is unavailable as named above. Title enhancement uses Semantic `test/semantic/growth-subjects.test.ts` “Anchored subject read stays within its bound as N grows”. Browser call counts are not examined-row evidence.
+
+### Cost: verification consumer recovery
+
+- Touches: one controller keeps one active read, one accepted snapshot, one optional title, at most eight suggestions and one unresolved original. Viewer, account or CSRF replacement aborts the lifetime, drops the query and ignores late callbacks.
+- Bound: retained original bytes are the captured subject, statement, ≤5 links, key and request identity. Sequential visits 1, 10 and 100 replace that window; they do not accumulate prior pages, searches or commands. Unrelated account or request history is not read.
+- Growth check: focused Settings suites pin call counts, retained snapshots and released callbacks. Native SQL growth stays with Accounts, Search and Semantic.
 
 Subject lookup carries a private success/failure envelope with a safe localized message and supported native status details. A valid native Retry-After becomes a response-time deadline: edits retain only the current term, and retry remains deliberate after expiry. Refusal, closed service and unavailable reads stay visible failures; only a successful eligible suggestion can be selected.
 
@@ -261,3 +314,27 @@ The Account card reads the current identity from the managed session and keeps r
 **Decision:** Account safety recovery is proven by the existing region, link and card checks plus setup-envelope, non-cooperative session recovery, old-viewer late completion and deliberate current destination assertions. No extra timer-test family or stories.
 
 **Decision:** Reuse the retained directory and native management GET for selection, with regressions for installed GET serialization, current-viewer binding, cross-feed admission retirement and keyboard return. Browser/native seeded acceptance remains with integration; fixtures and focused checks do not establish it.
+
+### Cost: account destination reads
+
+- Touches: session preparation as in verification, then two exact-account reads in parallel: private `GET /v1/accounts/{accountId}/profile` and `POST /v1/viewerActions` for `{ type: "access.account", id }`. Nested Accounts work is the full-key editable profile statement plus at most one Content avatar-summary composition, and one viewer-actions observation for that exact resource.
+- Bound: constant Settings requests per reload. Ten-second deadline covers preparation and both bodies independently of verification, sign-out and Auth pages. Mixed native faults keep the longest Retry-After and never leave a previous destination clickable.
+- Growth check: Access documents the private profile GET as one `account_pkey` seek whose unrelated-account population does not change the bound; `test/access/growth-account-handle-read.test.ts` “public profile by handle stays bounded as accounts and handle claims grow” is the public handle path, not this private GET. Examined-row evidence for the private editable GET as unrelated accounts grow is unavailable. Viewer-actions uses `test/access/growth-viewer-actions.test.ts` “viewer actions keep bounded work for mixed types and every outcome over independent growth axes”.
+
+### Cost: Auth-owned safety navigation
+
+- Touches: Settings builds `/security`, `/account/rename` and `/account/delete` only from the trusted issuer origin. It does not read `GET /security-page`, passkeys, sessions or consent, and supplies no account, scope, approval or return target.
+- Bound: constant URL construction. Rename availability still requires the current native `account:update` observation plus the configured issuer route.
+- Growth check: Auth `test/growth-pages-reads.test.ts` measures consent and sessions GETs, not these Settings handoff URLs. Native Auth page examined work is not consumed and is unavailable as Settings nested evidence.
+
+### Cost: sign-out recovery
+
+- Touches: ordinary `POST /auth/sign-out` with the captured CSRF token. Deliberate Reload rereads the current website session under the same ten-second deadline.
+- Bound: one in-page attempt; timeout unlocks only Reload and never resubmits. Viewer replacement fences the form and destination links before late session completion.
+- Growth check: Auth session-list growth is not this POST. Examined-row evidence for website sign-out as unrelated session history grows is unavailable here.
+
+### Cost: account-safety consumer recovery
+
+- Touches: one rename region keeps one loading snapshot, the current context or bounded failures, and one absolute Retry-After. Directory selection remains the existing 20-row feeds with eight predecessor coordinates.
+- Bound: sequential visits replace that snapshot; retired viewers drop destination hrefs and ignore late module loads. Verification status, suggestions and commands are independent endpoints and independent deadlines.
+- Growth check: focused region, link and card suites pin call counts, retained identity and released callbacks. Native SQL growth stays with Accounts and Auth.

@@ -1,5 +1,6 @@
 import { initializeEventTypes } from '../events/catalogue.ts';
 import { ensureContentApplication } from '../content/adapters/index.ts';
+import { bindOrdinaryContentLifecycle, nativeContentLifecycle } from '../semantic/adapters/index.ts';
 import { contentHttpDeclaration, mountContentHttp, type ContentHttpRoutes } from '../content/http.ts';
 import { createOperationCatalogue } from '@rezics/operations';
 import { readCommerceMoneyPolicy, type CommerceMoneyPolicy } from '../commerce/money.ts';
@@ -375,6 +376,7 @@ export function createKernelAccessResolver(options: {
 
 /** The route key must stay the same across restarts, or retries lose their receipts. */
 export function createKernel(dependencies: KernelDependencies): Kernel {
+  bindOrdinaryContentLifecycle(nativeContentLifecycle());
   const declared = contentHttpDeclaration();
   const contentRuntime = ensureContentApplication({
     ...(dependencies.clock ? { clock: dependencies.clock } : {}),

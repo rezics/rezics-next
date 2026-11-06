@@ -55,9 +55,43 @@ export const staticZoneHomeFake = {
           ],
         },
       },
+      {
+        type: 'TypeList',
+        props: {
+          id: 'books',
+          title: {
+            en: 'Books',
+            'zh-Hant': '書籍',
+            'zh-Hans': '书籍',
+            ja: '本',
+            ko: '책',
+            de: 'Bücher',
+            fr: 'Livres',
+            es: 'Libros',
+          },
+          types: ['schema:Book'],
+          sort: 'name',
+          limit: 12,
+        },
+      },
     ],
   },
-  reads: {},
+  reads: {
+    r0: {
+      status: 200,
+      body: {
+        subjects: [
+          {
+            id: subject.subject.id,
+            type: 'schema:Book',
+            labels: subject.subject.labels,
+            summary: null,
+          },
+        ],
+        next: 'opaque-native-cursor',
+      },
+    },
+  },
   zone: {
     id: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e11',
     revision: '1',

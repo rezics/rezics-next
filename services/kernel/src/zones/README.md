@@ -3,7 +3,7 @@
 [Zones](../../../../docs/zones.md), [membership](../../../../docs/zone-membership.md) and
 [filtered lists](../../../../docs/filtered-lists.md) own behavior.
 
-`http.ts` mounts `GET /v1/zones/{id}/collections` and one `zone.read_page` composition in `page-runtime.ts`.
+`http.ts` mounts `GET /v1/zones/{id}/collections`, `GET /v1/zones/{id}/subjects` and one `zone.read_page` composition in `page-runtime.ts`.
 The mounted Collection summary route uses the requesting Actor's current Zone `zone:read` admission, then the
 existing `zone_sources` gate and each Collection owner's `readCollection` projection. It returns only the
 currently readable summaries in configured mount order. Hidden mounts add no output or cursor position.
@@ -75,7 +75,7 @@ hidden source ordinals are read or retained.
 
 Search has native ordered preparation and orderedPrefix bodies. They restore/capture complete observations, validate privacy-reduction coverage and currentness, read bounded ordered rows, verify native hits and revalidate before return. Collection input additionally requires a complete bounded population and current membership. Missing source or privacy evidence and unaffordable work still produce readiness; this implementation does not prove every ordered journey.
 
-The native Subject GET design is owned by [Zones](../../../../docs/zones.md#routes-and-native-declarations) and [Zone membership](../../../../docs/zone-membership.md). It is not mounted; sparse preparation, replay, generated installed client, native API and growth acceptance remain pending. Zone cleanup follows the [adopted branch contract](../../../../docs/zones.md#deletion-restoration-withholding-and-durable-cleanup). Proposed prepareZoneCleanup and lockZoneCleanup are not callable exports; the current ordinary record authority remains unchanged. Native six-surface, source publication, physical/growth, privacy repair, withholding, purge, account cleanup and default-world outcomes are not established by helper setup or type evidence.
+Ordinary `createKernel` binds the native Content cover/tuple lifecycle so Zone summary reads work without identity participants. `GET /v1/zones/{id}/subjects` is mounted from `page-runtime.ts`. It reuses `createZoneReads().page`, `zone_sources` admission, `createZoneMembership`/`advanceZoneUnion`/`revalidateZoneUnion` and `readSubjectSummaryObservation`, with the default list-cursor profile, predecessor replay and `409 stale_cursor` for expired or incompatible tokens. The Zone reader restarts that stale token once under current authority. Missing current summaries are unavailable, never omitted. TypeList membership and `zoneObservedReadKey` stay in that same runtime so Search does not import Zones and restricted observations cannot leak into a global Search dispatch. Generated OpenAPI and the installed client remain promotion outputs. Zone cleanup follows the [adopted branch contract](../../../../docs/zones.md#deletion-restoration-withholding-and-durable-cleanup). Proposed prepareZoneCleanup and lockZoneCleanup are not callable exports. Native six-surface, source publication, physical/growth, privacy repair, withholding, purge, account cleanup and default-world outcomes are not established by helper setup or type evidence.
 
 ## Authored names
 

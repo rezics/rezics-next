@@ -60,7 +60,7 @@ function IdentityRow({
   return (
     <ContentItem
       className={identityRowClassName}
-      href={href}
+      {...(href ? { href } : {})}
       data-managed-feed={feed}
       data-managed-key={rowKey}
       title={name}

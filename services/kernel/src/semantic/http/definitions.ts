@@ -18,6 +18,7 @@ import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import type { Pool } from 'pg';
 import { withConnection } from '../../database/pool.ts';
+import { withReadTransaction } from '../read.ts';
 import { customMethod } from '../../http/custom-method.ts';
 import { ProblemError, problemSchema } from '../../http/problem.ts';
 import { defineRateLimit } from '../../http/rate-limit.ts';
@@ -29,7 +30,14 @@ import { ContextNotFoundError, editorialContextAnchor, publicContextEligibility 
 import { routeOf } from '../../route/route.ts';
 import { MAX_BODY_LIMIT } from '../../http/body.ts';
 import type { Resource } from '../../request/access.ts';
-import { activateExtension, activeExtension, ExtensionInputError, publishExtension } from '../extensions.ts';
+import { previewImportedDocument } from '../definition-import.ts';
+import {
+  activateExtension,
+  activeExtension,
+  ExtensionInputError,
+  publishExtension,
+  readPublishedExtension,
+} from '../extensions.ts';
 import {
   activateRelease,
   activeRelease,
@@ -48,6 +56,75 @@ function resource() {
 const digestResponse = t.Object({ digest: t.String() }, { additionalProperties: false });
 const activeResponse = t.Object({ digest: t.String(), head: t.Integer() }, { additionalProperties: false });
 const releaseObject = t.Record(t.String(), t.Any());
+const diagnosticObject = t.Object(
+  {
+    pointer: t.String(),
+    code: t.String(),
+    file: t.Union([t.String(), t.Null()]),
+  },
+  { additionalProperties: false },
+);
+const releaseComparisonObject = t.Object(
+  {
+    addedTypes: t.Array(t.String()),
+    removedTypes: t.Array(t.String()),
+    changedTypes: t.Array(t.String()),
+    addedProperties: t.Array(t.String()),
+    removedProperties: t.Array(t.String()),
+    changedProperties: t.Array(t.String()),
+  },
+  { additionalProperties: false },
+);
+const extensionComparisonObject = t.Object(
+  {
+    addedTerms: t.Array(t.String()),
+    removedTerms: t.Array(t.String()),
+    changedTerms: t.Array(t.String()),
+  },
+  { additionalProperties: false },
+);
+const importPreviewResponse = t.Object(
+  {
+    kind: t.Union([t.Literal('release'), t.Literal('sources'), t.Literal('extension'), t.Literal('invalid')]),
+    identity: t.Union([
+      t.Object(
+        { digest: t.String(), version: t.Union([t.String(), t.Null()]), format: t.String() },
+        { additionalProperties: false },
+      ),
+      t.Null(),
+    ]),
+    diagnostics: t.Array(diagnosticObject, { maxItems: 64 }),
+    comparison: t.Union([releaseComparisonObject, extensionComparisonObject, t.Null()]),
+    types: t.Array(t.Object({ id: t.String() }, { additionalProperties: false })),
+    current: t.Union([t.Object({ digest: t.String(), head: t.Integer() }, { additionalProperties: false }), t.Null()]),
+    reconciliation: t.Union([
+      t.Object(
+        {
+          intended: t.String(),
+          current: t.Union([
+            t.Object({ digest: t.String(), head: t.Integer() }, { additionalProperties: false }),
+            t.Null(),
+          ]),
+          stale: t.Boolean(),
+        },
+        { additionalProperties: false },
+      ),
+      t.Null(),
+    ]),
+    operations: t.Object(
+      {
+        grant: t.Literal('definition_publication'),
+        admitted: t.Boolean(),
+        publish: t.Boolean(),
+        activate: t.Boolean(),
+        build: t.Boolean(),
+      },
+      { additionalProperties: false },
+    ),
+    document: t.Union([releaseObject, t.Null()]),
+  },
+  { additionalProperties: false },
+);
 const typeSummary = t.Object({
   typeId: t.String(),
   releaseDigest: t.String(),
@@ -540,6 +617,53 @@ export function definitionRoutes(
       },
     )
     .post(
+      '/v1/definitions/imports',
+      {
+        body: t.Object(
+          {
+            document: t.Any(),
+            context: t.Optional(t.String()),
+            expected_head: t.Optional(t.Union([t.Integer({ minimum: 1, maximum: 2147483646 }), t.Null()])),
+          },
+          { additionalProperties: false },
+        ),
+        response: {
+          200: importPreviewResponse,
+          400: problemSchema('invalid_request'),
+          401: unauthorized(),
+          403: problemSchema('forbidden', 'platform_closed'),
+          404: problemSchema('not_found'),
+          503: unavailable(),
+        },
+        detail: {
+          operationId: 'definitions.import',
+          'x-exposure': 'gate:definition_publication',
+          'x-action': 'definitions:publish',
+          'x-resource-types': ['semantic.context'],
+          'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
+          'x-body-limit': MAX_BODY_LIMIT(),
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ body, actor, authorize, admission, job }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const check = await authorize(resource());
+        try {
+          return await admission.run('normal', job, async () => {
+            if (!(await withReadTransaction(pool, (client) => check(client), job.deadline)))
+              throw new DefinitionAccessDeniedError();
+            return await previewImportedDocument(pool, body.document, {
+              ...(body.context === undefined ? {} : { context: body.context }),
+              expectedHead: body.expected_head ?? null,
+              admitted: true,
+            });
+          });
+        } catch (error) {
+          return definitionProblem(error);
+        }
+      },
+    )
+    .post(
       '/v1/definitions/releases',
       {
         headers: writeHeaders(),
@@ -886,6 +1010,46 @@ export function definitionRoutes(
           head: active?.head ?? 0,
           extension: (active?.extension as unknown as Record<string, unknown> | undefined) ?? null,
         };
+      },
+    )
+    .get(
+      '/v1/contexts/:id/definitions/extensions/:digest',
+      {
+        params: t.Object({ id: t.String(), digest: t.String() }),
+        response: {
+          200: withHeaders(
+            t.Object({ digest: t.String(), extension: releaseObject }, { additionalProperties: false }),
+            { etag: t.String(), 'cache-control': t.String() },
+          ),
+          401: unauthorized(),
+          404: problemSchema('not_found'),
+          503: problemSchema('overloaded', 'deadline_exceeded'),
+        },
+        detail: {
+          operationId: 'definitions.read_extension',
+          'x-exposure': 'public',
+          'x-action': 'context:read',
+          security: [{ bearerAuth: [] }, {}],
+        },
+      },
+      async ({ params, authorize, admission, job, set }) => {
+        const route = params.id === GLOBAL_CONTEXT ? 0 : routeOf(params.id);
+        if (route === null) throw new ProblemError('not_found');
+        const context: Resource = { route, id: params.id };
+        context.eligibility = publicContextEligibility(context);
+        const check = await authorize(context);
+        const extension = await admission.run('normal', job, async () => {
+          if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('not_found');
+          try {
+            return await readPublishedExtension(pool, params.id, params.digest);
+          } catch (error) {
+            return definitionProblem(error);
+          }
+        });
+        if (!extension) throw new ProblemError('not_found');
+        set.headers.etag = `"${params.digest}"`;
+        set.headers['cache-control'] = 'public, max-age=31536000, immutable';
+        return { digest: params.digest, extension: extension as unknown as Record<string, unknown> };
       },
     );
 }

@@ -70,6 +70,14 @@ async function loadExtension(db: Db, route: number, context: string, digest: str
   return extension;
 }
 
+/** Independently reread one published extension body; never the current head. */
+export async function readPublishedExtension(db: Db, context: string, digest: string): Promise<Extension | null> {
+  const route = contextRoute(context);
+  if (route === null || DIGEST.exec(digest)?.[0] !== digest) return null;
+  if (context !== GLOBAL_CONTEXT && !(await readCommunity.run(db, { route, context_id: context }))) return null;
+  return loadExtension(db, route, context, digest);
+}
+
 /** Current availability and head are point probes; the immutable body is read once per digest per process. */
 export async function activeExtension(
   db: Db,

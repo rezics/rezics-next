@@ -17,7 +17,6 @@ import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
 import { m } from '../paraglide/messages.js';
-import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
 import { ProfileSection } from './profile';
 import { ReadingCard } from './reading-card';
@@ -27,7 +26,7 @@ import { DisplayPreferences } from './display-preferences';
 import { NotificationsCard } from './notifications';
 import { PublicViewsSection } from './public-views';
 import type { NativePreferenceFailure, SettingsPage } from './preferences';
-import { usePreferenceRetry } from './preference-failure-retry';
+import { usePreferenceRetry } from './preferences';
 import { CollectionPrivacySection } from './collection-privacy';
 import { VerificationSection } from './verification';
 import { observeVerificationRead, verificationQueryKey } from './verification-recovery';
@@ -43,47 +42,18 @@ import type { ReadingIO } from './reading-preferences';
 import type { NotificationEditorIO } from './notification-recovery';
 import { SettingsSessionContext, useSettingsSessionOwner } from './settings-session-owner';
 import { isWatchReturnReceipt, type WatchReturnReceipt } from './watch-controller';
-
-const settingsWatchReturnKey = '__rezicsSettingsWatchReturn';
-type SettingsWatchReturnCarrier = Readonly<{
-  version: 1;
-  origin: string;
-  pathname: string;
-  hash: string;
-  locale: string;
-  receipt: WatchReturnReceipt;
-}>;
-
-function record(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function readSettingsWatchReturn(state: unknown): { receipt: WatchReturnReceipt | null; present: boolean } {
-  if (typeof globalThis.window === 'undefined' || !record(state)) return { receipt: null, present: false };
-  const value = state[settingsWatchReturnKey];
-  if (value === undefined) return { receipt: null, present: false };
-  const keys = record(value) ? Object.keys(value).sort().join(',') : '';
-  const carrier = value as Partial<SettingsWatchReturnCarrier>;
-  const current = globalThis.window.location;
-  const valid = keys === 'hash,locale,origin,pathname,receipt,version';
-  if (
-    !valid ||
-    carrier.version !== 1 ||
-    carrier.origin !== current.origin ||
-    carrier.pathname !== current.pathname ||
-    carrier.hash !== current.hash ||
-    carrier.locale !== getLocale() ||
-    !isWatchReturnReceipt(carrier.receipt)
-  )
-    return { receipt: null, present: true };
-  return { receipt: carrier.receipt, present: true };
-}
-
-function withoutSettingsWatchReturn(state: unknown): Record<string, unknown> {
-  const next = record(state) ? { ...state } : {};
-  delete next[settingsWatchReturnKey];
-  return next;
-}
+import {
+  readSettingsWatchReturn,
+  settingsWatchReturnCarrier,
+  settingsWatchReturnKey,
+  withoutSettingsWatchReturn,
+} from './settings-return';
+import {
+  SettingsReturnProvider,
+  useSettingsProfileReturn,
+  useSettingsSectionFocus,
+  type SettingsSectionFocus,
+} from './settings-return-context';
 
 type PreferenceIO = {
   read: ReadingIO['read'];
@@ -246,41 +216,79 @@ function RetainedSettingsPanel({
   const [hydrated, setHydrated] = useState(false);
   const previous = useRef(selected);
   const panel = useRef<HTMLDivElement>(null);
+  const lastFocus = useRef<HTMLElement | null>(null);
+  const sectionFocus = useSettingsSectionFocus();
   if (selected && !visited) setVisited(true);
   useLayoutEffect(() => {
     setHydrated(true);
     if (selected && !previous.current) {
-      const heading = panel.current?.querySelector<HTMLElement>('h2') ?? panel.current;
-      if (heading) {
-        heading.tabIndex = -1;
-        heading.focus();
+      const heading = panel.current?.querySelector<HTMLElement>('h2, [data-settings-focus-region]') ?? panel.current;
+      const returned = panel.current?.querySelector<HTMLElement>('[data-settings-return-focus]');
+      const remembered = lastFocus.current;
+      const exact =
+        returned &&
+        returned.isConnected &&
+        !returned.hasAttribute('disabled') &&
+        returned.getAttribute('aria-disabled') !== 'true'
+          ? returned
+          : remembered &&
+              remembered.isConnected &&
+              panel.current?.contains(remembered) &&
+              !remembered.hasAttribute('disabled') &&
+              remembered.getAttribute('aria-disabled') !== 'true'
+            ? remembered
+            : null;
+      if (sectionFocus === 'keyboard') {
+        const target = exact ?? heading;
+        if (target) {
+          if (target.tabIndex < 0) target.tabIndex = -1;
+          target.focus();
+        }
+        returned?.removeAttribute('data-settings-return-focus');
       }
     }
     previous.current = selected;
-  }, [selected]);
+  }, [selected, sectionFocus]);
   if (!selected && !visited) return null;
   const inactive = hydrated && !selected;
   return (
-    <div ref={panel} data-settings-panel={id} hidden={inactive} inert={inactive}>
+    <div
+      ref={panel}
+      data-settings-panel={id}
+      hidden={inactive}
+      inert={inactive}
+      onFocusCapture={(event) => {
+        if (event.target instanceof HTMLElement) lastFocus.current = event.target;
+      }}
+    >
       {children}
     </div>
   );
 }
 
 /** The Settings route owns the one-shot browser-history locator for a disclosed watch visit. */
-export function SettingsWatchesOwner({ io }: { io?: WatchManagementIO | undefined }) {
+export function SettingsWatchesOwner({
+  io,
+  initialReturn,
+}: {
+  io?: WatchManagementIO | undefined;
+  initialReturn?: WatchReturnReceipt | null;
+}) {
   const location = useLocation();
   const navigation = useSettingsNavigationOwner();
-  const [watchReturnEntry] = useState(() =>
-    typeof globalThis.window === 'undefined'
-      ? { receipt: null, present: false }
-      : readSettingsWatchReturn(window.history.state),
+  const profileReturn = useSettingsProfileReturn();
+  const [localReturn] = useState(() =>
+    initialReturn !== undefined
+      ? { receipt: initialReturn, present: false }
+      : typeof globalThis.window === 'undefined'
+        ? { receipt: null, present: false }
+        : readSettingsWatchReturn(window.history.state),
   );
   useLayoutEffect(() => {
-    if (watchReturnEntry.present && typeof globalThis.window !== 'undefined') {
+    if (localReturn.present && typeof globalThis.window !== 'undefined') {
       window.history.replaceState(withoutSettingsWatchReturn(window.history.state), '', window.location.href);
     }
-  }, [watchReturnEntry]);
+  }, [localReturn]);
   const visitWatchTarget = useCallback(
     (receipt: WatchReturnReceipt, href: string) => {
       if (typeof globalThis.window === 'undefined') return true;
@@ -293,14 +301,8 @@ export function SettingsWatchesOwner({ io }: { io?: WatchManagementIO | undefine
         return false;
       }
       if (target.origin !== current.origin || !isWatchReturnReceipt(receipt)) return false;
-      const carrier: SettingsWatchReturnCarrier = {
-        version: 1,
-        origin: current.origin,
-        pathname: current.pathname,
-        hash: current.hash,
-        locale: getLocale(),
-        receipt,
-      };
+      const carrier = settingsWatchReturnCarrier(receipt, profileReturn?.capture() ?? null);
+      if (!carrier) return false;
       const commit = () => {
         const state = withoutSettingsWatchReturn(window.history.state);
         state[settingsWatchReturnKey] = carrier;
@@ -308,9 +310,9 @@ export function SettingsWatchesOwner({ io }: { io?: WatchManagementIO | undefine
       };
       return navigation?.prepareDeparture(location.pathname, target.pathname, commit) ?? (commit(), true);
     },
-    [location.pathname, navigation],
+    [location.pathname, navigation, profileReturn],
   );
-  return <WatchesSection io={io} initialReturn={watchReturnEntry.receipt} onVisitTarget={visitWatchTarget} />;
+  return <WatchesSection io={io} initialReturn={localReturn.receipt} onVisitTarget={visitWatchTarget} />;
 }
 
 function SettingsSections({
@@ -319,12 +321,16 @@ function SettingsSections({
   managedAccountsIO,
   watchesIO,
   preferenceIO,
+  watchReturn = null,
+  profileReturn = null,
 }: {
   page: Extract<SettingsPage, { signedIn: true }> & { accountId: string };
   csrfToken: string | null;
   managedAccountsIO?: ManagedAccountsIO | undefined;
   watchesIO?: WatchManagementIO | undefined;
   preferenceIO: PreferenceIO;
+  watchReturn?: WatchReturnReceipt | null;
+  profileReturn?: import('./settings-return').ProfileReturnSnapshot | null;
 }) {
   const collectionsAdmission = useOperationAdmission('account.collections');
   const collectionsAdmitted = collectionsAdmission === 'available';
@@ -344,6 +350,7 @@ function SettingsSections({
   const showVerification = verificationAdmitted && verification?.error?.message !== 'rezics-platform-closed';
   const location = useLocation();
   const router = useRouter();
+  const [sectionFocus, setSectionFocus] = useState<SettingsSectionFocus>(null);
   const [version, setVersion] = useState('preferences' in page ? page.preferences.version : 0);
   const owner = useSettingsSessionOwner(csrfToken, page.accountId)!;
   const [io] = useState(() => {
@@ -455,7 +462,7 @@ function SettingsSections({
           )}
         </section>
       ) : null,
-    watches: <SettingsWatchesOwner io={watchesIO} />,
+    watches: <SettingsWatchesOwner io={watchesIO} initialReturn={watchReturn} />,
     privacy: <CollectionPrivacySection />,
     verification: (
       <section id="verification" aria-label={m.settings_verification_heading()} className="scroll-mt-6" tabIndex={-1}>
@@ -499,25 +506,28 @@ function SettingsSections({
     ),
   };
   return (
-    <div className="grid gap-8 lg:grid-cols-[12rem_minmax(0,48rem)] lg:justify-center">
-      <SectionsNavigation
-        sections={sections}
-        selected={selected}
-        onSelect={(id, event) => {
-          if (event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
-          event.preventDefault();
-          void router.navigate({ hash: id, search: true, resetScroll: false, hashScrollIntoView: false });
-        }}
-        admission={collectionsAdmission}
-      />
-      <div className="min-w-0">
-        {sections.map(({ id }) => (
-          <RetainedSettingsPanel key={id} id={id} selected={id === selected}>
-            {panels[id]}
-          </RetainedSettingsPanel>
-        ))}
+    <SettingsReturnProvider initialProfile={profileReturn} sectionFocus={sectionFocus}>
+      <div className="grid gap-8 lg:grid-cols-[12rem_minmax(0,48rem)] lg:justify-center">
+        <SectionsNavigation
+          sections={sections}
+          selected={selected}
+          onSelect={(id, event) => {
+            if (event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+            event.preventDefault();
+            setSectionFocus(event.detail === 0 ? 'keyboard' : 'pointer');
+            void router.navigate({ hash: id, search: true, resetScroll: false, hashScrollIntoView: false });
+          }}
+          admission={collectionsAdmission}
+        />
+        <div className="min-w-0">
+          {sections.map(({ id }) => (
+            <RetainedSettingsPanel key={id} id={id} selected={id === selected}>
+              {panels[id]}
+            </RetainedSettingsPanel>
+          ))}
+        </div>
       </div>
-    </div>
+    </SettingsReturnProvider>
   );
 }
 
@@ -610,6 +620,16 @@ function OwnedSettingsPage({
   onRetry: () => void;
 }) {
   const owner = useSettingsSessionOwner(csrfToken, page.accountId)!;
+  const [returnEntry] = useState(() =>
+    typeof globalThis.window === 'undefined'
+      ? { receipt: null, profile: null, present: false }
+      : readSettingsWatchReturn(window.history.state),
+  );
+  useLayoutEffect(() => {
+    if (returnEntry.present && typeof globalThis.window !== 'undefined') {
+      window.history.replaceState(withoutSettingsWatchReturn(window.history.state), '', window.location.href);
+    }
+  }, [returnEntry]);
   if (!owner.readCurrent()) return <SettingsSessionRecovery state="unavailable" onRetry={onRetry} />;
   return (
     <SettingsSessionContext.Provider value={owner}>
@@ -620,6 +640,8 @@ function OwnedSettingsPage({
           preferenceIO={preferenceIO}
           managedAccountsIO={managedAccountsIO}
           watchesIO={watchesIO}
+          watchReturn={returnEntry.receipt}
+          profileReturn={returnEntry.profile}
         />
       </SettingsNavigationProvider>
     </SettingsSessionContext.Provider>

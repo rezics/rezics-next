@@ -973,7 +973,10 @@
         "apps/web/src/features/contexts/**",
         "apps/web/src/zones/**"
       ],
-      "publicEntries": [],
+      "publicEntries": [
+        "apps/web/src/features/catalogue/definition-publication/actions.ts",
+        "apps/web/src/features/catalogue/definition-publication/workspace.tsx"
+      ],
       "allowedDependencies": [
         "client",
         "composition",

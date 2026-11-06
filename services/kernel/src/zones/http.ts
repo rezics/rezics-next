@@ -23,9 +23,15 @@ import {
   ZoneListSchema,
   ZonePageRequestSchema,
   ZonePageResponseSchema,
+  ZoneSubjectListResponseSchema,
 } from './contract.ts';
-import { ZonePageQuerySchema, ZonePageReadProgressSchema } from './page-continuation.ts';
-import { readStaticZonePage } from './page-runtime.ts';
+import {
+  ZonePageQuerySchema,
+  ZonePageReadProgressSchema,
+  ZoneSubjectListQuerySchema,
+  ZoneSubjectListProgressSchema,
+} from './page-continuation.ts';
+import { readStaticZonePage, readZoneSubjects } from './page-runtime.ts';
 import { createZoneCommands, zoneIfMatch } from './resource-commands.ts';
 import { createZoneReads, requireZoneAccount } from './resource-reads.ts';
 import { readZoneCollections } from './mounted-collections.ts';
@@ -215,6 +221,45 @@ export function zoneRoutes(
       },
     )
     .get(
+      '/v1/zones/:id/subjects',
+      {
+        params,
+        query: ZoneSubjectListQuerySchema(),
+        response: {
+          ...failures(),
+          200: zoneSchema(ZoneSubjectListResponseSchema()),
+          202: zoneSchema(ZoneSubjectListProgressSchema()),
+          403: t.Union([failures()[403], problemSchema('platform_closed')]),
+          503: withHeaders(failures()[503], { 'retry-after': t.String() }),
+        },
+        detail: detail('list_subjects', 'zone:read', true),
+      },
+      async ({ params, query, actor, request, route, admission, job, session, set }) => {
+        const result = await admission.run('normal', job, () =>
+          readZoneSubjects(
+            { ...dependencies, access: dependencies.access() },
+            {
+              actor,
+              id: params.id,
+              ...(query.limit ? { limit: Number(query.limit) } : {}),
+              ...(query.cursor ? { cursor: query.cursor } : {}),
+              deadline: job.deadline,
+              clientAction: actionForRequest(app, request, route),
+            },
+          ),
+        );
+        session.record(result.component);
+        for (const component of result.components) session.record(component);
+        cache(set);
+        if (result.status === 202) {
+          set.status = 202;
+          return result.value;
+        }
+        set.status = 200;
+        return result.value;
+      },
+    )
+    .get(
       '/v1/zones/:id/configuration',
       {
         params,
@@ -260,8 +305,12 @@ export function zoneRoutes(
         );
         session.record(result.component);
         for (const component of result.components) session.record(component);
-        set.status = result.status;
         cache(set);
+        if (result.status === 202) {
+          set.status = 202;
+          return result.value;
+        }
+        set.status = 200;
         return result.value;
       },
     )

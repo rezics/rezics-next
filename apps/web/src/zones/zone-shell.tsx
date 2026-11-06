@@ -25,6 +25,7 @@ import type { PagePaths } from '../shell/head';
 import {
   continueZonePageRequest,
   readZonePageRequest,
+  zoneReturnHref,
   type ZonePageInput,
   type ZonePageRouteOutcome,
 } from './zone-read';
@@ -66,11 +67,13 @@ export function ZoneShell({
   zone,
   locale,
   route = '',
+  returnTo,
   children,
 }: {
   zone: ZonePublic;
   locale: string;
   route?: string;
+  returnTo?: { href: string; label: string };
   children: ReactNode;
 }) {
   const label = zoneLabel(zone, locale);
@@ -91,7 +94,7 @@ export function ZoneShell({
                 key={destination}
                 href={navigationHref(zone, locale, destination)}
                 aria-current={destination === route ? 'page' : undefined}
-                className="text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="min-h-[44px] min-w-[44px] text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 {zoneRouteHeading(destination, locale)}
               </a>
@@ -99,6 +102,16 @@ export function ZoneShell({
           </nav>
         )}
       </header>
+      {returnTo ? (
+        <p>
+          <a
+            href={returnTo.href}
+            className="inline-flex min-h-[44px] min-w-[44px] items-center text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {returnTo.label}
+          </a>
+        </p>
+      ) : null}
       <div className="min-w-0">{children}</div>
     </div>
   );
@@ -529,8 +542,13 @@ function ZoneSubjectPage({
     );
   };
 
+  const siteName = zoneLabel(zone, locale)?.text ?? m.zone_home();
   return (
-    <ZoneShell zone={zone} locale={locale}>
+    <ZoneShell
+      zone={zone}
+      locale={locale}
+      returnTo={{ href: zoneReturnHref(locale, zone.id), label: m.zone_subject_return({ name: siteName }) }}
+    >
       <ZonePageSurface zone={zone} document={outcome.page.document as CompositionDocument}>
         {(document) => {
           const zonePage = { ...page, document };

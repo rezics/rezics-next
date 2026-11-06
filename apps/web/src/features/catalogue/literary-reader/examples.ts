@@ -16,6 +16,7 @@ export const literaryWorkExample = {
   factsHref: '/en/subjects/0192f3a0-6c1e-7b2a-9d4e-000000000911/details',
 };
 
+import type { SelectedContext } from '@rezics/composition';
 import type { Release, ReleasedRelationDirectionResult } from '@rezics/definitions';
 import type { Subject, Related } from '../../../subject/types';
 import type { ProfileRelationWindow } from '../../pages/views';
@@ -65,7 +66,38 @@ export function literaryDirection(property: string, direction: 'forward' | 'inve
     qualifiers: [],
   };
 }
-export function literaryGrainExample(type: 'schema:Book' | 'schema:BookSeries' | 'bf:Instance' = 'schema:BookSeries') {
+export type LiteraryGrainRow = {
+  subject: string;
+  property: string;
+  statement: string;
+  assertion: Stmt;
+  label?: string;
+  type?: string;
+  related: object;
+  summary: { id: string; type: string; label: { value: string; language: string } };
+};
+
+export type LiteraryGrainExample = {
+  work: Subject;
+  related: Related;
+  source: object;
+  locale: string;
+  context: SelectedContext;
+  definitions: Release;
+  descriptorState: 'released';
+  digest: string;
+  windows: ProfileRelationWindow[];
+  view: string;
+  directions: ReleasedRelationDirectionResult[];
+};
+
+export function literaryGrainRow(value: unknown): LiteraryGrainRow {
+  return value as LiteraryGrainRow;
+}
+
+export function literaryGrainExample(
+  type: 'schema:Book' | 'schema:BookSeries' | 'bf:Instance' = 'schema:BookSeries',
+): LiteraryGrainExample {
   const id =
     type === 'schema:BookSeries'
       ? literaryIds.series
@@ -116,7 +148,7 @@ export function literaryGrainExample(type: 'schema:Book' | 'schema:BookSeries' |
     [literaryIds.author]: { id: literaryIds.author, type: 'schema:Person', labels: { en: 'Supplied author' } },
     [literaryIds.anime]: { id: literaryIds.anime, type: 'schema:Movie', labels: { en: 'First viewpoint' } },
   } as unknown as Related;
-  const memberRow = {
+  const memberRow: LiteraryGrainRow = {
     subject: literaryIds.member,
     property: 'wdt:P179',
     statement: membership.id,
@@ -127,7 +159,7 @@ export function literaryGrainExample(type: 'schema:Book' | 'schema:BookSeries' |
     summary: { id: literaryIds.member, type: 'schema:Book', label: { value: 'Harbour work', language: 'ja' } },
   };
   const editionStatement = literaryStatement('schema:exampleOfWork', literaryIds.member);
-  const editionRow = {
+  const editionRow: LiteraryGrainRow = {
     subject: literaryIds.edition,
     property: 'schema:exampleOfWork',
     statement: editionStatement.id,
@@ -135,7 +167,7 @@ export function literaryGrainExample(type: 'schema:Book' | 'schema:BookSeries' |
     related: {},
     summary: { id: literaryIds.edition, type: 'bf:Instance', label: { value: 'Harbour, 2nd edition', language: 'en' } },
   };
-  const window: ProfileRelationWindow = {
+  const window = {
     node: 'members',
     property: 'wdt:P179',
     direction: 'inverse',
@@ -146,19 +178,19 @@ export function literaryGrainExample(type: 'schema:Book' | 'schema:BookSeries' |
     complete: false,
     next: 'native/opaque?cursor=next',
     caughtUp: true,
-  };
-  const windows: ProfileRelationWindow[] =
+  } satisfies ProfileRelationWindow;
+  const windows =
     type === 'schema:BookSeries'
       ? [window]
       : type === 'schema:Book'
         ? [{ ...window, node: 'editions', property: 'schema:exampleOfWork', rows: [editionRow] }]
-        : [];
+        : ([] satisfies ProfileRelationWindow[]);
   return {
     work: subject,
     related,
     source: {},
     locale: 'en',
-    context: { id: subject.context, population: { kind: 'global' } },
+    context: { id: subject.context, population: { kind: 'global' } } satisfies SelectedContext,
     definitions: literaryDefinitions,
     descriptorState: 'released' as const,
     digest: literaryDigest,

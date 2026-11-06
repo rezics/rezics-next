@@ -50,7 +50,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/sources')({
       throw new Error('Invalid synopsis visit');
     const reader = await subjectRequestReader({ data: { realm: deps.realm } });
     const result = await loadSubjectSources({
-      data: { id: params.id, locale: getLocale(), realm: deps.realm, via: deps.via, reader },
+      data: { id: params.id, locale: getLocale(), realm: deps.realm, ...(deps.via ? { via: deps.via } : {}), reader },
     });
     if (result.kind === 'missing') throw notFound();
     if (result.kind === 'ready') {
@@ -99,7 +99,7 @@ function SourcesRoute() {
                   id: result.page.id,
                   locale: original.locale,
                   expectedReader: session.subject ?? null,
-                  via: original.via,
+                  ...(original.via ? { via: original.via } : {}),
                 },
                 headers: csrfHeaders(),
               }).catch((): SourcesResult => ({ kind: 'unavailable' }))

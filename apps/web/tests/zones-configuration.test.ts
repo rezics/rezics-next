@@ -74,10 +74,15 @@ test('A Zone owner configures saves previews publishes and resolves conflicts th
   await session.preview('');
   expect(fixture.calls.filter((call) => call.method === 'PUT')).toHaveLength(writes);
   session.resolve('reapply');
+  expect(session.snapshot().draft?.configuration.scope).toEqual(['books/fiction']);
+  expect(session.snapshot().draft?.mounts).toEqual(changed.mounts);
+  expect(session.snapshot().draft?.configuration.labels.en).toBe('Retain me');
   await session.save();
   const reapplied = fixture.calls.filter((call) => call.method === 'PUT').at(-1)!;
   expect(reapplied.headers.get('if-match')).toBe('"900719925474099312348"');
   expect(fixture.current().configuration.labels.en).toBe('Retain me');
+  expect(fixture.current().configuration.scope).toEqual(['books/fiction']);
+  expect(fixture.current().mounts).toEqual(changed.mounts);
   fixture.externalChange();
   const localAgain = draft(session);
   localAgain.configuration.labels.en = 'Discard me';
