@@ -263,14 +263,14 @@ export function taggedWorkCursor(
 export function pageTaggedWorkSubjects(input: {
   subjects: readonly IndexedSubject[];
   remaining: FilterDocument | undefined;
-  membership?: readonly TaggedWorkMembership[];
-  kinds?: readonly string[];
+  membership?: readonly TaggedWorkMembership[] | undefined;
+  kinds?: readonly string[] | undefined;
   sort: Exclude<TaggedWorkOrder, 'rating'>;
   limit: number;
   scanBound: number;
-  after?: TaggedWorkCursor;
-  languages?: readonly string[];
-  exhausted?: boolean;
+  after?: TaggedWorkCursor | undefined;
+  languages?: readonly string[] | undefined;
+  exhausted?: boolean | undefined;
 }): TaggedWorkPage {
   const ordered = [...input.subjects].sort((left, right) =>
     compareTaggedWorkOrder(left, right, input.sort, input.languages),
@@ -354,7 +354,7 @@ export function proveTaggedWorkKindCounts(input: {
   subjects: readonly IndexedSubject[];
   remaining: FilterDocument | undefined;
   directory: readonly string[];
-  membership?: readonly TaggedWorkMembership[];
+  membership?: readonly TaggedWorkMembership[] | undefined;
   complete: boolean;
 }): ReadonlyMap<string, KindCountEvidence> {
   return proveCurrentKindCounts({

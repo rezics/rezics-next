@@ -84,6 +84,7 @@ test('a designated kind leaf binds remaining catalogue predicate, native source 
         representation: 'discovery-v1',
         comparator: 'mixed-public-v1',
         filterDocument: filter,
+        text: undefined,
         sort: 'name',
         size: 49,
         pageSize: 24,
