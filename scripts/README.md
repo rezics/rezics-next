@@ -77,6 +77,13 @@ including the 11 GiB wait that still places on host b.
 Decision: leftover History callers use the contract and application public entries; placement-path units inject a
 refusing recognizer so check-host execution still relocates; Kernel/Auth map host 75/124/130/143 and placement
 exceptions to infrastructure 75. Pin with the existing typecheck-placement and root-typecheck-placement files.
+A waiting check stays on the host that holds its upload while that host has a free slot. After two minutes with none,
+if another performance host can start it now, the check uploads there, takes the slot, and releases the first copy
+for host cleanup. A later move needs another two minutes full on the new host. Gate and landing-priority runs keep
+today's waiter order on the host they move to. `REMOTE_CHECK_PLACEMENT_MOVE_MS` is the test seam for that wait.
+Decision: pin the move with both host names and the wait before it in the check log; a host with a free slot never
+moves.
+
 Decision: pin user-visible transport, empty-directory return, 11 GiB/b-placement and host-exclusion behaviour with
 the existing remote-check/check-ssh unit files rather than a second suite. Admitted stack databases use `--rm`,
 labelled owner-pid cleanup, 120s `docker run`/`rm -f` and 5s probes, 600s `docker build`/`pull`, a labelled volume
@@ -187,7 +194,8 @@ bun scripts/check-run-settlement.ts reconcile <invocation-id> [--hosts <absolute
 
 Reconciliation without `--hosts` handles a prepared/queued invocation with no physical run: it durably cancels the
 start, then removes only the recorded snapshot and records that custody. If a physical host/run was already recorded,
-reconciliation requires the host file and observes only that run; unavailable proof keeps the exact snapshot. A final
+reconciliation requires the host file and observes only that run; unavailable proof keeps the exact snapshot. While the
+invocation is still uploading, a placement move may replace that physical identity; once running it stays fixed. A final
 record is replayed by `status`; `run-prepared` rejects its descriptor after the one claim and never starts a replacement.
 For a preparation process lost before a registration record exists, use
 `bun scripts/check-run-settlement.ts reconcile --descriptor <absolute-private-json> [--state-dir <absolute-dir>]`.

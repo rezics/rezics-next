@@ -26,6 +26,10 @@
 // The command runs in <directory> (relative to the workspace root, default the root) after `bun install`, inside the
 // host's capped systemd slice, and its exit code is this script's exit code. The workspace uploads before a run takes
 // <n> slots (default 1) on that host; those slots cover only the remote command, not upload, output retrieval or cleanup.
+// A waiting upload stays on that host while it has a free slot. After two minutes with none, if another performance
+// host can start the run now, the check uploads there, takes the slot, and releases the first copy for host cleanup.
+// Another move needs two more minutes full on the new host. Gate and landing-priority runs keep today's waiter order
+// on the host they move to.
 // Admission depends on free slots, held memory reservations, per-run MemoryMax packing, slice headroom that counts
 // inactive file cache, and free disk. Each run has a nested slice shared with its containers, MemoryMax (default 6 GiB,
 // host memoryPerRunGiB) and MemorySwapMax 0; its cpu.stat and memory.peak report CPU seconds, average cores and peak
@@ -327,6 +331,8 @@ export type RemoteCheck = {
   hostsFile?: string;
   /** Test seam for the queued slot status heartbeat. */
   waitRepeatMs?: number;
+  /** Test seam for how long a full upload host may hold a waiter before a move; defaults to two minutes. */
+  placementMoveMs?: number;
   /** Called for each probe round that finds at least one responding host. */
   answered?: () => void;
   /** Called with the host's name once its slot is held and the command is about to start. */
@@ -795,6 +801,7 @@ export function parseRunLifetimeFailure(output: string): RunLifetimeFailure | nu
 }
 const DEFAULT_LIVENESS_INTERVAL_MS = 60_000;
 export const DEFAULT_TRANSFER_TIMEOUT_MS = 120_000;
+const DEFAULT_PLACEMENT_MOVE_MS = 120_000;
 // Base refresh and installs for dozens of concurrent checks exceeded three minutes on 2026-11-02.
 export const DEFAULT_PREPARATION_TIMEOUT_MS = 900_000;
 // Shared DEFAULT_CONTROL_PROBE_TIMEOUT_MS is check-ssh.ts. A 5 s probe failed 109 checks with exit 75 before any
@@ -4173,6 +4180,11 @@ function commandUsesBun(command: string[]): boolean {
 
 type Lease = { host: Host; release: () => Promise<void>; registerRun?: (id: string) => Promise<void> };
 type SessionLease = Lease & { exited: Promise<number>; isActive: () => boolean };
+type PlacementMove = { moveTo: Host; from: string; waitedMs: number };
+
+function isPlacementMove(value: Lease | PlacementMove | null): value is PlacementMove {
+  return value !== null && 'moveTo' in value;
+}
 
 /** The promise's value, or null once the time is up; the timer never outlives the wait. */
 async function within<T>(ms: number, promise: Promise<T>): Promise<T | null> {
@@ -5163,7 +5175,8 @@ async function acquire(
   connectionId?: string,
   transferTimeoutMs = DEFAULT_TRANSFER_TIMEOUT_MS,
   uploadedDirectory?: string,
-): Promise<Lease | null> {
+  placementMoveMs = DEFAULT_PLACEMENT_MOVE_MS,
+): Promise<Lease | PlacementMove | null> {
   let answered = false;
   let slots = requestedSlots;
   let warnedGateReduction = false;
@@ -5180,6 +5193,7 @@ async function acquire(
   const waitStarted = performance.now();
   const wait = checkWaitRecorder();
   wait.begin();
+  let placementFullSince: number | undefined;
   let acquiredHost: string | undefined;
   const skippedHosts = new Map<string, string>();
   const loggedSkipLines = new Set<string>();
@@ -5424,6 +5438,28 @@ async function acquire(
           marker = (await takeMultiSlotMarker(target.host, multiWaiterId, slots, signal, connectionId)) ?? undefined;
         } else if (target && !marker) {
           marker = (await takeMultiSlotMarker(target.host, multiWaiterId, slots, signal, connectionId)) ?? undefined;
+        }
+      }
+      if (placement && uploadedDirectory) {
+        const placementRank = ranked[0];
+        if (!placementRank || placementRank.freeSlots >= slots) placementFullSince = undefined;
+        else {
+          placementFullSince ??= performance.now();
+          if (performance.now() - placementFullSince >= placementMoveMs) {
+            const destination = startableHosts(allRanked, slots, gate).find(
+              (entry) =>
+                entry.freeSlots >= slots &&
+                (entry.host.name !== placement.name ||
+                  entry.host.address !== placement.address ||
+                  entry.host.identity !== placement.identity),
+            );
+            if (destination)
+              return {
+                moveTo: destination.host,
+                from: placement.name,
+                waitedMs: performance.now() - waitStarted,
+              };
+          }
         }
       }
       announceWait(allRanked);
@@ -7184,54 +7220,74 @@ async function runWithTransportRetries(
       },
     );
     if (!host) return null;
-    const id = `${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
-    const prepared: PreparedRun = {
-      host,
-      id,
-      directory: `${ROOT}/runs/${id}`,
-      connectionId: randomUUID().slice(0, 8),
-      ...(options.expectedSourceSha256 === undefined ? {} : { expectedSourceSha256: options.expectedSourceSha256 }),
+    const prepareOnHost = async (target: Host): Promise<PreparedRun> => {
+      const id = `${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
+      const next: PreparedRun = {
+        host: target,
+        id,
+        directory: `${ROOT}/runs/${id}`,
+        connectionId: randomUUID().slice(0, 8),
+        ...(options.expectedSourceSha256 === undefined ? {} : { expectedSourceSha256: options.expectedSourceSha256 }),
+      };
+      await options.allocated?.({ host: target.name, run: id });
+      assertExecutionAllowed(options, signal);
+      next.connectionId = await probeControl(target, next.connectionId, controlProbeTimeout(options));
+      Object.assign(next, await uploadRun(target, next.connectionId, id, options, files, signal, transfer));
+      return next;
     };
+    let prepared: PreparedRun | undefined;
     let managedByRun = false;
     let uploaded = false;
     try {
-      await options.allocated?.({ host: host.name, run: id });
-      assertExecutionAllowed(options, signal);
-      prepared.connectionId = await probeControl(host, prepared.connectionId, controlProbeTimeout(options));
-      Object.assign(prepared, await uploadRun(host, prepared.connectionId, id, options, files, signal, transfer));
+      prepared = await prepareOnHost(host);
       uploaded = true;
       assertExecutionAllowed(options, signal);
       const slotWaitStarted = performance.now();
-      const lease = await acquire(
-        [host],
-        slots,
-        options.estimateMs,
-        options.pollMs ?? 5000,
-        signal,
-        false,
-        () => {
-          answered = true;
-          onAnswered?.();
-        },
-        options.gate ?? false,
-        options.waitRepeatMs,
-        memoryReservationBytes,
-        options.priority,
-        hostsForRound,
-        host,
-        prepared.connectionId,
-        transferTimeout(options),
-        prepared.directory,
-      );
-      if (!lease) {
-        await cleanupPreparedRun(prepared);
-        continue;
+      while (prepared) {
+        const outcome = await acquire(
+          [prepared.host],
+          slots,
+          options.estimateMs,
+          options.pollMs ?? 5000,
+          signal,
+          false,
+          () => {
+            answered = true;
+            onAnswered?.();
+          },
+          options.gate ?? false,
+          options.waitRepeatMs,
+          memoryReservationBytes,
+          options.priority,
+          hostsForRound,
+          prepared.host,
+          prepared.connectionId,
+          transferTimeout(options),
+          prepared.directory,
+          options.placementMoveMs,
+        );
+        if (!outcome) {
+          await cleanupPreparedRun(prepared);
+          uploaded = false;
+          prepared = undefined;
+          break;
+        }
+        if (isPlacementMove(outcome)) {
+          console.error(
+            `remote-check: moving uploaded placement from ${outcome.from} to ${outcome.moveTo.name} after ${(outcome.waitedMs / 1000).toFixed(3)} s wait`,
+          );
+          const next = await prepareOnHost(outcome.moveTo);
+          uploaded = true;
+          await cleanupPreparedRun(prepared);
+          prepared = next;
+          continue;
+        }
+        prepared.host = outcome.host;
+        managedByRun = true;
+        return await runLeased(outcome, prepared, options, slotWaitStarted, signal);
       }
-      prepared.host = lease.host;
-      managedByRun = true;
-      return await runLeased(lease, prepared, options, slotWaitStarted, signal);
     } catch (error) {
-      if (!managedByRun && uploaded) await cleanupPreparedRun(prepared);
+      if (!managedByRun && uploaded && prepared) await cleanupPreparedRun(prepared);
       assertExecutionAllowed(options, signal);
       if (
         !(error instanceof RemoteTransportError) ||
@@ -7459,6 +7515,12 @@ function parse(argv: string[]): RemoteCheck {
     process.env.REMOTE_CHECK_WAIT_REPEAT_MS === undefined ? undefined : Number(process.env.REMOTE_CHECK_WAIT_REPEAT_MS);
   if (waitRepeatMs !== undefined && (!Number.isSafeInteger(waitRepeatMs) || waitRepeatMs < 1))
     throw new Error('REMOTE_CHECK_WAIT_REPEAT_MS must be a positive integer');
+  const placementMoveMs =
+    process.env.REMOTE_CHECK_PLACEMENT_MOVE_MS === undefined
+      ? undefined
+      : Number(process.env.REMOTE_CHECK_PLACEMENT_MOVE_MS);
+  if (placementMoveMs !== undefined && (!Number.isSafeInteger(placementMoveMs) || placementMoveMs < 1))
+    throw new Error('REMOTE_CHECK_PLACEMENT_MOVE_MS must be a positive integer');
   const cancellation = executionCancellationFromEnvironment();
   return {
     hosts: readHosts(hostsFile),
@@ -7479,6 +7541,7 @@ function parse(argv: string[]): RemoteCheck {
     ...(pollMs === undefined ? {} : { pollMs }),
     ...(retryBackoffMs === undefined ? {} : { retryBackoffMs }),
     ...(waitRepeatMs === undefined ? {} : { waitRepeatMs }),
+    ...(placementMoveMs === undefined ? {} : { placementMoveMs }),
     hostsFile,
   };
 }
