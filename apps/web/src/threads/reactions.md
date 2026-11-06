@@ -73,9 +73,9 @@ original load. These authored campaigns and the original native cost campaigns r
 
 Zone appearance merging retains the document root while its source document and appearance are unchanged, so
 personal readback cannot remount the composition's action host and lose queued choices or focus. Equal session
-success retains the combined Zone payload but requires Follow's own fresh admission under the shared session
-contract. A changed browser session state retires the combined source and loads a new one; removing the session
-cache requires an explicit fresh session read before private recovery. The focused tests use a known initial
+success retains the combined Zone payload; Follow's operation callbacks still require its current admission
+under the shared session contract. A changed browser session state retires the combined source and loads a new one;
+removing the session cache requires an explicit fresh session read before private recovery. The focused tests use a known initial
 session for reaction recovery and cover session loss separately.
 
 Composition slots invoke Puck's render callbacks instead of mounting those newly created functions as component
@@ -84,9 +84,10 @@ the reaction caller still retires them on a committed session replacement throug
 
 Mounted regression transports supply the configured definition origin as well as the native client, so Library
 choices come from the recorded release through its production reader. Follow cost assertions compare with the
-settled StrictMode mount baseline and require one fresh read after session replacement; reaction-only fetch
-notifications preserve that baseline. Public Zone route fixtures provide the Worker's declared startup secret
-without authenticating a persona; they remain separate from seeded browser/native acceptance.
+settled StrictMode mount baseline. Healthy same-reader session replacement and reaction-only fetch notifications
+preserve that edge read under Follow's existing operation lifetime. Public Zone route fixtures provide the Worker's
+declared startup secret without authenticating a persona; they remain separate from seeded browser/native acceptance.
 
 Mounted regressions flush native completion through the React consumer before inspecting its DOM, and await
-Follow's fresh enabled control before asserting the independent read count after a session replacement.
+Follow's enabled control before asserting its independent read count after a session replacement. Public reaction
+totals use their accessible names, and overflow entries use their menuitem roles across presentation modes.
