@@ -8,11 +8,12 @@ import { ProblemError, PROBLEMS } from '../http/problem.ts';
 import { createBuiltinRuntime } from '../library/builtin-runtime.ts';
 import { activeProfile } from '../presentation/profiles.ts';
 import { semanticPageView } from '../presentation/semantic-page.ts';
-import { PageReadBudget, readPage } from '../presentation/reads.ts';
+import { PageReadBudget, preparePageRead, readPage } from '../presentation/reads.ts';
+import { admitObservedMembersPage, admitObservedSearchPage, uniqueCanonicalRows } from '../presentation/slot-bodies.ts';
 import type { Actor } from '../request/access.ts';
 import { validateHitOptions } from '../search/hits.ts';
 import { activeRelease } from '../semantic/definitions.ts';
-import { readSubjectSummaries } from '../semantic/summaries.ts';
+import { readSubjectSummaries, type SubjectSummary } from '../semantic/summaries.ts';
 import { decodeSession, type SessionComponent } from '../tokens/session.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { ZonePageRequest, ZonePageResponse } from './contract.ts';
@@ -298,27 +299,37 @@ async function composeZonePage(
       }
       return zoneUnavailable();
     }
-    const rows = read.position.rows.map((row) => {
+    const mapped: { id: string; type: string; labels: Record<string, string>; summary: SubjectSummary }[] = [];
+    for (const row of read.position.rows) {
       const summary = summaries.get(row.id);
       if (!summary) return zoneUnavailable();
-      return {
+      mapped.push({
         id: row.id,
         type: summary.type,
         labels: summary.label ? { [summary.label.language]: summary.label.value } : {},
         summary,
-      };
-    });
+      });
+    }
+    const rows = uniqueCanonicalRows(mapped);
     const next = null;
-    const shaped =
-      descriptor.kind === 'search' && languages
-        ? { ...descriptor, body: { ...descriptor.body, languages: [...languages] } }
-        : descriptor;
-    observed.set(canonicalize(shaped)!, {
+    const body =
+      read.kind === 'search'
+        ? { subjects: rows, next }
+        : {
+            members: uniqueCanonicalRows(
+              rows.map((row) => ({ kind: 'dynamic' as const, subjectId: row.id, summary: row.summary })),
+            ),
+            next,
+          };
+    const admitted =
+      descriptor.kind === 'search'
+        ? admitObservedSearchPage(descriptor, body)
+        : admitObservedMembersPage(descriptor, body);
+    if (!admitted) return zoneUnavailable();
+    const prepared = preparePageRead(descriptor, languages);
+    observed.set(prepared.canonical, {
       status: 200,
-      body:
-        read.kind === 'search'
-          ? { subjects: rows, next }
-          : { members: rows.map((row) => ({ kind: 'dynamic', subjectId: row.id, summary: row.summary })), next },
+      body: admitted,
     });
   }
   const properties = subject

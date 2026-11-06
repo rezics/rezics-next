@@ -251,10 +251,12 @@ a served-page binding marked pending does not become covered merely by linking a
   curated — out of scope for this suite: semantic's mounted Collection routing needs a native served-page binding.  
   Everything without state — out of scope as a public mount: private owner population cannot become public by routing.  
   own state — `library-surfaces` personal controls; authenticated mount binding pending under semantic/commerce authority.  
-  mounted Zone — out of scope for this suite: semantic's saved-scope/mount/union/routed-site acceptance needs a full served-page binding.  
-  configured TypeList — out of scope for this suite: search's page composition and semantic's Zone routing need served slot binding.
+  mounted Zone — routed `readPage` binding: native ordered members, overlap/alias uniqueness, sparse continuation, private-mount SSR isolation and same-tab Subject return.  
+  configured TypeList — Search keeps Global `/search/list` controls; Zone lists stay on the Zone reader.
 - **Scenarios**: Semantic owns Zone native acceptance and `specs/collection-source-outcomes.test.ts` source
   composition; search owns `specs/pages-outcomes.test.ts` configured page slots. Web's publication destination
   scenarios and personal `library-surfaces` cannot alone prove a routed Zone; no full binding is claimed here.
 - **Acceptance command**: `bun test specs/collection-source-outcomes.test.ts specs/pages-outcomes.test.ts` with
-  their native drivers for owner contracts; publication verifier above for destination cases. Routed web binding pending.
+  their native drivers for owner contracts; publication verifier above for destination cases. Routed Zone lists bind
+  native `readPage` slots, Zone continuation, private-mount SSR isolation and same-tab Subject return; Search TypeList
+  stays Global. Broader native collection-source/configured-page persona acceptance remains the owner suites.

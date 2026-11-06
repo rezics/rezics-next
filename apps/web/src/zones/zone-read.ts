@@ -8,17 +8,19 @@ import type { ZonePageRequest, ZonePageResponse } from '../../../../services/ker
 import type { ZonePageQuery, ZonePageReadProgress } from '../../../../services/kernel/src/zones/page-continuation.ts';
 import type { ReadCredentialMode } from '../kernel/credential';
 import type { SessionEnv } from '../session/client';
-import { prepareSession, viewerCredential } from '../session/request';
 import { loadSubjectPage, type SubjectPageData } from '../features/pages/subject';
 import { loadViewPages } from '../features/pages/subject-frame';
 import { locales } from '../paraglide/runtime.js';
+import { isolatePublicZonePage, receiveZonePage } from './receive.ts';
+import { bindZoneSession, nextKernelSession, zoneKernelHeaders } from './session.ts';
+import { validZoneCursor } from './visit.ts';
 
 type ZoneRouteClient = {
   zones(input: { id: string }): {
     $readPage: {
       post(
         body: ZonePageRequest,
-        options?: { query?: ZonePageQuery; headers?: { authorization: string } },
+        options?: { query?: ZonePageQuery; headers?: { authorization?: string; [header: string]: string | undefined } },
       ): Promise<{
         status: number;
         data: ZonePageResponse | ZonePageReadProgress | null;
@@ -65,9 +67,6 @@ export type ZonePageInput = {
 };
 
 const idPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-// Keep the browser boundary aligned with the native search cursor schema.
-const maxCursorLength = 4864;
-const cursorPattern = /^[A-Za-z0-9_-]{1,4864}$/;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -116,7 +115,7 @@ export function validateZonePageInput(input: unknown): ZonePageInput {
 }
 
 function validCursor(value: unknown): value is string {
-  return typeof value === 'string' && value.length <= maxCursorLength && cursorPattern.test(value);
+  return validZoneCursor(value);
 }
 
 function retryAfter(response: Response): string {
@@ -128,23 +127,44 @@ export async function readZonePage(
   client: KernelClient,
   id: string,
   request: ZonePageRequest,
-  options: { cursor?: ZonePageQuery['cursor']; followContinuations?: boolean; authorization?: string } = {},
+  options: {
+    cursor?: ZonePageQuery['cursor'];
+    followContinuations?: boolean;
+    authorization?: string;
+    kernelSession?: string;
+    session?: boolean;
+  } = {},
 ): Promise<ZonePageOutcome> {
   const zone = (client as unknown as ZoneRouteClient).zones({ id });
   let cursor = options.cursor;
+  let kernelSession = options.kernelSession;
+  let restarted = false;
   const follow = options.followContinuations !== false;
   for (let attempt = 0; attempt <= (follow ? 4 : 0); attempt++) {
     let result: Awaited<ReturnType<typeof zone.$readPage.post>>;
     try {
       result = await zone.$readPage.post(request, {
         ...(cursor === undefined ? {} : { query: { cursor } }),
-        ...(options.authorization ? { headers: { authorization: options.authorization } } : {}),
+        ...(zoneKernelHeaders({ authorization: options.authorization, kernelSession })
+          ? { headers: zoneKernelHeaders({ authorization: options.authorization, kernelSession }) }
+          : {}),
       });
     } catch {
       return { kind: 'error' };
     }
+    kernelSession = nextKernelSession(result.response, kernelSession);
     if (result.status === 404) return { kind: 'missing' };
-    if (result.status === 200 && result.data) return { kind: 'page', page: result.data as ZonePageResponse };
+    if (result.status === 409 && cursor && !restarted) {
+      cursor = undefined;
+      restarted = true;
+      attempt -= 1;
+      continue;
+    }
+    if (result.status === 200 && result.data) {
+      const received = receiveZonePage(result.data);
+      if (!received) return { kind: 'error' };
+      return { kind: 'page', page: isolatePublicZonePage(received, options.session === true) as ZonePageResponse };
+    }
     if (result.status === 503) return { kind: 'unavailable', retryAfter: retryAfter(result.response) };
     if (result.status !== 202 || !result.data || !validCursor((result.data as ZonePageReadProgress).next))
       return { kind: 'error' };
@@ -158,7 +178,11 @@ export async function readZonePage(
 export async function readZonePageForRoute(
   client: KernelClient,
   input: ZonePageInput,
-  options: { followContinuations?: boolean; authorization?: string } = {},
+  options: {
+    followContinuations?: boolean;
+    authorization?: string;
+    kernelSession?: string;
+  } = {},
 ): Promise<ZonePageRouteOutcome> {
   const result = await readZonePage(
     client,
@@ -168,6 +192,8 @@ export async function readZonePageForRoute(
       ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
       ...(options.followContinuations === undefined ? {} : { followContinuations: options.followContinuations }),
       ...(options.authorization === undefined ? {} : { authorization: options.authorization }),
+      ...(options.kernelSession === undefined ? {} : { kernelSession: options.kernelSession }),
+      session: input.credentialMode === 'session',
     },
   );
   if (result.kind !== 'page' || !('subject' in input.target)) return result;
@@ -203,15 +229,12 @@ function setReadResponse(outcome: ZonePageRouteOutcome, serverRender: boolean): 
 async function readForRequest(input: ZonePageInput, followContinuations: boolean): Promise<ZonePageRouteOutcome> {
   const { kernelClient } = await import('../kernel/client');
   const request = getRequest();
-  let authorization: string | undefined;
-  if (input.credentialMode === 'session') {
-    await prepareSession(request, env as Partial<SessionEnv>);
-    authorization = viewerCredential(request) ?? undefined;
-  }
+  const binding = await bindZoneSession(request, env as Partial<SessionEnv>, input.credentialMode);
   setResponseHeader('cache-control', 'private, no-store');
   let outcome = await readZonePageForRoute(kernelClient(input.locale), input, {
     followContinuations,
-    ...(authorization === undefined ? {} : { authorization }),
+    ...(binding.authorization === undefined ? {} : { authorization: binding.authorization }),
+    ...(binding.kernelSession === undefined ? {} : { kernelSession: binding.kernelSession }),
   });
   if (outcome.kind === 'page' && outcome.common) {
     const { page, overview, view } = outcome.common;

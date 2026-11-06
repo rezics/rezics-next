@@ -517,6 +517,24 @@ async function executeRead(
   return { result: await responseResult(response), tokens };
 }
 
+/** The same search canonical used by `readPage`, including language overlay and admitted limit. */
+export function preparePageRead(
+  descriptor: PageRead,
+  languages?: readonly string[],
+): { descriptor: PageRead; canonical: string } {
+  if (descriptor.kind !== 'search') return { descriptor, canonical: canonicalize(descriptor)! };
+  const prepared: PageRead = {
+    ...descriptor,
+    kind: 'search',
+    body: {
+      ...descriptor.body,
+      limit: validateSearchLimit((descriptor.body as Record<string, unknown>).limit),
+      ...(languages === undefined ? {} : { languages: [...languages] }),
+    },
+  };
+  return { descriptor: prepared, canonical: canonicalize(prepared)! };
+}
+
 export async function readPage(options: {
   dispatch: (request: Request) => Promise<Response>;
   incoming: Request;
@@ -532,17 +550,8 @@ export async function readPage(options: {
   ) => Promise<{ id: string } | null>;
 }): Promise<{ results: Record<string, PageResult>; session: string | null; documents: Record<string, unknown> }> {
   const reads = validateReads(options.reads).map((read) => {
-    if (read.descriptor.kind !== 'search') return read;
-    const descriptor: PageRead = {
-      ...read.descriptor,
-      kind: 'search',
-      body: {
-        ...read.descriptor.body,
-        limit: validateSearchLimit((read.descriptor.body as Record<string, unknown>).limit),
-        ...(options.languages === undefined ? {} : { languages: [...options.languages] }),
-      },
-    };
-    return { ...read, descriptor, canonical: canonicalize(descriptor)! };
+    const prepared = preparePageRead(read.descriptor, options.languages);
+    return { ...read, descriptor: prepared.descriptor, canonical: prepared.canonical };
   });
   const unique = new Map<string, PreparedRead>();
   for (const read of reads) if (!unique.has(read.canonical)) unique.set(read.canonical, read);

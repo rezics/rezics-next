@@ -111,6 +111,7 @@ import { subjectUrlForView } from '../../subject/subject-href';
 import { ContextNavigation, contextHref } from './context-navigation';
 import { candidateContext } from '../../subject/candidates';
 import { subjectVisitReturn, withSubjectVisitReturn } from './subject-visit-navigation';
+import { zoneVisitReturn } from '../../zones/visit';
 import { MangaReaderEntry } from '../catalogue/manga-reader/entry';
 import { isMangaReaderType } from '../catalogue/manga-reader/model';
 import { mangaReaderAddress } from '../catalogue/manga-reader/navigation';
@@ -1471,7 +1472,9 @@ export function SubjectPage({
                 >
                   {visitReturn.endsWith('/library/import-vndb#vndb-current-library')
                     ? m.library_vndb_browse_back({}, { locale: locale as never })
-                    : m.recording_reader_return({}, { locale: locale as never })}
+                    : zoneVisitReturn(visitReturn, locale)
+                      ? m.zone_return({}, { locale: locale as never })
+                      : m.recording_reader_return({}, { locale: locale as never })}
                 </a>
               </p>
             ) : null}

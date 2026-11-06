@@ -2038,6 +2038,7 @@
   "zone_preparing_message": "This page is being prepared. Please try again in a moment.",
   "zone_unavailable_heading": "This Zone page is temporarily unavailable",
   "zone_unavailable_message": "We could not load this Zone page. Try again after a moment.",
+  "zone_return": "Back to this Zone",
   "inbox_heading": "Inbox",
   "inbox_sign_in": "Sign in to see your inbox.",
   "inbox_loading": "Loading your inbox…",

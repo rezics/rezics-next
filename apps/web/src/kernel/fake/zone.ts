@@ -1,6 +1,10 @@
 import type { KernelRecording } from '../fake.ts';
 import type { FakeRoute } from '../fake-modules.ts';
 import {
+  composedZoneEmptyFake as composedEmpty,
+  composedZoneMembersFake as composedMembers,
+  composedZonePrivateMountFake as composedPrivate,
+  composedZoneSparseFake as composedSparse,
   staticZoneGuideFake as staticGuide,
   staticZoneHomeFake as staticHome,
   staticZoneOwnerFake as staticOwnerHome,
@@ -19,6 +23,10 @@ const revokedZoneId = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e08';
 const subjectId = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e01';
 const staticZoneId = staticHome.zone.id;
 const staticOwnerZoneId = staticOwnerHome.zone.id;
+const composedZoneId = composedMembers.zone.id;
+const composedPrivateZoneId = composedPrivate.zone.id;
+const composedSparseZoneId = composedSparse.zone.id;
+const composedEmptyZoneId = composedEmpty.zone.id;
 const recoveringReads = new Map<string, number>();
 
 type ZoneTarget = { route: string };
@@ -117,6 +125,7 @@ async function response(request: Request, match: RegExpExecArray | null): Promis
   if (id === unavailableZoneId) return problem(503, { 'cache-control': 'no-store', 'retry-after': '1' });
 
   const url = new URL(request.url);
+  const cursor = url.searchParams.get('cursor');
   let body: unknown;
   try {
     body = await request.json();
@@ -134,7 +143,19 @@ async function response(request: Request, match: RegExpExecArray | null): Promis
     const recording = target.route === '' ? staticHome : target.route === 'guide' ? staticGuide : undefined;
     return recording ? { status: 200, ...recording } : problem(404, { 'cache-control': 'no-store' });
   }
-  const cursor = url.searchParams.get('cursor');
+  if (id === composedZoneId) {
+    if (target.route !== '') return problem(404, { 'cache-control': 'no-store' });
+    if (cursor === 'stale-source') return { status: 409, code: 'stale_cursor' };
+    return { status: 200, ...composedMembers };
+  }
+  if (id === composedPrivateZoneId)
+    return request.headers.get('authorization') === 'Bearer owner' && target.route === ''
+      ? { status: 200, ...composedPrivate }
+      : problem(404, { 'cache-control': 'no-store' });
+  if (id === composedSparseZoneId)
+    return target.route === '' ? { status: 200, ...composedSparse } : problem(404, { 'cache-control': 'no-store' });
+  if (id === composedEmptyZoneId)
+    return target.route === '' ? { status: 200, ...composedEmpty } : problem(404, { 'cache-control': 'no-store' });
   if (id === recoveringZoneId) {
     const count = recoveringReads.get(id) ?? 0;
     recoveringReads.set(id, count + 1);

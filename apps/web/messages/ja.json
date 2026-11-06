@@ -2011,6 +2011,7 @@
   "zone_preparing_message": "このページを準備しています。しばらくしてからもう一度お試しください。",
   "zone_unavailable_heading": "ゾーンのページを一時的に利用できません",
   "zone_unavailable_message": "ゾーンのページを読み込めませんでした。少し待ってからもう一度お試しください。",
+  "zone_return": "このゾーンに戻る",
   "inbox_heading": "受信箱",
   "inbox_sign_in": "受信箱を見るにはログインしてください。",
   "inbox_loading": "受信箱を読み込み中…",

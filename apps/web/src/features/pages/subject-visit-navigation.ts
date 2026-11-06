@@ -1,6 +1,7 @@
 import { releaseVisitReturn } from '../catalogue/release-fidelity/navigation';
 import { creditReturn } from '../catalogue/credit-inspection/navigation';
 import { realmReadingReturn } from '../../community/realm-reading-return';
+import { zoneVisitReturn } from '../../zones/visit';
 import {
   workFranchiseReturn,
   workFranchiseFragment,
@@ -706,6 +707,8 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
   if (/[\\\u0000-\u001f\u007f]/u.test(value)) return;
   const realmReading = realmReadingReturn(value, locale);
   if (realmReading) return realmReading;
+  const zoneReading = zoneVisitReturn(value, locale);
+  if (zoneReading) return zoneReading;
   const catalogueReturn = realmCatalogueReturnHref(value, locale);
   if (catalogueReturn) return catalogueReturn;
   if (!value.startsWith('/') || value.startsWith('//')) return;
