@@ -236,7 +236,12 @@ async function deletionPost(path: string, body: unknown, maxBytes: number): Prom
 async function runDeletion(
   operationKey: string,
   operation: Extract<AccountOperation, { kind: 'delete' }>,
-  browser?: { isCurrent: () => boolean; retryUncertain?: boolean; onExecutionDispatch?: () => boolean },
+  browser?: {
+    isCurrent: () => boolean;
+    retryUncertain?: boolean;
+    onExecutionDispatch?: () => boolean;
+    confirmation?: string;
+  },
 ): Promise<AccountOperationResult> {
   const current = () => !browser || browser.isCurrent();
   if (!current()) return { ok: false, reason: 'failure' };
@@ -248,15 +253,17 @@ async function runDeletion(
   if (!approved.ok) return failure(approved);
   const approval = parseAccountOperationApprovalResponse(approved.body);
   if (!approval || Date.parse(approval.expiresAt) <= Date.now()) return { ok: false, reason: 'unavailable' };
-  const executionBody = { operationKey, operation, reference: approval.reference };
+  const executionBody =
+    typeof browser?.confirmation === 'string'
+      ? { operationKey, operation, reference: approval.reference, confirmation: browser.confirmation }
+      : { operationKey, operation, reference: approval.reference };
   if (browser?.onExecutionDispatch && !browser.onExecutionDispatch()) return { ok: false, reason: 'failure' };
   if (!current()) return { ok: false, reason: 'failure' };
   const execute = () =>
     deletionPost('/account-operations/execute', executionBody, DELETION_EXECUTION_MAX_RESPONSE_BYTES);
   let executed = await execute();
   const uncertain = !executed.ok && executed.effectStatus !== 'not_applied';
-  if (!executed.ok && executed.code === 'unavailable' && (!browser || browser.retryUncertain) && current())
-    executed = await execute();
+  if (uncertain && (!browser || browser.retryUncertain) && current()) executed = await execute();
   if (!executed.ok)
     return uncertain || executed.effectStatus !== 'not_applied' ? { ok: false, reason: 'unknown' } : failure(executed);
   const result = parseDeletionExecutionResponse(executed.body);
@@ -385,6 +392,7 @@ export async function runAccountOperation(
     retryUncertain?: boolean;
     onExecutionDispatch?: () => boolean;
     signal?: AbortSignal;
+    confirmation?: string;
   },
 ): Promise<AccountOperationResult> {
   if (operation.kind === 'delete') return runDeletion(operationKey, operation, browser);

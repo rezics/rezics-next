@@ -735,9 +735,10 @@ only after trusted new-establishment proof. Reinstatement never restores old ses
 See [session-revocation.ts][session-revocation], [suspension.ts][suspension], [auth-barriers.ts][auth-barriers],
 [recovery-completion.ts][recovery-completion] and [Session revocation][access-revocation].
 
-[Deletion](deletion.md) owns erasure: account deletion is final at fresh, typed confirmation, private data is
-purged by bounded durable work and retained public contributions have only de-identified `{ id, state, kind }`
-attribution, through [lifecycle.ts][lifecycle], [account-workflows.ts][account-workflows] and
+[Deletion](deletion.md) owns erasure: account deletion is final at fresh, typed confirmation of the current handle
+after NFC and case-folding (handleless accounts skip that field). Private data is purged by bounded durable work.
+Public identity tombstones keep `{ id, state, kind }`; retained contributions carry `{ displayName: 'Deleted account' }`
+with no account id, through [lifecycle.ts][lifecycle], [account-workflows.ts][account-workflows] and
 [Account deletion policy][access-deletion].
 Operators must resolve operated-account responsibilities and organizations their ownership constraints before
 the barrier, while statutory erasure requests remain independent; expired cleanup cannot restore identity or

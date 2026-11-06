@@ -35,7 +35,9 @@ synchronous. See [Content deletion](../services/kernel/src/content/README.md#del
 ## Account erasure
 
 1. **Confirmation and T.** Account erasure is final at confirmation, with fresh authentication and the typed
-   confirmation. That instant, T, is both a read and write fence: private and unlisted reads, exports, counts, media
+   confirmation. Native execute confirmation is the account's current handle, compared after NFC and case-folding;
+   Auth-page localized phrases stay a client-only gate and are not the execute field. Handleless accounts skip the
+   typed execute field. The deletion-page review carries that current handle so the page can send it. That instant, T, is both a read and write fence: private and unlisted reads, exports, counts, media
    and producers reject the owner immediately. Every worker checks the fence before any effect. Authentication
    denial alone is not enough for public or unlisted routes. Imports and late webhooks can never recreate the
    account's data or benefits. The 30-day restore window applies to records deleted one by one; it never postpones
@@ -237,7 +239,9 @@ being inferred from a successful local page.
 
 ### Auth-local copies and the fixed proof boundary
 
-Auth owns its database and `auth_dbos`; kernel `dbos` is a different store. Auth
+Auth owns its database and `auth_dbos`; kernel `dbos` is a different store. Native
+Auth fixtures copy the once-migrated `rezics_kernel_test` template rather than
+replaying kernel migrations per file. Auth
 records account roles and exact workflow/artifact keys in the same transaction as
 SDK enqueue/message writes. App-owned native-table triggers cover subsequent
 status, input, output/error, operation, event/history and message writes. Unknown

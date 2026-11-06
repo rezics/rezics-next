@@ -14,6 +14,7 @@ const review: Extract<AccountDeletionPage, { kind: 'review' }> = {
   kind: 'review',
   accountId: 'account-a',
   email: 'private@example.test',
+  handle: 'reader',
   action: 'available',
   policy: 'personal-deletion',
 };

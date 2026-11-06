@@ -1,5 +1,6 @@
 import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 import {
+  bindAuthDeletionHandleRead,
   createAuthHost,
   createBarrierProofVerifier,
   createProvisioningEvidenceVerifier,
@@ -11,7 +12,7 @@ import { exportJWK, generateKeyPair, type JWK } from 'jose';
 import { Client, Pool } from 'pg';
 import { createAuthDatabase } from '../support/auth-database.ts';
 import { createAccess, INTERNAL_ACTIONS } from '../../src/access/index.ts';
-import { createNativeAccountBindings } from '../../src/access/native-account-bindings.ts';
+import { createAuthDeletionHandleRead, createNativeAccountBindings } from '../../src/access/native-account-bindings.ts';
 import { createAccountManagementReadAccess } from '../../src/access/management-source.ts';
 import { createWorkflowApprovals } from '../../src/access/workflow-approvals.ts';
 import { LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
@@ -78,7 +79,7 @@ export async function nativeFixture(
   const pair = existing ? undefined : await generateKeyPair('ES256', { extractable: true });
   const privateKey = existing?.privateKey ?? { ...(await exportJWK(pair!.privateKey)), kid: 'ordinary-native' };
   let service: AuthService;
-  let host: Awaited<ReturnType<typeof createAuthHost>>;
+  let host: Awaited<ReturnType<typeof createAuthHost>> | undefined;
   let bindings: ReturnType<typeof createNativeAccountBindings>;
   let proofs: ReturnType<typeof createNativeWorkflowProofPorts>;
   let authPool: Pool;
@@ -139,9 +140,11 @@ export async function nativeFixture(
           creationBinding: (input: { registrationId: string; operationKey: string }) => proofs.creationBinding(input),
         });
         const context = () => ({ pool, deadline: Date.now() + 10000 });
+        const deletionHandle = createAuthDeletionHandleRead({ pool, access });
         const ports: AccountOperationAccess = {
           context,
           readOperatorTransferState: createAccountManagementReadAccess({ pool, access }).readOperatorTransferState,
+          readDeletionHandle: (token, accountId, ctx) => deletionHandle.readDeletionHandle(token, accountId, ctx),
           approve: (token, input, ctx) => workflowApprovals.approve(token, input as never, ctx as never),
           resolveForCaller: (token, reference, operation, ctx) =>
             workflowApprovals.resolveForCaller(token, reference, operation as never, ctx as never),
@@ -165,6 +168,7 @@ export async function nativeFixture(
             }
           },
         };
+        bindAuthDeletionHandleRead(ports, deletionHandle);
         return ports;
       })(),
       stagingKey: new Uint8Array(32).fill(93),
@@ -175,7 +179,17 @@ export async function nativeFixture(
     await service.internal.registerClient({ clientId: 'ordinary-test-client', firstParty: true, scopes });
     await host.start();
   };
-  await build();
+  try {
+    await build();
+  } catch (error) {
+    await host?.stop().catch(() => {});
+    await database.close();
+    throw error;
+  }
+  const running = () => {
+    if (!host) throw new Error('Auth host failed to start');
+    return host;
+  };
   const request = (path: string, body?: unknown, headers = new Headers()) =>
     service.handler(
       new Request(`${issuer}${path}`, {
@@ -207,11 +221,11 @@ export async function nativeFixture(
         delegations: bindings.delegations,
       };
     },
-    stop: () => host.stop(),
+    stop: () => running().stop(),
     request,
     approval,
     get host() {
-      return host;
+      return running();
     },
     get bindings() {
       return bindings;
@@ -223,18 +237,18 @@ export async function nativeFixture(
       return proofs;
     },
     async restart() {
-      await host.stop();
+      await running().stop();
       await build();
     },
     async close() {
       try {
-        await host.stop();
+        await host?.stop();
       } finally {
         await database.close();
       }
     },
     async person(key: string) {
-      const result = await host.workflows.register({
+      const result = await running().workflows.register({
         key,
         handle: key.replaceAll('-', '_'),
         email: `${key}@ordinary.test`,
@@ -267,7 +281,7 @@ export async function nativeFixture(
         { operationKey: key, operation },
         { pool, deadline: Date.now() + 10000 },
       );
-      return host.workflows.createAutomated({
+      return running().workflows.createAutomated({
         key,
         handle: operation.handle,
         operatorAccountId: human.accountId,

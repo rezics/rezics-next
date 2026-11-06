@@ -107,6 +107,16 @@ export { createAuthHost, createAuthRestoreHost, AuthHostConfigurationError } fro
 export type { AuthHostOptions } from './host.ts';
 export { createAuthDeployment, authDeploymentConfiguration, websiteDeploymentScopes } from './deployment.ts';
 export type { AuthDeploymentOptions, AuthDeploymentConfiguration, AuthWebsiteDeployment } from './deployment.ts';
+export {
+  bindAuthErasureAcknowledgement,
+  authErasureAcknowledgement,
+  bindAuthDeletionHandleRead,
+  authDeletionHandleRead,
+  normalizeDeletionConfirmation,
+  deletionConfirmationMatches,
+  type AuthErasureAcknowledgement,
+  type AuthDeletionHandleRead,
+} from './kernel-access.ts';
 export { createInternalConsentHandler } from './internal-consent.ts';
 export type { InternalConsentAccessConfiguration } from './internal-consent.ts';
 export type { AccountOperationAccess } from './account-operations-transport.ts';

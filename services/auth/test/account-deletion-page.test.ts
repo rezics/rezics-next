@@ -32,7 +32,7 @@ function fixture(human = proof, advice: 'available' | 'refused' | 'changed' | 'u
   const access = {
     readAccountDeletionAdvice: async () => {
       calls.push('advice');
-      return { kind: advice };
+      return advice === 'available' || advice === 'refused' ? { kind: advice, handle: 'person' } : { kind: advice };
     },
   };
   return {
@@ -74,6 +74,7 @@ test.each(['available', 'refused', 'changed', 'unavailable'] as const)(
         kind: 'review',
         accountId: proof.account_id,
         email: 'person@example.test',
+        handle: 'person',
         action: kind,
         policy: 'personal-deletion',
       });

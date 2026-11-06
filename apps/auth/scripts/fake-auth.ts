@@ -218,6 +218,7 @@ export function startFakeAuth(options: FakeAuthOptions = {}) {
             kind: 'review',
             accountId: state.sessionAccountId,
             email: 'reader@example.test',
+            handle: 'reader',
             action: 'available',
             policy: 'personal-deletion',
           },

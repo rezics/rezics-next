@@ -523,6 +523,7 @@ export function DeleteAccountContent({
       isCurrent,
       retryUncertain: true,
       onExecutionDispatch,
+      ...(advice.handle ? { confirmation: advice.handle } : {}),
     });
     if (!isCurrent()) {
       // Retirement cannot erase evidence from this original send. Keep only

@@ -16,6 +16,7 @@ const review = {
   kind: 'review' as const,
   accountId: 'account-a',
   email: 'person@example.test',
+  handle: 'reader',
   action: 'available' as const,
   policy: 'personal-deletion' as const,
 };
@@ -60,10 +61,22 @@ async function renewAndRepeat(page: Awaited<ReturnType<typeof unknownPage>>) {
 }
 
 const laterResponses = [
-  ['denial', () => Response.json({ error: 'account_operation_denied' }, { status: 403 }), 'account_operation_denied'],
-  ['step-up', () => Response.json({ error: 'step_up_required' }, { status: 401 }), 'step-up'],
+  [
+    'denial',
+    () => Response.json({ error: 'account_operation_denied', effect_status: 'not_applied' }, { status: 403 }),
+    'account_operation_denied',
+  ],
+  [
+    'step-up',
+    () => Response.json({ error: 'step_up_required', effect_status: 'not_applied' }, { status: 401 }),
+    'step-up',
+  ],
   ['unavailable', () => Response.json({ error: 'unavailable' }, { status: 503 }), 'unavailable'],
-  ['platform closure', () => Response.json({ error: 'platform_closed' }, { status: 403 }), 'platform_closed'],
+  [
+    'platform closure',
+    () => Response.json({ error: 'platform_closed', effect_status: 'not_applied' }, { status: 403 }),
+    'platform_closed',
+  ],
 ] as const;
 
 test.each(laterResponses)(

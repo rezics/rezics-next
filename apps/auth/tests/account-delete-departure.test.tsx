@@ -18,6 +18,7 @@ const initial: Extract<AccountDeletionPage, { kind: 'review' }> = {
   kind: 'review',
   accountId: 'story-account',
   email: null,
+  handle: 'reader',
   action: 'available',
   policy: 'personal-deletion',
 };

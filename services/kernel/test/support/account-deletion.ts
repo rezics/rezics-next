@@ -40,6 +40,17 @@ function cookies(response: Response): Headers {
   });
 }
 
+/** Live execute confirmation is `access.account.handle`, the same row Auth reads. */
+export async function readLiveAccountHandle(pool: Pool, accountId: string): Promise<string | null> {
+  const route = routeOf(accountId);
+  if (route === null) return null;
+  const result = await pool.query<{ handle: string | null }>(
+    'SELECT handle FROM access.account WHERE route=$1 AND account_id=$2',
+    [route, accountId],
+  );
+  return result.rows[0]?.handle ?? null;
+}
+
 /**
  * Delete through Auth's step-up operation transport as a freshly signed-in human. An operated account is
  * deleted by its operator and includes the current operator responsibility; a successful deletion returns
@@ -123,10 +134,12 @@ export async function deletePersona(
   const approval = (await approved.json()) as { reference?: unknown };
   if (typeof approval.reference !== 'string' || !approval.reference)
     throw new AccountDeletionError(approved.status, { error: 'invalid_approval_response' });
+  const handle = await readLiveAccountHandle(options.pool, persona.accountId);
   const executed = await post('/account-operations/execute', {
     operationKey,
     operation,
     reference: approval.reference,
+    ...(handle ? { confirmation: handle } : {}),
   });
   if (!executed.ok) {
     const body = (await executed.json().catch(() => ({}))) as AccountDeletionErrorBody;

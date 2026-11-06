@@ -3,9 +3,8 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { Pool, type PoolClient } from 'pg';
 import { exportJWK, generateKeyPair } from 'jose';
-import { testDatabase } from '../../scripts/database.ts';
-import { migrate as migrateKernel } from '../../../kernel/scripts/database.ts';
-import { createAuthHost, type AccountOperationAccess } from '../../src/index.ts';
+import { kernelTestDatabase, testDatabase } from '../../scripts/database.ts';
+import { bindAuthDeletionHandleRead, createAuthHost, type AccountOperationAccess } from '../../src/index.ts';
 import { createNativeWorkflowProofPorts } from '../../src/native-workflow-proofs.ts';
 import { createProvisioningEvidenceVerifier } from '../../src/provisioning-evidence.ts';
 import { createBarrierProofVerifier } from '../../src/barrier-proofs.ts';
@@ -51,8 +50,7 @@ export function failNativeQueries(pool: Pool, fails: (sql: string) => boolean) {
  * Auth-only pool, never a kernel module, pool, key or credential. */
 export async function nativeFixture(options: { openPool?: (url: string) => Promise<Pool> } = {}) {
   const fixture = testDatabase();
-  const kernelFixture = testDatabase();
-  migrateKernel(kernelFixture.url);
+  const kernelFixture = kernelTestDatabase();
   const kernel = new Pool({ connectionString: kernelFixture.url });
   const pool = options.openPool ? await options.openPool(fixture.url) : new Pool({ connectionString: fixture.url });
   const previous = process.env.DATABASE_URL;
@@ -109,15 +107,18 @@ export async function nativeFixture(options: { openPool?: (url: string) => Promi
     creationBinding: proofs.creationBinding,
   });
   const context = () => ({ pool: kernel, deadline: Date.now() + 30_000 });
+  const deletionHandle = modules.createAuthDeletionHandleRead({ pool: kernel, access });
   const accountOperations: AccountOperationAccess = {
     context,
     async admitGroup() {
       throw new Error('This fixture does not exercise gated groups');
     },
+    readDeletionHandle: (token, accountId, ctx) => deletionHandle.readDeletionHandle(token, accountId, ctx),
     approve: (token, input, ctx) => approvals.approve(token, input as never, ctx as never),
     resolveForCaller: (token, reference, operation, ctx) =>
       approvals.resolveForCaller(token, reference, operation as never, ctx as never),
   };
+  bindAuthDeletionHandleRead(accountOperations, deletionHandle);
   const deliveries: { accountId: string; token: string }[] = [];
   const key = {
     ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
@@ -213,7 +214,17 @@ export async function nativeFixture(options: { openPool?: (url: string) => Promi
       const approval = await call('/account-operations/approve', { operationKey: key, operation }, person.cookie);
       expect(approval.status).toBe(200);
       const { reference } = (await approval.json()) as { reference: string };
-      return call('/account-operations/execute', { operationKey: key, operation, reference }, person.cookie);
+      const handle = (
+        await kernel.query<{ handle: string | null }>(
+          'SELECT handle FROM access.account WHERE route=$1 AND account_id=$2',
+          [modules.routeOf(person.accountId), person.accountId],
+        )
+      ).rows[0]?.handle;
+      return call(
+        '/account-operations/execute',
+        { operationKey: key, operation, reference, ...(handle ? { confirmation: handle } : {}) },
+        person.cookie,
+      );
     },
     async close(options: { keepPool?: boolean } = {}) {
       if (options.keepPool) await host.workflows.close();

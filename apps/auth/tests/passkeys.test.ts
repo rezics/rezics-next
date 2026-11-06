@@ -126,6 +126,7 @@ const fake = Bun.serve({
         kind: 'review',
         accountId: sessionAccountId,
         email,
+        handle: 'reader',
         action: 'available',
         policy: 'personal-deletion',
       });

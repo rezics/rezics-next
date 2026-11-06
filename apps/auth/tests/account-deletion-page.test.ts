@@ -1,13 +1,14 @@
 import { afterAll, expect, test } from 'bun:test';
 import { loadAccountDeletionPage } from '../src/account-deletion-page';
 
-const maxBytes = 2375;
+const maxBytes = 2771;
 const original = globalThis.fetch;
 const encoder = new TextEncoder();
 const maximum = {
   kind: 'review',
   accountId: '\0'.repeat(128),
   email: `${'\0'.repeat(249)}@\0.\0\0`,
+  handle: '\0'.repeat(64),
   action: 'available',
   policy: 'personal-deletion',
 };
@@ -78,18 +79,33 @@ test('one closed same-origin page read rejects authority and unrecognized advice
   for (const body of [
     { kind: 'signed-out' },
     { kind: 'authentication-required', accountId: 'self' },
-    { kind: 'review', accountId: 'self', email: null, action: 'refused', policy: 'personal-deletion' },
+    {
+      kind: 'review',
+      accountId: 'self',
+      email: null,
+      handle: null,
+      action: 'refused',
+      policy: 'personal-deletion',
+    },
   ])
     expect(await readBody(body)).toEqual(body);
   for (const body of [
     { kind: 'available' },
     { kind: 'review', accountId: 'self', action: 'available' },
+    {
+      kind: 'review',
+      accountId: 'self',
+      email: null,
+      action: 'available',
+      policy: 'personal-deletion',
+    },
     { kind: 'authentication-required', accountId: 'self', token: 'secret' },
     {
       kind: 'review',
       accountId: 'self',
       email: null,
       action: 'available',
+      handle: 'reader',
       policy: 'personal-deletion',
       targetAccountId: 'other',
     },
