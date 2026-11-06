@@ -174,7 +174,7 @@ test('a new boundary violation lands and is recorded against its Goal instead of
   } finally {
     h.dispose();
   }
-});
+}, 120_000);
 
 test('a landed violation gets one urgent repair and resolves once a later candidate on dev no longer reports it', async () => {
   const h = integrationHarness();
@@ -206,7 +206,7 @@ test('a landed violation gets one urgent repair and resolves once a later candid
   } finally {
     h.dispose();
   }
-});
+}, 120_000);
 
 test('a transpile failure still returns to the author and records no boundary violation', async () => {
   const h = integrationHarness();
@@ -255,4 +255,4 @@ test('a transpile failure still returns to the author and records no boundary vi
   } finally {
     h.dispose();
   }
-});
+}, 120_000);

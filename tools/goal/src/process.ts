@@ -57,7 +57,7 @@ function bootId(procRoot: string): string {
   return id;
 }
 /** A missing or dead process is distinct from process state we cannot inspect. */
-function inspectProcessSnapshot(
+export function inspectProcessSnapshot(
   pid: number,
   procRoot: string,
 ): { identity: ProcessIdentity; dead: boolean; cpuTicks?: bigint } | null {

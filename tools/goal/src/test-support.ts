@@ -20,7 +20,9 @@ import { gateRunner, type GateRunner } from './merge.ts';
 import { parseBrief, readRiskOwnership } from './briefs.ts';
 import {
   checkedProcessGroup,
+  groupMembers,
   inspectProcessIdentity,
+  inspectProcessSnapshot,
   sameProcess,
   signalProcessIdentity,
   waitForWorkerExit,
@@ -62,8 +64,22 @@ function boundedFixtureWorkerScript(script: string): string {
   return script.replace(/^(#![^\n]*\n)/, `$1${guard}`);
 }
 
+/**
+ * A dead leader keeps its kernel group until its parent reaps it, so the group looks present with no visible member.
+ * It is empty when that same leader is all that remains: a zombie keeps its PID reserved, so nothing can reuse it.
+ */
+function leaderIsDeadAlone(identity: ProcessIdentity): boolean {
+  const snapshot = inspectProcessSnapshot(identity.pid, '/proc');
+  return (
+    snapshot?.dead === true &&
+    snapshot.identity.start === identity.start &&
+    snapshot.identity.boot === identity.boot &&
+    groupMembers(identity.group).length === 0
+  );
+}
+
 function checkedFixtureGroup(identity: ProcessIdentity, _allowLeaderExit = false): ProcessIdentity[] {
-  return checkedProcessGroup(identity);
+  return leaderIsDeadAlone(identity) ? [] : checkedProcessGroup(identity);
 }
 
 async function signalFixtureGroup(identity: ProcessIdentity, signal: NodeJS.Signals): Promise<void> {
@@ -152,7 +168,7 @@ const CHECK_SCRIPT_PATHS = [
   'scripts/check-host/docker',
 ] as const;
 
-function cloneSharedGit(template: string, destination: string): void {
+function cloneSharedGit(template: string, destination: string, identity: { name: string; email: string }): void {
   mkdirSync(destination, { recursive: true });
   repositoryGit(destination, 'clone', '--quiet', '--shared', '--no-hardlinks', template, '.');
   try {
@@ -160,9 +176,9 @@ function cloneSharedGit(template: string, destination: string): void {
   } catch {
     /* git clone always adds origin; keep init-like remotes. */
   }
-  // A clone does not copy the template's identity, and a check host has no global one: fixture commits must not need it.
-  for (const key of ['user.name', 'user.email'])
-    repositoryGit(destination, 'config', key, repositoryGit(template, 'config', '--get', key).trim());
+  // A clone does not copy the template's identity; check hosts have no global one, so set it here.
+  repositoryGit(destination, 'config', 'user.name', identity.name);
+  repositoryGit(destination, 'config', 'user.email', identity.email);
 }
 
 function gitTemplate(kind: 'repository' | 'harness', build: (root: string) => void): string {
@@ -373,7 +389,7 @@ export function temporaryDirectory(): { path: string; close(): void } {
 export function repository() {
   const temporary = temporaryDirectory();
   const main = join(temporary.path, 'main');
-  cloneSharedGit(repositoryGitTemplate(), main);
+  cloneSharedGit(repositoryGitTemplate(), main, { name: 'Test', email: 'test@example.invalid' });
   return {
     ...temporary,
     main,
@@ -513,7 +529,7 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:120,cached
   disposeAsync(options?: { beforeRemove?: () => void | Promise<void> }): Promise<void>;
 } {
   const root = tempDirectory();
-  cloneSharedGit(harnessGitTemplate(), root);
+  cloneSharedGit(harnessGitTemplate(), root, { name: 'Fixture', email: 'fixture@example.invalid' });
   const state = join(root, '.temp/goal');
   mkdirSync(state, { recursive: true });
   const command = join(state, 'codex');
