@@ -321,7 +321,12 @@ test('community and content commands leave a log readBatch decodes, each emitted
   );
   const account = await readAccount(pool, routeOf(actor.accountId)!, actor.accountId);
   if (!account) throw new Error('missing account');
-  const membership = createRealmMembership({ deadlineNow: () => Date.now(), pool, access: f.access });
+  const membership = createRealmMembership({
+    clock: () => new Date(),
+    deadlineNow: () => Date.now(),
+    pool,
+    access: f.access,
+  });
   const reservation = {
     accountId: actor.accountId,
     principal: { kind: 'realm' as const, id: realm.value.realmId },

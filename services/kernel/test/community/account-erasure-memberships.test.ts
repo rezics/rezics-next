@@ -62,6 +62,7 @@ beforeAll(async () => {
   member = await deletion.person();
   production = await createProductionAccess({ actions: [...system.actions.keys()] });
   membership = createRealmMembership({
+    clock: () => new Date(),
     deadlineNow: () => Date.now(),
     pool: system.database.pool,
     access: production.access,

@@ -57,7 +57,7 @@ export type FeedDependencies = {
   tokens: KeyRing;
   clock: KernelClock;
   /** Real wall time for the request deadline of a Realm publication read. */
-  deadlineNow?: () => number;
+  deadlineNow: () => number;
   access: Access;
   contentAccess: Access;
   workClient: () => Promise<WorkClient>;

@@ -461,7 +461,7 @@ beforeAll(async () => {
     }),
   );
   if (!access) throw new Error('Kernel access was not installed');
-  membership = createRealmMembership({ deadlineNow: () => Date.now(), pool, access });
+  membership = createRealmMembership({ clock: () => new Date(), deadlineNow: () => Date.now(), pool, access });
   roleReader = membership.roleReader;
   service = await createAuthService({
     database: authPool,

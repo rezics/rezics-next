@@ -598,7 +598,13 @@ test.serial(
     expect(joined.response.status).toBe(202);
     await settle(joined.value.workflowId as string);
     expect((await ban(path, restricted, member)).response.status).toBe(403);
-    const membership = createRealmMembership({ deadlineNow: () => Date.now(), pool, access, referenceKeys: tokens });
+    const membership = createRealmMembership({
+      clock: () => new Date(),
+      deadlineNow: () => Date.now(),
+      pool,
+      access,
+      referenceKeys: tokens,
+    });
     await expect(
       membership.authorize(restricted.bearer, {
         kind: 'membership',

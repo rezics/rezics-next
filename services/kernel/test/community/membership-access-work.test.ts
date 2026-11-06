@@ -26,8 +26,12 @@ function rows(member: boolean, until?: string): { role: 'owner' | 'member'; memb
   return [{ role: 'member', member, valid: member ? '(,)' : `["${at}",${until ? `"${until}"` : ''})` }, negative];
 }
 function reader() {
-  return membershipModule.createRealmMembership({ deadlineNow: () => Date.now(), pool, access: {} as Access })
-    .roleReader;
+  return membershipModule.createRealmMembership({
+    clock: () => new Date(),
+    deadlineNow: () => Date.now(),
+    pool,
+    access: {} as Access,
+  }).roleReader;
 }
 function accounting(refuse = false) {
   const admitted: AccessWork[] = [];

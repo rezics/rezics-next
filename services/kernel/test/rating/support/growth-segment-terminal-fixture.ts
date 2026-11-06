@@ -179,6 +179,7 @@ export async function openTerminalGrowthFixture(): Promise<TerminalGrowthFixture
       realmRoleReader: (client, input) => roleReader(client, input),
     });
     const membership = createRealmMembership({
+      clock: () => new Date(),
       deadlineNow: () => Date.now(),
       pool: database.pool,
       access: production.access,
