@@ -10,8 +10,10 @@ import {
 import { createReviewDiscoveryAdapter } from '../search/review-discovery.ts';
 import type { SpaceDiscoveryAdapter } from '../search/space-discovery.ts';
 import type { IndexedSpace, SpaceDiscoverySummary } from '../community/index.ts';
+import { AccessUnavailableError, CommandUnavailableError } from '../access/unavailable.ts';
 import {
   REVIEW_DISCOVERY_PAGE_LIMIT,
+  ReviewDiscoverySourceError,
   type IndexedReview,
   type ReviewDiscoverySource,
 } from '../content/review-discovery.ts';
@@ -203,7 +205,18 @@ function createReviewPopulationProducer(source: ReviewDiscoverySource | undefine
     kind: 'review',
     owner: 'content',
     async readiness() {
-      return source?.pageWithCut ? 'ready' : 'unavailable';
+      if (!source?.pageWithCut) return 'unavailable';
+      try {
+        const page = await source.pageWithCut(0, null, 1);
+        if (page.state === 'ready') return 'ready';
+        if (page.state === 'unavailable') return 'unavailable';
+        return 'preparing';
+      } catch (error) {
+        if (error instanceof AccessUnavailableError || error instanceof CommandUnavailableError) return 'preparing';
+        if (error instanceof ReviewDiscoverySourceError)
+          return error.state === 'unavailable' ? 'unavailable' : 'preparing';
+        throw error;
+      }
     },
     async page(partition, after, continuation, limit) {
       if (!source?.pageWithCut) throw new TypeError('Content review discovery pageWithCut capability is unavailable');

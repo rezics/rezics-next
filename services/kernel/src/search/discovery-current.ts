@@ -26,6 +26,7 @@ import { validateRequestSourceSnapshot } from './request-source-snapshot.ts';
 import { admitDiscoveryHit } from './discovery-http.ts';
 import type { IndexedSubject, SubjectSnapshot, SubjectSource } from './source.ts';
 import { projectCharacterPersonContexts } from './character-person.ts';
+import { publicAliases } from './document-names.ts';
 import { chooseTexts, projectHit } from './hits.ts';
 import { ProblemError } from '../http/problem.ts';
 import { projectMatchEvidence } from './match-evidence.ts';
@@ -359,18 +360,7 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
             ),
           ).sort(([first], [second]) => first.localeCompare(second)),
         );
-        const aliasesByLanguage = new Map<string, Set<string>>();
-        for (const alias of subject.aliases) {
-          if (languages.length && !languages.includes(alias.language)) continue;
-          const values = aliasesByLanguage.get(alias.language) ?? new Set<string>();
-          values.add(alias.value);
-          aliasesByLanguage.set(alias.language, values);
-        }
-        const aliases = Object.fromEntries(
-          [...aliasesByLanguage]
-            .sort(([first], [second]) => first.localeCompare(second))
-            .map(([language, values]) => [language, [...values].sort()]),
-        );
+        const aliases = publicAliases(subject);
         const selectedLabel = Object.entries(labels)[0];
         const contexts =
           context.observeRelationRelease === undefined

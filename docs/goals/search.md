@@ -44,6 +44,7 @@ continuation. Their owners supply the closed registry, complete common-generatio
 eligibility/hydration seams; Search owns query compilation, ordered candidate consumption and response execution.
 Decision: while those seams are absent, an unexpected metadata candidate is unavailable; missing owner evidence
 never becomes a successful empty result or count.
+Decision: a preparing or unavailable review producer is omitted from generation requirements; catalogue siblings stay allocatable. Access deadline during that readiness probe is preparing, not a missing producer.
 Decision: scoped Search uses the verified current reader and one complete predicate for results and facets; a reader or
 resource change retires old facet values and cursors and restarts in that scope without Global fallback.
 The query contract is [discovery-query](../../services/kernel/src/search/discovery-query.md), under the
