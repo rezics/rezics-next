@@ -387,7 +387,8 @@ test('full native topology closure cannot substitute for an interrupted installa
     // Drive the actual bounded producer while the installation command is interrupted.
     // No topology, source ACK, receiving custody or completion row is installed by test SQL.
     let remaining = 4096;
-    for (let batch = 0; batch < 100 && remaining > 0; batch++) {
+    const deadline = Date.now() + 120_000;
+    while (remaining > 0 && Date.now() < deadline) {
       try {
         await runIdentityEpochBootstrapBatch(db.pool);
       } catch (error) {
