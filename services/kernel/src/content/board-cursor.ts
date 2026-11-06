@@ -156,7 +156,7 @@ export function encodeBoardCursor(
   binding: BoardCursorBinding,
   epoch: number,
   after: BoardCursorKey,
-  now = Date.now(),
+  now: number,
 ): string {
   if (binding.sort !== 'newest' && binding.sort !== 'oldest') throw new TypeError('Invalid board sort');
   if (!isBoardCursorKey(after)) throw new TypeError('Invalid board cursor key');
@@ -169,7 +169,7 @@ export function decodeBoardCursor(
   binding: BoardCursorBinding,
   token: string,
   expectedEpoch: number,
-  now = Date.now(),
+  now: number,
 ): BoardCursorResult {
   try {
     if (binding.sort !== 'newest' && binding.sort !== 'oldest') return { ok: false, reason: 'invalid' };
@@ -199,7 +199,7 @@ export function encodeBoardRankCursor(
   binding: BoardCursorBinding,
   epoch: number,
   after: BoardRankCursorKey,
-  now = Date.now(),
+  now: number,
 ): string {
   if (binding.sort !== 'active' && binding.sort !== 'hot') throw new TypeError('Invalid ranked board sort');
   if (!isBoardRankCursorKey(after)) throw new TypeError('Invalid board rank cursor key');
@@ -212,7 +212,7 @@ export function decodeBoardRankCursor(
   binding: BoardCursorBinding,
   token: string,
   expectedEpoch: number,
-  now = Date.now(),
+  now: number,
 ): BoardRankCursorResult {
   try {
     if (binding.sort !== 'active' && binding.sort !== 'hot') return { ok: false, reason: 'invalid' };

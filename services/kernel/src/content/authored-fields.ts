@@ -139,7 +139,7 @@ export async function appendAuthoredField(
     creator_id: authorAccountId,
     at: authoritativeTimeValue(command.time),
     grants: [{ subject_kind: 'identity', subject_id: authorAccountId, grant_role: 'content.authored_field.owner' }],
-    transaction_id: Bun.randomUUIDv7(),
+    transaction_id: command.transactionId,
   });
   if (grantRows.length !== 1) throw new TypeError('Authored field owner grant was not initialized');
   return { id, digest: document.sha256 };
