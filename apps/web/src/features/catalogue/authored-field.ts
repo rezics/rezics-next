@@ -222,7 +222,7 @@ export async function readAuthoredField(
           statement.value.content.language === language,
       ) ?? null;
     if (inspection) {
-      const exact = inspectSelectedSynopsisRead(inspection, current.data.selectedSynopsis);
+      const exact = inspectSelectedSynopsisRead(inspection, current.data.selectedSynopsis, current.data);
       const kind = authoredInspectionKind(exact);
       if (kind) return { ok: false, reason: 'stale', inspection: kind };
       statement = selectedSynopsisStatement(current.data, exact) ?? null;

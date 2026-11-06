@@ -53,8 +53,10 @@ test('independent public selected-synopsis reads keep no-store, refuse redirects
       'schema:abstract': [
         {
           id: statement,
+          rank: 'normal',
           property: { id: 'schema:abstract', data_type: 'document' },
           value: { type: 'value', content: { document, digest, language: 'und' } },
+          qualifiers: [],
           references: [],
         },
       ],
@@ -110,6 +112,10 @@ test('independent public selected-synopsis reads keep no-store, refuse redirects
     release,
     references: [],
   });
+  for (const kind of ['changed', 'missing', 'unsupported', 'unavailable'] as const)
+    expect(
+      admitSelectedSynopsisSupport({ ...current, selectedSynopsis: { kind } } as never, statement, operands.document),
+    ).toEqual({ kind });
   expect(
     admitSelectedSynopsisSupport(
       {
@@ -132,8 +138,69 @@ test('independent public selected-synopsis reads keep no-store, refuse redirects
       operands.document,
     ),
   ).toEqual({ kind: 'unavailable' });
+  const currentStatement = current.subject.statements['schema:abstract']![0]!;
+  const withCurrentField = (statementValue: unknown) =>
+    ({
+      ...current,
+      subject: {
+        ...current.subject,
+        statements: { ...current.subject.statements, 'schema:abstract': [statementValue] },
+      },
+    }) as never;
+  expect(
+    admitSelectedSynopsisSupport(
+      withCurrentField({
+        ...currentStatement,
+        value: { type: 'value', content: { document, digest: 'f'.repeat(64), language: 'und' } },
+      }),
+      statement,
+      operands.document,
+    ),
+  ).toEqual({ kind: 'unavailable' });
+  expect(
+    admitSelectedSynopsisSupport(
+      withCurrentField({ ...currentStatement, rank: 'preferred' }),
+      statement,
+      operands.document,
+    ),
+  ).toEqual({ kind: 'unavailable' });
+  expect(
+    admitSelectedSynopsisSupport(
+      withCurrentField({
+        ...currentStatement,
+        references: [
+          {
+            hash: 'changed-source',
+            parts: [
+              {
+                property: { id: 'schema:url', data_type: 'url' },
+                value: { type: 'value', content: 'https://source.test/other' },
+              },
+            ],
+          },
+        ],
+      }),
+      statement,
+      operands.document,
+    ),
+  ).toEqual({ kind: 'unavailable' });
   expect(
     selectedSynopsisQueryFromPublic({ subject: { ...subject, statements: {} } } as never, statement),
+  ).toBeUndefined();
+  expect(
+    selectedSynopsisQueryFromPublic(
+      {
+        subject: {
+          ...subject,
+          statements: {
+            'schema:abstract': [
+              { ...subject.statements['schema:abstract']![0], property: { id: 'schema:name', data_type: 'string' } },
+            ],
+          },
+        },
+      } as never,
+      statement,
+    ),
   ).toBeUndefined();
   expect(requests).toHaveLength(2);
   expect(requests[1]!.searchParams.get('selectedSynopsis')).toBe(operands.query);

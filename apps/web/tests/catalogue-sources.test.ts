@@ -282,10 +282,21 @@ test('exact HTTP receiving binds the original second/non-default selection and r
   const fact = {
     ...template,
     id: candidateId,
+    rank: 'normal' as const,
     property: { id: 'schema:abstract', data_type: 'document' },
     value: { type: 'somevalue' },
     references: [],
   };
+  fixture.read.subject.statements['schema:abstract'] = [
+    {
+      ...fact,
+      value: {
+        type: 'value',
+        content: { document: documentId, digest: selection.digest, language: selection.language },
+      },
+      rezics: { release: selection.subjectRelease, revision: 1 },
+    },
+  ];
   const matched = { kind: 'matched', fact, context: selection.context, release: selection.subjectRelease };
   let component: unknown = matched;
   const requests: URL[] = [];

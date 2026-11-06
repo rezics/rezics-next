@@ -8,9 +8,17 @@ import {
   proposeAuthoredField,
   readAuthoredField,
   readAuthoredReview,
+  type AuthoredAddress,
   type AuthoredDocument,
   type AuthoredTransport,
 } from '../../features/catalogue/authored-field';
+import { summaryReadingFragment } from '../../features/pages/subject-visit-navigation';
+import {
+  recordedCurrentSynopsisStatement,
+  recordedSelectedSynopsisSelection,
+  RECORDED_SELECTED_SYNOPSIS_DOCUMENT,
+  RECORDED_SELECTED_SYNOPSIS_DIGEST,
+} from '../recorded/selected-synopsis';
 import definitions from '../recorded/definitions-release.json';
 
 export type AuthoredScenario =
@@ -27,8 +35,17 @@ export type AuthoredScenario =
   | 'body-unavailable';
 export const authoredProperty = 'schema:abstract';
 
+export type AuthoredFixtureOptions = {
+  selected?: boolean;
+  holdRead?: () => Promise<void>;
+};
+
 /** Declared samples for isolated stories, layered on the existing review fake; never a runtime success fallback. */
-export function authoredFixture(scenario: AuthoredScenario = 'ready', locale = 'en') {
+export function authoredFixture(
+  scenario: AuthoredScenario = 'ready',
+  locale = 'en',
+  options: AuthoredFixtureOptions = {},
+) {
   const base = candidateFixture('ready', locale, authoredProperty);
   const release = structuredClone(definitions.release) as Release;
   if (scenario === 'empty')
@@ -45,6 +62,34 @@ export function authoredFixture(scenario: AuthoredScenario = 'ready', locale = '
   old.property = { id: authoredProperty, data_type: 'document' };
   old.value = { type: 'value', content: { document: oldId, language: 'en', digest: 'b'.repeat(64) } };
   base.publicRead.subject.statements[authoredProperty] = scenario === 'no-selection' ? [] : [old];
+  const selectedFragment =
+    options.selected && scenario !== 'no-selection'
+      ? summaryReadingFragment({
+          ...recordedSelectedSynopsisSelection,
+          locale,
+          context: base.publicRead.subject.context,
+          subjectRelease: base.publicRead.subject.release,
+        })
+      : undefined;
+  const selectedVia = selectedFragment ? `/en/subjects/${base.id}/work${selectedFragment}` : undefined;
+  if (selectedVia) {
+    base.publicRead.subject.statements[authoredProperty] = [structuredClone(recordedCurrentSynopsisStatement)];
+    documents.set(RECORDED_SELECTED_SYNOPSIS_DOCUMENT, {
+      id: RECORDED_SELECTED_SYNOPSIS_DOCUMENT,
+      subjectId: base.id,
+      candidateId: recordedSelectedSynopsisSelection.candidateId,
+      revision: 1,
+      origin: 'account',
+      author: `${base.id.slice(0, -3)}773`,
+      licence: 'CC-BY-SA-3.0',
+      language: recordedSelectedSynopsisSelection.language,
+      digest: RECORDED_SELECTED_SYNOPSIS_DIGEST,
+      availability: 'available',
+      body: fromPlainText(
+        'A pilot stranded in the Sahara meets a small prince who has left his asteroid, and learns from him what matters.',
+      ),
+    });
+  }
   documents.set(oldId, {
     id: oldId,
     subjectId: base.id,
@@ -115,6 +160,13 @@ export function authoredFixture(scenario: AuthoredScenario = 'ready', locale = '
       const document = documents.get(path.split('/').at(-1)!);
       return document ? json({ document }) : json({ code: 'not_found' }, 404);
     }
+    if (
+      options.holdRead &&
+      request.method === 'GET' &&
+      path === `/v1/subjects/${base.id}` &&
+      new URL(request.url).searchParams.has('selectedSynopsis')
+    )
+      await options.holdRead();
     if (path === `/v1/subjects/${base.id}/candidates` && request.method === 'POST') {
       if (!request.headers.has('authorization') || scenario === 'denied') return json({ code: 'forbidden' }, 403);
       if (scenario === 'invalid') return json({ code: 'invalid_request' }, 400);
@@ -163,21 +215,21 @@ export function authoredFixture(scenario: AuthoredScenario = 'ready', locale = '
     return base.fetcher(request);
   }) as typeof fetch;
   const client = createKernelClient('https://authored.test', { fetch: fetcher });
+  const address = (property?: string, session?: string): AuthoredAddress => ({
+    id: base.id,
+    ...(property ? { property } : {}),
+    ...(session ? { session } : {}),
+    ...(selectedVia ? { via: selectedVia } : {}),
+  });
   const transport: AuthoredTransport = {
     reader: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10',
-    read: (property, session) =>
-      readAuthoredField(
-        client,
-        { id: base.id, ...(property ? { property } : {}), ...(session ? { session } : {}) },
-        locale,
-        'Bearer fixture',
-      ),
+    read: (property, session) => readAuthoredField(client, address(property, session), locale, 'Bearer fixture'),
     propose: (command) => proposeAuthoredField(client, 'Bearer fixture', command),
     review: (property, candidate, cursor, session) =>
       readAuthoredReview(
         client,
         'Bearer fixture',
-        { id: base.id, property, candidate, ...(cursor ? { cursor } : {}), ...(session ? { session } : {}) },
+        { ...address(property, session), property, candidate, ...(cursor ? { cursor } : {}) },
         locale,
       ),
   };
@@ -189,6 +241,7 @@ export function authoredFixture(scenario: AuthoredScenario = 'ready', locale = '
     calls,
     old,
     transport,
+    via: selectedVia,
     confirm: (command: Parameters<typeof selectCandidate>[2]) => selectCandidate(client, 'Bearer fixture', command),
   };
 }

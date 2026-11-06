@@ -2,6 +2,11 @@ import { createKernelClient, type SubjectRead } from '@rezics/client';
 import type { SourceDefinitions } from '../../features/catalogue/subject-sources';
 import recording from '../recorded/subject.json';
 import release from '../recorded/definitions-release.json';
+import {
+  recordedSelectedSynopsisRead,
+  recordedSelectedSynopsisSelection,
+  type RecordedSelectedSynopsisKind,
+} from '../recorded/selected-synopsis';
 
 export type SourcesScenario =
   | 'selected-facts'
@@ -14,9 +19,15 @@ export type SourcesScenario =
   | 'unavailable';
 export const sourceDefinitions = release.release as unknown as SourceDefinitions;
 export const citationUrl = 'https://catalogue.example.test/books/prince';
+export { recordedSelectedSynopsisSelection, recordedSelectedSynopsisRead };
+
+export type CatalogueSourcesExact = Exclude<RecordedSelectedSynopsisKind, 'empty'>;
 
 /** A generated Subject DTO story seam; runtime availability still requires native proof. */
-export function catalogueSourcesFixture(scenario: SourcesScenario = 'selected-facts') {
+export function catalogueSourcesFixture(
+  scenario: SourcesScenario = 'selected-facts',
+  options: { exact?: CatalogueSourcesExact } = {},
+) {
   const read = structuredClone(recording) as unknown as SubjectRead;
   const id = read.subject.id;
   const citation = {
@@ -66,6 +77,19 @@ export function catalogueSourcesFixture(scenario: SourcesScenario = 'selected-fa
               : {}),
           },
         ];
+  let exact = options.exact;
+  const applyExact = () => {
+    if (!exact) {
+      delete read.selectedSynopsis;
+      return;
+    }
+    const recorded = recordedSelectedSynopsisRead(exact);
+    read.subject.statements['schema:abstract'] = structuredClone(recorded.subject.statements['schema:abstract'] ?? []);
+    const selected = recorded.selectedSynopsis;
+    if (selected === undefined) delete read.selectedSynopsis;
+    else read.selectedSynopsis = selected;
+  };
+  applyExact();
   const calls: { path: string; authorization: string | null; session: string | null }[] = [];
   let outcome = scenario;
   const client = createKernelClient('http://sources.test', {
@@ -100,6 +124,8 @@ export function catalogueSourcesFixture(scenario: SourcesScenario = 'selected-fa
     calls,
     recover: () => {
       outcome = 'selected-facts';
+      if (exact) exact = 'matched';
+      applyExact();
     },
   };
 }
