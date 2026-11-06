@@ -94,7 +94,7 @@ export function SubjectSourcesPage({
                       ? m.sources_conflict({}, o)
                       : m.sources_unavailable({}, o)}
         </p>
-        {onRetry && result.kind !== 'loading' && result.kind !== 'missing' && (
+        {onRetry && !['loading', 'missing', 'unsupported'].includes(result.kind) && (
           <Button
             variant="outline"
             className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere]"
