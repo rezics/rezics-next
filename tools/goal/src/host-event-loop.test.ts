@@ -150,9 +150,12 @@ test('the watchdog ping keeps running while a scheduler pass never finishes', as
   // A pass that never completes: the heartbeat must not depend on it.
   const pendingPass = new Promise<void>(() => {});
   void pendingPass;
-  const stop = await startHostHeartbeat({ NOTIFY_SOCKET: '/fixture/notify', WATCHDOG_USEC: '20000' }, async (message) => {
-    messages.push(message);
-  });
+  const stop = await startHostHeartbeat(
+    { NOTIFY_SOCKET: '/fixture/notify', WATCHDOG_USEC: '20000' },
+    async (message) => {
+      messages.push(message);
+    },
+  );
   await Bun.sleep(120);
   stop();
   const pings = messages.filter((message) => message === 'WATCHDOG=1').length;
@@ -184,10 +187,20 @@ setInterval(() => {}, 1000);
   try {
     for (let attempt = 0; attempt < 300 && !(identity && helperPid); attempt++) {
       if (!identity) {
-        const pid = Number(await Bun.file(leaderFile).text().catch(() => ''));
+        const pid = Number(
+          await Bun.file(leaderFile)
+            .text()
+            .catch(() => ''),
+        );
         identity = pid ? processIdentity(pid) : null;
       }
-      if (!helperPid) helperPid = Number(await Bun.file(helperFile).text().catch(() => '')) || 0;
+      if (!helperPid)
+        helperPid =
+          Number(
+            await Bun.file(helperFile)
+              .text()
+              .catch(() => ''),
+          ) || 0;
       if (!(identity && helperPid)) await Bun.sleep(20);
     }
     expect(identity).not.toBeNull();
@@ -200,7 +213,13 @@ setInterval(() => {}, 1000);
     expect(processIdentity(helperPid)).toBeNull();
     expect(await Bun.file(registry).exists()).toBe(false);
   } finally {
-    const pid = identity?.pid ?? Number(await Bun.file(leaderFile).text().catch(() => ''));
+    const pid =
+      identity?.pid ??
+      Number(
+        await Bun.file(leaderFile)
+          .text()
+          .catch(() => ''),
+      );
     if (pid > 0) {
       try {
         process.kill(-pid, 'SIGKILL');

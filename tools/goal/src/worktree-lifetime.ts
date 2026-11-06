@@ -346,7 +346,11 @@ export async function removeFinishedWorktree(
         if (!removed) continue;
         store.clearWorktreeCleanup(afterPressure.id);
         if (!unresolvedCleanup)
-          await io.command('ionice', ['-c', '3', 'nice', '-n', '19', 'git', 'worktree', 'prune'], settings.mainCheckout);
+          await io.command(
+            'ionice',
+            ['-c', '3', 'nice', '-n', '19', 'git', 'worktree', 'prune'],
+            settings.mainCheckout,
+          );
         return afterPressure.id;
       } finally {
         taskLease.release();

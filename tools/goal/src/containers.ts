@@ -35,7 +35,10 @@ function docker(args: string[], policy: typeof defaultPolicy.containers) {
  * Docker on the host's reaper path runs asynchronously: a slow daemon (btrfs maintenance held it past 120 s on
  * 2026-11-05) must never hold the manager socket or the scheduler. A failed command reports its partial stdout.
  */
-async function dockerAsync(args: string[], policy: typeof defaultPolicy.containers): Promise<{ ok: boolean; stdout: string }> {
+async function dockerAsync(
+  args: string[],
+  policy: typeof defaultPolicy.containers,
+): Promise<{ ok: boolean; stdout: string }> {
   try {
     const { stdout } = await execFileAsync('docker', args, { encoding: 'utf8', timeout: policy.commandTimeoutMs });
     return { ok: true, stdout };
@@ -76,7 +79,10 @@ function confirmedRemovals(stdout: string, selected: readonly ContainerRow[]): n
 }
 
 /** The policy in `<state>/containers.json`; a missing or invalid file removes nothing. */
-function containerPolicy(stateDirectory: string, defaults: typeof defaultPolicy.containers): ContainerPolicy | undefined {
+function containerPolicy(
+  stateDirectory: string,
+  defaults: typeof defaultPolicy.containers,
+): ContainerPolicy | undefined {
   const file = join(stateDirectory, 'containers.json');
   if (!existsSync(file)) return undefined;
   let policyValue: unknown;
