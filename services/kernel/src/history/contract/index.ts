@@ -71,7 +71,10 @@ export type {
   AgentIdentityWorkSource,
   HistoryConsumerReference,
   HistoryWriterState,
+  IdentityHistoryAccountsDeclaration,
   IdentityHistoryAccountsLocalWork,
+  IdentityHistoryCommandDispatchPrice,
+  IdentityHistoryWorkDimensions,
   NativeStepWork,
   Pending,
 } from './identity-types.ts';

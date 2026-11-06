@@ -579,101 +579,89 @@ export function withIdentitySourceFenceCommand<T>(
   );
 }
 
-/** Actual owner receiving disposition. There is deliberately no successful
- * IDENTITY_HISTORY_ORIGINAL_SOURCE_DECLARATION export while these reached bodies
- * lack compatible eight-axis declarations. Accounts treats absence as unavailable,
- * rather than accepting total:null or a local-only price as whole-child funding. */
+/** Owner receiving disposition. SourceHistoryNativeAllReachedCalls is the installed
+ * IDENTITY_HISTORY_ORIGINAL_SOURCE_DECLARATION. History's typed getter supplies
+ * eight-axis children and reached multiplicities; Core's event-callback profile and
+ * Access original-source / participant-reconcile bodies remain named foreign gaps. */
 export async function readIdentitySourceOriginalCostDisposition() {
   const {
     IDENTITY_SOURCE_HISTORY_GUARD_DECLARATION: IDENTITY_SOURCE_HISTORY_GUARD_DECLARATIONGetter,
     IDENTITY_SOURCE_LOCAL_READ_DECLARATIONS: IDENTITY_SOURCE_LOCAL_READ_DECLARATIONSGetter,
     IDENTITY_SOURCE_LOCAL_MUTATION_COMPONENTS: IDENTITY_SOURCE_LOCAL_MUTATION_COMPONENTSGetter,
     IDENTITY_SOURCE_LOCAL_CALLS: IDENTITY_SOURCE_LOCAL_CALLSGetter,
+    IDENTITY_HISTORY_ORIGINAL_SOURCE_DECLARATION: IDENTITY_HISTORY_ORIGINAL_SOURCE_DECLARATIONGetter,
     IDENTITY_SOURCE_WIDER_COMMAND_REQUIREMENTS,
   } = await import('./identity-source-consumer-custody.ts');
   const IDENTITY_SOURCE_HISTORY_GUARD_DECLARATION = IDENTITY_SOURCE_HISTORY_GUARD_DECLARATIONGetter();
   const IDENTITY_SOURCE_LOCAL_READ_DECLARATIONS = IDENTITY_SOURCE_LOCAL_READ_DECLARATIONSGetter();
   const IDENTITY_SOURCE_LOCAL_MUTATION_COMPONENTS = IDENTITY_SOURCE_LOCAL_MUTATION_COMPONENTSGetter();
   const IDENTITY_SOURCE_LOCAL_CALLS = IDENTITY_SOURCE_LOCAL_CALLSGetter();
+  const sourceDeclaration = IDENTITY_HISTORY_ORIGINAL_SOURCE_DECLARATIONGetter();
   const { scopeConsumerFootprint } = await import('./identity-scoped-observations.ts');
   const history = historyComposition();
-  const retirement = historyComposition();
   const library = await import('../library/collection-source-work.ts');
   const effects = await import('../library/identity-scope-effects.ts');
   const ownValue = (module: object, name: string): unknown => {
     const field = Object.getOwnPropertyDescriptor(module, name);
     return field && 'value' in field ? field.value : undefined;
   };
-  const libraryValue = ownValue(library, 'IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION');
+  const invoke = (module: object, name: string): unknown => {
+    const value = ownValue(module, name);
+    return typeof value === 'function' ? (value as () => unknown)() : value;
+  };
+  const libraryValue = invoke(library, 'IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION');
   const libraryDeclaration =
-    libraryValue === undefined
+    libraryValue === undefined || libraryValue === null
       ? null
       : (() => {
           const declaration = libraryValue as { work: WorkDimensions; engineRequests: 0 };
-          // Validate the actual installed owner export, never a caller quotation.
           const checked = composeIdentitySourceReachedCosts([
             { name: 'LibraryAllReachedCalls', calls: 1, declaration },
           ]);
           if (checked.state !== 'complete') throw new TypeError('Installed Library declaration is incomplete');
           return Object.freeze({ work: checked.work, engineRequests: checked.engineRequests });
         })();
-  const historyValue = ownValue(history, 'IDENTITY_HISTORY_ACCOUNTS_DECLARATION');
-  const historyComponents =
-    historyValue === undefined
-      ? null
-      : (() => {
-          const value = historyValue as {
-            version: number;
-            interface: string;
-            sourceReceiver: string;
-            engineRequests: number;
-            axes: readonly string[];
-            local: Record<string, WorkDimensions>;
-            sdk: Record<string, WorkDimensions>;
-            multiplicities: object;
-          };
-          if (
-            !value ||
-            value.version !== 1 ||
-            value.interface !== 'withPrepaidAgentIdentityHistoryUnit' ||
-            value.sourceReceiver !== 'withPrepaidIdentitySourceConsumerMaintenance' ||
-            value.engineRequests !== 0 ||
-            JSON.stringify(value.axes) !== JSON.stringify(ORIGINAL_AXES) ||
-            !value.local ||
-            !value.sdk
-          )
-            throw new TypeError('Installed History component interface is incompatible');
-          const copy = (parts: Record<string, WorkDimensions>) =>
+  const value = history.IDENTITY_HISTORY_ACCOUNTS_DECLARATION();
+  if (
+    value.version !== 1 ||
+    value.interface !== 'withPrepaidAgentIdentityHistoryUnit' ||
+    value.sourceReceiver !== 'withPrepaidIdentitySourceConsumerMaintenance' ||
+    value.engineRequests !== 0 ||
+    JSON.stringify(value.axes) !== JSON.stringify(ORIGINAL_AXES)
+  )
+    throw new TypeError('Installed History component interface is incompatible');
+  const copy = (parts: Readonly<Record<string, WorkDimensions>>) =>
+    Object.freeze(
+      Object.fromEntries(
+        Object.entries(parts).map(([name, work]) => {
+          const vector = originalWorkVector(work);
+          return [
+            name,
             Object.freeze(
-              Object.fromEntries(
-                Object.entries(parts).map(([name, work]) => {
-                  const vector = originalWorkVector(work);
-                  return [
-                    name,
-                    Object.freeze(
-                      Object.fromEntries(
-                        ORIGINAL_AXES.map((axis, i) => [axis, vector[i]!]),
-                      ) as unknown as WorkDimensions,
-                    ),
-                  ];
-                }),
-              ),
-            );
-          return Object.freeze({
-            local: copy(value.local),
-            sdk: copy(value.sdk),
-            // Delivered prose describes repetitions; it is not an executable maximum.
-            // Keep whole composition unavailable until those actual caller guards exist.
-            multiplicities: 'requires executable reached History caller multiplicities' as const,
-          });
-        })();
+              Object.fromEntries(ORIGINAL_AXES.map((axis, i) => [axis, vector[i]!])) as unknown as WorkDimensions,
+            ),
+          ];
+        }),
+      ),
+    );
+  const executable =
+    Object.values(value.selectedCommandCalls).every((count) => Number.isSafeInteger(count) && count >= 1) &&
+    Object.values(value.multiplicities).every((count) => Number.isSafeInteger(count) && count >= 1);
+  const historyComponents = Object.freeze({
+    local: copy(value.local),
+    sdk: copy(value.sdk),
+    selectedCommandCalls: value.selectedCommandCalls,
+    multiplicities: executable
+      ? value.multiplicities
+      : ('requires executable reached History caller multiplicities' as const),
+  });
   const whole = composeIdentitySourceReachedCosts([
     {
       name: 'AccountsLocalControl',
       calls: 1,
       declaration: { work: HISTORY_ORIGINAL_LOCAL_ALLOWANCE, engineRequests: 0 },
     },
-    { name: 'SourceHistoryNativeAllReachedCalls', calls: 1, declaration: null },
+    { name: 'SourceHistoryNativeAllReachedCalls', calls: 1, declaration: sourceDeclaration },
     { name: 'LibraryAllReachedCalls', calls: 1, declaration: libraryDeclaration },
     {
       name: 'AdditionalOriginalTransferControl',
@@ -681,9 +669,26 @@ export async function readIdentitySourceOriginalCostDisposition() {
       declaration: { work: ADDITIONAL_ORIGINAL_TRANSFER_CONTROL, engineRequests: 0 },
     },
   ]);
+  const missing = Object.freeze([
+    ...(typeof historyComponents.multiplicities === 'string'
+      ? [
+          'History selected unit: initial stage, repeated H/G/A, inventory, released/current/final receiving, q<=2/c<=64 outbox and role-mutation declarations',
+          'History SDK receiving/final progress: withPrepaidAgentIdentityHistoryUnit and SDK eight-axis declarations',
+        ]
+      : []),
+    ...(!libraryDeclaration
+      ? [
+          'LibraryAllReachedCalls: readLibraryScopeEffectsPageWithWork on the exact original ledger; complete bounded page/current/locked-plan/seal/six-driver declarations; IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION',
+        ]
+      : []),
+    'Access original source: readAccountIdentitySource eight-axis declaration',
+    'Mapping/Search/Library participantReconcile: identityEpochStore.readJob and reconcileStepReceipt',
+    'Core wider executor profile: Source callback/association, custody preparation/checkpoint/finish',
+  ]);
   return Object.freeze({
-    state: 'missing' as const,
+    state: whole.state === 'complete' && missing.length === 0 ? ('complete' as const) : ('missing' as const),
     whole,
+    sourceDeclaration,
     accountsLocalControl: HISTORY_ORIGINAL_LOCAL_ALLOWANCE,
     additionalOriginalTransferControl: ADDITIONAL_ORIGINAL_TRANSFER_CONTROL,
     local: Object.freeze({
@@ -697,21 +702,9 @@ export async function readIdentitySourceOriginalCostDisposition() {
     schedule: IDENTITY_SOURCE_ORIGINAL_SCHEDULE,
     widerExecutor: IDENTITY_SOURCE_WIDER_COMMAND_REQUIREMENTS,
     historyComponents,
-    historyCallableInstalled: typeof ownValue(retirement, 'withPrepaidAgentIdentityHistoryUnit') === 'function',
+    historyCallableInstalled: typeof history.withPrepaidAgentIdentityHistoryUnit === 'function',
     libraryDeclaration,
     librarySameWorkCallableInstalled: typeof ownValue(effects, 'readLibraryScopeEffectsPageWithWork') === 'function',
-    missing: Object.freeze([
-      'Source custody preparation/checkpoint/terminal: complete reached erasure-role, commit, event and binding child declarations',
-      'Source current verification: binding/Account technical receiver and reversal settlement eight-axis declarations',
-      'Source directory read and final cut: native population/preparePlan declarations',
-      'History selected unit: initial stage, repeated H/G/A, inventory, released/current/final receiving, q<=2/c<=64 outbox and role-mutation declarations',
-      'History SDK receiving/final progress: withPrepaidAgentIdentityHistoryUnit and SDK eight-axis declarations',
-      ...(!libraryDeclaration
-        ? [
-            'LibraryAllReachedCalls: readLibraryScopeEffectsPageWithWork on the exact original ledger; complete bounded page/current/locked-plan/seal/six-driver declarations; IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION',
-          ]
-        : []),
-      'Core wider executor profile: Source callback/association, custody preparation/checkpoint/finish',
-    ]),
+    missing,
   });
 }

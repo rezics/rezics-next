@@ -963,6 +963,8 @@ async function stepIdentityEpochAdmissionWithinDeadline(
       return { job: ref, state: saved.state, work: measured };
     }
   }
+  // Finish-close only CAS-cancels the job. Cancelled input and source rows stay for
+  // Lifecycle inverse removal; this command has no editorial write-basis of its own.
   const finalized = await runCommand<IdentityAdmissionProgress['state']>(
     pool,
     { partition: identityJobPartition(ref) },

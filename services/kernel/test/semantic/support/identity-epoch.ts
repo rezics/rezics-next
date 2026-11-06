@@ -133,7 +133,14 @@ export async function identityEpochDatabase() {
   const pool = createPool(source.href);
   const admin = new pg.Pool({ connectionString: source.href, max: 2 });
   let disconnected: Promise<void> | undefined;
-  const disconnect = () => (disconnected ??= Promise.all([pool.end(), admin.end()]).then(() => {}));
+  const disconnect = () =>
+    (disconnected ??= (async () => {
+      await Promise.all([pool.end(), admin.end()]);
+      await owner.query(
+        `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname=$1 AND pid<>pg_backend_pid()`,
+        [name],
+      );
+    })());
   return {
     url: source.href,
     pool,

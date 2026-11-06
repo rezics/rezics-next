@@ -963,13 +963,15 @@ only `state:missing` with exact term names.
 
 `readIdentitySourceOriginalCostDisposition()` publishes the callable local footprint
 and guard declarations, the installed Accounts local/transfer-control operands,
-the disjoint whole-parent missing disposition, and the missing reached terms: Source preparation/checkpoint/
-terminal erasure-role, commit, event and binding child work; current binding and Account
-receiver/reversal; native directory population/preparePlan; History staging, repeated
-H/G/A, inventory, receiving, outbox and role mutations; prepaid History/SDK and the
-same-work Library entry plus its complete declarations. Consequently Source exports no successful
-`IDENTITY_HISTORY_ORIGINAL_SOURCE_DECLARATION`. Accounts admits no usable Source child
-from this absence; independent receiving/accounting remains installed.
+the installed `IDENTITY_HISTORY_ORIGINAL_SOURCE_DECLARATION` (Source-owned schedule ×
+local reads/controls/mutation bodies, directory plan, receiving selection/reconcile/command,
+commit/role, binding-cut and accepted-account receiver), History's typed
+`IDENTITY_HISTORY_ACCOUNTS_DECLARATION` getter with numeric reached multiplicities,
+and the remaining foreign gaps: Access original-source, Mapping/Search/Library
+participant reconcile, and Core's event-callback executor. Fixture parent permissions
+install as trusted grant rows rather than the grant command, because platform.governance
+reach now requires `gate:any` on the acting token. Accounts still refuses whole-parent
+admission while those foreign gaps remain; independent receiving/accounting remains installed.
 
 The whole parent before first discovery/control IO is exactly:
 
@@ -1002,13 +1004,10 @@ remain the actual owner's independent reached terms. Their local controls do not
 fund Source or Library. No single cached receiving probe replaces them.
 
 Accounts' additive allocation/control/private grant and fixed child integration are
-installed. A complete numeric parent remains unavailable: the actual History module
-has no `withPrepaidAgentIdentityHistoryUnit` export; History/SDK reached bodies do not
-publish compatible eight-axis child declarations and repetition counts; Library has no
-the `readLibraryScopeEffectsPageWithWork` entry or
-`IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION`. Its positive native page and
-current/seal/planner bodies are present; those bodies alone do not establish
-compatible eight-axis bounds for this selected original. Search recovery enrollment and the
+installed. History composition binds `IDENTITY_HISTORY_ACCOUNTS_DECLARATION` as a getter
+and Access original-work reads the installed Source child. A complete numeric parent
+remains unavailable while Access original-source, Mapping/Search/Library participant
+reconcile and Core's event-callback profile stay foreign. Search recovery enrollment and the
 physical owner's receiving/writer closure remain independent foreign prerequisites.
 Source cannot classify invented foreign SQL, promote null to a grant, or count an absent
 declaration as successful zero child work. The exact local formulas above are the available

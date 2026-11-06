@@ -225,8 +225,9 @@ function validateEvidenceString(
     exactKeys(row, pendingKeys) &&
     isPartition(row.partition_no) &&
     isUuid(row.terminal) &&
-    (row.pending_job === null || isUuid(row.pending_job)) &&
-    isU64(row.pending_epoch);
+    (row.pending_job === null
+      ? row.pending_epoch === null
+      : isUuid(row.pending_job) && isU64(row.pending_epoch));
   const validCurrent = (row: unknown) =>
     record(row) &&
     exactKeys(row, currentRowKeys) &&
@@ -432,6 +433,8 @@ function normalizeOperand(value: unknown): IdentityRatingReviewOperand {
     classified.state !== 'reviewed'
   )
     return invalid();
+  // PostgreSQL JSONB sorts object keys. Nested locator key order and top-level key order are not
+  // identity; exactKeys already rejected extras. Evidence must still be canonical serialized JSON.
   const normalized: IdentityRatingReviewOperand = Object.freeze({
     version: 1,
     requestedOriginalId: value.requestedOriginalId,
@@ -439,11 +442,10 @@ function normalizeOperand(value: unknown): IdentityRatingReviewOperand {
     sourceIdentities: Object.freeze([...expectedIds]),
     sourceHomes: Object.freeze([...expectedHomes]),
     controlLocators: Object.freeze(sortedLocators.map((row) => Object.freeze({ ...row }))),
-    evidence: value.evidence,
+    evidence: classified.operand.evidence,
   });
   if (
     Buffer.byteLength(JSON.stringify(normalized), 'utf8') > MAX_REVIEW_OPERAND_BYTES ||
-    JSON.stringify(value) !== JSON.stringify(normalized) ||
     JSON.stringify(classified.operand) !== JSON.stringify(normalized)
   )
     return invalid();

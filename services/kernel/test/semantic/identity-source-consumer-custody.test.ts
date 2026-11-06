@@ -1721,8 +1721,25 @@ test('complete child composition repeats every reached term and exposes missing 
     composeIdentitySourceReachedCosts([{ name: 'overflow', calls: Number.MAX_SAFE_INTEGER, declaration: local }]),
   ).toThrow();
   const disposition = await readIdentitySourceOriginalCostDisposition();
+  const { IDENTITY_HISTORY_ORIGINAL_SOURCE_DECLARATION } =
+    await import('../../src/semantic/identity-source-consumer-custody.ts');
+  expect(IDENTITY_HISTORY_ORIGINAL_SOURCE_DECLARATION().engineRequests).toBe(0);
+  expect(disposition.sourceDeclaration.work).toEqual(IDENTITY_HISTORY_ORIGINAL_SOURCE_DECLARATION().work);
+  expect(disposition.whole.state === 'complete' || disposition.whole.state === 'missing').toBeTrue();
+  if (disposition.whole.state === 'complete')
+    expect(disposition.whole.work.nativeRows).toBeGreaterThan(disposition.sourceDeclaration.work.nativeRows);
+  expect(disposition.historyCallableInstalled).toBeTrue();
+  expect(disposition.historyComponents?.selectedCommandCalls.retirement).toBe(8);
+  expect(
+    Object.values(disposition.historyComponents?.multiplicities ?? {}).every(
+      (count) => Number.isSafeInteger(count) && Number(count) >= 1,
+    ),
+  ).toBeTrue();
   expect(disposition.state).toBe('missing');
-  expect(disposition.missing.some((term) => term.includes('LibraryAllReachedCalls'))).toBeTrue();
+  expect(disposition.missing.some((term) => term.includes('History'))).toBeFalse();
+  expect(
+    disposition.missing.some((term) => term.includes('event-callback') || term.includes('wider executor')),
+  ).toBeTrue();
 });
 
 test('scope literal accounting rejects malformed unbounded and receipt-writing operands before transport', async () => {

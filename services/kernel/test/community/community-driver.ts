@@ -32,8 +32,10 @@ import { observeSql, type SqlExecution, type SqlObserver } from '../content/supp
 import { assertSetupResponse } from '../content/support/setup-response.ts';
 import { openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
 import { TEST_REQUEST_DEADLINE_MS } from '../support/test-kernel.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
 import { productionActions } from '../support/production-actions.ts';
+import { installIdentityGrants } from '../support/trusted-grants.ts';
 import { startConsentServer } from './membership-fixture.ts';
 import {
   REALM_MEMBERSHIP_RECONCILIATION_WORKFLOW_NAME,
@@ -242,14 +244,25 @@ async function buildShared(
   authPoolFactory?: ContentSystemOptions['authPoolFactory'],
 ): Promise<SharedCommunity> {
   if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
-  // Durable operations preserve the exact authenticated scope ceiling, which is
-  // bounded at 100 tokens. Request this fixture's product scopes through Auth
-  // rather than every unrelated action mounted on Kernel.
-  const ordinaryScopes = [...productionActions().keys()].filter((action) =>
-    /^(account|access|space|realm|board|thread|post|subject|context|definitions|statement|document|copy|moderation|exposure|report|rating|follow|reaction|openapi):/.test(
-      action,
-    ),
-  );
+  // Durable operations preserve the exact authenticated scope ceiling. Request
+  // this fixture's product scopes through Auth rather than every unrelated action
+  // mounted on Kernel. Parent fixture grants install as trusted rows; gate:any
+  // stays on the token because platform.governance expands to that covering action.
+  const ordinaryScopes = [
+    ...new Set([
+      'access:grant',
+      'gate:any',
+      'space:create',
+      'realm:create',
+      'subject:create',
+      'account:suspend',
+      ...[...productionActions().keys()].filter((action) =>
+        /^(account|access|space|realm|board|thread|post|subject|context|definitions|statement|document|copy|moderation|exposure|report|rating|follow|reaction|openapi):/.test(
+          action,
+        ),
+      ),
+    ]),
+  ];
   const system = await createContentSystemWithOrdinaryScopes(
     { databaseUrl, ...(authPoolFactory === undefined ? {} : { authPoolFactory }) },
     ordinaryScopes,
@@ -266,6 +279,7 @@ async function buildShared(
       pool: system.database.pool,
       routeKey: system.routeKey,
       tokens: system.tokenKeys,
+      receiptKeys: testReceiptKeys(),
       content: { cursorNow: () => Date.now() },
       access: system.access,
       workClient: work,
@@ -597,18 +611,7 @@ function bindDriver(base: SharedCommunity, settleTimeoutMs: number): CommunityDr
         path: '/v1/platform/exposure/personal_library:open',
         key: nextKey(),
       });
-      await checked('Fixture Context creation grant', {
-        actor: governanceAccount,
-        method: 'POST',
-        path: '/v1/grants',
-        key: nextKey(),
-        body: {
-          resource: PLATFORM_RESOURCE,
-          subject: { kind: 'account', id: owner.id },
-          actions: ['context:create'],
-          valid: '(,)',
-        },
-      });
+      await installIdentityGrants(system.database.pool, PLATFORM_RESOURCE.id, owner.id, ['context:create']);
       const contextResponse = await checked('Fixture Context creation', {
         actor: owner,
         method: 'POST',

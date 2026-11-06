@@ -15,6 +15,7 @@ import {
   stepIdentityEpochBootstrap,
   stepIdentityEpochBootstrapWork,
 } from '../../src/semantic/identity-epoch-bootstrap.ts';
+import { CommandUnavailableError } from '../../src/command/command.ts';
 import { epochFixture, home, identityEpochDatabase, seedLegacyRoot } from './support/identity-epoch.ts';
 import { WORK_QUEUES } from '../../src/work/queues.ts';
 
@@ -85,10 +86,13 @@ test('default Community worker closes every native legacy home and then repairs 
 }, 180_000);
 
 test('fresh native default startup does not sweep empty homes when no legacy identity source exists', async () => {
-  // A new actual Community system clones the untouched migrated template. Neither this test nor
+  // A new actual Community system clones an untouched private template. Neither this test nor
   // the driver installs legacy subjects, ready bits, mappings, receiving receipts or source ACKs.
   await closeCommunityDrivers();
-  const driver = await createCommunityDriver();
+  const deployment = await identityEpochDatabase();
+  deployments.push(deployment);
+  await deployment.disconnect();
+  const driver = await createCommunityDriver({ databaseUrl: deployment.url });
   const fixture = await driver.provision();
   await driver.settle();
   const closure = await queryCommunityDatabase<{ empty_home_exports: number; empty_home_custody: number }>(`
@@ -112,7 +116,11 @@ test('fresh native default startup does not sweep empty homes when no legacy ide
 }, 180_000);
 
 test('committed native absence and birth custody survive default worker restart without a topology sweep', async () => {
-  const driver = await createCommunityDriver();
+  await closeCommunityDrivers();
+  const deployment = await identityEpochDatabase();
+  deployments.push(deployment);
+  await deployment.disconnect();
+  const driver = await createCommunityDriver({ databaseUrl: deployment.url });
   const { system } = communityFixtureRuntime();
   const installed = await installIdentityEpochBootstrap(system.database.pool);
   expect(installed.mode).toBe('absence');
@@ -386,8 +394,13 @@ test('full native topology closure cannot substitute for an interrupted installa
     // Drive the actual bounded producer while the installation command is interrupted.
     // No topology, source ACK, receiving custody or completion row is installed by test SQL.
     let remaining = 4096;
-    for (let batch = 0; batch < 100 && remaining > 0; batch++) {
-      await runIdentityEpochBootstrapBatch(db.pool);
+    const deadline = Date.now() + 120_000;
+    while (remaining > 0 && Date.now() < deadline) {
+      try {
+        await runIdentityEpochBootstrapBatch(db.pool);
+      } catch (error) {
+        if (!(error instanceof CommandUnavailableError) || error.reason !== 'contention') throw error;
+      }
       remaining = (await db.admin.query('SELECT remaining FROM semantic.identity_epoch_bootstrap_topology')).rows[0]!
         .remaining;
     }

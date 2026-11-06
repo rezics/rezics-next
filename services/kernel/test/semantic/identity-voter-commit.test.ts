@@ -4,7 +4,6 @@ import { noEffect, runCommand, withSingleCommandAttempt } from '../../src/comman
 import type { Pool, PoolClient } from 'pg';
 import lockOwner from '../../src/semantic/identity-rating-commit-participant-lock-owner.sql';
 import { randomUUID } from 'node:crypto';
-import { createGrantCommands } from '../../src/access/grant-commands.ts';
 import { createProfileEntryFixture } from '../library/support/profile-entry-fixture.ts';
 import { accessCommandAuthorization } from '../../src/request/access.ts';
 import { STANDARD_QUESTION_ID, createVoteCommands } from '../../src/rating/votes.ts';
@@ -128,16 +127,8 @@ async function localRatingSubject(f: Awaited<ReturnType<typeof createProfileEntr
 }
 
 async function grantStewardMerge(f: Awaited<ReturnType<typeof createProfileEntryFixture>>) {
-  await createGrantCommands({ pool: f.pool, access: f.access, managementAction: 'access:grant' }).create(
-    { pool: f.pool, actor: f.steward.actor, deadline: Date.now() + 30_000 },
-    {
-      resource: { route: 0, id: GLOBAL_CONTEXT },
-      subject: { kind: 'account', id: f.steward.actor.accountId },
-      actions: ['subject:merge'],
-      valid: '(,)',
-      key: randomUUID(),
-    },
-  );
+  const { installIdentityGrants } = await import('../support/trusted-grants.ts');
+  await installIdentityGrants(f.pool, GLOBAL_CONTEXT, f.steward.actor.accountId, ['subject:merge']);
 }
 
 async function admitSameHomeMerge(
@@ -191,6 +182,15 @@ async function drainMapping(pool: Pool, job: IdentityJobRef, bound = 512) {
   throw new Error(`Native mapping did not finish within ${bound} bounded steps`);
 }
 
+async function drainLibrary(pool: Pool, job: IdentityJobRef, bound = 32) {
+  for (let attempt = 0; attempt < bound; attempt++) {
+    const progress = await stepLibraryIdentityEpoch(pool, job);
+    if (progress.state === 'complete') return progress;
+  }
+  throw new Error(`ALL-Library identity did not finish within ${bound} bounded steps`);
+}
+
+
 async function profileRatingFixture() {
   const db = await identityEpochDatabase();
   try {
@@ -237,14 +237,23 @@ async function injectControlReplacement(
 test('four provider review/apply paths commit local votes and preserve foreign-home refusal', async () => {
   const f = await profileRatingFixture();
   try {
-    await installIdentityEpochBootstrap(f.pool);
     const votes = createVoteCommands({ pool: f.pool, access: f.access });
     const tuples = [];
-    for (const provider of ['vndb', 'bangumi', 'mal', 'anilist'] as const) {
-      const { requested, sourceHome } = await localRatingSubject(f, `${provider} native score target`);
+    const providers = ['vndb', 'bangumi', 'mal', 'anilist'] as const;
+    const sourceHome = partitionOf(1);
+    const prepared = [];
+    for (const provider of providers) {
       for (const callerHome of [sourceHome, (sourceHome + 1) % 4096]) {
         const caller = await f.identity(f.owner.actor.scopes, callerHome);
         await f.grantLibraryGate(caller.actor.accountId);
+        prepared.push({ provider, caller, callerHome });
+      }
+    }
+    await installIdentityEpochBootstrap(f.pool);
+    for (const provider of providers) {
+      const { requested, sourceHome: subjectHome } = await localRatingSubject(f, `${provider} native score target`);
+      expect(subjectHome).toBe(sourceHome);
+      for (const { caller, callerHome } of prepared.filter((row) => row.provider === provider)) {
         let appliedRequest!: { path: string; body: unknown; key: string; data: unknown };
         const request = async (path: string, body: unknown, key: string = randomUUID()) => {
           const response = await f.send(caller.bearer, 'POST', `/v1/libraryImports/${provider}${path}`, body, key);
@@ -559,6 +568,65 @@ test('identity mutation after review refuses admission, and rollback releases th
   }
 }, 180_000);
 
+test('fresh and JSONB-reviewed published evidence continues the original native vote under exact consent', async () => {
+  const f = await createIdentityMappingFixture({ poolMax: 2 });
+  try {
+    const selected = await reviewedSelf(f, 0x5d10);
+    const participant = createIdentityRatingCommitParticipant();
+    const evidence = JSON.parse(selected.operand.evidence) as { mapping: string; subjects: unknown };
+    const mapping = JSON.parse(evidence.mapping) as { pendingRows: { pending_job: unknown; pending_epoch: unknown }[] };
+    expect(mapping.pendingRows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ pending_job: null, pending_epoch: null, terminal: selected.subjectId }),
+      ]),
+    );
+    const stored = (
+      await f.admin.query<{ operand: Record<string, unknown>; mapping: { pendingRows: unknown[] } }>(
+        'SELECT $1::jsonb AS operand, $2::jsonb AS mapping',
+        [JSON.stringify(selected.operand), evidence.mapping],
+      )
+    ).rows[0]!;
+    expect(stored.mapping.pendingRows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ pending_job: null, pending_epoch: null, terminal: selected.subjectId }),
+      ]),
+    );
+    const fromJsonb = {
+      version: stored.operand.version,
+      requestedOriginalId: stored.operand.requestedOriginalId,
+      canonicalTerminalId: stored.operand.canonicalTerminalId,
+      sourceIdentities: stored.operand.sourceIdentities,
+      sourceHomes: stored.operand.sourceHomes,
+      controlLocators: stored.operand.controlLocators,
+      evidence: stored.operand.evidence,
+    };
+    for (const operand of [selected.operand, JSON.parse(JSON.stringify(selected.operand)), fromJsonb]) {
+      const prepared = participant.prepare(operand as typeof selected.operand);
+      const held = await runCommand(f.pool, { partition: selected.home }, async (tx) =>
+        noEffect(await participant.admit(tx, prepared)),
+      );
+      expect(held.value.subjectId).toBe(selected.subjectId);
+      expect(held.value.partition).toBe(selected.home);
+    }
+    const unpairedMapping = JSON.parse(evidence.mapping) as {
+      pendingRows: { pending_job: unknown; pending_epoch: unknown }[];
+    };
+    unpairedMapping.pendingRows = unpairedMapping.pendingRows.map((row) => ({
+      ...row,
+      pending_job: null,
+      pending_epoch: '1',
+    }));
+    expect(() =>
+      participant.prepare({
+        ...selected.operand,
+        evidence: JSON.stringify({ mapping: JSON.stringify(unpairedMapping), subjects: evidence.subjects }),
+      }),
+    ).toThrow(TypeError);
+  } finally {
+    await f.close();
+  }
+}, 180_000);
+
 test('preparation rejects extra, duplicated and oversized reviewed evidence', async () => {
   const f = await createIdentityMappingFixture({ poolMax: 1 });
   try {
@@ -585,11 +653,13 @@ test('preparation rejects extra, duplicated and oversized reviewed evidence', as
 test('the authorized vote transaction excludes native control writes through commit and rollback and replays after a changed review', async () => {
   const f = await profileRatingFixture();
   try {
-    await installIdentityEpochBootstrap(f.pool);
-    const { requested, sourceHome } = await localRatingSubject(f, 'Authorized guarded vote');
+    const sourceHome = partitionOf(1);
     const caller = await f.identity(['rating:vote', 'subject:read'], sourceHome);
-    const votes = createVoteCommands({ pool: f.pool, access: f.access });
     await grantStewardMerge(f);
+    await installIdentityEpochBootstrap(f.pool);
+    const { requested, sourceHome: subjectHome } = await localRatingSubject(f, 'Authorized guarded vote');
+    expect(subjectHome).toBe(sourceHome);
+    const votes = createVoteCommands({ pool: f.pool, access: f.access });
     const original = await localRatingSubject(f, 'Publication original');
     const survivor = await localRatingSubject(f, 'Publication survivor');
     expect(original.sourceHome).toBe(sourceHome);
@@ -662,8 +732,14 @@ test('the authorized vote transaction excludes native control writes through com
     const reconciled = await identityEpochStore().reconcileStepReceipt(f.pool, mapping.receipt);
     expect(reconciled.state).toBe('complete');
     expect(reconciled.receipt).toEqual(mapping.receipt);
+    const library = await drainLibrary(f.pool, job);
+    expect(library.state).toBe('complete');
+    const libraryReceipt = await identityEpochStore().reconcileStepReceipt(f.pool, library.receipt);
+    expect(libraryReceipt.state).toBe('complete');
+    expect(libraryReceipt.receipt).toEqual(library.receipt);
     const saved = await withConnection(f.pool, (tx) => identityEpochStore().readJob(tx, job));
     expect(saved?.mapping?.state).toBe('complete');
+    expect(saved?.participants['library-private-follow-counts']?.state).toBe('complete');
     await expect(votes.putVoteOutcome(caller.actor, prior, randomUUID())).rejects.toMatchObject({
       reason: 'identity_pending',
     });

@@ -81,10 +81,13 @@ Source/writer installation boundaries. Existing ordinary drain and unavailable f
 establish native preparation. No prepared array or receipt locator replaces complete original support or original
 uncertain-copy settlement.
 
-`createSearchIdentityEpochParticipant({search,prefix,routeKey}): IdentityEpochStep` preserves exactly
-`(pool,job: IdentityJobRef) => Promise<IdentityStepProgress>`. It validates trusted deployment inputs and reads the
-actual admitted job, rejecting unknown, nonpending and mapping-incomplete locators before engine work. An optional
-trusted `receiving` composition supplies the same-Pool Access, clock, physical owner and original work declaration.
+`createSearchIdentityEpochParticipant({search,prefix,routeKey,receiving}): IdentityEpochStep` preserves exactly
+`(pool,job: IdentityJobRef) => Promise<IdentityStepProgress>`. `searchIdentityReceivingComposition` is the trusted
+root helper that binds same-Pool Access, clock, generation-1 consumer/index and the six-operation production
+declaration. Composition imports that declaration from the Semantic public entry
+`identity-search-receiving-statements.ts`. The coordinator runs this callable inside the original live maintenance frame; the participant commits
+Source native `preparePlan` then enrolls common receiving there. It validates trusted deployment inputs and reads the
+actual admitted job, rejecting unknown, nonpending and mapping-incomplete locators before engine work.
 For an existing accepted scope it fuses actual native operation application, the common effect and fixed Search
 `more` step in one transaction, then reconciles original custody. The operational
 `identity_receiving_native_scope_pending` queue is inserted atomically with each common Search plan. Selection
@@ -92,21 +95,16 @@ uses its partition/job/epoch/effect primary key, so a settled first scope cannot
 prepared lower-sorting effect cannot fall behind a scheduling cursor. After genuine common reconciliation and
 post-control native release, a control command retires exactly that plan transaction/binding/applied receipt
 and records the next fixed `more` step atomically. A crash before retirement preserves the key and resumes
-accepted/applied/released replay. Empty queue state establishes no complete Source population.
+accepted/applied/released replay.
 
 A retained complete ACK is replayed only after resolving its original same-transaction native commit/step,
 exact job scope, current owner and indexed pending absence. The frontier comparison uses structural equality
 so PostgreSQL JSONB key order does not invalidate an original committed receipt. This replay does not mint
 completion, release a hold or reuse a private release observation.
 
-It refuses missing complete Source discovery; new whole-participant completion, cancellation and owner-handoff
-handling still require the missing original Source disposition protocol. Specifically the empty-queue path lacks
-a durable complete support/first-apply/predecessor and copy-directory closure witness; the cancelled-job path
-lacks the original writer's dispatch/cancellation settlement; relocation lacks a committed current-owner handoff
-for those same originals and copies. Local pending absence, a changed epoch and a previously applied scope cannot
-substitute for those operands. No coordinator/default identity worker/Accounts binding is installed, no
-receipt claims completion, and unchanged Store publication still requires real mapping, Search and ALL-Library
-custody. Existing `subject-coverage-v1` storage is never consumed as support or an ACK.
+Complete ACK requires every mapping original to have a native Search plan, an empty pending queue, and matching
+directory counts. Empty queue without that witness still refuses. Cancellation and owner-handoff still require the
+original writer's disposition protocol. Existing `subject-coverage-v1` storage is never consumed as support or an ACK.
 
 ## Cost and proof boundary
 

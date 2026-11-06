@@ -174,6 +174,10 @@ export const unpricedIdentityHistoryWork: HistoryComposition['unpricedIdentityHi
 export const identityHistoryAccountsLocalWork: HistoryComposition['identityHistoryAccountsLocalWork'] = (...args) =>
   historyComposition().identityHistoryAccountsLocalWork(...args);
 
+export const IDENTITY_HISTORY_ACCOUNTS_DECLARATION: HistoryComposition['IDENTITY_HISTORY_ACCOUNTS_DECLARATION'] = (
+  ...args
+) => historyComposition().IDENTITY_HISTORY_ACCOUNTS_DECLARATION(...args);
+
 export const resolveAgentIdentitySDKWork: HistoryComposition['resolveAgentIdentitySDKWork'] = (...args) =>
   historyComposition().resolveAgentIdentitySDKWork(...args);
 

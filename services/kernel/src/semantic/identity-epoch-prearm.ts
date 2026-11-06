@@ -516,7 +516,7 @@ export async function stepIdentityEpochPrearm(pool: Pool, ref: IdentityJobRef, w
         );
         await query(
           tx,
-          `UPDATE semantic.identity_epoch_job SET prearm_phase='prearm-sealed',prearm_transaction_id=$4
+          `UPDATE semantic.identity_epoch_job SET prearm_phase='prearm-sealed',prearm_transaction_id=$4::uuid
           WHERE partition_no=$1 AND job_id=$2 AND epoch=$3 AND state='preparing' AND prearm_phase='prearm-open'`,
           [identityJobPartition(ref), ref.jobId, ref.epoch.toString(), id],
           work,
@@ -712,7 +712,7 @@ export async function sealColocatedEmptyIdentityPrearm(
     );
     await tx.query(
       `UPDATE semantic.identity_epoch_input
-      SET prearm_sequence=1,prearm_transaction_id=$4,prearm_epoch=$5,prearm_position=$6
+      SET prearm_sequence=1,prearm_transaction_id=$4::uuid,prearm_epoch=$5::integer,prearm_position=$6::bigint
       WHERE partition_no=$1 AND job_id=$2 AND generation=$3`,
       [home, ref.jobId, input.generation, transactionId, native.epoch, native.position.toString()],
     );
@@ -724,7 +724,7 @@ export async function sealColocatedEmptyIdentityPrearm(
     [home, ref.jobId, transactionId],
   );
   await tx.query(
-    `UPDATE semantic.identity_epoch_job SET prearm_phase='prearm-sealed',prearm_transaction_id=$3
+    `UPDATE semantic.identity_epoch_job SET prearm_phase='prearm-sealed',prearm_transaction_id=$3::uuid
     WHERE partition_no=$1 AND job_id=$2 AND state='preparing'`,
     [home, ref.jobId, transactionId],
   );
@@ -748,7 +748,7 @@ export function recordIdentityPrearmCancellation(tx: CommandTransaction, ref: Id
       [identityJobPartition(ref), ref.jobId, ref.epoch.toString(), id],
     );
     await tx.query(
-      `UPDATE semantic.identity_epoch_job SET cancellation_transaction_id=$4
+      `UPDATE semantic.identity_epoch_job SET cancellation_transaction_id=$4::uuid
       WHERE partition_no=$1 AND job_id=$2 AND epoch=$3 AND state='cancelling'`,
       [identityJobPartition(ref), ref.jobId, ref.epoch.toString(), id],
     );
@@ -893,7 +893,7 @@ export async function stepIdentityPrearmCancellation(
     if (j?.state !== 'cancelling') throw stale();
     await query(
       tx,
-      `UPDATE semantic.identity_epoch_input SET prearm_cancelled_transaction_id=$4
+      `UPDATE semantic.identity_epoch_input SET prearm_cancelled_transaction_id=$4::uuid
       WHERE partition_no=$1 AND job_id=$2 AND generation=$3 AND prearm_cancelled_transaction_id IS NULL`,
       [identityJobPartition(ref), ref.jobId, generation, proof.transactionId],
       work,
@@ -948,7 +948,7 @@ export async function releaseIdentityPrearmHome(pool: Pool, ref: IdentityJobRef,
         await query(
           tx,
           `UPDATE semantic.identity_epoch_prearm_directory
-          SET released=true,release_transaction_id=$4
+          SET released=true,release_transaction_id=$4::uuid
           WHERE partition_no=$1 AND job_id=$2 AND job_epoch=$3 AND NOT released`,
           [home, ref.jobId, ref.epoch.toString(), id],
           work,

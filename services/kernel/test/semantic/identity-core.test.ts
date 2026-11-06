@@ -72,6 +72,24 @@ const resolve = (e: IdentityMappingEvidence, installed: typeof job | null = null
 test('saved originals preserve publication epoch, pending and exact absence without self fallback', () => {
   const e = evidence();
   expect(resolve(e)).toEqual({ state: 'mapped', original: 'saved', terminal: 'canonical', epoch: 11n });
+  expect(
+    resolve({
+      ...e,
+      pendingRows: [{ partition_no: 5, terminal: 'canonical', pending_job: null, pending_epoch: null }],
+    }),
+  ).toEqual({ state: 'mapped', original: 'saved', terminal: 'canonical', epoch: 11n });
+  expect(
+    resolve({
+      ...e,
+      pendingRows: [{ partition_no: 5, terminal: 'canonical', pending_job: null, pending_epoch: '1' }],
+    }),
+  ).toEqual(unavailable);
+  expect(
+    resolve({
+      ...e,
+      pendingRows: [{ partition_no: 5, terminal: 'canonical', pending_job: 'job', pending_epoch: null }],
+    }),
+  ).toEqual(unavailable);
   const pending = {
     ...e,
     pendingRows: [{ partition_no: 5, terminal: 'canonical', pending_job: 'job', pending_epoch: '7' }],
