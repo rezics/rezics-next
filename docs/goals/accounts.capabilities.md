@@ -71,7 +71,7 @@ recovery. Auth response and page transport suites pin fixed RP receiving, exact 
 
 **Native acceptance:** `bun run --cwd services/kernel check test/access/permission-outcome.test.ts`.
 
-**Executed evidence (not accepted):** at `dc68283098`, `permission.test.ts` passed 17/17 and `policy-core-collection.test.ts` passed 4/4; `work.test.ts` passed 14/15, and its failing bearer case also fails on base. At `48b91bf547`, `permission-outcome.test.ts` produced no result: the remote run deadline (`remote-check: deadline reached after 374382 ms`) ended it twice mid-file. No seeded persona or mounted-page walk ran.
+**Executed evidence (not accepted):** at `d7bf3fea79`, `permission.test.ts` passed 17/17, `policy-core-collection.test.ts` passed 4/4 and `work.test.ts` passed 15/15. The metered bearer read now charges its full closed account row, so a valid bearer with a profile is no longer refused as invalid. `permission-outcome.test.ts` has produced no result in three attempts: the remote run lifetime (`remote-check: deadline reached after 374382 ms`) ended each one mid-file. No seeded persona or mounted-page walk ran.
 
 ## platform-gates
 
@@ -201,7 +201,7 @@ acceptance remain deferred to integration; this consumer check does not establis
 
 **Native acceptance:** `bun run --cwd services/kernel check test/access/viewer-actions-outcomes.test.ts test/access/viewer-actions-surfaces-outcomes.test.ts test/access/growth-viewer-actions-surfaces.test.ts`.
 
-**Executed evidence (not accepted):** at `dc68283098`, `viewer-actions-outcomes.test.ts` passed 0/16: the first test's teardown left the Auth DBOS owner set, so later drivers fail with `Another Auth workflow host owns DBOS in this process`. `viewer-actions-surfaces-outcomes.test.ts` passed 1/7, and its TypeList rows return 113 lines the spec does not expect. `growth-viewer-actions-surfaces.test.ts` passed 0/1. No seeded persona or mounted-page walk ran.
+**Executed evidence (not accepted):** at `d7bf3fea79`, `viewer-actions-outcomes.test.ts` passed 0/16: the first test's teardown left the Auth DBOS owner set, so later drivers fail with `Another Auth workflow host owns DBOS in this process`. `viewer-actions-surfaces-outcomes.test.ts` passed 0/7: a Space write fails with SQLSTATE 42702 (`column reference "producer_epoch" is ambiguous`), and TypeList rows return 113 lines the spec does not expect. `growth-viewer-actions-surfaces.test.ts` passed 0/1. No seeded persona or mounted-page walk ran.
 
 ## membership-and-ban-protection
 
