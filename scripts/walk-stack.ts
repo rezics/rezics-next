@@ -6,7 +6,7 @@
  */
 import { type StackSlot, acquireStackSlot } from './stack-lease.ts';
 import { walkStackDirectory } from './stack-run.ts';
-import { createServer, type Server } from 'node:net';
+import { createConnection, createServer, type Server } from 'node:net';
 
 export const WALK_STACKS_DEFAULT = 6;
 const WALK_STACKS_MAXIMUM = 1000;
@@ -55,11 +55,47 @@ export function walkReadyUrls(ports: WalkPorts): string[] {
   return [`http://127.0.0.1:${ports.web}/`, `http://127.0.0.1:${ports.issuer}/`, `http://127.0.0.1:${ports.kernel}/`];
 }
 
-/** First Web compile can exceed two seconds; aborting it on every poll prevents Vite from ever listening. */
+/** First Web compile can exceed a short poll; aborting that request prevents Vite from listening. */
 export const WALK_READY_DEADLINE_MS = 1_200_000;
-export const WALK_READY_FETCH_MS = 30_000;
+export const WALK_READY_FETCH_MS = 120_000;
 export const WALK_READY_POLL_MS = 2_000;
 export const WALK_DOCKER_REMOVE_MS = 60_000;
+export const WALK_PROCESS_STOP_MS = 8_000;
+
+/** True when something already accepts TCP on the origin; connection refused is not a hung compile. */
+export function walkOriginListening(url: string, timeoutMs = 500): Promise<boolean> {
+  const parsed = new URL(url);
+  return new Promise((resolve) => {
+    let settled = false;
+    const socket = createConnection({ host: parsed.hostname, port: Number(parsed.port) });
+    const done = (open: boolean) => {
+      if (settled) return;
+      settled = true;
+      socket.removeAllListeners();
+      socket.destroy();
+      resolve(open);
+    };
+    socket.once('connect', () => done(true));
+    socket.once('error', () => done(false));
+    socket.setTimeout(timeoutMs, () => done(false));
+  });
+}
+
+type StoppableChild = {
+  kill(signal?: NodeJS.Signals): void;
+  exited: Promise<number>;
+  exitCode: number | null;
+  signalCode: NodeJS.Signals | null;
+};
+
+/** SIGTERM, then SIGKILL so a walk cannot wait forever on a worker that ignores shutdown. */
+export async function stopSpawned(child: StoppableChild, timeoutMs = WALK_PROCESS_STOP_MS): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  child.kill('SIGTERM');
+  const timedOut = await Promise.race([child.exited.then(() => false), Bun.sleep(timeoutMs).then(() => true)]);
+  if (timedOut && child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+  await child.exited;
+}
 
 /** A released lease may leave another task's containers behind; never claim their listening ports. */
 export async function walkPortsAvailable(ports: Iterable<number>): Promise<boolean> {

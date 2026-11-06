@@ -332,6 +332,8 @@ outcomes after owner adoption. Shared consumer acceptance is catalogue-jobs and 
 outage/recovery and safe rebuild. **Personas:** operator, editor/acceptor and all common read personas.
 Decision: retained-stack multilingual acceptance reuses its existing source identities, node volume and native
 publication lifecycle. Isolated analyzer checks and unavailable page walks supply no positive journey evidence.
+Walk stacks prove that journey: checks stay on hosts a/b, while `dev-stack.ts walk` stays on the worker host so
+`GOAL_ACCEPTANCE_REQUIRES` is not stripped. Readiness probes TCP before a two-minute first-compile fetch.
 Retry-After waits preserve identical server and initial hydration markup even when the deadline expires in transit;
 the mounted clock enables manual retry without dispatching a request.
 **Released fixtures:** original Chinese/Kana/Latin cases, real Semantic source keys/routeKey, source chunks256 EACH

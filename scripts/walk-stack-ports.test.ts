@@ -3,12 +3,14 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { createServer, type AddressInfo } from 'node:net';
 import { acquireStackSlot } from './stack-lease.ts';
 import {
+  walkOriginListening,
   walkPortsAvailable,
   walkProcessEnvironment,
   walkReadyUrls,
   walkStackPorts,
   WALK_READY_FETCH_MS,
   WALK_READY_POLL_MS,
+  WALK_PROCESS_STOP_MS,
 } from './walk-stack.ts';
 import { cgroupArgs } from '../services/kernel/scripts/search.ts';
 
@@ -20,7 +22,22 @@ test('walk readiness waits on web, issuer and kernel without aborting a first co
     'http://127.0.0.1:20053/',
   ]);
   expect(WALK_READY_FETCH_MS).toBeGreaterThan(WALK_READY_POLL_MS);
-  expect(WALK_READY_FETCH_MS).toBeGreaterThanOrEqual(30_000);
+  expect(WALK_READY_FETCH_MS).toBeGreaterThanOrEqual(120_000);
+  expect(WALK_PROCESS_STOP_MS).toBeGreaterThan(WALK_READY_POLL_MS);
+});
+
+test('readiness does not treat a closed port as a hung first compile', async () => {
+  const started = performance.now();
+  expect(await walkOriginListening('http://127.0.0.1:1/')).toBe(false);
+  expect(performance.now() - started).toBeLessThan(2_000);
+  const server = createServer();
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const port = (server.address() as AddressInfo).port;
+  try {
+    expect(await walkOriginListening(`http://127.0.0.1:${port}/`)).toBe(true);
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
 });
 
 test('walk process environment does not inherit check-host cgroup placement', () => {

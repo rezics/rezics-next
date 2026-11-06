@@ -24,6 +24,8 @@ import {
   WALK_READY_DEADLINE_MS,
   WALK_READY_FETCH_MS,
   WALK_READY_POLL_MS,
+  stopSpawned,
+  walkOriginListening,
   type WalkNames,
 } from '../../../scripts/walk-stack.ts';
 
@@ -729,29 +731,49 @@ async function start() {
     KERNEL_HOSTNAME: '127.0.0.1',
     KERNEL_PORT: String(localPort(origins.kernel)),
   };
-  const children = [
+  const commands = [
     ['bun', 'services/auth/scripts/dev-stack.ts', 'host'],
     ['bun', 'services/auth/scripts/dev-stack.ts', 'pages'],
     ['bun', 'services/auth/scripts/dev-stack.ts', 'web'],
     ['bun', 'run', '--cwd', 'services/kernel', 'dev'],
     ['bun', 'run', '--cwd', 'services/kernel', 'worker'],
-  ].map((command) => Bun.spawn(command, { cwd: root, env, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' }));
+  ];
+  const spawnChild = (command: string[]) =>
+    Bun.spawn(command, { cwd: root, env, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' });
+  const children = commands.map(spawnChild);
+  const webIndex = 2;
+  const webRestarts = 3;
   let stopping = false;
-  const stop = () => {
+  let webAttempts = 0;
+  const stopAll = async () => {
     stopping = true;
-    for (const child of children) child.kill('SIGTERM');
+    await Promise.all(children.map((child) => stopSpawned(child)));
   };
-  process.once('SIGINT', stop);
-  process.once('SIGTERM', stop);
+  const onSignal = () => {
+    void stopAll();
+  };
+  process.once('SIGINT', onSignal);
+  process.once('SIGTERM', onSignal);
+  const superviseWeb = (async () => {
+    for (;;) {
+      const code = await children[webIndex]!.exited;
+      if (stopping || webAttempts >= webRestarts) return code;
+      webAttempts += 1;
+      console.error(`walk: web exited ${code}; restart ${webAttempts}/${webRestarts}`);
+      children[webIndex] = spawnChild(commands[webIndex]!);
+    }
+  })();
   try {
-    const first = await Promise.race(children.map(async (child) => await child.exited));
+    const first = await Promise.race([
+      superviseWeb,
+      ...children.filter((_, index) => index !== webIndex).map((child) => child.exited),
+    ]);
     const interrupted = stopping;
-    stop();
-    await Promise.all(children.map((child) => child.exited));
+    await stopAll();
     process.exitCode = interrupted ? 0 : first || 1;
   } finally {
-    process.off('SIGINT', stop);
-    process.off('SIGTERM', stop);
+    process.off('SIGINT', onSignal);
+    process.off('SIGTERM', onSignal);
   }
 }
 const SIGNAL_NUMBERS = { SIGHUP: 1, SIGINT: 2, SIGTERM: 15 } as const;
@@ -792,6 +814,7 @@ function removeWalkStack(names: WalkNames): void {
 /** Resolves when every URL answers; fails when the stack exits first or the compile window elapses. */
 async function untilReady(urls: string[], starting: ReturnType<typeof Bun.spawn>): Promise<void> {
   const answers = async (url: string) => {
+    if (!(await walkOriginListening(url))) return false;
     try {
       const response = await fetch(url, { signal: AbortSignal.timeout(WALK_READY_FETCH_MS) });
       return response.status < 500;
@@ -870,6 +893,7 @@ async function walk(command: string[]): Promise<number> {
       }
       const log = join(root, '.temp', 'walk', task, 'stack.log');
       await mkdir(dirname(log), { recursive: true });
+      await Bun.write(log, '');
       starting = current = Bun.spawn([process.execPath, 'services/auth/scripts/dev-stack.ts', 'start'], {
         cwd: root,
         env,
@@ -881,10 +905,7 @@ async function walk(command: string[]): Promise<number> {
       current = Bun.spawn(command, { env, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' });
       code = await current.exited;
     } finally {
-      if (starting && starting.exitCode === null) {
-        starting.kill('SIGTERM');
-        await starting.exited;
-      }
+      if (starting) await stopSpawned(starting);
       removeWalkStack(names);
     }
   } catch (error) {
