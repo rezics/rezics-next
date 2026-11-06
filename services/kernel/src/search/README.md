@@ -1689,8 +1689,9 @@ revalidates current disclosure before exposing distinct positive witnesses as `N
 separate proof and are not inferred from the candidate prefix. Source census and page length are never query counts.
 Tagged-work requests (`tagged-work-plan.ts`) keep that designated kind as a direct top-level AND leaf, compile the
 remaining catalogue predicate (`tagged-work-query.ts`) and prove kind chips from those current rows (`type-facet.ts`).
-Name and id execute directly; rating sort is finite preparation until mixed rating seek is installed. Web Concept
-type labels read Search kind metadata rather than substituting admission maps.
+Capture overflow includes statement and same-statement qualifier properties. Name and id execute directly; rating sort
+is finite preparation until mixed rating seek is installed. Web Concept type labels read Search kind metadata rather
+than substituting admission maps. Catalogue mounts Search's public weight control for the shared numeric grammar.
 
 `DiscoveryConsumerCaptureInput`, `DiscoveryEngineHit` and `DiscoveryConsumerQuery` live in `discovery.ts`;
 `public-filter-consumer-contract.ts` adds `captureDiscovery`/`queryDiscovery`, optional refill and required windows

@@ -197,7 +197,10 @@ export function compileDiscoveryCapture(
     if ('and' in node) node.and.forEach(visit);
     else if ('or' in node) node.or.forEach(visit);
     else if ('not' in node) visit(node.not);
-    else if ('statement' in node) properties.add(node.statement.property);
+    else if ('statement' in node) {
+      properties.add(node.statement.property);
+      for (const qualifier of node.statement.qualifiers ?? []) properties.add(qualifier.property);
+    }
   }
   if (filterDocument) visit(filterDocument);
   return {

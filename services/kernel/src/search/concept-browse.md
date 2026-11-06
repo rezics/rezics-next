@@ -211,7 +211,7 @@ dispatch. It introduces no lifecycle, public cursor, retained permission or clos
 
 ## Native Boolean concept conditions
 
-Decision: Path 7 tagged-work discovery binds one designated work-kind AND leaf, the remaining catalogue predicate and name or id order for direct native execution. Descendant closures use retained concept membership. Rating order is finite preparation until mixed rating seek is installed. Kind chips prove current remaining-predicate membership as N+ and never infer zero; property facets and public totals stay count-free. Web type labels prefer Search kind metadata over admission maps.
+Decision: Path 7 tagged-work discovery binds one designated work-kind AND leaf, the remaining catalogue predicate and name or id order for direct native execution. Descendant closures use retained concept membership. Rating order is finite preparation until mixed rating seek is installed. Kind chips prove current remaining-predicate membership as N+ and never infer zero; property facets and public totals stay count-free. Web type labels prefer Search kind metadata over admission maps. Catalogue mounts Search's public weight control for the same-statement quantity grammar.
 
 Decision: the mounted M1 Concept page keeps its catalogue work-type control count-free except for that designated kind leaf; public result totals and
 catalogue property facets remain count-free on this route under the Search count contract.

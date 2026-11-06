@@ -176,6 +176,31 @@ test('descendant membership expands exact tags through the retained concept cut'
   expect(names(withCut)).toEqual(['B-child', 'B-edge', 'B-long', 'B-movie', 'B-split']);
 });
 
+test('crossed platform language qualifiers match only the same statement', () => {
+  const switchId = id(31);
+  const pcId = id(32);
+  const crossed = subject('R-crossed', 9, 'wd:Q20631656', [
+    item('schema:gamePlatform', switchId, [{ property: 'schema:inLanguage', value: 'ja' }]),
+    item('schema:gamePlatform', pcId, [{ property: 'schema:inLanguage', value: 'en' }]),
+  ]);
+  const switchEnglish: FilterDocument = {
+    statement: {
+      property: 'schema:gamePlatform',
+      in: [switchId],
+      qualifiers: [{ property: 'schema:inLanguage', in: ['en'] }],
+    },
+  };
+  const switchJapanese: FilterDocument = {
+    statement: {
+      property: 'schema:gamePlatform',
+      in: [switchId],
+      qualifiers: [{ property: 'schema:inLanguage', in: ['ja'] }],
+    },
+  };
+  expect(evaluateTaggedWorkPredicate(crossed, switchEnglish)).toBe(false);
+  expect(evaluateTaggedWorkPredicate(crossed, switchJapanese)).toBe(true);
+});
+
 test('id order continues the remaining form/tag page after the first current row', () => {
   const matched = currentTaggedWorkSubjects(books, formHarem).sort((left, right) => left.id.localeCompare(right.id));
   expect(matched.map((row) => row.id)).toEqual([id(1), id(2), id(4)]);

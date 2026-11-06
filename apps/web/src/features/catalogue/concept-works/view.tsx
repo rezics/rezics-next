@@ -25,7 +25,7 @@ import {
   type ConceptWorksSelection,
 } from './index';
 import { readPublicConceptWorks } from './actions';
-import { ConceptWeightRange } from './weight';
+import { ConceptWeightRange } from '../../../search/condition-weight';
 import type { DiscoveryRequest, DiscoveryState } from '../../../search/discovery';
 
 export type ConceptWorksRouteState = {

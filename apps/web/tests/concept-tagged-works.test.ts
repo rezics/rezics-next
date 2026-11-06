@@ -15,7 +15,7 @@ import {
   readConceptWorksPage,
 } from '../src/features/catalogue/concept-works';
 import type { DiscoveryState } from '../src/search/discovery';
-import { ConceptWeightRange } from '../src/features/catalogue/concept-works/weight';
+import { ConceptWeightRange } from '../src/search/condition-weight';
 import { DiscoveryResults } from '../src/search/discovery-results';
 import { discoveryExample } from '../src/kernel/fake/search-discovery';
 import { parseDiscoveryPage } from '../src/search/discovery';

@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import type { DiscoveryFilterDocument } from '@rezics/filter';
+import { compileDiscoveryCapture } from '../../src/search/discovery-filter.ts';
 import { createDiscoveryRegistry } from '../../src/search/discovery-registry.ts';
 import { admitDiscoveryRequest } from '../../src/search/discovery-request.ts';
 import {
@@ -73,6 +74,21 @@ test('a designated kind leaf binds remaining catalogue predicate, native source 
     { property: 'rezics:sourceTagWeight', range: { gte: 2, unit: '1' }, onConceptStatement: true },
     { property: 'schema:wordCount', range: { gte: 1_000_001, unit: '1' }, onConceptStatement: false },
   ]);
+  expect(plan.overflowProperties).toEqual(['schema:genre', 'rezics:sourceTagWeight', 'schema:wordCount']);
+  expect(
+    compileDiscoveryCapture(
+      {
+        representation: 'discovery-v1',
+        comparator: 'mixed-public-v1',
+        filterDocument: filter,
+        sort: 'name',
+        size: 49,
+        pageSize: 24,
+      },
+      registry,
+      bundledRelease,
+    ).overflowProperties,
+  ).toEqual(plan.overflowProperties);
 });
 
 test('descendant concept closures use retained membership; rating order stays finite preparation', () => {

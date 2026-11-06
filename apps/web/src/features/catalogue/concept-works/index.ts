@@ -1,3 +1,4 @@
+import { pickText } from '@rezics/composition';
 import { FILTER_LIMITS, parseFilter, type FilterDocument, type FilterQualifier } from '@rezics/filter';
 import { conditionTreeAdmission } from '../../../search/condition-editor-model';
 import { discoveryRequest } from '../../../search/search-request';
@@ -6,7 +7,6 @@ import { readDiscovery, type DiscoveryKinds, type DiscoverySender } from '../../
 import type { ConceptWorksAdmission, ConceptSchemeRef } from '../source-concept-explorer';
 import { isExploreId } from '../../pages/graph-browser';
 import type { DiscoveryRequest, DiscoveryState } from '../../../search/discovery';
-import { localizedLabel } from '../../../search/results';
 
 /** Search kind metadata is the native label owner; admission type labels are only a pre-page fallback. */
 export function conceptWorksTypeLabel(
@@ -15,7 +15,7 @@ export function conceptWorksTypeLabel(
   locale: string,
 ): string {
   const native = kinds?.find((entry) => entry.id === type.id);
-  const label = localizedLabel(native?.labels ?? type.labels, locale).text.trim() || type.id;
+  const label = pickText(native?.labels ?? type.labels, locale).text.trim() || type.id;
   const count = native?.count;
   return count && 'value' in count
     ? `${label} (${new Intl.NumberFormat(locale).format(count.value)}${count.exact ? '' : '+'})`

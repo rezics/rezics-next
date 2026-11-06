@@ -4,12 +4,12 @@ import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { useId } from 'react';
-import { m } from '../../../paraglide/messages.js';
-import { locales } from '../../../paraglide/runtime.js';
-import type { ConditionMetadata } from '../../../search/condition-editor-model';
-import { searchQuantityUnitText } from '../../../search/condition-quantity';
-import { parseConditionRangeDraft } from '../../../search/condition-range-input';
-import { localizedLabel } from '../../../search/results';
+import { m } from '../paraglide/messages.js';
+import { locales } from '../paraglide/runtime.js';
+import type { ConditionMetadata } from './condition-editor-model';
+import { searchQuantityUnitText } from './condition-quantity';
+import { parseConditionRangeDraft } from './condition-range-input';
+import { localizedLabel } from './results';
 
 const weightProperty = 'rezics:sourceTagWeight';
 
