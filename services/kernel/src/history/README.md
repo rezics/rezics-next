@@ -9,7 +9,8 @@ exports the receiving, record, operational, shared-work and identity facades; th
 capability. `kernel-history-adapters` implements that capability with native Postgres operations, command execution,
 and Access, Semantic, Search, Zones and Work owner bindings. The Semantic record-source-set producer is loaded
 lazily from `../../semantic/record-source-set.ts`, matching the adapter type import; a missing owner file stays
-unavailable.
+unavailable. Native `beginSemanticRecordSourceSet` is the sole Accounts declaration; History consumers must not
+declare the same command set again. Other moved native adapters have no runtime `existsSync`/`require` owner lookup.
 
 Foreign Kernel modules import the declared History application and contract entries. Zones and Semantic account-agents take `ACCOUNT_ROLE_BITS` and `declareCommandHistory` from those entries. Access keeps compatibility
 re-exports at `access/shared-history.ts` and `access/shared-history-work.ts` that resolve to those facades. Native adapters
