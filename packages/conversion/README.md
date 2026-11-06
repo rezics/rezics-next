@@ -12,7 +12,7 @@ The public subpaths are defined in [package.json](package.json).
 | @rezics/conversion/bangumi              | Bangumi converter, revision and result                                                       |
 | @rezics/conversion/bangumi-vocabulary   | Bangumi vocabulary mapper and revision                                                       |
 | @rezics/conversion/vndb                 | VNDB converter, revision, limits and result                                                  |
-| @rezics/conversion/vndb-vocabulary      | VNDB vocabulary mapper, revision, tag-weight producer and row types                          |
+| @rezics/conversion/vndb-vocabulary      | VNDB vocabulary mapper, revision, tag-weight and parent producers and row types                          |
 | @rezics/conversion/source-vocabulary    | Released binding, identity, row, gap and result types                                        |
 | @rezics/conversion/open-library         | Open Library converter, revision and result                                                  |
 | @rezics/conversion/wikidata             | Wikidata converter, revision, limits and result                                              |
@@ -23,6 +23,8 @@ Current exports are Bangumi bangumi@16, VNDB vndb@8, Open Library open-library@5
 ConversionInput carries the provider-native external ID, record revision and record. Revisions are not inferred from dump dates, checksums, row order or converter versions. A missing native revision stays null where permitted; Wikidata uses unversioned only when the entity has no lastrevid. Other required provider revisions must match the native record. The importer records the source revision or unversioned digest alongside the converter revision.
 
 Context separates trusted caller values from source data: alias, existing subject UUID, resolved references, available media, normalized vocabulary rows and admitted source classifications. Converters do not resolve identities, discover graph rows or treat body values as bindings. Results contain normalized data, a digest, diagnostics and portable commands for the ordinary bulk contract. A converter return proves neither acceptance, adoption nor current public return.
+
+Changed converter output uses a distinct revision. VNDB parent output `vndb-public-tag-vocabulary@2` adds the exact `tags_parents` row citation and leaves facts rights in source-record metadata. Importer refresh reconciles current adoption on unchanged source rows while retaining sealed `@1` requests.
 
 ## Source mappings and rights
 

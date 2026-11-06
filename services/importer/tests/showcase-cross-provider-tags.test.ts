@@ -136,7 +136,7 @@ test('a parent proposal cites the exact source path and both bound endpoints wit
   >;
   expect(command.subject).toBe(binding!.childId);
   expect(command.source.external_id).toBe('/tags_parents/g1/g2');
-  expect(command.source.converter_revision).toBe('vndb-public-tag-vocabulary@1');
+  expect(command.source.converter_revision).toBe('vndb-public-tag-vocabulary@2');
   expect(command.statement.property.id).toBe('skos:broader');
   expect(command.statement.value).toEqual({ type: 'value', content: binding!.parentId });
   expect(command.statement.qualifiers).toBeUndefined();
@@ -294,10 +294,28 @@ test('parent publication rereads native metadata before exact proposal replay an
     },
   };
   try {
+    const current = showcaseTagParentCommand(binding);
+    const old = {
+      ...current,
+      key: 'sealed-parent-v1',
+      source: { ...current.source, converter_revision: 'vndb-public-tag-vocabulary@1' },
+      statement: { ...current.statement, references: [{ parts: current.statement.references[0]!.parts.slice(1) }] },
+    };
+    journal.prepareCommand(old);
+    journal.acknowledgeCommand(old, {
+      key: old.key,
+      status: 201,
+      value: { candidate: '00000000-0000-4000-8000-000000000004', revision: 1 },
+    });
+    const oldBytes = JSON.stringify(journal.acknowledgedCommands()[0]!.command);
     const first = await prepareShowcaseTagParentPublications({ evidence: [binding], port, journal });
     expect(first.gaps).toEqual([]);
     expect(first.acknowledgements).toHaveLength(1);
     expect(events.splice(0)).toEqual(['fence', 'metadata', 'proposal']);
+    expect(journal.acknowledgedCommands()).toHaveLength(2);
+    expect(JSON.stringify(journal.acknowledgedCommands().find((row) => row.command.key === old.key)!.command)).toBe(
+      oldBytes,
+    );
     const reopened = await prepareShowcaseTagParentPublications({ evidence: [binding], port, journal });
     expect(reopened.acknowledgements).toEqual(first.acknowledgements);
     expect(events.splice(0)).toEqual(['fence', 'metadata']);

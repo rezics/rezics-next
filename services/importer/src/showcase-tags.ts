@@ -7,6 +7,7 @@ import {
   type BatchStatement,
 } from '@rezics/definitions/bulk';
 import type { SourceVocabularyBindings } from '@rezics/conversion';
+import { vndbPublicTagParentRevision } from '@rezics/conversion/vndb-vocabulary';
 import { vndbRecordUrl } from '@rezics/conversion/cross-media-entities';
 import {
   commandKey,
@@ -976,7 +977,10 @@ function ackedTagCreates(journal: ShowcaseJournal): Map<string, string> {
 }
 
 function isTagVocabularyCommand(command: BatchCommand): boolean {
-  return command.source.source === 'vndb_cross_media' && command.source.converter_revision === adapterRevision;
+  return (
+    command.source.source === 'vndb_cross_media' &&
+    [adapterRevision, vndbPublicTagParentRevision].includes(command.source.converter_revision)
+  );
 }
 
 async function sendTagCommandPages(

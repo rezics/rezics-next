@@ -954,7 +954,7 @@ export type VndbPublicTagParentBinding = Readonly<{
   releaseDigest: string;
 }>;
 
-const tagParentConverterRevision = 'vndb-public-tag-vocabulary@1';
+export const vndbPublicTagParentRevision = 'vndb-public-tag-vocabulary@2';
 
 export function vndbPublicTagParentCommand(
   binding: VndbPublicTagParentBinding,
@@ -964,7 +964,7 @@ export function vndbPublicTagParentCommand(
       source: 'vndb_cross_media',
       external_id: binding.path,
       record_revision: null,
-      converter_revision: tagParentConverterRevision,
+      converter_revision: vndbPublicTagParentRevision,
       digest: sourceDigest({
         provider: 'vndb',
         table: 'tags_parents',

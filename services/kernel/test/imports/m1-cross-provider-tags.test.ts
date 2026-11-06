@@ -178,7 +178,13 @@ test('exact VNDB parent assertions need separate native acceptance and adoption 
       schemeUri,
       releaseDigest: bundledDigest,
     };
-    const proposal = showcaseTagParentCommand(binding);
+    const corrected = showcaseTagParentCommand(binding);
+    const proposal = {
+      ...corrected,
+      key: 'sealed-parent-v1',
+      source: { ...corrected.source, converter_revision: 'vndb-public-tag-vocabulary@1' },
+      statement: { ...corrected.statement, references: [{ parts: corrected.statement.references[0]!.parts.slice(1) }] },
+    };
     expect(proposal.rights).toBeUndefined();
     await runtime.importTransport.setSourceRecordMetadata({
       command: showcaseTagParentMetadata(binding),
@@ -200,13 +206,14 @@ test('exact VNDB parent assertions need separate native acceptance and adoption 
     expect(readAfter.subject.statements['skos:broader']?.map((statement) => statement.value.content)).toEqual([
       parentId,
     ]);
-    // The public reader receives the exact table-row citation, not only the dictionary endpoints.
-    expect(JSON.stringify(readAfter.subject.statements['skos:broader'])).toContain(
-      'https://vndb.org/g311#/tags_parents/g311/g12',
-    );
     expect(JSON.stringify(after.body.subject)).toContain('ODbL-1.0');
 
     const journal = new ShowcaseJournal(':memory:');
+    journal.prepareCommand(proposal);
+    const oldReceipt = sent.results[0]!;
+    if (oldReceipt.status !== 201 && oldReceipt.status !== 200) throw new Error('Expected native parent receipt');
+    journal.acknowledgeCommand(proposal, oldReceipt);
+    const oldBytes = JSON.stringify(journal.acknowledgedCommands()[0]!.command);
     const publicationPort = captureShowcaseCommands(runtime.importTransport, journal);
     const publicClient = createPublicBulkClient({
       origin: runtime.origin,
@@ -272,6 +279,12 @@ test('exact VNDB parent assertions need separate native acceptance and adoption 
       // Reopening the current proposal is idempotent even after independent manual adoption.
       const reopened = await publish([binding]);
       expect(reopened.manifest.tagParentPublications).toMatchObject([{ status: 'public', parentId }]);
+      const correctedRead = await publicClient.readSubject(childId);
+      expect(JSON.stringify(correctedRead.subject)).toContain('https://vndb.org/g311#/tags_parents/g311/g12');
+      expect(JSON.stringify(correctedRead.subject)).toContain('ODbL-1.0');
+      expect(
+        JSON.stringify(journal.acknowledgedCommands().find((row) => row.command.key === proposal.key)!.command),
+      ).toBe(oldBytes);
       const firstIds = journal.acknowledgedCommands().map((row) => row.candidateId);
       await publish([binding]);
       expect(journal.acknowledgedCommands().map((row) => row.candidateId)).toEqual(firstIds);

@@ -55,7 +55,7 @@ import type {
 import type { BangumiPersonSourceJournal } from './showcase-bangumi-people.ts';
 import { validAvailableCover } from './showcase-media.ts';
 import { vndbPublicTagConceptUri, vndbPublicTagScheme } from '../../../packages/conversion/src/support.ts';
-import { vndbTagsRatingMetric } from '@rezics/conversion/vndb-vocabulary';
+import { vndbTagsRatingMetric, vndbPublicTagParentRevision } from '@rezics/conversion/vndb-vocabulary';
 import type {
   VndbTagRatingBinding,
   VndbTagRatingObservation,
@@ -592,7 +592,7 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
 }
 
 /** Persist each exact body before transport, then seal only acknowledged native UUIDs. */
-export function captureShowcaseCommands(port: CrossMediaPort, journal: ShowcaseJournal): CrossMediaPort {
+export function captureShowcaseCommands<Port extends CrossMediaPort>(port: Port, journal: ShowcaseJournal): Port {
   return {
     ...port,
     async batch(request: BatchWriteRequest): Promise<BatchWriteResult> {
@@ -763,7 +763,7 @@ function recordSource(record: ShowcaseRecord, assertion: ShowcaseAssertion): boo
     assertion.property === 'skos:broader' &&
     assertion.ownerKey === record.sourceKey &&
     assertion.tagParentPath === assertion.source.external_id &&
-    assertion.source.converter_revision === 'vndb-public-tag-vocabulary@1' &&
+    ['vndb-public-tag-vocabulary@1', vndbPublicTagParentRevision].includes(assertion.source.converter_revision) &&
     assertion.source.field_group === 'facts' &&
     /^\/tags_parents\/g[1-9][0-9]{0,9}\/g[1-9][0-9]{0,9}$/u.test(assertion.tagParentPath);
   return (
@@ -777,7 +777,7 @@ function recordSource(record: ShowcaseRecord, assertion: ShowcaseAssertion): boo
 function managedSourceTagParent(candidate: CandidateRead, alias: string): boolean {
   return (
     candidate.source?.source === alias &&
-    candidate.source.converter_revision === 'vndb-public-tag-vocabulary@1' &&
+    ['vndb-public-tag-vocabulary@1', vndbPublicTagParentRevision].includes(candidate.source.converter_revision) &&
     candidate.source.field_group === 'facts' &&
     /^\/tags_parents\/g[1-9][0-9]{0,9}\/g[1-9][0-9]{0,9}$/u.test(candidate.source.external_id) &&
     candidate.statement.property.id === 'skos:broader'
