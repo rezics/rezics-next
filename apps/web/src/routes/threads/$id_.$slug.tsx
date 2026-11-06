@@ -405,7 +405,7 @@ export function ThreadPage() {
   }, [page.posts, callbackRevision, caller?.connectionTicket]);
 
   useEffect(() => {
-    if (isCallbackCurrent() && !location.hash.replace(/^#/, '')) window.scrollTo(0, 0);
+    if (isCallbackCurrent() && !location.hash.replace(/^#/, '')) window.scrollTo?.(0, 0);
   }, [location]);
 
   async function refreshThreadQueries() {

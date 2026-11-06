@@ -811,8 +811,12 @@ export class ThreadPageCaller {
   connect(owner: object) {
     if (this.retired || this.connection.retired) return () => {};
     if (this.connection.owner && this.connection.owner !== owner) {
-      this.retire();
-      return () => {};
+      // A still-mounted owner is a conflicting tree. A disconnected owner is the previous
+      // mount of this same caller (StrictMode remount restores a new host object).
+      if (this.connection.connected) {
+        this.retire();
+        return () => {};
+      }
     }
     this.connection.owner = owner;
     this.connection.connected = true;
