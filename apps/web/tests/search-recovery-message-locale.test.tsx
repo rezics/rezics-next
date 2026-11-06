@@ -174,6 +174,29 @@ afterAll(() => {
   }
 });
 
+test('a Retry-After deadline expiring in transit hydrates without replacing the recovery and enables manual retry', async () => {
+  const clock = Date.now;
+  let now = 1000;
+  Date.now = () => now;
+  const errors: unknown[] = [];
+  const props = {
+    state: { status: 'index-not-ready' as const, retryAt: 2000 }, retryHref, restartHref, onRetry() {},
+  };
+  try {
+    host.innerHTML = renderToString(createElement(SearchRecovery, props));
+    now = 3000;
+    await act(async () => {
+      root = hydrateRoot(host, createElement(SearchRecovery, props), {
+        onRecoverableError: (error) => errors.push(error),
+      });
+    });
+    expect(errors).toEqual([]);
+    expect(host.querySelector('button')!.disabled).toBe(false);
+  } finally {
+    Date.now = clock;
+  }
+});
+
 test('kind continuation recovery text follows each instance locale through the shared helper', async () => {
   const previous = getLocale();
   setLocale('ja', { reload: false });

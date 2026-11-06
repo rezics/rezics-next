@@ -15,6 +15,7 @@ import {
   type RelationFacetProbe,
   type SubjectSource,
 } from './source.ts';
+import { publicAliases } from './document-names.ts';
 import { chooseTexts } from './hits.ts';
 import type { CharacterPersonDiscoveryContexts, DiscoveryContextSubject } from './discovery.ts';
 import { createReleasedRelationDirectionResolver, type Release } from '@rezics/definitions';
@@ -209,27 +210,11 @@ function originalLanguage(subject: IndexedSubject): string | undefined {
   return subject.statements.find(({ property }) => property === 'schema:inLanguage')?.value;
 }
 
-function projectAliases(subject: IndexedSubject, languages: readonly string[] | undefined): Record<string, string[]> {
-  const values = new Map<string, Set<string>>();
-  for (const { language, value } of subject.aliases) {
-    const selected = values.get(language) ?? new Set<string>();
-    selected.add(value);
-    values.set(language, selected);
-  }
-  const selectedLanguages = languages?.length ? languages : [...values.keys()].sort();
-  return Object.fromEntries(
-    selectedLanguages.flatMap((language) => {
-      const aliases = values.get(language);
-      return aliases?.size ? [[language, [...aliases].sort()]] : [];
-    }),
-  );
-}
-
 function projectContextSubject(
   subject: IndexedSubject,
   languages: readonly string[] | undefined,
 ): DiscoveryContextSubject {
-  const aliases = projectAliases(subject, languages);
+  const aliases = publicAliases(subject);
   return {
     id: subject.id,
     labels: chooseTexts(subject.labels, languages, originalLanguage(subject)),

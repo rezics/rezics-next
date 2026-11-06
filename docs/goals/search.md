@@ -29,6 +29,8 @@ implemented, exposed, tested and promoted are separate states; a passing local c
 ## Scope
 
 Decision: one composition runtime; lost SDK responses keep publication outcomes unknown.
+Decision: this increment uses the focused CJK projection, review-readiness, alias-locale and walk regressions as its owning cells, adds no stories or seeded-matrix cases, and leaves the seeded matrix unaccepted because local Web never listened on 20010 within 20 minutes. Path 17 walk first-compile HTTP uses the remaining readiness window; session modules stay in the route graph rather than Vite URL entries.
+Decision: typecheck repairs keep those assertions; walk `stopSpawned` accepts Bun's numeric or named `signalCode`; Library access-capabilities re-exports work types from kernel-library-contract, not the Source runtime.
 
 Decision: delayed-index disclosure recovers through the same ordinary relay. Withholding an unsafe kind preserves independently current kinds; unsafe combined execution remains withheld through sibling projection and cursor construction.
 
@@ -52,6 +54,7 @@ continuation. Their owners supply the closed registry, complete common-generatio
 eligibility/hydration seams; Search owns query compilation, ordered candidate consumption and response execution.
 Decision: while those seams are absent, an unexpected metadata candidate is unavailable; missing owner evidence
 never becomes a successful empty result or count.
+Decision: a preparing or unavailable review producer is omitted from generation requirements; catalogue siblings stay allocatable. Access deadline during that readiness probe is preparing, not a missing producer. Composition classifies Access and command unavailability by those error names so the composition root does not import a private Access file. A later preparing or unavailable review page retires that generation so the next allocation can omit the producer; it is not an unsupported-kind coverage failure.
 Decision: scoped Search uses the verified current reader and one complete predicate for results and facets; a reader or
 resource change retires old facet values and cursors and restarts in that scope without Global fallback.
 The query contract is [discovery-query](../../services/kernel/src/search/discovery-query.md), under the
