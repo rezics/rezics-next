@@ -4,7 +4,12 @@ import { isBound } from '@rezics/bounds';
 import type { Pool, PoolClient, QueryResult } from 'pg';
 import { systemClock } from '../../clock.ts';
 import type { OperationalOptions, OperationalTransaction } from '../../command/operational.ts';
-import { HistoryRegistry } from '../../history/contract/index.ts';
+import { HistoryRegistry, IDENTITY_FX_EFFECT } from '../../history/contract/index.ts';
+import {
+  associateSelectedEpisode,
+  bindIdentityOriginalEffect,
+  finishSelectedEpisode,
+} from '../../history/application/index.ts';
 import { partitionOf, routeOf } from '../../route/route.ts';
 import { assertSelectedWorkClient } from './client-binding.ts';
 import type { HistoryAssociationPort } from '../contract/index.ts';
@@ -244,26 +249,11 @@ export function createNativeWorkPorts(): WorkApplicationPorts {
     },
     selectedAssociation: {
       async associateEpisode(tx, identity, locator, fresh) {
-        const selected = load<typeof import('../../history/operational-work-selected.ts')>(
-          '../../history/operational-work-selected.ts',
-        );
-        return selected.associateSelectedEpisode(
-          tx as OperationalTransaction,
-          identity as never,
-          locator as never,
-          fresh,
-        );
+        return associateSelectedEpisode(tx as never, identity as never, locator as never, fresh);
       },
       finishEpisode(tx, identity, episode, phase, body) {
-        const selected = load<typeof import('../../history/operational-work-selected.ts')>(
-          '../../history/operational-work-selected.ts',
-        );
-        return selected.finishSelectedEpisode(
-          tx as OperationalTransaction,
-          identity as never,
-          episode as never,
-          phase,
-          (inner) => body(inner as WorkQueryClient) as never,
+        return finishSelectedEpisode(tx as never, identity as never, episode as never, phase, (inner) =>
+          body(inner as WorkQueryClient),
         );
       },
     },
@@ -282,14 +272,9 @@ export function createNativeWorkPorts(): WorkApplicationPorts {
     },
     effects: {
       get identityFxName() {
-        return load<typeof import('../../history/identity-original-association.ts')>(
-          '../../history/identity-original-association.ts',
-        ).IDENTITY_FX_EFFECT;
+        return IDENTITY_FX_EFFECT;
       },
       bindIdentityOriginal(effect, deps) {
-        const { bindIdentityOriginalEffect } = load<typeof import('../../history/identity-original-association.ts')>(
-          '../../history/identity-original-association.ts',
-        );
         return bindIdentityOriginalEffect(effect as never, {
           pool: asPool(deps.pool),
           client: deps.client as never,

@@ -345,11 +345,11 @@ test('registry and codecs have no database dependency anywhere in their runtime 
       await visit(resolve(file, '..', dependency.path));
     }
   }
-  await visit(resolve(import.meta.dir, '../../src/history/contracts.ts'));
-  await visit(resolve(import.meta.dir, '../../src/history/locator.ts'));
+  await visit(resolve(import.meta.dir, '../../src/history/contract/contracts.ts'));
+  await visit(resolve(import.meta.dir, '../../src/history/contract/locator.ts'));
   expect([...visited].map((file) => file.split('/src/')[1]).sort()).toEqual([
-    'history/contracts.ts',
-    'history/locator.ts',
-    'route/route.ts',
+    'history/contract/contracts.ts',
+    'history/contract/locator.ts',
+    'route/contract.ts',
   ]);
 });
