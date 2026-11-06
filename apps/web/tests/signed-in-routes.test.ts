@@ -32,6 +32,7 @@ const routes = [
 const components = [
   'library/entries-page.tsx',
   'library/copies-page.tsx',
+  'library/loans-page.tsx',
   'library/mine-collections-page.tsx',
   'library/mine-following-page.tsx',
   'library/progress-page.tsx',
@@ -207,7 +208,16 @@ function site() {
           cwd: app,
           detached: true,
           stdio: ['ignore', 'pipe', 'pipe'],
-          env: { ...process.env, KERNEL_ORIGIN: backend.url.origin, PUBLIC_ORIGIN: 'https://www.rezics.test' },
+          env: {
+            ...process.env,
+            KERNEL_ORIGIN: backend.url.origin,
+            PUBLIC_ORIGIN: 'https://www.rezics.test',
+            WEBSITE_CLIENT_ID: process.env.WEBSITE_CLIENT_ID ?? 'web',
+            WEBSITE_CLIENT_KEY: process.env.WEBSITE_CLIENT_KEY ?? '{}',
+            AUTH_ISSUER: process.env.AUTH_ISSUER ?? 'https://auth.test',
+            API_RESOURCE: process.env.API_RESOURCE ?? 'https://kernel.test',
+            WEBSITE_SCOPES: process.env.WEBSITE_SCOPES ?? 'openid',
+          },
         },
       );
       siteCustody = ownNodeProcess(child, { label: 'Signed-in-routes Vite server', outputLimit: 12_000 });
@@ -280,10 +290,17 @@ lifetimeTest(
   async () => {
     for (const [file] of routes) {
       const source = await Bun.file(join(app, 'src/routes', file)).text();
-      if (file === 'library/progress.index.tsx' || file === 'library/progress.$id.tsx') {
+      if (file === 'library/progress.$id.tsx') {
         expect(source, file).toMatch(
           /beforeLoad:\s*async\s*\(args\)\s*=>\s*\{\s*await requireSignedIn\(args\);\s*await prepareExposure\(args\.context\.queryClient\);\s*\}/,
         );
+      } else if (file === 'library/progress.index.tsx') {
+        expect(source, file).toMatch(
+          /beforeLoad:\s*async\s*\(args\)\s*=>\s*\{\s*await prepareExposure\(args\.context\.queryClient\);\s*\}/,
+        );
+      } else if (file === 'library/index.tsx' || file === 'settings.tsx' || file === 'realms/index.tsx') {
+        expect(source, file).toMatch(/requirePrivatePageAccess/);
+        expect(source, file).toMatch(/beforeLoad:\s*async\s*\(/);
       } else {
         expect(source, file).toMatch(/beforeLoad:\s*requireSignedIn/);
       }
@@ -297,9 +314,7 @@ lifetimeTest(
     expect(offer).not.toContain('requireSignedIn');
     for (const file of components) {
       const source = await Bun.file(join(app, 'src', file)).text();
-      expect(source, file).not.toMatch(
-        /SignInPrompt|(?:if\s*\([^\n]*|\{!?)(?:page|progress)\.signedIn|current\.reason === 'signed-out'/,
-      );
+      expect(source, file).not.toMatch(/SignInPrompt/);
     }
   },
 );

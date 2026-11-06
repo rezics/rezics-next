@@ -937,7 +937,7 @@ export function CopyRow({
           <SubjectCover subject={copy.subject} ratio={ratio} size="fill" />
         </div>
       }
-      preview={
+      metadata={
         <div className="w-full min-w-0">
           <p className="text-sm text-muted-foreground">
             <MetaLine

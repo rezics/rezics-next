@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react';
-import { de, enUS, es, fr, ja, ko, zhCN, zhTW } from 'date-fns/locale';
 import { Calendar } from '@rezics/ui/shadcn/calendar';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Popover, PopoverContent, PopoverTrigger } from '@rezics/ui/shadcn/popover';
@@ -8,16 +7,6 @@ import { getLocale } from '../paraglide/runtime.js';
 
 const inputClass =
   'min-h-11 min-w-0 w-full max-w-full rounded-lg border border-border bg-background px-3 text-left text-base text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60';
-const locales = {
-  en: enUS,
-  de,
-  es,
-  fr,
-  ja,
-  ko,
-  'zh-Hans': zhCN,
-  'zh-Hant': zhTW,
-} as const;
 
 /** Local calendar components, never an instant, so YYYY-MM-DD is not shifted by the browser zone. */
 export function calendarDayDate(value: string): Date | undefined {
@@ -71,7 +60,6 @@ export function CalendarDayField({
   const locale = getLocale();
   const selected = calendarDayDate(value);
   const month = selected ?? new Date();
-  const dayLocale = locales[locale as keyof typeof locales] ?? enUS;
   const labels = useMemo(
     () => ({
       labelGrid: (date: Date) => new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(date),
@@ -79,6 +67,13 @@ export function CalendarDayField({
         const name = new Intl.DateTimeFormat(locale, { dateStyle: 'full' }).format(date);
         return modifiers.selected ? `${name}, selected` : name;
       },
+    }),
+    [locale],
+  );
+  const formatters = useMemo(
+    () => ({
+      formatCaption: (date: Date) => new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(date),
+      formatWeekdayName: (date: Date) => new Intl.DateTimeFormat(locale, { weekday: 'short' }).format(date),
     }),
     [locale],
   );
@@ -108,8 +103,8 @@ export function CalendarDayField({
           <Calendar
             mode="single"
             required={required}
-            locale={dayLocale}
             labels={labels}
+            formatters={formatters}
             defaultMonth={month}
             selected={selected}
             disabled={(date) => {

@@ -1,6 +1,7 @@
 import { expect, mock, test } from 'bun:test';
 import { createElement, Fragment, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import * as start from '../.storybook/react-start';
 import { createKernelClient, type KernelClient } from '@rezics/client';
 import { copyStatusChange, loadCopiesPage, loadCopyDetail, saveCopy, type CopyItem } from '../src/library/copies-read';
 import {
@@ -12,17 +13,41 @@ import {
 } from '../src/library/copies-server';
 import { m } from '../src/paraglide/messages.js';
 
-mock.module('../src/library/copies-actions', () => ({
-  createCopy() {},
-  updateCopy() {},
-  deleteCopy() {},
-  readCopySubject() {},
-  readCopyDetail() {},
-  undoCopy() {},
+mock.module('cloudflare:workers', () => ({ env: { WEBSITE_CLIENT_KEY: '{}' } }));
+mock.module('@tanstack/react-start', () => ({
+  ...start,
+  createIsomorphicFn: () => ({
+    server: (handler: (...args: never[]) => unknown) => ({ client: () => handler }),
+  }),
 }));
+mock.module('@tanstack/react-start/server', () => start);
 mock.module('../src/threads/composer', () => ({ csrfHeaders: () => ({ 'x-csrf-token': 'csrf' }) }));
 mock.module('../src/kernel/exposure', () => ({
   Exposure: ({ children }: { children: ReactNode }) => createElement(Fragment, null, children),
+  operationIsAdmitted: (operation: string, admitted?: readonly string[]) => {
+    if (operation === 'library_entry.delete' || operation === 'library_entry.restore')
+      return admitted?.includes(operation) ?? false;
+    const groups: Record<string, string> = {
+      'copy.list': 'personal_library',
+      'copy.create': 'personal_library',
+      'copy.delete': 'personal_library',
+      'copy.get': 'personal_library',
+      'copy.update': 'personal_library',
+    };
+    return admitted?.includes(groups[operation] ?? operation) ?? false;
+  },
+  operationGroups: {
+    'copy.list': 'personal_library',
+    'copy.create': 'personal_library',
+    'copy.delete': 'personal_library',
+    'copy.get': 'personal_library',
+    'copy.update': 'personal_library',
+  },
+  prepareExposure: () => undefined,
+  useOperation: () => true,
+  useOperationAdmission: () => 'available',
+  readAdmitted: async () => [],
+  readAdmittedResult: async () => ({ state: 'ready', admitted: [] }),
 }));
 mock.module('@tanstack/react-router', () => ({
   Link: ({ children }: { children: ReactNode }) => createElement('a', null, children),

@@ -3,7 +3,7 @@ import { dirname } from 'node:path';
 import { act, StrictMode, useLayoutEffect, useRef, type ReactNode, type ComponentProps } from 'react';
 import * as start from '../.storybook/react-start';
 import type { CopiesCurrentRead, CopyDetailCurrentRead, CopySubjectCurrentRead } from '../src/library/copies-actions';
-import type { CopyItem, CopyWriteResult, CopyRemoveResult } from '../src/library/copies-read';
+import type { CopiesPageData, CopyItem, CopyWriteResult, CopyRemoveResult } from '../src/library/copies-read';
 import type { SessionEnv } from '../src/session/client';
 
 // UNRUN at this source boundary. Installed DOM, real route, CopyForm and UndoNotice;
@@ -168,6 +168,33 @@ mock.module('@rezics/ui/menu', () => ({
       ))}
     </>
   ),
+}));
+mock.module('../src/kernel/exposure', () => ({
+  Exposure: ({ children }: { children: ReactNode }) => <>{children}</>,
+  operationIsAdmitted: (operation: string, admitted?: readonly string[]) => {
+    if (operation === 'library_entry.delete' || operation === 'library_entry.restore')
+      return admitted?.includes(operation) ?? false;
+    const groups: Record<string, string> = {
+      'copy.list': 'personal_library',
+      'copy.create': 'personal_library',
+      'copy.delete': 'personal_library',
+      'copy.get': 'personal_library',
+      'copy.update': 'personal_library',
+    };
+    return admitted?.includes(groups[operation] ?? operation) ?? false;
+  },
+  operationGroups: {
+    'copy.list': 'personal_library',
+    'copy.create': 'personal_library',
+    'copy.delete': 'personal_library',
+    'copy.get': 'personal_library',
+    'copy.update': 'personal_library',
+  },
+  prepareExposure: () => undefined,
+  useOperation: () => true,
+  useOperationAdmission: () => 'available',
+  readAdmitted: async () => [],
+  readAdmittedResult: async () => ({ state: 'ready', admitted: [] }),
 }));
 const editionHandlers: {
   onChange: (subject: { id: string; title: string; types: string[] } | null) => void;
