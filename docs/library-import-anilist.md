@@ -45,10 +45,11 @@ upload confirmation, state import and the score value do not provide that consen
 
 Decision: native import tests keep the platform steward identity on the original governance scopes, including
 `gate:any`. Bootstrap installs `platform.governance` on the Global Context; that role already holds `access:grant`,
-`gate:any` and the extra import actions. Fixture grants use mounted `/v1/grants` so Accounts authenticates the grantor
-on the live request deadline. Library-gate keeps that original steward bearer; extra actions sign a sibling token with
-only `access:grant` plus the granted actions. Reusing a prior actor snapshot, copying the full governance token, or
-putting `gate:personal_library` on the grantor identity drops coverage.
+`gate:any` and the extra import actions. Every fixture grant authenticates those original scopes onto the command
+deadline so Access admits the live identity snapshot. `gate:any` covers library-gate delegation. A reduced sibling
+token is denied even when the role row exists; mounted HTTP `/v1/grants` authenticates a wrapped actor that command
+admission does not bind. Reusing a prior actor snapshot or putting `gate:personal_library` on the grantor identity
+drops coverage.
 
 Decision: compose Rating's complete native review observation and exact guarded command for the selected
 same-logical-home target in the existing AniList row; foreign-home support remains deferred. Confirmation
