@@ -409886,7 +409886,8 @@
           "units": 1
         },
         "x-resource-types": [
-          "semantic.revision"
+          "semantic.revision",
+          "semantic.context"
         ]
       }
     },
@@ -448182,7 +448183,8 @@
           "units": 1
         },
         "x-resource-types": [
-          "semantic.revision"
+          "semantic.revision",
+          "semantic.context"
         ]
       }
     },
@@ -494551,7 +494553,8 @@
           "units": 1
         },
         "x-resource-types": [
-          "semantic.zone"
+          "semantic.zone",
+          "semantic.context"
         ]
       }
     },

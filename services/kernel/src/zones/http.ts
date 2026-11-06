@@ -103,7 +103,10 @@ export function zoneRoutes(
         headers,
         body: zoneSchema(ZoneCreateInputSchema),
         response: { 201: zoneSchema(ZoneResponseSchema), ...failures },
-        detail: { ...detail('create', 'zone:create', false, true), 'x-resource-types': ['semantic.zone'] },
+        detail: {
+          ...detail('create', 'zone:create', false, true),
+          'x-resource-types': ['semantic.zone', 'semantic.context'],
+        },
       },
       async ({ body, headers, actor, admission, job, session, set }) => {
         requireZoneAccount(actor);
