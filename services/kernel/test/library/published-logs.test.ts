@@ -246,7 +246,7 @@ test('an owner publishes an immutable snapshot that anyone, including anonymous,
       { transactionId: newId(route), time: completedAt },
     ),
   );
-  expect(retired).toMatchObject({ state: 'retired' });
+  expect(retired).toMatchObject({ state: 'retired', completedAt: null });
   expect(await commands.readPublishedLog(anonymous, published.value.id)).toEqual(published.value);
   expect(await commands.readPublishedLog(anonymous, again.value.id)).toEqual(again.value);
   expect((await storedLog(published.value.id)).session_state).toBe('active');

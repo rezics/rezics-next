@@ -1186,9 +1186,10 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
         },
         detail: detail('published_log.list', 'published_log:read', true),
       },
-      async ({ query, actor, admission, job }) =>
+      async ({ query, actor, admission, job, set }) =>
         admission.run('normal', job, () =>
           mapped(async () => {
+            set.headers['cache-control'] = 'private, no-store';
             const page = basicQuery(query);
             return publishedCommands().listPublishedLogs(actor, page, {
               deadline: job.deadline,

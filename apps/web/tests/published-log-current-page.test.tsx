@@ -2,6 +2,7 @@ import { afterAll, describe, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, Children, Fragment, isValidElement, StrictMode, type ReactNode } from 'react';
 import type { PublishedLog, PublishedLogWriteResult } from '../src/library/logs-read';
+import { bindLogsReturnVisit, logsReturnFrontier, logsReturnLocationState } from '../src/library/logs-return';
 import { m } from '../src/paraglide/messages.js';
 
 // UNRUN: mounted deferred-result regressions for integration; no native/transport outcome claim.
@@ -396,7 +397,7 @@ test('same-page uncertain retries keep exact payloads, evidence and deadline; on
       original.log.completedAt!,
       original.log.publishedAt,
     ]);
-    expect(h.host.querySelector('a')?.textContent).toContain('Subject original');
+    expect([...h.host.querySelectorAll('a')].some((node) => node.textContent?.includes('Subject original'))).toBe(true);
     expect(h.host.textContent).toContain('@reader');
     await settle(oldDelete);
     expect(removes).toHaveLength(3); // Restoring also retires the old revision-bound confirmation.
@@ -462,6 +463,52 @@ test('a withheld changed Source still renders the published snapshot', async () 
     expect(h.host.textContent).toContain(m.library_subject_unavailable());
     expect(h.host.querySelector('button')).toBeNull();
   } finally {
+    await h.close();
+  }
+});
+
+test('mounted public log Back restores a captured My Logs visit and follows the href for direct and replaced sessions', async () => {
+  const session = 'owner-session';
+  const logId = '0192f3a0-6c1e-7b2a-9d4e-000000000011';
+  const frontier = logsReturnFrontier('en', session, 'opaque/page+', logId)!;
+  expect(frontier).not.toBeNull();
+  let backed = 0;
+  const history = window.history as History & { back: () => void };
+  const originalBack = history.back.bind(history);
+  history.back = () => {
+    backed += 1;
+  };
+  const h = await mount({ ...page(logId), sessionSubject: session });
+  try {
+    const back = () => [...h.host.querySelectorAll('a')].find((node) => node.textContent === m.library_logs_back());
+    const hrefOf = () => back()?.getAttribute('href');
+    expect(hrefOf()).toBe('/en/library/logs');
+    expect(hrefOf()).not.toContain('cursor');
+
+    bindLogsReturnVisit('en', session, logId);
+    window.history.replaceState({}, '', window.location.href);
+    await settle(() => back()!.click());
+    expect(backed).toBe(0);
+
+    window.history.replaceState(logsReturnLocationState(frontier), '', window.location.href);
+    await settle(() => back()!.click());
+    expect(backed).toBe(1);
+
+    await h.show({ ...page(logId), sessionSubject: 'replaced-session' });
+    window.history.replaceState(logsReturnLocationState(frontier), '', window.location.href);
+    await settle(() => back()!.click());
+    expect(backed).toBe(1);
+
+    await h.show({ ...page(logId), sessionSubject: session });
+    window.history.replaceState(logsReturnLocationState(frontier), '', window.location.href);
+    await complete(await h.remove(), 'success', receipt(logId));
+    expect(h.host.querySelector('[role="status"]')?.textContent).toBe(m.library_logs_deleted());
+    expect(hrefOf()).toBe('/en/library/logs');
+    await settle(() => back()!.click());
+    expect(backed).toBe(2);
+    expect(typeof undoProps?.deadline).toBe('number');
+  } finally {
+    history.back = originalBack;
     await h.close();
   }
 });

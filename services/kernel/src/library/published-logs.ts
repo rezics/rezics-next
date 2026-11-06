@@ -379,7 +379,6 @@ export function createPublishedLogCommands(config: Dependencies) {
             return options.present ? options.present(tombstone) : tombstone;
           }
           const value = view(row);
-          await source(viewer, value.subjectId, undefined, deadline);
           const body = {
             publishedLog: value,
             ...(viewer.kind === 'account' && viewer.accountId === row.accountId ? { revision: row.revision } : {}),
@@ -454,9 +453,7 @@ export function createPublishedLogCommands(config: Dependencies) {
             publishedLogs: PublishedLog[] = [];
           for (const row of shown) {
             try {
-              const value = view(row);
-              await source(viewer, value.subjectId, undefined, deadline);
-              publishedLogs.push(value);
+              publishedLogs.push(view(row));
             } catch (error) {
               if (!(error instanceof LibraryNotFoundError)) throw error;
             }

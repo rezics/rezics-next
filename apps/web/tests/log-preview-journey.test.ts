@@ -64,7 +64,10 @@ export async function logPreviewJourney({ canvasElement }: { canvasElement: HTML
   await expect(myLogsStoryActivity()).toEqual({ listReads: reads.listReads, detailReads: 1, detailId: selectedId });
 
   // Leave the canonical long story on its original, collapsed list for subsequent review.
-  window.history.back();
+  const back = await canvas.findByRole('link', { name: m.library_logs_back() });
+  await expect(back.getAttribute('href')).toMatch(/\/library\/logs$/);
+  await expect(back.getAttribute('href')).not.toContain('cursor=');
+  await userEvent.click(back);
   await canvas.findByRole('heading', { name: m.library_my_logs_heading() });
   const restoredList = await canvas.findByRole('list', { name: m.library_logs_heading() });
   await expect(restoredList.querySelector<HTMLDetailsElement>('details')?.open).toBe(false);

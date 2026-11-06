@@ -241,6 +241,7 @@ export function CurrentPublishedLog({ loaded, id }: { loaded: PublishedLogCurren
       isOwner={!!owner}
       {...(owner ? { revision: owner.revision } : {})}
       originating={originating}
+      sessionSubject={viewer}
     />
   );
 }
