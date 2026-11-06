@@ -50,17 +50,21 @@ export type DockerSpawnSyncOptions = SpawnSyncOptions & { encoding: 'utf8'; time
  * Forced `rm` is a new session so a 200ms supervisor SIGKILL of the owner group cannot abort it. A timeout kills with
  * SIGKILL: a docker CLI that ignores SIGTERM would otherwise hold the bounded wait open.
  */
+/** A caller's bound replaces the verb's default; cleanup of a busy container or volume passes its own. */
+export type DockerRunOptions = Pick<SpawnSyncOptions, 'cwd' | 'env'> & { timeout?: number };
+
 export function dockerSpawnSyncOptions(
   args: readonly string[],
-  extra: Pick<SpawnSyncOptions, 'cwd' | 'env' | 'timeout'> = {},
+  extra: DockerRunOptions = {},
 ): DockerSpawnSyncOptions {
   const forcedRm = args[0] === 'rm' && args.includes('-f');
+  const { timeout = dockerTimeoutMs(args), ...rest } = extra;
   return {
     encoding: 'utf8',
-    timeout: dockerTimeoutMs(args),
+    timeout,
     killSignal: 'SIGKILL',
     ...(forcedRm ? { detached: true } : {}),
-    ...extra,
+    ...rest,
   };
 }
 
@@ -98,7 +102,7 @@ function spawnDockerError(args: readonly string[], error: NodeJS.ErrnoException)
   throw error;
 }
 
-export function runDocker(args: string[], extra: Pick<SpawnSyncOptions, 'cwd' | 'env' | 'timeout'> = {}): string {
+export function runDocker(args: string[], extra: DockerRunOptions = {}): string {
   const result = spawnSync('docker', args, dockerSpawnSyncOptions(args, extra));
   if (result.error) spawnDockerError(args, result.error as NodeJS.ErrnoException);
   if (result.status !== 0)
