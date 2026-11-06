@@ -688,7 +688,10 @@ function denied(error: unknown): never {
   // PostgreSQL rejects invalid temporal values/identities and conflicting grants.
   // Neither those failures nor native formula denials disclose stored grant state.
   const code = typeof error === 'object' && error !== null && 'code' in error ? String(error.code) : '';
-  if (error instanceof GrantDeniedError || /^(?:22|23)/.test(code)) throw new ProblemError('forbidden');
+  if (error instanceof GrantDeniedError || /^(?:22|23)/.test(code)) {
+    console.error('DEBUG-DENIED-REMOVE', code, error instanceof Error ? error.name : typeof error, error instanceof Error ? error.message : '', error instanceof Error ? (error.stack ?? '').split('\n').slice(0, 7).join(' | ') : '');
+    throw new ProblemError('forbidden');
+  }
   throw error;
 }
 function verificationDenied(error: unknown): never {
