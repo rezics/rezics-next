@@ -1,165 +1,143 @@
 import type { KernelClient } from '@rezics/client';
 
-/** Minimal local consumer seam for the mounted native route while the shared
- * source publisher has not installed its declarations. This is a public DTO;
- * it contains no kernel producer type and never synthesizes advice. */
-export type ReviewDestinationPage = Readonly<{
-  state: 'choices' | 'sparse' | 'no-destinations' | 'exhausted' | 'denied' | 'expired';
-  viewer: Readonly<{ state: 'current' | 'denied' }>;
-  context: Readonly<{
-    subject: Readonly<{
-      id: string;
-      label: Readonly<{ value: string; language: string }> | null;
-      source: Readonly<{ partition: number; epoch: number; position: string }>;
-    }>;
-    realm: Readonly<{ id: string; title: string; spaceId: string; headRevisionId: string }>;
-  }> | null;
-  items: readonly Readonly<{
-    id: string;
-    title: string | null;
-    purpose: 'reviews';
-    actions: Readonly<{ createReview: 'allowed' }>;
-    native: Readonly<{
-      kind: 'review';
-      boardId: string;
-      subjectIds: readonly [string];
-      subjectSource: Readonly<{ partition: number; epoch: number; position: string }>;
-      realmHeadRevisionId: string;
-      boardSecurityRevision: string;
-    }>;
-  }>[];
-  next: string | null;
-}>;
+type ReviewDestinationsRoute = ReturnType<KernelClient['realms']>['review-destinations'];
+type ReviewDestinationsCall = Awaited<ReturnType<ReviewDestinationsRoute['get']>>;
 
-type ReviewDestinationRouteClient = {
-  realms(input: { realmId: string }): {
-    'review-destinations': {
-      get(input: {
-        query: { subjectId: string; cursor?: string; boardId?: string };
-        headers: { authorization: string };
-      }): Promise<unknown>;
-    };
-  };
-};
+/** The installed public response is the consumer contract for destination pages. */
+export type ReviewDestinationPage = NonNullable<ReviewDestinationsCall['data']>;
+export type ReviewDestinationItem = ReviewDestinationPage['items'][number];
 
-function record(value: unknown): Record<string, unknown> | null {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
+type ReviewDestinationContext = NonNullable<ReviewDestinationPage['context']>;
+type ReviewDestinationSource = ReviewDestinationContext['subject']['source'];
+
+const destinationStates = new Set<unknown>([
+  'choices',
+  'sparse',
+  'no-destinations',
+  'exhausted',
+  'denied',
+  'expired',
+]);
+const viewerStates = new Set<unknown>(['current', 'denied']);
+
+function isDestinationState(value: unknown): value is ReviewDestinationPage['state'] {
+  return destinationStates.has(value);
 }
 
-function source(value: unknown): value is { partition: number; epoch: number; position: string } {
-  const item = record(value);
-  return (
-    item !== null &&
-    Number.isInteger(item.partition) &&
-    (item.partition as number) >= 0 &&
-    Number.isInteger(item.epoch) &&
-    (item.epoch as number) > 0 &&
-    typeof item.position === 'string' &&
-    /^\d+$/.test(item.position)
-  );
+function isViewerState(value: unknown): value is ReviewDestinationPage['viewer']['state'] {
+  return viewerStates.has(value);
+}
+
+function record(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function parseSource(value: unknown): ReviewDestinationSource | null {
+  if (
+    !record(value) ||
+    typeof value.partition !== 'number' ||
+    !Number.isInteger(value.partition) ||
+    value.partition < 0 ||
+    typeof value.epoch !== 'number' ||
+    !Number.isInteger(value.epoch) ||
+    value.epoch <= 0 ||
+    typeof value.position !== 'string' ||
+    !/^\d+$/.test(value.position)
+  )
+    return null;
+  return { partition: value.partition, epoch: value.epoch, position: value.position };
+}
+
+function parseContext(value: unknown): ReviewDestinationContext | null {
+  if (!record(value) || !record(value.subject) || !record(value.realm)) return null;
+  const subject = value.subject;
+  const realm = value.realm;
+  const source = parseSource(subject.source);
+  const label = subject.label;
+  if (
+    typeof subject.id !== 'string' ||
+    source === null ||
+    (label !== null &&
+      (!record(label) || typeof label.value !== 'string' || typeof label.language !== 'string')) ||
+    typeof realm.id !== 'string' ||
+    typeof realm.title !== 'string' ||
+    typeof realm.spaceId !== 'string' ||
+    typeof realm.headRevisionId !== 'string'
+  )
+    return null;
+  return {
+    subject: {
+      id: subject.id,
+      label: label === null ? null : { value: label.value, language: label.language },
+      source,
+    },
+    realm: {
+      id: realm.id,
+      title: realm.title,
+      spaceId: realm.spaceId,
+      headRevisionId: realm.headRevisionId,
+    },
+  };
+}
+
+function parseItem(value: unknown): ReviewDestinationItem {
+  if (!record(value) || !record(value.actions) || !record(value.native))
+    throw new Error('Review destination response is unavailable');
+  const { actions, native } = value;
+  const subjectIds = native.subjectIds;
+  const [subjectId] = Array.isArray(subjectIds) ? subjectIds : [];
+  const subjectSource = parseSource(native.subjectSource);
+  if (
+    typeof value.id !== 'string' ||
+    (value.title !== null && typeof value.title !== 'string') ||
+    value.purpose !== 'reviews' ||
+    actions.createReview !== 'allowed' ||
+    native.kind !== 'review' ||
+    native.boardId !== value.id ||
+    !Array.isArray(subjectIds) ||
+    subjectIds.length !== 1 ||
+    typeof subjectId !== 'string' ||
+    subjectSource === null ||
+    typeof native.realmHeadRevisionId !== 'string' ||
+    typeof native.boardSecurityRevision !== 'string' ||
+    !/^[1-9][0-9]*$/.test(native.boardSecurityRevision)
+  )
+    throw new Error('Review destination response is unavailable');
+  return {
+    id: value.id,
+    title: value.title,
+    purpose: 'reviews',
+    actions: { createReview: 'allowed' },
+    native: {
+      kind: 'review',
+      boardId: native.boardId,
+      subjectIds: [subjectId],
+      subjectSource,
+      realmHeadRevisionId: native.realmHeadRevisionId,
+      boardSecurityRevision: native.boardSecurityRevision,
+    },
+  };
 }
 
 function parseReviewDestinationPage(value: unknown): ReviewDestinationPage {
-  const page = record(value);
   if (
-    !page ||
-    !['choices', 'sparse', 'no-destinations', 'exhausted', 'denied', 'expired'].includes(String(page.state)) ||
-    typeof page.viewer !== 'object' ||
-    page.viewer === null ||
-    !['current', 'denied'].includes(String((page.viewer as Record<string, unknown>).state)) ||
-    !Array.isArray(page.items) ||
-    page.items.length > 20 ||
-    (page.next !== null && (typeof page.next !== 'string' || page.next.length > 4096))
+    !record(value) ||
+    !isDestinationState(value.state) ||
+    !record(value.viewer) ||
+    !isViewerState(value.viewer.state) ||
+    !Array.isArray(value.items) ||
+    value.items.length > 20 ||
+    (value.next !== null && (typeof value.next !== 'string' || value.next.length > 4096))
   )
     throw new Error('Review destination response is unavailable');
-  let context: ReviewDestinationPage['context'] = null;
-  if (page.context !== null) {
-    const candidate = record(page.context);
-    const subject = record(candidate?.subject);
-    const realm = record(candidate?.realm);
-    const label = subject?.label;
-    const normalizedLabel =
-      label === null
-        ? null
-        : record(label) &&
-            typeof (label as Record<string, unknown>).value === 'string' &&
-            typeof (label as Record<string, unknown>).language === 'string'
-          ? {
-              value: (label as Record<string, unknown>).value as string,
-              language: (label as Record<string, unknown>).language as string,
-            }
-          : undefined;
-    if (
-      !subject ||
-      typeof subject.id !== 'string' ||
-      !source(subject.source) ||
-      normalizedLabel === undefined ||
-      !realm ||
-      typeof realm.id !== 'string' ||
-      typeof realm.title !== 'string' ||
-      typeof realm.spaceId !== 'string' ||
-      typeof realm.headRevisionId !== 'string'
-    )
-      throw new Error('Review destination response is unavailable');
-    context = {
-      subject: {
-        id: subject.id,
-        label: normalizedLabel,
-        source: { partition: subject.source.partition, epoch: subject.source.epoch, position: subject.source.position },
-      },
-      realm: {
-        id: realm.id,
-        title: realm.title,
-        spaceId: realm.spaceId,
-        headRevisionId: realm.headRevisionId,
-      },
-    };
-  }
-  const items = page.items.map((value): ReviewDestinationPage['items'][number] => {
-    const item = record(value);
-    const actions = record(item?.actions);
-    const native = record(item?.native);
-    if (
-      !item ||
-      typeof item.id !== 'string' ||
-      (item.title !== null && typeof item.title !== 'string') ||
-      item.purpose !== 'reviews' ||
-      actions?.createReview !== 'allowed' ||
-      native?.kind !== 'review' ||
-      native.boardId !== item.id ||
-      !Array.isArray(native.subjectIds) ||
-      native.subjectIds.length !== 1 ||
-      typeof native.subjectIds[0] !== 'string' ||
-      !source(native.subjectSource) ||
-      typeof native.realmHeadRevisionId !== 'string' ||
-      typeof native.boardSecurityRevision !== 'string' ||
-      !/^[1-9][0-9]*$/.test(native.boardSecurityRevision)
-    )
-      throw new Error('Review destination response is unavailable');
-    return {
-      id: item.id,
-      title: item.title as string | null,
-      purpose: 'reviews',
-      actions: { createReview: 'allowed' },
-      native: {
-        kind: 'review',
-        boardId: native.boardId,
-        subjectIds: [native.subjectIds[0]],
-        subjectSource: {
-          partition: native.subjectSource.partition,
-          epoch: native.subjectSource.epoch,
-          position: native.subjectSource.position,
-        },
-        realmHeadRevisionId: native.realmHeadRevisionId,
-        boardSecurityRevision: native.boardSecurityRevision,
-      },
-    };
-  });
-  const state = page.state as ReviewDestinationPage['state'];
-  const viewerState = (page.viewer as Record<string, unknown>).state as 'current' | 'denied';
-  const next = page.next as string | null;
+
+  const state = value.state;
+  const viewerState = value.viewer.state;
+  const next = value.next;
+  const context = value.context === null ? null : parseContext(value.context);
+  const items = value.items.map(parseItem);
+  if (value.context !== null && context === null) throw new Error('Review destination response is unavailable');
+
   if (
     (state === 'choices' && (!context || items.length === 0 || viewerState !== 'current')) ||
     (state === 'sparse' && (!context || items.length !== 0 || next === null || viewerState !== 'current')) ||
@@ -179,6 +157,7 @@ function parseReviewDestinationPage(value: unknown): ReviewDestinationPage {
       ))
   )
     throw new Error('Review destination response is unavailable');
+
   return {
     state,
     viewer: { state: viewerState },
@@ -193,20 +172,14 @@ export async function loadReviewDestinationPage(
   input: { realmId: string; subjectId: string; cursor?: string; boardId?: string },
   authorization: string,
 ): Promise<ReviewDestinationPage> {
-  const route = (client as unknown as ReviewDestinationRouteClient).realms({ realmId: input.realmId })[
-    'review-destinations'
-  ];
-  const result = record(
-    await route.get({
-      query: {
-        subjectId: input.subjectId,
-        ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
-        ...(input.boardId === undefined ? {} : { boardId: input.boardId }),
-      },
-      headers: { authorization },
-    }),
-  );
-  if (!result) throw new Error('Review destination read failed');
+  const result = await client.realms({ realmId: input.realmId })['review-destinations'].get({
+    query: {
+      subjectId: input.subjectId,
+      ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
+      ...(input.boardId === undefined ? {} : { boardId: input.boardId }),
+    },
+    headers: { authorization },
+  });
   if (result.status === 403 || result.status === 404)
     return { state: 'denied', viewer: { state: 'denied' }, context: null, items: [], next: null };
   if (result.error || !result.data) throw new Error('Review destination read failed');
