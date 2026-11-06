@@ -540,6 +540,7 @@ closed catalogues, envelope fields and whole-call costs live in [Viewer preferen
 `board_activity` is a distinct optional in-app kind. Thread watch uses `thread_watch`, never an overloaded Follow.
 There is no email delivery or backfill. Web and Performance own Settings/account-page presentation; Content owns
 notice delivery. Consumers do not own native preference policy or infer success from an ambiguous response.
+Settings verification keeps original-command retry only while the command is uncertain without a matching receipt.
 Portability launches through the published privacy contact; no self-service export, block/mute or expiry policy is
 invented by these account interfaces.
 

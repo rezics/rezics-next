@@ -47,8 +47,9 @@ existing `access.account` profile. Point actions without one exact target type r
 `ActionCatalogue`, resolved resource roles/types and exact `globalReach` registration. Point/page checks and
 `prepareReadDecisions().decide` use this adapter only when the exact action/type pair is registered. The existing
 `permission-check.sql` statement supplies qualified local and optional Global primitive grants, denials, assignment
-validity and deadline validity for those profiles; its final SQL booleans are reserved for profiles whose exact
-target type is not registered or inferable. The adapter evaluates every target at the same native snapshot and uses
+validity and deadline validity for those profiles; deadline validity is selected once as `deadlineLive` from
+`deadline_live` and again as consumed `live` for the policy adapter. Its final SQL booleans are reserved for
+profiles whose exact target type is not registered or inferable. The adapter evaluates every target at the same native snapshot and uses
 the same core for ordinary and explicit advice. Own-account action metadata binds its existing account target as
 `access.account`. The ordinary formula retains the verified public floor independently of scope. Explicit advice
 excludes that floor and resource-role grants. A core decision reached through registered Global authority still
@@ -3097,7 +3098,10 @@ report and appeal outcomes are independent of optional toggles. Optional off aff
 not old inbox entries, content authority or follows. See [Accounts adoption](../../../../docs/accounts.md#6-auth-ownership-and-registration)
 and the [notification research](../../../../docs/research/accounts-design-notification-preferences.md).
 
-Consumers retain the actual effective-map/default, null-reset, shared CAS and replay contracts above. Web must
+Consumers retain the actual effective-map/default, null-reset, shared CAS and replay contracts above. Native notice
+fixtures create boards as the governance operator through ordinary Space/Realm routes; Community's current witness
+refresh copies reference removals from the Space witness epoch because `space_discovery_tuple_reference` has no
+`producer_epoch`. Web must
 distinguish an ambiguous save from confirmed Saved and unavailable unread data from zero, preserving session
 and CSRF behavior. A replayed preference response is historical acknowledgement; fresh GET establishes current
 readback. No channel, quiet-hour or conversation setting is implied.
@@ -3106,6 +3110,10 @@ Decision: Reset, when shown, PATCHes native defaults `spoilerLevel` 0 and `suita
 shared version. Viewer state and read/update actions sit on the shared preference-page envelope so a notification
 catalogue and shelf observation can add their slices without a second preference version. Unknown or malformed choice
 data is unavailable; consumers do not guess the spoiler or suitability enum, nor invent shelf catalogues or limits.
+
+Decision: Native content fixtures grant Global parent-creation actions through ordinary `POST /v1/grants` receipts
+issued with the grantor client's `access:grant` token. Whether the Global B-tree seek admits those rows for Space
+and Realm creation is the permission-formula owner.
 
 ## Direct resource role data
 

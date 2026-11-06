@@ -528,7 +528,10 @@ and up to 50 source tuples for each retained Space. A missing witness is unavail
 Realm or no imported dependencies. Tuple inverse rows live in the source tuple's partition; current Space
 references, expected tuples and resumable work stay with the Space. A revision trigger advances the Space witness
 generation and queues removal of both acknowledged references and tuples whose earlier edge work may already have
-committed. Tuple-home upserts and removals compare that generation, so delayed work cannot restore a retired edge.
+committed. Reference rows store identity only; queued removals copy the current Space witness producer epoch and
+source position (`20261106043000_space_discovery_witness_locals.sql`). Selecting those fence columns from
+`space_discovery_tuple_reference` fails native Space-then-Realm creation (`POST /v1/spaces` then `POST /v1/realms`).
+Tuple-home upserts and removals compare that generation, so delayed work cannot restore a retired edge.
 The default supervisor repairs at most 50 exact tuple edges per page and acknowledges them separately at the Space
 home. Readiness includes the captured dependency installation and per-partition tuple witness counters; it is never
 derived from an empty inverse.
