@@ -69,6 +69,51 @@ export function quotationTypeAdmitted(
 }
 
 const quotationTextProperties = ['schema:text', 'schema:abstract'] as const;
+const recipeInstructionProperties = ['schema:recipeInstructions'] as const;
+
+/** Current release admission of schema:Recipe, including descendants. Historical pins omit this type. */
+export function recipeTypeAdmitted(
+  release: { types?: Record<string, { bases?: readonly string[] }> } | undefined,
+  type: string | null | undefined,
+): boolean {
+  if (!type || !release?.types?.['schema:Recipe']) return false;
+  const seen = new Set<string>();
+  const extendsRecipe = (candidate: string): boolean => {
+    if (candidate === 'schema:Recipe') return true;
+    if (seen.has(candidate)) return false;
+    seen.add(candidate);
+    return (release.types?.[candidate]?.bases ?? []).some(extendsRecipe);
+  };
+  return extendsRecipe(type);
+}
+
+/** Generic Recipe templates have no Documents node; hydrate the released instruction document with the page. */
+export function recipePageDocuments(
+  base: PageDocumentRead | null,
+  release:
+    | {
+        types?: Record<string, { bases?: readonly string[] }>;
+        properties?: Record<string, { datatype?: string }>;
+      }
+    | undefined,
+  type: string | null | undefined,
+  subject: string | null,
+  available: readonly string[],
+  context?: string,
+): PageDocumentRead | null {
+  if (subject === null || !recipeTypeAdmitted(release, type)) return base;
+  const extra = recipeInstructionProperties.filter(
+    (id) => available.includes(id) && release?.properties?.[id]?.datatype === 'document',
+  );
+  if (!extra.length) return base;
+  const properties = [...new Set([...(base?.properties ?? []), ...extra])].sort();
+  return {
+    kind: 'documents',
+    id: subject,
+    ...(context ? { context } : {}),
+    properties,
+  };
+}
 
 /** Ordinary overview Summary hydrates schema:abstract; admitted quotation text still needs the document composition. */
 export function quotationPageDocuments(
