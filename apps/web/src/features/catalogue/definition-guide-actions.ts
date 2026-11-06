@@ -1,4 +1,4 @@
-import { createServerFn } from '@tanstack/react-start';
+import { createServerFn, createServerOnlyFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../../kernel/client';
@@ -125,7 +125,7 @@ export const readDefinitionGuideType = createServerFn({ method: 'GET' })
     withGuideReader(data.locale, ({ client, headers }) => readGuideType(client, data.typeId, data.locale, headers)),
   );
 
-export async function withCatalogueSession<T>(
+export const withCatalogueSession = createServerOnlyFn(async function withCatalogueSession<T>(
   read: (input: { client: ReturnType<typeof kernelClient>; authorization: string }) => Promise<T>,
 ): Promise<T | { ok: false; reason: 'denied' | 'signed-out' | 'unavailable' }> {
   setResponseHeader('cache-control', 'private, no-store');
@@ -139,4 +139,4 @@ export async function withCatalogueSession<T>(
   } catch {
     return { ok: false, reason: 'unavailable' };
   }
-}
+});

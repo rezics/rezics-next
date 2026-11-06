@@ -235,9 +235,10 @@ export default defineConfig((context) => {
     build: { assetsInlineLimit: 0 },
     optimizeDeps: {
       // Scan the complete route graph up front so a local Worker browser check never discovers a route dependency
-      // after the first page load.
-      entries: [...webViteClientOptimizeDeps.entries],
-      holdUntilCrawlEnd: webViteClientOptimizeDeps.holdUntilCrawlEnd,
+      // after the first page load. Focused browser files compile the journey route on demand; crawling Home
+      // during Vite startup holds the ready line until the process dies.
+      entries: testRuntime ? ['src/server.ts', 'src/session/routes.ts'] : [...webViteClientOptimizeDeps.entries],
+      holdUntilCrawlEnd: testRuntime ? false : webViteClientOptimizeDeps.holdUntilCrawlEnd,
     },
     plugins: [
       ...(viteCacheDir
@@ -302,7 +303,9 @@ export default defineConfig((context) => {
           }
         },
       },
-      paraglideVitePlugin({ project: './project.inlang' }),
+      // Finite checks prepare the complete locale tree before importing tests. Starting another compiler here
+      // rewrites that shared tree while Bun and the Worker optimizer are reading it.
+      ...(process.env.REZICS_TEST_RUNTIME === '1' ? [] : [paraglideVitePlugin({ project: './project.inlang' })]),
       tanstackStart(),
       react(),
       tailwindcss(),

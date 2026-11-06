@@ -70,6 +70,28 @@ parent disclosure precede and follow foreign work; final assembly compares origi
 and authority. Revoked, concealed, renamed, deleted or replaced sources withhold labels and controls. Requests never
 repair any source, grant or membership history.
 
+### Late Board revocation for point and page reads
+
+Thread and post heads retain their original source fingerprint and prepared Access checks across reaction enrichment.
+The final check validates that exact source, including its current Board and Realm authority; a different head cannot
+validate bytes selected earlier. Thread post pages retain each selected post and the containing opening in the same
+way. A changed reply is omitted without refilling or moving the bounded selection frontier. Counts and their oldest
+source watermark describe only the final disclosed entries. A concealed containing Board or opening returns `404`.
+Subject discussions and author activity retain their native final disclosure and context assembly.
+
+Decision: retain original source authority through enrichment, preserve sparse continuation frontiers, and use
+connection-free timing barriers for late-revocation acceptance. `disclosureBarrier` pauses after initial Board/Access
+checks; `pageDisclosureBarrier` pauses after page enrichment. Both change timing only and are absent in production.
+Author and Subject page handlers accept the limit as a decimal-digit query string (1 through 20) and convert it for internal paging, so a mismatched continuation stays `400` instead of a missing route. A bound Subject discussion cursor is checked against place, kind and viewer before disclosure.
+Selected reading references validate each Board’s own routed identity. Current thread-to-Board membership supplies
+placement authority; the Board and thread need not share a native home. Subject discussion cards keep the Subject
+key and confirm it on the disclosed thread; they do not treat the Board id as a Subject place.
+Native tests create identities, Boards, threads, replies and revisions through HTTP and run production effects/relays.
+They cover anonymous takedown and protected read-grant revocation for heads, exact revisions, Subject discussions,
+author activity, all three Board orders and thread posts, including first/continuing pages and eligible controls.
+Decision: those two native files plus the frozen composed page cases are the fewest tests for the named families;
+no extra stories.
+
 ### Cost: native directory assembly
 
 Touches: shared HTTP authentication/admission; initial and final installation point reads; one bounded candidate index
