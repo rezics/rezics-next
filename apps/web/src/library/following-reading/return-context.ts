@@ -131,7 +131,10 @@ export function followingDestinationClick(
   return true;
 }
 
-export function followingReturnTrigger(root: ParentNode | null, targetId: string): HTMLButtonElement | null {
+export function followingReturnTrigger(
+  root: { querySelector: ParentNode['querySelector'] } | null,
+  targetId: string,
+): HTMLButtonElement | null {
   if (!root || !uuid.test(targetId)) return null;
   const row = root.querySelector(`[data-follow-target="${targetId}"]`);
   return row?.querySelector<HTMLButtonElement>('button[aria-label^="Inspect "]') ?? null;
