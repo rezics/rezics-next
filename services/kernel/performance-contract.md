@@ -36,7 +36,9 @@ sdk-retirement-fence and growth-retention fixtures remain the bounded-work proof
 IDs plus owned payload/FK cascade rows; a selected count alone cannot bound that payload. The growth-retention suite
 uses one folded capture per measured batch or sweep: nested SDK-delete auto_explain notices exceed the 32 MiB raw
 cap and the 20,000 retained-entry cap at a 1,000-id batch, so occurrence costs, SQL, binds and background attribution
-stay and selector-plan samples prove `workflow_retention_selector`. Folded notice envelopes and walk occupancy are
+stay and selector-plan samples prove `workflow_retention_selector`. Selector-plan notices are taken from acquired
+pool clients after the auto_explain probe, and payload tables share the 32,768-row planner floor so fanout 1/8/64
+keeps indexed equality deletes. Folded notice envelopes and walk occupancy are
 released after each summary; unmeasured prepare/warmup ignores nested trigger notices.
 
 ## Semantic domain composition

@@ -227,7 +227,9 @@ interrupt/resume, and growth empty/short/full/backlog/fanout/sweep). Seed all ei
 deletion rows from actual payload/FK cascade counts rather than selected workflow count, and give each growth series
 its own application and seed identities. Growth checks use folded capture; raw nested auto_explain notices from a
 1,000-id SDK delete exceed the 32 MiB and 20,000 retained-entry telemetry caps. Folded captures recycle each notice
-envelope and walk occupancy after summaries; unmeasured prepare/warmup ignores nested trigger notices.
+envelope and walk occupancy after summaries; unmeasured prepare/warmup ignores nested trigger notices. Selector-plan
+notices are sampled from acquired pool clients after the auto_explain probe. Payload tables share the 32,768-row
+planner floor so fanout 1/8/64 stays an indexed equality delete.
 Explicit Imports driver bindings use repo-relative paths in command argv, resolved on admitted remote checkouts; the
 frozen suite receives an absolute path.
 

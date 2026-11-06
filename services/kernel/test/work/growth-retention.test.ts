@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { createWorkClient } from '../../src/work/client.ts';
 import {
   classifyRetentionStatement,
@@ -61,13 +61,17 @@ beforeAll(async () => {
     selectionBinds.push(input);
     return inner(input);
   };
-  await seed(db, 'planner-floor', 32_768, 0, {
+  const floorIds = await seed(db, 'planner-floor', 32_768, 0, {
     application: 'retention.growth.floor',
     status: 'SUCCESS',
     createdAt: origin - 400 * dayMs,
     completedAt: origin - 400 * dayMs,
   });
-  await db.admin.query('ANALYZE dbos.workflow_status');
+  await insertRetentionPayload(db.pool, floorIds);
+  await db.admin.query(
+    `ANALYZE dbos.workflow_status, dbos.workflow_input, dbos.workflow_output, dbos.operation_outputs,
+            dbos.workflow_events, dbos.workflow_events_history, dbos.notifications, dbos.streams`,
+  );
 });
 
 afterAll(async () => {
@@ -81,7 +85,10 @@ function isSelectorNotice(message: string): boolean {
 }
 
 function observeSelectorPlans(pool: Pool): void {
-  pool.on('connect', (connection) => {
+  const observed = new WeakSet<PoolClient>();
+  const attach = (connection: PoolClient) => {
+    if (observed.has(connection)) return;
+    observed.add(connection);
     connection.on('notice', ({ message }) => {
       if (!samplingSelectorPlans || !message?.startsWith('duration:') || !message.includes(planMarker)) return;
       if (!isSelectorNotice(message)) return;
@@ -91,7 +98,10 @@ function observeSelectorPlans(pool: Pool): void {
         // Invalid notices are not plans and do not contribute evidence.
       }
     });
-  });
+  };
+  pool.on('connect', attach);
+  pool.on('acquire', attach);
+  for (const connection of (pool as Pool & { _clients?: PoolClient[] })._clients ?? []) attach(connection);
 }
 
 function plansFrom(documents: readonly unknown[]): PlanEvidence[] {
@@ -100,9 +110,13 @@ function plansFrom(documents: readonly unknown[]): PlanEvidence[] {
     return roots.flatMap((root) => {
       if (typeof root !== 'object' || root === null) return [];
       const entry = root as { readonly 'Query Text'?: unknown; readonly Plan?: unknown };
-      return typeof entry['Query Text'] === 'string' && entry.Plan !== undefined
-        ? [{ query: entry['Query Text'], plan: entry.Plan }]
-        : [];
+      if (entry.Plan === undefined) return [];
+      return [
+        {
+          query: typeof entry['Query Text'] === 'string' ? entry['Query Text'] : '',
+          plan: entry.Plan,
+        },
+      ];
     });
   });
 }
