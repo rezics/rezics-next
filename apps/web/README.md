@@ -131,8 +131,8 @@ left the process group, when the invocation ends or is interrupted. Lifecycle, f
 pin that composed-run behaviour; existing browser page assertions stay unchanged. Decision: wrap optimizer init from a
 pre plugin so Cloudflare cannot re-optimize before restamp; keep those few tests as the pin for shared-server
 acquisition, lock-keyed cache reuse and optimizer restamp; no extra stories for this runner. Decision: Web typecheck
-loads Reylo from Kernel's installed `services/kernel/node_modules/reylo` so the ordinary Web compiler sees SQL types
-through the root compiler database; it does not import Kernel scripts into the Web program or add a second driver. Commerce Copies owns Workerd urlpattern ESM entry, Worker `import` conditions and child-output custody; this
+declares `reylo` 0.7.0 beside its `contentMappers` entry so the mapper resolves from this workspace; it does not
+compile Kernel, Auth or Importer scripts. Commerce Copies owns Workerd urlpattern ESM entry, Worker `import` conditions and child-output custody; this
 runner keeps shared-server and lock-keyed cache identity, and overlapping Vite config is train reconciliation. Decision:
 Vite `server.fs.allow` is the Node-resolved install roots of packages the client and Worker actually load, collapsed to
 the smallest covering directories including shared bun stores and linked packages; lexical `node_modules` paths and a

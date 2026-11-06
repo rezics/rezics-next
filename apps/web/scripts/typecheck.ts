@@ -5,14 +5,11 @@ import {
   placeCompilerRun,
   typecheck,
 } from '../../../scripts/typecheck.ts';
-import { join, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const directory = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const repository = resolve(directory, '../..');
-const kernelWorkspace = join(repository, 'services/kernel');
-/** Kernel's installed Reylo, the same driver tsc loads through Web's content mapper. */
-export const webKernelReyloPackage = join(kernelWorkspace, 'node_modules', 'reylo');
 
 async function command(args: string[], env: NodeJS.ProcessEnv): Promise<number> {
   const child = Bun.spawn(args, {
@@ -33,8 +30,8 @@ async function compile(env: NodeJS.ProcessEnv): Promise<number> {
     const code = await command(args, env);
     if (code !== 0) return code;
   }
-  // The tooling scripts import kernel and auth sources, so they run as their own program within the check memory envelope.
-  // Both programs run even when the web program has diagnostics; the scripts are never skipped by a red web program.
+  // Kernel, Auth and Importer sources stay in those workspaces. Scripts that import them are excluded from
+  // tsconfig.scripts.json so this program does not compile them. Both programs still run when the web program is red.
   let result = 0;
   for (const args of [
     ['tsc', '--noEmit', '--runExternalCode', '-p', 'tsconfig.json'],
