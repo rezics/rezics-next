@@ -3,6 +3,7 @@ import {
   createBarrierProofVerifier,
   createNativeWorkflowProofPorts,
   createProvisioningEvidenceVerifier,
+  type AccountOperationAccess,
   type AccountWorkflowOptions,
   type AuthService,
 } from '@rezics/auth';
@@ -11,16 +12,16 @@ import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { Pool } from 'pg';
 import { createAccess, type AccessConfig } from '../../src/access/index.ts';
 import { createNativeAccountBindings } from '../../src/access/native-account-bindings.ts';
-import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
+import { admitGroup, PlatformClosedError } from '../../src/access/gates/admission.ts';
 import { LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
+import { createAccountManagementReadAccess } from '../../src/access/management-source.ts';
 import { resolveResourceRoles } from '../../src/access/resource-roles.ts';
+import { AccessUnavailableError } from '../../src/access/unavailable.ts';
 import { createWorkflowApprovals } from '../../src/access/workflow-approvals.ts';
 import { createKernel, type KernelDependencies } from '../../src/http/kernel.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
-import { createApp } from '../../src/http/app.ts';
-import { accessRoutes } from '../../src/access/routes.ts';
 import type { Access, AccountActor } from '../../src/request/access.ts';
-import type { GrantInput } from '../../src/access/grant-commands.ts';
+import { GrantDeniedError, type GrantInput } from '../../src/access/grant-commands.ts';
 import { authTemplateName, createAuthDatabase } from '../support/auth-database.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
@@ -36,6 +37,20 @@ import {
 
 export const MISSING_IMPORT_IDENTITY = 'openImportIdentity is not implemented';
 let mountedActions: ReturnType<typeof actionCatalogue> | undefined;
+/** Auth workflows are a process singleton. Concurrent identity setups take turns
+ * from host construction through quiesce so registrations and grants see one live runtime. */
+let identityAuthTail: Promise<unknown> = Promise.resolve();
+function beginIdentityAuthTurn(): Promise<() => void> {
+  let release!: () => void;
+  const previous = identityAuthTail;
+  identityAuthTail = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return previous.then(
+    () => release,
+    () => release,
+  );
+}
 
 /** Route metadata is immutable; every fixture still owns its Access and credentials. */
 export function importActionCatalogue(database: GrowthDatabase, routeKey: Uint8Array) {
@@ -347,8 +362,49 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
         barriers: createBarrierProofVerifier({ database: authPool }),
       },
     });
+    const approval = createWorkflowApprovals({
+      pool: database.pool,
+      access,
+      actions,
+      referenceKeys: tokenKeys,
+      creationBinding: (input: { registrationId: string; operationKey: string }) => proofs.creationBinding(input),
+    });
+    const accountOperations = ((): AccountOperationAccess => {
+      const context = () => ({ pool: database.pool, deadline: Date.now() + 10000 });
+      return {
+        context,
+        readOperatorTransferState: createAccountManagementReadAccess({
+          pool: database.pool,
+          access,
+        }).readOperatorTransferState,
+        approve: (token, input, ctx) => approval.approve(token, input as never, ctx as never),
+        resolveForCaller: (token, reference, operation, ctx) =>
+          approval.resolveForCaller(token, reference, operation as never, ctx as never),
+        async admitGroup(token, group, ctx) {
+          const bounded = ctx as ReturnType<typeof context>;
+          const actor = await access.authenticate(token, bounded);
+          try {
+            await admitGroup({
+              pool: database.pool,
+              access: () => access,
+              actor,
+              group,
+              clientAction: 'organization:create',
+              deadline: bounded.deadline,
+              clock,
+            });
+            return true;
+          } catch (error) {
+            if (error instanceof PlatformClosedError) return false;
+            throw error;
+          }
+        },
+      };
+    })();
     const authSecret = randomBytes(32).toString('hex');
     const registrationStagingKey = new Uint8Array(randomBytes(32));
+    const releaseIdentityAuth = await beginIdentityAuthTurn();
+    try {
     host = await createAuthHost({
       database: authPool,
       systemDatabasePool: authPool,
@@ -358,6 +414,7 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
       signing: { activeKid: kid, privateKeys: [{ ...(await exportJWK(pair.privateKey)), kid }] },
       trustedAccess: bindings.trustedAccess,
       access: bindings.workflowPorts,
+      accountOperations,
       stagingKey: registrationStagingKey,
       executorId: `identity-${randomUUID()}`,
       maintenanceSchedule: '0 0 1 1 *',
@@ -427,13 +484,6 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
     const managementHeaders = await login(human.email, managementClient, managementScopes);
     // Access tokens live 300 s, so the bearer is replaced by `renewManagement` between steps.
     let management = await token(human.accountId, managementHeaders);
-    const approval = createWorkflowApprovals({
-      pool: database.pool,
-      access,
-      actions,
-      referenceKeys: tokenKeys,
-      creationBinding: (input: { registrationId: string; operationKey: string }) => proofs.creationBinding(input),
-    });
     const operation = {
       kind: 'automated' as const,
       registrationId: '',
@@ -502,28 +552,6 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
       return token(accountId, cookies(signed));
     }
     const grantLocators: GrantInput[] = [];
-    // Reuse this actual Access instance in the HTTP composition; it owns native
-    // authenticated identities and durable approval bridges for this exact pool.
-    // Setup needs only the production Access routes. Mount their real request
-    // pipeline without compiling unrelated content routes in every identity.
-    // API and media fixtures still own their separate complete kernel apps.
-    const app = accessRoutes(
-      createApp({
-        // Match the shared test kernel's request deadline.
-        requestDeadlineMs: 30_000,
-        pool: database.pool,
-        tokens: tokenKeys,
-        clock,
-        access,
-        // A finite isolated deployment budget admits history seeding while retaining
-        // the real request-stage identity, counter SQL and admission pipeline.
-        writeRate: createWriteRateLimiter({
-          secret: randomBytes(32).toString('hex'),
-          overrides: '{"new-account":{"write":{"maximum":10000,"seconds":60}}}',
-        }),
-      }) as unknown as Parameters<typeof accessRoutes>[0],
-      { pool: database.pool, access: () => access, clock, tokens: tokenKeys },
-    );
     /** The ordinary /token call on the management session. Never run inside a measured operation. */
     async function renewManagement() {
       try {
@@ -535,42 +563,40 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
         );
       }
     }
-    async function grant(path: string, accountId: string, actions: readonly string[]) {
-      const key = randomUUID();
-      const send = () =>
-        app.handle(
-          new Request(`https://kernel.identity.test${path}`, {
-            method: 'POST',
-            headers: {
-              authorization: `Bearer ${management.bearer}`,
-              'content-type': 'application/json',
-              'idempotency-key': JSON.stringify(key),
-            },
-            body: JSON.stringify({
-              resource: GLOBAL,
-              subject: { kind: 'account', id: accountId },
-              actions,
-              valid: '(,)',
-            }),
-          }),
-        );
-      let response = await send();
-      for (let attempt = 1; response.status === 503 && attempt < 3; attempt++) {
-        await response.body?.cancel();
-        await Bun.sleep(1000);
-        response = await send();
-      }
-      if (![200, 201].includes(response.status)) {
-        // Bounded refusal excerpt: the problem code names the denied rule without any private grant value.
-        const detail = (await response.text()).slice(0, 512);
-        throw new Error(`Public ${path} ${actions}: HTTP ${response.status} ${detail}`);
-      }
-      const body = (await response.json()) as { grant: GrantInput };
-      if (path === '/v1/grants') grantLocators.push(body.grant);
+    async function grantContext() {
+      const deadline = Date.now() + 10_000;
+      const actor = await access.authenticate(management.bearer, { pool: database.pool, deadline });
+      return { pool: database.pool, deadline, actor };
     }
-    await grant('/v1/grants', robot.accountId, importerScopes);
-    if (statisticScopes.length) await grant('/v1/grants', robot.accountId, statisticScopes);
-    await grant('/v1/grants', comparison.accountId, COMMON_ACTIONS);
+    async function grant(accountId: string, actions: readonly string[], operation: 'create' | 'revoke') {
+      const input: GrantInput = {
+        resource: GLOBAL,
+        subject: { kind: 'account', id: accountId },
+        actions: [...actions],
+        valid: '(,)',
+        key: randomUUID(),
+      };
+      for (let attempt = 0; ; attempt++) {
+        try {
+          const context = await grantContext();
+          if (operation === 'revoke') await bindings.grants.revoke(context, input);
+          else await bindings.grants.create(context, input);
+          break;
+        } catch (error) {
+          if (error instanceof AccessUnavailableError && attempt < 2) {
+            await Bun.sleep(1000);
+            continue;
+          }
+          if (error instanceof GrantDeniedError)
+            throw new Error(`Native grants ${operation} ${actions.join(',')}: denied`);
+          throw error;
+        }
+      }
+      if (operation === 'create') grantLocators.push(input);
+    }
+    await grant(robot.accountId, importerScopes, 'create');
+    if (statisticScopes.length) await grant(robot.accountId, statisticScopes, 'create');
+    await grant(comparison.accountId, COMMON_ACTIONS, 'create');
     await options.afterStage?.('grants');
     const [governance, ordinary, bulk] = await Promise.all([
       issue(human.accountId, [...importerScopes, ...statisticScopes]),
@@ -593,7 +619,7 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
       close,
       async setBulkPermission(enabled) {
         if (enabled === bulkEnabled) return;
-        await grant(enabled ? '/v1/grants' : '/v1/grants:revoke', robot.accountId, [BULK_ACTION]);
+        await grant(robot.accountId, [BULK_ACTION], enabled ? 'create' : 'revoke');
         bulkEnabled = enabled;
       },
     };
@@ -922,7 +948,7 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
         if (options.sourceStatistics !== 'vndb')
           throw new Error('Explicit VNDB source statistics configuration required');
         if (enabled === statisticEnabled) return;
-        await grant(enabled ? '/v1/grants' : '/v1/grants:revoke', robot.accountId, statisticScopes);
+        await grant(robot.accountId, statisticScopes, enabled ? 'create' : 'revoke');
         statisticEnabled = enabled;
       },
       async approveOpening(key) {
@@ -962,11 +988,17 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
       },
       async grow(index) {
         await renewManagement();
-        await host!.workflows.start();
-        await person(`history_${index}`);
-        // Grow real Auth keys/effect history and native consumed openings on
-        // the same subject/operator anchors, as well as unrelated accounts.
-        await installKey(`history-${index}`);
+        const releaseGrowthAuth = await beginIdentityAuthTurn();
+        try {
+          await host!.workflows.start();
+          await person(`history_${index}`);
+          // Grow real Auth keys/effect history and native consumed openings on
+          // the same subject/operator anchors, as well as unrelated accounts.
+          await installKey(`history-${index}`);
+        } finally {
+          await host!.workflows.close();
+          releaseGrowthAuth();
+        }
         // Same Global + hot importer rows, using only normal public commands.
         await result.setBulkPermission(false);
         await result.setBulkPermission(true);
@@ -977,6 +1009,9 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
     // two live fixture services can coexist with their separate Auth pools.
     await host.workflows.close();
     return result;
+    } finally {
+      releaseIdentityAuth();
+    }
   } catch (error) {
     await close();
     throw error;

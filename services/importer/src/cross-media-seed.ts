@@ -3277,6 +3277,8 @@ async function readPriorShowcasePublication(
 }
 
 export type CrossMediaSeedCliOptions = {
+  /** Include the independently selected, pinned literary families beside a finite showcase selection. */
+  includeBooks?: boolean;
   episodeCatalogueSubjects?: Readonly<Record<string, string>>;
   reviewedCatalogueSubjects?: Readonly<Record<string, string>>;
   selection?: CrossMediaSelection;
@@ -4321,7 +4323,7 @@ export async function runCrossMediaSeedCli(
       },
     };
     const { importShowcaseBooks, showcaseBooksToCrossMediaPlan } = await import('./showcase-books.ts');
-    const books = options.selection
+    const books = options.selection && !options.includeBooks
       ? undefined
       : await importShowcaseBooks({
           tables: input,

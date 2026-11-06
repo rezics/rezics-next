@@ -3,7 +3,14 @@ import { liveActionWorkType } from './cross-media-entities.ts';
 
 const gregorian = 'http://www.wikidata.org/entity/Q1985727';
 export const bangumiTVAnimeTemplateHead = '{{Infobox animanga/TVAnime';
-export const bangumiBookTemplateHead = '{{Infobox animanga/Book';
+/** Every book-family template that the grain profile admits; names and aliases read the same set. */
+export const bangumiBookTemplateHeads = [
+  '{{Infobox animanga/Book',
+  '{{Infobox animanga/BookSeries',
+  '{{Infobox animanga/Manga',
+  '{{Infobox animanga/Novel',
+  '{{Infobox animanga/PhotoBook',
+] as const;
 export const bangumiGameTemplateHead = '{{Infobox Game';
 
 export const bangumiTVAnimeWorkEvidenceFields = {
@@ -25,7 +32,8 @@ export function isBangumiTVAnimeTemplateHead(line: string): boolean {
 }
 
 export function isBangumiBookTemplateHead(line: string): boolean {
-  return line.trim() === bangumiBookTemplateHead;
+  const head = line.trim();
+  return bangumiBookTemplateHeads.some((template) => head === template);
 }
 
 export function isBangumiGameTemplateHead(line: string): boolean {

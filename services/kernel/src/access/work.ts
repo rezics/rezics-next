@@ -1,4 +1,5 @@
 import { memoizedValue } from '../memoized.ts';
+import { nativePermissionProjectionBound } from './permission-projection.ts';
 import { AccessUnavailableError, requireAccessDeadline } from './unavailable.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
 
@@ -428,6 +429,7 @@ export function accessNativeDeclaration(
             governanceReach: false,
             explicit: false,
             publicAllowed: false,
+            ...nativePermissionProjectionBound,
             at: timestamp,
             live: false,
           },
