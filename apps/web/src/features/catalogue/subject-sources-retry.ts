@@ -82,10 +82,13 @@ export function useSourcesRetry({
     retire();
     const target = headingRef.current;
     if (!intent.focus || !target?.isConnected) return;
+    // A replaced error boundary can leave its old opener connected but outside the visible article.
+    const opener =
+      intent.opener?.isConnected && target.closest('article')?.contains(intent.opener) ? intent.opener : null;
     const active = target.ownerDocument.activeElement;
-    if (active === intent.opener && intent.opener?.isConnected) return;
+    if (opener && active === opener) return;
     if (active === intent.opener || active === target.ownerDocument.body) {
-      if (intent.opener?.isConnected) (intent.opener as HTMLElement).focus();
+      if (opener) (opener as HTMLElement).focus();
       else target.focus();
     }
   });
