@@ -315,9 +315,9 @@ Observation: On 2026-11-06, host b, a cold same-tree comparison used one migrate
 2,001 Kernel queries. Reproduce: `bun services/kernel/scripts/benchmark-reylo.ts` (isolated 0.6.0 dependencies).
 
 | Reylo | SQL analysis | TypeScript | Kernel typecheck (sum) |
-| --- | ---: | ---: | ---: |
-| 0.6.0 | 197.24 s | 23.47 s | 220.71 s |
-| 0.7.0 | 213.52 s | 22.05 s | 235.57 s |
+| ----- | -----------: | ---------: | ---------------------: |
+| 0.6.0 |     197.24 s |    23.47 s |               220.71 s |
+| 0.7.0 |     213.52 s |    22.05 s |               235.57 s |
 
 Analysis was 8.3% slower; total 6.7% slower. This sample shows no speedup. Setup/admission are excluded. Both
 compilers exited 2: base diagnostics plus 0.7 JSON errors later adapted. These measure time to diagnostics.

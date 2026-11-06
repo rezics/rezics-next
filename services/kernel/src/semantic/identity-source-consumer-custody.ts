@@ -232,13 +232,7 @@ export function IDENTITY_SOURCE_LOCAL_READ_DECLARATIONS() {
       Object.fromEntries(
         Object.entries(sourceLiterals()).map(([name, literal]) => [
           name,
-          sourcePrice(
-            literal.rows,
-            literal.points,
-            1,
-            statementBytes(literal) + literal.binds + literal.output,
-            1,
-          ),
+          sourcePrice(literal.rows, literal.points, 1, statementBytes(literal) + literal.binds + literal.output, 1),
         ]),
       ) as Readonly<Record<keyof ReturnType<typeof sourceLiterals>, ReturnType<typeof sourcePrice>>>,
     ),
