@@ -74,7 +74,10 @@ test('Search admits rating population and membership independently without chang
   expect(searchLoaderDeps(parse(searchParams, { ...search, ratingPopulation: 'bad' })).invalidInput?.key).toBe(
     'ratingPopulation',
   );
-  for (const [key, value] of [['filter', 'x'.repeat(16385)], ['condition', 'x'.repeat(32769)]] as const) {
+  for (const [key, value] of [
+    ['filter', 'x'.repeat(16385)],
+    ['condition', 'x'.repeat(32769)],
+  ] as const) {
     const raw = parse(searchParams, { [key]: value });
     expect(raw[key]).toBe(value);
     expect(searchLoaderDeps(raw).invalidInput).toMatchObject({ key, value });

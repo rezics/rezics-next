@@ -173,9 +173,7 @@ test('replay of a Subject changing between released Types deletes its old kind a
     return body.hits.hits.find((row) => row._id === documentId);
   }
   try {
-    const baseline = await append([
-      { type: 'com.rezics.fixture.created.v1', subject: 'walk-b-374d19', data: {} },
-    ]);
+    const baseline = await append([{ type: 'com.rezics.fixture.created.v1', subject: 'walk-b-374d19', data: {} }]);
     expect(await relay.run(partition)).toMatchObject({ status: 'read', envelopes: 1, position: baseline });
     await projection.project(partition, [personKey]);
     const personId = discoveryDocumentId(registry, personKey);
