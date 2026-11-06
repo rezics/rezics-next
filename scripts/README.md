@@ -71,7 +71,8 @@ including the 11 GiB wait that still places on host b.
 
 Decision: pin user-visible transport, empty-directory return, 11 GiB/b-placement and host-exclusion behaviour with
 the existing remote-check/check-ssh unit files rather than a second suite. Admitted stack databases use `--rm`,
-labelled owner-pid cleanup, `container:<id>` attachment and an independent TCP-to-Unix forwarder after in-container
+labelled owner-pid cleanup, 120s `docker run`/`rm -f` and 5s probes, a labelled volume rather than 1 GiB tmpfs, nonce
+reap on create failure, `container:<id>` attachment and an independent TCP-to-Unix forwarder after in-container
 `pg_isready` plus a protocol reply; original remote context stays on those same tests. Management walk
 idle-in-transaction is that lifetime, not a second launcher. Original walks remain open.
 `GROWTH_PROFILE`, when set to a file inside the workspace, is forwarded to stack runs on check hosts as a
