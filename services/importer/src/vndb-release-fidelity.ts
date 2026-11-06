@@ -57,12 +57,13 @@ const WORK_ID = vndbWorkIdentity;
 const RELEASE_ID = vndbReleaseIdentity;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 
-const RELEASE_SCAN_LIMITS: Readonly<Record<string, { maxRows: number; maxBytes: number }>> = Object.freeze({
+/** Full-table budgets for the pinned 2026-11-04 dump. `entry_meta` includes every VNDB entity type. */
+export const vndbReleaseScanLimits: Readonly<Record<string, { maxRows: number; maxBytes: number }>> = Object.freeze({
   vn: { maxRows: 100_000, maxBytes: 64 * 1024 * 1024 },
   vn_titles: { maxRows: 500_000, maxBytes: 128 * 1024 * 1024 },
-  entry_meta: { maxRows: 100_000, maxBytes: 64 * 1024 * 1024 },
+  entry_meta: { maxRows: 1_000_000, maxBytes: 64 * 1024 * 1024 },
   releases_vn: { maxRows: 500_000, maxBytes: 64 * 1024 * 1024 },
-  releases: { maxRows: 100_000, maxBytes: 64 * 1024 * 1024 },
+  releases: { maxRows: 500_000, maxBytes: 64 * 1024 * 1024 },
   releases_titles: { maxRows: 500_000, maxBytes: 128 * 1024 * 1024 },
   releases_supersedes: { maxRows: 100_000, maxBytes: 16 * 1024 * 1024 },
   releases_platforms: { maxRows: 500_000, maxBytes: 64 * 1024 * 1024 },
@@ -70,7 +71,7 @@ const RELEASE_SCAN_LIMITS: Readonly<Record<string, { maxRows: number; maxBytes: 
 });
 
 async function* boundedRows(input: CrossMediaTables, table: string): AsyncGenerator<Row> {
-  const limit = RELEASE_SCAN_LIMITS[table];
+  const limit = vndbReleaseScanLimits[table];
   ensure(limit, `Missing VNDB release scan budget: ${table}`);
   let rows = 0;
   let bytes = 0;

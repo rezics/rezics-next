@@ -17,6 +17,7 @@ import {
 } from '../src/cross-media-seed.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { importVndbReleaseFidelity } from '../src/selected-import.ts';
+import { CrossMediaTableScanLimitError } from '../src/showcase-contract.ts';
 import {
   decodeVndbReleased,
   developmentStatusConceptUri,
@@ -24,6 +25,7 @@ import {
   developmentStatusTaxonomy,
   planVndbReleaseFidelity,
   readVndbReleaseBindings,
+  vndbReleaseScanLimits,
 } from '../src/vndb-release-fidelity.ts';
 
 /** Authored COPY tables. These are not observed public dump evidence. */
@@ -507,3 +509,26 @@ test('default selected-family traversal acquires directed release endpoints and 
     await rm(directory, { recursive: true, force: true });
   }
 }, 60_000);
+
+test('release scan limits fit the pinned 2026-11-04 dump tables', () => {
+  expect(vndbReleaseScanLimits.entry_meta?.maxRows).toBeGreaterThanOrEqual(495_184);
+  expect(vndbReleaseScanLimits.entry_meta?.maxBytes).toBeGreaterThanOrEqual(17_493_195);
+  expect(vndbReleaseScanLimits.releases?.maxRows).toBeGreaterThanOrEqual(160_532);
+  expect(vndbReleaseScanLimits.releases?.maxBytes).toBeGreaterThanOrEqual(15_913_985);
+});
+
+test('dump table scan overflow uses the contract error the release planner catches', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'vndb-scan-overflow-'));
+  try {
+    const db = join(directory, 'db');
+    await mkdir(db, { recursive: true });
+    await writeFile(join(db, 'entry_meta.header'), 'id\trevision\tlastmod\n');
+    await writeFile(join(db, 'entry_meta'), 'v1\t1\t2026-10-25 00:00:00+00\nv2\t1\t2026-10-25 00:00:00+00\n');
+    const tables = new CrossMediaDumpFiles(join(directory, 'bangumi'), directory);
+    await expect(async () => {
+      for await (const row of tables.rows('vndb', 'entry_meta', { maxRows: 1, maxBytes: 64 * 1024 * 1024 })) void row;
+    }).toThrow(CrossMediaTableScanLimitError);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

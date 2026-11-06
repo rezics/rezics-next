@@ -371,6 +371,9 @@ Remote seeded walks copy only those pinned archives onto `/srv/rezics-check/data
 download and extract stay out of the run and a rotated public file cannot replace the pin. Incomplete archive
 transfers resume. Timestamp-verified extracted tables reuse without hashing the archive, and the pin marker is
 written when missing. Sequential table reads drop-behind inside the slice.
+Decision: VNDB release-fidelity scans the pinned dump with one contract overflow error and budgets that fit that
+dump's full `entry_meta` (495,184 rows; every entity type) and `releases` (160,532 rows). A second error class must
+not escape the planner; overflow after those budgets is a named gap, not a seed crash.
 VNDB's dump metadata licence remains independent of image rights. The wrapper's returned and persisted
 `developmentShowcase.sourceSnapshots` carries the verified archive URL, filename, SHA-256 and metadata licences for
 both providers, plus VNDB's verified TIMESTAMP, even when later publication is incomplete.
