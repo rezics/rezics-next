@@ -242,7 +242,7 @@ test('missing original native floor evidence remains pending and ownership chang
     });
     expect(await ports.pageAuthErasureObligations({ cutId, cursor, deadline: deadline() })).toMatchObject({
       state: 'pending',
-      reason: 'original-floor-unavailable',
+      pending: [{ accountId: missing, reason: 'original-floor-unavailable' }],
     });
   } finally {
     await db.close();

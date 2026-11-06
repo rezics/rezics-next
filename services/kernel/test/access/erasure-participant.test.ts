@@ -4,12 +4,17 @@ import { createPool } from '../../src/database/pool.ts';
 import { readErasureStatus, erasureWorkModule } from '../../src/access/erasure.ts';
 import { advanceNativeErasure, NATIVE_ERASURE_GROUPS } from '../../src/access/erasure-native.ts';
 import { composeAccessApplication } from '../../src/composition/access.ts';
+import { bindExecutionContract } from '../../src/command/execution-contract.ts';
 import { KERNEL_WORK_MODULES } from '../support/default-work-modules.ts';
 import { createWorkClient } from '../../src/work/client.ts';
+import { workExecutionPort } from '../../src/work/selected-runtime.ts';
+import { historyExecutionPort } from '../../src/history/application/index.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { nativeFixture, scopes } from './native-account-bindings-fixture.ts';
 import { deletePersona, drainEffects } from '../support/account-deletion.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
+import '../support/native-history-composition.ts';
 
 const pool = createPool(process.env.DATABASE_URL!);
 let auth: Awaited<ReturnType<typeof nativeFixture>>;
@@ -153,6 +158,8 @@ test('default registered tombstone effect resumes after process and DBOS loss, r
   const nativeId = `access-native:${progressId}`;
   const effectId = `fx:${eventRow.epoch}:${partition}:${eventRow.position}:${eventRow.event_seq}:account_erasure_native`;
   const client = await createWorkClient(process.env.DATABASE_URL!, pool);
+  configureTestReceiptKeys(pool);
+  bindExecutionContract(client, workExecutionPort(), historyExecutionPort);
   try {
     // Supported SDK removal of exactly this test's work. Native state is untouched.
     await client.deleteWorkflows([nativeId, effectId], false);
