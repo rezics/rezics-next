@@ -200,7 +200,12 @@ mock.module('@tanstack/react-start/server', () => ({
 }));
 mock.module('cloudflare:workers', () => ({ env: workerEnv }));
 const kernel = await import('../src/kernel/client');
-mock.module('../src/kernel/client', () => ({ ...kernel, kernelClient: () => fakeKernelClient }));
+mock.module('../src/kernel/client', () => ({
+  ...kernel,
+  kernelClient: () => fakeKernelClient,
+  // The browser shim selects the client branch; server-side release reads still need their configured origin.
+  configuredKernelOrigin: () => workerEnv.KERNEL_ORIGIN,
+}));
 
 const { createRoot } = await import('react-dom/client');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
@@ -230,6 +235,7 @@ type PersonalCall = {
   gate?: ReturnType<typeof deferred<void>>;
 };
 let personalCalls: PersonalCall[] = [];
+let mountedFollowReads = 0;
 let rootMounted = false;
 const previousLocale = getLocale;
 const previousFetch = globalThis.fetch;
@@ -430,6 +436,7 @@ beforeEach(async () => {
   libraryEntryReads.length = 0;
   followReads.length = 0;
   personalCalls = [];
+  mountedFollowReads = 0;
   holdPersonalCalls = new Set();
   preparedReader = 'reader-one';
   preparedCsrf = 'story-csrf-token';
@@ -561,6 +568,8 @@ test('failed own-reaction reads stay unavailable while the actual Zone personal 
   });
   expect(firstPersonal.reader).toEqual({ spoilerLevel: 2, suitability: 'show' });
   expect(firstPersonal.library?.provenance).toMatchObject({ viewer: 'reader-one', subjectId });
+  expect(firstPersonal.library?.entryAvailable).toBe(true);
+  expect(firstPersonal.library?.stateOptions?.length).toBeGreaterThan(0);
   expect(firstPersonal.reactions).toMatchObject({ counts: { like: 2 }, value: null });
   expect(personalCalls).toHaveLength(1);
   expect(countReads.length - countReadsBeforeMount).toBe(1);
@@ -763,7 +772,7 @@ async function equalSuccess(source: 'manual' | 'fetch', afterCommit: () => void)
 function noSelection() {
   expect(chips().filter((button) => button.getAttribute('aria-pressed') === 'true')).toHaveLength(0);
 }
-function independentZonePayload(combined: number, counts: number, follows = 1) {
+function independentZonePayload(combined: number, counts: number, follows = mountedFollowReads) {
   expect(personalCalls).toHaveLength(combined);
   expect(countReads).toHaveLength(counts);
   expect(preferenceReads).toEqual(Array.from({ length: combined }, () => 'reader-one'));
@@ -772,17 +781,26 @@ function independentZonePayload(combined: number, counts: number, follows = 1) {
   expect(host.textContent).toContain('ZONE-PREFERENCE-WITNESS');
   expect(chip('like').textContent).toContain('2');
 }
-function independentZone(combined: number, counts: number, follows = 1) {
+function independentZone(combined: number, counts: number, follows = mountedFollowReads) {
   independentZonePayload(combined, counts, follows);
   expect(libraryEntryButton()?.disabled).toBe(false);
-  const follow = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
-    (button) => button.textContent?.trim() === m.library_follow(),
-  );
-  expect(follow?.disabled).toBe(false);
+  expect(followButton()?.disabled).toBe(false);
   const report = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
     (button) => button.getAttribute('aria-label') === m.report_more(),
   );
   expect(report?.disabled).toBe(false);
+}
+
+function followButton() {
+  return [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+    (button) => button.textContent?.trim() === m.library_follow(),
+  );
+}
+async function settleZoneActions() {
+  await until(() => libraryEntryButton() !== null && followButton()?.disabled === false);
+  // StrictMode can issue an initial read before retiring its first mounted admission.
+  mountedFollowReads = followReads.length;
+  expect(mountedFollowReads).toBeGreaterThan(0);
 }
 
 for (const source of ['manual', 'fetch'] as const)
@@ -803,7 +821,8 @@ for (const source of ['manual', 'fetch'] as const)
       oldOwn.resolve({ status: 200, data: { kind: 'love' } });
       personalCalls[0]!.gate!.resolve();
     });
-    await until(() => ownReads.length === 2 && libraryEntryButton() !== null && followReads.length === 1);
+    await until(() => ownReads.length === 2);
+    await settleZoneActions();
     expect(client.getQueryData(oldKey)).toBeUndefined();
     expect(chips().every((button) => button.disabled)).toBe(true);
     noSelection();
@@ -832,6 +851,7 @@ for (const surface of ['ordinary Subject', 'production Zone'] as const)
         if (surface === 'production Zone') await paint(zoneOutcome(subjectId));
         else await paintOrdinary();
         await until(() => ownReads.length === 1 && chips().some((button) => !button.disabled));
+        if (surface === 'production Zone') await settleZoneActions();
         const oldOwnQuery = client
           .getQueryCache()
           .findAll({ queryKey: ['subject-own-reaction'] })
@@ -861,7 +881,7 @@ for (const surface of ['ordinary Subject', 'production Zone'] as const)
         expect(oldButton.isConnected).toBe(false);
         expect(window.document.activeElement).not.toBe(oldButton);
         expect(countReads).toHaveLength(countsBefore);
-        if (surface === 'production Zone') independentZone(1, 1, 2);
+        if (surface === 'production Zone') independentZone(1, 1, mountedFollowReads + 1);
         // The fresh response comes through the real prepared native read, never from a copied cache value.
         await flush(() => freshOwn.resolve({ status: 200, data: { kind: null } }));
         await until(() => chips().some((button) => !button.disabled));
@@ -874,7 +894,7 @@ for (const surface of ['ordinary Subject', 'production Zone'] as const)
           nativeWrites.every((write) => write.id === subjectId && write.authorization === 'Bearer token-reader-one'),
         ).toBe(true);
         expect(ownReads).toHaveLength(2);
-        if (surface === 'production Zone') independentZone(1, 1, 2);
+        if (surface === 'production Zone') independentZone(1, 1, mountedFollowReads + 1);
         else expect(countReads).toHaveLength(countsBefore + 2); // Only the two useful current mutation refreshes.
       });
 
@@ -907,6 +927,7 @@ for (const surface of ['ordinary Subject', 'production Zone'] as const)
     if (surface === 'production Zone') await paint(zoneOutcome(subjectId));
     else await paintOrdinary();
     await until(() => ownReads.length === 1 && chips().some((button) => !button.disabled));
+    if (surface === 'production Zone') await settleZoneActions();
     const initialCountReads = countReads.length;
     const write = deferred<NativeWriteResult>();
     nativeWriteQueue.push(() => write.promise);
@@ -951,7 +972,8 @@ test('production Zone reloads its personal source after session loss while react
   client.setQueryData(sessionQuery.queryKey, sessionData());
   queueNativeRead({ status: 403 });
   await paint(zoneOutcome(subjectId));
-  await until(() => ownReads.length === 1 && libraryEntryButton() !== null && followReads.length === 1);
+  await until(() => ownReads.length === 1);
+  await settleZoneActions();
   independentZone(1, 1);
   noSelection();
   expect(chips().every((button) => button.disabled)).toBe(true);
@@ -992,8 +1014,13 @@ test('production Zone reloads its personal source after session loss while react
     await recovery;
     await tick();
   });
-  await until(() => ownReads.length === 2 && followReads.length === 2 && chips().some((button) => !button.disabled));
-  independentZonePayload(4, 4, 2);
+  await until(
+    () =>
+      ownReads.length === 2 &&
+      followReads.length === mountedFollowReads + 1 &&
+      chips().some((button) => !button.disabled),
+  );
+  independentZonePayload(4, 4, mountedFollowReads + 1);
 });
 
 test('anonymous production Zone makes zero private reaction reads and preserves its public counts', async () => {
@@ -1018,6 +1045,7 @@ for (const surface of ['ordinary Subject', 'production Zone'] as const)
     if (surface === 'production Zone') await paint(zoneOutcome(subjectId));
     else await paintOrdinary();
     await until(() => ownReads.length === 1 && chips().some((button) => !button.disabled));
+    if (surface === 'production Zone') await settleZoneActions();
     const initialCountReads = countReads.length;
     const freshOwn = deferred<NativeReactionRead>();
     queueNativeRead(freshOwn);
@@ -1033,7 +1061,7 @@ for (const surface of ['ordinary Subject', 'production Zone'] as const)
     noSelection();
     expect(chips().every((button) => button.disabled)).toBe(true);
     expect(countReads).toHaveLength(initialCountReads);
-    if (surface === 'production Zone') independentZone(1, 1, 2);
+    if (surface === 'production Zone') independentZone(1, 1, mountedFollowReads + 1);
     await flush(() => freshOwn.resolve({ status: 200, data: { kind: null } }));
     await until(() => chips().some((button) => !button.disabled));
   });
