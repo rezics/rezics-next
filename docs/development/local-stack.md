@@ -230,7 +230,8 @@ bun services/auth/scripts/dev-stack.ts walk -- <command...>
 3. Runs `db up`, `search up` and `setup`, starts the processes `dev` starts, and waits until Web and the Auth pages
    answer, for at most ten minutes. Its output goes to `.temp/walk/<task>/stack.log`.
 4. Runs `<command>` in the caller's directory with the stack's names, ports and origins. Persona and seed steps belong
-   inside `<command>`, for example `dev-stack.ts persona` followed by `task seed:dev`.
+   inside `<command>`: run `dev-stack.ts persona`, then load its private `seed.env` and run
+   `bun scripts/datasets/cross-media-seed.ts --dev`, as described under seeded journey walks below.
 5. Stops the processes, removes the stack's containers and volumes, and releases the slot when the command ends or the
    attempt receives SIGHUP, SIGINT or SIGTERM. A stack left by a killed attempt is removed when the same task next
    starts.
