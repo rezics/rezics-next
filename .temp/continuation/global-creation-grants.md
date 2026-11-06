@@ -45,3 +45,16 @@ Acceptance to finish the content row once this lands:
 Already landed on the content side: thread head, post head and the thread post page disclose again after reaction
 totals (`services/kernel/src/content/routes.ts`), and `content.disclosureBarrier` is the composed timing seam
 (`services/kernel/src/content/reads.ts`).
+
+## Second base blocker: standing fixture Access construction
+
+`services/kernel/test/access/standing-fixture.ts` builds Access with resource roles that name an unmounted action
+(`fixture.unmounted` → `unmounted:action`). The policy catalogue compile now refuses that
+(`TypeError: Invalid native Access policy catalogue: unknown-resource-action`, raised from
+`compileNativePolicyCatalogue` through `createAccess` at `standing-fixture.ts:141`). Every test built on the standing
+fixture therefore fails before its first case on base: `boards-http`, `subject-threads-http`, `board-hot-http`,
+`author-item-reads`, `author-item-public-views`, and the native late-revocation point-read test
+(`services/kernel/test/content/late-board-revocation-point-reads.test.ts`). These are the receiving controls for the
+content read changes, so none of them can verify those changes until the fixture constructs Access again.
+
+The owner decides whether the refusal or the fixture role is wrong; this part does not weaken either.
