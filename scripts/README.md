@@ -64,7 +64,11 @@ owned directory `$XDG_RUNTIME_DIR/rezics-ssh/<host>` (or `/tmp/rezics-ssh-<uid>/
 overrides that directory. OpenSSH's `unix_listener` adds a `.XXXXXXXXXX` suffix, so a path at or over 97 bytes is
 relocated to a hashed `/tmp/rs<uid>-<digest>` that still names one socket per host. Concurrent callers reuse that
 master. Completing a run releases its channels and never `-O exit`s a master other runs still use; ControlPersist reaps
-idle sockets. A stale or lost master is recovered with `-O check` then `-O exit` before the next auto connection.
+idle sockets. A stale or lost master is recovered with `-O check` then `-O exit` before the next auto connection. A
+socket file left by a killed master is removed when `-O check` reports a refused or missing listener; while it
+remains, OpenSSH prints `already exists, disabling multiplexing` and every connection pays a full handshake.
+Expired immutable bases are renamed aside under `bases/.lock` and deleted after it is released, so a base lookup never
+waits behind another run's recursive delete.
 Stderr reports connection work and probe failures (including `unix_listener` overflow) separately from admitted
 execution. `--exclude-hosts` and the wait line's `reservation N GiB` expose host exclusions and the memory reservation,
 including the 11 GiB wait that still places on host b.
@@ -524,7 +528,7 @@ either stopgap, remain with the supermanager. Post-admission throughput and host
 remain separate questions for the existing compiler/health chain; this cohort supplies neither.
 
 1. Select a responding eligible host and verify a run-private SSH control connection with a trivial command before
-   using it. The probe is bounded to five seconds. On failure, close that run's master, replace its control path and
+   using it. The probe is bounded to ninety seconds. On failure, close that run's master, replace its control path and
    probe once more; the second failure is `RemoteTransportError` for the host and `control probe` stage. A check never
    closes another run's control path.
 2. Rsync existing tracked and unignored untracked files into `/srv/rezics-check/runs/<run-id>` without an execution
