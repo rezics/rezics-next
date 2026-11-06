@@ -5,8 +5,8 @@ The private route `/library/recover-progress` consumes only installed `KernelCli
 Library navigation and the private export page link this journey separately from Entry/label/journal recovery.
 Decision: keep the original upload bytes for Restart after cancellation, and offer a completed export from this
 signed-in owner. A completed version 4 capture is projected to the installed version 3 envelope at upload. An
-acknowledged Session opens the current progress reader. Journey tests pin that restart; named stories stay with
-Collection and Entry recovery.
+acknowledged Session opens the current progress reader. Journey tests pin that restart; the native Web owner walk
+restores one occurrence through the page. Named stories stay with Collection and Entry recovery.
 
 `native.ts` derives all request/result types from generated methods and quotes logical keys once. `server.ts`
 binds current HTTP viewer evidence and the existing sealed original command credential. `controller.ts` retains

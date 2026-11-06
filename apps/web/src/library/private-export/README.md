@@ -79,3 +79,6 @@ Decision: pin export-to-restore with journey tests for owner-keyed completed-arc
 restart, Collection readback and other-member denial; keep the existing named upload, review and result stories.
 Decision: keep downloaded V4 bytes unchanged; Collection recovery uploads the installed V1 envelope, and Entry and
 progress recovery upload the installed V3 envelope, because those native consumers refuse version 4.
+Decision: native Web fixture personas alice (owner) and bob (other member) plus actual Kernel commands prove the
+export-to-restore walk; dump seed identities are not required for owned Library facts. Unreadable archive bytes pass
+through to the native decoder.
