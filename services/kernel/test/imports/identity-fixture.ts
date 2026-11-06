@@ -437,7 +437,7 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
           'statement:propose',
           'media:read_reservation',
           ...(options.publication
-            ? ['subject:read', 'subject:context_read', 'media:read', 'context:accept', 'context:adopt']
+            ? ['subject:read', 'context:read', 'media:read', 'context:accept', 'context:adopt']
             : []),
           ...statisticScopes,
         ],
@@ -613,7 +613,10 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
       const [governance, ordinary, bulk] = await Promise.all([
         issue(human.accountId, [...importerScopes, ...statisticScopes]),
         issue(comparison.accountId, COMMON_ACTIONS),
-        issue(robot.accountId, options.sourceStatistics === 'vndb' ? client.scopes : importerScopes),
+        issue(
+          robot.accountId,
+          options.publication || options.sourceStatistics === 'vndb' ? client.scopes : importerScopes,
+        ),
       ]);
       let bulkEnabled = true;
       let statisticEnabled = statisticScopes.length > 0;

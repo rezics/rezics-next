@@ -67,10 +67,19 @@ test('local publication accepts only its acknowledged plan after authorization a
       statement: {
         property: { id: 'schema:name' },
         value: { type: 'value', content: { language: 'en', text: 'Unrelated title' } },
-        references: selectedName.statement.references,
+        references: [
+          {
+            parts: [
+              {
+                property: { id: 'schema:url' },
+                value: { type: 'value', content: 'https://example.org/independent-review' },
+              },
+            ],
+          },
+        ],
       },
     });
-    expect(unrelated.status).toBe(201);
+    expect(unrelated.status, JSON.stringify(unrelated.body)).toBe(201);
     const unrelatedId = (unrelated.body as { candidate: string }).candidate;
     const publicClient = createPublicBulkClient({
       origin: runtime.origin,

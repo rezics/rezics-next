@@ -449,6 +449,13 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       ...tagOptions,
     });
     expect(replayed.status).toBe('published');
+    // Equal acceptance bodies for distinct targets must never share a receipt key.
+    const candidateKeys = new Map<string, string>();
+    for (const call of acceptanceCalls) {
+      const target = candidateKeys.get(call.idempotencyKey);
+      if (target) expect(call.candidateId).toBe(target);
+      candidateKeys.set(call.idempotencyKey, call.candidateId);
+    }
     expect(replayed.manifest.digest).toBe(first.manifest.digest);
     expect(accepted).toEqual(new Set(acknowledged.map((entry) => entry.candidateId!)));
     for (const candidate of synopses) {
