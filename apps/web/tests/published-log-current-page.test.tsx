@@ -2,7 +2,12 @@ import { afterAll, describe, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, Children, Fragment, isValidElement, StrictMode, type ReactNode } from 'react';
 import type { PublishedLog, PublishedLogWriteResult } from '../src/library/logs-read';
-import { bindLogsReturnVisit, logsReturnFrontier, logsReturnLocationState } from '../src/library/logs-return';
+import {
+  bindLogsReturnVisit,
+  logsDestinationClick,
+  logsReturnFrontier,
+  logsReturnLocationState,
+} from '../src/library/logs-return';
 import { m } from '../src/paraglide/messages.js';
 
 // UNRUN: mounted deferred-result regressions for integration; no native/transport outcome claim.
@@ -490,14 +495,31 @@ test('mounted public log Back restores a captured My Logs visit and follows the 
     await settle(() => back()!.click());
     expect(backed).toBe(0);
 
-    window.history.replaceState(logsReturnLocationState(frontier), '', window.location.href);
+    logsDestinationClick(
+      {
+        defaultPrevented: false,
+        button: 0,
+        metaKey: false,
+        ctrlKey: false,
+        shiftKey: false,
+        altKey: false,
+        preventDefault() {},
+      },
+      () => true,
+      frontier,
+    );
+    await h.show({ ...page(logId), sessionSubject: session });
     await settle(() => back()!.click());
     expect(backed).toBe(1);
+
+    window.history.replaceState(logsReturnLocationState(frontier), '', window.location.href);
+    await settle(() => back()!.click());
+    expect(backed).toBe(2);
 
     await h.show({ ...page(logId), sessionSubject: 'replaced-session' });
     window.history.replaceState(logsReturnLocationState(frontier), '', window.location.href);
     await settle(() => back()!.click());
-    expect(backed).toBe(1);
+    expect(backed).toBe(2);
 
     await h.show({ ...page(logId), sessionSubject: session });
     window.history.replaceState(logsReturnLocationState(frontier), '', window.location.href);
@@ -505,7 +527,7 @@ test('mounted public log Back restores a captured My Logs visit and follows the 
     expect(h.host.querySelector('[role="status"]')?.textContent).toBe(m.library_logs_deleted());
     expect(hrefOf()).toBe('/en/library/logs');
     await settle(() => back()!.click());
-    expect(backed).toBe(2);
+    expect(backed).toBe(3);
     expect(typeof undoProps?.deadline).toBe('number');
   } finally {
     history.back = originalBack;
