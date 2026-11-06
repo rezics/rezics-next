@@ -107,9 +107,8 @@ without asserting that the complete search journey is callable in every checkout
 and sitemap enumeration do not deliver Account search. [Universal search](search-conditions.md) and
 [facet discovery](search-facets.md) remain the sole Search policy; there is no second engine or permission cache.
 
-The deleted identity contract is exactly `{ id, state, kind }`, with no person/automation label. The base's
-[account-data.ts][account-data] meets that shape for organizations but still returns extra null/false fields
-for actors; those fields are an implementation gap, not additional public identity policy.
+The deleted identity contract is exactly `{ id, state, kind }`, with no person/automation label.
+[account-data.ts][account-data] returns that shape for deleted actors and organizations.
 
 Live attribution exposes `id`, `kind`, `handle`, `displayName`, public state, `automated` and `operatorId`.
 The handle profile can also expose biography, links, avatar, verification and the account's public-view choices.
@@ -144,12 +143,11 @@ Web preserves the server-derived automation marker even when operator hydration 
 operator address may become a link. An operated actor whose operator has no readable public identity displays the
 localized “Operator unavailable” label without an operator identifier or inferred name; only a readable public
 identity becomes a link. Profile editing must round-trip the actual Content avatar summary and every
-public-view choice without widening content access. The [profiles report](research/accounts-design-agents-profiles.md)
-records existing gaps: avatar `{media}` versus the settings adapter's `id`, omitted Realms projection, form/API
-limits, handleless and managed-target loading, and representative explanation/release controls. These are whole
-profile/verification delivery slices for Web, Accounts and Semantic, not new identity policies. Semantic's
-released identity coordinator must publish verification and exact reversal; local merge primitives or stored
-verification state alone do not establish the final public-page outcome.
+public-view choice without widening content access. The Web gaps in the
+[profiles report](research/accounts-design-agents-profiles.md) (avatar summary, Realms projection, form and API
+limits, handleless and managed-target loading, and representative explanation and release controls) are implemented.
+Semantic's released identity coordinator must publish verification and exact reversal; local merge primitives or
+stored verification state alone do not establish the final public-page outcome.
 
 A handle lookup resolves only the account's current spelling from an active claim, and a fenced account exposes no biography or links on public reads.
 
@@ -192,8 +190,7 @@ cannot operate another account or join an organization; an operator chain cannot
 identity, account pages and attribution must mark automation and identify its operator, for example
 “Automated · operated by @handle”. The [operator commands][operator], [membership inverse][membership-inverse]
 and [public projection][account-data] carry the relation and public fields. The website's
-[profile reader][web-profile-reader] currently drops `automated` and `operatorId`, and its
-[profile header][web-profile-header] does not render that marking; this is a presentation gap.
+[profile reader][web-profile-reader] keeps `automated`, and its [profile header][web-profile-header] renders that marking.
 
 The operator creates the account and controls whether it has independent credentials. Opening sessions,
 changing credentials and managing it require current management authority: the human operator holds that
@@ -476,8 +473,8 @@ own-edge removal rule: deleting an existing own follow requires current own-acco
 scope, actor grant and delegated principal authorization when applicable. Removal remains possible when the
 target is hidden, deleted or otherwise unavailable, using the stored original edge without disclosing target
 data. This does not waive account standing or fresh authorization before replay. Create/refollow still requires
-current target eligibility bound to command T. The current Library preflight blocks unavailable-target removal;
-the manager coordinates adoption in Library/Web before their existing producer implements this rule.
+current target eligibility bound to command T. Library preparation admits a stored removal without visiting the target,
+so unavailable-target removal is allowed.
 
 A follow grants neither membership nor access. Explicit negative intent survives delayed Library/membership
 work; leaving a Realm does not unfollow its Space. Account follows address the agent Subject, not a new Account
