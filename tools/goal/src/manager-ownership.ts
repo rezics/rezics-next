@@ -1,5 +1,14 @@
 import type { Database } from 'bun:sqlite';
 
+type SessionFields = {
+  kind?: unknown;
+  status?: unknown;
+  goal?: unknown;
+  goals?: unknown;
+};
+
+type ListedSession = { id: string; status: string } & SessionFields;
+
 /** Goals a managed session owns. Persisted sessions without `goals` own their original `goal`. */
 export function ownedGoals(state: { goal?: unknown; goals?: unknown } | null | undefined): string[] {
   if (Array.isArray(state?.goals))
@@ -7,35 +16,17 @@ export function ownedGoals(state: { goal?: unknown; goals?: unknown } | null | u
   return typeof state?.goal === 'string' && state.goal.length > 0 ? [state.goal] : [];
 }
 
-function sessionState(row: { id: string; state: string }): {
-  id: string;
-  kind?: unknown;
-  status?: unknown;
-  goal?: unknown;
-  goals?: unknown;
-} | null {
+function sessionState(row: { id: string; state: string }): ({ id: string } & SessionFields) | null {
   try {
-    const state = JSON.parse(row.state) as {
-      id?: unknown;
-      kind?: unknown;
-      status?: unknown;
-      goal?: unknown;
-      goals?: unknown;
-    };
+    const state = JSON.parse(row.state) as SessionFields;
     if (!state || typeof state !== 'object' || Array.isArray(state)) return null;
-    return { id: row.id, ...state };
+    return { ...state, id: row.id };
   } catch {
     return null;
   }
 }
 
-function runningManagedSessions(db: Database): {
-  id: string;
-  kind?: unknown;
-  status?: unknown;
-  goal?: unknown;
-  goals?: unknown;
-}[] {
+function runningManagedSessions(db: Database): ({ id: string } & SessionFields)[] {
   if (!db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'manager_sessions'").get()) return [];
   const rows = db.query('SELECT id, state FROM manager_sessions').all() as { id: string; state: string }[];
   return rows
@@ -60,9 +51,7 @@ export type ManagerOwnership = {
 };
 
 /** Status listing: each manager and the Goals it owns. */
-export function managerOwnership(
-  states: { id: string; status: string; kind?: string; goal?: unknown; goals?: unknown }[],
-): ManagerOwnership[] {
+export function managerOwnership(states: ListedSession[]): ManagerOwnership[] {
   return states
     .map((state) => ({
       id: state.id,
