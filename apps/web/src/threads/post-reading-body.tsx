@@ -182,6 +182,7 @@ function ReadingVisit({
 /** One index per supplied disclosure, then constant-time admission for every image node. No new reads. */
 export function ThreadPostReadingBody({
   post,
+  pageIndex = 0,
   documentMedia,
   mentions,
   locale = getLocale(),
@@ -189,13 +190,14 @@ export function ThreadPostReadingBody({
   isReaderCurrent,
 }: {
   post: ThreadPost;
+  pageIndex?: number;
   documentMedia?: ThreadDocumentMedia | undefined;
   mentions: DocumentMentions;
   locale?: string;
   readerIdentity?: unknown;
   isReaderCurrent?: () => boolean;
 }) {
-  const images = useMemo(() => documentImagesForPost(documentMedia, post), [documentMedia, post]);
+  const images = useMemo(() => documentImagesForPost(documentMedia, post, pageIndex), [documentMedia, post, pageIndex]);
   if (post.availability !== 'available') return null;
   return (
     <PostReadingBody

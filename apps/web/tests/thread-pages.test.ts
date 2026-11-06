@@ -20,7 +20,8 @@ const threadCaller = await readFile(join(root, 'threads/thread-page-caller.tsx')
 const community = await readFile(join(root, 'threads/board-community.tsx'), 'utf8');
 const feed = await readFile(join(root, 'threads/board-feed.tsx'), 'utf8');
 const reading = await readFile(join(root, 'threads/thread-reading.tsx'), 'utf8');
-const shell = await readFile(join(root, 'shell/shell.tsx'), 'utf8');
+const byline = await readFile(join(root, 'threads/byline.tsx'), 'utf8');
+const topBar = await readFile(join(root, 'shell/top-bar.tsx'), 'utf8');
 
 test('board and thread titles use the shared page heading size, not the display size', () => {
   expect(board).toContain('<BoardCommunity');
@@ -33,8 +34,9 @@ test('board and thread titles use the shared page heading size, not the display 
 });
 
 test('a post shows edited only when it was revised after it was published', () => {
-  expect(thread).toMatch(
-    /post\.revisedAt\s*&&\s*new Date\(post\.revisedAt\)\.getTime\(\)\s*>\s*new Date\(post\.createdAt\)\.getTime\(\)/,
+  expect(thread).toContain('revisedAt={post.revisedAt}');
+  expect(byline).toMatch(
+    /revisedAt && new Date\(revisedAt\)\.getTime\(\) > new Date\(createdAt\)\.getTime\(\)/,
   );
 });
 
@@ -66,6 +68,7 @@ test('the actual board feed uses heading-style titles and the available opening 
         };
         return Response.json({
           board: boardRecording.board,
+          pinRevision: '1',
           pinnedThreads: [],
           threads: [
             {
@@ -106,8 +109,8 @@ test('the actual board feed uses heading-style titles and the available opening 
 });
 
 test('scrolling a thread at 390 shows the shell header once, at the top of the viewport', () => {
-  expect(shell.match(/<header className="sticky top-0/g)).toHaveLength(1);
-  expect(shell).toContain('sticky top-0');
+  expect(topBar.match(/<header className="sticky top-0/g)).toHaveLength(1);
+  expect(topBar).toContain('sticky top-0');
 });
 
 test('each route has one initial page source; an explicit thread refresh preserves the current cursor and credentials', () => {
@@ -123,8 +126,8 @@ test('each route has one initial page source; an explicit thread refresh preserv
   expect(threadLoader.match(/threadPageQuery\(/g)).toHaveLength(1);
   expect(threadLoader).toContain('runThreadPageQuery(context.queryClient, caller, query');
   expect(threadLoader).toContain('context.queryClient.ensureQueryData(guarded)');
-  expect(threadCaller).toContain('const original = query.queryFn');
-  expect(threadCaller).toContain('const value = await original(context)');
+  expect(threadCaller).toContain('const original = (query as T & { queryFn?: unknown }).queryFn');
+  expect(threadCaller).toContain('value = await (original as (context: unknown) => unknown)(context)');
   expect(threadCaller).toContain('caller.finishQuery(query.queryKey, result, before, beforeTerminalRevision)');
   expect(thread.match(/threadPersonalQuery\(/g)).toHaveLength(1);
   expect(thread).toMatch(/enabled:\s*session === 'signed-in'/);

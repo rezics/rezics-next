@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test';
+import { createKernelClient } from '@rezics/client';
 import { boardPinAdviceInput, receiveBoardPinAdvice, type BoardPinAdviceQuery } from '../src/threads/board-pins/advice';
 import { readBoardPinAdviceRequest } from '../src/threads/board-pins/native';
-import { productionBoardPinProducer } from '../src/threads/board-pins/producer';
+import { SESSION_COOKIE } from '../src/session/cookies';
 
 const boardId = '01a17a3b-09b4-77bf-a24b-1234ebeab5b3';
 const threadId = '01a17a3b-09b4-77bf-a24b-1234ebeab5b4';
@@ -64,9 +65,88 @@ test('malformed advice, denial and full capacity never invent selected actions',
   expect(receiveBoardPinAdvice(query(), 200, { state: 'stale' })).toEqual({ state: 'stale' });
 });
 
-test('the receiver stays unavailable until official client publication and withholds aborted results', async () => {
-  expect(await readBoardPinAdviceRequest()).toEqual({ state: 'unavailable' });
-  expect(await productionBoardPinProducer.inspectSelected?.(query())).toEqual({ state: 'unavailable' });
+test('the installed callable receives the admitted generation and current session through no-store transport', async () => {
+  const calls: { url: string; method: string; headers: Headers; body: unknown; cache?: RequestCache }[] = [];
+  const client = createKernelClient('https://kernel.test', {
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      calls.push({
+        url: new URL(request.url).pathname,
+        method: request.method,
+        headers: request.headers,
+        body: await request.json(),
+        cache: init?.cache,
+      });
+      return Response.json(ready());
+    },
+  });
+  const env = {
+    AUTH_ISSUER: 'https://auth.test',
+    API_RESOURCE: 'https://kernel.test',
+    WEBSITE_SCOPES: 'openid',
+    WEBSITE_CLIENT_ID: 'web',
+    WEBSITE_CLIENT_KEY: 'secret',
+    SESSIONS: {
+      idFromName: (id: string) => id,
+      get: () => ({
+        credential: async () => ({
+          status: 'active',
+          subject: viewerId,
+          accessToken: 'native-access',
+          csrfToken: 'csrf',
+        }),
+      }),
+    },
+  } as never;
+  const request = new Request('https://web.test/board-pin-advice', {
+    headers: { cookie: `${SESSION_COOKIE}=${'a'.repeat(43)}` },
+  });
+  expect(
+    await readBoardPinAdviceRequest({ boardId, viewerId, selected, pinRevision: '4' }, request, env, client, true),
+  ).toEqual(ready());
+  expect(calls).toHaveLength(1);
+  expect(calls[0]).toMatchObject({
+    url: `/v1/boards/${boardId}/pin-advice`,
+    method: 'POST',
+    cache: 'no-store',
+    body: { selected, pinRevision: '4' },
+  });
+  expect(calls[0]?.headers.get('authorization')).toBe('Bearer native-access');
+});
+
+test('session mismatch is denied before transport and aborted advice is withheld', async () => {
+  let calls = 0;
+  const client = createKernelClient('https://kernel.test', {
+    fetch: async () => {
+      calls++;
+      return Response.json(ready());
+    },
+  });
+  const env = {
+    AUTH_ISSUER: 'https://auth.test',
+    API_RESOURCE: 'https://kernel.test',
+    WEBSITE_SCOPES: 'openid',
+    WEBSITE_CLIENT_ID: 'web',
+    WEBSITE_CLIENT_KEY: 'secret',
+    SESSIONS: {
+      idFromName: (id: string) => id,
+      get: () => ({
+        credential: async () => ({
+          status: 'active',
+          subject: threadId,
+          accessToken: 'wrong-access',
+          csrfToken: 'csrf',
+        }),
+      }),
+    },
+  } as never;
+  const request = new Request('https://web.test/board-pin-advice', {
+    headers: { cookie: `${SESSION_COOKIE}=${'a'.repeat(43)}` },
+  });
+  expect(
+    await readBoardPinAdviceRequest({ boardId, viewerId, selected, pinRevision: '4' }, request, env, client, true),
+  ).toEqual({ state: 'denied' });
+  expect(calls).toBe(0);
   const controller = new AbortController();
   controller.abort();
   expect(receiveBoardPinAdvice({ ...query(), signal: controller.signal }, 200, ready())).toEqual({

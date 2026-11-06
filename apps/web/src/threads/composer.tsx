@@ -65,7 +65,7 @@ function useComposerLifetime() {
   const [lifetime] = useState(() => {
     const identity = () => {
       const session = client?.getQueryData(sessionQuery.queryKey);
-      return JSON.stringify([session?.state ?? 'unknown', session?.subject ?? null, session?.csrfToken ?? null]);
+      return JSON.stringify([session?.state ?? 'unknown', session?.subject ?? null]);
     };
     const owner = identity();
     const state: {
@@ -605,6 +605,7 @@ function PostComposerContent<T, Context = undefined>({
   const bodyRef = useRef(body);
   const [snapshotPhase, setSnapshotPhase] = useState<'ready' | 'pending' | 'failed'>('ready');
   const snapshotPhaseRef = useRef(snapshotPhase);
+  const publishingSnapshot = useRef(false);
   const rawEditorWork = useRef<DocumentNode | null>(null);
   const writingRevision = useRef(0);
   const [bodyCanSend, setBodyCanSend] = useState(() => hasDocumentContent(body));
@@ -665,8 +666,9 @@ function PostComposerContent<T, Context = undefined>({
     submittingRef.current,
     replyIntent.current.unresolved,
   ]);
+  const departureHeld = lifetime.current() || replyIntent.current.unresolved || submittingRef.current;
   const departure = useAuthoringDeparture(
-    lifetime.current() &&
+    departureHeld &&
       (title !== '' ||
         JSON.stringify(bodyRef.current) !== JSON.stringify(initialBodyRef.current) ||
         JSON.stringify(submissionContext) !== initialSubmissionContext.current ||
@@ -675,7 +677,7 @@ function PostComposerContent<T, Context = undefined>({
         submittingRef.current ||
         replyIntent.current.unresolved ||
         uncertainChanged),
-    lifetime.current() && (submittingRef.current || replyIntent.current.unresolved),
+    replyIntent.current.unresolved || (lifetime.current() && submittingRef.current),
     departureSignature,
     undefined,
     () => lifetime.retire(),
@@ -755,7 +757,7 @@ function PostComposerContent<T, Context = undefined>({
     inspection?.changed();
   }
   function snapshotPending() {
-    if (!lifetime.current()) return;
+    if (!lifetime.current() || publishingSnapshot.current) return;
     snapshotPhaseRef.current = 'pending';
     rawEditorWork.current = null;
     setSnapshotPhase('pending');
@@ -907,6 +909,7 @@ function PostComposerContent<T, Context = undefined>({
 
   function updateBody(next: DocumentSnapshot) {
     if (!lifetime.current()) return;
+    publishingSnapshot.current = true;
     snapshotPhaseRef.current = 'ready';
     setSnapshotPhase('ready');
     rawEditorWork.current = null;
@@ -916,6 +919,9 @@ function PostComposerContent<T, Context = undefined>({
     setBodyCanSend(hasDocumentContent(next));
     pruneCopiedImages(next);
     queueForeignImages(next);
+    queueMicrotask(() => {
+      publishingSnapshot.current = false;
+    });
   }
 
   function updatePending() {
@@ -1130,7 +1136,7 @@ function PostComposerContent<T, Context = undefined>({
     }
   }
 
-  if (!lifetime.current())
+  if (!lifetime.current() && !replyIntent.current.unresolved && !submittingRef.current)
     return (
       <p className="min-w-0 [overflow-wrap:anywhere]" role="alert">
         {m.thread_authoring_session_changed()}
@@ -1400,6 +1406,7 @@ function InlinePostEditorContent({
   const [inspectionRevision, setInspectionRevision] = useState(0);
   const [snapshotPhase, setSnapshotPhase] = useState<'ready' | 'pending' | 'failed'>('ready');
   const snapshotPhaseRef = useRef(snapshotPhase);
+  const publishingSnapshot = useRef(false);
   const [revisionId, setRevisionId] = useState(initialRevisionId);
   const [commandAction, setCommandAction] = useState<'save' | 'publish'>('save');
   const [failure, setFailure] = useState<EditFailure | null>(null);
@@ -1484,7 +1491,7 @@ function InlinePostEditorContent({
   }
 
   function snapshotPending() {
-    if (!lifetime.current()) return;
+    if (!lifetime.current() || publishingSnapshot.current) return;
     snapshotPhaseRef.current = 'pending';
     setSnapshotPhase('pending');
     invalidateInspection();
@@ -1499,6 +1506,7 @@ function InlinePostEditorContent({
 
   function updateBody(next: DocumentSnapshot) {
     if (!lifetime.current()) return;
+    publishingSnapshot.current = true;
     snapshotPhaseRef.current = 'ready';
     setSnapshotPhase('ready');
     invalidateInspection();
@@ -1506,6 +1514,9 @@ function InlinePostEditorContent({
     setBody(next);
     pruneCopiedImages(next);
     queueForeignImages(next);
+    queueMicrotask(() => {
+      publishingSnapshot.current = false;
+    });
   }
 
   function updatePending() {
@@ -1732,7 +1743,7 @@ function InlinePostEditorContent({
     updatePending();
   }
 
-  if (!lifetime.current())
+  if (!lifetime.current() && !editIntent.current.unresolved && !submittingRef.current)
     return (
       <p className="min-w-0 [overflow-wrap:anywhere]" role="alert">
         {m.thread_authoring_session_changed()}

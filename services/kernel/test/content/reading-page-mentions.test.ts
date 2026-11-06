@@ -115,6 +115,10 @@ test('empty, unavailable, active, concealed and erased identity states stay dist
     { id: concealedId, state: 'concealed' },
     { id: deletedId, state: 'erased' },
   ]);
+  const laterDeleted: PublicIdentity = { id: activeId, kind: 'actor', state: 'deleted' };
+  expect(
+    readingPageMentionIdentityViews([activeId, activeId], [active, laterDeleted, { ...active, handle: 'second' }]),
+  ).toEqual([{ id: activeId, state: 'active', handle: 'reader' }]);
 });
 
 test('first, continued and exact-selected-post pages contain only their readable body mentions', async () => {
@@ -143,6 +147,11 @@ test('first, continued and exact-selected-post pages contain only their readable
 
   const first = await f.page(thread.id);
   expect(first.response.status, first.text).toBe(200);
+  expect(first.value.documentMedia).toMatchObject({ state: 'available' });
+  expect(['current', 'withheld', 'unavailable']).toContain(first.value.conversationActivity.state);
+  expect(first.value.reviewContext).toMatchObject({
+    source: { threadId: thread.id, postId: thread.firstPost.id, revisionId: thread.firstPost.revisionId },
+  });
   expect(first.value.mentions).toMatchObject({ state: 'current', retryable: false, overflow: false });
   expect(first.value.mentions.identities.map((identity: { id: string }) => identity.id)).toEqual([
     f.author.accountId,
@@ -159,6 +168,9 @@ test('first, continued and exact-selected-post pages contain only their readable
 
   const continued = await f.page(thread.id, undefined, first.value.replies.next);
   expect(continued.response.status, continued.text).toBe(200);
+  expect(continued.value.documentMedia.state).toBe('available');
+  expect(continued.value.reviewContext.source.threadId).toBe(thread.id);
+  expect(['current', 'withheld', 'unavailable']).toContain(continued.value.conversationActivity.state);
   expect(
     continued.value.mentions.sources.find((source: { postId: string }) => source.postId === lastReply?.id),
   ).toMatchObject({
@@ -171,6 +183,9 @@ test('first, continued and exact-selected-post pages contain only their readable
   const exact = await f.page(thread.id, undefined, location.cursor);
   expect(exact.response.status, exact.text).toBe(200);
   expect(exact.value.query.cursor).toBe(location.cursor);
+  expect(exact.value.documentMedia.state).toBe('available');
+  expect(exact.value.reviewContext.source.threadId).toBe(thread.id);
+  expect(['current', 'withheld', 'unavailable']).toContain(exact.value.conversationActivity.state);
   expect(exact.value.mentions.sources.some((source: { postId: string }) => source.postId === lastReply!.id)).toBe(true);
   expect(exact.value.mentions.identities.map((identity: { id: string }) => identity.id)).toEqual([selectedReply]);
 

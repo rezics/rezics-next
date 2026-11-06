@@ -1961,6 +1961,7 @@
   "thread_review_cite_vote": "引用我目前的投票（{score}/10）",
   "thread_review_details_heading": "評價詳情",
   "thread_review_details_selected_subject": "評價對象：{title}",
+  "thread_review_citation_absent": "此則貼文沒有引用評分。",
   "thread_review_details_citation_help": "選填。之後變更投票不會改變已引用的評分。",
   "thread_review_duplicate": "你已在此版塊發表過該條目的有效評價。",
   "thread_review_existing": "開啟既有評價",

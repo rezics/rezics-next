@@ -64,14 +64,10 @@ export function receiveBoardOpeningPage(response: BoardPageResponse, now = new D
     for (const author of [selected.authors.thread, selected.authors.openingPost])
       if (author.state === 'available') authors[author.id] ??= author;
   }
-  const pinRevision =
-    response &&
-    typeof response === 'object' &&
-    !Array.isArray(response) &&
-    'pinRevision' in response &&
-    validBoardPinRevision(response.pinRevision)
-      ? response.pinRevision
-      : undefined;
+  // BoardPageResponse is the installed root contract. Keep its observed generation intact;
+  // a malformed HTTP response is rejected instead of opening an unbound pin-management visit.
+  const pinRevision = response.pinRevision;
+  if (!validBoardPinRevision(pinRevision)) throw new Error('Invalid Board page pin revision');
   return {
     board: response.board,
     community: boardCommunitySource(response.board),
@@ -84,7 +80,7 @@ export function receiveBoardOpeningPage(response: BoardPageResponse, now = new D
       threads: response.threads.map((card) => card.thread),
       next: response.next,
       rankRefreshedAt: response.rankRefreshedAt,
-      ...(pinRevision === undefined ? {} : { pinRevision }),
+      pinRevision,
     },
     authors,
     now,

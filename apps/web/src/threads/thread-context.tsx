@@ -6,6 +6,8 @@ import type { BoardRealm } from './board-context';
 import { admittedBoardReturn, boardReturnMatches } from './board-navigation';
 import { getLocale } from '../paraglide/runtime.js';
 import { initials } from './initials';
+import type { ThreadPost } from './thread-page';
+import { ThreadReviewContext, type ThreadReviewContextValue } from './thread-review-context';
 
 const linkClass =
   'inline-flex h-auto min-h-11 min-w-11 max-w-full items-center rounded-sm px-2 py-2.5 whitespace-normal [overflow-wrap:anywhere] hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
@@ -16,40 +18,62 @@ export function BoardContext({
   board,
   prominent = false,
   boardReturn,
+  reviewContext,
+  thread,
+  posts,
+  cursor,
 }: {
   realm?: BoardRealm | undefined;
   board?: { id: string; title: string | null } | undefined;
   prominent?: boolean;
   boardReturn?: string | undefined;
+  reviewContext?: ThreadReviewContextValue | undefined;
+  thread?: { id: string; title: string | null } | undefined;
+  posts?: readonly ThreadPost[] | undefined;
+  cursor?: string | null | undefined;
 }) {
-  if (!realm && !board) return null;
+  if (!realm && !board && !(reviewContext && thread && posts)) return null;
   const origin = admittedBoardReturn(boardReturn);
   const boardHref = origin && boardReturnMatches(origin, board?.id, getLocale()) ? origin : undefined;
   return (
-    <nav
-      aria-label={m.board_context_label()}
-      className="flex min-w-0 max-w-full flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm text-muted-foreground"
-    >
-      {prominent ? (
-        <Avatar aria-hidden="true" size="sm">
-          <AvatarFallback>{initials(realm?.title ?? board?.title ?? '')}</AvatarFallback>
-        </Avatar>
+    <div className="min-w-0 space-y-2">
+      {realm || board ? (
+        <nav
+          aria-label={m.board_context_label()}
+          className="flex min-w-0 max-w-full flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm text-muted-foreground"
+        >
+          {prominent ? (
+            <Avatar aria-hidden="true" size="sm">
+              <AvatarFallback>{initials(realm?.title ?? board?.title ?? '')}</AvatarFallback>
+            </Avatar>
+          ) : null}
+          {realm ? (
+            <Link to="/realms/$id" params={{ id: realm.id }} className={linkClass}>
+              <span className="min-w-0">{realm.title}</span>
+            </Link>
+          ) : null}
+          {realm && board ? <ChevronRightIcon aria-hidden="true" className="size-3.5 shrink-0" /> : null}
+          {board && boardHref ? (
+            <a href={boardHref} className={linkClass}>
+              <span className="min-w-0">{board.title ?? m.threads_untitled()}</span>
+            </a>
+          ) : board ? (
+            <Link to="/boards/$id" params={{ id: board.id }} className={linkClass}>
+              <span className="min-w-0">{board.title ?? m.threads_untitled()}</span>
+            </Link>
+          ) : null}
+        </nav>
       ) : null}
-      {realm ? (
-        <Link to="/realms/$id" params={{ id: realm.id }} className={linkClass}>
-          <span className="min-w-0">{realm.title}</span>
-        </Link>
+      {reviewContext && thread && posts ? (
+        <ThreadReviewContext
+          context={reviewContext}
+          thread={thread}
+          posts={posts}
+          cursor={cursor}
+          boardReturn={boardReturn}
+          locale={getLocale()}
+        />
       ) : null}
-      {realm && board ? <ChevronRightIcon aria-hidden="true" className="size-3.5 shrink-0" /> : null}
-      {board && boardHref ? (
-        <a href={boardHref} className={linkClass}>
-          <span className="min-w-0">{board.title ?? m.threads_untitled()}</span>
-        </a>
-      ) : board ? (
-        <Link to="/boards/$id" params={{ id: board.id }} className={linkClass}>
-          <span className="min-w-0">{board.title ?? m.threads_untitled()}</span>
-        </Link>
-      ) : null}
-    </nav>
+    </div>
   );
 }

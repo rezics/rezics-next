@@ -183,7 +183,7 @@ test('a selected reply keeps its native intent on retry and the returned relatio
   expect(html).toContain(`href="#post-${parent.id}"`);
   expect(html).toContain('A reply returned by the command.');
   expect(html.match(/name="idempotency_key"/g)).toHaveLength(1);
-  expect(html).toContain(m.thread_reply_to_post());
+  expect(html).toContain(m.feed_action_reply());
 });
 
 test('Default thread reading renders the conversation before secondary history and erasure controls while retaining exact revision navigation and mandatory attribution', async () => {
@@ -228,8 +228,8 @@ test('Default thread reading renders the conversation before secondary history a
     expect(item).toContain(`href="/en/posts/${post.id}/revisions/${post.revisionId}"`);
     const controls = item.slice(footer);
     expect(controls).toContain(`${m.thread_history_licence()}: ${post.licence}`);
-    expect(controls).toContain(m.thread_reading_share());
-    expect(controls).toContain(m.thread_reply_to_post());
+    expect(item).toContain(m.thread_reading_share());
+    expect(item).toContain(m.feed_action_reply());
     expect(controls).toContain(m.thread_history_show());
     expect(controls).toContain(`aria-controls="revision-details-${post.id}"`);
     expect(controls).toMatch(/<div(?=[^>]*data-slot="collapsible-content")(?=[^>]*hidden="")[^>]*>/);
@@ -239,7 +239,7 @@ test('Default thread reading renders the conversation before secondary history a
   }
   expect(html).toContain(`title="${displayName} @${handle}"`);
   expect(html).toContain(`href="/en/@${handle}"`);
-  expect(html).toContain('class="block min-w-0 truncate"');
+  expect(html).toContain('class="block min-w-0"');
   expect(html).toContain(m.thread_post_edited());
 });
 

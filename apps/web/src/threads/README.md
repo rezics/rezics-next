@@ -62,10 +62,11 @@ explains the local retry recovery will be lost and that leaving does not cancel 
 and a changed or lost session release protection and retire the old editor.
 
 Each editor owns its in-flight reads, uploads and submission continuations. Unmounting, changing its container or
-new-thread intent, or losing/replacing its in-memory account/CSRF session retires that work irreversibly, including
-switching away and back to the same account. Copied-image reads are aborted; late results cannot reserve an image,
-restore private writing, change a replacement editor or call its parent. A prepared editor with an unknown session
-does not gain upload authority. Choosing an ordinary reply parent keeps the current writing and reply-intent rules.
+new-thread intent, or losing/replacing the signed-in subject retires that work irreversibly, including switching
+away and back to the same account. A same-account token refresh keeps the mounted editor, dirty draft and uncertain
+command. Copied-image reads are aborted; late results cannot reserve an image, restore private writing, change a
+replacement editor or call its parent. A prepared editor with an unknown session does not gain upload authority.
+Choosing an ordinary reply parent keeps the current writing and reply-intent rules.
 
 Copied images retain their original File and target in the existing bounded upload recovery. Explicit retry resumes
 the exact reservation when known and never makes a second fresh reservation after an uncertain reserve. Removal
@@ -613,16 +614,23 @@ optional References visit cannot hydrate.
 
 ## Composed current thread page
 
-The existing visit consumes `KernelClient.threads({id})['reading-page'].get` and derives its DTO from that method.
+The existing visit consumes `KernelClient.threads({id})['reading-page'].get` and derives its page type from that method.
 The opening identity, bounded native reply order and opaque continuation stay intact. The composed author map contains
 only identities disclosed by available posts; unavailable authors remain unknown without a second account batch.
-Erased and withheld rows gain no author, date or document fields. Mentions, document media, Subjects and Board/Realm
-context retain their separate reads where this DTO supplies no replacement.
+Erased and withheld rows gain no author, date or document fields. Board/Realm context and unrelated editor adapters
+keep their existing readers; images, mentions, review context and activity come from this page response.
 
-Decision: the thread reader switches to the installed root `ReadingPageResponse` projections `documentMedia`,
-`mentions`, `reviewContext` and `conversationActivity` only when the public client declares them. Until then, keep the
-current document-media and mention reads and the existing unavailable review/activity display; do not cast, mirror or
-overlay generated types. The shared Media adapter remains for its other consumers until their callables are installed.
+Decision: the thread reader consumes installed root `ReadingPageResponse` projections `documentMedia`, `mentions`,
+`reviewContext` and `conversationActivity` directly. Existing renderers adapt exact admitted image and mention sources;
+the page starts no separate media or identity hydration. Review context is passed through the thread header and is
+retired with the admitted page. The shared Media adapter remains for its other consumers.
+
+Decision: land the installed Board-to-thread reading outcome with clean Web, Kernel and UI workspace typechecks;
+retain nonfinancial failing outcome assertions for grouped capability repair, with native, browser and root
+acceptance deferred until integration. Cancellation/removal ownership lasts through settlement, and the previous
+route generation retires before successor capture. This source landing does not accept the capability or Goal.
+Existing focused tests remain the fewest that pin Board pin advice, review-context hrefs, mentions and lifetime;
+architecture repair adds no extra cases.
 
 Decision: Replace the thread byline account batch with composed authors; the no-slug, no-media, no-Subject cohort now
 uses K2/D1 (page plus Board context) instead of the retained split-reader K4/D1 baseline, with at most 21 disclosed
@@ -636,15 +644,34 @@ idempotency operands, readback and historical-reader/browser-writing recovery ke
 The existing page admission retires the composed observations with authors, media and focus on viewer, credentials,
 locale, route, connection or source replacement. Anonymous SSR remains anonymous. Prepared page examples establish
 DTO closure and consumer behavior only; Content's native disclosure/growth cases and rendered acceptance remain deferred.
-Decision: the retained document-media transport shares the page request's abort signal so route retirement also
-ends an in-flight optional presentation read; an aborted visit cannot publish a late page.
-The page loader passes the incoming request's abort signal to selected location, slug, reading-page, Board and media reads;
-an ended request cannot publish a page or start later hydration from a late reading response.
+The single ReadingPage response supplies optional media and mention summaries with the admitted posts. Route retirement
+aborts that page request, so no second media or identity hydration can publish after the page closes. Existing location,
+slug and Board context reads keep their request signal.
 
 ## Current-page mention reading
 
 The final-admitted installed projection binds each document to `postId`, `threadId`, `revisionId`, `sha256` and
-`pageIndex`; a page holds at most 21 documents, 32 image references and 100 mention identities. Keep
-active/concealed/erased, zero/unavailable/overflow and unresolved `@` text distinct. References retain exact occurrence/page/cursor
-return with separate mention/link ordinals. Keep separate hydration until the official callable is installed;
-viewer, revision or cache changes retire output. No refill or second renderer. Accounts admits identities.
+`pageIndex`; a page holds at most 21 documents, 32 image references and 100 mention identities. Duplicate mention
+identities keep the first disclosed row. Mixed document-media availability keeps available images and readable text;
+only a failed presentation read marks the page unavailable. Keep
+active/concealed/erased identities, unavailable/overflow and unresolved `@` text distinct. Activity retains exact,
+lower-bound, zero, null and unknown meanings. References retain exact
+occurrence/page/cursor return with separate mention/link ordinals. The renderer adapts only current identities attached
+to the exact admitted post revision; viewer, revision or cache changes retire output. No refill or second renderer.
+Accounts admits identities.
+
+### Cost: mounted thread page projections
+
+- **Touches:** consume the existing ReadingPage request's document media, mention, review and activity projections;
+  adapt those values locally beside the admitted posts. No separate post-media presentation or account identity request
+  is started by the thread page. Existing Board/Realm context reads keep their own bounds.
+- **Bound:** at most 21 disclosed posts, 32 native image references and 100 native mention identities; image and
+  mention bindings check post, thread, revision, digest and the admitted page index. Source bodies and native final
+  admission remain charged to Content's mounted thread-reading page operation.
+- **Growth check:** `thread-page-reading.test.ts` and `seeded-content-reading.test.ts` verify all four installed
+  projections, Board generation/advice, original-page return, optional-source behavior and absence of second
+  media/account reads. Native, installed, seeded browser and physical growth acceptance remain separately owned.
+  Source-shape thread-page checks follow current owners: Byline holds the edited comparison and wraps long names,
+  TopBar the sticky header, Share stays in the post action bar, and FeedActionBar supplies Reply.
+  Decision: lifetime tests wait for the actual page and personal request spies rather than a fixed number of microtasks.
+  Decision: owned page publication keeps the Query stamp; an owned cancel/remove boundary lasts until its work settles; route-change and locale retirement flush abandon before a successor capture; a continuation that has not bound a page query does not retire from predecessor cancel/remove; same-account token refresh keeps the reply command; echo snapshots do not disable Send; external cache-notification retirement still cancels asynchronously without touching a newer live caller; StrictMode remount reuses the same connection generation; refresh navigation compares the de-localized thread path. See [thread page lifetime](thread-page-lifetime.md#thread-refresh-and-recovery).

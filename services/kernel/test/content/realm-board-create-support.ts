@@ -65,7 +65,7 @@ export async function realmBoardWorld() {
       }),
     );
     const text = await response.text();
-    return { response, value: text ? (JSON.parse(text) as Record<string, any>) : {} };
+    return { response, value: text ? (JSON.parse(text) as Record<string, any>) : {}, text };
   }
   async function checked(method: string, path: string, body: unknown, status = 201, options = {}) {
     const result = await call(method, path, body, options);

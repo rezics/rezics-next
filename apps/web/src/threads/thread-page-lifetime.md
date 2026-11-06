@@ -14,11 +14,11 @@ is still the exact entry owned by the caller. A current explicit refresh capture
 existing page query; it does not grant the old result new authority.
 
 An admitted refresh keeps the exact QueryClient and cache source, source query/result generation, route identity,
-session stamp, locale and mounted connection that started it. During the synchronous `cancelQueries` or
-`removeQueries` call only, the predecessor continuation and its captured fresh caller join one boundary. Cancellation
+session stamp, locale and mounted connection that started it. Until the owned `cancelQueries` or
+`removeQueries` operation settles, the predecessor continuation and its captured fresh caller join one boundary. Cancellation
 owns only the exact full-revert `setState` event that the cache source identified for a query object present at call
-entry. Removal owns only the `removed` event for one of those exact query objects. The boundary is removed before the
-operation can await; it does not confer ownership on a later event or a successor caller. Preparing an unusable
+entry. Removal owns only the `removed` event for one of those exact query objects. Settlement removes the boundary;
+it does not confer ownership on another query object or a successor caller. Preparing an unusable
 private cache entry uses a separate one-query, synchronous removal boundary on that loader caller. The entry is still
 discarded, then the loader performs its existing bounded native read.
 
@@ -58,14 +58,12 @@ navigate after their admission retires.
 
 ## Review header handoff
 
-Decision: the mounted review header consumes only the official installed `ReadingPageResponse.reviewContext`. It
-passes citation references through the existing [post-history reader and return lifetime](post-history-lifetime.md),
-preserving source post, source revision, question and vote revision as independent identities. Historical question
-labels and scales remain unavailable; no second history reader or lifetime host is added.
-
-The connected review-and-reply handoff requires the official root-derived reading callable to publish both top-level
-`reviewContext` and `conversationActivity`. Until that publication is installed, preserve the existing receiver and
-native projections. The older nested feed context and unavailable activity display do not complete this journey.
+Decision: the mounted review header consumes only the official installed `ReadingPageResponse.reviewContext`. It links
+the current disclosed subject and each exact published citation through the existing subject and exact-revision
+readers, preserving source post, source revision, question and vote revision as independent identities. Subject
+overview addresses use the shared slug from definitions; the header does not import Web's private subject-href module.
+Historical question labels and scales remain unavailable; no second history reader or lifetime host is added. Private-page
+redaction removes review context with the posts and current activity.
 
 The disclosure uses `browserObservation` and `subscribeCache` with a retiring lease scoped to the mounted page.
 Invalidation or fetching, equal session replacement, remount and an observed away-and-back session transition retire
@@ -104,5 +102,17 @@ the safe runtime behavior, but does not claim that private SSR and private hydra
 - Growth check: retain original page and personal bounds, prevent obsolete queued reads and publication, and exercise
   first and repeated healthy refresh, recovery followed by refresh, private-cache discard, exact external successor
   retention and own-cancellation recovery. These paths add only constant per-read ownership and boundary state; they
-  do not add native requests, per-row work, polling or authentication. The connected regressions authored for this
-  implementation remain UNRUN until the deferred acceptance pass.
+  do not add native requests, per-row work, polling or authentication. Decision: owned page publication keeps the Query
+  stamp; external session/cache retirement cancels and removes asynchronously so cancellation cannot escape the
+  cache notification; a delayed cancel or remove leaves a newer live caller and its query object untouched;
+  StrictMode remount reuses the same connection generation. An owned cancel/remove boundary stays open until its
+  returned work settles. Decision: recovery and ordinary refresh await removal settlement before admitting their new
+  bounded page read and subsequent personal read; extend the existing recovery assertion with delayed removal.
+  Route-change, locale and mounted retirement flush abandon before a successor capture, so a second refresh does not
+  join the predecessor fetch. A continuation that has not bound a page query does not retire
+  from predecessor cancel/remove. A same-account token refresh keeps the mounted reply command. Echo editor snapshots
+  do not disable Send. Refresh navigation compares the de-localized thread path so a locale prefix does not leave the
+  current page.
+
+Decision: caller retirement, cancellation settlement and reply lifetime are one capability. The `thread-page-lifetime`
+suite is its acceptance; its assertions are repaired in that capability and are not weakened to pass.
