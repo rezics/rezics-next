@@ -316,9 +316,7 @@ async function revalidateCollectionDirectory(
   const ids = [...hydrated.keys()];
   for (let offset = 0; offset < ids.length; offset += COLLECTION_DISCOVERY_BATCH_SIZE) {
     const batchIds = ids.slice(offset, offset + COLLECTION_DISCOVERY_BATCH_SIZE);
-    const batch = new Map(
-      batchIds.flatMap((id) => (hydrated.has(id) ? [[id, hydrated.get(id)!] as const] : [])),
-    );
+    const batch = new Map(batchIds.flatMap((id) => (hydrated.has(id) ? [[id, hydrated.get(id)!] as const] : [])));
     const revalidated = await revalidate(batch, context);
     for (const [id, summary] of revalidated) current.set(id, summary);
   }
