@@ -106,11 +106,12 @@ the safe runtime behavior, but does not claim that private SSR and private hydra
   stamp; external session/cache retirement cancels and removes asynchronously so cancellation cannot escape the
   cache notification; a delayed cancel or remove leaves a newer live caller and its query object untouched;
   StrictMode remount reuses the same connection generation. An owned cancel/remove boundary stays open until its
-  returned work settles. Decision: recovery and ordinary refresh await removal settlement before admitting their new
+  returned work settles.   Decision: recovery and ordinary refresh await removal settlement before admitting their new
   bounded page read and subsequent personal read; extend the existing recovery assertion with delayed removal.
   Route-change, locale and mounted retirement flush abandon before a successor capture, so a second refresh does not
   join the predecessor fetch. A continuation that has not bound a page query does not retire
-  from predecessor cancel/remove; an external remove or session transition of that same queued recovery does. A
+  from predecessor cancel/remove; an external remove or session transition of that same queued recovery does,
+  without removing a successor cache entry it never started. CancelledError from owned cancelQueries is settlement. A
   same-account token refresh keeps the mounted reply command and exact idempotency key, and a late reply does not
   publish after credential replacement. Echo editor snapshots do not disable Send. Refresh navigation compares the
   de-localized thread path so a locale prefix does not leave the current page. An owned cancel settlement that

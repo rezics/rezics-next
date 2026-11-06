@@ -375,12 +375,19 @@ function isThenable(value: unknown): value is PromiseLike<unknown> {
 }
 
 function isCancelledError(error: unknown) {
-  return Boolean(
-    error &&
-      typeof error === 'object' &&
-      'name' in error &&
-      (error as { name?: string }).name === 'CancelledError',
+  if (!error || typeof error !== 'object') return false;
+  const value = error as { name?: unknown; message?: unknown; constructor?: { name?: unknown } };
+  return (
+    value.name === 'CancelledError' ||
+    value.message === 'CancelledError' ||
+    value.constructor?.name === 'CancelledError'
   );
+}
+
+function settleCancel(result: unknown) {
+  return Promise.resolve(result).catch((error) => {
+    if (!isCancelledError(error)) throw error;
+  });
 }
 
 type Connection = { owner: object | null; connected: boolean; generation: number; retired: boolean };
@@ -546,10 +553,9 @@ export class ThreadPageCaller {
     if (this.retired) return;
     this.retired = true;
     const abandonedRead = this.ownedPageRead;
-    const cancelQuery = abandonedRead?.started
-      ? (abandonedRead.query ?? this.inFlightQuery)
-      : this.inFlightQuery;
+    const cancelQuery = abandonedRead?.started ? (abandonedRead.query ?? this.inFlightQuery) : undefined;
     const refreshQueries = [...this.refreshContinuations]
+      .filter((continuation) => continuation.ownedPageRead?.started)
       .map((continuation) => continuation.sourceQuery)
       .filter((query): query is QueryStamp => query !== undefined);
     for (const continuation of this.refreshContinuations) continuation.active = false;
@@ -614,26 +620,18 @@ export class ThreadPageCaller {
 
   private abandonRetiredPage(cancelQuery: object | undefined, pageKey: QueryKey | undefined) {
     const liveStamp = pageKey ? this.source.queryStamp(pageKey) : undefined;
-    const ownedInFlight =
-      ownsPageQuery(cancelQuery, this) || (cancelQuery !== undefined && cancelQuery === this.inFlightQuery);
+    const owned =
+      ownsPageQuery(cancelQuery, this) || ownsPageQuery(liveStamp?.query, this) || liveStamp?.query === cancelQuery;
+    if (!owned || !pageKey) return;
     try {
-      const live = (cancelQuery ?? liveStamp?.query) as {
-        state?: { fetchStatus?: string };
-        cancel?: (options: { revert: boolean; silent: boolean }) => Promise<unknown> | unknown;
-      };
-      if (
-        (ownedInFlight || ownsPageQuery(live as object | undefined, this)) &&
-        live?.cancel &&
-        live.state?.fetchStatus &&
-        live.state.fetchStatus !== 'idle'
-      ) {
-        const cancelled = live.cancel({ revert: false, silent: true });
-        void Promise.resolve(cancelled).catch(() => undefined);
-      }
+      void settleCancel(
+        this.client.cancelQueries({ queryKey: pageKey, exact: true }, { silent: true, revert: false }),
+      );
     } catch {
-      /* Cancellation is the expected interruption; it must not escape a cache notification. */
+      /* Query cancellation must not escape a cache notification. */
     }
-    if (pageKey && liveStamp && (ownsPageQuery(liveStamp.query, this) || liveStamp.query === cancelQuery))
+    const remaining = this.source.queryStamp(pageKey);
+    if (remaining && (ownsPageQuery(remaining.query, this) || remaining.query === cancelQuery))
       this.client.removeQueries({ queryKey: pageKey, exact: true });
   }
 
@@ -709,7 +707,7 @@ export class ThreadPageCaller {
 
   setRouteIdentity(identity: ThreadPageRouteIdentity) {
     this.currentIdentity = identity;
-    if (!sameIdentity(this.currentAdmission.identity, identity)) this.retire(true);
+    if (!sameIdentity(this.currentAdmission.identity, identity)) this.retire(false);
   }
 
   private queryCurrent() {
@@ -1352,9 +1350,9 @@ export class ThreadPageCaller {
         try {
           const result = operation();
           if (isThenable(result))
-            return Promise.resolve(result)
+            return settleCancel(result)
               .catch((error) => {
-                if (kind === 'cancel' && isCancelledError(error)) return undefined as T;
+                if (kind === 'cancel' && isCancelledError(error)) return undefined;
                 throw error;
               })
               .finally(release) as T;
