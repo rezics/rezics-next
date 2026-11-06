@@ -76,12 +76,17 @@ card as `/collections/<id>`; the installed common metadata codec owns its smalle
 The existing mixed Search request accepts `collectionDirectory` only with the sole `collection` kind filter.
 It carries an explicit presentation Type ID or `mixed`, canonical curator and Subject IDs, and `recent` or
 `popular` order; all values enter the cursor binding. Search runs the directory only when the Collection owner
-registry advertises `collectionDirectory`. Without that native capability it returns `index_not_ready` before
-enumeration. The identity-ordered `source.page` remains the indexing frontier and never becomes a result-ordering
-authority.
+registry advertises `collectionDirectory` on a ready adapter. Without that native capability it returns
+`index_not_ready` before filter admission or enumeration. The identity-ordered `source.page` remains the indexing
+frontier and never becomes a result-ordering authority. Query-time listing cannot walk every partition of the
+4096-way split: OpenSearch supplies the occupied identity frontier, and native tests walk `source.page` on those
+partitions, including a tail past the first owner batch of 100.
 Decision: directory execution hydrates that indexed collection population with `collectionQuery`, then Search
 applies recency or popularity order across the complete eligible frontier with query-wide currentness so a newly
 eligible identity appears in its global position; continuation is a sort keyset, not an OpenSearch prefix.
+`hasCollectionDirectoryCapability`, `consumeCollectionDirectoryFrontier`, `hydrateCollectionDirectory` and
+`executeCollectionDirectory` are the mounted consumer. Working-draft timestamps never replace released public
+owner recency or the selected publication generation.
 
 ## Cost Touches / Bound / Growth check
 
@@ -104,12 +109,20 @@ eligible identity appears in its global position; continuation is a sort keyset,
   are landing checks, not a production native execution or measured three-scale growth claim.
   Focused native tests pin catalogue unique members, directory recency/popularity order, composition slot skip and
   TypeList Search-page admission; browser walks remain deferred.
+Decision: the fewest tests pin capability absent/present, an identity-page tail, recency ties, popularity, owner
+removal, a resumed sort-keyset cursor, query-wide currentness, lost-response reconcile against native
+generation/uuid/index, selected A lookup after a later working identity, and one native directory/publication
+group on released public owners and the live subject index. Browser and main acceptance stay held.
 
 Decision: catalogue Collection publication snapshots public Search population into selected A through
-`readCataloguePublicationPage`/`observeCataloguePublication`. The producer carries the original deadline and
+`observeCataloguePublication`/`readCataloguePublicationPage`/`lookupCataloguePublication`. A lost OpenSearch
+response rereads the native generation/uuid/index and retries once while that observation is unchanged; a
+changed generation restarts rather than failing the attempt as a lost transport. Lookup renders the stored
+selected identities of A; a later working B or live append is not this selection. HTTP `renderSelected` fills
+those identities through the shared catalogue adapter. The producer carries the original deadline and
 `SearchRequestWork`, reserves limit+1 candidates before dispatch, and fails closed when generation, UUID or
 release currentness change. Library stages, seals and rereads that observation; working membership B stays
-private. Configured TypeList BFF prepares the session on every read and attaches credentials only for a
+private. Omitted-source HTTP stays its existing owner contract. Configured TypeList BFF prepares the session on every read and attaches credentials only for a
 selected realm. TypeList completion, revocation and suspension reuse that same session transport.
 Decision: typecheck repairs keep those assertions; fixtures carry `source` (owner unless catalogue), omit
 undefined `expected`, and FULL members pages pass only cursor, limit and languages. Catalogue publication

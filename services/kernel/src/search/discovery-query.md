@@ -35,7 +35,7 @@ New metadata kinds do not create endpoints or client-side federated searches.
 | Kind                  | Primary identity                               | Conditions                                                           | Retained-source readiness |
 | --------------------- | ---------------------------------------------- | -------------------------------------------------------------------- | ------------------------- |
 | Released Subject type | Subject UUID plus registered type              | Text, kind, released type/subtype and applicable semantic conditions | Registered                |
-| Public Collection     | Existing Collection UUID                       | Text and kind                                                        | Default owner adapter     |
+| Public Collection     | Existing Collection UUID                       | Text, kind, and `collectionDirectory` when the ready adapter advertises it | Default owner adapter     |
 | Public review         | Existing thread UUID plus review discriminator | Text and kind; ordinary discussions are outside this slice           | Default owner adapter     |
 | Space                 | Space UUID, with its carried Realm as context  | Text and kind; the Realm does not create another hit                 | Default owner adapter     |
 | Account               | Account UUID                                   | Text and kind                                                        | Registered                |

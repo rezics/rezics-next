@@ -24,6 +24,7 @@ export type SavedCatalogueMembers = (input: SavedCatalogueMembersInput) => Promi
 /** The ordinary complete public Search consumer supplies catalogue membership, including preparation,
  * canonical DISTINCT, current disclosure, native recovery and retained continuation. Library supplies
  * the saved identity/meaning and current private authority; no Library presence is added to the query.
+ * The accepted release digest is the selected catalogue meaning: a later working B does not replace it.
  * A restart from a superseded cursor is passed through unchanged for the Library caller to answer.
  */
 export async function readSavedCatalogueMembers(

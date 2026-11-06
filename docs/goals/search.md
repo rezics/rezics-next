@@ -28,6 +28,7 @@ implemented, exposed, tested and promoted are separate states; a passing local c
 
 ## Scope
 
+Decision: fewest Search tests pin Collection directory capability, identity-page tail, recency/popularity, removal, cursor, currentness, lost-response reconcile, selected A lookup, and one native directory/publication group; browser/main stay held.
 Decision: one composition runtime; lost SDK responses keep publication outcomes unknown.
 Decision: this increment uses the focused CJK projection, review-readiness, alias-locale and walk regressions as its owning cells, adds no stories or seeded-matrix cases, and leaves the seeded matrix unaccepted because local Web never listened on 20010 within 20 minutes. Path 17 walk first-compile HTTP uses the remaining readiness window; session modules stay in the route graph rather than Vite URL entries. Walk regressions assert slot-qualified container names from `walkStackNames`; worker container-gate probes use a cwd that is not the check-host run. Stack-run probe fixtures emit `DISK_FREE` and `MEMORY_RECLAIMABLE` with numeric `MEMORY_CURRENT`/`MEMORY_MAX` so `parseProbe` admits them; nested worker-check `--local` uses the repository cwd when the suite itself is on a check host.
 Decision: typecheck repairs keep those assertions; review-population readiness fixtures pass KernelClock into createDiscoveryProducerEntry; walk `stopSpawned` accepts Bun's numeric or named `signalCode`; Library access-capabilities re-exports work types from kernel-library-contract, not the Source runtime.
