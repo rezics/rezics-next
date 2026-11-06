@@ -627,6 +627,13 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
         if (operation === 'create') grantLocators.push(input);
       }
       await grant(robot.accountId, importerScopes, 'create');
+      // Governance may grant the reviewed-merge authority only while it holds that authority itself.
+      if (options.publication)
+        await grant(
+          human.accountId,
+          ['subject:merge', 'gate:subject_identity', 'context:accept', 'context:adopt'],
+          'create',
+        );
       if (statisticScopes.length) await grant(robot.accountId, statisticScopes, 'create');
       await grant(comparison.accountId, COMMON_ACTIONS, 'create');
       await options.afterStage?.('grants');

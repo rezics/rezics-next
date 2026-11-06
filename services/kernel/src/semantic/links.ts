@@ -10,7 +10,7 @@ import { requireAccessDeadline } from '../access/unavailable.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
 import { releaseDigest, type Release } from '@rezics/definitions';
 import { activeRelease, GLOBAL_CONTEXT, readRelease } from './definitions.ts';
-import { loadRelated, readItemTypes, readLabels } from './subject.ts';
+import { readItemTypes, readLabels, readRelated } from './subject.ts';
 import { languageRanges } from './language.ts';
 import { holderFacts, labelOrderKey, readHolderKeys } from './link-keys.ts';
 import { factDataTypes, resolveItem, type Statement, type FactRow } from './item.ts';
@@ -969,8 +969,9 @@ async function relatedSurvivors(pool: Pool, ids: readonly string[]): Promise<Map
   const subjects = ids.filter((id) => routeOf(id) !== null);
   const survivors = new Map<string, string>();
   if (subjects.length === 0) return survivors;
-  for (const [id, state] of await loadRelated(pool, subjects))
-    if (state.visibility === 'visible' && state.redirect) survivors.set(id, state.redirect);
+  // The related resolver owns redirect reads: one batched read per call, through the same pool path as labels.
+  for (const [id, related] of Object.entries(await readRelated(pool, subjects)))
+    if (related.redirect) survivors.set(id, related.redirect);
   return survivors;
 }
 

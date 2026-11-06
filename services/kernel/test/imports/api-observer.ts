@@ -42,6 +42,8 @@ export async function openApiObserver(runtime: ApiRuntime) {
     'context:accept',
     'context:adopt',
     'access:grant',
+    'subject:merge',
+    'gate:subject_identity',
     'source_fence:takedown',
     'moderation:takedown',
   ];
