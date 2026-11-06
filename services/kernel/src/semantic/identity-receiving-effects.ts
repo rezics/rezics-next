@@ -75,7 +75,10 @@ import { snapshotSearchIdentityReceivingFrontier } from '../search/identity-rece
 
 export type * from './identity-receiving-effects-types.ts';
 export type { SearchReceivingWorkContext, SearchReceivingWorkDeclaration } from './identity-search-receiving-work.ts';
-export { commonSearchReceivingStatements } from './identity-search-receiving-statements.ts';
+export {
+  commonSearchReceivingStatements,
+  searchReceivingProductionDeclaration,
+} from './identity-search-receiving-statements.ts';
 const step = 'library-private-follow-counts';
 const stale = () =>
   new IdentityEpochStoreError(

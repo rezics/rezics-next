@@ -963,13 +963,14 @@ only `state:missing` with exact term names.
 
 `readIdentitySourceOriginalCostDisposition()` publishes the callable local footprint
 and guard declarations, the installed Accounts local/transfer-control operands,
-the disjoint whole-parent missing disposition, and the missing reached terms: Source preparation/checkpoint/
-terminal erasure-role, commit, event and binding child work; current binding and Account
-receiver/reversal; native directory population/preparePlan; History staging, repeated
-H/G/A, inventory, receiving, outbox and role mutations; prepaid History/SDK and the
-same-work Library entry plus its complete declarations. Consequently Source exports no successful
-`IDENTITY_HISTORY_ORIGINAL_SOURCE_DECLARATION`. Accounts admits no usable Source child
-from this absence; independent receiving/accounting remains installed.
+the installed `IDENTITY_HISTORY_ORIGINAL_SOURCE_DECLARATION` (Source-owned schedule ×
+local reads/controls/mutation bodies, directory plan, receiving selection/reconcile/command,
+commit/role, binding-cut and accepted-account receiver), and the remaining foreign gaps:
+Access original-source, Mapping/Search/Library participant reconcile, History staging and
+SDK caller multiplicities, and Core's event-callback executor. Fixture parent permissions
+install as trusted grant rows rather than the grant command, because platform.governance
+reach now requires `gate:any` on the acting token. Accounts still refuses whole-parent
+admission while those foreign gaps remain; independent receiving/accounting remains installed.
 
 The whole parent before first discovery/control IO is exactly:
 

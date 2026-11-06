@@ -3,7 +3,6 @@ import { noEffect, runCommand, withSingleCommandAttempt } from '../../src/comman
 import type { Pool, PoolClient } from 'pg';
 import lockOwner from '../../src/semantic/identity-rating-commit-participant-lock-owner.sql';
 import { randomUUID } from 'node:crypto';
-import { createGrantCommands } from '../../src/access/grant-commands.ts';
 import { createProfileEntryFixture } from '../library/support/profile-entry-fixture.ts';
 import { accessCommandAuthorization } from '../../src/request/access.ts';
 import { STANDARD_QUESTION_ID, createVoteCommands } from '../../src/rating/votes.ts';
@@ -22,7 +21,7 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { readIdentityRatingReview } from '../../src/semantic/identity-adapters/read.ts';
 import { createIdentityRatingCommitParticipant } from '../../src/semantic/identity-rating-commit-participant.ts';
 import { createIdentityMappingFixture } from './support/identity-epoch-mapping.ts';
-import { digest, release } from './support/identity-epoch.ts';
+import { digest, identityEpochDatabase, release } from './support/identity-epoch.ts';
 
 async function reviewedSelf(f: Awaited<ReturnType<typeof createIdentityMappingFixture>>, route: number) {
   const subjectId = (await f.create('Rating reviewed identity', route)).subject.id;
@@ -125,16 +124,8 @@ async function localRatingSubject(f: Awaited<ReturnType<typeof createProfileEntr
 }
 
 async function grantStewardMerge(f: Awaited<ReturnType<typeof createProfileEntryFixture>>) {
-  await createGrantCommands({ pool: f.pool, access: f.access, managementAction: 'access:grant' }).create(
-    { pool: f.pool, actor: f.steward.actor, deadline: Date.now() + 30_000 },
-    {
-      resource: { route: 0, id: GLOBAL_CONTEXT },
-      subject: { kind: 'account', id: f.steward.actor.accountId },
-      actions: ['subject:merge'],
-      valid: '(,)',
-      key: randomUUID(),
-    },
-  );
+  const { installIdentityGrants } = await import('../support/trusted-grants.ts');
+  await installIdentityGrants(f.pool, GLOBAL_CONTEXT, f.steward.actor.accountId, ['subject:merge']);
 }
 
 async function admitSameHomeMerge(
@@ -188,17 +179,77 @@ async function drainMapping(pool: Pool, job: IdentityJobRef, bound = 512) {
   throw new Error(`Native mapping did not finish within ${bound} bounded steps`);
 }
 
-test('four provider review/apply paths commit local votes and preserve foreign-home refusal', async () => {
-  const f = await createProfileEntryFixture({ ownerScopes: ['rating:vote'] });
+async function drainLibrary(pool: Pool, job: IdentityJobRef, bound = 32) {
+  for (let attempt = 0; attempt < bound; attempt++) {
+    const progress = await stepLibraryIdentityEpoch(pool, job);
+    if (progress.state === 'complete') return progress;
+  }
+  throw new Error(`ALL-Library identity did not finish within ${bound} bounded steps`);
+}
+
+async function profileRatingFixture() {
+  const db = await identityEpochDatabase();
   try {
-    await installIdentityEpochBootstrap(f.pool);
+    const f = await createProfileEntryFixture({
+      ownerScopes: ['rating:vote'],
+      pool: db.pool,
+      databaseUrl: db.url,
+    });
+    return {
+      ...f,
+      async close() {
+        await f.close();
+        await db.close();
+      },
+    };
+  } catch (error) {
+    await db.close();
+    throw error;
+  }
+}
+
+async function injectControlReplacement(
+  admin: Pool,
+  table: string,
+  column: string,
+  where: string,
+  keys: readonly unknown[],
+  replacement: unknown,
+) {
+  const client = await admin.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SET LOCAL session_replication_role = replica');
+    await client.query(`UPDATE ${table} SET ${column}=$${keys.length + 1} WHERE ${where}`, [...keys, replacement]);
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+test('four provider review/apply paths commit local votes and preserve foreign-home refusal', async () => {
+  const f = await profileRatingFixture();
+  try {
     const votes = createVoteCommands({ pool: f.pool, access: f.access });
     const tuples = [];
-    for (const provider of ['vndb', 'bangumi', 'mal', 'anilist'] as const) {
-      const { requested, sourceHome } = await localRatingSubject(f, `${provider} native score target`);
+    const providers = ['vndb', 'bangumi', 'mal', 'anilist'] as const;
+    const sourceHome = partitionOf(1);
+    const prepared = [];
+    for (const provider of providers) {
       for (const callerHome of [sourceHome, (sourceHome + 1) % 4096]) {
         const caller = await f.identity(f.owner.actor.scopes, callerHome);
         await f.grantLibraryGate(caller.actor.accountId);
+        prepared.push({ provider, caller, callerHome });
+      }
+    }
+    await installIdentityEpochBootstrap(f.pool);
+    for (const provider of providers) {
+      const { requested, sourceHome: subjectHome } = await localRatingSubject(f, `${provider} native score target`);
+      expect(subjectHome).toBe(sourceHome);
+      for (const { caller, callerHome } of prepared.filter((row) => row.provider === provider)) {
         let appliedRequest!: { path: string; body: unknown; key: string; data: unknown };
         const request = async (path: string, body: unknown, key: string = randomUUID()) => {
           const response = await f.send(caller.bearer, 'POST', `/v1/libraryImports/${provider}${path}`, body, key);
@@ -378,7 +429,7 @@ test('persisted control replacement invalidates the exact review without changin
       const previous = (await f.admin.query(`SELECT ${column} AS value FROM ${table} WHERE ${where}`, [...keys]))
         .rows[0]!.value;
       const replacement = column === 'epoch' ? Number(previous) + 2 : randomUUID();
-      await f.admin.query(`UPDATE ${table} SET ${column}=$${keys.length + 1} WHERE ${where}`, [...keys, replacement]);
+      await injectControlReplacement(f.admin, table, column, where, keys, replacement);
       try {
         await expect(
           runCommand(f.pool, { partition: selected.home }, async (tx) =>
@@ -386,7 +437,7 @@ test('persisted control replacement invalidates the exact review without changin
           ),
         ).rejects.toMatchObject({ name: 'VoteReviewStaleError', reason: 'identity_epoch_changed' });
       } finally {
-        await f.admin.query(`UPDATE ${table} SET ${column}=$${keys.length + 1} WHERE ${where}`, [...keys, previous]);
+        await injectControlReplacement(f.admin, table, column, where, keys, previous);
       }
     }
     expect(
@@ -537,13 +588,15 @@ test('preparation rejects extra, duplicated and oversized reviewed evidence', as
 }, 180_000);
 
 test('the authorized vote transaction excludes native control writes through commit and rollback and replays after a changed review', async () => {
-  const f = await createProfileEntryFixture({ ownerScopes: ['rating:vote'] });
+  const f = await profileRatingFixture();
   try {
-    await installIdentityEpochBootstrap(f.pool);
-    const { requested, sourceHome } = await localRatingSubject(f, 'Authorized guarded vote');
+    const sourceHome = partitionOf(1);
     const caller = await f.identity(['rating:vote', 'subject:read'], sourceHome);
-    const votes = createVoteCommands({ pool: f.pool, access: f.access });
     await grantStewardMerge(f);
+    await installIdentityEpochBootstrap(f.pool);
+    const { requested, sourceHome: subjectHome } = await localRatingSubject(f, 'Authorized guarded vote');
+    expect(subjectHome).toBe(sourceHome);
+    const votes = createVoteCommands({ pool: f.pool, access: f.access });
     const original = await localRatingSubject(f, 'Publication original');
     const survivor = await localRatingSubject(f, 'Publication survivor');
     expect(original.sourceHome).toBe(sourceHome);
@@ -616,8 +669,14 @@ test('the authorized vote transaction excludes native control writes through com
     const reconciled = await identityEpochStore().reconcileStepReceipt(f.pool, mapping.receipt);
     expect(reconciled.state).toBe('complete');
     expect(reconciled.receipt).toEqual(mapping.receipt);
+    const library = await drainLibrary(f.pool, job);
+    expect(library.state).toBe('complete');
+    const libraryReceipt = await identityEpochStore().reconcileStepReceipt(f.pool, library.receipt);
+    expect(libraryReceipt.state).toBe('complete');
+    expect(libraryReceipt.receipt).toEqual(library.receipt);
     const saved = await withConnection(f.pool, (tx) => identityEpochStore().readJob(tx, job));
     expect(saved?.mapping?.state).toBe('complete');
+    expect(saved?.participants['library-private-follow-counts']?.state).toBe('complete');
     await expect(votes.putVoteOutcome(caller.actor, prior, randomUUID())).rejects.toMatchObject({
       reason: 'identity_pending',
     });

@@ -488,16 +488,17 @@ Library descendants use only the authentic parent's cumulative ledger.
 
 ### Missing operands and current refusal boundary
 
-The installed Source module does not export the agreed prepaid receiver or complete
-Source declaration; the installed Library module does not export its complete original
-declaration. Accordingly the actual original admission cannot supply those partitions.
-The known Accounts declaration remains independently available for owner composition.
-Its named missing terms are:
+Source exports `IDENTITY_HISTORY_ORIGINAL_SOURCE_DECLARATION` for its owned schedule
+bodies. Library exports `IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION`. History/SDK
+caller multiplicities and Core's event-callback profile remain unnamed as complete
+children, so original admission still cannot supply the whole parent. The known
+Accounts declaration remains independently available for owner composition.
+Its named remaining terms are:
 
-- `SourceHistoryNativeAllReachedCalls`: original/accepted recovery reads, Source
-  staging/custody/handoff and final native verification, including nested native SQL.
-- `LibraryAllReachedCalls`: successful page/current/locked-plan/seal/fence and cleanup,
-  through the exact original ledger. An unavailable page is not successful free work.
+- `SourceHistoryNativeAllReachedCalls`: installed on Source; History still composes nested
+  native SQL inside its own guard, inventory and SDK bodies.
+- `LibraryAllReachedCalls`: installed Library page/current/locked-plan/seal on the exact
+  original ledger. An unavailable page is not successful free work.
 - `SourceHistoryNativeGuard`: nested Source work reached by the History native guard.
 - `RecoveryFinalReceiving`: disjoint local/Source composition of the two serializer
   current receiving verifiers; its legacy five-field bound does not classify eight axes.

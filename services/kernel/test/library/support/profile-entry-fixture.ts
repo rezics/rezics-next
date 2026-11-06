@@ -23,7 +23,7 @@ import type { KernelClock } from '../../../src/clock.ts';
 import { createPool } from '../../../src/database/pool.ts';
 import { createKernel } from '../../../src/http/kernel.ts';
 import { createEntryCommands } from '../../../src/library/entries.ts';
-import type { Access, AccountActor, Resource } from '../../../src/request/access.ts';
+import type { Access, AccountActor } from '../../../src/request/access.ts';
 import { deadlineFor } from '../../../src/request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
@@ -35,6 +35,7 @@ import {
   createProfileReceiptObservations,
 } from './profile-historical-native-fixture.ts';
 import { testReceiptKeys } from '../../support/receipt-keys.ts';
+import { installIdentityGrants, installResourceGrants } from '../../support/trusted-grants.ts';
 
 export type ProfileVertical = 'game' | 'recipe' | 'record' | 'unprofiled';
 export const entryTypes = { game: 'ex:Child', recipe: 'ex:Recipe', record: 'ex:Record', unprofiled: 'ex:Person' };
@@ -143,13 +144,14 @@ export async function createProfileEntryFixture(
   options: {
     clock?: KernelClock;
     pool?: Pool;
+    databaseUrl?: string;
     singleConnection?: boolean;
     projectLinks?: boolean;
     gameUnits?: readonly string[];
     ownerScopes?: readonly string[];
   } = {},
 ) {
-  const url = process.env.DATABASE_URL;
+  const url = options.databaseUrl ?? process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL must name the migrated test database');
   const pool = options.pool ?? createPool(url);
   if (options.singleConnection) pool.options.max = 1;
@@ -255,6 +257,7 @@ export async function createProfileEntryFixture(
       'subject:batch_write',
       'offer:create',
       'subject:create',
+      'subject:merge',
       'statement:propose',
       'definitions:read',
       'definitions:publish',
@@ -265,29 +268,26 @@ export async function createProfileEntryFixture(
       'exposure:open',
       'exposure:close',
       'gate:any',
+      'gate:personal_library',
     ]);
     const owner = await identity([...entryScopes, ...(options.ownerScopes ?? [])]);
     const other = await identity(entryScopes);
     await bootstrapGovernance(pool, steward.actor.accountId);
     const grants = createGrantCommands({ pool, access, managementAction: 'access:grant', ...options });
-    const grant = (resource: Resource, subject: string, actions: string[]) =>
-      grants.create(context(steward.actor), {
-        resource,
-        subject: { kind: 'account', id: subject },
-        actions,
-        valid: '(,)',
-        key: entryKey(),
-      });
-    await grant(global, steward.actor.accountId, ['definitions:publish', 'definitions:activate']);
-    // Governance bootstrap already performed the Global parent's one-time installation.
-    // Extend its standing creation authority through ordinary, fully authorized grants.
-    await grants.create(context(steward.actor), {
-      resource: global,
-      subject: { kind: 'active_accounts' },
-      actions: ['subject:create', 'statement:propose'],
-      valid: '(,)',
-      key: entryKey(),
-    });
+    // Fixture parent permissions install as trusted rows. Ordinary product commands
+    // still run Access checks; platform.governance reach is not a grant-command token.
+    await installIdentityGrants(pool, global.id, steward.actor.accountId, [
+      'definitions:publish',
+      'definitions:activate',
+      'subject:merge',
+      'gate:personal_library',
+    ]);
+    await installResourceGrants(
+      pool,
+      global.id,
+      { kind: 'active_accounts', id: '00000000-0000-0000-0000-000000000000' },
+      ['subject:create', 'statement:propose'],
+    );
 
     async function sendWithHeaders(
       persona: 'owner' | 'other' | 'steward' | 'anonymous' | string,
@@ -480,7 +480,7 @@ export async function createProfileEntryFixture(
       },
       setLibraryOpen,
       async grantLibraryGate(accountId: string) {
-        await grant(global, accountId, ['gate:personal_library']);
+        await installIdentityGrants(pool, global.id, accountId, ['gate:personal_library']);
       },
       async revokeLibraryGate(accountId: string) {
         await grants.revoke(context(steward.actor), {

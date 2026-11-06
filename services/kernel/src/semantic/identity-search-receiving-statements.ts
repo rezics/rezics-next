@@ -289,3 +289,61 @@ export function searchReceivingOwnedStatementCosts(): SearchReceivingWorkDeclara
     searchReceivingCapturedStatementCosts().filter(({ sql }) => !deferred.has(receivingSqlKey(sql))),
   );
 }
+
+const zeroOutside = Object.freeze({
+  candidateKeys: 0,
+  identityMetadataRows: 0,
+  nativeRows: 0,
+  nativePoints: 0,
+  witnessKeys: 0,
+  statements: 0,
+  bytes: 0,
+  emptySeeks: 0,
+});
+const productionNative = Object.freeze({
+  resolvePlanned: Object.freeze({
+    allowance: Object.freeze({ rows: 80, points: 80, statements: 24, bytes: 65536, engineRequests: 0 }),
+    outsideSql: zeroOutside,
+  }),
+  readAndHold: Object.freeze({
+    allowance: Object.freeze({ rows: 40, points: 40, statements: 16, bytes: 32768, engineRequests: 0 }),
+    outsideSql: zeroOutside,
+  }),
+  revalidateHold: Object.freeze({
+    allowance: Object.freeze({ rows: 40, points: 40, statements: 16, bytes: 32768, engineRequests: 0 }),
+    outsideSql: zeroOutside,
+  }),
+  recordApplied: Object.freeze({
+    allowance: Object.freeze({ rows: 48, points: 48, statements: 16, bytes: 32768, engineRequests: 0 }),
+    outsideSql: zeroOutside,
+  }),
+  reconcileOriginal: Object.freeze({
+    allowance: Object.freeze({ rows: 320, points: 320, statements: 72, bytes: 393216, engineRequests: 0 }),
+    outsideSql: zeroOutside,
+  }),
+  releaseHold: Object.freeze({
+    allowance: Object.freeze({ rows: 32, points: 32, statements: 12, bytes: 16384, engineRequests: 0 }),
+    outsideSql: zeroOutside,
+  }),
+}) satisfies SearchReceivingWorkDeclaration['native'];
+
+const productionOperations = [
+  'resolvePlanned',
+  'readAndHold',
+  'revalidateHold',
+  'recordApplied',
+  'reconcileOriginal',
+  'releaseHold',
+] as const satisfies readonly (keyof typeof productionNative)[];
+
+/** Trusted production composition: captured SQL inventory plus all six native operations. */
+export function searchReceivingProductionDeclaration(): SearchReceivingWorkDeclaration {
+  return memoizedValue(searchReceivingProductionDeclaration, () =>
+    Object.freeze({
+      statements: searchReceivingCapturedStatementCosts(),
+      native: Object.freeze(
+        Object.fromEntries(productionOperations.map((operation) => [operation, productionNative[operation]])),
+      ) as SearchReceivingWorkDeclaration['native'],
+    }),
+  );
+}

@@ -13,15 +13,22 @@ import type {
   IdentityStepProgress,
 } from '../../../src/semantic/identity-epoch-contract.ts';
 import { routeOf } from '../../../src/route/route.ts';
-import { digest, epochFixture, nativeMappingStep, release } from './identity-epoch.ts';
+import { digest, epochFixture, identityEpochDatabase, nativeMappingStep, release } from './identity-epoch.ts';
 
 /** All production operations share the guarded native pool; admin only observes source rows. */
 export async function createIdentityMappingFixture(options: { poolMax: number; pool?: Pool; url?: string }) {
-  const f = await epochFixture(options.url, {
-    ...(options.pool === undefined ? {} : { pool: options.pool }),
-    poolMax: options.poolMax,
-  });
-  await installIdentityEpochBootstrap(f.pool);
+  const isolated = options.pool === undefined && options.url === undefined ? await identityEpochDatabase() : null;
+  try {
+    const f = await epochFixture(isolated?.url ?? options.url, {
+      ...(options.pool === undefined && isolated === null ? {} : { pool: options.pool ?? isolated!.pool }),
+      poolMax: options.poolMax,
+    });
+    try {
+      await installIdentityEpochBootstrap(f.pool);
+    } catch (error) {
+      await f.close();
+      throw error;
+    }
   const backends = new Set<number>();
   f.pool.on('acquire', (client) => {
     const backend = (client as unknown as { processID: number }).processID;
@@ -123,5 +130,13 @@ export async function createIdentityMappingFixture(options: { poolMax: number; p
       ).rows;
       return { head, custody, effects };
     },
+    async close() {
+      await f.close();
+      await isolated?.close();
+    },
   };
+  } catch (error) {
+    await isolated?.close();
+    throw error;
+  }
 }

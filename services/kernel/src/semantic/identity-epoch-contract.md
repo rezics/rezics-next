@@ -638,7 +638,8 @@ The existing Search binding is `searchWorkModule` -> `startSearchIndexing` -> `c
 The indexer uses 256-ID source chunks and `refresh: wait_for` bulk before its ordinary partition checkpoint.
 Those are actual subject index surfaces, not a complete epoch observation or a private/public disclosure grant.
 Search must export a real `IdentityEpochStep` adapter for its canonical index and prepared rows. The concrete producer is
-`search/identity-epoch-participant.ts`, `createSearchIdentityEpochParticipant({search,prefix,routeKey})`.
+`search/identity-epoch-participant.ts`, `createSearchIdentityEpochParticipant({search,prefix,routeKey,receiving})`.
+The composition root supplies `receiving` through `searchIdentityReceivingComposition`.
 Its current native support/receiving boundary fails unavailable; the declaration is not complete coverage. It must bind the physical target,
 incarnation and complete canonical observation at this epoch, keep one public terminal document and unique prepared
 rows per generation+canonical ID, and preserve original support and last-eligible-original behavior. This ACK is
@@ -647,7 +648,7 @@ narrowing remain separately owned work; do not fork their public-filter contract
 
 Library must export a real `IdentityEpochStep` adapter under the existing fixed `library-private-follow-counts`
 name for ALL Library canonical records; `library/identity-epoch-participant.ts` exports `stepLibraryIdentityEpoch`. Its native Source invalidation
-work is integrated, while complete six-driver/follow coverage still fails unavailable. It receives the same
+and six-driver planner are bound. Empty-home coverage seals after a committed original scan; homes with collections still require Source manifests. It receives the same
 affected-original/new-terminal stream, re-keys in <=100-row steps, and ACKs before
 publication. Support is per (canonical target, follower); totals change only at 0->1 / 1->0. Derived pair/support/total
 rows live in the canonical-target home; stored follows stay in the source owner home. Admission uses
@@ -664,10 +665,18 @@ and `WorkContext.addEffects`, `DBOS.registerStep/registerWorkflow`, `WorkClient.
 and `return-existing`. `composeWork` owns the single DBOS launch; `KERNEL_WORK_MODULES` owns default binding and
 `startWorker` owns lifecycle. No scheduler/process/second launch or independently invented maintenance engine.
 STORE and mapping import only native dependencies and these types; participant producers import STORE/types;
-only final coordinator composition imports concrete participants. Neither participant waits for or imports coordinator.
+the composition root binds concrete participants and Search receiving; the coordinator receives them as ports.
+Neither participant waits for or imports the coordinator.
 Accounts and ordinary callers bind last, after their actual response contracts and native prerequisites exist.
 
-The coordinator now exports these two functions and registers through the existing Semantic module. Each finite
+The coordinator now exports these two functions and registers through the existing Semantic module. Control
+reads `prepare_job`/`prepare_epoch` with pending custody: a preparing job owns the prepare reservation, and
+acquisition mirrors that job into pending before promotion. Publication clears prepare and pending locators,
+then revisits admission so every planned home, bridge and Source hold is released. Produce still runs inside
+the original Source maintenance frame; Search and Library reconcile their own native receipts there. Lifecycle
+owns platform-native inverse removal on the same control home; Identity does not borrow editorial write-basis
+for finish-close. Accounts are pre-armed with each grant action on their token before identity installation,
+and cancelled admission retains source rows until that Lifecycle removal. Each finite
 DBOS segment contains at most 100 pages and enqueues its deterministic continuation with only job/segment locators;
 it releases its queue slot rather than waiting for a child on the same bounded queue. Wait follows that workflow
 custody but returns only after rereading the actual published job and control. The mapping declaration remains
@@ -819,8 +828,8 @@ be counted as `noData` while missing.
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | Semantic STORE            | identityEpochStore; cap/index/control records, creation self mapping, bounded all-home bootstrap, P=1 fences, native custody | Implemented; full publication still awaits the producers below                                                    |
 | Semantic native step      | stepIdentityEpochMapping; scoped effect receipts and bounded mapping/redirect/member/link work                               | MISSING                                                                                                           |
-| Search participant        | version-1 search-canonical-index IdentityEpochStep; actual physical target/incarnation/canonical ACK                         | Constructor integrated; complete native coverage remains unavailable                                              |
-| Library participant       | version-1 library-private-follow-counts IdentityEpochStep; ALL canonical records/directories, first-apply custody and fences | Native Source invalidation integrated; complete ALL-role coverage remains unavailable                             |
+| Search participant        | version-1 search-canonical-index IdentityEpochStep; actual physical target/incarnation/canonical ACK                         | Coordinator installs same-Pool receiving, six native operations and directory-complete ACK                        |
+| Library participant       | version-1 library-private-follow-counts IdentityEpochStep; ALL canonical records/directories, first-apply custody and fences | Six-driver planner bound; empty-home coverage seal ACK; collection rebuild still requires Source manifests        |
 | Commerce ordering         | same-transaction owner counter and entry.owner_write_seq producers; legacy readiness policy                                  | Allocator/schema present; complete producer integration remains required                                          |
 | Final coordinator/callers | resumeIdentityEpochJob, waitIdentityEpochPublished, fixed WorkModule/default composition and unchanged Accounts step binding | Composition implemented; mapping/participant completeness, native proof and actual Accounts caller remain missing |
 
@@ -1545,7 +1554,10 @@ its source command, whose SQL revalidates source owner, subject and captured hea
 Receiving acquire joins only its retained local handoff, local group, owner, attempt and slot; close remains atomic
 with first absence and takes no capacity. Receiving waiters are discovered from local handoff/attempt records.
 
-Default startup first calls `installIdentityEpochBootstrap(pool)` before DBOS resumes work. The one-time
+Default startup first calls `installIdentityEpochBootstrap(pool)` before DBOS resumes work. Job immutability
+keeps intent and receipts fixed; admission may write pre-arm phase and cancellation locators. Writers cast those
+locators to uuid and pre-arm epoch/position to integer/bigint in CASE assignments. Topology custody
+binds the sealed transaction as uuid. The one-time
 installation cut drains structural source and custody writers with SHARE ROW EXCLUSIVE relation locks in a
 READ COMMITTED transaction. Its post-lock scan includes subjects, orphan revision/backlink sources, redirects,
 members, uncaptured dirty heads and retained bootstrap work. It excludes a native birth only with actual
@@ -1554,6 +1566,10 @@ locks would miss a drained writer; it is not used for this migration inspection.
 installation enables the deferred birth guard and commits immutable `identity_epoch_installation_cut`
 custody. An interrupted cut rolls back atomically; a committed cut without native closure remains unavailable.
 Even all 4096 retained native topology closures cannot substitute for the missing installation receipt.
+While a cut exists without a valid installation, remaining() counts unclosed topology homes so bounded batches
+can finish; cutover stays blocked until the installation receipt. An empty selected frontier is a no-effect
+repair pass, not an unavailable failure. Generation-1 is the current Search physical owner until a live
+generation is readable.
 
 A separately released home-0 command verifies the committed cut and installed guards and records the actual
 bootstrap native commit plus `identity_epoch_installation` closure. The exported result is
@@ -1585,6 +1601,8 @@ remain independent obligations.
 Default legacy bootstrap effects execute at most 100 existing bounded native steps. Initial closure uses eight released
 home pipelines and amortizes topology overhead: one local command selects at most 100 unclosed topology slots,
 advances the cursor; one later local command takes at most 100 independently released native closure receipts.
+A contended home is skipped inside the batch so successful empty-home seals still reach that take; a later batch
+reads the retained native closure instead of re-exporting.
 Four initial native wake events seed bounded chains under the same worker registration. The first actual source ACK
 in each batch commits its continuation at that source home, preserving the existing queue partitioning instead of
 serializing every batch on topology home 0. A crash before the ACK is recovered by the already durable DBOS effect.

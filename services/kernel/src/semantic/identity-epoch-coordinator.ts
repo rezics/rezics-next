@@ -4,6 +4,7 @@ import { runCommand } from '../command/command.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
 import { stepIdentityEpochAdmission } from './identity-epoch-admission.ts';
+import { withIdentitySourceConsumerMaintenance } from './identity-source-consumer-maintenance.ts';
 import type {
   IdentityJobRef,
   IdentityStepName,
@@ -123,6 +124,7 @@ function installed(pool: Pool): Installation {
 
 /** Trusted registration only. The composition root supplies the fixed participants; null leaves the coordinator
  * unavailable. There is no caller-selected participant list or mutable installation setter.
+ * Produce runs inside the original Source maintenance frame; Search commits its own native plans there.
  */
 export function registerIdentityEpochCoordinator(
   context: WorkContext,
@@ -148,12 +150,17 @@ export function registerIdentityEpochCoordinator(
     async (job: JobLocator, step: IdentityStepName) => {
       const ref = nativeJob(job);
       const binding = installed(context.pool);
-      // The producer rereads its saved frontier and commits locally. Its home has been released on return.
-      const progress = await (step === 'mapping' ? stepIdentityEpochMapping : binding.participants![step])(
-        context.pool,
-        ref,
+      return withIdentitySourceConsumerMaintenance(
+        { pool: context.pool, env: context.env, clock: context.clock },
+        { deadline: Date.now() + 5_000 },
+        async () => {
+          const progress = await (step === 'mapping' ? stepIdentityEpochMapping : binding.participants![step])(
+            context.pool,
+            ref,
+          );
+          return { receipt: receiptLocator(ref, step, progress), state: progress.state };
+        },
       );
-      return { receipt: receiptLocator(ref, step, progress), state: progress.state };
     },
     { name: `${workflowName}.produce`, ...COMMAND_STEP_RETRIES },
   );
