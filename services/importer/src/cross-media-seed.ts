@@ -102,6 +102,7 @@ import {
   type ImportRunResult,
 } from './importer.ts';
 import { createMediaResolver } from './media-resolver.ts';
+import { resumeSelectedCover } from './cross-media-covers.ts';
 import type { BangumiCoverSource, BangumiPersonCareerSource, CrossMediaMediaOutcome } from './showcase-media.ts';
 import { acquireBangumiCoverSources } from './showcase-media.ts';
 import { acquireBangumiPersonCareerSources, bangumiPersonCareerAdmission } from './showcase-bangumi-careers.ts';
@@ -3196,10 +3197,7 @@ export async function seedCrossMedia(
           })
         : undefined;
     type MediaResolveInput = Parameters<NonNullable<ImporterOptions['mediaResolver']>['resolve']>[0];
-    /**
-     * Resume a selected cover whose journal is not final: a prepared POST replays its exact bytes and key,
-     * an accepted reservation polls its own Media ID. Final journals and unchanged sources cost no media call.
-     */
+    /** Resume a selected cover whose sealed media journal is not final; see resumeSelectedCover. */
     const resumeSelectedMedia = async (
       source: { sourceAlias: string; externalId: string; sourceStatus: string },
       containerId: string,
@@ -3218,23 +3216,16 @@ export async function seedCrossMedia(
       ) as { mediaImportIntents?: MediaResolveInput['mediaImportIntents'] };
       const intent = converted.mediaImportIntents?.[0];
       if (!intent) return;
-      const owner = { source: source.sourceAlias, external_id: source.externalId };
-      const signature = createHash('sha256').update(JSON.stringify(intent)).digest('hex');
-      const journal = importer.session.bindings.mediaPending(
-        owner,
-        `${source.sourceAlias}:${source.externalId}:${signature}`,
-      );
-      if (!journal) return;
-      const state = journal.status?.media.state;
-      if (journal.accepted !== null && (state === 'available' || state === 'rejected')) return;
       try {
-        await resolver.resolve({
-          owner,
-          subject: containerId,
-          mediaImportIntents: [intent],
-          signal: AbortSignal.timeout(30_000),
-          deferPending: false,
-        });
+        await resumeSelectedCover(
+          { bindings: importer.session.bindings, resolver },
+          {
+            owner: { source: source.sourceAlias, external_id: source.externalId },
+            containerId,
+            intent,
+            signal: AbortSignal.timeout(30_000),
+          },
+        );
       } catch (error) {
         // The resolver wrapper records refusals and unknown deliveries before they surface; other errors throw.
         if (!(error instanceof ImportTransportError)) throw error;

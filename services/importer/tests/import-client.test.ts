@@ -367,3 +367,35 @@ test('review transport retains coherent query, nullable evidence, exact admissio
   expect(requests[1]!.headers.get('idempotency-key')).toBe('"review-key"');
   await expect(transport.mergeReviewedPersons(body, 'review-key')).rejects.toMatchObject({ status: 200 });
 });
+
+test('served-variant reads accept only the admitted image decision for the requested derivative', async () => {
+  const mediaId = '00000000-0000-4000-8000-000000000201';
+  const decision = {
+    allowed: true,
+    key: 'served/avif-320',
+    sha256: 'b'.repeat(64),
+    mediaType: 'image/avif',
+    byteCount: 2048,
+    publicCache: false,
+    cacheControl: 'private, no-cache',
+  } as const;
+  const paths: string[] = [];
+  let body: unknown = decision;
+  const transport = createImportTransport({
+    origin: 'https://api.importer.test',
+    tokenProvider: async () => 'test-token',
+    fetch: (async (request: Request) => {
+      const url = new URL(request.url);
+      paths.push(`${url.pathname}${url.search}`);
+      return Response.json(body);
+    }) as typeof fetch,
+  });
+  await expect(transport.authorizeMediaVariant(mediaId, 'avif-320')).resolves.toEqual(decision);
+  body = { ...decision, mediaType: 'image/png' };
+  await expect(transport.authorizeMediaVariant(mediaId, 'avif-320')).rejects.toThrow();
+  await expect(transport.authorizeMediaVariant(mediaId, 'png-320')).rejects.toThrow();
+  expect(paths).toEqual([
+    `/v1/media/${mediaId}:authorizeDownload?variant=avif-320`,
+    `/v1/media/${mediaId}:authorizeDownload?variant=avif-320`,
+  ]);
+});
