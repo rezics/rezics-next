@@ -511,7 +511,8 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     return access.stableCommandKey?.(context, phase) ?? commandKey(phase);
   }
   // The first actual failure of each workflow this process ran. A durable step journals only the generic step message,
-  // so registration reads attach this internal cause instead. Bounded; never persisted or exposed.
+  // so registration reads attach this internal cause instead. Bounded; never persisted or exposed. Forked isolated
+  // Auth helpers report original Access errors on the child stream independently and do not replace this map.
   const firstFailures = new Map<string, unknown>();
   const retainFirstFailure = (id: string, error: unknown) => {
     if (firstFailures.has(id)) return;

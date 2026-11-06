@@ -1134,19 +1134,18 @@ error. Late cleanup of a previous generation cannot clear or shut down a
 successor.
 
 Native fixtures bind dedicated receipt keys on the kernel pool they pass to Access
-commands, using the same supported test ring as kernel worker composition. Those keys
-are independent of Auth staging keys and of Access reference-seal keys.
-They also install Kernel's native History composition before importing Access, the
-same binding Kernel tests preload; Auth's check has no Kernel bunfig. Reylo registers
-first so History adapters can load compiled `.sql` modules. A staged
-provisioning receipt copies reservation identity from the locked registration row
-when Access did not supply a receipt, matching the party-guard binding.
-The dump CLI copies `scripts/database.ts` away from the kernel tree and therefore
-loads kernel migrate only when a kernel template is actually migrated.
-Workflow-host, native-consumer and database tests run through
-`bun run --cwd services/auth check <file>` so each file receives a lane copy of the
-once-migrated kernel template and releases its host. Focused receiving is the five
-named suites plus failed-start relaunch and first-actual-failure cause; no extra stories.
+commands, using the same supported test ring as kernel worker composition,
+independent of Auth staging keys and Access reference-seal keys. They install Kernel
+History after Reylo registers SQL modules; Auth's check has no Kernel bunfig. A
+forked isolated Auth helper installs that History/event catalogue, binds a separate
+receipt ring on its Access `createPool`, reports original Access errors on the child
+stream, and cleans up independently without replacing this process's first-cause map.
+A staged provisioning receipt copies reservation identity from the locked
+registration row when Access did not supply a receipt. The dump CLI copies
+`scripts/database.ts` away from the kernel tree and loads kernel migrate only when a
+kernel template is actually migrated. Workflow-host, native-consumer and database
+tests run through `bun run --cwd services/auth check <file>` so each file receives a
+lane copy of the once-migrated kernel template and releases its host.
 
 A registration whose workflow stopped reports the durable failure, and this process's
 first actual step failure rides along as its `cause`, including when the workflow is
