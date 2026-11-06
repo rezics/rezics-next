@@ -800,7 +800,7 @@ test('subject preferences and own rating retire across the complete mounted read
           expectedReader: 'other-reader',
         },
       ),
-    ).toBe(false);
+    ).toBe('rejected');
     expect(nativeCalls).toBe(0);
   } finally {
     await main.unmount();

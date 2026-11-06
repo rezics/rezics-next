@@ -19,7 +19,6 @@ import { SHELF_TYPE_DIGEST_ENV } from '../../../src/library/shelf-type-keys.ts';
 import { actionCatalogue } from '../../../src/http/request.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { createWorkClient } from '../../../src/work/client.ts';
-import { KERNEL_WORK_MODULES } from '../../support/default-work-modules.ts';
 import { readWorkerConfig, startWorker } from '../../../src/worker.ts';
 import { createAuthDatabase } from '../../support/auth-database.ts';
 import { dropTestDatabase } from '../../support/drop-test-database.ts';
@@ -1451,18 +1450,27 @@ if (import.meta.main) {
   let repairLatch: ReturnType<typeof installStateReferenceRepairLatch> | undefined;
   process.on('message', (message) => repairLatch?.receive(message));
   process.on('disconnect', () => repairLatch?.close());
-  const modules = KERNEL_WORK_MODULES.map((module) =>
-    module.name !== 'library'
-      ? module
-      : {
-          ...module,
-          async register(context: Parameters<typeof module.register>[0]) {
-            repairLatch = installStateReferenceRepairLatch(context.pool, (message) => process.send?.(message));
-            await module.register(context);
-          },
-        },
+  await startWorker(
+    readWorkerConfig(workerEnv),
+    (composed) => {
+      const names = new Set(composed.map((module) => module.name));
+      for (const required of ['content', 'rating', 'semantic', 'search', 'library'] as const) {
+        if (!names.has(required)) throw new Error(`Library outcome worker missing live ${required} registration`);
+      }
+      return composed.map((module) =>
+        module.name !== 'library'
+          ? module
+          : {
+              ...module,
+              async register(context: Parameters<typeof module.register>[0]) {
+                repairLatch = installStateReferenceRepairLatch(context.pool, (message) => process.send?.(message));
+                await module.register(context);
+              },
+            },
+      );
+    },
+    workerEnv,
   );
-  await startWorker(readWorkerConfig(workerEnv), modules, workerEnv);
   for (const queue of await DBOS.listQueues()) await queue.setMinPollingIntervalMs(5);
   process.send?.('ready');
 }
