@@ -14,10 +14,16 @@ const privateLogs = resolve(root, '.temp/local-stack/journey');
 await mkdir(evidence, { recursive: true, mode: 0o700 });
 await mkdir(privateLogs, { recursive: true, mode: 0o700 });
 const suffix = crypto.randomUUID().slice(0, 8);
-const reservations = Array.from({ length: 6 }, () => Bun.serve({
-  hostname: '127.0.0.1', port: 0, fetch: () => new Response(),
-}));
-const [databasePort, searchPort, webPort, issuerPort, nativePort, kernelPort] = reservations.map((server) => server.port!);
+const reservations = Array.from({ length: 6 }, () =>
+  Bun.serve({
+    hostname: '127.0.0.1',
+    port: 0,
+    fetch: () => new Response(),
+  }),
+);
+const [databasePort, searchPort, webPort, issuerPort, nativePort, kernelPort] = reservations.map(
+  (server) => server.port!,
+);
 const webOrigin = `http://127.0.0.1:${webPort}`;
 const issuerOrigin = `http://127.0.0.1:${issuerPort}`;
 const kernelOrigin = `http://127.0.0.1:${kernelPort}`;
@@ -80,9 +86,13 @@ try {
   await command('database', ['bun', 'run', '--cwd', 'services/kernel', 'db', 'up']);
   await command('search', ['bun', 'run', '--cwd', 'services/kernel', 'search', 'up']);
   const kernelEnvFile = resolve(root, 'services/kernel/.env');
-  await writeFile(kernelEnvFile, (await readFile(kernelEnvFile, 'utf8'))
-    .replace(/^AUTH_ISSUER=.*$/m, `AUTH_ISSUER=${issuerOrigin}`)
-    .replace(/^AUTH_JWKS_URL=.*$/m, `AUTH_JWKS_URL=${issuerOrigin}/.well-known/jwks.json`), { mode: 0o600 });
+  await writeFile(
+    kernelEnvFile,
+    (await readFile(kernelEnvFile, 'utf8'))
+      .replace(/^AUTH_ISSUER=.*$/m, `AUTH_ISSUER=${issuerOrigin}`)
+      .replace(/^AUTH_JWKS_URL=.*$/m, `AUTH_JWKS_URL=${issuerOrigin}/.well-known/jwks.json`),
+    { mode: 0o600 },
+  );
   await command('setup', ['bun', 'services/auth/scripts/dev-stack.ts', 'setup']);
   await command('persona', ['bun', 'services/auth/scripts/dev-stack.ts', 'persona']);
   const keys = JSON.parse(await readFile(resolve(root, '.temp/local-stack/keys.json'), 'utf8'));
@@ -90,20 +100,28 @@ try {
   const stackLog = Bun.file(resolve(privateLogs, 'stack.log'));
   stackDescriptor = openSync(stackLog.name!, 'a', 0o600);
   stack = Bun.spawn(['bun', 'services/auth/scripts/dev-stack.ts', 'start'], {
-    cwd: root, env, stdout: stackDescriptor, stderr: stackDescriptor,
+    cwd: root,
+    env,
+    stdout: stackDescriptor,
+    stderr: stackDescriptor,
   });
   await ready(`${issuerOrigin}/.well-known/jwks.json`, stack);
   report.phases.push('auth-ready');
   const seedEnv = Object.fromEntries(
-    (await readFile(resolve(root, '.temp/local-stack/seed.env'), 'utf8')).trim().split('\n').map((line) => {
-      const at = line.indexOf('=');
-      return [line.slice(0, at), line.slice(at + 1)];
-    }),
+    (await readFile(resolve(root, '.temp/local-stack/seed.env'), 'utf8'))
+      .trim()
+      .split('\n')
+      .map((line) => {
+        const at = line.indexOf('=');
+        return [line.slice(0, at), line.slice(at + 1)];
+      }),
   );
   const reviewerToken = await createAccountTokenProvider({
     accountKeyPath: seedEnv.REZICS_DEV_PERSONA_ACCOUNT_KEY!,
-    account: seedEnv.REZICS_DEV_PERSONA_ACCOUNT!, client: seedEnv.REZICS_DEV_PERSONA_CLIENT!,
-    authOrigin: issuerOrigin, scopes: [...IMPORTER_SCOPES, 'subject:read', 'context:accept', 'context:adopt'],
+    account: seedEnv.REZICS_DEV_PERSONA_ACCOUNT!,
+    client: seedEnv.REZICS_DEV_PERSONA_CLIENT!,
+    authOrigin: issuerOrigin,
+    scopes: [...IMPORTER_SCOPES, 'subject:read', 'context:accept', 'context:adopt'],
   });
   const reviewerBearer = await reviewerToken();
   const claims = JSON.parse(Buffer.from(reviewerBearer.split('.')[1]!, 'base64url').toString());
@@ -111,15 +129,22 @@ try {
   // The complete composition may report an unavailable private list; catalogue reads remain independently testable.
   const seedLog = Bun.file(resolve(privateLogs, 'seed.log'));
   const seedDescriptor = openSync(seedLog.name!, 'a', 0o600);
-  const seed = Bun.spawn(['bun', '--eval', 'await (await import("./scripts/datasets/cross-media-seed.ts")).runDevelopmentSeed()'], {
-    cwd: root, env: { ...env, ...seedEnv }, stdout: seedDescriptor, stderr: seedDescriptor,
-  });
+  const seed = Bun.spawn(
+    ['bun', '--eval', 'await (await import("./scripts/datasets/cross-media-seed.ts")).runDevelopmentSeed()'],
+    {
+      cwd: root,
+      env: { ...env, ...seedEnv },
+      stdout: seedDescriptor,
+      stderr: seedDescriptor,
+    },
+  );
   const seedCode = await seed.exited;
   closeSync(seedDescriptor);
   if (!(await Bun.file(resolve(root, '.temp/cross-media-seed/result.json')).exists())) {
     const database = new Database(resolve(root, '.temp/cross-media-seed/state.sqlite'), { readonly: true });
-    const subjects = database.query('SELECT source, external_id, subject FROM binding_records WHERE subject IS NOT NULL').all() as
-      { source: string; external_id: string; subject: string }[];
+    const subjects = database
+      .query('SELECT source, external_id, subject FROM binding_records WHERE subject IS NOT NULL')
+      .all() as { source: string; external_id: string; subject: string }[];
     database.close();
     const readings = [];
     for (const subject of subjects) {
@@ -129,15 +154,28 @@ try {
       readings.push({ ...subject, status: response.status, reading: await response.json() });
     }
     await writeFile(resolve(evidence, 'reviewed-bootstrap-readings.json'), JSON.stringify(readings), { mode: 0o600 });
-    throw new Error(`seed exited ${seedCode}\n${(await seedLog.text()).replaceAll(password, '[redacted]').slice(-12000)}`);
+    throw new Error(
+      `seed exited ${seedCode}\n${(await seedLog.text()).replaceAll(password, '[redacted]').slice(-12000)}`,
+    );
   }
-  const result = JSON.parse(await readFile(resolve(root, '.temp/cross-media-seed/result.json'), 'utf8')) as
-    CrossMediaSeedResult & { showcase?: unknown; developmentShowcase?: unknown };
-  await writeFile(resolve(evidence, 'publication.json'), JSON.stringify({
-    showcase: result.showcase, developmentShowcase: result.developmentShowcase,
-    personIdentities: result.personIdentities, gaps: result.gaps,
-    vndbCreditDiagnostics: result.vndbCreditDiagnostics,
-  }, null, 2), { mode: 0o600 });
+  const result = JSON.parse(
+    await readFile(resolve(root, '.temp/cross-media-seed/result.json'), 'utf8'),
+  ) as CrossMediaSeedResult & { showcase?: unknown; developmentShowcase?: unknown };
+  await writeFile(
+    resolve(evidence, 'publication.json'),
+    JSON.stringify(
+      {
+        showcase: result.showcase,
+        developmentShowcase: result.developmentShowcase,
+        personIdentities: result.personIdentities,
+        gaps: result.gaps,
+        vndbCreditDiagnostics: result.vndbCreditDiagnostics,
+      },
+      null,
+      2,
+    ),
+    { mode: 0o600 },
+  );
   report.phases.push('seed-returned');
   await ready(`${webOrigin}/en`, stack);
   browser = await chromium.launch({ headless: true });
@@ -154,16 +192,21 @@ try {
     const text = await page.locator('body').innerText();
     await writeFile(resolve(evidence, `anonymous-${key}.txt`), text, { mode: 0o600 });
     report.visits.push({ persona: 'anonymous', source: key, url: page.url(), subject: selected.subject });
-    assert(text.includes('STEINS') || text.includes('Steins') || text.includes('CLANNAD'), `Missing work title at ${url}`);
+    assert(
+      text.includes('STEINS') || text.includes('Steins') || text.includes('CLANNAD'),
+      `Missing work title at ${url}`,
+    );
   }
   await context.close();
   report.phases.push('anonymous-work-pages');
 } catch (error) {
   report.error = String(error).replaceAll(password || '\u0000', '[redacted]');
   if (await Bun.file(resolve(privateLogs, 'stack.log')).exists()) {
-    await writeFile(resolve(evidence, 'stack.log'),
+    await writeFile(
+      resolve(evidence, 'stack.log'),
       (await readFile(resolve(privateLogs, 'stack.log'), 'utf8')).replaceAll(password || '\u0000', '[redacted]'),
-      { mode: 0o600 });
+      { mode: 0o600 },
+    );
   }
   throw error;
 } finally {
