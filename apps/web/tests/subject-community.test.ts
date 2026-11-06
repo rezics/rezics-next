@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test';
 import { createElement } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { createRootRoute, createRouter, createMemoryHistory, RouterContextProvider } from '@tanstack/react-router';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createKernelClient } from '@rezics/client';
 import { fromPlainText } from '@rezics/document';
@@ -38,8 +40,23 @@ const threadReads = (requests: Request[]) =>
 const isCommunity = (request: Request) =>
   new URL(request.url).pathname === `/v1/subjects/${communitySubject.id}/threads`;
 function pageHtml(page: SubjectPageData) {
+  const router = createRouter({
+    routeTree: createRootRoute(),
+    history: createMemoryHistory({ initialEntries: [`/en/subjects/${page.subject}/work`] }),
+  });
   return renderToStaticMarkup(
-    createElement(SubjectPage, { page, locale: 'en', messages: subjectPageMessages(), renderJsonLd: false }),
+    createElement(RouterContextProvider, {
+      router,
+      children: createElement(QueryClientProvider, {
+        client: new QueryClient(),
+        children: createElement(SubjectPage, {
+          page,
+          locale: 'en',
+          messages: subjectPageMessages(),
+          renderJsonLd: false,
+        }),
+      }),
+    }),
   );
 }
 

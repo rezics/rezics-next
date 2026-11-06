@@ -88,7 +88,9 @@ const pageRedirect = t.Object({ redirect: t.Object({ from: t.String(), to: t.Str
 
 type ReadResult = { status: number; body: unknown; headers?: Record<string, string> };
 type PageAccount = { id: string; handle: string; automated: boolean; operatorId: string | null };
-type PageTarget = ({ subject: string; realm?: string } | { route: string } | { account: string }) & { view?: View };
+type PageTarget = ({ subject: string; realm?: string; board?: string } | { route: string } | { account: string }) & {
+  view?: View;
+};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -126,7 +128,14 @@ function targetOf(body: unknown): PageTarget {
     reject(errors);
   }
   for (const key of Object.keys(target)) {
-    if (key !== 'subject' && key !== 'route' && key !== 'account' && key !== 'view' && key !== 'realm')
+    if (
+      key !== 'subject' &&
+      key !== 'route' &&
+      key !== 'account' &&
+      key !== 'view' &&
+      key !== 'realm' &&
+      key !== 'board'
+    )
       errors.push({ pointer: `/target/${segment(key)}`, code: 'unknown_field' });
   }
   const named = ['subject', 'route', 'account'].filter((key) => Object.hasOwn(target, key));
@@ -150,6 +159,17 @@ function targetOf(body: unknown): PageTarget {
       });
     else realm = target.realm;
   }
+  // An untrusted exact Board operand. It selects entry advice only; the Subject threads read admits it.
+  let board: string | undefined;
+  if (Object.hasOwn(target, 'board')) {
+    if (named[0] !== 'subject') errors.push({ pointer: '/target/board', code: 'unknown_field' });
+    else if (typeof target.board !== 'string' || !subjectIdPattern.test(target.board))
+      errors.push({
+        pointer: '/target/board',
+        code: typeof target.board === 'string' ? 'invalid_format' : 'invalid_type',
+      });
+    else board = target.board;
+  }
   if (named.length !== 1) {
     errors.push({ pointer: '/target', code: 'invalid_type' });
     reject(errors);
@@ -161,7 +181,13 @@ function targetOf(body: unknown): PageTarget {
         pointer: '/target/subject',
         code: typeof subject === 'string' ? 'invalid_format' : 'invalid_type',
       });
-    else if (errors.length === 0) return { subject, ...(realm ? { realm } : {}), ...(view ? { view } : {}) };
+    else if (errors.length === 0)
+      return {
+        subject,
+        ...(realm ? { realm } : {}),
+        ...(board ? { board } : {}),
+        ...(view ? { view } : {}),
+      };
   } else if (named[0] === 'account') {
     const account = target.account;
     if (typeof account !== 'string' || !handlePattern.test(account))
@@ -597,6 +623,7 @@ function nativePageRoute<App, const Path extends string>(
         release: definitionRelease?.release,
         continuationOnlyLists: !('subject' in target) || !target.view || target.view === 'overview',
         ...(selected ? { context: selected.context } : {}),
+        ...('subject' in target && target.board ? { board: target.board } : {}),
         ...(selected || plannedDocuments
           ? {
               finalGuard: async (readSession: string | null) => {
@@ -697,6 +724,7 @@ async function pageAnswer(input: {
   probeSession: string | null;
   languages?: readonly string[];
   context?: SelectedContext;
+  board?: string;
   continuation?: PageContinuation;
   finalGuard?: (session: string | null) => Promise<string | null>;
   resolveBuiltin: NonNullable<Parameters<typeof readPage>[0]['resolveBuiltin']>;
@@ -732,6 +760,7 @@ async function pageAnswer(input: {
         subject: input.subject,
         account: input.account,
         ...(input.context ? { context: input.context } : {}),
+        ...(input.board ? { board: input.board } : {}),
         ...(input.continuation ? { continuation: input.continuation } : {}),
       });
     } catch (error) {

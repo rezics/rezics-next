@@ -22,6 +22,13 @@ import {
   resetLocalContentMedia,
   localShowcaseClientRegistration,
   importerScopes,
+  walkBun,
+  walkHostPersonaAccount,
+  walkSetupCommand,
+  walkStackStartCommand,
+  walkStartProcesses,
+  parseDevelopmentBindings,
+  walkFrontendEnvironmentPath,
 } from '../scripts/dev-stack.ts';
 import { developmentEnv } from '../../kernel/scripts/database.ts';
 import { rateLimitBudgets } from '../../kernel/src/access/write-rate-budgets.ts';
@@ -66,9 +73,9 @@ test('Auth page scope configuration carries trusted siteActions and records nati
   });
 });
 
-test('persona creator capabilities are registered separately from ordinary importer scopes', () => {
+test('persona creator capabilities are registered separately from ordinary importer scopes', async () => {
   const creator = ['collection:create', 'collection:read', 'collection:update', 'library_entry:update'];
-  expect(localShowcaseClientRegistration().scopes).toEqual(expect.arrayContaining(creator));
+  expect((await localShowcaseClientRegistration()).scopes).toEqual(expect.arrayContaining(creator));
   expect(importerScopes.some((scope) => creator.includes(scope))).toBe(false);
 });
 
@@ -294,6 +301,82 @@ test('parallel local startup has a configured connection allowance while the ord
   expect(developmentEnv('KERNEL_POOL_ACQUIRE_TIMEOUT_MS=500\n', 'postgres://127.0.0.1/rezics')).toContain(
     'KERNEL_POOL_ACQUIRE_TIMEOUT_MS=500\n',
   );
+});
+
+test('a walk persona reuses the host-written seed.env instead of assembling a second Auth host', () => {
+  const seed = [
+    'REZICS_DEV_PERSONA_ACCOUNT=99e7b230-90dd-83ae-b5dc-67cacb45ae35',
+    'AUTH_ORIGIN=http://127.0.0.1:20011',
+  ].join('\n');
+  expect(walkHostPersonaAccount({ REZICS_WALK_DEFER_FRONTENDS: '1' }, seed)).toBe(
+    '99e7b230-90dd-83ae-b5dc-67cacb45ae35',
+  );
+  expect(walkHostPersonaAccount({}, seed)).toBeUndefined();
+  expect(walkHostPersonaAccount({ REZICS_WALK_DEFER_FRONTENDS: '1' }, undefined)).toBeUndefined();
+  expect(
+    walkHostPersonaAccount({ REZICS_WALK_DEFER_FRONTENDS: '1' }, 'AUTH_ORIGIN=http://127.0.0.1:20011\n'),
+  ).toBeUndefined();
+});
+
+test('walk and start parents keep Kernel, Postgres and dump modules off the waiter graph', async () => {
+  const source = await Bun.file(resolve(import.meta.dir, '../scripts/dev-stack.ts')).text();
+  expect(source).not.toMatch(/^import \{[^}]*\} from 'pg';/m);
+  expect(source).not.toMatch(/^import \{[^}]*\} from 'jose';/m);
+  expect(source).not.toMatch(/^import .*showcase-community/m);
+  expect(source).not.toMatch(/^import .*showcase-personal-list/m);
+  expect(source).toContain("import type { JWK } from 'jose'");
+  expect(source).toContain("await import('pg')");
+  expect(source).toContain('walkFrontendEnvironmentPath');
+  expect(source).toContain('--max-old-space-size=512');
+  expect(source).toContain('persistDevelopmentWebsiteBindings');
+  expect(source).toContain("REZICS_WALK_DEFER_FRONTENDS === '1'");
+  expect(source.indexOf("['services/auth/scripts/dev-stack.ts', 'setup']")).toBeLessThan(
+    source.indexOf("['services/kernel/scripts/search.ts', 'up']"),
+  );
+});
+
+test('setup-written frontend bindings keep JWK JSON literal for the Vite parent', () => {
+  const website = JSON.stringify({ kid: 'k', kty: 'EC', crv: 'P-256', x: 'x', y: 'y' });
+  const text = developmentBindings({
+    WEBSITE_CLIENT_KEY: website,
+    WEBSITE_SCOPES: 'openid thread:create',
+    AUTH_SECURITY_SCOPE_CONFIGURATION: 'catalogue:1',
+  });
+  expect(parseDevelopmentBindings(text)).toEqual({
+    WEBSITE_CLIENT_KEY: website,
+    WEBSITE_SCOPES: 'openid thread:create',
+    AUTH_SECURITY_SCOPE_CONFIGURATION: 'catalogue:1',
+  });
+  expect(walkFrontendEnvironmentPath()).toMatch(/frontend\.env$/);
+});
+
+test('a walk start keeps Vite and the worker down through seed and runs Kernel without watch', () => {
+  const ordinary = walkStartProcesses({});
+  expect(ordinary.map((row) => row.command.join(' '))).toEqual([
+    'bun services/auth/scripts/dev-stack.ts host',
+    'bun services/auth/scripts/dev-stack.ts pages',
+    'bun services/auth/scripts/dev-stack.ts web',
+    'bun run --cwd services/kernel dev',
+    'bun run --cwd services/kernel worker',
+  ]);
+  const walk = walkStartProcesses({ REZICS_WALK_SMOL: '1', REZICS_WALK_DEFER_FRONTENDS: '1' });
+  expect(walkBun({ REZICS_WALK_SMOL: '1' })).toEqual([process.execPath, '--smol']);
+  expect(walkStackStartCommand({ REZICS_WALK_SMOL: '1' })).toEqual([
+    process.execPath,
+    '--smol',
+    'services/auth/scripts/dev-stack.ts',
+    'start',
+  ]);
+  expect(walk.map((row) => row.command.slice(-1)[0])).toEqual(['host', 'src/server.ts']);
+  expect(walk.some((row) => row.command.includes('pages') || row.command.includes('web'))).toBe(false);
+  expect(walk.some((row) => row.command.includes('worker') || row.command.includes('src/worker.ts'))).toBe(false);
+  expect(walk.some((row) => row.command.includes('dev'))).toBe(false);
+  expect(walkSetupCommand({ REZICS_WALK_SMOL: '1' }, ['services/kernel/scripts/database.ts', 'up'])).toEqual([
+    process.execPath,
+    '--smol',
+    'services/kernel/scripts/database.ts',
+    'up',
+  ]);
 });
 
 test('an authorized password rotation retains the original registration input', async () => {

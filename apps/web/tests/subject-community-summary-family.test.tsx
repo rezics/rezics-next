@@ -273,9 +273,9 @@ test('Subject discussion and review summaries keep native read destinations and 
           expect(citation.textContent).toContain(m.discussion_provenance_details_rating_units({ units: '0' }, options));
           expect(citation.textContent).not.toContain(m.thread_provenance_current_vote({}, options));
           const reactions = first.querySelector('[data-slot="community-reaction-summary"]')?.textContent;
-          expect(reactions).toContain(m.reaction_upvote());
+          expect(reactions).toContain(m.reaction_upvote({}, options));
           expect(reactions).toContain('4');
-          expect(reactions).toContain(m.reaction_like());
+          expect(reactions).toContain(m.reaction_like({}, options));
           expect(reactions).toContain('2');
           expect(reactions).not.toContain(m.board_feed_reactions({ count: '6' }, options));
           await show(kind, paged, { ...ready, reactionsAsOf: null });
@@ -286,7 +286,7 @@ test('Subject discussion and review summaries keep native read destinations and 
           expect(rows()[1]!.querySelector('[data-slot="review-citation"]')?.getAttribute('data-state')).toBe(
             'unscored',
           );
-          expect(rows()[1]!.textContent).toContain(m.subject_community_reactions_none());
+          expect(rows()[1]!.textContent).toContain(m.subject_community_reactions_none({}, options));
           expect(rows()[2]!.textContent).toContain(m.subject_community_citation_unavailable({}, options));
         }
         expect(rows()[1]!.querySelector('[data-content-item-slot="preview"]')).toBeNull();
@@ -357,7 +357,9 @@ test('Subject discussion and review summaries keep native read destinations and 
       );
       expect(slot('community-next')).toBeNull();
       expect(slot('choose-board')).toBeNull();
-      expect(host.textContent).toContain(m.subject_community_board_unavailable({}, options));
+      // Without a supplied Board the native entry is not_selected: no creation affordance and no unavailable claim.
+      expect(slot('community-entry')).toBeNull();
+      expect(host.textContent).not.toContain(m.subject_community_board_unavailable({}, options));
       for (const state of ['loading', 'closed', 'unavailable'] as const) {
         for (const paged of [false, true]) {
           await show(kind, paged, { state });

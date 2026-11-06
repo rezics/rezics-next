@@ -3,30 +3,28 @@ import { spawnSync } from 'node:child_process';
 import { createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { chmod, lstat, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
-import { Pool } from 'pg';
-import { exportJWK, generateKeyPair, type JWK } from 'jose';
+import type { JWK } from 'jose';
 import { securityScopeLimit } from '@rezics/auth-contract';
-import { migrate } from './database.ts';
-import { mountedWebsiteConfiguration } from './website-composition.ts';
 import { websiteWorkerScopes } from '../../../apps/web/scripts/website-configuration.ts';
-import { DEVELOPMENT_SHOWCASE_SCOPES } from '../../../scripts/datasets/showcase-community.ts';
-import { developmentCollectionScopes } from '../../../scripts/datasets/development-showcase.ts';
-import { developmentPersonalListScopes } from '../../importer/src/showcase-personal-list.ts';
 import type { StackSlot } from '../../../scripts/stack-lease.ts';
 import { walkStackRequired } from '../../../scripts/stack-run.ts';
 import {
   admitWalkStack,
+  reclaimInactiveFileCache,
+  stopSpawned,
+  walkDockerOutput,
   walkHttpAnswers,
+  walkOriginListening,
+  walkPortAllocated,
   walkProcessEnvironment,
+  walkReadyFetchTimeoutMs,
   walkReadyUrls,
+  walkStackLimit,
   walkStackNames,
   walkStackPorts,
   WALK_DOCKER_REMOVE_MS,
   WALK_READY_DEADLINE_MS,
   WALK_READY_POLL_MS,
-  walkReadyFetchTimeoutMs,
-  stopSpawned,
-  walkOriginListening,
   type WalkNames,
 } from '../../../scripts/walk-stack.ts';
 
@@ -117,6 +115,13 @@ export function developmentWebsiteBindings(
   };
 }
 
+export type DevelopmentWebsiteBindings = {
+  scopes: string[];
+  WEBSITE_SCOPES: string;
+  WEBSITE_CONFIGURATION_FILE?: string;
+  AUTH_SECURITY_SCOPE_CONFIGURATION: string;
+};
+
 /** A purpose-bound server credential connects the site to the same local objects used by native workers. */
 export function developmentMediaBindings(
   env: Readonly<Record<string, string | undefined>>,
@@ -129,14 +134,40 @@ export function developmentMediaBindings(
   };
 }
 
+/** Persist Web and Auth-page launch bindings after Kernel catalogue composition. */
+export async function persistDevelopmentWebsiteBindings(
+  keys: Pick<DevelopmentKeys, 'website' | 'secret'>,
+  website: DevelopmentWebsiteBindings,
+  env: Record<string, string | undefined> = process.env,
+): Promise<void> {
+  const websiteBindings = {
+    ...developmentWebsiteBindings(keys, website),
+    ...developmentMediaBindings(env, keys),
+  };
+  await privateFile(resolve(root, 'apps/web/.dev.vars'), developmentBindings(websiteBindings));
+  await privateFile(
+    walkFrontendEnvironmentPath(),
+    developmentBindings({ ...websiteBindings, ...developmentAuthPageBindings(website) }),
+  );
+}
+
 /** Build the same mounted Kernel declarations used by the host; no request-time discovery. */
 export async function developmentWebsiteConfiguration(env?: Record<string, string>) {
   await import('reylo/register');
-  const [{ createKernel }, { readConfig }, { actionCatalogue }, { accessActionCatalogue }] = await Promise.all([
+  const [
+    { createKernel },
+    { readConfig },
+    { actionCatalogue },
+    { accessActionCatalogue },
+    { Pool },
+    { mountedWebsiteConfiguration },
+  ] = await Promise.all([
     import('../../kernel/src/http/kernel.ts'),
     import('../../kernel/src/server.ts'),
     import('../../kernel/src/http/request.ts'),
     import('../../kernel/src/access/index.ts'),
+    import('pg'),
+    import('./website-composition.ts'),
   ]);
   const config = readConfig(env ?? (await kernelEnvironment()));
   const pool = new Pool({ connectionString: config.databaseUrl });
@@ -177,7 +208,16 @@ export const localClientIds = {
 } as const;
 const personaClient = localClientIds.importer;
 const showcaseClient = localClientIds.showcase;
-export function localShowcaseClientRegistration() {
+export async function localShowcaseClientRegistration() {
+  const [
+    { DEVELOPMENT_SHOWCASE_SCOPES },
+    { developmentCollectionScopes },
+    { developmentPersonalListScopes },
+  ] = await Promise.all([
+    import('../../../scripts/datasets/showcase-community.ts'),
+    import('../../../scripts/datasets/development-showcase.ts'),
+    import('../../importer/src/showcase-personal-list.ts'),
+  ]);
   return {
     clientId: showcaseClient,
     firstParty: true,
@@ -202,6 +242,7 @@ export function developmentRegistrationPassword(keys: DevelopmentKeys): string {
 }
 
 async function privateKey(): Promise<JWK> {
+  const { exportJWK, generateKeyPair } = await import('jose');
   const pair = await generateKeyPair('ES256', { extractable: true });
   return { ...(await exportJWK(pair.privateKey)), kid: randomUUID(), alg: 'ES256', use: 'sig' };
 }
@@ -372,10 +413,37 @@ async function authDatabaseUrl() {
   return url.href;
 }
 
+/** Walk Vite parents read this instead of assembling Kernel a second time after seed. */
+export function walkFrontendEnvironmentPath(directory = state): string {
+  return resolve(directory, 'frontend.env');
+}
+
+export function parseDevelopmentBindings(text: string): Record<string, string> {
+  return Object.fromEntries(
+    text.split('\n').flatMap((line) => {
+      const match = /^([A-Z0-9_]+)='(.*)'$/.exec(line);
+      return match ? [[match[1]!, match[2]!]] : [];
+    }),
+  );
+}
+
+export async function readWalkFrontendEnvironment(
+  directory = state,
+): Promise<Record<string, string> | undefined> {
+  try {
+    const bindings = parseDevelopmentBindings(await readFile(walkFrontendEnvironmentPath(directory), 'utf8'));
+    return bindings.WEBSITE_SCOPES && bindings.AUTH_SECURITY_SCOPE_CONFIGURATION ? bindings : undefined;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
+  }
+}
+
 async function setup() {
   if (process.env.NODE_ENV === 'production') throw new Error('Local stack is development only');
   const env = await kernelEnvironment();
   const kernelUrl = localDatabase(env.DATABASE_URL!);
+  const { Pool } = await import('pg');
   const pool = new Pool({ connectionString: kernelUrl.href });
   try {
     // The service has its own database even though development shares one PostgreSQL server.
@@ -389,6 +457,7 @@ async function setup() {
   } finally {
     await pool.end();
   }
+  const { migrate } = await import('./database.ts');
   migrate(await authDatabaseUrl());
   const keys = await developmentKeys();
   const contentBindings = developmentContentBindings(env);
@@ -401,12 +470,11 @@ async function setup() {
     }),
   );
   await privateFile(resolve(state, 'importer.jwk'), JSON.stringify(keys.importer));
-  await privateFile(
-    resolve(root, 'apps/web/.dev.vars'),
-    developmentBindings({
-      ...developmentWebsiteBindings(keys, await developmentWebsiteConfiguration(env)),
-      ...developmentMediaBindings({ ...env, ...contentBindings }, keys),
-    }),
+  if (process.env.REZICS_WALK_DEFER_FRONTENDS === '1') return;
+  await persistDevelopmentWebsiteBindings(
+    keys,
+    await developmentWebsiteConfiguration(env),
+    { ...env, ...contentBindings },
   );
 }
 
@@ -438,6 +506,10 @@ export async function assemble(options?: {
   const env = options?.env ?? (await kernelEnvironment());
   const config = readConfig(env);
   localDatabase(config.databaseUrl);
+  const [{ Pool }, { mountedWebsiteConfiguration }] = await Promise.all([
+    import('pg'),
+    import('./website-composition.ts'),
+  ]);
   const kernelPool = new Pool({ connectionString: config.databaseUrl });
   const database = new Pool({ connectionString: options?.authDatabaseUrl ?? (await authDatabaseUrl()) });
   const keys = options?.keys ?? (await developmentKeys());
@@ -447,8 +519,12 @@ export async function assemble(options?: {
     routeKey: config.routeKey,
     ...(config.receiptKeys ? { receiptKeys: config.receiptKeys } : {}),
   });
-  const actions = accessActionCatalogue(actionCatalogue(kernel));
-  const website = developmentWebsiteScopeConfiguration(mountedWebsiteConfiguration(actionCatalogue(kernel)));
+  const catalogue = actionCatalogue(kernel);
+  const actions = accessActionCatalogue(catalogue);
+  const website: DevelopmentWebsiteBindings = {
+    ...developmentWebsiteScopeConfiguration(mountedWebsiteConfiguration(catalogue)),
+    AUTH_SECURITY_SCOPE_CONFIGURATION: authSecurityScopeConfiguration(actions.keys()),
+  };
   let service: import('../src/index.ts').AuthService;
   const access = createAccess({
     actions,
@@ -508,7 +584,7 @@ export async function assemble(options?: {
     firstParty: true,
     scopes: [...new Set([...importerScopes, 'account:manage', 'exposure:open'])],
   });
-  await service.internal.registerClient(localShowcaseClientRegistration());
+  await service.internal.registerClient(await localShowcaseClientRegistration());
   await host.start();
   const stop = async () => {
     try {
@@ -684,22 +760,19 @@ export function issuerRequest(request: Request): Request {
 async function serveHost() {
   const composition = await assemble();
   try {
+    if (process.env.REZICS_WALK_DEFER_FRONTENDS === '1')
+      await persistDevelopmentWebsiteBindings(composition.keys, composition.website);
     const person = await provisionPersona(composition);
     printPersona(composition.keys, person.accountId);
   } catch (error) {
     await composition.stop();
     throw error;
   }
-  const mediaBindings = developmentMediaBindings(await kernelEnvironment(), composition.keys);
-  const media = mediaBindings.LOCAL_MEDIA_TOKEN
-    ? (await import('../../kernel/src/content/index.ts')).developmentMediaHandler(mediaBindings.LOCAL_MEDIA_TOKEN)
-    : undefined;
   const server = Bun.serve({
     hostname: '127.0.0.1',
     port: localPort(origins.native),
     fetch: async (request) => {
       if (new URL(request.url).hostname !== '127.0.0.1') return new Response('Loopback only', { status: 403 });
-      if (new URL(request.url).pathname.startsWith('/_local/media/') && media) return media(request);
       if (new URL(request.url).pathname === '/local-turnstile.js')
         return new Response(widgetScript, { headers: { 'content-type': 'text/javascript' } });
       return composition.host.handler(issuerRequest(request));
@@ -721,11 +794,18 @@ async function serveHost() {
 
 async function launch(action: 'pages' | 'web', args: string[]) {
   const pages = action === 'pages';
-  const website = await developmentWebsiteConfiguration();
-  const keys = await developmentKeys();
+  const walkFrontend = process.env.REZICS_WALK_DEFER_FRONTENDS === '1';
+  const persisted = walkFrontend ? await readWalkFrontendEnvironment() : undefined;
+  const website = persisted ? undefined : await developmentWebsiteConfiguration();
+  const keys = persisted ? undefined : await developmentKeys();
+  const bindings = persisted ?? {
+    ...developmentWebsiteBindings(keys!, website!),
+    ...developmentMediaBindings(await kernelEnvironment(), keys!),
+    ...(pages ? developmentAuthPageBindings(website!) : {}),
+  };
   const child = Bun.spawn(
     [
-      'bun',
+      ...walkBun(process.env),
       'run',
       '--cwd',
       pages ? 'apps/auth' : 'apps/web',
@@ -742,12 +822,15 @@ async function launch(action: 'pages' | 'web', args: string[]) {
       env: {
         ...process.env,
         AUTH_ORIGIN: origins.native,
-        ...developmentWebsiteBindings(keys, website),
-        ...developmentMediaBindings(await kernelEnvironment(), keys),
-        ...(pages ? developmentAuthPageBindings(website) : {}),
+        ...bindings,
         PUBLIC_ORIGIN: origins.web,
         TURNSTILE_SITE_KEY: 'local',
         TURNSTILE_SCRIPT_URL: `${origins.issuer}/local-turnstile.js`,
+        ...(walkFrontend
+          ? {
+              NODE_OPTIONS: [process.env.NODE_OPTIONS, '--max-old-space-size=512'].filter(Boolean).join(' '),
+            }
+          : {}),
       },
       stdin: 'inherit',
       stdout: 'inherit',
@@ -765,19 +848,116 @@ async function launch(action: 'pages' | 'web', args: string[]) {
   }
 }
 
-/**
- * Starts the local stack in three ordered phases, each gated on what the next one needs. The issuer origin is served by
- * the Pages process, which proxies to the native Auth host, and the kernel fetches its keys from that issuer while it
- * boots. So identity, Pages and the workflow worker start first: the worker's DBOS launch creates the system schema the
- * kernel boots against, and its "Worker ready" line marks that launch complete. The kernel boots next and must answer
- * before Web, the heaviest compilation, begins. Each phase logs when it is ready and names itself when it stalls.
- */
+export function walkBun(env: NodeJS.ProcessEnv = process.env): string[] {
+  return env.REZICS_WALK_SMOL === '1' ? [process.execPath, '--smol'] : ['bun'];
+}
+
+export function walkSetupCommand(env: NodeJS.ProcessEnv, script: readonly string[]): string[] {
+  return [...walkBun(env), ...script];
+}
+
+/** Walk host already wrote seed.env; a second Auth+Kernel assemble would share the 6 GiB slice. */
+export function walkHostPersonaAccount(
+  env: NodeJS.ProcessEnv | Record<string, string | undefined>,
+  seedEnvContents: string | undefined,
+): string | undefined {
+  if (env.REZICS_WALK_DEFER_FRONTENDS !== '1' || seedEnvContents === undefined) return undefined;
+  const match = /^REZICS_DEV_PERSONA_ACCOUNT=(\S+)/m.exec(seedEnvContents);
+  return match?.[1];
+}
+
+/** Kernel and native Auth. Web, Auth pages and the worker stay down through persona/seed when deferred. */
+export function walkStartProcesses(
+  env: NodeJS.ProcessEnv = process.env,
+): ReadonlyArray<{ command: string[]; cwd: string }> {
+  const bun = walkBun(env);
+  const kernel = join(root, 'services/kernel');
+  const host = { command: [...bun, 'services/auth/scripts/dev-stack.ts', 'host'], cwd: root };
+  const pages = { command: [...bun, 'services/auth/scripts/dev-stack.ts', 'pages'], cwd: root };
+  const web = { command: [...bun, 'services/auth/scripts/dev-stack.ts', 'web'], cwd: root };
+  const server =
+    env.REZICS_WALK_SMOL === '1'
+      ? { command: [...bun, 'src/server.ts'], cwd: kernel }
+      : { command: [...bun, 'run', '--cwd', 'services/kernel', 'dev'], cwd: root };
+  const worker =
+    env.REZICS_WALK_SMOL === '1'
+      ? { command: [...bun, 'src/worker.ts'], cwd: kernel }
+      : { command: [...bun, 'run', '--cwd', 'services/kernel', 'worker'], cwd: root };
+  return env.REZICS_WALK_DEFER_FRONTENDS === '1' ? [host, server] : [host, pages, web, server, worker];
+}
+
+/** Walk `start` is a waiter; it still loads this module, so it runs under bun --smol on a walk host. */
+export function walkStackStartCommand(env: NodeJS.ProcessEnv = process.env): string[] {
+  return [...walkBun(env), 'services/auth/scripts/dev-stack.ts', 'start'];
+}
+
+/** Durable work shares the 6 GiB slice with dump import unless the journey starts it after seed. */
+async function serveWorker() {
+  const env = {
+    ...process.env,
+    ...(await kernelEnvironment()),
+    ...developmentKernelBindings(),
+  };
+  const bun = walkBun(env);
+  const kernel = join(root, 'services/kernel');
+  const child = Bun.spawn(
+    env.REZICS_WALK_SMOL === '1' ? [...bun, 'src/worker.ts'] : [...bun, 'run', '--cwd', 'services/kernel', 'worker'],
+    {
+      cwd: env.REZICS_WALK_SMOL === '1' ? kernel : root,
+      env,
+      stdin: 'inherit',
+      stdout: 'inherit',
+      stderr: 'inherit',
+    },
+  );
+  const stop = () => child.kill('SIGTERM');
+  process.once('SIGINT', stop);
+  process.once('SIGTERM', stop);
+  try {
+    process.exitCode = await child.exited;
+  } finally {
+    process.off('SIGINT', stop);
+    process.off('SIGTERM', stop);
+  }
+}
+
 async function start() {
   const env = {
     ...process.env,
     ...(await kernelEnvironment()),
     ...developmentKernelBindings(),
   };
+  if (env.REZICS_WALK_DEFER_FRONTENDS === '1') {
+    const children = walkStartProcesses(env).map(({ command, cwd }) =>
+      Bun.spawn(command, { cwd, env, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' }),
+    );
+    let stopping = false;
+    const stop = () => {
+      stopping = true;
+      for (const child of children) child.kill('SIGTERM');
+    };
+    process.once('SIGINT', stop);
+    process.once('SIGTERM', stop);
+    try {
+      await Promise.race([
+        new Promise<void>((resolve) => {
+          const done = () => resolve();
+          process.once('SIGINT', done);
+          process.once('SIGTERM', done);
+        }),
+        ...children.map(async (child) => {
+          await child.exited;
+        }),
+      ]);
+      stop();
+      await Promise.all(children.map((child) => child.exited));
+      process.exitCode = 0;
+    } finally {
+      process.off('SIGINT', stop);
+      process.off('SIGTERM', stop);
+    }
+    return;
+  }
   const children: ReturnType<typeof Bun.spawn>[] = [];
   const commands: string[][] = [];
   const spawnChild = (command: string[], stdout: 'inherit' | 'pipe' = 'inherit') =>
@@ -894,6 +1074,7 @@ async function stopChildren(children: ReturnType<typeof Bun.spawn>[], graceMs = 
   if (outlived) for (const child of running()) child.kill('SIGKILL');
   await exits;
 }
+
 const SIGNAL_NUMBERS = { SIGHUP: 1, SIGINT: 2, SIGTERM: 15 } as const;
 
 function dockerOutput(args: string[], timeoutMs?: number): string {
@@ -907,10 +1088,11 @@ function dockerOutput(args: string[], timeoutMs?: number): string {
   return result.stdout.trim();
 }
 
-/** Removes the task's containers and volumes that exist, so a partial start tears down completely. */
+/** Removes the task's containers and volumes that exist; a killed Docker cannot hide the walk failure. */
 function removeWalkStack(names: WalkNames): void {
   for (const container of [names.database, names.search]) {
-    if (!dockerOutput(['ps', '-aq', '--filter', `name=^${container}$`])) continue;
+    if (!walkDockerOutput(spawnSync('docker', ['ps', '-aq', '--filter', `name=^${container}$`], { encoding: 'utf8' })))
+      continue;
     try {
       dockerOutput(['kill', container], 15_000);
     } catch {
@@ -923,7 +1105,10 @@ function removeWalkStack(names: WalkNames): void {
     }
   }
   for (const volume of [names.database, names.search]) {
-    if (!dockerOutput(['volume', 'ls', '-q', '--filter', `name=^${volume}$`])) continue;
+    if (
+      !walkDockerOutput(spawnSync('docker', ['volume', 'ls', '-q', '--filter', `name=^${volume}$`], { encoding: 'utf8' }))
+    )
+      continue;
     try {
       dockerOutput(['volume', 'rm', volume], WALK_DOCKER_REMOVE_MS);
     } catch (error) {
@@ -977,6 +1162,38 @@ async function untilReady(
   }
 }
 
+class WalkPortAllocated extends Error {
+  readonly index: number;
+  constructor(script: string[], index: number) {
+    super(`walk: ${script.join(' ')} failed`);
+    this.name = 'WalkPortAllocated';
+    this.index = index;
+  }
+}
+
+/** Runs one setup script and keeps its stderr, so a Docker port collision can skip this slot. */
+async function runWalkSetup(
+  script: string[],
+  env: Record<string, string>,
+  onSpawn: (child: ReturnType<typeof Bun.spawn>) => void,
+): Promise<void> {
+  const child = Bun.spawn(walkSetupCommand(env, script), {
+    cwd: root,
+    env,
+    stdin: 'ignore',
+    stdout: 'inherit',
+    stderr: 'pipe',
+  });
+  onSpawn(child);
+  const stderr = await new Response(child.stderr).text();
+  if (stderr) process.stderr.write(stderr);
+  if ((await child.exited) !== 0) {
+    const error = new Error(`walk: ${script.join(' ')} failed`);
+    if (walkPortAllocated(stderr)) (error as Error & { portAllocated: true }).portAllocated = true;
+    throw error;
+  }
+}
+
 /**
  * Runs `command` against one walk stack: admission, the stack `dev:infra` and `dev` start, then teardown when the
  * command ends or the attempt is signalled. Only a worker whose brief lists native or browser acceptance may start one.
@@ -986,6 +1203,8 @@ async function walk(command: string[]): Promise<number> {
   if (!task || !walkStackRequired(process.env))
     throw new Error('walk stacks are for a worker whose brief lists acceptance.requires native or browser');
   if (command.length === 0) throw new Error('Usage: bun services/auth/scripts/dev-stack.ts walk -- <command...>');
+  process.env.REZICS_WALK_SMOL = '1';
+  reclaimInactiveFileCache();
   const controller = new AbortController();
   let current: ReturnType<typeof Bun.spawn> | undefined;
   let interrupted: keyof typeof SIGNAL_NUMBERS | undefined;
@@ -998,52 +1217,69 @@ async function walk(command: string[]): Promise<number> {
     process.on(signal, handler);
     return [signal, handler] as const;
   });
+  const blocked = new Set<number>();
   let slot: StackSlot | undefined;
   let code = 0;
   try {
-    slot = await admitWalkStack(task, process.env, root, controller.signal);
-    const names = walkStackNames(task, slot.index!);
-    const env = walkProcessEnvironment(task, slot.index!);
-    const ports = walkStackPorts(slot.index!);
-    let starting: ReturnType<typeof Bun.spawn> | undefined;
-    try {
-      removeWalkStack(names); // an interrupted attempt of this slot may have left its stack behind
-      for (const script of [
-        ['services/kernel/scripts/database.ts', 'up'],
-        ['services/kernel/scripts/search.ts', 'up'],
-        ['services/auth/scripts/dev-stack.ts', 'setup'],
-      ]) {
-        let code = 1;
-        for (let attempt = 0; attempt < 2 && code !== 0; attempt++) {
-          current = Bun.spawn([process.execPath, ...script], {
-            cwd: root,
-            env,
-            stdin: 'ignore',
-            stdout: 'inherit',
-            stderr: 'inherit',
-          });
-          code = await current.exited;
-          if (code !== 0 && attempt === 0 && script[1] === 'up' && script[0]?.endsWith('database.ts'))
-            removeWalkStack(names);
+    while (true) {
+      slot = await admitWalkStack(task, process.env, root, controller.signal, blocked);
+      const names = walkStackNames(task, slot.index!);
+      const env = walkProcessEnvironment(task, slot.index!);
+      const ports = walkStackPorts(slot.index!);
+      let starting: ReturnType<typeof Bun.spawn> | undefined;
+      let failed: unknown;
+      try {
+        removeWalkStack(names); // an interrupted attempt of this slot may have left its stack behind
+        for (const script of [
+          ['services/kernel/scripts/database.ts', 'up'],
+          ['services/auth/scripts/dev-stack.ts', 'setup'],
+          ['services/kernel/scripts/search.ts', 'up'],
+        ]) {
+          try {
+            await runWalkSetup(script, env, (child) => {
+              current = child;
+            });
+            reclaimInactiveFileCache();
+          } catch (error) {
+            if (
+              error instanceof Error &&
+              (error as Error & { portAllocated?: boolean }).portAllocated &&
+              slot.index != null
+            )
+              throw new WalkPortAllocated(script, slot.index);
+            throw error;
+          }
         }
-        if (code !== 0) throw new Error(`walk: ${script.join(' ')} failed`);
+        const log = join(root, '.temp', 'walk', task, 'stack.log');
+        await mkdir(dirname(log), { recursive: true });
+        starting = current = Bun.spawn(walkStackStartCommand(env), {
+          cwd: root,
+          env,
+          stdin: 'ignore',
+          stdout: Bun.file(log),
+          stderr: Bun.file(log),
+        });
+        await untilReady(walkReadyUrls(ports, env), starting);
+        reclaimInactiveFileCache();
+        current = Bun.spawn(command, { env, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' });
+        code = await current.exited;
+      } catch (error) {
+        failed = error;
       }
-      const log = join(root, '.temp', 'walk', task, 'stack.log');
-      await mkdir(dirname(log), { recursive: true });
-      await writeFile(log, '');
-      starting = current = Bun.spawn([process.execPath, 'services/auth/scripts/dev-stack.ts', 'start'], {
-        cwd: root,
-        env,
-        stdin: 'ignore',
-        stdout: Bun.file(log),
-        stderr: Bun.file(log),
-      });
-      await untilReady(walkReadyUrls(ports), starting);
-      current = Bun.spawn(command, { env, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' });
-      code = await current.exited;
-    } finally {
       if (starting) await stopSpawned(starting);
       removeWalkStack(names);
+      if (failed === undefined) break;
+      if (
+        failed instanceof WalkPortAllocated &&
+        interrupted === undefined &&
+        blocked.size + 1 < walkStackLimit(process.env)
+      ) {
+        blocked.add(failed.index);
+        await slot.release();
+        slot = undefined;
+        continue;
+      }
+      throw failed;
     }
   } catch (error) {
     if (interrupted === undefined) throw error;
@@ -1070,19 +1306,30 @@ if (import.meta.main) {
       await setup();
     } else if (action === 'host') await serveHost();
     else if (action === 'persona') {
-      const composition = await assemble();
-      try {
-        const person = await provisionPersona(composition);
-        printPersona(composition.keys, person.accountId);
-      } finally {
-        await composition.stop();
+      const account = walkHostPersonaAccount(
+        process.env,
+        await readFile(resolve(state, 'seed.env'), 'utf8').catch((error) => {
+          if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+          throw error;
+        }),
+      );
+      if (account) printPersona(await developmentKeys(), account);
+      else {
+        const composition = await assemble();
+        try {
+          const person = await provisionPersona(composition);
+          printPersona(composition.keys, person.accountId);
+        } finally {
+          await composition.stop();
+        }
       }
     } else if (action === 'pages' || action === 'web') await launch(action, process.argv.slice(3));
+    else if (action === 'worker') await serveWorker();
     else if (action === 'start') await start();
     else if (action === 'walk') {
       const rest = process.argv.slice(3);
       process.exitCode = await walk(rest[0] === '--' ? rest.slice(1) : rest);
-    } else throw new Error('Use setup, start, host, pages, web, persona or walk');
+    } else throw new Error('Use setup, start, host, pages, web, worker, persona or walk');
   } catch (error) {
     console.error(error);
     process.exit(1);

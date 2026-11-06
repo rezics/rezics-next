@@ -242,31 +242,35 @@ plane passes that list to the worker as `GOAL_ACCEPTANCE_REQUIRES`. Every other 
 containers, and its checks keep the remote placement in [scripts/README.md](../../scripts/README.md#check-hosts).
 
 ```sh
-bun services/auth/scripts/dev-stack.ts walk -- <command...>
+bun --smol services/auth/scripts/dev-stack.ts walk -- <command...>
 ```
 
 `walk` runs in this order:
 
 1. Waits for a walk slot. At most `REZICS_WALK_STACKS` stacks (default 6; an integer from 1 to 1000) run on the host
-   at once, counted across worktrees under the main checkout's `.temp/walk-stacks`. A further start waits in arrival
-   order and prints its position, `walk <task> waiting (<held>/<limit> held, <n> ahead)`. It is never refused.
+   at once, counted under `/tmp/rezics-walk-stacks` (`REZICS_WALK_STACK_DIR` overrides; `TMPDIR` does not), including
+   concurrent remote-check checkouts. A further start waits in arrival order and prints its position,
+   `walk <task> waiting (<held>/<limit> held, <n> ahead)`. It is never refused.
 2. Names the stack's containers and volumes `rezics-walk-<task>-<slot>-database` and
    `rezics-walk-<task>-<slot>-search`, and gives it its slot's loopback ports: `20000 + 10 × slot` plus 0 for Web, 1
    for the Auth pages, 2 for native Auth, 3 for Kernel, 4 for PostgreSQL and 5 for search. A stuck container from an
    earlier slot cannot occupy a later slot's names.
-   Admission skips slots whose ports still have listeners, including containers surviving an interrupted launcher.
+   Admission skips slots whose ports still have listeners or Docker-published mappings, including containers surviving
+   an interrupted launcher. A Docker bind that still reports the port allocated skips that slot and admits another.
    Those listeners remain untouched; when all slots are occupied, the launch keeps its queue position.
-3. Runs `db up`, `search up` and `setup`, starts the processes `dev` starts, and waits until Web, the Auth pages and
-   Kernel answer, for at most twenty minutes. Readiness first checks that the port accepts TCP, then fetches with the
-   remaining window so a short abort cannot strand Vite's first compile. A hard request budget also bounds a listener
-   that never writes. `db up` and `search up` retry once; a failed database bring-up first retires this task's containers.
-   The walk `start` process stays up until SIGTERM or SIGINT and restarts a child that exits, so a native host
-   registration timeout or worker database blip does not tear down a ready Web. Teardown SIGKILLs a stack process
-   that ignores SIGTERM, then docker-kills and `docker rm -f -v` this task's containers with a bounded wait. Its output
-   goes to `.temp/walk/<task>/stack.log`.
+3. Runs `db up`, `search up` and `setup`, then starts native Auth and Kernel. It waits until native Auth JWKS and
+   Kernel health answer, for at most twenty minutes. Vite/workerd for Web and Auth pages, Playwright and the worker
+   stay down through persona and seed so they cannot share the 6 GiB run slice with dump import. Readiness first checks
+   that the port accepts TCP, then fetches with the remaining window so a short abort cannot strand Vite's first
+   compile. A hard request budget also bounds a listener that never writes. `db up` and `search up` retry once; a failed
+   database bring-up first retires this task's containers. Teardown SIGKILLs a stack process that ignores SIGTERM, then
+   docker-kills and `docker rm -f -v` this task's containers with a bounded wait. Output goes to
+   `.temp/walk/<task>/stack.log`.
 4. Runs `<command>` in the caller's directory with the stack's names, ports and origins. Inside that command, run
    `bun services/auth/scripts/dev-stack.ts persona`, load its private `seed.env`, then run
    `bun scripts/datasets/cross-media-seed.ts --dev`, as described in [Seeded journey walks](#seeded-journey-walks).
+   A seeded browser journey starts Web, Auth pages and the worker after seed, forwarding issuer JWKS through native
+   Auth until those pages bind.
 5. Stops the processes, removes the stack's containers and volumes, and releases the slot when the command ends or the
    attempt receives SIGHUP, SIGINT or SIGTERM. A stack left by a killed attempt is removed when the same task next
    starts.
@@ -292,6 +296,23 @@ Decision: walk readiness keeps a TCP listen check, a remaining-window first-comp
 SIGTERM, and bounded docker kill then removal so a Vite SSR abort loop, a stuck worker, or a Dead OpenSearch container
 cannot replace a seeded product walk. Walk `start` waits for the walk signal rather than the first child exit.
 `stopSpawned` accepts Bun subprocesses whose `signalCode` may be a number or a signal name.
+Decision: remote placement forwards the original launcher `GOAL_TASK_ID`, `GOAL_ATTEMPT` and `GOAL_ACCEPTANCE_REQUIRES`
+into the walk command without rewriting recorded argv. Walk search nodes use a 128m heap without mmap, Postgres 32MB
+shared_buffers, and docker memory ceilings (search 768m, database 256m) so seeded volume file cache cannot fill the
+6 GiB run slice. OpenSearch cannot start in 256m; that container OOM is recorded on the run slice as a 6 GiB kill.
+Reclaim writes only `inactive_file` bytes, never a 4 GiB request against a smaller slice. Walk setup skips Kernel
+catalogue composition; the Auth host writes frontend bindings after assemble. Kernel starts with bun --smol against
+`src/server.ts` (no `--watch`); the worker pool is 1. Web, Auth pages and the worker start after seed. Walk admission is
+host-wide at `/tmp/rezics-walk-stacks` so concurrent remote-check checkouts share slots and ports; leftover containers
+for this slot are removed after admission, and a Docker bind that still reports the port allocated skips that slot.
+`persona` inside a deferred-frontend walk reuses the host-written `seed.env` instead of assembling a second Auth+Kernel
+composition in the 6 GiB slice. Issuer JWKS and seed `POST /signin/key` are forwarded onto native Auth with the original
+request, including POST bodies, until Auth pages bind. Launch the walk with `bun --smol` so the parent module graph
+shares that heap; database, search and setup use that same bun; leftover Docker teardown never throws; a restored dump
+extraction that matches the pin timestamp skips archive hashing even without a marker; sequential dump reads
+drop-behind; walk/start waiters keep Kernel off their graphs; Vite reads host-written frontend bindings; and each
+walk/seed/browser phase asks the slice to reclaim only its inactive file pages. The walk `start` waiter itself runs
+under bun --smol.
 
 Decision: keep one causal binding regression and the existing launcher assertions. Kernel setup persists the selected
 loopback Auth issuer, audience, JWKS URL, Kernel host and API port in `services/kernel/.env`; start applies the same
@@ -301,18 +322,22 @@ remain separate acceptance outcomes.
 ## Seeded journey walks
 
 One area outcome shares one admitted current-revision stack session and one supported seed result. Start that session
-with `bun services/auth/scripts/dev-stack.ts walk -- <command...>`. The slot lock is the admission: the environment
+with `bun --smol services/auth/scripts/dev-stack.ts walk -- <command...>`. The slot lock is the admission: the environment
 names the slot, and the command inherits that stack's container names, loopback ports and origins. Obtain the
 controller-owned stack, browser and persona handles, then record the source revision, completed `result.json` and
 actual native identities. Missing credentials, private exports or required seeded roles are setup inputs for the
 controller. Keep actual doctor volumes and live process and browser sessions. Use `127.0.0.1` throughout.
 
 Inside `<command>`, provision with `bun services/auth/scripts/dev-stack.ts persona` and seed with
-`bun scripts/datasets/cross-media-seed.ts --dev` after loading the private `seed.env` that persona wrote. Do not run
+`bun scripts/datasets/cross-media-seed.ts --dev` after loading the private `seed.env` that persona wrote. A deferred-frontend
+walk's `persona` reprints the host-written account and skips a second Auth+Kernel assemble. Do not run
 `task seed:dev` or `task dev:persona` inside a walk: those depend on `dev:infra` and would start the default-port
 stack beside the admitted slot. Ordinary member personas use actual signup; privileged roles come from native
 admission. Browser launch sets `TMPDIR` to a short root such as `/tmp/rw` when the inherited root is missing, so
 Chromium Unix socket paths fit; the controller supplies a healthy connector if that root is unavailable.
+Anonymous locale/viewport captures share one Chromium and own one context each; the signed-in session is a second
+browser. Chromium runs one renderer without GPU or media so capture buffers do not accumulate across visits.
+Playwright is imported only after seed so its native heap cannot share the dump-import slice.
 
 Execute real pages through the production BFF, API and native commands for every served persona. Trace and repair
 defects where they occur, then rerun the complete area journey. Record secret-free source, seed and persona
@@ -338,6 +363,11 @@ The development pin is `vndb-db-2026-11-04.tar.zst` from https://dl.vndb.org/dum
 integrity, required tables and `.header` files, and the exact timestamp before recording `vndb/manifest.json`.
 Missing or changed pinned bytes stop the seed; it does not continue with Bangumi alone. Restore the exact archive
 in the dump cache when the provider rotates it away. Changing the pin is an explicit source-generation change.
+Remote seeded walks copy only those pinned archives onto `/srv/rezics-check/datasets/dumps/downloads` before the
+6 GiB command slice, extract under the dump-cache lock on the host, and set `REZICS_DATASETS_DUMP_CACHE` there, so
+download and extract stay out of the run and a rotated public file cannot replace the pin. Incomplete archive
+transfers resume. Timestamp-verified extracted tables reuse without hashing the archive, and the pin marker is
+written when missing. Sequential table reads drop-behind inside the slice.
 VNDB's dump metadata licence remains independent of image rights. The wrapper's returned and persisted
 `developmentShowcase.sourceSnapshots` carries the verified archive URL, filename, SHA-256 and metadata licences for
 both providers, plus VNDB's verified TIMESTAMP, even when later publication is incomplete.

@@ -79,7 +79,7 @@ function site(): Promise<string> {
     ])
       delete env[name];
     // The anonymous fixture never signs in, but Wrangler requires the declared secret binding.
-    env.WEBSITE_CLIENT_KEY = 'unused-by-anonymous-subject-fixture';
+    env.WEBSITE_CLIENT_KEY = '{}';
     child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
       cwd: app,
       detached: true,

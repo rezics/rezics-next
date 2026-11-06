@@ -5,22 +5,71 @@ import { browserObservation, type BrowserObservationSnapshot } from '../../sessi
 const noSubscribe = () => () => {};
 const UNKNOWN_SNAPSHOT: BrowserObservationSnapshot = { state: 'unknown' };
 const unknownSnapshot = () => UNKNOWN_SNAPSHOT;
+const STANDALONE_SNAPSHOT = JSON.stringify(['unknown', null, null, true]);
 
-/** Consume the shared browser authority without preparing another request. */
-function observeCommunityEnvironment(client: QueryClient | undefined) {
+type CommunityEnvironment = {
+  observation: ReturnType<typeof browserObservation> | undefined;
+  sourceCurrent: () => boolean;
+  snapshot: () => string;
+  subscribe: (notify: () => void) => () => void;
+};
+
+/**
+ * Cache the external-store snapshot until a subscription fires. React compares getSnapshot with
+ * Object.is on every paired read; a fresh object or a mutating sourceCurrent() tears and loops.
+ * Standalone ReviewList/ThreadList mounts have no QueryClient, so both client and server reads
+ * reuse the same cached unknown snapshot.
+ */
+function observeCommunityEnvironment(client: QueryClient | undefined, queryKey?: readonly unknown[]): CommunityEnvironment {
   const observation = client ? browserObservation(client) : undefined;
+  const source = queryKey && client ? client.getQueryCache().find({ queryKey, exact: true }) : undefined;
+  const count = source?.state.dataUpdateCount;
+  let retired = false;
+  let cached: string | undefined = observation ? undefined : STANDALONE_SNAPSHOT;
+  const sourceCurrent = () => {
+    if (retired) return false;
+    if (!queryKey) return true;
+    const current = client?.getQueryCache().find({ queryKey, exact: true });
+    if (
+      !current ||
+      current !== source ||
+      current.state.status !== 'success' ||
+      current.state.fetchStatus !== 'idle' ||
+      current.state.isInvalidated ||
+      current.state.dataUpdateCount !== count
+    )
+      retired = true;
+    return !retired;
+  };
+  const compute = () => {
+    const current = observation?.getSnapshot() ?? UNKNOWN_SNAPSHOT;
+    return JSON.stringify([
+      current.state,
+      current.state === 'signed-in' ? current.observation.subject : null,
+      current.state === 'signed-in' ? current.observation.id : null,
+      sourceCurrent(),
+    ]);
+  };
+  const snapshot = () => (cached ??= compute());
+  const invalidate = (notify: () => void) => {
+    cached = undefined;
+    notify();
+  };
   return {
     observation,
-    snapshot: () => {
-      const current = observation?.getSnapshot() ?? unknownSnapshot();
-      return JSON.stringify([
-        current.state,
-        current.state === 'signed-in' ? current.observation.subject : null,
-        current.state === 'signed-in' ? current.observation.id : null,
-      ]);
+    sourceCurrent,
+    snapshot,
+    subscribe: (notify: () => void) => {
+      const stop = observation?.subscribe(() => invalidate(notify)) ?? noSubscribe();
+      // Fence every cache transition in-stack, including fetching/idle and A/B/A in one React batch.
+      const stopCache = observation?.subscribeCache(() => {
+        if (!sourceCurrent()) observation.publish(() => invalidate(notify));
+      });
+      return () => {
+        stop();
+        stopCache?.();
+      };
     },
-    serverSnapshot: () => 'unknown',
-    subscribe: observation?.subscribe ?? noSubscribe,
   };
 }
 
@@ -28,7 +77,7 @@ type CommunityReadingBinding = {
   source: object | string;
   descriptor: string;
   reader: string | null;
-  environment: ReturnType<typeof observeCommunityEnvironment>;
+  environment: CommunityEnvironment;
   generation: number;
   retired: boolean;
   privateRetired: boolean;
@@ -37,9 +86,9 @@ type CommunityReadingBinding = {
 
 function initialBinding(
   input: { source: object | string; descriptor: string; reader: string | null },
-  environment: ReturnType<typeof observeCommunityEnvironment>,
+  environment: CommunityEnvironment,
 ): CommunityReadingBinding {
-  const observed = environment.observation?.getSnapshot() ?? unknownSnapshot();
+  const observed = environment.observation?.getSnapshot() ?? UNKNOWN_SNAPSHOT;
   const matched =
     input.reader !== null && observed.state === 'signed-in' && observed.observation.subject === input.reader;
   const settledMismatch =
@@ -50,29 +99,44 @@ function initialBinding(
     ...input,
     environment,
     generation: 0,
-    retired: false,
+    retired: settledMismatch,
     privateRetired: settledMismatch,
     ...(matched && observed.state === 'signed-in' ? { observation: observed.observation } : {}),
   };
 }
 
-/** Public bodies survive session preparation; private actions bind once to the matching browser observation. */
+/** Initial session preparation preserves public bodies; an admitted reader binds once to its browser observation. */
 export function useSubjectCommunityReading(input: {
   source: object | string;
   descriptor: string;
   reader: string | null;
+  queryKey?: readonly unknown[] | undefined;
 }) {
   const client = useContext(QueryClientContext);
-  const environment = useMemo(() => observeCommunityEnvironment(client), [client]);
-  useSyncExternalStore(environment.subscribe, environment.snapshot, environment.serverSnapshot);
-  const observation = environment.observation?.getSnapshot() ?? unknownSnapshot();
+  // Keep the browser subscription mounted while a new source installs its cache witness.
+  const observationStore = client ? browserObservation(client) : undefined;
+  useSyncExternalStore(
+    observationStore?.subscribe ?? noSubscribe,
+    observationStore?.getSnapshot ?? unknownSnapshot,
+    observationStore?.getServerSnapshot ?? unknownSnapshot,
+  );
+  const queryIdentity = JSON.stringify(input.queryKey);
+  const environment = useMemo(
+    () => observeCommunityEnvironment(client, input.queryKey),
+    [client, queryIdentity, input.source],
+  );
+  useSyncExternalStore(environment.subscribe, environment.snapshot, environment.snapshot);
+  const observation = environment.observation?.getSnapshot() ?? UNKNOWN_SNAPSHOT;
   const [binding, setBinding] = useState(() => initialBinding(input, environment));
 
   if (binding.source !== input.source) {
     setBinding({ ...initialBinding(input, environment), generation: binding.generation + 1 });
   } else if (
     !binding.retired &&
-    (binding.descriptor !== input.descriptor || binding.reader !== input.reader || binding.environment !== environment)
+    (binding.descriptor !== input.descriptor ||
+      binding.reader !== input.reader ||
+      binding.environment !== environment ||
+      !environment.sourceCurrent())
   ) {
     setBinding({ ...binding, retired: true, generation: binding.generation + 1 });
   } else if (!binding.retired && input.reader !== null) {
@@ -83,14 +147,14 @@ export function useSubjectCommunityReading(input: {
           observation.observation.id !== binding.observation.id ||
           observation.observation.subject !== binding.observation.subject)
       ) {
-        setBinding({ ...binding, privateRetired: true, generation: binding.generation + 1 });
+        setBinding({ ...binding, retired: true, privateRetired: true, generation: binding.generation + 1 });
       }
     } else if (
       !binding.privateRetired &&
       (observation.state === 'signed-out' ||
         (observation.state === 'signed-in' && observation.observation.subject !== input.reader))
     ) {
-      setBinding({ ...binding, privateRetired: true, generation: binding.generation + 1 });
+      setBinding({ ...binding, retired: true, privateRetired: true, generation: binding.generation + 1 });
     } else if (
       !binding.privateRetired &&
       observation.state === 'signed-in' &&
@@ -115,12 +179,22 @@ export function useSubjectCommunityReading(input: {
   }, []);
 
   const isBoundCurrent = () => {
-    if (!mounted.current || current.current !== binding || binding.retired) return false;
+    if (!mounted.current || current.current !== binding || binding.retired || !environment.sourceCurrent())
+      return false;
+    if (binding.observation) {
+      const now = environment.observation?.getSnapshot() ?? UNKNOWN_SNAPSHOT;
+      if (
+        now.state !== 'signed-in' ||
+        now.observation.id !== binding.observation.id ||
+        now.observation.subject !== binding.observation.subject
+      )
+        return false;
+    }
     return true;
   };
   const privateActionsCurrent = () => {
     if (!isBoundCurrent() || binding.reader === null || binding.privateRetired) return false;
-    const now = environment.observation?.getSnapshot() ?? unknownSnapshot();
+    const now = environment.observation?.getSnapshot() ?? UNKNOWN_SNAPSHOT;
     return (
       binding.observation !== undefined &&
       now.state === 'signed-in' &&
@@ -130,7 +204,7 @@ export function useSubjectCommunityReading(input: {
   };
 
   return {
-    available: !binding.retired,
+    available: !binding.retired && environment.sourceCurrent(),
     key: String(binding.generation),
     isCurrent: isBoundCurrent,
     privateActionsCurrent,

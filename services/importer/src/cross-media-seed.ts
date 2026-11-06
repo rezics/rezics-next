@@ -2018,6 +2018,7 @@ export class CrossMediaDumpFiles implements CrossMediaTables {
   constructor(
     private readonly bangumi: string,
     private readonly vndb: string,
+    private readonly onTableReleased?: (file: string) => void,
   ) {}
   async *rows(provider: Provider, table: string, limits?: CrossMediaTableScanLimits): AsyncGenerator<Row> {
     ensure(/^[a-z][a-z_-]*$/.test(table), 'Invalid dump table name');
@@ -2112,6 +2113,7 @@ export class CrossMediaDumpFiles implements CrossMediaTables {
       throw error;
     } finally {
       stream.destroy();
+      this.onTableReleased?.(file);
     }
     const key = `${provider}/${table}`,
       hash = digest.digest('hex');
@@ -3424,6 +3426,8 @@ export type CrossMediaSeedCliOptions = {
   /** Calendar date from the selected VNDB dump's verified snapshot provenance. */
   sourceSnapshotAsOf?: string;
   composePersona?: (context: DevelopmentShowcaseContext) => Promise<DevelopmentShowcaseResult>;
+  /** Walk seeds drop each scanned dump table from the 6 GiB file cache. */
+  onDumpTableReleased?: (file: string) => void;
 };
 
 export type CrossMediaSeedReport = CrossMediaSeedResult & {
@@ -3493,7 +3497,11 @@ export async function runCrossMediaSeedCli(
   for (const flag of requiredFlags) ensure(values.has(flag), 'Missing seed option: ' + flag);
   const api = normalizeCrossMediaSeedOrigin(values.get('--api')!),
     auth = normalizeCrossMediaSeedOrigin(values.get('--auth')!);
-  const input = new CrossMediaDumpFiles(values.get('--bangumi')!, values.get('--vndb')!);
+  const input = new CrossMediaDumpFiles(
+    values.get('--bangumi')!,
+    values.get('--vndb')!,
+    options.onDumpTableReleased,
+  );
   let plan = await planCrossMediaSeed(input, {
     deferVndbCharacterAppearances: true,
     ...(options.selection ? { selection: showcaseFranchiseSelection(options.selection) } : {}),

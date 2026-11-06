@@ -10,7 +10,7 @@ import { loadSettingsPage } from '../../settings/preferences';
 import type { SessionEnv } from '../../session/client';
 import { defaultReader, type Reader } from '../../subject/reader';
 import type { typeFrame as TypeFrame } from '../../subject/definitions';
-import { validatePageRealm, validatePageNode, validateViewCursor } from './view-cursor';
+import { validatePageBoard, validatePageRealm, validatePageNode, validateViewCursor } from './view-cursor';
 import { loadSubjectPage, PageReadError, subjectRead, type SubjectPageData } from './subject';
 import { loadContextSubject } from './context-subject';
 import {
@@ -67,12 +67,13 @@ async function includeReleasedWorkCatalogue(
 }
 
 export const subjectKernelClient = createServerOnlyFn(
-  async (locale: string, realm?: string, expectedReader?: string | null, signal?: AbortSignal) => {
+  async (locale: string, realm?: string, expectedReader?: string | null, signal?: AbortSignal, board?: string) => {
     signal?.throwIfAborted();
     const { kernelClient } = await import('../../kernel/client');
     signal?.throwIfAborted();
     // Eden's treaty client is thenable; wrap it so this async boundary does not make a request to /v1.
-    if (realm === undefined) return { client: kernelClient(locale), authorization: undefined, reader: null };
+    if (realm === undefined && board === undefined)
+      return { client: kernelClient(locale), authorization: undefined, reader: null };
     const { env } = await import('cloudflare:workers');
     const { prepareSession, viewerCredential, sessionSubject } = await import('../../session/request');
     signal?.throwIfAborted();
@@ -99,12 +100,15 @@ export const subjectKernelClient = createServerOnlyFn(
 
 /** Resolve the current request's cache partition. This value never grants native read authority. */
 export const subjectRequestReader = createServerFn({ method: 'GET', strict: false })
-  .validator((input: { realm?: string | undefined }) => ({ realm: validatePageRealm(input.realm) }))
+  .validator((input: { realm?: string | undefined; board?: string | undefined }) => ({
+    realm: validatePageRealm(input.realm),
+    board: validatePageBoard(input.board),
+  }))
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
     const signal = getRequest().signal;
     signal.throwIfAborted();
-    return (await subjectKernelClient('en', data.realm, undefined, signal)).reader;
+    return (await subjectKernelClient('en', data.realm, undefined, signal, data.board)).reader;
   });
 
 function validateReader(value: unknown): string | null {
@@ -130,6 +134,7 @@ const readSubjectPage = createServerFn({ method: 'GET', strict: false })
       locale: value.locale,
       view: value.view as View | undefined,
       realm: validatePageRealm(value.realm),
+      board: validatePageBoard(value.board),
       reader: validateReader(value.reader),
     };
   })
@@ -137,10 +142,17 @@ const readSubjectPage = createServerFn({ method: 'GET', strict: false })
     capturePageRead(async () => {
       const signal = getRequest().signal;
       setResponseHeader('cache-control', 'private, no-store');
-      const { client, authorization } = await subjectKernelClient(data.locale, data.realm, data.reader);
+      const { client, authorization } = await subjectKernelClient(
+        data.locale,
+        data.realm,
+        data.reader,
+        signal,
+        data.board,
+      );
       assertSubjectPageReadActive(signal);
       let loaded = await loadSubjectPage(client, data.id, data.view, data.locale, {
         realm: data.realm,
+        board: data.board,
         authorization,
         signal,
       });
@@ -220,6 +232,7 @@ const readSubjectViewPages = createServerFn({ method: 'GET', strict: false })
       view: value.view,
       cursor: validateViewCursor(value.cursor),
       realm: validatePageRealm(value.realm),
+      board: validatePageBoard(value.board),
       reader: validateReader(value.reader),
       node: validatePageNode(value.node),
     };
@@ -230,10 +243,17 @@ const readSubjectViewPages = createServerFn({ method: 'GET', strict: false })
       setResponseHeader('cache-control', 'private, no-store');
       const { loadViewPages } = await import('./subject-frame');
       assertSubjectPageReadActive(signal);
-      const { client, authorization } = await subjectKernelClient(data.locale, data.realm, data.reader);
+      const { client, authorization } = await subjectKernelClient(
+        data.locale,
+        data.realm,
+        data.reader,
+        signal,
+        data.board,
+      );
       assertSubjectPageReadActive(signal);
       const loaded = await loadViewPages(client, data.id, data.view, data.locale, data.cursor, {
         realm: data.realm,
+        board: data.board,
         node: data.node,
         authorization,
         signal,
@@ -253,6 +273,8 @@ const readSubjectViewPages = createServerFn({ method: 'GET', strict: false })
           : undefined;
       page.requestedReader = data.reader;
       overview.requestedReader = data.reader;
+      page.requestedBoard = data.board;
+      overview.requestedBoard = data.board;
       const result = await withComposedCommunity(client, { kind: 'page', page }, signal);
       assertSubjectPageReadActive(signal);
       if (result.kind !== 'page') return result;
@@ -603,6 +625,7 @@ export const subjectPageQuery = (
   view: View | 'overview' = 'overview',
   realm?: string,
   reader: string | null = null,
+  board?: string,
 ) =>
   queryOptions({
     ...publicRead,
@@ -610,12 +633,12 @@ export const subjectPageQuery = (
     structuralSharing: false,
     staleTime: 0,
     gcTime: 0,
-    queryKey: [...key('subject-page', id, locale, view), realm ?? null, reader],
+    queryKey: [...key('subject-page', id, locale, view), realm ?? null, reader, board ?? null],
     retry: false,
     queryFn: async ({ signal }) =>
       admitPageRead(
         await readSubjectPage({
-          data: { id, locale, realm, reader, ...(view !== 'overview' ? { view } : {}) },
+          data: { id, locale, realm, reader, ...(board ? { board } : {}), ...(view !== 'overview' ? { view } : {}) },
           signal,
         }),
       ),
@@ -629,18 +652,38 @@ export const subjectViewPagesQuery = (
   realm?: string,
   node?: string,
   reader: string | null = null,
+  board?: string,
 ) =>
   queryOptions({
     ...publicRead,
     structuralSharing: false,
     staleTime: 0,
     gcTime: 0,
-    queryKey: ['subject-view-pages', id, locale, view, cursor ?? null, realm ?? null, node ?? null, reader] as const,
+    queryKey: [
+      'subject-view-pages',
+      id,
+      locale,
+      view,
+      cursor ?? null,
+      realm ?? null,
+      node ?? null,
+      reader,
+      board ?? null,
+    ] as const,
     retry: false,
     queryFn: async ({ signal }) =>
       admitPageRead(
         await readSubjectViewPages({
-          data: { id, locale, view, realm, node, reader, ...(cursor !== undefined ? { cursor } : {}) },
+          data: {
+            id,
+            locale,
+            view,
+            realm,
+            node,
+            reader,
+            ...(board ? { board } : {}),
+            ...(cursor !== undefined ? { cursor } : {}),
+          },
           signal,
         }),
       ),

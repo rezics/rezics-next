@@ -2,6 +2,7 @@ import { isView } from '@rezics/composition';
 import { notFound } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
+import { env } from 'cloudflare:workers';
 import { kernelClient } from '../../kernel/client';
 import { relationLabels } from '../../subject/definitions';
 import { loadPublicAccountJourney, type AccountView } from '../../accounts/public-profile/page-read';
@@ -30,5 +31,15 @@ export const readAgentPage = createServerFn({ method: 'GET', strict: false })
     const result = await loadPublicAccountJourney(kernelClient(data.locale), data, getRequest().signal);
     if (result.kind === 'missing') throw notFound();
     if (result.kind !== 'page') return result;
-    return { ...result, relations: await relationLabels(pageRelationProperties(result.overview), data.locale) };
+    const config = env as { TURNSTILE_SITE_KEY?: string; TURNSTILE_SCRIPT_URL?: string };
+    return {
+      ...result,
+      relations: await relationLabels(pageRelationProperties(result.overview), data.locale),
+      verification: {
+        sitekey: config.TURNSTILE_SITE_KEY ?? '',
+        scriptUrl:
+          (import.meta.env.DEV && config.TURNSTILE_SCRIPT_URL) ||
+          'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit',
+      },
+    };
   });

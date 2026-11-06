@@ -1,3 +1,4 @@
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
@@ -309,6 +310,11 @@ test('route targets resolve route templates and malformed targets are field erro
   const subject = await read({ subject: 'not-a-uuid' });
   expect(subject.response.status).toBe(400);
   expect(subject.body.errors).toEqual([{ pointer: '/target/subject', code: 'invalid_format' }]);
+  // A supplied Board is an exact operand of a Subject target only.
+  const board = await read({ subject: randomUUID(), board: 'not-a-uuid' });
+  expect(board.body.errors).toEqual([{ pointer: '/target/board', code: 'invalid_format' }]);
+  const routeBoard = await read({ route: '/', board: randomUUID() });
+  expect(routeBoard.body.errors).toEqual([{ pointer: '/target/board', code: 'unknown_field' }]);
   for (const target of [{}, { subject: randomUUID(), route: '/' }, 'x'])
     expect((await read(target)).response.status).toBe(400);
 });

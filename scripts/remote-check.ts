@@ -89,6 +89,15 @@ import {
   CHECK_HOST_NAME_PATTERN,
   performanceHosts,
 } from './check-placement.ts';
+import {
+  CHECK_HOST_DUMP_CACHE,
+  CROSS_MEDIA_DUMP_CACHE_ENV,
+  assertPinnedCrossMediaDumpCache,
+  commandNeedsCrossMediaDumpCache,
+  crossMediaDumpCacheRoot,
+  dumpCacheRsyncArgs,
+  hostDumpExtractScript,
+} from './cross-media-dump-cache.ts';
 
 /** Exact root-relative files owned by the remote-check producer lifecycle. */
 export const REMOTE_CHECK_PRODUCER_CONTROL_FILES = [
@@ -3637,23 +3646,29 @@ function runMemoryLimitShell(directory: string, memoryPerRunGiB: number): string
   const lastTestFile = quote(`${directory}/.last-test-file`);
   const reported = quote(`${directory}/.memory-limit-reported`);
   const bytes = Math.round(memoryPerRunGiB * 2 ** 30);
-  return `apply_run_memory_limit() {
-  slice_cgroup=$(systemctl show --property=ControlGroup --value "$REZICS_CHECK_SLICE" 2>/dev/null)
-  case "$slice_cgroup" in /*)
-    printf '%s\\n' ${bytes} > "/sys/fs/cgroup$slice_cgroup/memory.max" 2>/dev/null || true
-    printf '0\\n' > "/sys/fs/cgroup$slice_cgroup/memory.swap.max" 2>/dev/null || true
+  return `resolve_run_slice_cgroup() {
+  slice_cgroup=$(systemctl show --property=ControlGroup --value "$REZICS_CHECK_SLICE" 2>/dev/null || true)
+  case "$slice_cgroup" in /*) return 0 ;; esac
+  slice_cgroup=$(awk -F: '$1 == "0" { print $3; exit }' /proc/self/cgroup 2>/dev/null || true)
+  case "$slice_cgroup" in /*) ;; *) slice_cgroup=; return 1 ;; esac
+  case "$REZICS_CHECK_SLICE" in ?*)
+    case "$slice_cgroup" in *"$REZICS_CHECK_SLICE"*)
+      slice_cgroup="\${slice_cgroup%%"$REZICS_CHECK_SLICE"*}$REZICS_CHECK_SLICE"
     ;;
+    esac
+  ;;
   esac
 }
+apply_run_memory_limit() {
+  resolve_run_slice_cgroup || return 0
+  printf '%s\\n' ${bytes} > "/sys/fs/cgroup$slice_cgroup/memory.max" 2>/dev/null || true
+  printf '0\\n' > "/sys/fs/cgroup$slice_cgroup/memory.swap.max" 2>/dev/null || true
+}
 run_memory_killed() {
-  slice_cgroup=$(systemctl show --property=ControlGroup --value "$REZICS_CHECK_SLICE" 2>/dev/null)
-  case "$slice_cgroup" in /*)
-    oom_kill=$(awk '$1 == "oom_kill" { print $2 }' "/sys/fs/cgroup$slice_cgroup/memory.events" 2>/dev/null || true)
-    case "$oom_kill" in ''|*[!0-9]*) return 1 ;; esac
-    [ "$oom_kill" -gt 0 ]
-    ;;
-  *) return 1 ;;
-  esac
+  resolve_run_slice_cgroup || return 1
+  oom_kill=$(awk '$1 == "oom_kill" { print $2 }' "/sys/fs/cgroup$slice_cgroup/memory.events" 2>/dev/null || true)
+  case "$oom_kill" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$oom_kill" -gt 0 ]
 }
 report_run_memory_kill() {
   running_file=
@@ -3672,6 +3687,14 @@ report_run_memory_kill() {
     printf 'remote-check: check exceeded its memory limit (${memoryPerRunGiB} GiB) while running the check command\\n' >&2
   fi
   : > ${reported}
+}
+reclaim_run_inactive_file() {
+  resolve_run_slice_cgroup || return 0
+  inactive=$(awk '$1 == "inactive_file" { print $2 }' "/sys/fs/cgroup$slice_cgroup/memory.stat" 2>/dev/null || true)
+  case "$inactive" in ''|0|*[!0-9]*) ;; *)
+    printf '%s\\n' "$inactive" > "/sys/fs/cgroup$slice_cgroup/memory.reclaim" 2>/dev/null || true
+  ;;
+  esac
 }
 apply_run_memory_limit`;
 }
@@ -3836,6 +3859,7 @@ host=$REMOTE_CHECK_HOST
     if [ "$code" -eq 0 ]; then [ -f ${quote(`${directory}/.bun-install-complete`)} ] || touch ${quote(`${directory}/.bun-install-complete`)}; fi
     install_finished=$(date +%s%N)
     awk -v elapsed="$((install_finished - install_started))" -v host="$host" 'BEGIN { printf "remote-check: bun install %.3f s on %s\\n", elapsed / 1000000000, host }' >&2
+    reclaim_run_inactive_file
     if [ "$code" -eq 0 ]; then
       export PATH="$(dirname "$bun"):$PWD/node_modules/.bin:$PATH"
       ${preparationScript}
@@ -3848,7 +3872,7 @@ host=$REMOTE_CHECK_HOST
       if [ "$code" -eq 0 ]; then
         command_started=$(date +%s%N)
         touch ${quote(`${directory}/command-started`)}
-        slice_cgroup=$(systemctl show --property=ControlGroup --value "$REZICS_CHECK_SLICE" 2>/dev/null)
+        resolve_run_slice_cgroup || true
         progress_pid=
         command_pid=
         oom_watch_pid=
@@ -3930,7 +3954,7 @@ host=$REMOTE_CHECK_HOST
         { printf "remote-check: command phase %s %.9f s\\n", $1, ($3-started[$1])/1000000000; delete started[$1] }
         END { for (phase in started) printf "remote-check: malformed command phase unmatched start %s\\n", phase > "/dev/stderr" }' "$REZICS_CHECK_PHASES"
     fi
-    slice_cgroup=$(systemctl show --property=ControlGroup --value "$REZICS_CHECK_SLICE" 2>/dev/null)
+    resolve_run_slice_cgroup || true
     case "$slice_cgroup" in /*)
       usage=$(awk '$1 == "usage_usec" { print $2 }' "/sys/fs/cgroup$slice_cgroup/cpu.stat" 2>/dev/null)
       peak=$(cat "/sys/fs/cgroup$slice_cgroup/memory.peak" 2>/dev/null)
@@ -3946,7 +3970,7 @@ host=$REMOTE_CHECK_HOST
     exit $code`;
   const script = `mkdir -p ${wrapperDirectory} && cat > ${wrapperDirectory}/docker <<'WRAPPER' && chmod +x ${wrapperDirectory}/docker || exit 1
 ${dockerWrapper}WRAPPER
-export PATH=${wrapperDirectory}:/usr/local/bin:$PATH BUN_INSTALL_CACHE_DIR=${ROOT}/bun-cache BUN_RUNTIME_TRANSPILER_CACHE_PATH=${directory}/bun-runtime-transpiler-cache PLAYWRIGHT_BROWSERS_PATH=${ROOT}/browsers KERNEL_CHECK_TIMINGS=${quote(`${directory}/.temp/kernel-check/timings`)} AUTH_CHECK_TIMINGS=${quote(`${directory}/.temp/auth-check/timings`)} KERNEL_CHECK_ON_REMOTE=1 REZICS_STACK_LEASE=off REMOTE_CHECK_HOST=${quote(hostName)} REZICS_CHECK_SLICE=${runSlice(id)} REZICS_CHECK_RUN=${id} REZICS_CHECK_MEMORY_PER_RUN_GIB=${quote(String(memoryPerRunGiB))}
+export PATH=${wrapperDirectory}:/usr/local/bin:$PATH BUN_INSTALL_CACHE_DIR=${ROOT}/bun-cache BUN_RUNTIME_TRANSPILER_CACHE_PATH=${directory}/bun-runtime-transpiler-cache PLAYWRIGHT_BROWSERS_PATH=${ROOT}/browsers ${CROSS_MEDIA_DUMP_CACHE_ENV}=${quote(CHECK_HOST_DUMP_CACHE)} KERNEL_CHECK_TIMINGS=${quote(`${directory}/.temp/kernel-check/timings`)} AUTH_CHECK_TIMINGS=${quote(`${directory}/.temp/auth-check/timings`)} KERNEL_CHECK_ON_REMOTE=1 REZICS_STACK_LEASE=off REMOTE_CHECK_HOST=${quote(hostName)} REZICS_CHECK_SLICE=${runSlice(id)} REZICS_CHECK_RUN=${id} REZICS_CHECK_MEMORY_PER_RUN_GIB=${quote(String(memoryPerRunGiB))}
 export REZICS_CHECK_PHASES=${quote(`${directory}/command-phases.tsv`)}
 printf 'remote-check: run priority %s on %s\n' ${quote(priorityClass)} ${quote(hostName)} >&2
 cd ${directory} || exit 1
@@ -6160,6 +6184,46 @@ export function gitWorkspaceOverlay(workspace: string, files: string[]): { files
   };
 }
 
+/** Restore pinned archives onto the host, then extract before a seeded walk enters the 6 GiB slice. */
+async function uploadCrossMediaDumpCache(
+  host: Host,
+  connectionId: string,
+  command: readonly string[],
+  signal: AbortSignal,
+  transferLimit: number,
+): Promise<void> {
+  if (!commandNeedsCrossMediaDumpCache(command)) return;
+  const source = crossMediaDumpCacheRoot();
+  assertPinnedCrossMediaDumpCache(source);
+  const started = performance.now();
+  const sync = Bun.spawn(
+    dumpCacheRsyncArgs(
+      source,
+      host.address,
+      ['ssh', ...sshOptions(host, connectionId)].map(quote).join(' '),
+    ),
+    { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' },
+  );
+  const { code, bytesSent, vanishedFiles } = await finishedRsync(sync, signal, host, 'dump cache', transferLimit);
+  reportDuration('dump cache', started, host.name, bytesSent);
+  if (signal.aborted) throw new Aborted();
+  if ([10, 12, 30, 35, 255].includes(code)) throw new RemoteTransportError(host.name, 'dump cache', code);
+  if (code === 24) reportVanishedFiles('to', host.name, vanishedFiles);
+  else if (code !== 0) throw new Error(`rsync of dump cache to ${host.name} failed with exit code ${code}`);
+  const extractStarted = performance.now();
+  const extract = Bun.spawn(['ssh', ...sshOptions(host, connectionId), host.address, hostDumpExtractScript()], {
+    stdin: 'ignore',
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  const [extracted, extractOutput] = await boundedTextChild(extract, signal, transferLimit, host, 'dump extract');
+  if (extractOutput.trim()) console.error(extractOutput.trimEnd());
+  reportDuration('dump extract', extractStarted, host.name);
+  if (signal.aborted) throw new Aborted();
+  if ([10, 12, 30, 35, 255].includes(extracted)) throw new RemoteTransportError(host.name, 'dump extract', extracted);
+  else if (extracted !== 0) throw new Error(`dump extract on ${host.name} failed with exit code ${extracted}`);
+}
+
 /** Transfers the workspace before admission so upload work never owns execution capacity. */
 async function uploadRun(
   host: Host,
@@ -6355,6 +6419,7 @@ async function uploadRun(
     if ([10, 12, 30, 35, 255].includes(synced)) throw new RemoteTransportError(host.name, 'workspace upload', synced);
     if (synced === 24) reportVanishedFiles('to', host.name, vanishedFiles);
     else if (synced !== 0) throw new Error(`rsync to ${host.name} failed with exit code ${synced}`);
+    await uploadCrossMediaDumpCache(host, connectionId, options.command, signal, transferLimit);
     return {
       host,
       id,

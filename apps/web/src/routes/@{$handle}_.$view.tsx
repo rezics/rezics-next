@@ -200,6 +200,8 @@ function NamedAccountViewRoute({
       <PublicProfilePage
         key={cursor ?? 'first'}
         page={data.page}
+        sourceQueryKey={query.queryKey}
+        verification={data.verification}
         cursor={data.cursor ?? null}
         locale={locale}
         {...(view === 'posts' || view === 'reviews' || view === 'discussion'

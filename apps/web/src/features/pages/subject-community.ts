@@ -55,6 +55,16 @@ export type CommunityThread = Pick<NativeCommunityThread, 'id' | 'title' | 'auth
   nativeCard?: CommunityNativeCard;
   actions?: CommunityActionAdvice;
 };
+export type CommunityEntryAction = 'allowed' | 'denied' | 'sign-in' | 'unavailable';
+/**
+ * The native creation entry for the supplied Board, decoded from the installed `entry`.
+ * Advice only presents the composer link; the composer and thread command stay authoritative.
+ */
+export type CommunityEntry =
+  | { state: 'not_selected' }
+  | { state: 'concealed' }
+  | { state: 'unavailable' }
+  | { state: 'current'; board: { id: string; title: string | null }; action: CommunityEntryAction };
 export type CommunityRegion = (
   | { state: 'loading' | 'unavailable' | 'closed' | 'expired' }
   | {
@@ -63,6 +73,7 @@ export type CommunityRegion = (
       next: string | null;
       context: CommunityDisplayContext;
       reactionsAsOf: CommunityReactionFreshness;
+      entry?: CommunityEntry;
     }
 ) & { request?: CommunityRequest };
 export type SubjectCommunity = {
@@ -73,6 +84,8 @@ export type SubjectCommunity = {
   reader?: string | null;
   contextId?: string | null;
   sourceKey?: string;
+  /** The mounted composition query; omitted by standalone lists and recorded presentation. */
+  queryKey?: readonly unknown[] | undefined;
 };
 
 export const COMMUNITY_PREVIEW_LIMIT = 5;
@@ -200,6 +213,38 @@ function communityReactionFreshness(value: unknown): CommunityReactionFreshness 
   )
     return undefined;
   return { epoch: value.epoch as number, position: value.position };
+}
+
+const entryActions = new Set<string>(['allowed', 'denied', 'sign-in', 'unavailable']);
+
+/**
+ * Decode the closed entry against the exact request it answers. A response without `entry` is the
+ * no-Board answer, which is `not_selected`; a supplied Board must receive an explicit entry.
+ */
+function communityEntry(value: unknown, expected: CommunityRequest): CommunityEntry | undefined {
+  if (value === undefined) return expected.board === undefined ? { state: 'not_selected' } : undefined;
+  if (!isRecord(value) || !isRecord(value.request)) return undefined;
+  const request = value.request;
+  if (
+    request.subjectId !== expected.id ||
+    request.placeId !== expected.place ||
+    request.kind !== expected.threadKind ||
+    request.selectedBoardId !== expected.board
+  )
+    return undefined;
+  if (value.state === 'not_selected') return expected.board === undefined ? { state: 'not_selected' } : undefined;
+  if (expected.board === undefined) return undefined;
+  if (value.state === 'concealed') return { state: 'concealed' };
+  if (value.state === 'unavailable') return { state: 'unavailable' };
+  if (value.state !== 'current') return undefined;
+  const board = value.board;
+  const actions = value.actions;
+  if (!isRecord(board) || board.id !== expected.board || !isRecord(actions)) return undefined;
+  const action = actions.createThread;
+  const title = board.title;
+  if (typeof action !== 'string' || !entryActions.has(action)) return undefined;
+  if (title !== null && (typeof title !== 'string' || title.length > COMMUNITY_TEXT_LIMIT)) return undefined;
+  return { state: 'current', board: { id: expected.board, title }, action: action as CommunityEntryAction };
 }
 
 function communityReactionCounts(value: unknown): CommunityReactionCounts | null {
@@ -413,7 +458,8 @@ function decodeCommunityRegion(
   const reactionsAsOf = Object.hasOwn(read.body, 'reactionsAsOf')
     ? communityReactionFreshness(read.body.reactionsAsOf)
     : undefined;
-  if (!context || reactionsAsOf === undefined) return { state: 'unavailable' };
+  const entry = communityEntry(read.body.entry, expected);
+  if (!context || reactionsAsOf === undefined || entry === undefined) return { state: 'unavailable' };
   try {
     const threads: CommunityThread[] = [];
     const occurrences = new Map<string, number>();
@@ -424,7 +470,7 @@ function decodeCommunityRegion(
       occurrences.set(thread.id, occurrence + 1);
       threads.push({ ...thread, rowKey: `${thread.id}:${occurrence}`, position: threads.length });
     }
-    return { state: 'ready', threads, next: read.body.next, context, reactionsAsOf };
+    return { state: 'ready', threads, next: read.body.next, context, reactionsAsOf, entry };
   } catch {
     return { state: 'unavailable' };
   }

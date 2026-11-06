@@ -169,6 +169,8 @@ export type SubjectPageData = {
   context?: SelectedContext | undefined;
   /** The requested selector survives a native Global fallback without inventing Realm metadata. */
   requestedRealm?: string | undefined;
+  /** A supplied Board operand; the native page selects its creation entry, never a default Board. */
+  requestedBoard?: string | undefined;
   /** BFF cache identity of this reading; never native read authority. */
   requestedReader?: string | null | undefined;
   continuation?: PageContinuation | undefined;
@@ -234,11 +236,14 @@ function placesType(content: readonly unknown[], type: string): boolean {
 }
 
 /** The context the page's reads are planned in. */
-export function pageContext(page: Pick<SubjectPageData, 'subject' | 'account' | 'context' | 'continuation'>) {
+export function pageContext(
+  page: Pick<SubjectPageData, 'subject' | 'account' | 'context' | 'continuation' | 'requestedBoard'>,
+) {
   return {
     subject: page.subject,
     account: page.account ?? null,
     ...(page.context ? { context: page.context } : {}),
+    ...(page.requestedBoard ? { board: page.requestedBoard } : {}),
     ...(page.continuation ? { continuation: page.continuation } : {}),
   };
 }
@@ -291,6 +296,7 @@ export async function loadSubjectPage(
   locale = 'en',
   options: {
     realm?: string | undefined;
+    board?: string | undefined;
     continuation?: PageContinuation | undefined;
     authorization?: string | undefined;
     signal?: SubjectPageReadLifetime | undefined;
@@ -302,7 +308,12 @@ export async function loadSubjectPage(
   try {
     result = await client.pages.$read.post(
       {
-        target: { subject: id, ...(view ? { view } : {}), ...(options.realm ? { realm: options.realm } : {}) },
+        target: {
+          subject: id,
+          ...(view ? { view } : {}),
+          ...(options.realm ? { realm: options.realm } : {}),
+          ...(options.board ? { board: options.board } : {}),
+        },
         ...(options.continuation ? { continuation: options.continuation } : {}),
         languages: requestLanguages(locale),
       },
@@ -352,6 +363,7 @@ export async function loadSubjectPage(
           ...catalogue,
           subject: id,
           ...(options.realm ? { requestedRealm: options.realm } : {}),
+          ...(options.board ? { requestedBoard: options.board } : {}),
         },
       };
     }
@@ -385,6 +397,7 @@ export async function loadSubjectPage(
         ...page,
         subject: page.subject ?? null,
         ...(options.realm ? { requestedRealm: options.realm } : {}),
+        ...(options.board ? { requestedBoard: options.board } : {}),
         ...(termsAuthority ? { termsAuthority } : {}),
       },
     };
@@ -802,8 +815,10 @@ export function SubjectPage({
   recoverCatalogueFileReader,
   recoverMusicReleaseReader,
   readingAdmission,
+  communityQueryKey,
 }: {
   page: SubjectPageData;
+  communityQueryKey?: readonly unknown[] | undefined;
   verification?: VerificationConfig;
   refreshCommunityAdvice?: () => Promise<void>;
   /** Re-enter the current Subject route loader for catalogue-file recovery. */
@@ -1800,7 +1815,9 @@ export function SubjectPage({
               />
             ) : null}
             <SubjectCommunityRefreshContext.Provider value={refreshCommunityAdvice}>
-              <SubjectCommunityContext.Provider value={page.community}>
+              <SubjectCommunityContext.Provider
+                value={page.community ? { ...page.community, queryKey: communityQueryKey } : undefined}
+              >
                 <SubjectCommunityVerificationContext.Provider value={verification}>
                   <CompositionRender
                     document={composition.remaining}

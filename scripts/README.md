@@ -236,7 +236,7 @@ Returned bytes are checked against the manifest size and SHA-256 before they rep
 
 ### Durable worker-check custody
 
-`worker-check` freezes `GOAL_TASK_ID` and `GOAL_ATTEMPT` when a task-owned check starts. Both variables must be valid together. When `GOAL_CHECK_REGISTRY` names an available absolute directory, the detached runner publishes a version 1 registration containing the task attempt, logical check ID, result path, physical run UUID, host, and Linux boot/start/group identity before the command may begin. Registration failure terminates the new runner and makes start fail. Standalone checks without task identity keep working but cannot be stopped as task-owned checks.
+`worker-check` freezes `GOAL_TASK_ID` and `GOAL_ATTEMPT` when a task-owned check starts. Both variables must be valid together. Remote placement forwards those values and `GOAL_ACCEPTANCE_REQUIRES` into the host command as original launcher context, without rewriting recorded argv. When `GOAL_CHECK_REGISTRY` names an available absolute directory, the detached runner publishes a version 1 registration containing the task attempt, logical check ID, result path, physical run UUID, host, and Linux boot/start/group identity before the command may begin. Registration failure terminates the new runner and makes start fail. Standalone checks without task identity keep working but cannot be stopped as task-owned checks.
 
 Each detached incarnation and automatic rerun has a fresh physical UUID and an immutable history record under `.temp/goal/checks/`. The logical result file remains at `.temp/goal/checks/results/<check-id>.json`. The public script API exports `CheckRecord`, `CHECK_RECORD_CUSTODY_VERSION`, `readWorkerCheckRecord(id, cwd?)`, `readWorkerCheckHistory(id, physicalRunId, cwd?)`, and `stopWorkerCheck(id, cwd, expected)`. The stop expectation binds ownership, physical UUID, host, PID, boot ID, process start time, and group ID. Stop returns a `CheckCleanupReceipt`; `readWorkerCheckCleanupReceipt` and `readWorkerCheckCleanupHistory` expose the current receipt and immutable receipt events. A stop refuses unknown, stale, mismatched, reused, or foreign-host identity without signaling it. Local terminality, the original result, and every owned remote run must be confirmed before the receipt reports terminal cleanup.
 
@@ -460,7 +460,9 @@ counts as available. Anon memory is never treated as free. Held reservations and
 When a reservation still does not fit on any answering host, admission writes `min(shortfall, inactive_file)` to
 the slice's `memory.reclaim` once and re-probes before waiting or reporting no slot. A missing or unwritable
 `memory.reclaim` is ignored and does not fail the run. The slot-wait line reports the reclaimable file-cache amount.
-When slice memory cannot be read, it uses the machine's `MemAvailable` instead. Every run also sets Node's compile cache to a directory inside its run directory; cleanup removes the cache with that run.
+When slice memory cannot be read, it uses the machine's `MemAvailable` instead. Every run disables Node's compile
+cache and keeps Bun's transpiler cache inside its run directory so those pages cannot fill the 6 GiB slice; cleanup
+removes the run directory. After `bun install`, the run reclaims only that slice's `inactive_file` pages.
 Slots and per-run MemoryMax together reserve admission capacity. Each run's nested slice and scope have `MemoryMax`
 (`memoryPerRunGiB`, default 6 GiB) and `MemorySwapMax` 0, covering the command and its containers. A kernel OOM kill
 exits 137 and reports `check exceeded its memory limit (<n> GiB)` with the test file that was running (from command
@@ -605,6 +607,9 @@ remain separate questions for the existing compiler/health chain; this cohort su
    `RemoteCheck.preparationTimeoutMs` or `REMOTE_CHECK_PREPARATION_TIMEOUT_MS` for finite fixtures.
    A cold artifact miss runs `bun install --frozen-lockfile`, preserving every lifecycle script. The shared
    `BUN_INSTALL_CACHE_DIR=/srv/rezics-check/bun-cache` remains a download cache; it does not substitute for lifecycle outputs.
+   Seeded VNDB/Bangumi walks restore the pinned archives onto `/srv/rezics-check/datasets/dumps/downloads` and extract
+   on the host before the run slice, then set `REZICS_DATASETS_DUMP_CACHE` there, so a rotated public dump cannot
+   replace the development pin.
    Verified installation artifacts live in `/srv/rezics-check/dependency-artifacts`. The key covers only the inputs that
    change `node_modules`: every `package.json`, `bun.lock`, `bun.lockb`, `bunfig.toml` and `patches/`, plus Linux
    platform/architecture/libc, runtime build and exact pinned Bun revision. Two runs with those same inputs on one host

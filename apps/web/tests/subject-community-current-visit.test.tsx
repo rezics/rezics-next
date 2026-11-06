@@ -44,6 +44,8 @@ test('mounted cards retire browser epochs and descriptors until a fresh native o
   const session = { state: 'signed-in', subject: 'reader', csrfToken: 'csrf-one' };
   client.setQueryData(['session'], session);
   let source = 0;
+  const sourceKey = ['subject-composition', 'selected'] as const;
+  client.setQueryData(sourceKey, { source });
   let locale = 'en';
   let href = '/en/subjects/one/reviews?cursor=same&node=reviews';
   let currentHref = '/en/subjects/one/work';
@@ -111,7 +113,12 @@ test('mounted cards retire browser epochs and descriptors until a fresh native o
     );
   let region = regionFor(GLOBAL);
   function Probe() {
-    origin = useSubjectCommunityReading({ source: String(source), descriptor: href, reader: 'reader' });
+    origin = useSubjectCommunityReading({
+      source: String(source),
+      descriptor: href,
+      reader: 'reader',
+      queryKey: sourceKey,
+    });
     return null;
   }
   const show = () =>
@@ -126,6 +133,7 @@ test('mounted cards retire browser epochs and descriptors until a fresh native o
               now: '2026-11-02T00:00:00Z',
               reader: 'reader',
               sourceKey: String(source),
+              queryKey: sourceKey,
             }}
           >
             <SubjectCommunityRegion
@@ -171,12 +179,15 @@ test('mounted cards retire browser epochs and descriptors until a fresh native o
     source++;
     await show();
     populated();
+    // An unrelated cache key is not the shared browser reader or this region's native source.
+    await act(async () => client.setQueryData(['exposure', 'viewer'], ['changed']));
+    populated();
+    expect(origin.isCurrent()).toBe(true);
     for (const replace of [
       () => client.setQueryData(['session'], { ...session, csrfToken: 'csrf-two' }),
       () => client.setQueryData(['session'], { ...session, subject: 'other' }),
       () => client.setQueryData(['session'], { state: 'signed-out', csrfToken: null }),
       () => client.setQueryData(['session'], session), // Equal successful observations also replace an epoch.
-      () => client.setQueryData(['exposure', 'viewer'], ['changed']),
     ]) {
       const link = host.querySelector('h3 a') as unknown as HTMLElement;
       link.focus();
@@ -217,6 +228,26 @@ test('mounted cards retire browser epochs and descriptors until a fresh native o
       await show();
       populated();
     }
+    const lateSource = origin;
+    await act(async () => {
+      const query = client.getQueryCache().find({ queryKey: sourceKey, exact: true })!;
+      query.setState({ fetchStatus: 'fetching' });
+      expect(lateSource.isCurrent()).toBe(false);
+      query.setState({ fetchStatus: 'idle' });
+    });
+    retired();
+    source++;
+    await show();
+    populated();
+    const equalSource = origin;
+    await act(async () => {
+      client.setQueryData(sourceKey, client.getQueryData(sourceKey));
+      expect(equalSource.isCurrent()).toBe(false);
+    });
+    retired();
+    source++;
+    await show();
+    populated();
     if (region.state !== 'ready') throw new Error('Expected a readable native fixture');
     region = { ...region, reactionsAsOf: null };
     await show();
@@ -225,7 +256,9 @@ test('mounted cards retire browser epochs and descriptors until a fresh native o
     await show();
     populated();
     expect(host.querySelector('[data-slot="community-reaction-summary"]')).toBeNull();
-    expect(host.querySelector('button, a[href$="#reply"]')).toBeNull();
+    // An unavailable reaction baseline withholds reaction commands, independently of reply/watch advice.
+    expect(host.querySelector('[aria-label="Reactions"]') === null).toBe(true);
+    expect(host.querySelector('a[href$="#reply"]') !== null).toBe(true);
     const late = origin;
     await act(async () => root.render(null));
     expect(late.isCurrent()).toBe(false);
@@ -239,4 +272,4 @@ test('mounted cards retire browser epochs and descriptors until a fresh native o
     }
     mock.restore();
   }
-});
+}, 30_000);

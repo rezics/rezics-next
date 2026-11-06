@@ -14,6 +14,7 @@ import {
 import { seedReviewedCatalogue } from '../../services/importer/src/reviewed-catalogue.ts';
 import { createSeedDenialDiagnostics } from '../../services/importer/src/showcase-denial-diagnostics.ts';
 import { fetchCrossMediaDumps, type CrossMediaDumpPaths } from './fetch-dumps.ts';
+import { releaseWalkFileCache } from '../walk-memory.ts';
 import { ShowcaseJournal, type ShowcasePublicationResult } from '../../services/importer/src/showcase-publication.ts';
 import {
   createDevelopmentShowcaseClient,
@@ -213,6 +214,7 @@ export async function runDevelopmentSeed(
       ? {}
       : { sourceSnapshotAsOf: dumps.sourceSnapshots.vndb.timestamp.slice(0, 10) }),
     composePersona: (context) => seedDevelopmentShowcase({ ...context, accountId: account, request }),
+    ...(process.env.REZICS_WALK_SMOL === '1' ? { onDumpTableReleased: releaseWalkFileCache } : {}),
   });
   if (!importedResult) throw new TypeError('Cross-media seed did not return its native result handoff');
 

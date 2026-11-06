@@ -72,21 +72,23 @@ export function ContributionReply({
   const target = contributionReplyTarget(input, row);
   const advice: ContributionAdviceState = !isCurrent()
     ? 'retired'
-    : presentation.failed
-      ? 'failed'
-      : presentation.replyState && presentation.replyState !== 'available'
-        ? presentation.replyState
-        : target
-          ? contributionOperationAdvice({
-              reference: target.reference,
-              operation: 'reply',
-              action: 'post:create',
-              operationId: 'post.create',
-              source,
-              reader,
-              isCurrent,
-            })
-          : 'unavailable';
+    : presentation.restriction
+      ? presentation.restriction
+      : presentation.failed
+        ? 'failed'
+        : presentation.replyState && presentation.replyState !== 'available'
+          ? presentation.replyState
+          : target
+            ? contributionOperationAdvice({
+                reference: target.reference,
+                operation: 'reply',
+                action: 'post:create',
+                operationId: 'post.create',
+                source,
+                reader,
+                isCurrent,
+              })
+            : 'unavailable';
   const candidateLease = target && isCurrent() ? presentation.operation('reply') : undefined;
   const lease = isReplyLease(candidateLease) ? candidateLease : undefined;
   const ready =

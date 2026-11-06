@@ -181,7 +181,7 @@ for cache in "${legacy_transpiler_caches[@]}"; do
 done
 echo "removed legacy Bun runtime transpiler caches (if present): ${legacy_transpiler_caches[*]}"
 
-mkdir -p /srv/rezics-check/slots /srv/rezics-check/runs /srv/rezics-check/bun-cache /srv/rezics-check/browsers
+mkdir -p /srv/rezics-check/slots /srv/rezics-check/runs /srv/rezics-check/bun-cache /srv/rezics-check/browsers /srv/rezics-check/datasets
 
 browsers=/srv/rezics-check/browsers
 if [ ! -e "$browsers/.chromium-$playwright_version" ]; then
