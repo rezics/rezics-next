@@ -90,21 +90,24 @@ GET/POST/PATCH/return contracts and yields when that envelope exists. Web uses o
 extend and return on each eligible row, and a named-counterparty create form. The Copy editor offers the same create,
 extend and return commands beside the copy form for the inspected holding, so loan fields cannot block copy Save, and
 links to the loans page. Copy and loan day fields keep a locale Calendar grid that does not import `react-day-picker`
-or `date-fns`. Web's restored Worker optimizer include of `@inlang/paraglide-js/urlpattern-polyfill`
-is the composition that prints ready: emptying `optimizeDeps.include` and pinning `noDiscovery`
-produced no Vite output for 150s on host b, with diagnostics showing only the storybook-dev
-command. Copies still aliases `urlpattern-polyfill` to ESM `index.js`, serves those files through
-filtered Worker resolve/load hooks, and shims remaining CJS, because Workerd's export-type
-inspection uses workerd/worker/module/browser conditions, not `import`. Adding `import` hung
-Rolldown before ready. The nested package and `react-dom/server` stay off include and off
-exclude; calendar packages stay on exclude. Serve reuses current Paraglide output through
-`messagesCurrent`, skips generate under `REZICS_TEST_RUNTIME` unless a test supplies
-`REZICS_PARAGLIDE_COMPILER_MODULE`, and takes a `.temp` lock when it does generate. Return uses
-the mounted `POST /v1/copy-loans/:loanId/return` path, not an AIP-136 `:return` method.
-signed-in-routes uses the same `startDevServer` ready and `/en` first-response path as Copies.
-A focused check sets `REZICS_WEB_SERIAL_VITE` and `--max-concurrency=1` so Copies and
-signed-in-routes never compile two Worker graphs in one 6 GiB slot. Isolation tests that need
-overlapping helpers leave that variable unset.
+or `date-fns`. Host-b ready evidence: Worker discovery printed `(ssr) [optimizer] scanning dependencies...`
+and then nothing for 150s, with diagnostics showing only the storybook-dev command and no
+CJS/`module` exception. Empty `optimizeDeps.include` plus `noDiscovery` printed no Vite line.
+The composition that skips that scan is Worker `noDiscovery` with an explicit include of React,
+TanStack's server store and `@inlang/paraglide-js/urlpattern-polyfill`. Copies still aliases
+`urlpattern-polyfill` to ESM `index.js`, serves those files through filtered Worker resolve/load
+hooks, and shims remaining CJS, because Workerd's export-type inspection uses
+workerd/worker/module/browser conditions, not `import`. Adding `import` hung Rolldown before
+ready. The nested package and `react-dom/server` stay off include and off exclude; calendar
+packages stay on exclude. Serve reuses current Paraglide output through `messagesCurrent`, skips
+generate under `REZICS_TEST_RUNTIME` unless a test supplies `REZICS_PARAGLIDE_COMPILER_MODULE`,
+and takes a `.temp` lock when it does generate. Return uses the mounted
+`POST /v1/copy-loans/:loanId/return` path, not an AIP-136 `:return` method. signed-in-routes uses
+the same `startDevServer` ready and `/en` first-response path as Copies. A focused check sets
+`REZICS_WEB_SERIAL_VITE` and `--max-concurrency=1` so Copies and signed-in-routes never compile
+two Worker graphs in one 6 GiB slot. Isolation tests that need overlapping helpers leave that
+variable unset. `WEB_TEST_STATE_DIR` remains the focused run root; Worker persistence still
+allocates its own instance directory unless a caller passes `WEB_TEST_STATE_INSTANCE_DIR`.
 
 Acceptance pins the mounted return path and the locale Calendar source, and keeps the existing Copies
 page/browser cases. No extra page stories. Keep the original Copies, loan, label, signed-in-route and

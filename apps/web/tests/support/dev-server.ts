@@ -119,7 +119,7 @@ export async function startDevServer(
   });
   const keep = (chunk: Uint8Array) => {
     const combined = output + Buffer.from(chunk).toString();
-    output = combined.slice(-8000);
+    output = combined.slice(-24_000);
     if (
       readyAt === undefined &&
       /\bVITE\s+v\S+\s+ready in\s+[\d.]+\s*(?:ms|s)\b/i.test(combined.replace(/\x1b\[[0-9;]*m/g, ''))
@@ -134,11 +134,15 @@ export async function startDevServer(
     const pid = child?.pid;
     const members = pid === undefined ? [] : liveProcessGroupMemberIds(pid);
     const exit = child === undefined ? undefined : (child.exitCode ?? (pid === undefined ? undefined : directChildExitCode(pid)));
+    const capturedOutput = custody?.diagnostics() || output;
     return [
       `$ ${command.join(' ')}`,
       `pid=${pid ?? 'none'} exit=${exit ?? 'running'} live=${members.join(',') || 'none'}`,
-      custody?.diagnostics() || output,
-    ].join('\n');
+      capturedOutput,
+      output && output !== capturedOutput ? output : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
   };
   try {
     const childEnvironment: NodeJS.ProcessEnv = {
@@ -146,8 +150,6 @@ export async function startDevServer(
       ...options.env,
       REZICS_TEST_RUNTIME: '1',
     };
-    if (options.env?.WEB_TEST_STATE_DIR && !options.env.WEB_TEST_STATE_INSTANCE_DIR)
-      childEnvironment.WEB_TEST_STATE_INSTANCE_DIR = options.env.WEB_TEST_STATE_DIR;
     child = Bun.spawn(command, {
       cwd: options.cwd ?? join(import.meta.dir, '../..'),
       env: childEnvironment,
@@ -161,6 +163,7 @@ export async function startDevServer(
       onOutput: keep,
       termGraceMs: 2_000,
       settleTimeoutMs: 5_000,
+      outputLimit: 24_000,
     });
   } catch (error) {
     releaseSerialVite();

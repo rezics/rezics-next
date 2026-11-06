@@ -56,6 +56,22 @@ function errorText(error: unknown): string {
   return error instanceof Error ? `${error.name}: ${error.message}` : String(error);
 }
 
+/** Killing a group closes its pipes; that abort is settlement, not a fixture defect. */
+function isIgnorableCloseError(error: unknown): boolean {
+  const name =
+    error && typeof error === 'object' && 'name' in error ? String((error as { name: unknown }).name) : '';
+  const cause =
+    error && typeof error === 'object' && 'cause' in error ? (error as { cause: unknown }).cause : undefined;
+  const text = `${name} ${errorText(error)}${cause === undefined ? '' : ` ${errorText(cause)}`}`;
+  return (
+    name === 'AbortError' ||
+    (cause !== undefined && isIgnorableCloseError(cause)) ||
+    /AbortError|ERR_STREAM_PREMATURE_CLOSE|EPIPE|ECONNRESET|\bcancel(?:led|ed)?\b|\baborted\b|\bpremature close\b/i.test(
+      text,
+    )
+  );
+}
+
 function asCleanupError(label: string, error: unknown): Error {
   return new Error(`${label} cleanup failed: ${errorText(error)}`, { cause: error });
 }
@@ -346,8 +362,10 @@ function makeProcessCustody(
     ]);
     childSettled = completions[0]?.status === 'fulfilled';
     outputIsSettled = completions[1]?.status === 'fulfilled';
-    for (const completion of completions) if (completion.status === 'rejected') cleanupErrors.push(completion.reason);
-    cleanupErrors.push(...errors);
+    for (const completion of completions)
+      if (completion.status === 'rejected' && !isIgnorableCloseError(completion.reason))
+        cleanupErrors.push(completion.reason);
+    cleanupErrors.push(...errors.filter((error) => !isIgnorableCloseError(error)));
 
     isSettled = groupSettled && childSettled && outputIsSettled;
     if (cleanupErrors.length > 0) {
@@ -380,6 +398,7 @@ export function ownBunProcess(child: Bun.Subprocess, options: ProcessCustodyOpti
     try {
       for await (const chunk of stream) recorder.recordOutput(chunk, name);
     } catch (error) {
+      if (isIgnorableCloseError(error)) return;
       errors.push(
         new Error(`${options.label ?? 'Child process group'} ${name} capture failed: ${errorText(error)}`, {
           cause: error,
