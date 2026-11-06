@@ -1,7 +1,38 @@
 import { expect } from 'bun:test';
+import { PLATFORM_RESOURCE } from '../../../../services/kernel/src/access/bootstrap-governance.ts';
 import type { NativeWebStack } from './stack.ts';
 
-export async function createLibraryEntry(stack: NativeWebStack, persona: string, authorization: string) {
+/** First HTTP Global grant on the mounted createGrantCommands path; must return 201. */
+export async function grantGlobalCatalogueWrite(
+  stack: NativeWebStack,
+  accountId: string,
+  actions: readonly string[],
+) {
+  return stack.kernel(
+    '/v1/grants',
+    {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'idempotency-key': `"${crypto.randomUUID()}"`,
+      },
+      body: JSON.stringify({
+        resource: PLATFORM_RESOURCE,
+        subject: { kind: 'account', id: accountId },
+        actions,
+        valid: '(,)',
+      }),
+    },
+    'governor',
+  );
+}
+
+export async function createLibraryEntry(
+  stack: NativeWebStack,
+  persona: string,
+  authorization: string,
+  cataloguePersona = 'editor',
+) {
   const openedLibrary = await stack.kernel(
     '/v1/platform/exposure/personal_library:open',
     { method: 'POST', headers: { 'idempotency-key': `"${crypto.randomUUID()}"` } },
@@ -16,7 +47,7 @@ export async function createLibraryEntry(stack: NativeWebStack, persona: string,
       headers: { 'content-type': 'application/json', 'idempotency-key': `"${crypto.randomUUID()}"` },
       body: JSON.stringify({ type: 'schema:Book', labels: { en: 'Native library member' } }),
     },
-    'editor',
+    cataloguePersona,
   );
   expect(createdSubject.status).toBe(201);
   const { subject } = (await createdSubject.json()) as { subject: { id: string } };

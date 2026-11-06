@@ -128,7 +128,9 @@ and `gate:any`, not the full catalogue, so delegated actions remain in the JWT. 
 the 30s test deadline with the same write-rate fixture ceiling as Library outcomes.
 
 Decision: host-walk tests pin the seeded voter/second-account/anonymous score journey; product lines cover the native
-order, own-vote currentness and public aggregate. Fewer test lines than product lines.
+order, own-vote currentness and public aggregate. Fewer test lines than product lines. The walk issues that first
+HTTP Global grant through the Library fixture before catalogue writes. Uncertain Save retries the original
+question-bound command and idempotency key; a stale review rolls back for a fresh save.
 
 Acceptance is the seeded native and browser walk in `apps/web/tests/native/library-personal-score.host.test.ts`.
 Bound declarations read canonical Source cost leaves so Kernel can boot through the Collection Source import cycle.

@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { chromium, type Browser, type Page } from 'playwright';
 import { startAuthStack } from './auth-stack.ts';
 import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll } from './lifecycle.ts';
-import { createLibraryEntry } from './library-navigation-fixture.ts';
+import { createLibraryEntry, grantGlobalCatalogueWrite } from './library-navigation-fixture.ts';
 import { startNativeWebStack, type NativeWebStack } from './stack.ts';
 
 const stacks: NativeWebStack[] = [];
@@ -111,8 +111,11 @@ async function openScoreOrder(page: Page, stack: NativeWebStack) {
 
 test('signed-in voters rate a work and read the same current score in Library, Liked and public pages', async () => {
   const stack = stacks[0]!;
+  const steward = await stack.authPersona('steward');
+  const grant = await grantGlobalCatalogueWrite(stack, steward.accountId, ['subject:create']);
+  expect(grant.status, await grant.clone().text()).toBe(201);
   const alice = await stack.authPersona('alice');
-  const subject = await createLibraryEntry(stack, 'alice', alice.authorization);
+  const subject = await createLibraryEntry(stack, 'alice', alice.authorization, 'steward');
   const { subjectHref } = await import('../../src/subject/subject-href.ts');
   const pageUrl = `${stack.web}${subjectHref({ id: subject.id, label }, 'en').href}`;
   const auth = await startAuthStack(stack);
