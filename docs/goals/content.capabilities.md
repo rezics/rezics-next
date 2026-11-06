@@ -37,9 +37,11 @@ claims are covered here, including uploader identity, parent disclosure and life
 
 Decision: reading-card `placeId` is the Board identity. Subject discussion pages confirm the Subject on the
 disclosed thread and the Board home separately; they do not pass the Board id to `readSubjectThread` as a place.
-Focused post-editing browser cases remain the fewest that pin the mounted edit/delete journey; they consume the
-composed reading-page rather than split thread and post lists. Owner edit and erase use the reading-page viewer when
-that page was admitted for the account, otherwise the signed-in session subject after anonymous SSR.
+Subject and author list query limits stay decimal-digit strings on the HTTP schema so a mismatched continuation is
+`400`, not a missing route. Focused post-editing browser cases remain the fewest that pin the mounted edit/delete
+journey; they consume the composed reading-page rather than split thread and post lists. Owner edit and erase use
+the reading-page viewer when that page was admitted for the account, otherwise the signed-in session subject after
+anonymous SSR.
 
 | Surface cell             | Scope and scenarios                                                                                                                                                   |
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

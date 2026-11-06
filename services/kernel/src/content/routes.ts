@@ -366,19 +366,49 @@ function sitemapFailures() {
   }));
 }
 function subjectThreadsQuery() {
-  return memoizedValue(subjectThreadsQuery, () => strictContentSchema(SubjectThreadsQuerySchema));
+  return memoizedValue(subjectThreadsQuery, () =>
+    strictContentSchema(
+      t.Object(
+        {
+          ...SubjectThreadsQuerySchema.properties,
+          limit: t.Optional(t.String({ pattern: '^(?:[1-9]|1[0-9]|20)$' })),
+        },
+        { additionalProperties: false },
+      ),
+    ),
+  );
 }
 function subjectThreadsResponse() {
   return memoizedValue(subjectThreadsResponse, () => strictContentSchema(SubjectThreadsResponseSchema()));
 }
 function authorThreadsQuery() {
-  return memoizedValue(authorThreadsQuery, () => strictContentSchema(AuthorThreadsQuerySchema));
+  return memoizedValue(authorThreadsQuery, () =>
+    strictContentSchema(
+      t.Object(
+        {
+          ...AuthorThreadsQuerySchema.properties,
+          limit: t.Optional(t.String({ pattern: '^(?:[1-9]|1[0-9]|20)$' })),
+        },
+        { additionalProperties: false },
+      ),
+    ),
+  );
 }
 function authorThreadsResponse() {
   return memoizedValue(authorThreadsResponse, () => strictContentSchema(AuthorThreadsResponseSchema()));
 }
 function authorPostsQuery() {
-  return memoizedValue(authorPostsQuery, () => strictContentSchema(AuthorPostsQuerySchema));
+  return memoizedValue(authorPostsQuery, () =>
+    strictContentSchema(
+      t.Object(
+        {
+          ...AuthorPostsQuerySchema.properties,
+          limit: t.Optional(t.String({ pattern: '^(?:[1-9]|1[0-9]|20)$' })),
+        },
+        { additionalProperties: false },
+      ),
+    ),
+  );
 }
 function authorPostsResponse() {
   return memoizedValue(authorPostsResponse, () => strictContentSchema(AuthorPostsResponseSchema()));

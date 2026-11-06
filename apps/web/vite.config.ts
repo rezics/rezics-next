@@ -112,10 +112,13 @@ export default defineConfig((context) => {
       holdUntilCrawlEnd: process.env.REZICS_TEST_RUNTIME !== '1',
     },
     ssr: {
-      optimizeDeps: {
-        include: ['@inlang/paraglide-js/urlpattern-polyfill'],
-        entries: ['src/server.ts', 'src/session/routes.ts'],
-      },
+      optimizeDeps:
+        process.env.REZICS_TEST_RUNTIME === '1'
+          ? { noDiscovery: true }
+          : {
+              include: ['@inlang/paraglide-js/urlpattern-polyfill'],
+              entries: ['src/server.ts', 'src/session/routes.ts'],
+            },
     },
     plugins: [
       {
