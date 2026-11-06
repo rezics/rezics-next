@@ -72,3 +72,11 @@ Parent fixtures now configure dedicated receipt keys and commit linked Realm/Spa
 thread/post/revision rows together. Routing, transaction, growth and authorization assertions are unchanged.
 Media lifecycle still fails initial Global grant provisioning with the exact Accounts projection defect above.
 Full log: `.temp/check-logs/7cc91e23-5534-4aa9-b78a-be736aa254c9.log`.
+
+Receiving check `679479ad-e8b0-4b09-ab0f-b053cd3400ba` passed mounted scopes (1 case, 5 assertions),
+with 9/12 parent cases passing. Realm fixture commit exposed a retained native Discovery function error:
+`error: column reference "producer_epoch" is ambiguous`. A forward Community migration removes the two
+unused shadowing locals and their unused SELECT operands. The existing Realm/media test exercises it.
+The remaining private-parent and growth cases deny in current Access authorization, consistently with the
+unselected deadline operand already reported; no authorization check or assertion is removed.
+The migration's official schema dump remains with the serial publisher; no generated declaration was edited.
