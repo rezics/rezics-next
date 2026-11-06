@@ -30,7 +30,7 @@ export function withoutRetiredScopeFacets(
 /** Restart in the next scope: keep the executed query, drop facet values and the hit cursor. */
 export function searchStateForScopeRestart(
   state: SearchLoaderDeps,
-  next: Readonly<{ filter?: string; resourceScope?: SearchResourceScope }>,
+  next: Readonly<{ filter?: string | undefined; resourceScope?: SearchResourceScope | undefined }>,
 ): SearchLoaderDeps {
   return {
     ...state,
@@ -42,8 +42,6 @@ export function searchStateForScopeRestart(
 }
 
 export function searchStateWithoutScope(state: SearchLoaderDeps): SearchLoaderDeps {
-  return searchStateForScopeRestart(state, {
-    filter: removeSearchResourceScope(state.filter),
-    resourceScope: undefined,
-  });
+  const filter = removeSearchResourceScope(state.filter);
+  return searchStateForScopeRestart(state, filter === undefined ? {} : { filter });
 }
