@@ -231,7 +231,7 @@ beforeAll(async () => {
     if (conceptId && response.status !== 201) {
       const title = (body as { title: string }).title;
       const result = await pool.query(
-        `SELECT b.route,b.board_id,b.subject_id,b.realm_id,b.visibility,b.availability,b.title,
+        `SELECT b.route,b.board_id,b.subject_id,b.realm_id,b.visibility,b.title,
           b.security_revision::text,b.purpose,b.created_at,
           (SELECT json_agg(json_build_object('role',r.grant_role,'valid',r.valid::text,'current',r.valid @> clock_timestamp()))
            FROM access.resource_role_grant r
