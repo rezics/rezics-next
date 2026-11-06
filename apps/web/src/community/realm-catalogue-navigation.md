@@ -108,7 +108,8 @@ carry the query and fragment. Both route boundaries preserve Search operands bes
 and mounted Search uses the current pathname. Subject returns accept canonical Space addresses with a Realm predicate.
 
 The focused entry and navigation tests cover parser admission, rendered forms/links, browser return,
-replacement fencing, limits and supplied 1/6/12 publication windows. Connected Storybook examples use
+replacement fencing, limits and supplied 1/6/12 publication windows. Focused Realm, scoped-reader and
+recovery regressions pin the committed 20-row window, concealment and reader restart; no extra stories. Connected Storybook examples use
 the production page and existing recorded native sources at phone390/desktop1280 in light/dark,
 plus long labels and unavailable/query states. Their play assertions are authored; browser rendering,
 visual inspection and frozen acceptance belong to the integration controller under this attempt's

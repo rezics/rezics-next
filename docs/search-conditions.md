@@ -164,6 +164,8 @@ resource references remain rejected, without recursion. No query-time account se
   readers verified by the installed session resolver. Canonical Space redirects preserve Search intent and keep
   shelf and work cursors separate. Continuations replace a single 20-row window; pending or failed reads retain
   only the prior rows, while facets and counts require the current response's aggregate proof.
+  Decision: focused Realm entry, scoped-reader and recovery regressions pin that committed window, concealment
+  and reader restart; no extra stories. Workspace typecheck and seeded or hydrated Realm matrix stay deferred.
 
 - Review-backed Context is `{ratingQuestion:{id:UUID}}`, request-only with a server-resolved exact native
   definition revision. Original `definitions:read` precedes enumeration for every reference, including under
