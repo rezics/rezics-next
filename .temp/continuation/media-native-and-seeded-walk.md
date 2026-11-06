@@ -121,3 +121,21 @@ Exact terminal error: `error: dev server did not serve the media route in time:`
 No timeout was increased, route substituted, assertion removed or served-media acceptance claimed.
 The shared Web startup delivery must make the supported Worker launch reach readiness before receiving
 the original upload/completion/readback assertions. Seeded/browser/root acceptance remains unestablished.
+
+## Retry: Worker startup and the deadline projection
+
+Vite's Worker environment had discovery enabled. Each cold start scanned the whole Worker graph, then bundled every
+package it found before the first Worker request could finish. On loaded check hosts this exceeded the 150-second
+probe, which is the failure recorded above. Commit `4ca087e422` moves the Worker to an explicit pre-bundle list:
+a post-order plugin in `apps/web/vite.config.ts` turns discovery off for the `ssr` environment and pre-bundles only
+React, TanStack's server set and the paraglide polyfill. The probe, its deadline and its assertions are unchanged.
+
+Commit `ef0b016806` returns `local.deadline_live AS "deadlineLive"` from `services/kernel/src/access/permission-check.sql`,
+which the policy core reads. The existing `live` column stays for `permission.ts`. This is the same Accounts
+projection defect recorded above, so the native parent denials should clear if that was its only cause.
+
+Checks at hand-off: focused Web transport `0ae0e9be-72fb-4818-8bcd-588d0d6bfe38` (`bun apps/web/scripts/focused.ts
+--private-network -- bun test tests/media-configuration.test.ts tests/media.test.ts`) and native media parent
+`a9c06f5b-39b5-458f-a2fa-b11c2a335fd8` (`bun run --cwd services/kernel check test/content/media-parent.test.ts
+test/content/local-media-http.test.ts test/content/media-dev-stack-configuration.test.ts`). Seeded, browser and root
+stages remain owner-deferred as recorded above; no seeded stack was started in this attempt.
