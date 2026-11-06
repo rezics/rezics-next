@@ -31,7 +31,7 @@ const row = {
   advancedScores: { Story: 8 },
   unfamiliar: { keep: true },
 };
-test('the supported GraphQL wrappers preserve distinct zero, missing, fuzzy, invalid and unknown source evidence', () => {
+test.serial('the supported GraphQL wrappers preserve distinct zero, missing, fuzzy, invalid and unknown source evidence', () => {
   const collection = {
     hasNextChunk: true,
     lists: [{ name: 'Private custom', isCustomList: true, entries: [row] }],
@@ -71,18 +71,21 @@ test('the supported GraphQL wrappers preserve distinct zero, missing, fuzzy, inv
   ])
     expect(() => parseAniList(upload)).toThrow(AniListInputError);
 });
-test('mounted own upload, admitted identifier match, explicit resolution, conflict, original-command retry and fences', async () => {
-  const importer = await f.identity([
-    'subject:batch_write',
-    'subject:create',
-    'subject:read',
-    'library_entry:update',
-    'library_entry:read',
-    'rating:vote',
-    'progress_session:create',
-    'progress_session:read',
-    'progress_session:update',
-  ]);
+test.serial('mounted own upload, admitted identifier match, explicit resolution, conflict, original-command retry and fences', async () => {
+  const importer = await f.identity(
+    [
+      'subject:batch_write',
+      'subject:create',
+      'subject:read',
+      'library_entry:update',
+      'library_entry:read',
+      'rating:vote',
+      'progress_session:create',
+      'progress_session:read',
+      'progress_session:update',
+    ],
+    0,
+  );
   await f.grantLibraryGate(importer.actor.accountId);
   await f.grantAccountActions(importer.actor.accountId, ['subject:batch_write']);
   const mediaId = Math.floor(Math.random() * 1_000_000_000) + 1;
@@ -92,7 +95,7 @@ test('mounted own upload, admitted identifier match, explicit resolution, confli
       commands: [
         {
           op: 'create',
-          key: entryKey(),
+          key: f.homeKey(importer.actor.accountId),
           source: {
             source,
             external_id: String(mediaId),
@@ -439,7 +442,7 @@ test('mounted own upload, admitted identifier match, explicit resolution, confli
   });
   expect(datesDenied.status).toBeGreaterThanOrEqual(401);
 }, 120000);
-test('native redirect requires a deliberate review of the canonical AniList target', async () => {
+test.serial('native redirect requires a deliberate review of the canonical AniList target', async () => {
   const importer = await f.identity(
     ['subject:create', 'subject:read', 'library_entry:update', 'library_entry:read', 'rating:vote'],
     0,

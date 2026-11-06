@@ -72,13 +72,13 @@ function voteFixture(voter: Awaited<ReturnType<typeof voteOwner>>) {
   };
 }
 async function admitBangumiClaim(externalId: number, label: string, digest = 'a'.repeat(64), revision = 'v0') {
-  const importer = await f.identity(['subject:batch_write', 'subject:create', 'subject:read']);
+  const importer = await f.identity(['subject:batch_write', 'subject:create', 'subject:read'], 0);
   await f.grantAccountActions(importer.actor.accountId, ['subject:batch_write', 'subject:create']);
   const made = await f.send(importer.bearer, 'POST', '/v1/subjects:batchWrite', {
     commands: [
       {
         op: 'create',
-        key: randomUUID(),
+        key: f.homeKey(importer.actor.accountId),
         source: {
           source: 'bangumi',
           external_id: String(externalId),
@@ -104,7 +104,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await f?.close();
 });
-test('own native HTTP preview, identifier match, explicit unmatched target, skip and private losses', async () => {
+test.serial('own native HTTP preview, identifier match, explicit unmatched target, skip and private losses', async () => {
   const facts = async () => {
     const { receipts: _r, events: _e, partition: _p, ...facts } = await f.inspect();
     return facts;
@@ -142,7 +142,7 @@ test('own native HTTP preview, identifier match, explicit unmatched target, skip
   expect((await f.send('other', 'POST', `${root}/${uploadId}:apply`, { rows: confirmed })).status).toBe(404);
 });
 
-test('changed Bangumi re-import updates the same Entry incarnation', async () => {
+test.serial('changed Bangumi re-import updates the same Entry incarnation', async () => {
   const firstUpload = await preview([record()]);
   const firstReview = await review(firstUpload.uploadId, 0);
   expect(firstReview.target).toBe(matched);
@@ -169,7 +169,7 @@ test('changed Bangumi re-import updates the same Entry incarnation', async () =>
   );
 });
 
-test('metadata review uses explicit field consent and keeps one selection per confirmation', async () => {
+test.serial('metadata review uses explicit field consent and keeps one selection per confirmation', async () => {
   const { uploadId } = await preview([record()]),
     sourceReview = await review(uploadId, 0),
     metadata = await ok(
@@ -203,7 +203,7 @@ test('metadata review uses explicit field consent and keeps one selection per co
   expect(entry.sourceObservations.some((item: { provider: string }) => item.provider === 'bangumi')).toBe(false);
 }, 120000);
 
-test('mounted metadata retries recover only exact receipts after evidence expiry and never admit a started intent', async () => {
+test.serial('mounted metadata retries recover only exact receipts after evidence expiry and never admit a started intent', async () => {
   const { uploadId } = await preview([record()]),
     sourceReview = await review(uploadId, 0),
     metadata = await ok(
@@ -312,7 +312,7 @@ test('mounted metadata retries recover only exact receipts after evidence expiry
   ).toMatchObject({ fields: [{ field: 'note', status: 'unattempted' }] });
   expect((await personalEntry()).note).toBe('private note sentinel');
 }, 120000);
-test('conflict preservation, guarded replacement, stale review refresh and original command retry', async () => {
+test.serial('conflict preservation, guarded replacement, stale review refresh and original command retry', async () => {
   const { uploadId } = await preview([{ ...record(), type: 2 }]);
   const initial = await review(uploadId, 0);
   expect(initial.conflict).toBe(true);
@@ -337,7 +337,7 @@ test('conflict preservation, guarded replacement, stale review refresh and origi
   expect((await apply(release, [choice(0, old, 'replace')])).outcomes[0].status).toBe('stale');
   await f.activate(f.originalDigest);
 });
-test('lost native acknowledgement replays the original receipt and a changed provider claim stales fresh adoption', async () => {
+test.serial('lost native acknowledgement replays the original receipt and a changed provider claim stales fresh adoption', async () => {
   const replayId = 900201;
   const replayTarget = await admitBangumiClaim(replayId, 'Replay subject');
   const { uploadId } = await preview([record(replayId)]);
@@ -368,7 +368,7 @@ test('lost native acknowledgement replays the original receipt and a changed pro
   await admitBangumiClaim(lateId, 'Late canonical provider subject', 'b'.repeat(64), 'v1');
   expect((await apply(unbound.uploadId, [choice(0, lateReview)])).outcomes[0].status).toBe('stale');
 });
-test('partial state application can stop after one accepted row and cancellation preserves that native fact', async () => {
+test.serial('partial state application can stop after one accepted row and cancellation preserves that native fact', async () => {
   const targets = [await f.createSubject('game'), await f.createSubject('game')];
   const { uploadId } = await preview([record(920001), record(920002)]);
   const reviews = [await review(uploadId, 0, targets[0]), await review(uploadId, 1, targets[1])];
@@ -398,7 +398,7 @@ test('partial state application can stop after one accepted row and cancellation
   expect((await f.commands.readEntry(f.owner.actor, targets[0]!)).state).toBe('planned');
   await expect(f.commands.readEntry(f.owner.actor, targets[1]!)).rejects.toThrow();
 });
-test('absolute expiry denies fresh source work while scheduled cleanup scrubs then deletes bounded pages with receipt replay', async () => {
+test.serial('absolute expiry denies fresh source work while scheduled cleanup scrubs then deletes bounded pages with receipt replay', async () => {
   const expire = async (id: string) =>
     f.pool.query(
       "UPDATE library.bangumi_upload SET expires_at=clock_timestamp()-interval '1 second' WHERE route=$1 AND account_id=$2 AND upload_id=$3",
@@ -480,7 +480,7 @@ test('absolute expiry denies fresh source work while scheduled cleanup scrubs th
     ).rows,
   ).toEqual([]);
 });
-test('score review retains source scale and native vote while requiring separate consent', async () => {
+test.serial('score review retains source scale and native vote while requiring separate consent', async () => {
   const score = voteFixture(await voteOwner());
   {
     const setTarget = await score.createSubject('game');
@@ -643,7 +643,7 @@ test('score review retains source scale and native vote while requiring separate
     });
   }
 });
-test('native redirect requires a deliberate review of the canonical Bangumi target', async () => {
+test.serial('native redirect requires a deliberate review of the canonical Bangumi target', async () => {
   const score = voteFixture(await voteOwner());
   {
     const subjects = [await score.createSubject('game'), await score.createSubject('game')].sort();
@@ -726,7 +726,7 @@ test('native redirect requires a deliberate review of the canonical Bangumi targ
     });
   }
 });
-test('uncertain score delivery retains exact native operands and a changed own vote is stale on retry', async () => {
+test.serial('uncertain score delivery retains exact native operands and a changed own vote is stale on retry', async () => {
   const score = voteFixture(await voteOwner());
   {
     const target = await score.createSubject('game');
@@ -835,7 +835,7 @@ test('uncertain score delivery retains exact native operands and a changed own v
     });
   }
 });
-test('source scrub retains only a started vote receipt and reconciles it with current Rating readback', async () => {
+test.serial('source scrub retains only a started vote receipt and reconciles it with current Rating readback', async () => {
   const score = voteFixture(await voteOwner());
   {
     const target = await score.createSubject('game');
@@ -950,7 +950,7 @@ test('source scrub retains only a started vote receipt and reconciles it with cu
     expect(after.currentVote).toEqual(before.currentVote);
   }
 });
-test('bounds, invalid values, cancellation, deletion and terminal authority denial', async () => {
+test.serial('bounds, invalid values, cancellation, deletion and terminal authority denial', async () => {
   for (const body of [
     { upload: '{' },
     upload([]),

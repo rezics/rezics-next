@@ -6,6 +6,7 @@ import { parseMal, malDate, MAL_LIMITS } from '../../src/library/list-import-mal
 import { createMalImport } from '../../src/library/list-import-mal.ts';
 import { createSessionCommands } from '../../src/library/sessions.ts';
 import { createVoteCommands, STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
+import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { testRouteKey } from '../support/test-kernel.ts';
 const anime = (id: string, extra = '', status = 'Completed') =>
   `<anime><series_animedb_id>${id}</series_animedb_id><series_title><![CDATA[Private title & text]]></series_title><my_status>${status}</my_status>${extra}</anime>`;
@@ -34,7 +35,7 @@ async function review(id: string, row: number, target: string | null, replace = 
 }
 const apply = (id: string, row: number, version: string, fields = ['status']) =>
   json('POST', `${base}/${id}/apply`, { confirm: true, rows: [{ row, version, fields }] });
-test('MAL retains independent measures, zero, private comments, dates and unknown fields without fabricated sessions', () => {
+test.serial('MAL retains independent measures, zero, private comments, dates and unknown fields without fabricated sessions', () => {
   const [row] = parseMal(
     xml(
       `<manga><manga_mangadb_id>7</manga_mangadb_id><manga_title>M</manga_title><my_status>Reading</my_status><my_score>0</my_score><my_read_chapters>12</my_read_chapters><my_read_volumes>2</my_read_volumes><my_comments><![CDATA[secret & <text>]]></my_comments><my_start_date>2024-00-00</my_start_date><my_finish_date>2024-02-00</my_finish_date><my_times_read>3</my_times_read><my_tags>a,b</my_tags><my_privacy>1</my_privacy><my_last_updated>123</my_last_updated><unknown>x</unknown></manga>`,
@@ -62,7 +63,7 @@ test('MAL retains independent measures, zero, private comments, dates and unknow
   expect(() => parseMal('<myanimelist><anime></myanimelist>')).toThrow('malformed');
   expect(() => parseMal(' '.repeat(MAL_LIMITS.bytes + 1))).toThrow('2 MiB');
 });
-test('MAL adopts only an explicitly selected scalar occurrence and retries the same native receipts', async () => {
+test.serial('MAL adopts only an explicitly selected scalar occurrence and retries the same native receipts', async () => {
   expect(native.original.types['ex:Parent']?.library?.profileId).toBe('fixture.game');
   expect(
     native.original.libraryProfiles?.['fixture.game']?.progress?.allowed[0]?.units.map((unit) => unit.id),
@@ -70,7 +71,8 @@ test('MAL adopts only an explicitly selected scalar occurrence and retries the s
   await native.grantLibraryGate(native.owner.actor.accountId);
   const exposure = await native.send('steward', 'POST', '/v1/platform/exposure/reading_progress:open');
   expect(exposure.status).toBe(200);
-  const target = await native.createSubject('game');
+  const ownerHome = partitionOf(routeOf(native.owner.actor.accountId)!);
+  const target = await native.createHomeSubject('game', native.owner, ownerHome);
   const id = await upload(
     anime('210', '<my_watched_episodes>0</my_watched_episodes>') +
       anime('211') +
@@ -173,7 +175,7 @@ test('MAL adopts only an explicitly selected scalar occurrence and retries the s
   expect((await json('GET', `/v1/progressSessions?subjectId=${target}`)).progressSessions).toHaveLength(1);
   await json('DELETE', `${base}/${id}`);
 });
-test('native HTTP own preview, explicit unmatched resolution, supported status, unsupported evidence, retry and owner fence', async () => {
+test.serial('native HTTP own preview, explicit unmatched resolution, supported status, unsupported evidence, retry and owner fence', async () => {
   const producer = await accountToken({
     accountId: native.steward.actor.accountId,
     clientId: native.steward.actor.clientId,
@@ -269,7 +271,7 @@ test('native HTTP own preview, explicit unmatched resolution, supported status, 
   );
   await json('DELETE', `${base}/${id}`);
 });
-test('native conflict defaults preserve facts; replacement has revision and release guards; cancel and terminal stop admission', async () => {
+test.serial('native conflict defaults preserve facts; replacement has revision and release guards; cancel and terminal stop admission', async () => {
   const target = await native.createSubject('game');
   await json('PUT', `/v1/libraryEntries/${target}`, { state: 'planned' }, randomUUID(), 'owner', 201);
   const id = await upload(anime('200') + anime('201') + anime('202'));
@@ -316,7 +318,7 @@ test('native conflict defaults preserve facts; replacement has revision and rele
   await json('POST', `${base}:preview`, { xml: xml(anime('1')) }, randomUUID(), denied.bearer, 401);
 });
 
-test('MAL score review records explicit native units, preserves corrections and commits selected native votes through the guarded producer', async () => {
+test.serial('MAL score review records explicit native units, preserves corrections and commits selected native votes through the guarded producer', async () => {
   const actor = await native.identity(
     [...native.owner.actor.scopes, 'rating:vote', 'definitions:read', 'subject:read'],
     0,
@@ -535,7 +537,7 @@ test('MAL score review records explicit native units, preserves corrections and 
   await json('DELETE', `${base}/${id}`, undefined, randomUUID(), actor.bearer);
 });
 
-test('MAL adopts reviewed partial dates to selected repeats, preserves unknowns, clears only by consent and retries the original journal PATCH', async () => {
+test.serial('MAL adopts reviewed partial dates to selected repeats, preserves unknowns, clears only by consent and retries the original journal PATCH', async () => {
   const bearer = await accountToken({
     accountId: native.owner.actor.accountId,
     clientId: native.owner.actor.clientId,
@@ -549,7 +551,8 @@ test('MAL adopts reviewed partial dates to selected repeats, preserves unknowns,
     ],
   });
   expect((await native.send('steward', 'POST', '/v1/platform/exposure/reading_progress:open')).status).toBe(200);
-  const target = await native.createSubject('game');
+  const ownerHome = partitionOf(routeOf(native.owner.actor.accountId)!);
+  const target = await native.createHomeSubject('game', native.owner, ownerHome);
   const occurrences: { id: string }[] = [];
   for (let index = 0; index < 5; index++) {
     const started = await json(
@@ -722,7 +725,7 @@ test('MAL adopts reviewed partial dates to selected repeats, preserves unknowns,
   expect((await dateApply(4, retiredVersion, ['startDate'])).outcomes[0]).toMatchObject({ status: 'stale' });
   await json('DELETE', `${base}/${id}`);
 });
-test('native redirect requires a deliberate review of the canonical MAL target', async () => {
+test.serial('native redirect requires a deliberate review of the canonical MAL target', async () => {
   const actor = await native.identity(
     [...native.owner.actor.scopes, 'rating:vote', 'definitions:read', 'subject:read'],
     0,

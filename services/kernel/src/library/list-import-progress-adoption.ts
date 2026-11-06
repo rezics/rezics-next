@@ -10,6 +10,7 @@ import type { createSessionCommands } from './sessions.ts';
 import { ProgressConflictError, ProgressInvalidError } from './sessions.ts';
 import { LibraryConflictError } from './entries.ts';
 import { LibraryNotFoundError } from './command-support.ts';
+import { SubjectIdentityUnavailableError } from './subject-anchor.ts';
 
 export type ProgressSourceValue = {
   field: string;
@@ -709,7 +710,8 @@ export async function executeProgressAdoption(
         error instanceof ProgressInvalidError ||
         error instanceof GrantDeniedError ||
         error instanceof TypeError ||
-        error instanceof AccessUnavailableError
+        error instanceof AccessUnavailableError ||
+        error instanceof SubjectIdentityUnavailableError
       )
         throw error;
       const failed: ProgressAdoptionMeasureResult = {

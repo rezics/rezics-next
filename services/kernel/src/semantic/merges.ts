@@ -113,8 +113,8 @@ export async function mergeSubjects(
 
 export type SubjectMergeAdmission = { operation: { id: string } };
 
-/** Ordinary HTTP admission. Completes the catalogue redirect in the persist command;
- * callers observe publication through GET /v1/subjectIdentityOperations/{id}. */
+/** Ordinary HTTP admission. Retains the identity job; mapping applies the catalogue
+ * redirect. Callers observe publication through GET /v1/subjectIdentityOperations/{id}. */
 export async function admitMergeSubjects(
   pool: Pool,
   options: {
@@ -197,22 +197,11 @@ export async function admitMergeSubjects(
       authorization: options.authorization,
       ...(options.clock === undefined ? {} : { clock: options.clock }),
     },
-    async (tx, { transactionId }) => {
-      const mapping = (
-        await tx.query<{ closure_state: string }>(
-          'SELECT closure_state FROM semantic.identity_epoch_mapping WHERE route=$1 AND original=$2',
-          [route, redirected],
-        )
-      ).rows[0];
-      // Active terminal mappings apply the catalogue redirect inside mapping work.
-      // A persist-command redirect against those rows raises identity_epoch_unavailable.
-      if (mapping && mapping.closure_state !== 'legacy') return noEffect({ operation: { id: job.jobId } });
-      const merged = await mergeSubjectsInCommand(tx, transactionId, {
-        survivor,
-        redirected,
-        release: options.release,
-      });
-      return { value: { operation: { id: job.jobId } }, events: merged.events };
+    async () => {
+      // HTTP admission retains the identity job. Mapping applies the catalogue
+      // redirect. A persist-command redirect against the admission hold raises
+      // identity_epoch_unavailable, including for still-legacy birth rows.
+      return noEffect({ operation: { id: job.jobId } });
     },
   );
   return {

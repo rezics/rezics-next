@@ -53,7 +53,7 @@ library-gate delegation. Subject merge for a Rating redirect authenticates that 
 Guarded score and redirect checks place the Library-selected Subject on the voter's identity home and finish
 identity bootstrap on that partition before Rating review or merge. Guarded Rating apply uses the same `rating:vote`
 token-scope check as HTTP PUT; it does not require an Access account grant. HTTP merge on an active identity terminal
-admits the job and mapping applies the redirect. A reduced sibling token is denied even when the role row exists. Reusing a prior actor
+admits the job and mapping applies the redirect; it does not persist-command the catalogue redirect against that hold. A reduced sibling token is denied even when the role row exists. Reusing a prior actor
 snapshot, `deadlineFor` from a leaked request budget, or putting `gate:personal_library` on the grantor identity
 drops coverage. Unique-typed extra grants (`definitions:publish`, `definitions:activate`) require Access to project
 the existing `deadline_live` operand as `deadlineLive`; without that fact the policy core treats a live governance

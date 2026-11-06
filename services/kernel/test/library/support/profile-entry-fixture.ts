@@ -370,7 +370,8 @@ export async function createProfileEntryFixture(
     await installIdentityEpochBootstrap(pool);
     async function catchUpIdentity(home: number) {
       for (let n = 0; n < 1000; n++) {
-        if ((await stepIdentityEpochBootstrap(pool, home)).state === 'caught-up') return;
+        const progress = await stepIdentityEpochBootstrap(pool, home);
+        if (progress.state === 'caught-up') return;
       }
       throw new Error('Native identity bootstrap did not finish');
     }
@@ -517,14 +518,18 @@ export async function createProfileEntryFixture(
       await catchUpIdentity(partitionOf(routeOf(id)!));
       return id;
     }
+    function homeKey(accountId: string, home = 0) {
+      let key = entryKey();
+      while (partitionOf(subjectTarget(routeKey, accountId, key).route) !== home) key = entryKey();
+      return key;
+    }
     async function createHomeSubject(
       vertical: ProfileVertical,
       person: { actor: AccountActor; bearer: string },
       home = 0,
       label: string = vertical,
     ) {
-      let key = entryKey();
-      while (partitionOf(subjectTarget(routeKey, person.actor.accountId, key).route) !== home) key = entryKey();
+      const key = homeKey(person.actor.accountId, home);
       const response = await send(
         person.bearer,
         'POST',
@@ -627,6 +632,7 @@ export async function createProfileEntryFixture(
       sendWithHeaders,
       createSubject,
       createHomeSubject,
+      homeKey,
       catchUpIdentity,
       admitSubjectMerge,
       publish,
