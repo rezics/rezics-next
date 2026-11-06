@@ -13,6 +13,9 @@ and `/slug` also support browser use. Publication validation/admission (`validat
 and `bundledSources` remain native operations; they are not exposed by the browser
 root or bundled entry. Browser publication callers use the ordinary Definitions API
 so the native validator retains its isolated checker and exact analysis limits.
+Portable publication workspace helpers (`classifyImportedDocument`, `compareReleases`,
+`compareExtensions`, `reconcileActivation` and imported-file diagnostics) live on both root and
+browser entries. Source compilation and extension validation stay native.
 
 ## Semantic language selection
 

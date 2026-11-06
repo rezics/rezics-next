@@ -1129,3 +1129,9 @@ export async function compileCatalogue(input: {
   if (defects.length) throw new Error(`Compiler produced an invalid release: ${JSON.stringify(defects)}`);
   return release;
 }
+
+export {
+  admitImportedDocument,
+  type CatalogueSourceInput,
+  type ImportedCatalogueDocument,
+} from './import-document.ts';
