@@ -79,7 +79,8 @@ with 9/12 parent cases passing. Realm fixture commit exposed a retained native D
 unused shadowing locals and their unused SELECT operands. The existing Realm/media test exercises it.
 The remaining private-parent and growth cases deny in current Access authorization, consistently with the
 unselected deadline operand already reported; no authorization check or assertion is removed.
-The migration's official schema dump remains with the serial publisher; no generated declaration was edited.
+The focused native check returned the migrated Community schema; its exact dump is now retained with the
+forward migration. No generator or generated TypeScript declaration was changed.
 
 The bridge migration's missing dbmate envelope caused `cdd6e1ce-e796-42d0-ace3-e2d3a30166e0`
 to exit 1 before tests (`dbmate requires each migration to define an up block with '-- migrate:up'`).
