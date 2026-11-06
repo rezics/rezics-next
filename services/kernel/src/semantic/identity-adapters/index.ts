@@ -897,6 +897,12 @@ export function identityEpochStore(): IdentityEpochStore {
 }
 
 export { readIdentityMappings, readIdentityRatingReview };
+export {
+  activeIdentitySourceConsumerMaintenance,
+  identitySourceConsumerLibraryWork,
+} from '../identity-source-consumer-maintenance.ts';
+export type { IdentitySourceConsumerMaintenanceContext } from '../identity-source-consumer-maintenance.ts';
+export type { IdentityReceivingSelection } from '../identity-receiving-effects-types.ts';
 export type {
   IdentityRatingControlLocator,
   IdentityRatingReviewOperand,

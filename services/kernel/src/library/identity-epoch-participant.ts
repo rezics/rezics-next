@@ -12,7 +12,10 @@ import {
   identityJobPartition,
   IdentityEpochStoreError,
   serializeIdentityValue as json,
+  activeIdentitySourceConsumerMaintenance,
+  identitySourceConsumerLibraryWork,
 } from '../semantic/identity-adapters/index.ts';
+import type { IdentitySourceConsumerMaintenanceContext } from '../semantic/identity-adapters/index.ts';
 import {
   lookupIdentityReceivingEffect,
   prepareIdentityReceivingEffect,
@@ -22,11 +25,6 @@ import {
   type IdentityReceivingSelection,
 } from '../semantic/identity-receiving-effects.ts';
 import { withReadTransaction } from '../semantic/read.ts';
-import {
-  activeIdentitySourceConsumerMaintenance,
-  identitySourceConsumerLibraryWork,
-  type IdentitySourceConsumerMaintenanceContext,
-} from '../semantic/identity-source-consumer-maintenance.ts';
 import { IDENTITY_EPOCH_ADMITTED } from '../semantic/events.ts';
 import { WORK_STEP_DEADLINE_MS, workStepDeadline } from './command-support.ts';
 import {
