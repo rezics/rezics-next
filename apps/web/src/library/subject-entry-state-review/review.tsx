@@ -180,7 +180,13 @@ function LibraryStateSelect({
   );
 }
 
-function ReceivedValue({ entry, label }: { entry: SubjectSlotEntry | null; label: string }) {
+function ReceivedValue({
+  entry,
+  label,
+}: {
+  entry: Pick<SubjectSlotEntry, 'subjectId' | 'state' | 'revision' | 'incarnationId'> | null;
+  label: string;
+}) {
   return <span data-entry-state-received-value>{entry ? label : m.library_entry_review_absent()}</span>;
 }
 
@@ -195,7 +201,7 @@ function ReviewValues({ draft, receivedLabel }: { draft: Draft; receivedLabel: s
       </dd>
       <dt className="font-medium text-muted-foreground">{m.library_entry_review_received()}</dt>
       <dd className="m-0 min-w-0 whitespace-normal break-words [overflow-wrap:anywhere]">
-        <ReceivedValue entry={draft.basis ? { subjectId: draft.basis.subjectId } : null} label={receivedLabel} />
+        <ReceivedValue entry={draft.basis} label={receivedLabel} />
       </dd>
       <dt className="font-medium text-muted-foreground">{m.library_entry_review_proposed()}</dt>
       <dd className="m-0 min-w-0 whitespace-normal break-words [overflow-wrap:anywhere]">{draft.label}</dd>

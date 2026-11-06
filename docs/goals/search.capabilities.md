@@ -420,7 +420,9 @@ malicious input and shared public sources. Synthetic Book-with-author alone is n
 
 Decision: the fewest Web tests pin publish/read, TypeList raw-limit admission, mixed sibling Retry-After and public
 ReactionSummary totals; Members keep recorded native duplicates; no extra page stories. Auth website tests pin malformed
-native metadata, non-object token errors and revocation JSON at the protocol boundary.
+native metadata, non-object token errors and revocation JSON at the protocol boundary. Driver following, entry-review and
+Board consumers type-check with those six existing suites; History README keeps one Foreign Kernel introduction and the
+Zone cleanup paragraph in the Zone receiving section.
 
 **Frozen scenarios and binding:** all six original pages titles in the ledger. Preserve registry limits64KiB,
 256 nodes, depth8,16 reads/128 slots; profile1MiB/128 templates; executable HTML/script/links rejected with pointers.
