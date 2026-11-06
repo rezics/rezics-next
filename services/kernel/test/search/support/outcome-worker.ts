@@ -1,5 +1,4 @@
 import { readWorkerConfig, startWorker, type WorkerConfig } from '../../../src/worker.ts';
-import { KERNEL_WORK_MODULES } from '../../support/default-work-modules.ts';
 import type { WorkContext, WorkModule } from '../../../src/work/registry.ts';
 import { rebuildSubjects, RebuildError } from '../../../src/search/generations.ts';
 import { createOpenSearch } from '../../../src/search/opensearch.ts';
@@ -47,7 +46,7 @@ export function createOutcomeWorker(overrides: Pick<WorkerConfig, 'kernelPool' |
   const workerClock = createOutcomeWorkerClock(overrides.clock);
   const slot = createSearchRunnerSlot();
   const observations: Omit<WorkerStats, 'clockInstant'> = {
-    defaultModules: KERNEL_WORK_MODULES.map(({ name }) => name),
+    defaultModules: [],
     registeredModules: [],
     registrationCounts: {},
     startedServices: {},
@@ -77,43 +76,51 @@ export function createOutcomeWorker(overrides: Pick<WorkerConfig, 'kernelPool' |
   }
 
   async function init(env: Record<string, string | undefined>): Promise<WorkerStats> {
-    const defaults: WorkModule[] = KERNEL_WORK_MODULES.map((module) => ({
-      name: module.name,
-      async register(context) {
-        observations.registeredModules.push(module.name);
-        observations.registrationCounts[module.name] = (observations.registrationCounts[module.name] ?? 0) + 1;
-        observations.startedServices[module.name] = 0;
-        // Only addService is decorated. Pool, queues, client, env, effects and clock retain their identities.
-        await module.register({
-          ...context,
-          addService(original) {
-            // Search also owns retention/erasure services. Adopt only the actual
-            // runner returned by its post-launch starter, retaining every service.
-            const isRunner = (service: Awaited<ReturnType<typeof original>>) =>
-              module.name === 'search' && 'refresh' in service && typeof service.refresh === 'function';
-            const start = async () => {
-              const service = await original();
-              observations.startedServices[module.name] = (observations.startedServices[module.name] ?? 0) + 1;
-              if (isRunner(service)) observations.searchStarterInvocations += 1;
-              return service;
-            };
-            context.addService(async () => {
-              const service = await start();
-              if (!isRunner(service)) return service;
-              searchServices += 1;
-              if (searchServices !== 1) {
-                await service.stop();
-                throw new Error('Default search must start exactly one runner');
-              }
-              searchContext = context;
-              return slot.adopt(service, start);
-            });
-          },
-        });
-      },
-    }));
     try {
-      worker = await startWorker({ ...readWorkerConfig(env), ...overrides, clock: workerClock.clock }, defaults, env);
+      worker = await startWorker(
+        { ...readWorkerConfig(env), ...overrides, clock: workerClock.clock },
+        (composed) => {
+          observations.defaultModules = composed.map(({ name }) => name);
+          return composed.map((module): WorkModule => {
+            return {
+              name: module.name,
+              async register(context) {
+                observations.registeredModules.push(module.name);
+                observations.registrationCounts[module.name] = (observations.registrationCounts[module.name] ?? 0) + 1;
+                observations.startedServices[module.name] = 0;
+                // Only addService is decorated. Pool, queues, client, env, effects and clock retain their identities.
+                await module.register({
+                  ...context,
+                  addService(original) {
+                    // Search also owns retention/erasure services. Adopt only the actual
+                    // runner returned by its post-launch starter, retaining every service.
+                    const isRunner = (service: Awaited<ReturnType<typeof original>>) =>
+                      module.name === 'search' && 'refresh' in service && typeof service.refresh === 'function';
+                    const start = async () => {
+                      const service = await original();
+                      observations.startedServices[module.name] = (observations.startedServices[module.name] ?? 0) + 1;
+                      if (isRunner(service)) observations.searchStarterInvocations += 1;
+                      return service;
+                    };
+                    context.addService(async () => {
+                      const service = await start();
+                      if (!isRunner(service)) return service;
+                      searchServices += 1;
+                      if (searchServices !== 1) {
+                        await service.stop();
+                        throw new Error('Default search must start exactly one runner');
+                      }
+                      searchContext = context;
+                      return slot.adopt(service, start);
+                    });
+                  },
+                });
+              },
+            };
+          });
+        },
+        env,
+      );
       if (
         searchServices !== 1 ||
         observations.searchStarterInvocations !== 1 ||

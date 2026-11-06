@@ -34,3 +34,16 @@ test('search work never loads the HTTP server', () => {
   expect(parents.has(server) ? chain(parents, server) : null).toBeNull();
   expect(parents.has(resolve(src, 'search/runner.ts'))).toBe(true);
 });
+
+test('the outcome worker child decorates startWorker composition instead of a substitute module list', () => {
+  const source = readFileSync(resolve(import.meta.dir, 'support/outcome-worker.ts'), 'utf8');
+  expect(source).not.toContain('default-work-modules');
+  expect(source).toContain('startWorker');
+  expect(source).toMatch(/startWorker\([\s\S]*\(composed\)\s*=>/);
+});
+
+test('the erasure participant child decorates startWorker composition instead of a substitute module list', () => {
+  const source = readFileSync(resolve(import.meta.dir, 'erasure-participant.test.ts'), 'utf8');
+  expect(source).not.toMatch(/createKernelWorkModules\s*\(/);
+  expect(source).toMatch(/startWorker\(readWorkerConfig\(params\),\s*\(defaults\)\s*=>/);
+});

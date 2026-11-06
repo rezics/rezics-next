@@ -30,11 +30,13 @@ The [Auth fixture](../semantic/outcome-auth.ts) keeps Auth's SDK in the supervis
 
 ## Run and observe the default worker
 
-In the worker child, call `startWorker` with the imported [default module list](../../src/composition/work-modules.ts). Decorate
-every imported default registration in place: preserve the full list, order and configuration, invoke each original
-`register` exactly once, and do not filter or replace registrations. Observe service starters only when the real
-[`composeWork`](../../src/work/registry.ts) invokes them after SDK launch. Registration may create a starter without
-running it; do not manually invoke dormant Semantic factories.
+The callable composition entry is [`createKernelWorkModules`](../../src/composition/work-modules.ts). In the worker
+child, call `startWorker` and decorate that live list: `startWorker` invokes `createKernelWorkModules` with Content
+ambient (clock, fetch, identity) and the same producer/Semantic composers the production worker uses. Decorate every
+default registration in place; preserve the full list, order and configuration; invoke each original `register`
+exactly once; do not filter, replace, or import a second pre-built module list. Observe service starters only when
+the real [`composeWork`](../../src/work/registry.ts) invokes them after SDK launch. Registration may create a starter
+without running it; do not manually invoke dormant Semantic factories.
 
 Capture the real Search runner through its original starter in [search/work.ts](../../src/search/work.ts). Keep a
 stable lifecycle slot whose stop operation always targets the currently active runner, including a replacement

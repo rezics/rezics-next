@@ -40,6 +40,7 @@ export const nativePermissionProjectionBound = Object.freeze({
   explicitGlobalPrincipalResourceRoleGrant: false,
   explicitGlobalPrincipalOwnAccountGrant: false,
   explicitGlobalPrincipalAuthenticatedBenefitGrant: false,
+  live: false,
 });
 
 export type NativePermissionProjection = Readonly<{
