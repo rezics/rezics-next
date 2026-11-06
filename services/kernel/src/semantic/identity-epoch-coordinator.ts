@@ -91,8 +91,12 @@ async function readNext(pool: Pool, ref: IdentityJobRef): Promise<Next> {
       return 'published';
     }
     if (job.state === 'cancelled' || job.state === 'cancelling') return job.state;
-    if (row.pending_job !== ref.jobId || BigInt(row.pending_epoch ?? -1) !== ref.epoch)
-      throw unavailable('Native identity job no longer owns its control reservation');
+    // PREPARING holds the prepare reservation; acquire mirrors the same job into pending before promotion.
+    const owned =
+      job.state === 'preparing'
+        ? row.prepare_job === ref.jobId && BigInt(row.prepare_epoch ?? -1) === ref.epoch
+        : row.pending_job === ref.jobId && BigInt(row.pending_epoch ?? -1) === ref.epoch;
+    if (!owned) throw unavailable('Native identity job no longer owns its control reservation');
     if (job.state === 'preparing') return 'preparing';
     if (job.mapping?.state !== 'complete') return 'mapping';
     if (job.participants['search-canonical-index']?.state !== 'complete') return 'search-canonical-index';
@@ -219,7 +223,12 @@ export function registerIdentityEpochCoordinator(context: WorkContext): void {
       let previous: ReceiptLocator | null = null;
       for (let page = 0; page < segmentPages; page++) {
         const next = await read(job);
-        if (next === 'published' || next === 'cancelled') return { nextSegment: null };
+        if (next === 'cancelled') return { nextSegment: null };
+        if (next === 'published') {
+          // Publication releases the reservation, bridges and Source holds through the owning admission path.
+          await admission(job);
+          return { nextSegment: null };
+        }
         if (next === 'preparing' || next === 'cancelling') {
           await admission(job);
         } else if (next === 'publish') {
