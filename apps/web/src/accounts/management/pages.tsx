@@ -473,6 +473,9 @@ export function AccountManagementPage({
               })}
             </nav>
           ) : null}
+          {value.relation && page.authNavigation?.actions.transfer?.state !== 'available' ? (
+            <p>{m.managed_transfer_unavailable()}</p>
+          ) : null}
           <p>{m.managed_operation_status()}</p>
           {deletion ? (
             <a className={linkClass} href={deletion}>
