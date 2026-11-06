@@ -39,6 +39,7 @@ let joinAdvice: RealmJoinAdvice = { state: 'current', allowed: true };
 const joinAdviceReads: string[] = [];
 let membershipAction: () => Promise<unknown> = async () => ({ outcome: 'accepted', workflowId: 'membership-visit' });
 const membershipActionCalls: string[] = [];
+const unusedSpaceAction = async () => null;
 mock.module('../src/community/realm-membership-actions', () => ({
   readRealmMembership: ({ data }: { data: { realmId: string } }) =>
     realmMembershipTestReaders.readMembership(data.realmId),
@@ -52,6 +53,29 @@ mock.module('../src/community/space-actions', () => ({
     membershipActionCalls.push(`${input.data.realmId}:${input.data.action}`);
     return membershipAction();
   },
+  addRealmMember: unusedSpaceAction,
+  readSpacePage: unusedSpaceAction,
+  locateRealmPage: unusedSpaceAction,
+  readMyRealmsPage: unusedSpaceAction,
+  readMyRealmsPageForReview: unusedSpaceAction,
+  readRealmClaimState: unusedSpaceAction,
+  readOwnRealmClaimStatus: unusedSpaceAction,
+  submitRealmClaim: unusedSpaceAction,
+  readContainerLifecycle: unusedSpaceAction,
+  changeContainerLifecycle: unusedSpaceAction,
+  readContainerLifecycleDestination: unusedSpaceAction,
+  readSpaceSetup: unusedSpaceAction,
+  resolveSpaceSetupChoice: unusedSpaceAction,
+  searchSpaceSetupContexts: unusedSpaceAction,
+  readSpaceSetupBoardChoices: unusedSpaceAction,
+  changeSpaceSetup: unusedSpaceAction,
+  readRealmBans: unusedSpaceAction,
+  resolveRealmBanTarget: unusedSpaceAction,
+  changeRealmBan: unusedSpaceAction,
+  readRealmAppearanceSettings: unusedSpaceAction,
+  readRealmRulesAuthoring: unusedSpaceAction,
+  changeRealmAppearanceSettings: unusedSpaceAction,
+  resolveRealmAppearanceChoice: unusedSpaceAction,
   changeRealmPublication: async () => ({ kind: 'denied' }),
   readRealmBoards: async () => ({ kind: 'page', items: [], next: null, unavailable: 0 }),
   readRealmPublications: async () => ({ kind: 'page', items: [], next: null, unavailable: 0 }),
