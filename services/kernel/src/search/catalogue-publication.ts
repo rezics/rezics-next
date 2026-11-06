@@ -9,7 +9,7 @@ export type CataloguePublicationPage = Readonly<{
   exhausted: boolean;
 }>;
 
-/** Public catalogue membership for whole-query publication. Library facts never enter this population. */
+/** Search public producer: selected catalogue A for Library staging. Library facts never enter this population. */
 export async function readCataloguePublicationPage(input: {
   client: OpenSearch;
   prefix: string;

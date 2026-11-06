@@ -366,7 +366,8 @@
         "services/kernel/src/search/rated-source.ts",
         "services/kernel/src/search/space-discovery.ts",
         "services/kernel/src/search/work.ts",
-        "services/kernel/src/search/discovery-filter.ts"
+        "services/kernel/src/search/discovery-filter.ts",
+        "services/kernel/src/search/catalogue-publication.ts"
       ],
       "allowedDependencies": [
         "bounds",

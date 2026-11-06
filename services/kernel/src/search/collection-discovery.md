@@ -102,6 +102,8 @@ eligible identity appears in its global position; continuation is a sort keyset,
   deterministic count ties, exact recency, completed empty A during B, absent A and expired deletion retention.
   The native fixture uses product creation/publication and the installed registry hydration caller. These tests
   are landing checks, not a production native execution or measured three-scale growth claim.
+  Focused native tests pin catalogue unique members, directory recency/popularity order, composition slot skip and
+  TypeList Search-page admission; browser walks remain deferred.
 
 ## Readiness
 
