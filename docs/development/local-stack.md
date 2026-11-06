@@ -319,4 +319,6 @@ The general `fetchVndbDump` helper, when called without a pin, first tries the i
 machine-local reuse. This mode does not establish the development seed's pinned acceptance generation.
 
 The seed's `REZICS_DEV_PERSONA_*`, `AUTH_ORIGIN` and `KERNEL_ORIGIN` environment seam also works with a manually
-configured local account. Seed origins accept HTTPS or loopback HTTP (`localhost`, `127.0.0.1`, `[::1]`).
+configured local account. Optional `REZICS_DEV_BANGUMI_GAME_ENVIRONMENT_BINDINGS` names the reviewed Game
+platform/engine JSON used by `--bangumi-game-environment-bindings`; missing input omits those proposals only.
+Seed origins accept HTTPS or loopback HTTP (`localhost`, `127.0.0.1`, `[::1]`).

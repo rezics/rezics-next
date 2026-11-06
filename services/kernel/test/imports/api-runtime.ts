@@ -278,7 +278,7 @@ export async function openApiRuntime(
     const mediaBoundary = boundary!;
     await mediaBoundary.source('https://lain.bgm.tv/cover.jpg');
     await mediaBoundary.source('https://lain.bgm.tv/replacement.jpg');
-    work = await time('work client', () => createWorkClient(database.url, database.openPool()));
+    work = await time('work client', () => createWorkClient(database.url, database.pool));
     const secret = randomUUID();
     let overrides: string | undefined = growthWriteRate
       ? JSON.stringify({ service: { write: growthWriteRate } })
