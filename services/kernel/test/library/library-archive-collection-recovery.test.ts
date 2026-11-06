@@ -11,6 +11,7 @@ let artifact: { manifest: Record<string, any>; records: Record<string, any>[] },
 const scopes = [
   'subject:read',
   'collection:read',
+  'library_archive:read',
   'collection:create',
   'collection:update',
   'collection:delete',
