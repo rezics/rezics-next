@@ -133,6 +133,10 @@ desktop/phone review remain integration verification; no promoted execution is e
 
 **Native acceptance:** `bun run --cwd services/kernel check test/access/account-lifecycle-outcome.test.ts test/access/account-agent-effect.test.ts test/presentation/agent-page-address.test.ts test/access/agent-profile-outcomes.test.ts`.
 
+**Worker fixture evidence:** the canonical-target and agent-page-address fixtures register named actors through the
+lifecycle registration commands and run the work executor in a child process. Their publication step needs Semantic52's
+verify and unverify mapping, so these suites are not accepted until that delivery lands.
+
 ## self-profile
 
 **User job:** An account updates its public profile fields and public views over HTTP while other readers see only the fields allowed by those views.

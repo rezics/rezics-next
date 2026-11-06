@@ -28,10 +28,17 @@ export async function createRealAccess<const Personas extends Readonly<Record<st
   admin: Pool,
   accounts: Personas,
   actions: readonly string[],
-  options: { clock?: () => Date; credentialClock?: () => Date } = {},
+  options: {
+    clock?: () => Date;
+    credentialClock?: () => Date;
+    /** Personas whose account the production registration path already created (see identity-registration.ts).
+     * Their rows are not inserted raw, so their handle claims emit discovery events. */
+    registered?: readonly (keyof Personas & string)[];
+  } = {},
 ): Promise<RealAccessFixture<keyof Personas & string>> {
   configureTestReceiptKeys(admin);
   type Persona = keyof Personas & string;
+  const registered = new Set<string>(options.registered ?? []);
   const accountById = new Map(Object.entries(accounts).map(([persona, accountId]) => [accountId, persona]));
   const signing = await generateKeyPair('ES256', { extractable: true });
   const jwk = { ...(await exportJWK(signing.publicKey)), kid: 'semantic-real-access', alg: 'ES256' };
@@ -69,10 +76,11 @@ export async function createRealAccess<const Personas extends Readonly<Record<st
   for (const [persona, accountId] of Object.entries(accounts) as [Persona, string][]) {
     const route = routeOf(accountId);
     if (route === null) throw new Error(`Invalid account id for persona ${persona}`);
-    await admin.query(
-      "INSERT INTO access.account(route,account_id,kind,state,transaction_id) VALUES ($1,$2,'actor','active',$2)",
-      [route, accountId],
-    );
+    if (!registered.has(persona))
+      await admin.query(
+        "INSERT INTO access.account(route,account_id,kind,state,transaction_id) VALUES ($1,$2,'actor','active',$2)",
+        [route, accountId],
+      );
     await renew(persona);
   }
   const checks: RealAccessCheck[] = [];

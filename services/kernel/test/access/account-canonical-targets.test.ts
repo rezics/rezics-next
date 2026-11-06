@@ -17,35 +17,49 @@ import type { SummaryReaderDependencies } from '../../src/semantic/summaries.ts'
 import { createWorkClient, type WorkClient } from '../../src/work/client.ts';
 import { composeWork } from '../../src/work/registry.ts';
 import { KERNEL_WORK_MODULES } from '../support/default-work-modules.ts';
+import { createIdentityRegistrar } from '../support/identity-registration.ts';
+import { startIdentityWorkProcess } from '../support/identity-work-process.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
 import { createRealAccess } from '../semantic/real-access.ts';
 import { epochFixture, type EpochFixture } from '../semantic/support/identity-epoch.ts';
 
 let f: EpochFixture;
+let registrar: ReturnType<typeof createIdentityRegistrar>;
 let workClient: WorkClient;
-let work: Awaited<ReturnType<typeof composeWork>> | undefined;
+let registration: Awaited<ReturnType<typeof composeWork>> | undefined;
+let identityWork: Awaited<ReturnType<typeof startIdentityWorkProcess>> | undefined;
 beforeAll(async () => {
   f = await epochFixture();
-  // Account completion publishes through the real identity coordinator, which needs the production work modules.
+  registrar = createIdentityRegistrar(f.pool, new Uint8Array(32).fill(37));
+  // Account completion publishes through the real identity coordinator. Its enqueue needs the composed registration in
+  // this process; the production executor is launched only by the child process.
   const databaseUrl = process.env.DATABASE_URL!;
+  const routeKey = Buffer.from(new Uint8Array(32).fill(37)).toString('base64url');
+  // A check run and its load reruns share one OpenSearch; each composition owns fresh index names.
+  const searchPrefix = `canonical-targets-${randomUUID().slice(0, 8)}-`;
   workClient = await createWorkClient(databaseUrl, f.pool);
-  work = await composeWork(KERNEL_WORK_MODULES, {
+  registration = await composeWork(KERNEL_WORK_MODULES, {
     databaseUrl,
     pool: f.pool,
     client: workClient,
     env: workerTestEnv({
-      KERNEL_ROUTE_KEY: Buffer.from(new Uint8Array(32).fill(37)).toString('base64url'),
+      KERNEL_ROUTE_KEY: routeKey,
       OPENSEARCH_URL: process.env.OPENSEARCH_URL,
-      // A check run and its load reruns share one OpenSearch; each composition owns fresh index names.
-      KERNEL_SEARCH_PREFIX: `canonical-targets-${randomUUID().slice(0, 8)}-`,
+      KERNEL_SEARCH_PREFIX: searchPrefix,
     }),
     receiptKeys: testReceiptKeys(),
   });
-  await work.launch();
-});
+  identityWork = await startIdentityWorkProcess({
+    databaseUrl,
+    routeKey,
+    openSearchUrl: process.env.OPENSEARCH_URL,
+    searchPrefix,
+  });
+}, 180_000);
 afterAll(async () => {
-  await work?.shutdown();
+  await identityWork?.stop();
+  await registration?.shutdown();
   await workClient?.close();
   await f?.close();
 });
@@ -68,9 +82,15 @@ async function linked(handle: string | null) {
   const reviewerId = newId(0x5c31);
   const subjectId = (await f.create('Canonical account target')).subject.id;
   const actions = ['account:update', 'account:verify_agent'];
-  const real = await createRealAccess(f.admin, { owner: accountId, reviewer: reviewerId }, actions);
+  // A named account enters through production registration, so its claim emits discovery events. A handleless
+  // identity has no claim and keeps the bare active row that createRealAccess writes.
+  if (handle) await registrar.registerActor(handle, accountId);
+  const real = await createRealAccess(f.admin, { owner: accountId, reviewer: reviewerId }, actions, {
+    registered: handle ? ['owner'] : [],
+  });
   const access = real.access({ actions: new Map(actions.map((action) => [action, { anonymous: false }])) });
-  await real.grant({ route: routeOf(accountId)!, id: accountId }, 'owner', 'account:update');
+  // A registered owner already holds its self grants from registration; only a handleless owner needs this raw grant.
+  if (!handle) await real.grant({ route: routeOf(accountId)!, id: accountId }, 'owner', 'account:update');
   await real.grant(PLATFORM_RESOURCE, 'reviewer', 'account:verify_agent');
   const context = async (persona: 'owner' | 'reviewer') => {
     // Approval publishes the identity through the coordinator, which needs the same budget as the page fixture.
@@ -81,16 +101,10 @@ async function linked(handle: string | null) {
       actor: await access.authenticate(real.bearer(persona), { pool: f.pool, deadline }),
     };
   };
-  await f.pool.query(
-    `UPDATE access.account SET handle=$3, display_name='Canonical account' WHERE route=$1 AND account_id=$2`,
-    [routeOf(accountId), accountId, handle],
-  );
-  if (handle)
-    await f.pool.query(
-      `INSERT INTO access.handle_claim(route,normalized_handle,account_id,state,transaction_id)
-     VALUES($1,$2,$3,'active',$3)`,
-      [claimRoute(handle), handle, accountId],
-    );
+  await f.pool.query(`UPDATE access.account SET display_name='Canonical account' WHERE route=$1 AND account_id=$2`, [
+    routeOf(accountId),
+    accountId,
+  ]);
   await ensureAccountAgent(f.pool, { account: accountId, kind: 'person', name: 'Canonical account' });
   const commands = createAgentVerificationCommands({ pool: f.pool, access, clock: () => new Date() });
   const request = await commands.request(await context('owner'), {

@@ -97,19 +97,24 @@ export function showcaseFranchiseAssertions(input: {
     }
     const ownerKey = command.source.external_id;
     const targetKey = ownerKey === relation.sourceSubject ? relation.sourceEndpoint : relation.sourceSubject;
-    const owner = reads.get(ownerKey)?.subject.subject;
-    const target = reads.get(targetKey)?.subject.subject;
+    const ownerReading = reads.get(ownerKey);
+    const targetReading = reads.get(targetKey);
+    const owner = ownerReading?.subject.subject;
+    const target = targetReading?.subject.subject;
     if (!selected.has(ownerKey) || !selected.has(targetKey) || !owner || !target) {
       omissions.push({ provider: 'bangumi', sourceKey: ownerKey, code: 'graph-endpoint-unavailable' });
       continue;
     }
+    const ownerId = ownerReading?.boundSubjectId ?? owner.id;
+    const targetId = targetReading?.boundSubjectId ?? target.id;
     if (
       (ownerKey !== relation.sourceSubject && ownerKey !== relation.sourceEndpoint) ||
       command.source.source !== draft.alias ||
-      command.subject !== owner.id ||
+      command.subject !== ownerId ||
       command.statement.property.id !== draft.property ||
       command.statement.value.type !== 'value' ||
-      command.statement.value.content !== target.id ||
+      command.statement.value.content !== targetId ||
+      ownerId === targetId ||
       owner.id === target.id
     ) {
       omissions.push({ provider: 'bangumi', sourceKey: ownerKey, code: 'graph-endpoint-mismatch' });
@@ -118,7 +123,7 @@ export function showcaseFranchiseAssertions(input: {
     targets.set(command.key, {
       provider: 'bangumi',
       sourceKey: targetKey,
-      subjectId: target.id,
+      subjectId: targetId,
       nativeType: target.type,
       factsFence: true,
     });

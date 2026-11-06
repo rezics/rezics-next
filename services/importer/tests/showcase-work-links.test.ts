@@ -177,13 +177,14 @@ test('default selected-family COPY planning joins only selected VN links and kee
     ]);
     expect(plan.workLinks[2]?.bridgeReason).toContain('site does not admit');
     expect(plan.workLinks.slice(3).every((link) => link.bridgeReason !== undefined)).toBe(true);
-    expect(plan.edges.filter((item) => item.property === 'wdt:P5732')).toHaveLength(1);
+    expect(plan.edges.filter((item) => item.property === 'rezics:crossMediaCounterpart')).toHaveLength(1);
     const linked = plan.workLinks[0]!;
-    const edge = plan.edges.find((item) => item.property === 'wdt:P5732')!;
+    const edge = plan.edges.find((item) => item.property === 'rezics:crossMediaCounterpart')!;
     expect(edge).toMatchObject({
       alias: crossMediaAliases.vndb,
       holder: 'v411',
       target: '100',
+      targetAlias: crossMediaAliases.bangumi,
       url: 'https://bgm.tv/subject/100',
       table: 'extlinks',
       recordRevision: '8',
@@ -264,7 +265,9 @@ test('malformed and oversized selected work links stay atomic bounded gaps', asy
       }),
     );
     expect(malformed.workLinks.some((link) => link.owner === 'v411' && link.linkId === 1)).toBe(false);
-    expect(malformed.edges.some((edge) => edge.holder === 'v411' && edge.property === 'wdt:P5732')).toBe(false);
+    expect(
+      malformed.edges.some((edge) => edge.holder === 'v411' && edge.property === 'rezics:crossMediaCounterpart'),
+    ).toBe(false);
 
     const oversizedJoins = Array.from({ length: vndbLimits.maxLinks + 1 }, (_, index) => `v411\t${index + 1}`).join(
       '\n',
@@ -288,7 +291,9 @@ test('malformed and oversized selected work links stay atomic bounded gaps', asy
     );
     expect(oversized.records.vndb.find((record) => record.key === 'v411')?.payload).not.toHaveProperty('vn_extlinks');
     expect(oversized.workLinks.some((link) => link.owner === 'v411')).toBe(false);
-    expect(oversized.edges.some((edge) => edge.holder === 'v411' && edge.property === 'wdt:P5732')).toBe(false);
+    expect(
+      oversized.edges.some((edge) => edge.holder === 'v411' && edge.property === 'rezics:crossMediaCounterpart'),
+    ).toBe(false);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

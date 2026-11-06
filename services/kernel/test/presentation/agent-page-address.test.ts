@@ -15,6 +15,8 @@ import { createSubject } from '../../src/semantic/subject.ts';
 import { bootstrapProfile } from '../../src/presentation/profiles.ts';
 import { createWorkClient, type WorkClient } from '../../src/work/client.ts';
 import { composeWork } from '../../src/work/registry.ts';
+import { KERNEL_WORK_MODULES } from '../support/default-work-modules.ts';
+import { workerTestEnv } from '../support/worker-env.ts';
 import type { Resource } from '../../src/request/access.ts';
 import {
   completeAgentVerification,
@@ -35,9 +37,9 @@ import { newId, routeOf, partitionOf } from '../../src/route/route.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue, IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
 import { accountToken, admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
-import { KERNEL_WORK_MODULES } from '../support/default-work-modules.ts';
+import { createIdentityRegistrar } from '../support/identity-registration.ts';
+import { startIdentityWorkProcess } from '../support/identity-work-process.ts';
 import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
-import { workerTestEnv } from '../support/worker-env.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
 
 const accountRoute = 0x5274;
@@ -54,9 +56,11 @@ let access: ReturnType<typeof admittedAccess>;
 let kernel: ReturnType<typeof createKernel>;
 let staff: Seeded;
 let manager: Seeded;
+let registrar: ReturnType<typeof createIdentityRegistrar>;
 // The production work modules publish identity epochs; verified-subject addresses depend on that publication.
 let workClient: WorkClient;
-let work: Awaited<ReturnType<typeof composeWork>> | undefined;
+let registration: Awaited<ReturnType<typeof composeWork>> | undefined;
+let identityWork: Awaited<ReturnType<typeof startIdentityWorkProcess>> | undefined;
 const node = (type: string, id: string) => ({ type, props: { id } });
 const document = {
   root: { props: {} },
@@ -102,26 +106,37 @@ async function seedAccount(
   const id = newId(accountRoute);
   const kind = options.kind ?? 'actor';
   const displayName = handle.replaceAll('_', ' ');
-  await pool.query(
-    `INSERT INTO access.account
+  if (kind === 'actor' && !options.automatedBy) {
+    // Human accounts and their claims come from production registration, which also installs their self grants.
+    await registrar.registerActor(handle, id);
+    await pool.query(`UPDATE access.account SET display_name=$3 WHERE route=$1 AND account_id=$2`, [
+      accountRoute,
+      id,
+      displayName,
+    ]);
+  } else {
+    // Operated automated accounts and organizations keep raw rows here: their creation belongs to the operator and
+    // organization commands, which these page fixtures do not drive.
+    await pool.query(
+      `INSERT INTO access.account
       (route, account_id, kind, handle, display_name, state, operator_account_id, transaction_id)
      VALUES ($1, $2, $3, $4, $5, 'active', $6, $2)`,
-    [accountRoute, id, kind, handle, displayName, options.automatedBy ?? null],
-  );
-  if (kind === 'actor') {
+      [accountRoute, id, kind, handle, displayName, options.automatedBy ?? null],
+    );
+    const handleRoute = createHash('sha256').update(handle).digest().readUInt16BE(0);
     await pool.query(
-      `INSERT INTO access.resource_grant(route, resource_id, subject_id, action, valid, transaction_id)
+      `INSERT INTO access.handle_claim(route,normalized_handle,account_id,state,transaction_id)
+     VALUES($1,$2,$3,'active',$3)`,
+      [handleRoute, handle, id],
+    );
+    if (kind === 'actor')
+      await pool.query(
+        `INSERT INTO access.resource_grant(route, resource_id, subject_id, action, valid, transaction_id)
        VALUES ($1, $2, $2, 'account:update', '(,)', $2),
               ($1, $2, $2, 'account:read', '(,)', $2)`,
-      [accountRoute, id],
-    );
+        [accountRoute, id],
+      );
   }
-  const handleRoute = createHash('sha256').update(handle).digest().readUInt16BE(0);
-  await pool.query(
-    `INSERT INTO access.handle_claim(route,normalized_handle,account_id,state,transaction_id)
-     VALUES($1,$2,$3,'active',$3)`,
-    [handleRoute, handle, id],
-  );
   return { id, handle, kind, displayName };
 }
 
@@ -290,20 +305,30 @@ beforeAll(async () => {
     },
   });
   workClient = await createWorkClient(db.url, pool);
-  work = await composeWork(KERNEL_WORK_MODULES, {
+  // Identity publication indexes through the Search participant, which the check runner configures per run. This
+  // process composes the registration that the coordinator enqueues through; the production executor is launched only
+  // by the child process.
+  const routeKeyText = Buffer.from(routeKey).toString('base64url');
+  // A check run and its load reruns share one OpenSearch; each composition owns fresh index names.
+  const searchPrefix = `page-address-${randomUUID().slice(0, 8)}-`;
+  registration = await composeWork(KERNEL_WORK_MODULES, {
     databaseUrl: db.url,
     pool,
     client: workClient,
-    // Identity publication indexes through the Search participant, which the check runner configures per run.
     env: workerTestEnv({
-      KERNEL_ROUTE_KEY: Buffer.from(routeKey).toString('base64url'),
+      KERNEL_ROUTE_KEY: routeKeyText,
       OPENSEARCH_URL: process.env.OPENSEARCH_URL,
-      // A check run and its load reruns share one OpenSearch; each composition owns fresh index names.
-      KERNEL_SEARCH_PREFIX: `page-address-${randomUUID().slice(0, 8)}-`,
+      KERNEL_SEARCH_PREFIX: searchPrefix,
     }),
     receiptKeys: testReceiptKeys(),
   });
-  await work.launch();
+  identityWork = await startIdentityWorkProcess({
+    databaseUrl: db.url,
+    routeKey: routeKeyText,
+    openSearchUrl: process.env.OPENSEARCH_URL,
+    searchPrefix,
+  });
+  registrar = createIdentityRegistrar(pool, routeKey);
   staff = await seedAccount('page_staff');
   manager = await seedAccount('page_manager');
   await bootstrapGovernance(pool, staff.id);
@@ -314,10 +339,11 @@ beforeAll(async () => {
     [GLOBAL_CONTEXT, staff.id],
   );
   expect((await post('/v1/platform/exposure/agent_verification:open', await bearer(staff))).response.status).toBe(200);
-}, 60_000);
+}, 180_000);
 
 afterAll(async () => {
-  await work?.shutdown();
+  await identityWork?.stop();
+  await registration?.shutdown();
   await workClient?.close();
   await db?.close();
 });

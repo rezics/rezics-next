@@ -334,6 +334,7 @@ export type CrossMediaPlan = {
   entities: Record<Provider, SourceRecord[]>;
   edges: GraphEdgeDraft[];
   workLinks: ShowcaseWorkLink[];
+  workLinkSnapshot?: { scope: string[]; digest: string; complete: boolean };
   credits: BangumiCreatorCreditDraft[];
   franchises: Record<Franchise, { bangumi: string[]; vndb: string[] }>;
   members: CrossMediaMember[];
@@ -347,6 +348,8 @@ export type CrossMediaPlan = {
   relationScope: string[];
   relationSnapshotDigest: string;
   relationSnapshotComplete: boolean;
+  /** Bounded selected VN relation evidence, independent of the Bangumi source generation. */
+  vndbRelationSnapshot?: { scope: string[]; digest: string; complete: boolean };
   /** Selected-family VNDB release dates/states for the common showcase publisher. */
   releaseFacts?: CrossMediaReleaseFacts;
   /** Exact selected VNDB release platform and medium rows for source-vocabulary admission. */
@@ -1240,6 +1243,8 @@ export async function planCrossMediaSeed(
   }
   const selectedVndbRelationCounts = new Map<string, number>();
   const typedVndbRelationEdges: GraphEdgeDraft[] = [];
+  const vndbRelationRows: Row[] = [];
+  let vndbRelationComplete = true;
   const vndbRelationRevisions = new Map([...revisions].map(([key, value]) => [key, String(value.revision)] as const));
   for await (const row of input.rows('vndb', 'vn_relations')) {
     const id = text(row, 'id');
@@ -1249,10 +1254,12 @@ export async function planCrossMediaSeed(
     const owner = vnIds.has(id) ? id : vid;
     const count = selectedVndbRelationCounts.get(owner) ?? 0;
     if (count >= vndbLimits.maxLinks) {
+      vndbRelationComplete = false;
       gap('vndb', 'vn_relations', row, 'Selected VNDB relation limit exceeded', { code: relation });
       continue;
     }
     selectedVndbRelationCounts.set(owner, count + 1);
+    vndbRelationRows.push(row);
     if (!vnIds.has(id) || !vnIds.has(vid)) {
       gap('vndb', 'vn_relations', row, 'Selected VNDB relation endpoint is outside the current work graph', {
         code: relation,
@@ -1308,6 +1315,11 @@ export async function planCrossMediaSeed(
     });
   }
   for (const draft of coalesceVndbWorkRelations(typedVndbRelationEdges)) edge(draft);
+  plan.vndbRelationSnapshot = {
+    scope: [...vnIds].sort(),
+    digest: sourceDigest(vndbRelationRows.map(sourceDigest).sort()),
+    complete: vndbRelationComplete,
+  };
   const releases = new Set<string>(),
     chars = new Set<string>(),
     aliases = new Set<string>();
@@ -1853,6 +1865,7 @@ export async function planCrossMediaSeed(
     workDictionary.set(id, { value: { id, site: row.site, value: row.value }, raw: row.raw });
   const workProjection = attachShowcaseWorkLinks({
     alias: crossMediaAliases.vndb,
+    bangumiAlias: crossMediaAliases.bangumi,
     records: plan.records.vndb,
     joins: new Map(
       [...workJoins].map(([owner, joins]) => [owner, joins.filter((join) => !invalidWebsites.has(join.join.link))]),
@@ -1861,6 +1874,11 @@ export async function planCrossMediaSeed(
   });
   plan.records.vndb = workProjection.records;
   plan.workLinks = workProjection.links;
+  plan.workLinkSnapshot = {
+    scope: plan.records.vndb.map((record) => record.key),
+    digest: sourceDigest(workProjection.links),
+    complete: workProjection.gaps.length === 0 && invalidWebsites.size === 0,
+  };
   for (const draft of workProjection.edges) edge(draft);
   for (const missing of workProjection.gaps) gap('vndb', 'vn_extlinks', missing.record, missing.reason);
   for (const entity of plan.entities.vndb) {
@@ -2104,7 +2122,7 @@ export type CrossMediaPort = Pick<
 > &
   Partial<Pick<ReturnType<typeof createImportTransport>, 'requestMedia' | 'mediaStatus'>>;
 export type CrossMediaReading = {
-  /** Original claim target; independent public reads may return its canonical Person. */
+  /** Original claim target; independent reads may return its canonical Subject. */
   boundSubjectId?: string;
   source: Provider;
   externalId: string;
@@ -2206,7 +2224,10 @@ export function buildVndbWorkRelationOutcomes(input: {
   const readings = new Map(
     input.readings
       .filter((reading) => reading.source === 'vndb')
-      .map((reading) => [reading.externalId, currentWorkRead(reading.subject)?.subjectId ?? null]),
+      .map((reading) => [
+        reading.externalId,
+        reading.boundSubjectId ?? currentWorkRead(reading.subject)?.subjectId ?? null,
+      ]),
   );
   return input.plan.edges
     .filter((edge) => edge.source === 'vndb' && edge.table === 'vn_relations')
@@ -2259,12 +2280,15 @@ function currentPersonIdentityReadFailure(error: unknown): 'missing' | 'refused'
   return 'unavailable';
 }
 
-function currentReleaseEndpoint(
+/** A VNDB-native endpoint is current only while its own wdt:P3180 identity still names this exact source key. */
+function currentVndbIdentityEndpoint(
   read: ReviewedSubjectRead | null,
   externalId: string,
   nativeSubjectId: string,
   expectedType: string | undefined,
+  nativeType: string,
   failure?: unknown,
+  canonical = false,
 ): ReleaseEndpointCurrentness {
   if (!read) return failure === undefined ? 'unavailable' : currentReleaseReadFailure(failure);
   const subject = (
@@ -2277,14 +2301,40 @@ function currentReleaseEndpoint(
     }
   ).subject;
   if (!subject) return 'unknown';
-  if (typeof expectedType !== 'string' || expectedType !== 'wd:Q20631656') return 'wrong_type';
-  if (subject.id !== nativeSubjectId) return 'identity_mismatch';
+  if (expectedType !== nativeType) return 'wrong_type';
+  if (!canonical && subject.id !== nativeSubjectId) return 'identity_mismatch';
   if (subject.type !== expectedType) return 'wrong_type';
   const identities = subject.statements?.['wdt:P3180'];
   if (!Array.isArray(identities)) return 'unknown';
   return identities.some((statement) => statement.value?.type === 'value' && statement.value.content === externalId)
     ? 'current'
     : 'identity_mismatch';
+}
+
+function currentReleaseEndpoint(
+  read: ReviewedSubjectRead | null,
+  externalId: string,
+  nativeSubjectId: string,
+  expectedType: string | undefined,
+  failure?: unknown,
+): ReleaseEndpointCurrentness {
+  return currentVndbIdentityEndpoint(read, externalId, nativeSubjectId, expectedType, 'wd:Q20631656', failure);
+}
+
+/**
+ * Current endpoint for a selected typed work relation. VNDB work endpoints are native visual novels whose
+ * identity is wdt:P3180; Bangumi endpoints keep their own subject, character and person identities.
+ */
+export function currentWorkRelationEndpoint(
+  read: ReviewedSubjectRead | null,
+  externalId: string,
+  nativeSubjectId: string,
+  expectedType: string | undefined,
+  failure?: unknown,
+): RelationEndpointCurrentness {
+  return /^v[1-9][0-9]*$/u.test(externalId)
+    ? currentVndbIdentityEndpoint(read, externalId, nativeSubjectId, expectedType, 'wd:Q689445', failure, true)
+    : currentBangumiRelationEndpoint(read, externalId, nativeSubjectId, expectedType, failure);
 }
 
 function currentBangumiRelationEndpoint(
@@ -2305,7 +2355,9 @@ function currentBangumiRelationEndpoint(
     }
   ).subject;
   if (!subject) return 'unknown';
-  if (subject.id !== nativeSubjectId) return 'identity_mismatch';
+  // The native transport follows its admitted redirect chain. Numeric Work keys may resolve canonically;
+  // proposal ownership and target operands remain on the original claim, checked separately by the journal.
+  if (!/^[1-9][0-9]*$/u.test(externalId) && subject.id !== nativeSubjectId) return 'identity_mismatch';
   if (expectedType === undefined || subject.type !== expectedType) return 'wrong_type';
   const identity = bangumiSourceIdentity(externalId, expectedType);
   if (!identity) return 'wrong_type';
@@ -2784,7 +2836,7 @@ export async function seedCrossMedia(
       },
       async currentRelationEndpoint(externalId, nativeSubjectId, expectedType) {
         const read = await readCurrent(nativeSubjectId);
-        return currentBangumiRelationEndpoint(
+        return currentWorkRelationEndpoint(
           read,
           externalId,
           nativeSubjectId,
@@ -2813,12 +2865,36 @@ export async function seedCrossMedia(
           importer.session.bindings.acknowledge(owner, command.key, { results: [result] });
         },
       },
-      relationSnapshot: {
-        currentKeys: graphEdges.filter((edge) => edge.relation).map(graphEdgeKey),
-        scope: plan.relationScope,
-        digest: plan.relationSnapshotDigest,
-        complete: plan.relationSnapshotComplete,
-      },
+      relationSnapshots: [
+        ...(plan.workLinkSnapshot
+          ? [
+              {
+                provider: 'vndb' as const,
+                table: 'extlinks',
+                currentKeys: graphEdges.filter((edge) => edge.targetAlias).map(graphEdgeKey),
+                ...plan.workLinkSnapshot,
+              },
+            ]
+          : []),
+        {
+          provider: 'bangumi',
+          table: 'subject-relations',
+          currentKeys: graphEdges.filter((edge) => edge.relation).map(graphEdgeKey),
+          scope: plan.relationScope,
+          digest: plan.relationSnapshotDigest,
+          complete: plan.relationSnapshotComplete,
+        },
+        ...(plan.vndbRelationSnapshot
+          ? [
+              {
+                provider: 'vndb' as const,
+                table: 'vn_relations',
+                currentKeys: graphEdges.filter((edge) => edge.vndbRelation).map(graphEdgeKey),
+                ...plan.vndbRelationSnapshot,
+              },
+            ]
+          : []),
+      ],
     });
     const keys = [...plan.records.bangumi, ...plan.entities.bangumi, ...plan.records.vndb, ...plan.entities.vndb];
     const sourceIdentityGaps: CrossMediaGap[] = [];
@@ -2913,7 +2989,12 @@ export async function seedCrossMedia(
             : (subject?.statements?.[identity.property]?.some(
                 (statement) => statement.value?.type === 'value' && statement.value.content === identity.value,
               ) ?? false);
-        if (subject?.id !== claim.subject || subject.type !== expectedType || !matches) {
+        if (
+          !subject ||
+          subject.type !== expectedType ||
+          !matches ||
+          (!/^[1-9][0-9]*$/u.test(record.key) && subject.id !== claim.subject)
+        ) {
           if (identity)
             sourceIdentityGaps.push({
               source: 'bangumi',
@@ -2944,6 +3025,7 @@ export async function seedCrossMedia(
         }
       }
       readings.push({
+        boundSubjectId: claim.subject,
         source: provider,
         externalId: record.key,
         subject: subjectRead,

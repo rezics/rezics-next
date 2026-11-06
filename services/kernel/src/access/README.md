@@ -2283,6 +2283,10 @@ workflow context only for protected operations; public sign-up cannot use the ex
 The registry check is an in-memory set lookup with fewer than 64 entries: constant
 work and no additional relation or growth check. Existing claim storage bounds remain unchanged.
 
+Identity test fixtures claim named handles only through the registration commands
+(`test/support/identity-registration.ts`); raw account or claim rows emit no discovery events and stand only for
+negative states, operated automated accounts and organizations.
+
 ### Public identity read
 
 `GET /v1/accounts/{accountId}/profile` (`account.read_editable_profile`) returns the private editable

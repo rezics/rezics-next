@@ -8,6 +8,7 @@ import { readPublicViews } from '../../src/access/index.ts';
 import { createLifecycleCommands, createLifecycleInternals, LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
 import { newId } from '../../src/route/route.ts';
 import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
+import { createIdentityRegistrar } from '../support/identity-registration.ts';
 
 const pool = createPool(process.env.DATABASE_URL!);
 configureTestReceiptKeys(pool);
@@ -19,6 +20,7 @@ const internal = createLifecycleInternals({
   provisioningEvidence: async () => null,
   recoveryEvidence: async () => null,
 });
+const registrar = createIdentityRegistrar(pool, new Uint8Array(32).fill(41));
 const owners = new Map<string, string>();
 const defaults = { posts: true, reviews: true, collections: true };
 const privateViews = { posts: false, reviews: false, collections: false };
@@ -32,6 +34,12 @@ async function account(
 ): Promise<{ id: string; handle: string }> {
   const id = newId(route);
   const handle = `views_${key().replaceAll('-', '')}`;
+  if (kind === 'actor' && state === 'active' && !fenced) {
+    // Production registration: its claim emits the discovery events that raw handle rows do not, and it installs the
+    // self grants (account:update among them) that a raw resource_grant row would collide with.
+    await registrar.registerActor(handle, id);
+    return { id, handle };
+  }
   if (kind === 'organization' && state === 'active' && !fenced) {
     const owner = await account();
     const reservation = await internal.reserveCoordination({

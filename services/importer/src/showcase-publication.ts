@@ -658,7 +658,13 @@ function currentSourceRead(
   if (subjectType(read) !== record.nativeType) return false;
   if (subjectId(read) === record.subjectId) return true;
   const identity = personIdentityForSource(record.provider, record.sourceKey, record.nativeType ?? undefined);
-  return identity !== undefined && observePersonIdentity(identity, read).state === 'current';
+  if (identity) return observePersonIdentity(identity, read).state === 'current';
+  // Exact current provider facts certify native Work redirects without moving the sealed source binding.
+  if (record.provider === 'bangumi' && /^[1-9][0-9]*$/u.test(record.sourceKey))
+    return publicHasValue(read, 'wdt:P5732', record.sourceKey);
+  if (record.provider === 'vndb' && /^v[1-9][0-9]*$/u.test(record.sourceKey))
+    return publicHasValue(read, 'wdt:P3180', record.sourceKey);
+  return false;
 }
 
 function subjectType(read: ReviewedSubjectRead): string | null {

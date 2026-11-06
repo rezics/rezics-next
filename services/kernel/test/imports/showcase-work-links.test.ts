@@ -85,10 +85,12 @@ test('default seed publishes the cited VN work link on its own identity and refr
   })();
   const directory = await mkdtemp(join(tmpdir(), 'showcase-work-links-native-'));
   try {
+    const tierKey = randomUUID();
     const tier = await runtime.request(
       `/v1/accounts/${runtime.identity.governance.accountId}:setRateTier`,
-      { key: randomUUID(), tier: 'trusted' },
+      { key: tierKey, tier: 'trusted' },
       identitySupport(runtime.identity).managementBearer,
+      tierKey,
     );
     expect(tier.status).toBe(200);
     const editor = await openApiObserver(runtime);
@@ -158,6 +160,18 @@ test('default seed publishes the cited VN work link on its own identity and refr
       },
     };
     const firstPlan = await planCrossMediaSeed(tables(), { selection: developmentShowcaseSelection });
+    await seedCrossMedia(firstPlan, path, port, destination, { mediaDeadlineMs: 0 });
+    // Review exact proposal endpoints before the current-reading identity gate can admit them.
+    const identities = commands.filter(
+      (command) =>
+        command.op === 'propose' &&
+        (command.statement.property.id === 'wdt:P5732' || command.statement.property.id === 'wdt:P3180'),
+    );
+    expect(identities.length).toBeGreaterThan(0);
+    for (const command of identities) {
+      if (command.op !== 'propose') throw new TypeError('Identity review requires a proposal');
+      await acceptAdopt(command.subject, command.statement.property.id);
+    }
     const first = await seedCrossMedia(firstPlan, path, port, destination, { mediaDeadlineMs: 0 });
     const vnId = subjectId(first.readings.find((row) => row.source === 'vndb' && row.externalId === sourceWork)!);
     const animeId = subjectId(first.readings.find((row) => row.source === 'bangumi' && row.externalId === animeWork)!);
@@ -197,15 +211,15 @@ test('default seed publishes the cited VN work link on its own identity and refr
       vnId,
     );
 
-    const bridgeCandidates = await candidates(vnId, 'wdt:P5732');
+    const bridgeCandidates = await candidates(vnId, 'rezics:crossMediaCounterpart');
     const bridge = bridgeCandidates.candidates.find((candidate) => candidate.source?.external_id === sourceWork)!;
     expect(bridge).toMatchObject({
-      statement: { value: { content: animeWork } },
+      statement: { value: { content: animeId } },
       source: {
         source: crossMediaAliases.vndb,
         external_id: sourceWork,
         record_revision: '7',
-        converter_revision: 'vndb-work-links@1',
+        converter_revision: 'vndb-work-links@2',
       },
     });
     expect(bridge.source?.digest).toBe(first.workLinks[0]?.candidateDigest);
@@ -219,20 +233,20 @@ test('default seed publishes the cited VN work link on its own identity and refr
     expect(
       urlCandidate.statement.references?.some((reference) =>
         reference.parts.some(
-          (part) => part.property.id === 'schema:url' && part.value.content === 'https://vndb.org/v410.7',
+          (part) => part.property.id === 'schema:url' && part.value.content === 'https://vndb.org/v2002.7',
         ),
       ),
     ).toBe(true);
-    await acceptAdopt(vnId, 'wdt:P5732');
-    await acceptAdopt(vnId, 'wdt:P3180');
+    await acceptAdopt(vnId, 'rezics:crossMediaCounterpart');
     await acceptAdopt(vnId, 'schema:url');
-    await acceptAdopt(animeId, 'wdt:P5732');
 
     const currentVn = await read(vnId);
     const currentAnime = await read(animeId);
     expect(currentVn.subject.id).not.toBe(currentAnime.subject.id);
     expect(currentVn.subject.type).not.toBe(currentAnime.subject.type);
-    expect(currentVn.subject.statements['wdt:P5732']?.map((item) => item.value.content)).toContain(animeWork);
+    expect(currentVn.subject.statements['rezics:crossMediaCounterpart']?.map((item) => item.value.content)).toContain(
+      animeId,
+    );
     expect(currentVn.subject.statements['wdt:P3180']?.map((item) => item.value.content)).toContain(sourceWork);
     expect(currentVn.subject.statements['schema:url']?.map((item) => item.value.content)).toContain(linkedUrl);
     expect(currentAnime.subject.statements['wdt:P5732']?.map((item) => item.value.content)).toContain(animeWork);
@@ -258,11 +272,17 @@ test('default seed publishes the cited VN work link on its own identity and refr
     );
     expect(refreshedVnId).toBe(vnId);
     expect(refreshed.unresolved).toContainEqual(
-      expect.objectContaining({ holder: sourceWork, property: 'wdt:P5732', reason: 'fenced_source_facts' }),
+      expect.objectContaining({
+        holder: sourceWork,
+        property: 'rezics:crossMediaCounterpart',
+        reason: 'fenced_source_facts',
+      }),
     );
     expect(refreshed.workLinks[0]?.candidateDigest).not.toBe(first.workLinks[0]?.candidateDigest);
     const afterFence = await read(vnId);
-    expect(afterFence.subject.statements['wdt:P5732']?.map((item) => item.value.content)).toContain('100');
+    expect(afterFence.subject.statements['rezics:crossMediaCounterpart']?.map((item) => item.value.content)).toContain(
+      animeId,
+    );
     expect(afterFence.subject.statements['schema:url']?.map((item) => item.value.content)).toContain(linkedUrl);
     expect(afterFence.subject.statements['schema:url']?.map((item) => item.value.content)).not.toContain(
       'https://bgm.tv/subject/101',

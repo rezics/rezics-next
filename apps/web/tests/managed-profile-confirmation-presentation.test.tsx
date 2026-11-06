@@ -132,3 +132,46 @@ test('failed managed readback preserves visible acknowledgement separately from 
     expect(editor.snapshot().attempt).not.toBeNull();
   }
 });
+
+test('a managed read failure without a retained command shows its Retry-After wait on the reload control', async () => {
+  mock.module('cloudflare:workers', () => ({ env: {} }));
+  const { AccountProfileView } = await import('../src/accounts/profile-editor/page');
+  let reads = 0;
+  const editor = new AccountProfileEditor({
+    read: async () => {
+      reads++;
+      throw new EditableProfileReadError(503, { status: 429, code: 'rate_limited', retryAfter: '120' });
+    },
+    save: async () => ({ ok: false, status: 503, message: '' }),
+  });
+  await editor.reload();
+  expect(reads).toBe(1);
+  const render = (target: AccountProfileEditor) =>
+    renderToStaticMarkup(
+      createElement(AccountProfileView, {
+        accountId: profile.accountId,
+        editor: target,
+        page: { state: 'unavailable' },
+      }),
+    );
+  const reloadControl = (html: string) =>
+    html.match(new RegExp(`<button([^>]*)>${m.settings_profile_reload_current()}</button>`))?.[1];
+  const waiting = render(editor);
+  expect(waiting).toContain(m.account_profile_unavailable());
+  expect(waiting).toContain(`${m.settings_profile_reload_current()}: ${m.settings_retry_wait()}`);
+  expect(reloadControl(waiting)).toMatch(/\sdisabled=""/);
+  // The editor itself also refuses the early read; the control only presents that wait.
+  await editor.reload();
+  expect(reads).toBe(1);
+  const unlimited = new AccountProfileEditor({
+    read: async () => {
+      throw new EditableProfileReadError(503);
+    },
+    save: async () => ({ ok: false, status: 503, message: '' }),
+  });
+  await unlimited.reload();
+  const ready = render(unlimited);
+  expect(ready).not.toContain(m.settings_retry_wait());
+  expect(reloadControl(ready)).toBeString();
+  expect(reloadControl(ready)).not.toMatch(/\sdisabled=""/);
+});

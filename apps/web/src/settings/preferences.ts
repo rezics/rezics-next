@@ -28,6 +28,7 @@ import type { AccountRenameNavigation } from './account-rename-actions';
 import { settingsCommandKeyHeader } from './command-headers';
 
 // Shared Profile boundary for the Accounts editor.
+export { usePreferenceRetry } from './preference-failure-retry';
 export { withProfileDeadline } from './profile-request-deadline';
 export { settingsCommandKeyHeader } from './command-headers';
 export {

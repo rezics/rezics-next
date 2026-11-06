@@ -3,16 +3,21 @@ import { Database } from 'bun:sqlite';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { BatchCommand } from '@rezics/definitions/bulk';
 import { graphEdgeKey } from '../../../importer/src/cross-media-bindings.ts';
 import { planCrossMediaSeed, seedCrossMedia, type CrossMediaTables } from '../../../importer/src/cross-media-seed.ts';
 import { openApiRuntime } from './api-runtime.ts';
 import { openApiObserver } from './api-observer.ts';
+import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { routeOf } from '../../src/route/route.ts';
 
 type Candidate = {
   id: string;
   head: number | null;
   statement: { value: { content: unknown }; rank?: 'normal' | 'preferred' };
 };
+
+const selection = { bangumi: [1, 2, 5], vndb: ['v1'], includeReleases: false };
 
 function authoredTables(withReciprocal: boolean): CrossMediaTables {
   // Authored operator fixture; these values do not claim observation in a public dump.
@@ -52,11 +57,48 @@ test('production operator imports reciprocal and one-sided work relations for in
   const state = join(directory, 'importer.sqlite');
   const runtime = await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 65536 });
   try {
-    const pairedPlan = await planCrossMediaSeed(authoredTables(true));
+    const pairedPlan = await planCrossMediaSeed(authoredTables(true), { selection });
     const pair = pairedPlan.edges.find(
       (edge) => edge.table === 'subject-relations' && edge.property === 'rezics:sideStoryOf',
     )!;
     expect(pair.relation?.evidence).toHaveLength(2);
+    const commands: BatchCommand[] = [];
+    const port = {
+      ...runtime.importTransport,
+      async batch(request: Parameters<typeof runtime.importTransport.batch>[0]) {
+        commands.push(...request.commands);
+        return runtime.importTransport.batch(request);
+      },
+    };
+    await seedCrossMedia(pairedPlan, state, port, { origin: 'https://kernel.import.test' });
+    const editor = await openApiObserver(runtime);
+    expect(
+      (
+        await editor.http('/v1/grants', {
+          resource: { route: 0, id: GLOBAL_CONTEXT },
+          subject: { kind: 'account', id: runtime.identity.governance.accountId },
+          actions: ['context:accept', 'context:adopt'],
+          valid: '(,)',
+        })
+      ).status,
+    ).toBe(201);
+    // Current readings require adopted identity; locate review endpoints in actual source proposals.
+    const identities = commands.filter(
+      (command) =>
+        command.op === 'propose' &&
+        (command.statement.property.id === 'wdt:P5732' || command.statement.property.id === 'wdt:P3180'),
+    );
+    expect(identities.length).toBeGreaterThan(0);
+    for (const command of identities) {
+      if (command.op !== 'propose' || command.statement.value.type !== 'value')
+        throw new TypeError('Identity review requires a value proposal');
+      await editor.adoptSubject(
+        command.subject,
+        command.statement.property.id,
+        command.statement.value.content as string,
+        GLOBAL_CONTEXT,
+      );
+    }
     const first = await seedCrossMedia(pairedPlan, state, runtime.importTransport, {
       origin: 'https://kernel.import.test',
     });
@@ -76,12 +118,11 @@ test('production operator imports reciprocal and one-sided work relations for in
     ).subject?.type;
     expect(movieType).toBe('schema:Movie');
 
-    const editor = await openApiObserver(runtime);
     const createdContext = await editor.http('/v1/contexts', { labels: { en: 'Relation review' } });
     expect(createdContext.status).toBe(201);
     const context = (createdContext.body as { context: { id: string } }).context.id;
     const grant = await editor.http('/v1/grants', {
-      resource: { route: 0, id: context },
+      resource: { route: routeOf(context)!, id: context },
       subject: { kind: 'account', id: runtime.identity.governance.accountId },
       actions: ['context:accept', 'context:adopt'],
       valid: '(,)',
@@ -152,7 +193,7 @@ test('production operator imports reciprocal and one-sided work relations for in
       .query('SELECT command_payload FROM cross_media_graph WHERE edge_key=?')
       .get(graphEdgeKey(pair)) as { command_payload: string };
     priorDatabase.close();
-    const oneSidedPlan = await planCrossMediaSeed(authoredTables(false));
+    const oneSidedPlan = await planCrossMediaSeed(authoredTables(false), { selection });
     const changed = oneSidedPlan.edges.find((edge) => edge.table === 'subject-relations' && edge.holder === '1')!;
     expect(changed.property).toBe('wdt:P361');
     const second = await seedCrossMedia(oneSidedPlan, state, runtime.importTransport, {

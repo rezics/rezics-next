@@ -640,6 +640,29 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     expect(resumed.manifest.records[0]?.sourceRevision).toBe('unversioned');
     expect(resumed.published[0]?.readerRoute).toBe(`/subjects/${workId}/steins-gate`);
 
+    // Native canonical Work reads preserve the original adoption owner and supply the current reader address.
+    const canonicalId = randomUUID();
+    const canonicalRead = (value: ReviewedSubjectRead): ReviewedSubjectRead => ({
+      ...value,
+      subject: { ...value.subject, id: value.subject.id === workId ? canonicalId : value.subject.id },
+    });
+    const canonical = await publishShowcase({
+      plan,
+      result,
+      aliases: crossMediaAliases,
+      journal,
+      review: { ...review, readReviewedSubject: async (id) => canonicalRead(await review.readReviewedSubject(id)) },
+      publicClient: { readSubject: async (id) => canonicalRead(await publicClient.readSubject(id)) },
+      ...tagOptions,
+    });
+    const canonicalWork = canonical.published.find((record) => record.subjectId === workId);
+    expect(canonicalWork?.readerRoute).toBe(`/subjects/${canonicalId}/steins-gate`);
+    expect(canonicalWork?.assertions.map((assertion) => assertion.candidateId)).toEqual(
+      resumed.published
+        .find((record) => record.subjectId === workId)
+        ?.assertions.map((assertion) => assertion.candidateId),
+    );
+
     const finalAcknowledgements = journal.acknowledgedCommands();
     const relationAck = finalAcknowledgements.find(
       (entry) => entry.command.op === 'propose' && entry.command.statement.property.id === 'schema:exampleOfWork',
