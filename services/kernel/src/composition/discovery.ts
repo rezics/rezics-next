@@ -32,7 +32,7 @@ export function createDiscoveryProducerEntry(input: {
   const reviewSource =
     input.reviewSource ??
     (input.tokens
-      ? createReviewDiscoverySource({ pool, access, tokens: input.tokens, ...(clock ? { clock } : {}) }, () => ({
+      ? createReviewDiscoverySource({ pool, access, tokens: input.tokens, deadlineNow, ...(clock ? { clock } : {}) }, () => ({
           actor: { kind: 'anonymous' },
           deadline: Date.now() + 30_000,
         }))
