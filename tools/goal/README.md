@@ -1885,6 +1885,8 @@ Disposable Goal fixtures record each wrapper and pidfd waiter in an append-only 
 Cleanup uses those identities, including wrappers no longer present in attempt rows; it does not select processes by
 working directory. Tests that can leave children running must `await h.disposeAsync()`. It reaps the owned groups,
 awaits tracked exit/follow continuations and waiter cleanup, then closes SQLite and removes the fixture directory.
+A just-exited group whose leader is gone and that has no live members is treated as already gone, including a brief
+zombie linger after a transport worker exits.
 Disposal seals the fixture against new workers before taking its child inventory; waiter registration remains available
 until existing work finishes. Ownership and pending work are checked again immediately before removal.
 Synchronous `h.dispose()` refuses live children or unfinished waits. A changed owner marker, unreadable state or failed

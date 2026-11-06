@@ -62,12 +62,28 @@ function boundedFixtureWorkerScript(script: string): string {
   return script.replace(/^(#![^\n]*\n)/, `$1${guard}`);
 }
 
-function checkedFixtureGroup(identity: ProcessIdentity, _allowLeaderExit = false): ProcessIdentity[] {
-  return checkedProcessGroup(identity);
+function isVanishedFixtureGroup(identity: ProcessIdentity, error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    error.message === `process group visibility unknown for group ${identity.group}: no live members visible`
+  );
+}
+
+/**
+ * A just-exited detached group can linger as zombies: `kill(-pgid, 0)` still succeeds while `/proc` shows no live
+ * members. Fixture teardown treats that linger as already gone instead of failing the test that owned the worker.
+ */
+function checkedFixtureGroup(identity: ProcessIdentity, allowLeaderExit = false): ProcessIdentity[] {
+  try {
+    return checkedProcessGroup(identity);
+  } catch (error) {
+    if (allowLeaderExit && isVanishedFixtureGroup(identity, error)) return [];
+    throw error;
+  }
 }
 
 async function signalFixtureGroup(identity: ProcessIdentity, signal: NodeJS.Signals): Promise<void> {
-  for (const member of checkedFixtureGroup(identity)) await signalProcessIdentity(member, signal);
+  for (const member of checkedFixtureGroup(identity, true)) await signalProcessIdentity(member, signal);
 }
 
 async function waitForFixtureGroupExit(identity: ProcessIdentity, timeoutMs: number): Promise<boolean> {
@@ -80,7 +96,7 @@ async function waitForFixtureGroupExit(identity: ProcessIdentity, timeoutMs: num
 }
 
 async function reapFixtureGroup(identity: ProcessIdentity): Promise<void> {
-  if (!checkedFixtureGroup(identity).length) return;
+  if (!checkedFixtureGroup(identity, true).length) return;
   await signalFixtureGroup(identity, 'SIGTERM');
   if (await waitForFixtureGroupExit(identity, FIXTURE_TERM_GRACE_MS)) return;
   await signalFixtureGroup(identity, 'SIGKILL');
@@ -121,7 +137,9 @@ function hasLiveFixtureProcess(stateDirectory: string, token: string): boolean {
   const processes = fixtureOwnedProcesses(stateDirectory, token);
   if (hasUnsettledFixtureWaits(stateDirectory, token)) return true;
   return processes.some((owned) =>
-    owned.role === 'worker' ? checkedFixtureGroup(owned.identity).length > 0 : checkedFixtureWaiter(owned.identity),
+    owned.role === 'worker'
+      ? checkedFixtureGroup(owned.identity, true).length > 0
+      : checkedFixtureWaiter(owned.identity),
   );
 }
 

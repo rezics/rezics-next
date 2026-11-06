@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   isTransportFailure,
@@ -34,6 +34,11 @@ const WEBSOCKET = 'failed to connect to Responses WebSocket';
 const OTHER = "unexpected argument '-C'";
 
 const tlsCli = `#!/usr/bin/env bun
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+const directory = join(process.cwd(), '.temp/goal');
+mkdirSync(directory, { recursive: true });
+writeFileSync(join(directory, 'cli-argv.json'), JSON.stringify(process.argv));
 if (process.argv.includes('resume')) {
   console.log(JSON.stringify({type:'thread.started',thread_id:'wake-session'}));
   console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'RESULT: success'}}));
@@ -272,6 +277,11 @@ test('a transport drop resumes the existing session after backoff', async () => 
     expect(h.store.attempt(ref).result).toContain('RESULT: success');
     expect(h.store.attempt(ref).failureKind).toBeNull();
     expect(h.store.task(task.id).currentAttempt).toBe(1);
+    const argv = JSON.parse(
+      readFileSync(join(h.store.task(task.id).worktree, '.temp/goal/cli-argv.json'), 'utf8'),
+    ) as string[];
+    expect(argv).toContain('resume');
+    expect(argv).toContain('wake-session');
   } finally {
     await h.disposeAsync();
   }
