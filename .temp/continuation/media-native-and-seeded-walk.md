@@ -42,10 +42,9 @@ invalid-file recovery, worker terminal effects, independent readback, composer c
 Capture English/zh-Hant/Japanese at 390/1440, light/dark, and preserve original return and uncertain retry input.
 Return non-secret seed, route, persona and screenshot references. Root acceptance remains controller-owned.
 
-The required manager notification was attempted twice with `bun tools/goal/src/cli.ts inbox send content info ...`;
-both failed before sending with `Error: unknown pool policy field: maxConcurrent`. This worktree's retained
-CLI cannot decode the current controller pool policy. This file preserves the exact receiving report without
-changing control-plane configuration or Accounts authorization code.
+The Content inbox now accepts notifications. The narrowed bridge decision and current native receiving
+result have been sent successfully; earlier controller-policy and dependency failures no longer prevent
+that notification. No control-plane configuration or Accounts authorization code was changed.
 
 The raw Auth script check `3a52495e-ef3a-4ddd-879d-4189e24f364f` passed the new binding scenario but the
 retained mounted-scope scenario failed SQL import with `No database URL: set DATABASE_URL in the environment,
@@ -86,3 +85,14 @@ The bridge migration's missing dbmate envelope caused `cdd6e1ce-e796-42d0-ace3-e
 to exit 1 before tests (`dbmate requires each migration to define an up block with '-- migrate:up'`).
 Added the required up/down envelope. The latest authenticated Content decision retains this narrowed
 bridge outcome, original behavior acceptance and controller retry/landing custody.
+
+
+Latest native receiving: `a79e70c3-0d73-46ae-855a-31dbc226b51f`, exit 1, ran
+`bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/content/media-parent.test.ts test/content/media-dev-stack-configuration.test.ts test/content/local-media-http.test.ts`.
+Migration and schema consistency pass. Local HTTP passes 15 assertions and mounted scopes pass 5.
+Parent acceptance has 9 passes and 3 native Access denials: Realm participation, private ancestry and
+its growth operation. These preserve the foreign permission projection receiving requirement above;
+all original assertions remain. The complete log is `.temp/check-logs/a79e70c3-0d73-46ae-855a-31dbc226b51f.log`.
+Retained unrelated compiler diagnostics include Search HTTP/scope admission, Semantic optional operands,
+terminal erasure fixture, kernel fixture, second-scope collections and music context admission. There is
+no compiler diagnostic in the local media bridge or its changed fixtures.
