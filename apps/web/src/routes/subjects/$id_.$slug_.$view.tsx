@@ -27,7 +27,7 @@ import {
   subjectRelationsQuery,
 } from '../../features/pages/subject-queries';
 import { useSession } from '../../session/query';
-import { validateViewCursor, validatePageRealm, validatePageNode } from '../../features/pages/view-cursor';
+import { validateViewCursor, validatePageBoard, validatePageRealm, validatePageNode } from '../../features/pages/view-cursor';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { WriteReviewAction } from '../../subject/write-review';
@@ -156,6 +156,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
     return {
       cursor: search.cursor,
       realm: validatePageRealm(search.realm),
+      board: validatePageBoard(search.board),
       node,
       ...(typeof streamProperty === 'string' ? { streamProperty } : {}),
       ...(validatedStreamDirection ? { streamDirection: validatedStreamDirection } : {}),
@@ -165,6 +166,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
   loaderDeps: ({ search }) => ({
     cursor: search.cursor,
     realm: search.realm,
+    board: search.board,
     node: search.node,
     streamProperty: search.streamProperty,
     streamDirection: search.streamDirection,
@@ -194,13 +196,15 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
     // Reuse the current native reading for the head, never a retained navigation result.
     const loaded = await awaitSubjectRoute(signal, () =>
       context.queryClient.fetchQuery(
-        subjectViewPagesQuery(params.id, getLocale(), view, cursor, deps.realm, deps.node, reader),
+        subjectViewPagesQuery(params.id, getLocale(), view, cursor, deps.realm, deps.node, reader, deps.board),
       ),
     );
     signal.throwIfAborted();
     if (loaded.kind === 'missing') {
       const overview = await awaitSubjectRoute(signal, () =>
-        context.queryClient.fetchQuery(subjectPageQuery(params.id, getLocale(), 'overview', deps.realm, reader)),
+        context.queryClient.fetchQuery(
+          subjectPageQuery(params.id, getLocale(), 'overview', deps.realm, reader, deps.board),
+        ),
       );
       if (overview.kind !== 'page') throw notFound();
       throw redirect(canonicalRedirect(canonical.href, location.searchStr, location.hash, 302));

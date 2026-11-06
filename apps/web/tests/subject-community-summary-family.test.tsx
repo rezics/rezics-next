@@ -357,7 +357,9 @@ test('Subject discussion and review summaries keep native read destinations and 
       );
       expect(slot('community-next')).toBeNull();
       expect(slot('choose-board')).toBeNull();
-      expect(host.textContent).toContain(m.subject_community_board_unavailable({}, options));
+      // Without a supplied Board the native entry is not_selected: no creation affordance and no unavailable claim.
+      expect(slot('community-entry')).toBeNull();
+      expect(host.textContent).not.toContain(m.subject_community_board_unavailable({}, options));
       for (const state of ['loading', 'closed', 'unavailable'] as const) {
         for (const paged of [false, true]) {
           await show(kind, paged, { state });

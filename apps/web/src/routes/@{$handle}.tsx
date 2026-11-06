@@ -89,6 +89,7 @@ function AgentRoute() {
   return (
     <PublicProfilePage
       page={data.page}
+      verification={data.verification}
       locale={locale}
       messages={subjectPageMessages()}
       reading={reading}

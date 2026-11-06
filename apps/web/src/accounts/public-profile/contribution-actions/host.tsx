@@ -27,16 +27,18 @@ import { isRecord } from '../../../features/pages/shared';
 import {
   contributionActionsInput,
   ContributionActionsReceiver,
-  unavailableAuthorContributionActionsWire,
-  type AuthorContributionActionsWire,
   type ContributionActionsInput,
   type ContributionActionsState,
 } from './receiver';
+import type { AuthorContributionActionsResponse, AuthorContributionActionsWire } from './wire';
+import type { VerificationConfig } from '../../../report/turnstile';
 
 export type ContributionActionsPageScopeValue = {
   page: SubjectPageData;
   cursor: string | null;
   view: string;
+  /** Report verification for this page's native owners; absent keeps report controls unavailable. */
+  verification?: VerificationConfig | undefined;
 };
 
 const ContributionActionsPageScopeContext = createContext<ContributionActionsPageScopeValue | null>(null);
@@ -45,10 +47,11 @@ export function ContributionActionsPageScope({
   page,
   cursor,
   view,
+  verification,
   children,
 }: ContributionActionsPageScopeValue & { children: ReactNode }) {
   return (
-    <ContributionActionsPageScopeContext.Provider value={{ page, cursor, view }}>
+    <ContributionActionsPageScopeContext.Provider value={{ page, cursor, view, verification }}>
       {children}
     </ContributionActionsPageScopeContext.Provider>
   );
@@ -109,7 +112,7 @@ export type ContributionActionsEpisode = {
   credential: string | null;
   navigation: object;
   mount: object | null;
-  wire: AuthorContributionActionsWire<unknown>;
+  wire: AuthorContributionActionsWire<AuthorContributionActionsResponse>;
   rows: RowObservation[];
 };
 
@@ -147,7 +150,11 @@ export function sameContributionActionsEpisode(left: ContributionActionsEpisode,
 
 export type ContributionActionsHostValue = {
   input: ContributionActionsInput | undefined;
-  state: ContributionActionsState<unknown>;
+  state: ContributionActionsState<AuthorContributionActionsResponse>;
+  /** The reader's subject, the only identity that viewer advice may name. */
+  reader: string | null;
+  /** The last advice this visit admitted, retained through refresh and cleared by retirement. */
+  advice: AuthorContributionActionsResponse | undefined;
   isCurrent: () => boolean;
   retry: () => Promise<void>;
   operation: (operation: ContributionOperation) => OperationLease<ContributionOperation> | undefined;
@@ -159,14 +166,14 @@ export function useContributionActionsHost() {
   return useContext(ContributionActionsHostContext);
 }
 
-const unavailable: ContributionActionsState<unknown> = { state: 'unavailable' };
+const unavailable: ContributionActionsState<AuthorContributionActionsResponse> = { state: 'unavailable' };
 const noSubscribe = (_notify: () => void) => () => {};
 const noSnapshot = () => unavailable;
 const useClientLayoutEffect = typeof document === 'undefined' ? useEffect : useLayoutEffect;
 
 type Visit = {
   episode: ContributionActionsEpisode | undefined;
-  receiver?: ContributionActionsReceiver<unknown>;
+  receiver?: ContributionActionsReceiver<AuthorContributionActionsResponse>;
   address?: ContributionActionsAddress;
   operations?: Partial<Record<ContributionOperation, OperationLease<ContributionOperation>>>;
 };
@@ -184,7 +191,7 @@ export function ContributionActionsHost({
   postsPublished,
   reviewsPublished,
   rows,
-  wire = unavailableAuthorContributionActionsWire,
+  wire,
   children,
 }: {
   accountId: string;
@@ -199,7 +206,7 @@ export function ContributionActionsHost({
   postsPublished: boolean;
   reviewsPublished: boolean;
   rows: readonly Record<string, unknown>[];
-  wire?: AuthorContributionActionsWire<unknown>;
+  wire: AuthorContributionActionsWire<AuthorContributionActionsResponse>;
   children: ReactNode;
 }) {
   const client = useQueryClient();
@@ -330,7 +337,15 @@ export function ContributionActionsHost({
     if (nextLease) (visit.operations ??= {})[name] = nextLease;
     return nextLease;
   };
-  const hostValue: ContributionActionsHostValue = { input, state, isCurrent, retry, operation };
+  const hostValue: ContributionActionsHostValue = {
+    input,
+    state,
+    reader: reader.state === 'signed-in' ? reader.observation.subject : null,
+    advice: receiver?.advice(),
+    isCurrent,
+    retry,
+    operation,
+  };
   const showReadStatus = hydrated && signedIn;
   const signInHref =
     hydrated && reader.state === 'signed-out'

@@ -34,7 +34,12 @@ export function PublicProfilePage({
     : null;
   return (
     <ContributionWindowRouteScope route={windowRoute}>
-      <ContributionActionsPageScope page={props.page} cursor={cursor} view={props.view ?? 'overview'}>
+      <ContributionActionsPageScope
+        page={props.page}
+        cursor={cursor}
+        view={props.view ?? 'overview'}
+        verification={props.verification}
+      >
         <ProfileReadingResponse value={reading?.response ?? 'public'}>
           <SubjectPage
             {...props}

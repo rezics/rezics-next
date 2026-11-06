@@ -14,7 +14,7 @@ import {
   type NativeContributionAdvice,
 } from './advice';
 
-/** Prepared native presentation input, never an adapter for the receiver's unknown response. */
+/** Presentation input for one surviving row; `source` is the installed callable's advice for the admitted visit. */
 export type ContributionPresentation = {
   input: ContributionActionsInput;
   row: Record<string, unknown>;

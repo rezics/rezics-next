@@ -185,7 +185,12 @@ try {
     const selected = result.readings.find((row) => row.source === 'vndb' && row.externalId === key);
     assert(selected, `Missing selected VNDB ${key}`);
     assert.equal(selected.selection, 'selected', `${key} must be selected independently of proposals`);
-    const url = `${webOrigin}/en${selected.route}`;
+    // The showcase work receives its supplied Board operand from the same seed report; no other visit does.
+    const showcase = (
+      result.developmentShowcase as { community?: { source: { subjectId: string }; board: { id: string } } } | undefined
+    )?.community;
+    const board = showcase?.source.subjectId === selected.subject ? showcase.board.id : undefined;
+    const url = `${webOrigin}/en${selected.route}${board ? `?board=${encodeURIComponent(board)}` : ''}`;
     const response = await page.goto(url);
     assert.equal(response?.status(), 200);
     await page.screenshot({ path: resolve(evidence, `anonymous-${key}.png`), fullPage: true });

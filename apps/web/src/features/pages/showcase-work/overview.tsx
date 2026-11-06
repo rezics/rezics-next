@@ -71,6 +71,7 @@ export function WorkFranchiseReading(props: WorkFranchiseReadingProps) {
       value?.viewer,
       page?.context,
       page?.requestedRealm,
+      page?.requestedBoard,
       page?.requestedReader,
       page?.catalogue?.digest,
       selection,
