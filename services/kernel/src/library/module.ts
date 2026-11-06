@@ -8,20 +8,22 @@ import {
   verifyLibraryScopeEffectsSeal,
   type LibraryScopeEffectsPage,
 } from './identity-scope-effects.ts';
-import {
-  identitySourceConsumerLibraryWork,
-  type IdentitySourceConsumerMaintenanceContext,
-  type IdentityReceivingSelection,
-  type IdentityJobRef,
+import type {
+  IdentitySourceConsumerMaintenanceContext,
+  IdentityReceivingSelection,
+  IdentityJobRef,
 } from '../semantic/identity-adapters/index.ts';
 import type { LibraryIdentityPlanInput, LibraryIdentityPlanResult } from './identity-native-planner-types.ts';
 import {
   advanceLibraryIdentityNativeScope,
   prepareLibraryIdentityNativeEffect,
+  resolveLiveLibrarySource,
   stepLibraryIdentityEpochWithSource,
+  type LibrarySourceFrame,
 } from './identity-epoch-participant.ts';
 import type { LibraryScopeEffectsKey, LibraryExpectedEffectAfter } from './identity-scope-effects.ts';
-import type { NativeCollectionWork } from './collection-source-work.ts';
+
+export type { LibrarySourceFrame } from './identity-epoch-participant.ts';
 
 /** Named public ports retain the opaque seal through its owning page union during declaration emission. */
 export type LibraryIdentityNativePlanner = Readonly<{
@@ -34,20 +36,28 @@ export type LibraryIdentityNativePlanner = Readonly<{
   ): Promise<LibraryIdentityPlanResult>;
 }>;
 
-/** Default native producer ports. These never borrow receiving acknowledgments or publish a ready Source. */
-export function createLibraryIdentityNativePlanner({ pool }: { pool: Pool }): LibraryIdentityNativePlanner {
+/** Default native producer ports. These never borrow receiving acknowledgments or publish a ready Source.
+ * `frame` is Semantic's live Source accessor; Library never imports the frame module itself.
+ */
+export function createLibraryIdentityNativePlanner({
+  pool,
+  frame,
+}: {
+  pool: Pool;
+  frame: LibrarySourceFrame;
+}): LibraryIdentityNativePlanner {
   return Object.freeze({
     advance: (input: LibraryIdentityPlanInput) => advanceLibraryIdentityNativePlan(pool, input),
     readPage: (input: Parameters<typeof readLibraryScopeEffectsPage>[1]) => readLibraryScopeEffectsPage(pool, input),
     verifySeal: verifyLibraryScopeEffectsSeal,
     /** Source owns the frame/parent. Its existing prepaid Library partition is consumed in place. */
-    advancePrepaid(
+    async advancePrepaid(
       input: Omit<LibraryIdentityPlanInput, 'allowance'>,
       context: IdentitySourceConsumerMaintenanceContext,
     ) {
-      const work = identitySourceConsumerLibraryWork(pool, context.identityConsumerWork, input.deadline);
-      if (!work || input.deadline !== context.deadline) throw new TypeError('Missing live prepaid Library partition');
-      return advanceLibraryIdentityNativePlanWithWork(pool, input, work);
+      const source = resolveLiveLibrarySource(frame, pool, context);
+      if (input.deadline !== context.deadline) throw new TypeError('Missing live prepaid Library partition');
+      return advanceLibraryIdentityNativePlanWithWork(pool, input, source.work);
     },
   });
 }
@@ -55,21 +65,22 @@ export function createLibraryIdentityNativePlanner({ pool }: { pool: Pool }): Li
 /** Default Library binding consumed inside Semantic's existing Source maintenance frame.
  * It deliberately exposes bounded scope advancement, retained native selections and one-effect
  * receiving progress; the fixed IdentityEpochStep receipt remains Semantic's final composition.
+ * Every method resolves the caller's context through `frame` first, so a copied or settled context is refused.
  */
-export function createLibraryIdentityEpochReceiver({ pool }: { pool: Pool }) {
+export function createLibraryIdentityEpochReceiver({ pool, frame }: { pool: Pool; frame: LibrarySourceFrame }) {
   return Object.freeze({
-    step(job: IdentityJobRef, context: IdentitySourceConsumerMaintenanceContext) {
-      return stepLibraryIdentityEpochWithSource(pool, job, context);
+    async step(job: IdentityJobRef, context: IdentitySourceConsumerMaintenanceContext) {
+      return stepLibraryIdentityEpochWithSource(pool, job, resolveLiveLibrarySource(frame, pool, context));
     },
-    advanceScope(
+    async advanceScope(
       key: LibraryScopeEffectsKey,
       after: LibraryExpectedEffectAfter | null,
       context: IdentitySourceConsumerMaintenanceContext,
     ) {
-      return advanceLibraryIdentityNativeScope(pool, key, after, context);
+      return advanceLibraryIdentityNativeScope(pool, key, after, resolveLiveLibrarySource(frame, pool, context));
     },
-    prepareEffect(selection: IdentityReceivingSelection, work: NativeCollectionWork) {
-      return prepareLibraryIdentityNativeEffect(pool, selection, work);
+    async prepareEffect(selection: IdentityReceivingSelection, context: IdentitySourceConsumerMaintenanceContext) {
+      return prepareLibraryIdentityNativeEffect(pool, selection, resolveLiveLibrarySource(frame, pool, context));
     },
   });
 }

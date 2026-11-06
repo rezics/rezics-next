@@ -12,8 +12,6 @@ import {
   identityJobPartition,
   IdentityEpochStoreError,
   serializeIdentityValue as json,
-  activeIdentitySourceConsumerMaintenance,
-  identitySourceConsumerLibraryWork,
 } from '../semantic/identity-adapters/index.ts';
 import type { IdentitySourceConsumerMaintenanceContext } from '../semantic/identity-adapters/index.ts';
 import {
@@ -206,6 +204,30 @@ export async function registerLibraryIdentitySourceInvalidation(
   });
 }
 
+/** Semantic's live Source frame as Library receives it from the binding's caller. Library never imports
+ * the frame module; the caller supplies the accessor and every function below runs on the resolved pair.
+ */
+export type LibrarySourceFrame = Readonly<{
+  libraryWork(
+    pool: Pool,
+    token: IdentitySourceConsumerMaintenanceContext['identityConsumerWork'],
+    deadline: number,
+  ): NativeCollectionWork | null;
+}>;
+export type LiveLibrarySource = Readonly<{
+  context: IdentitySourceConsumerMaintenanceContext;
+  work: NativeCollectionWork;
+}>;
+export function resolveLiveLibrarySource(
+  frame: LibrarySourceFrame,
+  pool: Pool,
+  context: IdentitySourceConsumerMaintenanceContext,
+): LiveLibrarySource {
+  const work = frame.libraryWork(pool, context.identityConsumerWork, context.deadline);
+  if (!work) throw unavailable("Library identity receiver requires Semantic's exact live Source maintenance frame");
+  return Object.freeze({ context, work });
+}
+
 function roleOfDriver(value: unknown): LibraryIdentityRole {
   if (typeof value !== 'string' || !libraryIdentityRoles.includes(value as LibraryIdentityRole))
     throw unavailable('Native Library manifest contains an unbound driver');
@@ -218,14 +240,9 @@ function roleOfDriver(value: unknown): LibraryIdentityRole {
 export async function prepareLibraryIdentityNativeEffect(
   pool: Pool,
   selection: IdentityReceivingSelection,
-  work: NativeCollectionWork,
+  source: LiveLibrarySource,
 ): Promise<IdentityReceivingEffect> {
-  const active = activeIdentitySourceConsumerMaintenance(pool);
-  if (
-    !active ||
-    identitySourceConsumerLibraryWork(pool, active.identityConsumerWork, active.deadline) !== work
-  )
-    throw unavailable('Library native effect preparation requires the exact live Source Library partition');
+  const { context, work } = source;
   const capture = selection.capture;
   if (!capture) throw stale('A native Library plan effect requires its retained Source capture');
   const sourceIdentity: NativeSourceIdentity = capture.identity;
@@ -271,6 +288,7 @@ export async function prepareLibraryIdentityNativeEffect(
     sourceId: sourceIdentity.collectionId,
     planKey: libraryIdentityPlanKey(key),
     disposition: selection.disposition,
+    deadline: context.deadline,
   });
   return effect;
 }
@@ -290,11 +308,9 @@ export async function advanceLibraryIdentityNativeScope(
   pool: Pool,
   key: LibraryScopeEffectsKey,
   after: LibraryExpectedEffectAfter | null,
-  context: IdentitySourceConsumerMaintenanceContext,
+  source: LiveLibrarySource,
 ): Promise<LibraryIdentityNativeScopeProgress> {
-  const work = identitySourceConsumerLibraryWork(pool, context.identityConsumerWork, context.deadline);
-  if (!work || activeIdentitySourceConsumerMaintenance(pool)?.identityConsumerWork !== context.identityConsumerWork)
-    throw unavailable('Library native scope requires the live prepaid Source maintenance frame');
+  const { context, work } = source;
   // Public output authority is owned by its publication producer, which has no account owner
   // locator for the private Library receiving cursor.
   if (key.sourceIdentity.scope === 'public_output')
@@ -362,7 +378,7 @@ export async function advanceLibraryIdentityNativeScope(
 
   let effect: IdentityReceivingEffect | null = null;
   for (const selection of page.rows) {
-    effect = await prepareLibraryIdentityNativeEffect(pool, selection, work);
+    effect = await prepareLibraryIdentityNativeEffect(pool, selection, source);
   }
   const afterPage = page.after;
   if (page.exhausted) {
@@ -408,11 +424,10 @@ async function registerLibraryIdentityNativeEffect(
     sourceId: string;
     planKey: string;
     disposition: IdentityReceivingSelection['disposition'];
+    deadline: number;
   }>,
 ): Promise<void> {
-  const active = activeIdentitySourceConsumerMaintenance(pool);
-  if (!active) throw unavailable('Library native effect registration requires the live Source maintenance frame');
-  const deadline = active.deadline;
+  const { deadline } = locator;
   await withRequestDeadline(deadline, async () => {
     const observed = await runCommand(
       pool,
@@ -832,12 +847,9 @@ export type LibraryIdentitySourceProgress = Readonly<{
 export async function stepLibraryIdentityEpochWithSource(
   pool: Pool,
   job: IdentityJobRef,
-  context: IdentitySourceConsumerMaintenanceContext,
+  source: LiveLibrarySource,
 ): Promise<LibraryIdentitySourceProgress> {
-  const active = activeIdentitySourceConsumerMaintenance(pool);
-  const work = identitySourceConsumerLibraryWork(pool, context.identityConsumerWork, context.deadline);
-  if (!work || !active || active.identityConsumerWork !== context.identityConsumerWork)
-    throw unavailable('Library identity receiver requires Semantic\'s exact live Source maintenance frame');
+  const { context, work } = source;
   if (routeOf(job.jobId) === null || job.epoch <= 0n) throw new TypeError('Invalid native identity job');
   const deadline = Math.min(context.deadline, workStepDeadline());
   const saved = await withReadTransaction(pool, (tx) => identityEpochStore.readJob(tx, job));
