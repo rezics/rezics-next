@@ -218,8 +218,12 @@ test('signed cursors bind board normalized query sort verified viewer epoch and 
   const binding = {
     operation: 'board.threads.list',
     parameters: {
-      boardId: id, query: 'searchable', sort: 'newest', viewer: null,
-      representation: 'pinned-cohort-v2', pinRevision: '0',
+      boardId: id,
+      query: 'searchable',
+      sort: 'newest',
+      viewer: null,
+      representation: 'pinned-cohort-v2',
+      pinRevision: '0',
     },
   };
   const decoded = decodeCursor(tokens, binding, cursor, now);
