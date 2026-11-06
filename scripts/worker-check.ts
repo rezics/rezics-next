@@ -1504,8 +1504,6 @@ export async function runWorkerCheck(
           [
             join(root, 'scripts/remote-check.ts'),
             ...(weight < 2 ? [] : ['--memory-gib', String(weight)]),
-            '--allowed-hosts',
-            'a,b',
             ...(lifecycle ? ['--max-ms', String(lifecycle.lifetimeMs + 60_000)] : []),
             ...(growthProfileRelative === undefined ? [] : ['--returns', growthProfileRelative]),
             ...(artifactPrepared ? ['--returns', artifactRelative] : []),
