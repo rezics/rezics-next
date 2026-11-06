@@ -77,10 +77,13 @@ proof. Contract/core/application load no downstream implementations. Native adap
 `createKernel`/`server`/`worker` composition. The split adds no query or extra statement; cost stays the existing
 producer declarations composed through `admitOriginalWork` and Kind-audience work vectors.
 Decision: pin this increment's user-visible check-infrastructure behaviour with the existing remote-check, check-ssh,
-compiler-database, Kernel script and page-data unit files rather than a second suite. Observed bounds: one OpenSSH
+compiler-database, Kernel script and page-data unit files rather than a second suite, including the 120s host-lifetime
+`docker rm` and detached SIGTERM cleanup. Observed bounds: one OpenSSH
 ControlMaster per configured host under a short owned `$XDG_RUNTIME_DIR/rezics-ssh` (relocated under `/tmp` when
 unix_listener would overflow); throwaway PostgreSQL `--rm` plus owner-pid cleanup; `docker run`/`rm -f` spawn 120s (Auth
-`DEFAULT_RUN_TIMEOUT`) and exec/ps/port probes 5s, because a 10s cap timed out a live host-b `database-image` at 10.012s;
+`DEFAULT_RUN_TIMEOUT`) and exec/ps/port probes 5s, because a 10s cap timed out a live host-b `database-image` at 10.012s
+and a 3s host-lifetime `docker rm -f` timed out on SIGTERM cleanup; signal-path removal is detached so the 200ms
+supervisor SIGKILL cannot abort it;
 labelled volume not 1 GiB tmpfs; a failed create reaps its nonce; `container:<id>` isolated-stack
 attachment with an independent TCP-to-Unix forwarder; migrations wait for in-container `pg_isready` and a protocol
 reply, not a TCP accept that EOFs; empty-directory manifests hash `directory\0`; page-data boot keeps the first
