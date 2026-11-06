@@ -45,7 +45,7 @@ test('test Worker bindings are startup-only and production has no fixture header
   expect(bindingsSource).not.toContain('active');
   expect(bindingsSource).not.toContain('depth');
   expect(bindingsSource).not.toContain('request.headers');
-  expect(viteSource).toContain('WEB_TEST_WORKER_BINDINGS');
+  expect(viteSource).toContain('testWorkerBindingsEnvName');
 
   const previous = process.env.REZICS_TEST_RUNTIME;
   const previousBindings = process.env.WEB_TEST_WORKER_BINDINGS;
@@ -129,7 +129,7 @@ test('WEB_VITE_CACHE_DIR selects the host-local optimizeDeps cache and allows re
     expect(config.cacheDir).toBe(cacheDir);
     expect(config.server?.fs?.allow).toContain(cacheDir);
     expect(config.optimizeDeps?.holdUntilCrawlEnd).toBe(true);
-    expect(config.optimizeDeps?.entries).toEqual(['src/routes/**/*.tsx']);
+    expect(config.optimizeDeps?.entries).toEqual(['src/routes/**/*.tsx', 'src/server.ts', 'src/session/routes.ts']);
     const plugins = (config.plugins ?? []).flatMap((plugin) => (Array.isArray(plugin) ? plugin : [plugin]));
     const worker = plugins.find(
       (plugin) =>

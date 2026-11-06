@@ -79,7 +79,16 @@ const conditions = {
   conditionEditing: {
     state: 'supported',
     currentness: 'current',
-    choices: [{ id: 'good', label: 'Good', description: 'Normal signs of use.' }],
+    choices: [
+      { id: 'unknown', label: 'Unknown', description: 'Assessed without a known grade.' },
+      { id: 'mint', label: 'Mint', description: 'No observable wear or defects.' },
+      { id: 'near_mint', label: 'Near mint', description: 'Almost no observable wear.' },
+      { id: 'very_good_plus', label: 'Very good plus', description: 'Minor observable wear.' },
+      { id: 'very_good', label: 'Very good', description: 'Noticeable wear, still fully usable.' },
+      { id: 'good', label: 'Good', description: 'Substantial wear, still usable.' },
+      { id: 'fair', label: 'Fair', description: 'Damage limits ordinary use.' },
+      { id: 'poor', label: 'Poor', description: 'Severe damage prevents ordinary use.' },
+    ],
   },
 } satisfies Pick<NativeCopyPresentation, 'mediaCondition' | 'packagingCondition' | 'conditionEditing'>;
 const presentation = {
@@ -94,16 +103,7 @@ const presentation = {
     statuses: [{ id: 'loan', label: 'Currently on loan', labelLanguage: 'en' }],
   },
 } satisfies NativeCopyPresentation;
-const omittedCondition = {
-  mediaCondition: { state: 'not_recorded' as const },
-  packagingCondition: { state: 'not_recorded' as const },
-  conditionEditing: {
-    state: 'unavailable' as const,
-    currentness: 'unavailable' as const,
-    reason: 'current_source_unavailable' as const,
-  },
-};
-const copy = (extra: Partial<CopyItem> = {}): CopyItem => ({
+const copy =(extra: Partial<CopyItem> = {}): CopyItem => ({
   ...native,
   subject: null,
   idempotencyKey: key,
@@ -205,7 +205,7 @@ test('one explicit inspection reads the actual credential-bound point DTO once a
 
 test('declared native presentation binds accepted kind and status labels separately from current choices', () => {
   const declared = { ...native, presentation } satisfies NativeCopy;
-  expect(nativeCopyPresentation(declared)).toEqual({ ...presentation, ...omittedCondition });
+  expect(nativeCopyPresentation(declared)).toEqual(presentation);
   const html = form(
     { ...copy(), ...nativeCopyPresentation(declared) },
     {
@@ -356,9 +356,9 @@ test('unknown and unavailable presentation cannot supply labels or establish sta
   for (const meaning of ['unknown', 'unavailable'] as const) {
     const detail = { ...native, presentation: { ...presentation, meaning } } satisfies NativeCopy;
     expect(nativeCopyPresentation(detail)).toEqual({
+      ...conditions,
       meaning,
       statusEditing: { state: 'unavailable' },
-      ...omittedCondition,
     });
   }
 });
