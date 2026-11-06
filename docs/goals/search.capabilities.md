@@ -354,7 +354,7 @@ These native seams are retained, without claiming complete runtime closure.
 **Native wrapper/command:** original Search/relation wrappers use
 [outcome-driver](../../services/kernel/test/search/outcome-driver.ts)→[driver client](../../services/kernel/test/search/support/driver-client.ts)
 →[supervisor](../../services/kernel/test/search/support/outcome-supervisor.ts)→[worker child](../../services/kernel/test/search/support/outcome-worker.ts).
-Worker invokes startWorker with decorated full KERNEL_WORK_MODULES, original registrations and observed real starters;
+Worker invokes startWorker with a decorator of the live `createKernelWorkModules` list (Content ambient included), original registrations and observed real starters;
 pause/resume captures only Search, rebuild uses real rebuildSubjects/subjectSource and runner refresh. Current
 source has progressed beyond [harness README](../../services/kernel/test/search/README.md)'s older captured-starter
 status; neither source nor that stale status supplies a native pass.

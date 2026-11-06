@@ -67,16 +67,19 @@ export function readWorkerConfig(env: NodeJS.ProcessEnv): WorkerConfig {
   };
 }
 
+/** Default worker registrations. Isolated tests may pass a substitute list; the Search
+ * outcome child decorates this live list instead of importing a second composition. */
+export type KernelWorkModuleDecorator = (modules: readonly WorkModule[]) => readonly WorkModule[];
+
 export async function startWorker(
   config: WorkerConfig,
-  modules?: readonly WorkModule[],
+  modules?: readonly WorkModule[] | KernelWorkModuleDecorator,
   env: Readonly<Record<string, string | undefined>> = process.env,
 ) {
   composeAccessApplication();
   composeWorkApplication();
   const content = startContentApplication(config.clock ? { clock: config.clock } : undefined);
-  const resolvedModules =
-    modules ??
+  const composed = () =>
     createKernelWorkModules(
       createDiscoveryProducerEntry,
       createKernelRuntimeDefaults,
@@ -87,6 +90,8 @@ export async function startWorker(
         id: content.application.ambient.id,
       },
     );
+  const resolvedModules =
+    modules === undefined ? composed() : typeof modules === 'function' ? modules(composed()) : modules;
   const receiptKeys = readReceiptKeyRing(env, config.receiptKeys);
   initializeEventTypes();
   let pool: pg.Pool;

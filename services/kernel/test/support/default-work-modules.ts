@@ -3,7 +3,8 @@ import { createKernelRuntimeDefaults } from '../../src/composition/runtime-defau
 import { createKernelWorkModules } from '../../src/composition/work-modules.ts';
 import { composeSemanticIdentityParticipants } from '../../src/composition/semantic.ts';
 
-/** The production module list with the same explicit producer and Semantic composition used by the worker. */
+/** Name and identity pin for tests that inspect default registrations. The worker child must
+ * decorate `startWorker`'s live `createKernelWorkModules` result, which also supplies Content ambient. */
 export const KERNEL_WORK_MODULES = createKernelWorkModules(
   createDiscoveryProducerEntry,
   createKernelRuntimeDefaults,

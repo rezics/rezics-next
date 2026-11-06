@@ -58,8 +58,10 @@ function contentWorkAmbient(supplied?: ContentWorkAmbient): ContentWorkAmbient {
   };
 }
 
-/** Add each module's registration here, in dependency order, once. Content's worker is the declared
- * factory over explicit network, clock and identity operands supplied by this composition root. */
+/** Callable default-worker composition. `startWorker` invokes this with Content ambient; Search
+ * outcome children decorate that live list. Add each module's registration here, in dependency
+ * order, once. Content's worker is the declared factory over explicit network, clock and identity
+ * operands supplied by this composition root. */
 export function createKernelWorkModules(
   composeDiscovery: Parameters<typeof createSearchWorkModule>[0],
   composeRuntimeDefaults: Parameters<typeof createSearchWorkModule>[1],
