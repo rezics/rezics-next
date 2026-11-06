@@ -332,8 +332,9 @@ bounding every page, including all rejected candidates and pending consumers.
 Fewest tests: extend the two existing growth suites, retention causal cases and SDK
 binding cases; use the existing genuine erasure fixture and consumable target helper.
 Do not substitute returned counts or a callback stub for retirement-body work.
-Auth does not query `auth_dbos.workflow_status`; producer inclusive
-`completed_at <= createdBefore` eligibility is received as-is.
+Pin funded close/delete, unavailable funded admission and same-identity replay on the
+existing binding suite. Auth does not query `auth_dbos.workflow_status`; producer
+inclusive `completed_at <= createdBefore` eligibility is received as-is.
 
 Frozen full/short, zero-eligible and drain/repeated-empty titles remain in the Auth
 inventory. Each independently grows workflow rows, old-created/recent-completed
@@ -343,8 +344,9 @@ HTTP revoke request, closes native writers, deletes payload/FK families and veri
 raw absence. Missing consumer custody stays pending. Timestamp ties, late inserts
 inside the captured upper key, 60-page continuation, original-cut recovery,
 interruption and replay stay causal cases; old synthetic technical bindings have no
-source proof and must be retained. The SDK connection-retry loop still has no finite
-attempt limit; persistent native failure stays an explicit unavailable producer bound.
+source proof and must be retained. Personal closure uses funded `maintainWorkflowOnce`
+attempts and one deadline; scan-page connection retry stays an explicit unbounded
+producer bound.
 
 Run through the Auth owning runner:
 
@@ -357,10 +359,10 @@ exact command, independently seeded axes, foreground and background statements/p
 examined rows, hits/reads and request/response bytes, including every consumer, closure,
 FK and request trigger in the original operation context. Raw pages, not deletion
 counts, price empty work. Test existence and clean typing provide no native pass.
-The current SDK connection-retry loop has no finite attempt limit; persistent native
-failure requires producer-owned retry admission before a finite whole-operation
-failure bound can close. Selection uses the received scan producer; no Auth-owned
-SDK SQL or synthetic fence is supplied here.
+Personal closure accounts failed funded attempts and resumes the original writer
+identity after uncertain COMMIT; timeout never proves absence. Scan-page connection
+retry still has no finite attempt limit. Selection uses the received scan producer;
+no Auth-owned SDK SQL or synthetic fence is supplied here.
 
 ### Control-plane operation coverage
 

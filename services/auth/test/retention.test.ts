@@ -16,6 +16,7 @@ import {
   TERMINAL_WORKFLOW_STATUSES,
   WORKFLOW_RETENTION_SCHEDULE,
   WorkflowRetentionConfigurationError,
+  type WorkflowCopyRetirement,
 } from '../src/retention.ts';
 
 const day = 86400000;
@@ -24,7 +25,7 @@ const cutoff = now.getTime() - 30 * day;
 const fixture = testDatabase();
 const pool = new Pool({ connectionString: fixture.url });
 let maintenance: ReturnType<typeof registerAuthMaintenance>;
-const unclassified = async () => false;
+const unclassified: WorkflowCopyRetirement = async () => false;
 
 beforeAll(async () => {
   maintenance = registerAuthMaintenance({
@@ -73,7 +74,8 @@ async function seed(
     { id },
   ]);
 }
-const page = (at = now, retire = unclassified) => runWorkflowRetentionPage(pool, 30, DBOS, at, retire);
+const page = (at = now, retire: WorkflowCopyRetirement = unclassified) =>
+  runWorkflowRetentionPage(pool, 30, DBOS, at, retire);
 async function continuation() {
   return (await pool.query('SELECT continuation FROM auth_workflow_retention')).rows[0].continuation;
 }
@@ -180,7 +182,7 @@ test('raw pages pass pending consumers and timestamp ties, resume the fixed hori
   ).toBe(1);
   expect(await continuation()).toBeNull();
   const recovered: string[] = [];
-  const next = await page(now, async (id) => {
+  const next = await page(now, async (id: string) => {
     recovered.push(id);
     await DBOS.deleteWorkflows([id], false);
     return true;

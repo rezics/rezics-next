@@ -2626,12 +2626,12 @@ names use direct SDK deletion. They create no personal request binding.
 
 The focused causal cases also pin inclusive producer cutoff ties, pending then recovered
 custody, late insertion inside the captured upper key, a 60-page continuation, deletion
-rollback and lost native receipt/reply replay. Source presence and typing do not
-establish native acceptance. SDK connection retry loops can make more than one native
-attempt; all observed attempts must remain charged, and persistent connection failure
-has no finite whole-operation retry bound in the current producer. Native plans, nested
-producer constants, bytes and original operation attribution require the owning checks
-after integration; capability limits are recorded in
+rollback and lost native receipt/reply replay. Personal writer closure and payload
+deletion use SDK `maintainWorkflowOnce` (one attempt, one deadline); a lost reply
+rereads that writer identity and never treats timeout as absence. Scan-page connection
+retry remains unbounded producer evidence. Native plans, nested producer constants,
+bytes and original operation attribution require the owning checks after integration;
+capability limits are recorded in
 [Performance acceptance](../../docs/goals/performance.capabilities.md).
 
 ### Erasure cursor deployment
