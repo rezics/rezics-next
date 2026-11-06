@@ -67,6 +67,8 @@ Decision: Keep exact Character provider keys, appearance rows and units; omit un
 
 ## Native execution boundary
 
+Decision: retain the existing native CLI lifecycle assertions and use the registered converter exports for their revision expectations. Current Bangumi and Open Library mappings supersede historical revision literals; reviewed tag binding pairs retain tuple types. These fixture corrections change no publication behavior or operation cost and add no duplicate acceptance tests.
+
 Kernel owns runtime, authorization, command execution and native reads. Importer does not add privileged writes, acceptance shortcuts or SQL adoption. Decision: review exact original `bangumi_cross_media`/`vndb_cross_media` claims through the released asynchronous merge contract; retain sealed intent and original bindings while observing native operation completion and separate public canonical reads. Client binds these exact methods while whole-Kernel declaration publication is pending. HTTP 202 is admission; HTTP 200 merge or an application reread is not completion. Current Person identifiers exclude deprecated rows and require every remaining value to agree. Native redirects resolve reads on the same API; manifest assertions and dependent credits keep original source ownership. Credits wait for current canonical delivery, not another binding or publisher.
 
 ## Deletion

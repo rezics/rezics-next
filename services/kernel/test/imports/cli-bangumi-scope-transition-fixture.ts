@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { decodeJwt, exportJWK, generateKeyPair } from 'jose';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import type { BatchCommand, BatchStatement, Source } from '@rezics/definitions/bulk';
+import { converter_revision } from '../../../../packages/conversion/src/bangumi.ts';
 import { runImportCli } from '../../../importer/src/cli.ts';
 import { IMPORTER_SCOPES } from '../../../importer/src/credentials.ts';
 import { ImportSession } from '../../../importer/src/import-session.ts';
@@ -222,7 +223,7 @@ export async function runJourney() {
       for (const member of observed.members) {
         expect(member.row.baseline?.state).toBe('present');
         expect(member.row.acknowledged).toEqual(member.row.baseline);
-        expect(member.row.baseline?.converter_revision).toBe('bangumi@15');
+        expect(member.row.baseline?.converter_revision).toBe(converter_revision);
         expect(member.row.baseline?.recordRevision).toBe('unversioned');
       }
       sourceRows.push(observed);
@@ -409,7 +410,7 @@ export async function runJourney() {
         source: 'bangumi',
         external_id: target,
         record_revision: 'unversioned',
-        converter_revision: 'bangumi@15',
+        converter_revision,
         digest: returnedState.members[0]!.row.baseline!.digest,
         field_group: 'facts',
       });
