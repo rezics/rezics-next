@@ -61,9 +61,18 @@ export type LoanCounterpartyInput =
   | { kind: 'person'; personId: string };
 export type LoanAction = { allowed: boolean; reason: 'returned' | 'copy_unavailable' | null };
 export type LoanDueBoundary = { calendar: 'gregorian'; zone: 'UTC'; today: string };
+export type CopyContextFact =
+  | { kind: 'item'; id: string; labels: Record<string, string> }
+  | { kind: 'time'; year: number; month?: number; day?: number }
+  | { kind: 'quantity'; amount: number; unit: string }
+  | { kind: 'code'; value: string };
 export type LoanCopyContext =
-  | { state: 'available'; work: { id: string; labels: Record<string, string> }[]; facts: Record<string, unknown[]> }
-  | { state: 'unsupported'; facts: Record<string, unknown[]> }
+  | {
+      state: 'available';
+      work: { id: string; labels: Record<string, string> }[];
+      facts: Record<string, CopyContextFact[]>;
+    }
+  | { state: 'unsupported'; facts: Record<string, CopyContextFact[]> }
   | { state: 'scope' | 'withheld' | 'missing' | 'unavailable' };
 export type LoanCopy = {
   state: 'available' | 'deleted' | 'missing';

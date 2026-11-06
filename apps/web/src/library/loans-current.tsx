@@ -166,7 +166,7 @@ function CurrentLoansRead({
       address={address}
       originating={operand ?? closed}
       onRefresh={() => {
-        if (origin.isCurrent('copy.list')) void query.refetch();
+        if (origin.isCurrent()) void query.refetch();
       }}
     />
   );
