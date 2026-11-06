@@ -2,7 +2,9 @@ import { expect } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { createAccess } from '../../../src/access/index.ts';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
-import { registerContent } from '../../../src/content/register.ts';
+import { createContentWorkModule } from '../../../src/content/register.ts';
+
+const registerContent = createContentWorkModule({ fetch: (request) => fetch(request) });
 import { createTurnstileVerifier } from '../../../src/content/turnstile.ts';
 import { relayEffects } from '../../../src/events/effects.ts';
 import { createKernel } from '../../../src/http/kernel.ts';

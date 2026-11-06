@@ -7,7 +7,9 @@ import { createKernel } from '../../../src/http/kernel.ts';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import { encodeReceiptKey } from '../../../src/command/receipt-key.ts';
 import { SESSION_HEADER } from '../../../src/http/request.ts';
-import { registerContent } from '../../../src/content/register.ts';
+import { createContentWorkModule } from '../../../src/content/register.ts';
+
+const registerContent = createContentWorkModule({ fetch: (request) => fetch(request) });
 import { effectWorkflowId, type Effect } from '../../../src/events/effects.ts';
 import { readBatch, type Envelope } from '../../../src/events/log.ts';
 import { newId, routeOf } from '../../../src/route/route.ts';

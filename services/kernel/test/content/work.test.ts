@@ -14,7 +14,13 @@ import {
   CONTENT_COLLECTION_SCHEDULE,
   CONTENT_OPERATION_PROGRESS,
 } from '../../src/content/work.ts';
-import { contentWorkDependencies, createContentWorkAccess, registerContent } from '../../src/content/register.ts';
+import {
+  contentWorkDependencies,
+  createContentWorkAccess,
+  createContentWorkModule,
+} from '../../src/content/register.ts';
+
+const registerContent = createContentWorkModule({ fetch: (request) => fetch(request) });
 import { contentEffects } from '../../src/content/relays.ts';
 import { readMembershipRouteKey } from '../../src/access/membership-work-config.ts';
 import {
@@ -99,7 +105,7 @@ if (process.argv.includes('--content-worker')) {
       ...(process.env.CONTENT_TEST_NOW ? { clock: () => new Date(process.env.CONTENT_TEST_NOW!) } : {}),
     },
     KERNEL_WORK_MODULES.map((module) =>
-      module === registerContent ? contentWithStepRetryDelay(STEP_RETRY_DELAY_SECONDS) : module,
+      module.name === registerContent.name ? contentWithStepRetryDelay(STEP_RETRY_DELAY_SECONDS) : module,
     ),
     workerTestEnv({
       CONTENT_R2_ENDPOINT: storageEndpoint,
@@ -356,7 +362,8 @@ ON CONFLICT (route,media_id) DO UPDATE SET state='uploaded',actual_byte_count=EX
   }
 
   test('shared kernel registers content once and effects are source-partitioned', () => {
-    expect(KERNEL_WORK_MODULES.filter((module) => module.name === registerContent.name)).toEqual([registerContent]);
+    // The composition supplies its own module instance; identity is the single registered content name.
+    expect(KERNEL_WORK_MODULES.filter((module) => module.name === registerContent.name)).toHaveLength(1);
     expect(WORK_QUEUES.effects).toMatchObject({ partitionConcurrency: 1 });
     expect(WORK_QUEUES.governance.workerConcurrency).toBeGreaterThan(0);
   });

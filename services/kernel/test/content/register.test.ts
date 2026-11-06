@@ -7,8 +7,10 @@ import { createImageJob } from '../../src/content/image-job.ts';
 import {
   contentWorkDependencies,
   ContentDependencyUnavailableError,
-  registerContent,
+  createContentWorkModule,
 } from '../../src/content/register.ts';
+
+const registerContent = createContentWorkModule({ fetch: (request) => fetch(request) });
 import { CONTENT_WORKFLOWS } from '../../src/content/work-contract.ts';
 import {
   CONTENT_BOARD_RANK_SCHEDULE,

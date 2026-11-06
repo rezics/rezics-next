@@ -2,7 +2,9 @@ import { afterAll, expect, spyOn, test } from 'bun:test';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { authoritativeTimeValue, runCommand } from '../../src/command/command.ts';
 import * as contentWork from '../../src/content/work.ts';
-import { registerContent } from '../../src/content/register.ts';
+import { createContentWorkModule } from '../../src/content/register.ts';
+
+const registerContent = createContentWorkModule({ fetch: (request) => fetch(request) });
 import { createPool } from '../../src/database/pool.ts';
 import { accessCheck, type Access } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
