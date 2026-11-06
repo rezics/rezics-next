@@ -12,14 +12,20 @@ and Profile owners are linked from the [Performance Goal](performance.md). This 
 not evidence that the capabilities have passed.
 
 Decision: Published Log public lifecycle acceptance stays on the seven existing Log operation/growth/retention/source
-suites and the five retained Search scope/work-context suites, plus affected Web log tests. FULL withhold of a changed
-Source and the My Logs history-state return frontier are pinned on those suites. Full native Auth walk,
-64/512/4096 growth and rendered 720-hour retention remain open until observed passing. Verification.md keeps general
-check policy; these suites and the deferred native walk live here and in Library owners. Fewest tests: extend
-operation-bounds and retract causal, plus one FULL withhold and one My Logs return-frontier pin. A retired completed
-session clears `completedAt` (`progress_session_check3`). FULL publication keeps the current public-account and
-`targetFields` unions, including deleted/pending curator/log-account cases; Accounts optional contribution-attribution
-producer is not in this checkout.
+suites and the five retained Search scope/work-context suites, plus affected Web log tests. Public reads keep the
+immutable snapshot without current Source; FULL withholds `subject: null` on a changed Source. Retract hides the
+snapshot from the public list immediately; replaying the original create receipt does not restore it. Growth uses 64/512/4096
+with `scale` rows per population and a fixed selected neighbourhood; publish resolves one real subject and retract
+uses the stored CAS revision. restoreExpired CAS-sets `restore_until`;
+restoreHistorical retires the private session. Empty and post-drain sweeps use the default worker. Back href is
+cursor-free My Logs; ordinary click uses history.back() only for this captured My Logs visit, log and current session,
+otherwise the href. Native Auth-persona walks, phone/desktop/locale keyboard evidence and rendered 720-hour browser
+retention stay with the controller-owned driver after integration. Verification.md keeps general check policy; these
+suites and the deferred native walk live here and in Library owners. Fewest tests: extend those suites, complete
+native-published-log-responses, and pin captured/direct/replaced-session Back on the existing mounted return scenario. A retired completed session clears
+`completedAt` (`progress_session_check3`). FULL publication keeps the current public-account and `targetFields`
+unions, including deleted/pending curator/log-account cases; Accounts optional contribution-attribution producer is
+not in this checkout.
 
 Executable scenarios, user-case acceptance and promotion require separate evidence. A scenario name alone proves
 nothing; it becomes frozen with its executable acceptance. Existing frozen tests remain unchanged. Promotion requires

@@ -45,6 +45,14 @@ async function row(logId: string) {
   return result.rows[0] ?? null;
 }
 
+test('default worker empty and post-drain sweeps complete with zero eligible published-log output', async () => {
+  const { client } = runtime!;
+  const first = await client.triggerSchedule(PUBLISHED_LOG_RETENTION_SCHEDULE);
+  await first.getResult({ pollingIntervalMs: 20 });
+  const again = await client.triggerSchedule(PUBLISHED_LOG_RETENTION_SCHEDULE);
+  await again.getResult({ pollingIntervalMs: 20 });
+}, 120000);
+
 test('native exact expiry purge keeps only permitted public structural identity while terminal account erasure removes personal log payload and stale work cannot restore it', async () => {
   const { fixture: f, client } = runtime!;
   const scopes = [

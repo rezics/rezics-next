@@ -39,6 +39,7 @@ test('published reading log retracts immediately and Undo restores its original 
   const publicDetail = await f.send('anonymous', 'GET', `/v1/publishedLogs/${original.id}`);
   expect((await publicDetail.json()).publishedLog).toEqual(original);
   const publicList = await f.send('anonymous', 'GET', `/v1/publishedLogs?accountId=${owner.actor.accountId}`);
+  expect(publicList.headers.get('cache-control')).toBe('private, no-store');
   expect((await publicList.json()).publishedLogs).toContainEqual(original);
   const path = `/v1/publishedLogs/${original.id}`,
     key = entryKey();
@@ -58,6 +59,7 @@ test('published reading log retracts immediately and Undo restores its original 
     revision: session.revision,
   });
   expect(completed.status).toBe(200);
+  const completedRevision = (await completed.json()).progressSession.revision;
   const replayedPublish = await f.send(
     owner.bearer,
     'POST',
@@ -70,7 +72,7 @@ test('published reading log retracts immediately and Undo restores its original 
   const replayedList = await f.send('anonymous', 'GET', `/v1/publishedLogs?accountId=${owner.actor.accountId}`);
   expect(
     (await replayedList.json()).publishedLogs.filter((log: { id: string }) => log.id === original.id),
-  ).toHaveLength(1);
+  ).toHaveLength(0);
   const restored = await f.send(owner.bearer, 'POST', path + ':restore', { deletionId, revision: deletedRevision });
   expect(restored.status).toBe(200);
   const value = (await restored.json()).publishedLog;
@@ -83,6 +85,21 @@ test('published reading log retracts immediately and Undo restores its original 
     publishedAt: original.publishedAt,
   });
   expect(value.sessionState).not.toBe('completed');
+  const retired = await f.send(
+    owner.bearer,
+    'POST',
+    `/v1/progressSessions/${session.id}:retire`,
+    { revision: completedRevision },
+    entryKey(),
+  );
+  expect(retired.status).toBe(200);
+  expect((await retired.json()).progressSession).toMatchObject({ state: 'retired', completedAt: null });
+  expect((await (await f.send('anonymous', 'GET', path)).json()).publishedLog).toMatchObject({
+    id: original.id,
+    sessionState: original.sessionState,
+    completedAt: original.completedAt,
+    note: original.note,
+  });
   const replay = await f.send(owner.bearer, 'DELETE', `${path}?revision=${revision}`, undefined, key);
   expect(replay.status).toBe(200);
   expect(replay.headers.get('Library-Published-Log-Deletion-Id')).toBe(deletionId);

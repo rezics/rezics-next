@@ -134,6 +134,10 @@ describe('native published-log response bindings', () => {
       'deleteAgain',
       'staleRestore',
       'finalRestore',
+      'completeSource',
+      'retireSource',
+      'deleteExpired',
+      'expiredRestore',
     ]) {
       expect(fixture.manifest.commandKeys[name]).toMatch(/^"[0-9a-f-]{36}"$/i);
     }
@@ -228,6 +232,7 @@ describe('native published-log response bindings', () => {
     const { ids: fixtureIds, aliceAccountId, bobAccountId } = fixture.manifest;
     const initial = callFor('ownerHistoryBeforePublication');
     expect(initial.response.status).toBe(200);
+    expect(initial.response.headers['cache-control']).toBe('private, no-store');
     expect(items(initial.response, 'Owner history before explicit publication')).toEqual([]);
     expect(object(initial.response.body, 'Owner history before explicit publication').next).toBeNull();
 
@@ -337,10 +342,29 @@ describe('native published-log response bindings', () => {
     expect(finalRestore.command.input.idempotencyKey).toBe(commandKeys.finalRestore);
     expect(finalRestore.command.input.idempotencyKey).not.toBe(commandKeys.deleteAgain);
 
-    for (const scenario of ['restoreExpired', 'restoreHistorical'] as const) {
-      expect(fixture.manifest.scenarios[scenario]).toMatchObject({ availability: 'unavailable' });
-      if (fixture.manifest.scenarios[scenario].availability === 'unavailable')
-        expect(fixture.manifest.scenarios[scenario].binding.length).toBeGreaterThan(0);
-    }
+    const historical = callFor('restoreHistorical');
+    expect(historical.response.status).toBe(200);
+    expect(nested(historical.response.body, 'publishedLog', 'Historical source public log')).toMatchObject({
+      id: fixtureIds.publishedLogId,
+      note: 'N'.repeat(1000),
+    });
+    assertNoPrivateSourceFields(historical.response);
+
+    const expiredDeletion = callByKey('deleteExpired');
+    const expired = callFor('restoreExpired');
+    expect(expired.response.status).toBe(409);
+    expect(object(expired.response.body, 'Expired restore').code).toBe('published_log_restore_expired');
+    expect(expired.command.input.body).toEqual({
+      deletionId: expiredDeletion.response.headers['library-published-log-deletion-id'],
+      revision: Number(expiredDeletion.response.headers['library-published-log-deletion-revision']),
+    });
+
+    const retired = callByKey('retireSource');
+    expect(retired.response.status).toBe(200);
+    expect(nested(retired.response.body, 'progressSession', 'Retired completed source')).toMatchObject({
+      id: fixtureIds.sourceSessionId,
+      state: 'retired',
+      completedAt: null,
+    });
   });
 });

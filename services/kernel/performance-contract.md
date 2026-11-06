@@ -20,9 +20,11 @@ Decision: Library Published Log operations compose nested original/terminal Sour
 public-account work from those producers, bind remaining original deadlines into retries, and pin zero
 `engineRequests`/`witnessKeys` on SQL leaves. Reached producers receive Access work and the original absolute
 deadline; the native interceptor skips consume inside the reserved envelope. FULL public snapshots withhold a
-changed Source. Native 64/512/4096 receiving stays deferred. Access and Command keep policy and SQL ownership
-through public owner leaves; `published-log-native.ts` executes those leaves and `published-log-bounds.ts` does not
-import `command-support.ts`. Fewest tests: keep `published-log-operation-bounds.test.ts` and the existing Log suites;
+changed Source. Growth checks use 64/512/4096 with a fixed selected neighbourhood; native receiving evidence stays
+integration-owned. Web Back uses history.back() only for the captured My Logs visit, log and current session.
+Access and Command keep policy and SQL ownership through public owner leaves; `published-log-native.ts` executes
+those leaves and `published-log-bounds.ts` does not import `command-support.ts`. Fewest tests: keep
+`published-log-operation-bounds.test.ts` and the existing Log suites;
 envelope skip is pinned without Reylo `.run()`.
 
 ## Access domain composition
