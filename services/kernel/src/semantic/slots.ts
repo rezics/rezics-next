@@ -16,7 +16,6 @@ import readLatestAdoption from './slots-read-adoption.sql';
 import readCompactFacts from './slots-read-compact.sql';
 import readHiddenCandidates from './slots-read-hidden.sql';
 import readSlotOperation from './slots-read-operation.sql';
-import readRejectedCandidates from './slots-read-rejected.sql';
 import readSelectionFacts from './slots-read-selection.sql';
 import lockReviewedSelection from './reviewed-person-identity-lock-selection.sql';
 
@@ -140,28 +139,28 @@ async function selectionFacts(
   return rows.map((row) => candidateFact(property, row, row.adopted_rank));
 }
 
+/** Compact creation facts, or the current Global replace selection. Rejected candidates stay off this view. */
+async function selectedGlobalFacts(
+  tx: CommandTransaction,
+  subject: string,
+  property: string,
+  slot = slotId(subject, property),
+) {
+  const state = await resolveSlot(tx, subject, property, GLOBAL_CONTEXT, slot);
+  const selection = state.adoption?.mode === 'replace' ? state.adoption.selection : [];
+  const facts = state.expanded
+    ? await selectionFacts(tx, subject, property, selection)
+    : state.compact.map((candidate) => candidateFact(property, candidate));
+  return { state, selection, facts };
+}
+
 async function globalSlotView(
   tx: CommandTransaction,
   subject: string,
   property: string,
   slot = slotId(subject, property),
 ): Promise<FactRow[]> {
-  const state = await resolveSlot(tx, subject, property, GLOBAL_CONTEXT, slot);
-  if (!state.expanded) return state.compact.map((candidate) => candidateFact(property, candidate));
-
-  const selection = state.adoption?.mode === 'replace' ? state.adoption.selection : [];
-  const selected = await selectionFacts(tx, subject, property, selection);
-  const rejectedLimit = Math.max(0, 32 - selected.length);
-  if (!rejectedLimit) return selected;
-  const rows = await readRejectedCandidates.run(tx, {
-    route: routeOf(subject)!,
-    subject_id: subject,
-    context_id: GLOBAL_CONTEXT,
-    slot_id: slot,
-    rejected_limit: rejectedLimit,
-    excluded: selection.map((row) => row.candidate),
-  });
-  return [...selected, ...rows.map((row) => candidateFact(property, row, 'deprecated'))];
+  return (await selectedGlobalFacts(tx, subject, property, slot)).facts;
 }
 
 export async function hiddenCandidateKeys(
@@ -244,8 +243,7 @@ export async function effectiveGlobalSlotFacts(
   slot = slotId(subject, property),
   lockSelected = false,
 ): Promise<{ facts: FactRow[]; basis: unknown }> {
-  const state = await resolveSlot(tx, subject, property, GLOBAL_CONTEXT, slot);
-  const selection = state.adoption?.mode === 'replace' ? state.adoption.selection : [];
+  const { state, selection, facts } = await selectedGlobalFacts(tx, subject, property, slot);
   if (lockSelected) {
     const locked = (await lockReviewedSelection.run(tx, {
       route: routeOf(subject)!,
@@ -259,9 +257,6 @@ export async function effectiveGlobalSlotFacts(
     if (state.expanded && (locked.candidates !== selection.length || locked.adoption !== (state.adoption ? 1 : 0)))
       throw new AccessUnavailableError('contention');
   }
-  const facts = state.expanded
-    ? await selectionFacts(tx, subject, property, selection)
-    : state.compact.map((candidate) => candidateFact(property, candidate));
   if (state.expanded && facts.length !== selection.length) throw new AccessUnavailableError('contention');
   const visible = await omitHidden(tx, subject, facts);
   await collectSemanticRecordFacts(tx, subject, visible);

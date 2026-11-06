@@ -289,7 +289,7 @@ test('Global acceptance and adoption turn a proposal into a ranked statement, on
   expect((await revisions(book.id)).map((row) => row.kind)).toEqual(['create', 'propose', 'accept', 'adopt']);
 });
 
-test('a Global rejection keeps its candidate as deprecated with references and only accepted candidates are adopted', async () => {
+test('a Global rejection keeps last adopted public facts and records the candidate as deprecated with references', async () => {
   const work = await created({ type: 'schema:Book', labels: { en: 'Kokoro' } });
   const edition = await created({
     type: 'bf:Instance',
@@ -308,17 +308,16 @@ test('a Global rejection keeps its candidate as deprecated with references and o
     revision: 3,
   });
   const dates = (await view(edition.id)).subject.statements['schema:datePublished'];
-  expect(dates.map((s: any) => [s.id, s.rank, s.rezics.revision])).toEqual([
-    [originalDate.id, 'normal', 1],
-    [wrongDate, 'deprecated', 2],
-  ]);
-  expect(dates[1].references).toEqual(originalDate.references);
-  expect((await listed(edition.id, 'schema:datePublished')).candidates[1]).toMatchObject({
+  expect(dates.map((s: any) => [s.id, s.rank, s.rezics.revision])).toEqual([[originalDate.id, 'normal', 1]]);
+  expect(JSON.stringify(dates)).not.toContain(wrongDate);
+  const rejectedCandidate = (await listed(edition.id, 'schema:datePublished')).candidates[1];
+  expect(rejectedCandidate).toMatchObject({
     id: wrongDate,
     decision: 'rejected',
     head: 1,
     rank: 'deprecated',
   });
+  expect(rejectedCandidate.statement.references).toMatchObject(originalDate.references);
   const alternative = await proposed(edition.id, cited('schema:exampleOfWork', work.id, { rank: 'preferred' }));
   const before = await revisions(edition.id);
   for (const [property, candidate] of [

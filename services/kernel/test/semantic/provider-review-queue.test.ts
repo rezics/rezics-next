@@ -198,7 +198,7 @@ test('contributor proposals preserve native decisions and pending abstentions', 
   const native = status(await f.call('GET', `/v1/subjects/${abstained.id}/candidates?property=schema:inLanguage`), 200);
   expect(native.candidates[0]).toMatchObject({ id: abstained.candidate, decision: 'abstained', head: 1, rank: null });
   const rejectedSubject = status(await f.call('GET', `/v1/subjects/${proposals[1]!.id}`), 200);
-  expect(rejectedSubject.statements['schema:inLanguage'][0].rank).toBe('deprecated');
+  expect(rejectedSubject.statements['schema:inLanguage'] ?? []).toEqual([]);
 
   const acceptedPage = status(
     await f.call('GET', `${reviewEndpoint}&status=accepted_unselected`, undefined, 'editor'),

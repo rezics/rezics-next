@@ -197,13 +197,8 @@ test('compact and expanded Book facts preserve qualifier support and release pin
   );
   expect(rejected.status, JSON.stringify(rejected.body)).toBe(200);
   const shown = subject(await fixture.read(expanded)).statements['schema:keywords']!;
-  expect(shown.filter((s) => s.rank !== 'deprecated')).toEqual([b]);
-  expect(shown.find((s) => s.id === alternative.body.candidate)).toMatchObject({
-    rank: 'deprecated',
-    value: input.value,
-    references: b.references,
-    rezics: { release: bundledDigest },
-  });
+  expect(shown).toEqual([b]);
+  expect(shown.find((s) => s.id === alternative.body.candidate)).toBeUndefined();
 }, 120_000);
 
 test('released word count admits nonnegative integer unit one and Book facet while form reuses P7937', async () => {

@@ -123,7 +123,8 @@ Context authorities. Candidate proposal authorizes that Global Context parent as
 infer the child revision type for the grant. Accept, reject and adopt use that same declared Context type through
 the page formula. Declared `x-resource-types` remain creation bindings and do not form a
 unique native policy profile. Public subject reads report the current command revision; selected statements stay at
-the last adopted facts until a later adoption. The proposal command still reauthorizes the exact admitted target and
+the last adopted facts until a later adoption. A Global rejection records the candidate decision and deprecated rank
+on the candidate list; it does not add a deprecated public statement. The proposal command still reauthorizes the exact admitted target and
 property at execution.
 The mounted `subject.terms` viewer-action binding observes `statement:propose` on the canonical Global Context;
 the Semantic Context resolver marks it applicable only there while Access decides the current grant. Subject Terms

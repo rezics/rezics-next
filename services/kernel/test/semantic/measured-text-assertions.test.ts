@@ -324,12 +324,8 @@ test('native measured word and character assertions preserve holder text version
     expect(visible.some((s) => s.id === word.id)).toBe(action === 'restore');
   }
   const publicWords = (await read(holder)).statements[words]! as NativeStatement[];
-  expect(publicWords.filter((s) => s.rank !== 'deprecated')).toEqual([word]);
-  expect(publicWords.find((s) => s.id === pending.body.candidate)).toMatchObject({
-    rank: 'deprecated',
-    qualifiers: alternate.qualifiers,
-    references: alternate.references,
-  });
+  expect(publicWords).toEqual([word]);
+  expect(publicWords.find((s) => s.id === pending.body.candidate)).toBeUndefined();
 }, 120_000);
 
 test('edition and characters never become Book work words and incomplete crossstatement qualifiers never match', async () => {

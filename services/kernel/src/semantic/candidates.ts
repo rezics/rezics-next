@@ -1235,7 +1235,7 @@ async function candidatePage(pool: Pool, ring: KeyRing, options: CandidatePageOp
                   ? 'abstained'
                   : null,
           head: row.head,
-          rank: ranks.get(row.candidate_id) ?? null,
+          rank: ranks.get(row.candidate_id) ?? (row.verdict === 'reject' ? 'deprecated' : null),
         });
       }
       if (options.routeKey && candidates.length) {

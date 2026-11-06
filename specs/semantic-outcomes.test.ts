@@ -743,8 +743,8 @@ test('Editor proposes a pending author then acceptor accepts and adopts with one
   });
 });
 
-test('Rejected date candidates remain deprecated and relation adoptions stay within their target slots', async () => {
-  const { digest } = await active();
+test('Rejected date candidates stay off the public subject and relation adoptions stay within their target slots', async () => {
+  await active();
   const work = await create('schema:Book', 'Kokoro');
   const otherWork = await create('schema:Book', 'Botchan');
   const edition = await create('bf:Instance', 'Kokoro, Penguin Classics', {
@@ -759,12 +759,15 @@ test('Rejected date candidates remain deprecated and relation adoptions stay wit
   const proposed = await propose(edition.id, 'schema:datePublished', time('1914-09-20'));
   await accept(edition.id, proposed.candidate, 'reject');
   const shown = (await read(edition.id)).subject.statements['schema:datePublished']!;
-  expect(shown).toHaveLength(2);
-  expect(shown.find((s) => s.id === proposed.candidate)).toMatchObject({
+  expect(shown).toHaveLength(1);
+  expect(shown.find((s) => s.id === proposed.candidate)).toBeUndefined();
+  expect((await candidates(edition.id, 'schema:datePublished')).find((c) => c.id === proposed.candidate)).toMatchObject({
+    decision: 'rejected',
     rank: 'deprecated',
-    value: proposed.input.value,
-    references: [{ hash: expect.any(String), parts: proposed.input.references![0]!.parts }],
-    rezics: { release: digest, revision: 2 },
+    statement: {
+      value: proposed.input.value,
+      references: [{ hash: expect.any(String), parts: proposed.input.references![0]!.parts }],
+    },
   });
   const dateHead = (await candidates(edition.id, 'schema:datePublished')).find(
     (c) => c.id !== proposed.candidate,
