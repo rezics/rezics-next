@@ -30,6 +30,9 @@ export type WorkerConfig = {
   kernelPool?: (url: string) => pg.Pool | Promise<pg.Pool>;
 };
 
+/** Decorate the live default composition without replacing its ambient services or module instances. */
+export type KernelWorkModuleDecorator = (modules: readonly WorkModule[]) => readonly WorkModule[];
+
 export function readWorkerConfig(env: NodeJS.ProcessEnv): WorkerConfig {
   const receiptKeys = readReceiptKeyRing(env);
   const databaseUrl = env.DATABASE_URL;
@@ -69,24 +72,23 @@ export function readWorkerConfig(env: NodeJS.ProcessEnv): WorkerConfig {
 
 export async function startWorker(
   config: WorkerConfig,
-  modules?: readonly WorkModule[],
+  modules?: readonly WorkModule[] | KernelWorkModuleDecorator,
   env: Readonly<Record<string, string | undefined>> = process.env,
 ) {
   composeAccessApplication();
   composeWorkApplication();
   const content = startContentApplication(config.clock ? { clock: config.clock } : undefined);
-  const resolvedModules =
-    modules ??
-    createKernelWorkModules(
-      createDiscoveryProducerEntry,
-      createKernelRuntimeDefaults,
-      composeSemanticIdentityParticipants,
-      {
-        fetch: content.application.ambient.fetch,
-        now: content.application.ambient.now,
-        id: content.application.ambient.id,
-      },
-    );
+  const defaultModules = createKernelWorkModules(
+    createDiscoveryProducerEntry,
+    createKernelRuntimeDefaults,
+    composeSemanticIdentityParticipants,
+    {
+      fetch: content.application.ambient.fetch,
+      now: content.application.ambient.now,
+      id: content.application.ambient.id,
+    },
+  );
+  const resolvedModules = typeof modules === 'function' ? modules(defaultModules) : (modules ?? defaultModules);
   const receiptKeys = readReceiptKeyRing(env, config.receiptKeys);
   initializeEventTypes();
   let pool: pg.Pool;
