@@ -1,4 +1,6 @@
 import { expect, test } from 'bun:test';
+// The full scope composition imports Kernel SQL, so run its existing assertions in the native database lane.
+import '../scripts/dev-stack.test.ts';
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import { relative, resolve } from 'node:path';
 import { createRequire } from 'node:module';
