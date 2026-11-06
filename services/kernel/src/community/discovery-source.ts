@@ -223,33 +223,33 @@ function sourceEvent(realmId: string, realmEpoch: string) {
 /** Commits precisely one fence, using only a committed source preparation.
  * A terminal tombstone wins over any delayed installation of the same fence.
  */
-export async function commitDiscoveryFence(pool: Pool, ref: DiscoveryOperationReference): Promise<string> {
+export async function commitDiscoveryFence(
+  pool: Pool,
+  ref: DiscoveryOperationReference,
+  deadline: number,
+): Promise<string> {
   const source = await readDiscoveryOperation(pool, ref);
   if (!source) throw new Error('Discovery preparation unavailable');
   const route = routeOf(source.realm_id)!;
-  const result = await runCommand(
-    pool,
-    { partition: partitionOf(route), deadline: Date.now() + 30_000 },
-    async (tx) => {
-      if (!(await epoch.run(tx, { route, realm_id: source.realm_id }))) throw new Error('Discovery Realm unavailable');
-      const installed = (
-        await fence.run(tx, {
-          route,
-          realm_id: source.realm_id,
-          realm_epoch: source.realm_epoch,
-          source_route: ref.route,
-          intent: ref.intent,
-          generation: ref.generation,
-          outcome: null,
-          transaction_id: null,
-        })
-      )[0];
-      if (!installed || installed.fence_generation === null) throw new Error('Discovery Realm fence unavailable');
-      if (!installed.changed) return noEffect(installed.fence_generation);
-      bindRealmDiscoveryCommand(tx);
-      return { value: installed.fence_generation, events: [sourceEvent(source.realm_id, source.realm_epoch)] };
-    },
-  );
+  const result = await runCommand(pool, { partition: partitionOf(route), deadline }, async (tx) => {
+    if (!(await epoch.run(tx, { route, realm_id: source.realm_id }))) throw new Error('Discovery Realm unavailable');
+    const installed = (
+      await fence.run(tx, {
+        route,
+        realm_id: source.realm_id,
+        realm_epoch: source.realm_epoch,
+        source_route: ref.route,
+        intent: ref.intent,
+        generation: ref.generation,
+        outcome: null,
+        transaction_id: null,
+      })
+    )[0];
+    if (!installed || installed.fence_generation === null) throw new Error('Discovery Realm fence unavailable');
+    if (!installed.changed) return noEffect(installed.fence_generation);
+    bindRealmDiscoveryCommand(tx);
+    return { value: installed.fence_generation, events: [sourceEvent(source.realm_id, source.realm_epoch)] };
+  });
   return result.value;
 }
 
@@ -257,10 +257,14 @@ export async function commitDiscoveryFence(pool: Pool, ref: DiscoveryOperationRe
  * exact terminal generation in the SAME Realm command. There is no caller-supplied
  * success flag. APPLIED evidence is read from the source journal and native rows.
  */
-export async function projectDiscoveryOutcome(pool: Pool, ref: DiscoveryOperationReference): Promise<void> {
+export async function projectDiscoveryOutcome(
+  pool: Pool,
+  ref: DiscoveryOperationReference,
+  deadline: number,
+): Promise<void> {
   const { operation: source, current, source: contribution } = await readDiscoveryOutcome(pool, ref);
   const route = routeOf(source.realm_id)!;
-  await runCommand(pool, { partition: partitionOf(route), deadline: Date.now() + 30_000 }, async (tx) => {
+  await runCommand(pool, { partition: partitionOf(route), deadline }, async (tx) => {
     if (!(await epoch.run(tx, { route, realm_id: source.realm_id }))) throw new Error('Discovery Realm unavailable');
     let changed = false;
     if (source.phase === 'applied') {
@@ -316,12 +320,12 @@ export async function projectDiscoveryOutcome(pool: Pool, ref: DiscoveryOperatio
  * stale positive state or clear an operation fence. Later aggregate maintenance
  * consumes these native facts and advances its own generation after bucket work.
  */
-export async function projectDiscoveryStart(pool: Pool, delta: DiscoveryDelta): Promise<void> {
+export async function projectDiscoveryStart(pool: Pool, delta: DiscoveryDelta, deadline: number): Promise<void> {
   const prepared = prepareDiscoverySourceApply(delta, await readDiscoverySource(pool, delta.threadId), null);
   if (!prepared) throw new Error('Discovery source delta unavailable');
   const source = prepared.source;
   const route = routeOf(source.realmId)!;
-  await runCommand(pool, { partition: partitionOf(route), deadline: Date.now() + 30_000 }, async (tx) => {
+  await runCommand(pool, { partition: partitionOf(route), deadline }, async (tx) => {
     if (!(await epoch.run(tx, { route, realm_id: source.realmId }))) throw new Error('Discovery Realm unavailable');
     const changed = await project.run(tx, {
       route,

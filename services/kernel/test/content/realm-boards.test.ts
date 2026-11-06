@@ -11,9 +11,12 @@ import { createAccountsWorkModule } from '../../src/access/membership-work.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
-import { communityWorkModule } from '../../src/community/work.ts';
+import { createCommunityWorkModule } from '../../src/community/work.ts';
+
+const communityWorkModule = createCommunityWorkModule({ deadlineNow: () => Date.now() });
 import { createRealmMembership, readMembershipInitiator } from '../../src/community/membership.ts';
 import { createKernel } from '../../src/http/kernel.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { actionCatalogue, IDEMPOTENCY_HEADER, SESSION_HEADER } from '../../src/http/request.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { createWorkClient, type WorkClient } from '../../src/work/client.ts';
@@ -270,6 +273,7 @@ async function startMembershipWorker() {
   });
   membership = createRealmMembership({
     clock: () => new Date(),
+    deadlineNow: () => Date.now(),
     pool: db.pool,
     access: workerAccess,
     referenceKeys: tokens,
@@ -412,6 +416,7 @@ beforeAll(async () => {
     pool: db.pool,
     routeKey,
     tokens,
+    receiptKeys: testReceiptKeys(),
     access: (config) =>
       createAccess({
         ...config,

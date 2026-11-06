@@ -15,6 +15,7 @@ import { dropTestDatabase } from '../support/drop-test-database.ts';
 await import('reylo/register');
 const { productionActions } = await import('../support/production-actions.ts');
 const { createPool } = await import('../../src/database/pool.ts');
+const { configureTestReceiptKeys } = await import('../support/receipt-keys.ts');
 const { readAccount } = await import('../../src/access/account-data.ts');
 const { createAccess } = await import('../../src/access/index.ts');
 const { setBoardScheme } = await import('../../src/community/board-scheme.ts');
@@ -241,6 +242,7 @@ beforeAll(async () => {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL is required');
   pool = createPool(url);
+  configureTestReceiptKeys(pool);
   admin = new Pool({ connectionString: url });
   f = await fixture(pool, admin);
 }, 60_000);
@@ -253,7 +255,13 @@ afterAll(async () => {
 
 test('community and content commands leave a log readBatch decodes, each emitted type closed', async () => {
   const actor = f.actor;
-  const deps = () => ({ clock: () => new Date(), pool, access: f.access, routeKey });
+  const deps = () => ({
+    clock: () => new Date(),
+    pool,
+    access: f.access,
+    routeKey,
+    deadlineNow: () => Date.now(),
+  });
   await step('release', () => bootstrapRelease(pool, bundledRelease));
   await step('grant space', () => f.grant(actor.accountId, root, 'space:create'));
   await step('grant realm', () => f.grant(actor.accountId, root, 'realm:create'));
@@ -321,7 +329,12 @@ test('community and content commands leave a log readBatch decodes, each emitted
   );
   const account = await readAccount(pool, routeOf(actor.accountId)!, actor.accountId);
   if (!account) throw new Error('missing account');
-  const membership = createRealmMembership({ clock: () => new Date(), pool, access: f.access });
+  const membership = createRealmMembership({
+    clock: () => new Date(),
+    deadlineNow: () => Date.now(),
+    pool,
+    access: f.access,
+  });
   const reservation = {
     accountId: actor.accountId,
     principal: { kind: 'realm' as const, id: realm.value.realmId },

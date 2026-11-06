@@ -499,6 +499,7 @@ test('default discovery owns hydration languages before activeRelease', async ()
   const discovery = createDefaultDiscoverySearch(
     {
       pool,
+      deadlineNow: () => Date.now(),
       routeKey: new Uint8Array(32).fill(1),
       access: new Proxy({} as Access, {
         get() {

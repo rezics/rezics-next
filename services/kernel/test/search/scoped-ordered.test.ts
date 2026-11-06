@@ -276,6 +276,7 @@ test('a real product-created catalogue subject has ordered native scope evidence
         pool: config.pool,
         tokens: config.tokens!,
         clock: config.clock ?? (() => new Date()),
+        deadlineNow: () => Date.now(),
         ...(config.access ? { access: config.access } : {}),
       });
       return createKernel({

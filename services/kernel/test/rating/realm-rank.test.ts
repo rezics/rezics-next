@@ -13,6 +13,7 @@ test('protected native rank converges after votes, clear and membership loss wit
   try {
     const { system, kernel } = communityFixtureRuntime();
     const source = createRealmRankSource({
+      deadlineNow: () => Date.now(),
       pool: fixture.database.pool,
       access: system.access,
       tokens: system.tokenKeys,

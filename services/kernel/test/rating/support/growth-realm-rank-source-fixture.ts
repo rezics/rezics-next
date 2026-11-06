@@ -25,7 +25,12 @@ export async function createGrowthRealmRankSourceFixture() {
     const { database } = fixture;
     const route = routeOf(fixture.subjectIds[0]!)!;
     const partition = partitionOf(route);
-    const source = createRealmRankSource({ pool: database.pool, access: system.access, tokens: system.tokenKeys });
+    const source = createRealmRankSource({
+      deadlineNow: () => Date.now(),
+      pool: database.pool,
+      access: system.access,
+      tokens: system.tokenKeys,
+    });
     const request: RealmRankRequest = {
       realmId: fixture.realmId,
       questionId: STANDARD_QUESTION_ID,

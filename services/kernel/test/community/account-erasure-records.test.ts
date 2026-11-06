@@ -41,6 +41,7 @@ async function realm(driver: CommunityDriver, fixture: Fixture, createdAt?: stri
       pool: system.database.pool,
       access: auth.access,
       routeKey: system.routeKey,
+      deadlineNow: () => Date.now(),
       clock: () => new Date(createdAt),
     };
     const context = () => ({ deadline: Date.now() + 30000, idempotencyKey: crypto.randomUUID() });

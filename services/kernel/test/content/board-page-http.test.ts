@@ -231,7 +231,12 @@ test.serial(
       access,
       tokens: testTokens(),
       routeKey: world.routeKey,
-      realmParticipation: createRealmParticipationCheck({ clock: () => new Date(), pool: world.db.pool, access }),
+      realmParticipation: createRealmParticipationCheck({
+        clock: () => new Date(),
+        pool: world.db.pool,
+        access,
+        deadlineNow: () => Date.now(),
+      }),
       async readConversationActivityBatch() {
         if (!changed) {
           changed = true;
