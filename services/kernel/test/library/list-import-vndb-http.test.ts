@@ -354,7 +354,7 @@ test('journalled explicit review and changed reimport survive lost delivery and 
       ),
     });
     if (first.state !== 'uploaded') throw new Error(first.code);
-    expect(first.rows).toBe(2);
+    expect(first.rows).toBe(3);
     const preview = await readShowcasePersonalList({ client, uploadId: first.uploadId });
     if (preview.state !== 'current') throw new Error(preview.code);
     expect(preview.value.rows[0]?.match.status).toBe('unmatched');
@@ -584,7 +584,7 @@ test('VNDB explicit unmatched score choice commits chosen units, zero and clear 
     '<reviews><review id="r1"><text>private</text></review></reviews>',
   );
   const { uploadId, rows } = await c.importUpload(source);
-  expect(rows).toBe(2);
+  expect(rows).toBe(3);
   const page = await c.send('GET', `${base}/${uploadId}`);
   expect(page.rows[0].match.status).toBe('unmatched');
   expect(page.rows[0].fields.score).toEqual({

@@ -1752,6 +1752,7 @@ export function createVndbImport(config: Config) {
             )
               throw new LibraryConflictError();
             await save(tx, account, id, choice.ordinal, { ...currentDecision, status: 'applying' });
+            return { ordinal: choice.ordinal, reviewId: choice.reviewId };
           },
         );
         decision = { ...decision, status: 'applying' };
@@ -2020,7 +2021,7 @@ export function createVndbImport(config: Config) {
           id: score.question.id,
           revision: score.question.revision,
           grain: score.question.grain,
-          meaning: score.question.meaning!,
+          meaning: score.question.meaning ?? score.question.label,
           scale: {
             min: score.question.scale.min,
             max: score.question.scale.max,
