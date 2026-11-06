@@ -221,6 +221,16 @@ function cataloguePageViewer(
   return viewer && 'state' in viewer ? viewer : undefined;
 }
 
+/** Quotation action arrays stay off the catalogue envelope; viewer-actions objects remain. */
+function cataloguePageActions(
+  actions:
+    | SubjectPageData['actions']
+    | { action: string; operationId: string; state: string }[]
+    | undefined,
+): SubjectPageData['actions'] | undefined {
+  return actions && !Array.isArray(actions) ? actions : undefined;
+}
+
 /** Whether the template places a node of this type anywhere, including inside slots. */
 function placesType(content: readonly unknown[], type: string): boolean {
   return content.some(
@@ -357,10 +367,11 @@ export async function loadSubjectPage(
           return { kind: 'redirect', id: profile.handle, target: 'account' };
       }
       // An absent, handleless or foreign profile supplies no admitted public @ address.
-      const { account: _account, viewer, ...catalogue } = result.data;
+      const { account: _account, viewer, actions, ...catalogue } = result.data;
       if (catalogue.subject !== id || (options.realm && !catalogue.context))
         throw new PageReadError('dependency_unavailable', 503);
       const pageViewer = cataloguePageViewer(viewer);
+      const pageActions = cataloguePageActions(actions);
       return {
         kind: 'page',
         page: {
@@ -368,20 +379,23 @@ export async function loadSubjectPage(
           subject: id,
           ...(options.realm ? { requestedRealm: options.realm } : {}),
           ...(pageViewer ? { viewer: pageViewer } : {}),
+          ...(pageActions ? { actions: pageActions } : {}),
         },
       };
     }
     const survivor = result.data.subject;
     if (typeof survivor === 'string' && survivor !== id) return { kind: 'redirect', id: survivor };
     if (options.realm && !result.data.context) throw new PageReadError('dependency_unavailable', 503);
-    const { account: _account, viewer, ...page } = result.data;
+    const { account: _account, viewer, actions, ...page } = result.data;
     const pageViewer = cataloguePageViewer(viewer);
+    const pageActions = cataloguePageActions(actions);
     // Read the existing mounted Terms authority resource once, alongside this page reading.
     // An advice outage must never fail or conceal the admitted public page.
     const currentPage = {
       ...page,
       subject: page.subject ?? null,
       ...(pageViewer ? { viewer: pageViewer } : {}),
+      ...(pageActions ? { actions: pageActions } : {}),
     } as SubjectPageData;
     const reading = subjectBody(currentPage);
     const eligible =
@@ -407,6 +421,7 @@ export async function loadSubjectPage(
         subject: page.subject ?? null,
         ...(options.realm ? { requestedRealm: options.realm } : {}),
         ...(pageViewer ? { viewer: pageViewer } : {}),
+        ...(pageActions ? { actions: pageActions } : {}),
         ...(termsAuthority ? { termsAuthority } : {}),
       },
     };

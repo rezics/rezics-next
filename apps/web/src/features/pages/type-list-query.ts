@@ -225,7 +225,7 @@ const readTypeList = createServerFn({ method: 'GET', strict: false })
       subject: response.subject ?? null,
       ...(response.account && 'account' in target
         ? { account: { id: response.account, handle: target.account } }
-        : { account: undefined }),
+        : {}),
     } as SubjectPageData;
     if (!findTypeList(page.document, data.node)) throw notFound();
     return {
