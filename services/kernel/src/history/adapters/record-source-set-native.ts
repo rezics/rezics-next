@@ -27,9 +27,9 @@ let producer: RecordSourceSetProducer | undefined;
 
 export function nativeRecordSourceSetProducer(): RecordSourceSetProducer {
   if (producer) return producer;
-  if (!existsSync(new URL('../semantic/record-source-set.ts', import.meta.url)))
+  if (!existsSync(new URL('../../semantic/record-source-set.ts', import.meta.url)))
     throw new RecordSourceSetUnavailableError();
-  const native: RecordSourceSetProducer = requireNative('../semantic/record-source-set.ts');
+  const native: RecordSourceSetProducer = requireNative('../../semantic/record-source-set.ts');
   producer = native;
   return native;
 }
