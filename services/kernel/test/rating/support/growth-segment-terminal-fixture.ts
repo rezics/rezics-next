@@ -6,7 +6,9 @@ import { createAccountsWorkModule } from '../../../src/access/membership-work.ts
 import { GLOBAL_CONTEXT } from '../../../src/access/gates/catalogue.ts';
 import type { AccessRealmRoleReader } from '../../../src/request/access.ts';
 import { createRealmMembership, readMembershipInitiator } from '../../../src/community/membership.ts';
-import { communityWorkModule } from '../../../src/community/work.ts';
+import { createCommunityWorkModule } from '../../../src/community/work.ts';
+
+const communityWorkModule = createCommunityWorkModule({ deadlineNow: () => Date.now() });
 import { createKernel } from '../../../src/http/kernel.ts';
 import { IDEMPOTENCY_HEADER } from '../../../src/http/request.ts';
 import { createRatingWorkModule } from '../../../src/rating/work-module.ts';
@@ -178,6 +180,7 @@ export async function openTerminalGrowthFixture(): Promise<TerminalGrowthFixture
     });
     const membership = createRealmMembership({
       clock: () => new Date(),
+      deadlineNow: () => Date.now(),
       pool: database.pool,
       access: production.access,
       referenceKeys: sessionKeys,

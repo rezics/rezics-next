@@ -24,6 +24,7 @@ import {
 import type { Access } from '../../src/request/access.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue, IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { newId, routeOf, partitionOf } from '../../src/route/route.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 
@@ -203,6 +204,7 @@ beforeAll(async () => {
     pool,
     routeKey,
     tokens,
+    receiptKeys: testReceiptKeys(),
     access: (config) =>
       (access = createAccess({
         ...config,
@@ -687,13 +689,15 @@ test.serial(
         },
         async operation() {
           const changed = await board.setBoardScheme(
-            { pool, access, routeKey },
+            { pool, access, routeKey, clock: () => new Date(), deadlineNow: () => Date.now() },
             actor,
             { realmId: probe.realmId, schemeId, expectedHead: head },
             { deadline: Date.now() + 90_000, idempotencyKey: crypto.randomUUID() },
           );
           head = changed.value.revisionId;
-          const read = await readRealm({ pool, access }, actor, probe.realmId, { deadline: Date.now() + 90_000 });
+          const read = await readRealm({ deadlineNow: () => Date.now(), pool, access }, actor, probe.realmId, {
+            deadline: Date.now() + 90_000,
+          });
           expect(read?.boardSchemeId).toBe(schemeId);
           expect(read?.headRevisionId).toBe(head);
           return changed;

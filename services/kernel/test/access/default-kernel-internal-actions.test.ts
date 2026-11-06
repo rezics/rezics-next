@@ -118,7 +118,12 @@ beforeAll(async () => {
   const mounted = actionCatalogue(kernel);
   expect(mounted.has('account:manage')).toBe(false);
   // Auth's native bindings use the same default resolver and complete mounted catalogue.
-  access = createKernelAccessResolver({ pool: db.pool, tokens: referenceKeys, clock }).resolveAccess({
+  access = createKernelAccessResolver({
+    pool: db.pool,
+    tokens: referenceKeys,
+    clock,
+    deadlineNow: () => Date.now(),
+  }).resolveAccess({
     actions: mounted,
   });
   const actions = accessActionCatalogue(mounted);
@@ -321,7 +326,12 @@ test('internal actions are additive, keep identical route metadata and reject co
       const declared = actionCatalogue(mountedAction(action, conflict));
       expect(() => createAccess({ actions: declared })).toThrow(action);
       expect(() =>
-        createKernelAccessResolver({ pool: db.pool, tokens: referenceKeys, clock }).resolveAccess({
+        createKernelAccessResolver({
+          pool: db.pool,
+          tokens: referenceKeys,
+          clock,
+          deadlineNow: () => Date.now(),
+        }).resolveAccess({
           actions: declared,
         }),
       ).toThrow(action);

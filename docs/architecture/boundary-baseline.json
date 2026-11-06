@@ -4867,11 +4867,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/community/realm-claim-review.ts",
-          "edge": "value import \"../access/access-clock.ts\" #1 => services/kernel/src/access/access-clock.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/community/realm-claim-review.ts",
           "edge": "value import \"../access/account-data.ts\" #1 => services/kernel/src/access/account-data.ts"
         },
         {
@@ -5573,21 +5568,6 @@
           "rule": "rule 3",
           "file": "services/kernel/src/community/member-count.ts",
           "edge": "value import \"./party-locator.ts\" #1 => services/kernel/src/community/party-locator.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/community/own-realms-view.ts",
-          "edge": "value import \"./own-realms-viewer.ts\" #1 => services/kernel/src/community/own-realms-viewer.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/community/own-realms-viewer.ts",
-          "edge": "value import \"./own-realms.ts\" #1 => services/kernel/src/community/own-realms.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/community/own-realms.ts",
-          "edge": "value import \"./own-realms-view.ts\" #1 => services/kernel/src/community/own-realms-view.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -16287,11 +16267,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/http/kernel.ts",
           "edge": "value import \"../commerce/routes.ts\" #1 => services/kernel/src/commerce/routes.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/http/kernel.ts",
-          "edge": "value import \"../community/actions.ts\" #1 => services/kernel/src/community/actions.ts"
         },
         {
           "rule": "rule 2",

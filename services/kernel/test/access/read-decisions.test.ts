@@ -376,6 +376,7 @@ test('the native Realm adapter batches current and negative proofs across routes
   const { testTokens } = await import('../support/test-kernel.ts');
   const { GLOBAL_CONTEXT } = await import('../../src/semantic/definitions.ts');
   const resolver = createKernelAccessResolver({
+    deadlineNow: () => Date.now(),
     pool,
     tokens: testTokens(),
     clock: () => new Date(),

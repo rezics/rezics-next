@@ -23,6 +23,7 @@ const deps = () => ({
   access: system.access,
   routeKey: system.routeKey,
   clock: () => new Date(at),
+  deadlineNow: () => Date.now(),
 });
 const context = () => ({ deadline: Date.now() + 30_000, idempotencyKey: crypto.randomUUID() });
 async function request(method: string, path: string, bearer: string, body?: unknown) {

@@ -1,6 +1,7 @@
 -- Bodies are fetched only after native exact-revision and ancestry disclosure.
+-- Keys are a JSON array bound as text so the reader never treats the list as a PostgreSQL array.
 WITH input AS NOT MATERIALIZED (
-  SELECT k.route, k.id FROM jsonb_to_recordset(:keys::jsonb) AS k(route integer, id uuid)
+  SELECT k.route, k.id FROM jsonb_to_recordset((:keys::text)::jsonb) AS k(route integer, id uuid)
 )
 SELECT r.revision_id, r.post_id, r.body, r.body_sha256, r.licence
 FROM input i

@@ -75,6 +75,7 @@ test('the default kernel Access receives every mounted action and resolves the c
 test('a composing kernel refuses early Access resolution and uses its final catalogue instead of the caller subset', () => {
   let mounted: ActionCatalogue | undefined;
   const resolver = createKernelAccessResolver({
+    deadlineNow: () => Date.now(),
     pool: db.pool,
     tokens: testTokens(),
     clock: () => new Date(),
@@ -94,6 +95,7 @@ test('a composing kernel refuses early Access resolution and uses its final cata
 test('an explicitly supplied Access instance keeps its identity during composition', () => {
   const installed = accessModule.createAccess({ actions: new Map() });
   const resolver = createKernelAccessResolver({
+    deadlineNow: () => Date.now(),
     pool: db.pool,
     tokens: testTokens(),
     clock: () => new Date(),

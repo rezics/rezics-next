@@ -10,7 +10,6 @@ import { isDeepStrictEqual } from 'node:util';
 import { activeRelease } from '../semantic/definitions.ts';
 import { publicFilterSource } from '../semantic/public-filter-source.ts';
 import { createWorkClient } from '../work/client.ts';
-import type { Pool } from 'pg';
 import { deadlineClient } from '../access/authenticate.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { readListPresentationFacts } from '../semantic/list-presentation.ts';
@@ -61,6 +60,8 @@ import {
 
 export type DefaultDiscoverySearchConfig = DefaultPublicFilterRuntimeConfig & {
   keys: KeyRing;
+  /** Real wall time for the space-entry deadlines of discovery pages, supplied by composition. */
+  deadlineNow: () => number;
   spaceEntryActions?: SpaceEntryActionRuntime;
   spaceEntryFollow?: SpaceEntryFollowProducer;
 };
