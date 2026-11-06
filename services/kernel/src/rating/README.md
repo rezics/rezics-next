@@ -1281,12 +1281,16 @@ Each slot is null for proven absence, or
 `[sourceTargetId, units, revision, countedRevision, countedTarget, changedAt, transactionId]`.
 It retains explicit clears, zero, source replacement and revision-only changes, with a 4096-byte input ceiling.
 Consumers retain it unchanged. The provider entry additionally includes `subject.identity`, the version-1
-`IdentityRatingReviewOperand` returned by `readIdentityRatingReview` from `semantic/index.ts` for the exact
-requested/canonical pair. Its ordered source identities, sorted source homes, sorted persisted control locators
-and strict evidence string remain intact in the normalized guard and digest. Semantic owns validation and
-classification; Content does not reconstruct its proof or replace it at command time. Preparation freezes the
-operand without authority. Old guards omit this field and keep their original encoding and digest for historical
-replay; a fresh command using one requires a new explicit review. Neither preparation nor review holds a lock.
+`IdentityRatingReviewOperand` returned by `readIdentityRatingReview` from `semantic/identity-core/index.ts` for the exact
+requested/canonical pair. Its ordered source identities, sorted numeric source homes, sorted persisted control
+locator partitions and strict evidence string remain intact in the normalized guard and digest. Semantic owns
+validation and classification; Content does not reconstruct its proof or replace it at command time. Preparation
+freezes the declared operand fields without authority, including after PostgreSQL JSONB reorder. Old guards omit
+this field and keep their original encoding and digest for historical replay; a fresh command using one requires a
+new explicit review. Neither preparation nor review holds a lock.
+
+Decision: `own-votes-review` imports `IdentityRatingReviewOperand` as a type-only binding from Semantic's public
+identity-core entry, not from the semantic root. No extra refusal is added.
 
 The complete closed, copied guard participates in the existing vote receipt digest. Current native account and
 Access admission precede receipt lookup. Fresh execution compares question meaning/lifecycle, canonical target,
