@@ -23,7 +23,9 @@ test('Novel-template light novel series and volumes keep their exact und archive
     });
     expect(converted.outcome).toBe('converted');
     const names = (converted.proposals ?? []).flatMap((command) =>
-      command.op === 'propose' && command.statement.property.id === 'schema:name'
+      command.op === 'propose' &&
+      command.statement.property.id === 'schema:name' &&
+      command.statement.value.type === 'value'
         ? [command.statement.value.content]
         : [],
     );

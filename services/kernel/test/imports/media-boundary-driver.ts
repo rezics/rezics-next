@@ -59,26 +59,25 @@ async function sqlLoader() {
     await writeFile(
       loader,
       `import { readFileSync, renameSync, writeFileSync } from 'node:fs';
-import reylo from ${JSON.stringify(import.meta.resolve('reylo/esbuild'))};
+import compiler from ${JSON.stringify(import.meta.resolve('reylo/jest'))};
 const path = ${JSON.stringify(cache)};
 const compiled = new Map(JSON.parse(readFileSync(path, 'utf8')));
 Reflect.set(globalThis, Symbol.for('rezics.import.media.flush-sql-cache'), () => {
   writeFileSync(path + '.pending', JSON.stringify([...compiled]));
   renameSync(path + '.pending', path);
 });
-// The asynchronous build adapter keeps compilation off Reylo's synchronous
-// worker bridge while Bun is loading this process's application graph.
-reylo().setup({ onLoad(options, compile) {
-  Bun.plugin({ name: 'native-reylo-cache', setup(build) {
-    build.onLoad(options, async (args) => {
-      const source = readFileSync(args.path, 'utf8');
-      const previous = compiled.get(args.path);
-      if (previous?.source === source) return { loader: 'js', contents: previous.code };
-      const result = await compile(args);
-      compiled.set(args.path, { source, code: result.contents });
-      return { loader: 'js', contents: result.contents };
-    });
-  } });
+// Work adapters load native SQL modules through require(). An async onLoad
+// makes those modules async, which Bun cannot require(). Compile
+// synchronously and flush the map only at process handoff.
+Bun.plugin({ name: 'native-reylo-cache', setup(build) {
+  build.onLoad({ filter: /\\.sql$/ }, ({ path: file }) => {
+    const source = readFileSync(file, 'utf8');
+    const previous = compiled.get(file);
+    if (previous?.source === source) return { loader: 'js', contents: previous.code };
+    const { code } = compiler.process(source, file, { supportsStaticESM: true, configString: '' });
+    compiled.set(file, { source, code });
+    return { loader: 'js', contents: code };
+  });
 } });
 `,
     );
@@ -1135,8 +1134,8 @@ if (import.meta.main && process.argv.some((arg) => arg.startsWith('--media-'))) 
         }
       },
     });
-    // Flush once at the process handoff, rather than serializing the growing
-    // compilation map after every imported SQL module.
+    // Flush once at the process handoff so later children reuse compiled SQL
+    // without writing the map after every imported module.
     Reflect.get(globalThis, Symbol.for('rezics.import.media.flush-sql-cache'))?.();
     console.log(`MEDIA_READY ${server.url.origin}`);
   } catch (error) {
