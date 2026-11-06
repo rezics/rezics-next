@@ -120,6 +120,10 @@ Missing reader, page currentness, native permission or a current viewer slot lea
 admitted write always settles through the owner's exact current read, which must meet the selected count watermark
 when one was supplied; the owner keeps the original retry operands and discards late reads after source retirement.
 
+Decision: composed Subject community cards block further reaction choices while their explicit command is pending.
+The shared control keeps its mounted queue and optimistic view during this lock; equal component registries
+cannot replace the native command owner or its retry operands.
+
 A thread return descriptor may retain the disclosed row ID for focus. It carries no title, author or credentials.
 Returning reads the current Board source before focusing that surviving row, or the feed heading if it disappeared.
 The continuation bound is the installed 4,096-character Board cursor limit.

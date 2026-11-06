@@ -163,6 +163,9 @@ test('the default ThreadList keeps the original pending and uncertain reaction t
       await render();
       expect(host.querySelector('[data-slot="reaction-chip"]')).toBe(chip);
       expect(chip.disabled).toBe(true);
+      expect(chip.getAttribute('aria-pressed')).toBe('true');
+      expect(chip.closest('[data-slot="reactions"]')?.getAttribute('aria-busy')).toBe('true');
+      chip.click();
       expect(sends).toHaveLength(1);
     }
     await act(async () => settle({ ok: false, reason: 'unavailable' }));

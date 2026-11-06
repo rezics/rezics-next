@@ -121,6 +121,8 @@ export function SubjectCommunityInteractions({
           returnTo={replyHref}
           personalReady
           reactionOrigin={lifetime}
+          readAuthority={readAuthority}
+          queueChanges={false}
           settleWithRead
           sourceWatermark={reactionsAsOf!}
           presentation="chips"
