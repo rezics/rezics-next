@@ -77,3 +77,20 @@ What this branch still owns, and what it has not yet proved:
 - Hot and active board pages are not covered natively yet; they need board rank rows.
 - The composed `specs/content-user-cases-outcomes.test.ts` (19 cases) still fails at provisioning until Accounts122's
   Global authorization lands.
+
+## Third base blocker: anonymous visibility of seeded content and member reaction authority
+
+Check 78b0bbff ran the landing set on the final code (`a94948e022`). Five files failed:
+
+- `late-board-revocation-point-reads` and `late-board-revocation-pages`: the first anonymous baseline read of a seeded
+  published thread, post, revision or Board page returns 404, before any late change. Their seed now matches Subject
+  threads: a visible concept for the Board and a subject reference on each revision.
+- `board-hot-http`: hot and active Board pages return 404 for seeded Boards.
+- `reaction-counts-http`: member reaction writes return 403, and an anonymous post-page read returns 404 at its root.
+- `subject-threads-http`: anonymous Subject listings of seeded threads return an empty list.
+
+The changed routes (thread head, post head and the thread post page) run their first read before any changed code, and
+the Subject, Board page and reaction-write paths are unchanged, so these are not regressions from the read-ordering fix.
+A comparison run of the same landing set on the base kernel source was queued and had not started when this attempt
+ended. What settles it: the base run reproducing the same failures, or Access and Accounts establishing the public
+floor for seeded anonymous reads and member `reaction:set` authority on this base. Then the landing set must pass.
