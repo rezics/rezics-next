@@ -1,10 +1,12 @@
 -- migrate:up
--- The witness refresh reads only its state. Former locals named like the witness columns made the
--- unqualified tuple references ambiguous, so every Space refresh failed.
+-- The witness refresh keeps the witness fence in locals with their own names. A reference row has no producer
+-- fence, so its removal uses the witness fence; work rows read their own qualified columns.
 CREATE OR REPLACE FUNCTION community.refresh_space_discovery_tuple_witness(r integer, id uuid) RETURNS void
-LANGUAGE plpgsql AS $$
+    LANGUAGE plpgsql
+    AS $$
 DECLARE current_space_revision uuid; current_realm_id uuid; current_realm_revision uuid;
         current_state text; p integer; next_generation bigint;
+        witness_producer_epoch numeric(20,0); witness_source_position numeric(20,0);
 BEGIN
   SELECT s.head_revision_id, h.realm_id, h.head_revision_id
     INTO current_space_revision, current_realm_id, current_realm_revision
@@ -13,7 +15,7 @@ BEGIN
     WHERE s.route=r AND s.space_id=id;
   IF NOT FOUND THEN RETURN; END IF;
   p := r / 16;
-  SELECT state INTO current_state
+  SELECT state,producer_epoch,source_position INTO current_state,witness_producer_epoch,witness_source_position
     FROM community.space_discovery_tuple_witness
     WHERE route=r AND space_id=id FOR UPDATE;
   IF NOT FOUND THEN
@@ -51,11 +53,12 @@ BEGIN
     SELECT r,id,next_generation,old.tuple_route,old.source,old.external_id,old.field_group,'remove',
            old.producer_epoch,old.source_position
       FROM (
-        SELECT tuple_route,source,external_id,field_group,producer_epoch,source_position
-          FROM community.space_discovery_tuple_reference WHERE route=r AND space_id=id
+        SELECT tr.tuple_route,tr.source,tr.external_id,tr.field_group,
+               witness_producer_epoch AS producer_epoch,witness_source_position AS source_position
+          FROM community.space_discovery_tuple_reference tr WHERE tr.route=r AND tr.space_id=id
         UNION
-        SELECT tuple_route,source,external_id,field_group,producer_epoch,source_position
-          FROM community.space_discovery_tuple_work WHERE route=r AND space_id=id
+        SELECT w.tuple_route,w.source,w.external_id,w.field_group,w.producer_epoch,w.source_position
+          FROM community.space_discovery_tuple_work w WHERE w.route=r AND w.space_id=id
       ) old
     ON CONFLICT DO NOTHING;
     DELETE FROM community.space_discovery_tuple_work WHERE route=r AND space_id=id
