@@ -243,6 +243,7 @@ async function startDriver(
     const app = compose({
       receiptKeys: testReceiptKeys(),
       pool: runtimePool,
+      requestDeadlineMs: 30_000,
       ...(options.clock ? { clock: options.clock } : {}),
       routeKey,
       tokens: sessionKeys,

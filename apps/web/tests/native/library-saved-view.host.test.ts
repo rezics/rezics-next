@@ -10,6 +10,12 @@ import { m } from '../../src/paraglide/messages.js';
 
 setDefaultTimeout(900_000);
 
+const writeRateOverrides = JSON.stringify({
+  'new-account': { write: { maximum: 100_000, seconds: 60 } },
+  member: { write: { maximum: 100_000, seconds: 60 } },
+  trusted: { write: { maximum: 100_000, seconds: 60 } },
+  service: { write: { maximum: 100_000, seconds: 60 } },
+});
 const standardQuestion = '00000000-0000-7000-8000-000000000001';
 const locales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'] as const;
 const evidenceDirectory = resolve(import.meta.dir, '../../../../.temp/library-saved-view');
@@ -31,7 +37,7 @@ let fixture: {
 };
 
 nativeBeforeAll(lifecycle, 900_000, async () => {
-  stack = await startNativeWebStack();
+  stack = await startNativeWebStack({ writeRateOverrides });
   await expect(await stack.kernel('/v1/definitions/active')).toBeInstanceOf(Response);
   for (const group of ['personal_library', 'reading_progress'] as const) {
     const opened = await stack.kernel(

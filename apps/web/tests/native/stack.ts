@@ -24,6 +24,10 @@ import { readCommerceConfig } from '../../../../services/kernel/src/commerce/con
 import { createStripePort } from '../../../../services/kernel/src/commerce/stripe.ts';
 import { createWorkClient, type WorkClient } from '../../../../services/kernel/src/work/client.ts';
 import type { OpenSearch } from '../../../../services/kernel/src/search/opensearch.ts';
+import { createWriteRateLimiter } from '../../../../services/kernel/src/access/write-rate.ts';
+
+/** Same budget as kernel `testKernel`. Production's 2s default is too tight for fixture grants. */
+const NATIVE_WEB_REQUEST_DEADLINE_MS = 30_000;
 
 export type NativeCredentials = { authorization: string; cookie?: string };
 export type NativeKernelRequest = {
@@ -791,8 +795,18 @@ async function startStack(): Promise<
                   : observeAccess(factory),
             }
           : dependencies;
+        const writeRateOverrides = process.env.NATIVE_WEB_STACK_WRITE_RATE_OVERRIDES;
         kernel = createKernel({
           ...observedDependencies,
+          requestDeadlineMs: observedDependencies.requestDeadlineMs ?? NATIVE_WEB_REQUEST_DEADLINE_MS,
+          ...(writeRateOverrides
+            ? {
+                writeRate: createWriteRateLimiter({
+                  secret: 'semantic-outcome-write-rate-secret-with-at-least-32-bytes',
+                  overrides: writeRateOverrides,
+                }),
+              }
+            : {}),
           ...(commerce
             ? {
                 commerce: {
