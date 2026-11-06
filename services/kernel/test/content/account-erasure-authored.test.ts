@@ -274,6 +274,17 @@ beforeAll(async () => {
   const url = pool.options.connectionString!;
   growth = await openGrowthDatabase(url);
   growth.pool.options.max = 1; // Every cross-partition checkout must be released.
+  const { space } = await http<{ space: { spaceId: string } }>('other', 'POST', '/v1/spaces', {
+    title: 'Erasure space',
+    summary: '',
+  });
+  const { realm } = await http<{ realm: { realmId: string; headRevisionId: string } }>('other', 'POST', '/v1/realms', {
+    spaceId: space.spaceId,
+    title: 'Erasure realm',
+    summary: '',
+    visibility: 'public',
+    contextId: GLOBAL_CONTEXT,
+  });
   worker = spawn(
     process.execPath,
     ['run', new URL('./support/disclosure-fixtures.ts', import.meta.url).pathname, '--disclosure-worker'],
@@ -300,17 +311,6 @@ beforeAll(async () => {
     worker.once('exit', (code) => reject(new Error(`Worker exited ${code}: ${output}`)));
   });
   await ready;
-  const { space } = await http<{ space: { spaceId: string } }>('other', 'POST', '/v1/spaces', {
-    title: 'Erasure space',
-    summary: '',
-  });
-  const { realm } = await http<{ realm: { realmId: string; headRevisionId: string } }>('other', 'POST', '/v1/realms', {
-    spaceId: space.spaceId,
-    title: 'Erasure realm',
-    summary: '',
-    visibility: 'public',
-    contextId: GLOBAL_CONTEXT,
-  });
   const { subject: scheme } = await http<{ subject: { id: string } }>('other', 'POST', '/v1/subjects', {
     type: 'skos:ConceptScheme',
     labels: { en: 'Erasure scheme' },

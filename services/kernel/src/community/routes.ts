@@ -35,6 +35,7 @@ import { parseItem } from 'structured-headers';
 import type { Static, TSchema } from 'typebox';
 import { Compile } from 'typebox/compile';
 import { GrantDeniedError } from '../access/grant-commands.ts';
+import { RealmLastOwnerError } from '../access/resource-access-errors.ts';
 import { normalizeHandle } from '../access/lifecycle.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import { withConnection } from '../database/pool.ts';
@@ -792,7 +793,10 @@ function communityProblem(error: unknown): never {
   if (error instanceof ContentNotFoundError) throw new ProblemError('not_found');
   if (error instanceof TypeError && error.message === 'Invalid content cursor')
     throw new ProblemError('invalid_cursor');
-  // Preserve the native ownership subclass for the central problem mapper.
+  // Last-owner stays a 409 for the central mapper. GrantDeniedError extends the
+  // resource-write-denied superclass, so it must be classified before that throw.
+  if (error instanceof RealmLastOwnerError) throw error;
+  if (error instanceof GrantDeniedError) throw new ProblemError('forbidden');
   if (error instanceof ResourceAccessWriteDeniedError) throw error;
   if (error instanceof MemberPageUnavailableError) throw new ProblemError('dependency_unavailable');
   if (error instanceof RealmBanRoleError) throw new ProblemError('conflict', { detail: error.message });
@@ -809,7 +813,6 @@ function communityProblem(error: unknown): never {
   if (error instanceof ContainerLifecycleConflictError) throw new ProblemError('precondition_failed');
   if (error instanceof SpaceConflictError || error instanceof RealmConflictError)
     throw new ProblemError('precondition_failed');
-  if (error instanceof GrantDeniedError) throw new ProblemError('forbidden');
   if (error instanceof RealmMembershipConflictError) throw new ProblemError('idempotency_conflict');
   throw error;
 }

@@ -244,9 +244,12 @@ test('Space owner with Global realm:create mints a distinct Realm on the Space r
   expect(created.partition).toBe(partitionOf(route));
   const parent = preparations.find((entry) => entry.action === 'realm:create');
   const owner = preparations.find((entry) => entry.action === 'space:manage');
+  const contextRead = preparations.find((entry) => entry.action === 'context:read');
   expect(parent).toBeDefined();
   expect(owner).toBeDefined();
+  expect(contextRead).toBeDefined();
   expect(owner!.context).toBe(parent!.context);
+  expect(contextRead!.context).toBe(parent!.context);
   expect(await read(realmId)).toMatchObject({
     realmId,
     spaceId,

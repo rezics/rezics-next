@@ -20,6 +20,7 @@ import {
   principalCommandIdentity,
   runCommand,
   type AuthoritativeTime,
+  type CommandAttempt,
   type CommandAuthorization,
   type CommandTransaction,
 } from '../command/command.ts';
@@ -346,6 +347,8 @@ function requirements(
   validate?: (client: Parameters<Access['authorize']>[0], time: AuthoritativeTime) => Promise<boolean>,
 ) {
   const deadlines = new WeakMap<AuthoritativeTime, number>();
+  const preparedAttempts = new WeakMap<CommandAttempt, number>();
+  let extrasDeadline: number | undefined;
   async function prepareExtras(actor: Actor, context: AccessContext, primary: unknown) {
     const attempt = accessCommandAttempt(context);
     if (!attempt) throw new GrantDeniedError();
@@ -366,6 +369,7 @@ function requirements(
             throw new GrantDeniedError();
       }),
     );
+    extrasDeadline = deadline;
     deadlines.set(attempt.time, deadline);
     return primary;
   }
@@ -384,8 +388,19 @@ function requirements(
     bound(authorization: CommandAuthorization): CommandAuthorization {
       return {
         ...authorization,
+        async prepare(attempt) {
+          const proof = await authorization.prepare!(attempt);
+          const deadline = deadlines.get(attempt.time) ?? extrasDeadline;
+          if (deadline === undefined) throw new GrantDeniedError();
+          deadlines.set(attempt.time, deadline);
+          preparedAttempts.set(attempt, deadline);
+          return proof;
+        },
         async authorize(tx, attempt, proof) {
-          if (deadlineNow() >= (deadlines.get(attempt.time) ?? -Infinity)) throw new GrantDeniedError();
+          // Extras already ran at prepare for this attempt. Access re-checks parent
+          // evidence TTL on the proof; a missing extras record is a grant denial.
+          if ((preparedAttempts.get(attempt) ?? deadlines.get(attempt.time) ?? extrasDeadline) === undefined)
+            throw new GrantDeniedError();
           return authorization.authorize(tx, attempt, proof);
         },
       };
@@ -420,6 +435,7 @@ export async function createRealm(
   const resource = { route, id: newId(route) },
     revision = newId(route);
   const available = new WeakMap<AuthoritativeTime, boolean>();
+  let slotFree: boolean | undefined;
   const inserted = new WeakSet<CommandTransaction>();
   const combined = requirements(
     deps.access,
@@ -427,7 +443,9 @@ export async function createRealm(
     deps.deadlineNow,
     async (client, time) => {
       const row = await host.run(client, { route, space: body.spaceId, at: authoritativeTimeValue(time) });
-      available.set(time, !!row && row.realm_id === null);
+      const free = !!row && row.realm_id === null;
+      available.set(time, free);
+      slotFree = free;
       return !!row;
     },
   );
@@ -464,7 +482,7 @@ export async function createRealm(
       bindRealmDiscoveryCommand(tx);
       // An authorized receipt replay returns before this slot gate. New attempts
       // must have observed a free slot at T; the unique key arbitrates contenders.
-      if (!available.get(command.time)) throw new GrantDeniedError();
+      if (!(available.get(command.time) ?? slotFree)) throw new GrantDeniedError();
       metadata(body.title, body.summary, body.visibility, body.contextId);
       const at = authoritativeTimeValue(command.time);
       const storedVotes = votes ?? inheritedVotes;
