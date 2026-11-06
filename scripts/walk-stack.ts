@@ -243,7 +243,23 @@ export function walkIssuerForward(request: Request, nativeOrigin: string): Reque
   const native = new URL(nativeOrigin);
   url.protocol = native.protocol;
   url.host = native.host;
-  return new Request(url, request);
+  const init: RequestInit & { duplex?: 'half' } = {
+    method: request.method,
+    headers: request.headers,
+    redirect: 'manual',
+  };
+  if (request.body !== null) {
+    init.body = request.body;
+    init.duplex = 'half';
+  }
+  return new Request(url, init);
+}
+
+const dbosDiagnosticBlock = /\{\s*"?code"?:\s*"dbos_diagnostic"[\s\S]*?\}\n?/g;
+
+/** Drop DBOS chatter so a failed walk's 32 KiB reprint still shows Kernel create errors. */
+export function walkStackLogExcerpt(recorded: string, limit = 32_768): string {
+  return recorded.replace(dbosDiagnosticBlock, '').slice(-limit);
 }
 
 /** Walks wait for Kernel and native Auth when frontends are deferred; otherwise Web, issuer and Kernel. */

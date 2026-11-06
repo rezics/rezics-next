@@ -78,7 +78,7 @@ Decision: remote placement forwards the original launcher `GOAL_TASK_ID`, `GOAL_
 run slice, and start Kernel HTTP without bun --smol and without `--watch` so catalogue subject create has heap.
 Waiters stay --smol. Native Auth and Kernel stay up for persona/seed;
 Web, Auth pages, Playwright and the one-worker pool start after seed, with issuer JWKS forwarded through native Auth
-until the pages bind. A failed journey reprints the last 32 KiB of the stack log. Anonymous locale/viewport captures share one Chromium and own one context each; the signed-in
+until the pages bind. A failed journey reprints the last 32 KiB of the stack log after dropping DBOS diagnostic objects, and a failed seed prints the public HTTP status, code and type. Anonymous locale/viewport captures share one Chromium and own one context each; the signed-in
 session is a second browser.
 Concurrent remote-check walks share `/tmp/rezics-walk-stacks` and skip Docker-published or already-allocated slot ports.
 The walk restores only the launcher's pinned archives onto `/srv/rezics-check/datasets/dumps/downloads`, then extracts

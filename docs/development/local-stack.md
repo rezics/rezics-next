@@ -297,7 +297,7 @@ SIGTERM, and bounded docker kill then removal so a Vite SSR abort loop, a stuck 
 cannot replace a seeded product walk. Walk `start` waits for the walk signal rather than the first child exit.
 A child that exits before that signal fails start with a non-zero code, and the walk parent reprints
 the last 32 KiB of `.temp/walk/<task>/stack.log` so host or Kernel death cannot look like a clean ready wait.
-A failed journey reprints that same log so a Kernel `internal_error` during catalogue bootstrap is visible.
+A failed journey reprints that same log after dropping DBOS diagnostic objects so a Kernel `internal_error` during catalogue bootstrap is visible. Seed CLI failures include the public HTTP status, code and type. The walk waits for issuer JWKS through native Auth before seed.
 `stopSpawned` accepts Bun subprocesses whose `signalCode` may be a number or a signal name.
 Decision: remote placement forwards the original launcher `GOAL_TASK_ID`, `GOAL_ATTEMPT` and `GOAL_ACCEPTANCE_REQUIRES`
 into the walk command without rewriting recorded argv. Walk search nodes use a 128m heap without mmap, Postgres 32MB

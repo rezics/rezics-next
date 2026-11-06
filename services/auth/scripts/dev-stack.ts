@@ -20,6 +20,7 @@ import {
   walkReadyFetchTimeoutMs,
   walkReadyUrls,
   walkStackLimit,
+  walkStackLogExcerpt,
   walkStackNames,
   walkStackPorts,
   WALK_DOCKER_REMOVE_MS,
@@ -1213,8 +1214,8 @@ async function runWalkSetup(
 /** Host and Kernel stderr live here; reprint on start death and on a failed journey so create 500s are visible. */
 async function reprintWalkStackLog(log: string): Promise<void> {
   try {
-    const recorded = await readFile(log, 'utf8');
-    if (recorded) process.stderr.write(recorded.slice(-32_768));
+    const excerpt = walkStackLogExcerpt(await readFile(log, 'utf8'));
+    if (excerpt) process.stderr.write(excerpt);
   } catch {
     // start may have died before creating the log
   }

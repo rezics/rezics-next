@@ -234,6 +234,8 @@ try {
   assert(jwks.ok, `Native Auth JWKS must answer before seed: HTTP ${jwks.status}`);
   const proxy = issuerProxy();
   try {
+    const issuerJwks = await fetch(`${stack.issuer}/.well-known/jwks.json`, { signal: AbortSignal.timeout(5_000) });
+    assert(issuerJwks.ok, `Issuer JWKS through native Auth must answer before seed: HTTP ${issuerJwks.status}`);
     await run([...bun, 'scripts/datasets/cross-media-seed.ts', '--dev'], {
       ...process.env,
       ...(await envFile(resolve(root, '.temp/local-stack/seed.env'))),

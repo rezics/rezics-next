@@ -3,7 +3,7 @@ import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { createKernelClient } from '@rezics/client';
 import { createAccountTokenProvider, IMPORTER_SCOPES } from '../../services/importer/src/credentials.ts';
-import { createImportTransport } from '../../services/importer/src/import-client.ts';
+import { createImportTransport, ImportTransportError } from '../../services/importer/src/import-client.ts';
 import { createImportFetch } from '../../services/importer/src/import-fetch.ts';
 import {
   developmentPersonalListScopes,
@@ -327,6 +327,16 @@ export async function runDevelopmentSeed(
   }
   return composedReport;
 }
+
+/** Seed CLI prints only public HTTP classifiers; remote bodies and credentials stay off the walk log. */
+export function seedFailureDetail(error: unknown): string {
+  if (error instanceof ImportTransportError) {
+    const detail = [error.status, error.code, error.type].filter((part) => part !== undefined && part !== '');
+    return detail.length === 0 ? error.message : `${error.message} (${detail.join(' ')})`;
+  }
+  return error instanceof Error ? error.message : 'Cross-media seed failed';
+}
+
 if (import.meta.main) {
   try {
     const args = Bun.argv.slice(2);
@@ -334,7 +344,7 @@ if (import.meta.main) {
       if ((await runDevelopmentSeed()).state !== 'complete') process.exitCode = 1;
     } else await runCrossMediaSeedCli(args);
   } catch (error) {
-    process.stderr.write(`${error instanceof Error ? error.message : 'Cross-media seed failed'}\n`);
+    process.stderr.write(`${seedFailureDetail(error)}\n`);
     process.exitCode = 1;
   }
 }

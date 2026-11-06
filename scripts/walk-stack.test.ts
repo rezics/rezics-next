@@ -15,6 +15,7 @@ import {
   walkParentInvocation,
   walkPortAllocated,
   walkReadyUrls,
+  walkStackLogExcerpt,
   walkStackEnvironment,
   walkStackPorts,
   walkStackPortsAvailable,
@@ -100,8 +101,10 @@ test('the seeded walk loads Playwright, the worker and the Kernel client only af
   expect(source).toContain("await import('@rezics/client')");
   expect(source).toContain("spawn('worker')");
   expect(source).toContain('releaseWalkFileCache');
+  expect(source).toContain('Issuer JWKS through native Auth must answer before seed');
   const seed = await Bun.file(join(import.meta.dir, 'datasets/cross-media-seed.ts')).text();
   expect(seed).toContain('onDumpTableReleased: releaseWalkFileCache');
+  expect(seed).toContain('seedFailureDetail');
 });
 
 test('walk issuer forwarding keeps POST bodies for native Auth', async () => {
@@ -115,6 +118,24 @@ test('walk issuer forwarding keeps POST bodies for native Auth', async () => {
   expect(forwarded.method).toBe('POST');
   expect(forwarded.headers.get('origin')).toBe('http://127.0.0.1:20011');
   expect(await forwarded.json()).toEqual({ account_id: '99e7b230-90dd-83ae-b5dc-67cacb45ae35' });
+});
+
+test('a failed walk stack reprint drops DBOS chatter and keeps Kernel create errors', () => {
+  const recorded = `{
+  code: "dbos_diagnostic",
+  operation: "workflow_runtime",
+  severity: "info",
+}
+TypeError: Unsealed or mismatched native Semantic source set
+{
+  "code": "dbos_diagnostic",
+  "operation": "workflow_runtime",
+  "severity": "debug"
+}
+`;
+  const excerpt = walkStackLogExcerpt(recorded);
+  expect(excerpt).toContain('Unsealed or mismatched native Semantic source set');
+  expect(excerpt).not.toContain('dbos_diagnostic');
 });
 
 test('Docker published mappings occupy a walk slot even when nothing is listening', () => {

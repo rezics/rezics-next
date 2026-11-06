@@ -336,6 +336,7 @@ test('walk and start parents keep Kernel, Postgres and dump modules off the wait
   );
   expect(source).toContain('before the walk signal');
   expect(source).toContain('reprintWalkStackLog');
+  expect(source).toContain('walkStackLogExcerpt');
   expect(source).toContain('if (code !== 0) await reprintWalkStackLog(log)');
   expect(source).not.toMatch(/children\.map\(async \(child\) => \{\s*await child\.exited;\s*\}\)/);
 });
