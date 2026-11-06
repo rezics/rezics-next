@@ -11,11 +11,7 @@ import { EpisodeChecklistEditor } from '../episode-checklist/editor';
 import { preparingVisit } from '../episode-checklist/controller';
 import type { ProgressChoices } from '../progress-profile';
 import { ArchiveRecoveryDeparture } from '../archive-collection-recovery/departure';
-import {
-  archiveFileFromCustody,
-  bindArchiveCustodyOwner,
-  completedArchiveFor,
-} from '../private-export/custody';
+import { archiveFileFromCustody, bindArchiveCustodyOwner, completedArchiveFor } from '../private-export/custody';
 import { ArchiveRecoveryDestinations } from '../private-export/destinations';
 import { ProgressRecoveryJourney, type Snapshot } from './controller';
 import { browserProgressRecoveryPort } from './port';

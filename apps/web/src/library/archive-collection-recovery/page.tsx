@@ -17,11 +17,7 @@ import { toggleOccurrence, togglePage } from './selection';
 import { ArchiveCollectionRecoveryUpload } from './upload';
 import { useRecoveryVisit, type RecoveryVisit } from './visit';
 import type { RecoveryReader } from './window';
-import {
-  archiveBase64FromCustody,
-  bindArchiveCustodyOwner,
-  completedArchiveFor,
-} from '../private-export/custody';
+import { archiveBase64FromCustody, bindArchiveCustodyOwner, completedArchiveFor } from '../private-export/custody';
 import { ArchiveRecoveryDestinations } from '../private-export/destinations';
 
 const visitIds = new WeakMap<RecoveryVisit, number>();

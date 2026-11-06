@@ -100,18 +100,11 @@ async function prepareOwnerLibrary(stack: NativeWebStack) {
     'editor',
   );
   const { subject } = await json<{ subject: { id: string } }>(createdSubject, 201, 'create subject');
-  const active = await json<{ digest: string }>(
-    await stack.kernel('/v1/definitions/active'),
-    200,
-    'active definition',
-  );
+  const active = await json<{ digest: string }>(await stack.kernel('/v1/definitions/active'), 200, 'active definition');
   const released = await json<{
     release: {
       types: Record<string, { library?: { profileId?: string } }>;
-      libraryProfiles: Record<
-        string,
-        { entryStateSet?: { states: { id: string; role: string }[] } }
-      >;
+      libraryProfiles: Record<string, { entryStateSet?: { states: { id: string; role: string }[] } }>;
     };
   }>(await stack.kernel(`/v1/definitions/releases/${encodeURIComponent(active.digest)}`), 200, 'release');
   const profileId = released.release.types['schema:Book']?.library?.profileId;
@@ -382,11 +375,7 @@ test('owner exports a populated Library and restores Collection, Entry and progr
   await expect(restored).toContainText('Repeated occurrence');
   const nativeCollection = await json<{
     collection: { id: string; title: string; visibility: string; memberCount: number };
-  }>(
-    await stack.kernel(`/v1/collections/${restoredId}`, undefined, 'alice'),
-    200,
-    'owner collection readback',
-  );
+  }>(await stack.kernel(`/v1/collections/${restoredId}`, undefined, 'alice'), 200, 'owner collection readback');
   expect(nativeCollection.collection).toMatchObject({
     id: restoredId,
     title: prepared.collectionTitle,

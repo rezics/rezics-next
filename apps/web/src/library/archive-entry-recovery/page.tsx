@@ -8,11 +8,7 @@ import { ArchiveEntryRecoveryJourney, supportedRecoverySection } from './control
 import { type ArchiveReviewItem, type ArchiveRow } from './native';
 import { browserArchiveRecoveryPort } from './port';
 import { type RecoveryBinding } from './visit';
-import {
-  archiveFileFromCustody,
-  bindArchiveCustodyOwner,
-  completedArchiveFor,
-} from '../private-export/custody';
+import { archiveFileFromCustody, bindArchiveCustodyOwner, completedArchiveFor } from '../private-export/custody';
 import { ArchiveRecoveryDestinations } from '../private-export/destinations';
 
 const control = 'min-h-11 min-w-11 rounded-md border px-3 py-2 disabled:opacity-50';
@@ -151,7 +147,12 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
           </button>
         )}
         {!hasUpload && snapshot?.hasOriginalArchive ? (
-          <button type="button" className={control} disabled={!live || uploadLocked} onClick={() => act(journey!.adoptOriginal())}>
+          <button
+            type="button"
+            className={control}
+            disabled={!live || uploadLocked}
+            onClick={() => act(journey!.adoptOriginal())}
+          >
             {m.library_archive_recovery_restart_original()}
           </button>
         ) : null}
@@ -419,10 +420,7 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
                       >
                         {m.library_archive_entry_subject()}
                       </a>
-                      <a
-                        className={`${control} inline-flex items-center underline`}
-                        href={localizeHref('/library')}
-                      >
+                      <a className={`${control} inline-flex items-center underline`} href={localizeHref('/library')}>
                         {m.library_archive_entry_open_library()}
                       </a>
                     </>

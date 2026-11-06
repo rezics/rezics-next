@@ -905,7 +905,8 @@ test('one native page and one bounded apply keep request counts constant as unre
 
 test('cancel then restart reuses the original archive and native Collection readback shows restored order', async () => {
   const fake = fakePort();
-  const { createArchiveCollectionRecoveryJourney } = await import('../src/library/archive-collection-recovery/controller');
+  const { createArchiveCollectionRecoveryJourney } =
+    await import('../src/library/archive-collection-recovery/controller');
   const journey = createArchiveCollectionRecoveryJourney({ port: fake.port, visit: visit() });
   try {
     await journey.upload('e30=');
@@ -937,7 +938,8 @@ test('cancel then restart reuses the original archive and native Collection read
 test('another account is refused at the restored Collection reader', async () => {
   const fake = fakePort();
   fake.port.receivingCollection = async () => ({ kind: 'denied' });
-  const { createArchiveCollectionRecoveryJourney } = await import('../src/library/archive-collection-recovery/controller');
+  const { createArchiveCollectionRecoveryJourney } =
+    await import('../src/library/archive-collection-recovery/controller');
   const journey = createArchiveCollectionRecoveryJourney({
     port: fake.port,
     visit: visit('other-member', 'epoch-other'),
