@@ -15,3 +15,5 @@ native credit roles, qualifiers, counts, selection and admitted destinations acr
 Both profiles use the shared retiring observation. A source, reader, locale or disclosure change discards revealed
 facts and pending definition responses. Refresh requires a fresh page source. Correction entries remain ordinary
 navigation to the existing command hosts; displaying facts grants no command authority.
+
+Decision: merged Person and Character addresses redirect (301) to their survivor, including the relationships and people views; reviewed comparison and publication follow one body-named survivor hop; an appearance accepts an original id only through its related summary's redirect.

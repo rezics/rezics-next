@@ -37,8 +37,10 @@ export function characterWorkRows(current: ConnectionSection, character: string,
       typeof label === 'string' ? label : isRecord(label) && typeof label.value === 'string' ? label.value : '';
     const item = holderItems({ links: [{ ...row, label: title }] }, 1, locale, level)?.items[0];
     if (!item) return [];
+    const related = relationRelated(row.related);
     const statement = typeof row.statement === 'string' && uuid.test(row.statement) ? row.statement : undefined;
     const assertion = row.assertion;
+    // A link may still name a merged original; its related summary names the surviving Character.
     const original =
       statement &&
       isRecord(assertion) &&
@@ -49,7 +51,9 @@ export function characterWorkRows(current: ConnectionSection, character: string,
       Array.isArray(assertion.qualifiers) &&
       Array.isArray(assertion.references) &&
       (kind === 'appearance'
-        ? assertion.value.type === 'value' && assertion.value.content === character
+        ? assertion.value.type === 'value' &&
+          (assertion.value.content === character ||
+            (typeof assertion.value.content === 'string' && related[assertion.value.content]?.redirect === character))
         : assertion.qualifiers.some(
             (part) =>
               isRecord(part) &&
@@ -61,7 +65,6 @@ export function characterWorkRows(current: ConnectionSection, character: string,
           ))
         ? (assertion as unknown as Stmt)
         : undefined;
-    const related = relationRelated(row.related);
     const performerId =
       kind === 'performance' && original?.value.type === 'value' && typeof original.value.content === 'string'
         ? original.value.content
