@@ -3,7 +3,7 @@ import { createPool } from '../../src/database/pool.ts';
 import { advanceNativeErasure, openNativeErasure, NATIVE_ERASURE_GROUPS } from '../../src/access/erasure-native.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
-import { readErasureStatus } from '../../src/access/erasure.ts';
+import { acknowledgeErasure, readErasureStatus } from '../../src/access/erasure.ts';
 import { createGrantCommands } from '../../src/access/grant-commands.ts';
 import { nativeFixture, scopes } from './native-account-bindings-fixture.ts';
 import { deletePersona } from '../support/account-deletion.ts';
@@ -293,7 +293,7 @@ describe('Access native terminal cleanup', () => {
       (await pool.query('SELECT phase FROM access.erasure_native_progress WHERE progress_id=$1', [progressId])).rows[0]
         .phase < 2
     )
-      await advanceNativeErasure(pool, progressId);
+      await advanceNativeErasure(pool, progressId, acknowledgeErasure);
   }
 
   beforeAll(async () => {
@@ -403,7 +403,7 @@ describe('Access native terminal cleanup', () => {
     const erased = await person();
     await deletePersona({ pool, auth }, erased);
     const progressId = await openNativeErasure(pool, erased.accountId);
-    await advanceNativeErasure(pool, progressId); // preferences: next phase owns default grants
+    await advanceNativeErasure(pool, progressId, acknowledgeErasure); // preferences: next phase owns default grants
     const before = (
       await pool.query('SELECT phase,page FROM access.erasure_native_progress WHERE progress_id=$1', [progressId])
     ).rows;
@@ -413,7 +413,9 @@ describe('Access native terminal cleanup', () => {
     await pool.query(`CREATE TRIGGER reject_native_checkpoint BEFORE UPDATE ON access.erasure_native_progress
       FOR EACH ROW EXECUTE FUNCTION public.reject_native_checkpoint()`);
     try {
-      await expect(advanceNativeErasure(pool, progressId)).rejects.toThrow('native checkpoint failed');
+      await expect(advanceNativeErasure(pool, progressId, acknowledgeErasure)).rejects.toThrow(
+        'native checkpoint failed',
+      );
     } finally {
       await pool.query('DROP TRIGGER reject_native_checkpoint ON access.erasure_native_progress');
       await pool.query('DROP FUNCTION public.reject_native_checkpoint()');
@@ -430,11 +432,11 @@ describe('Access native terminal cleanup', () => {
         ])
       ).rowCount,
     ).toBeGreaterThan(0);
-    await advanceNativeErasure(pool, progressId); // committed page, simulate losing its response
+    await advanceNativeErasure(pool, progressId, acknowledgeErasure); // committed page, simulate losing its response
     const restarted = createPool(process.env.DATABASE_URL!);
     try {
       expect(await openNativeErasure(restarted, erased.accountId)).toBe(progressId);
-      await advanceNativeErasure(restarted, progressId);
+      await advanceNativeErasure(restarted, progressId, acknowledgeErasure);
     } finally {
       await restarted.end();
     }
@@ -494,7 +496,7 @@ describe('Access native terminal cleanup', () => {
         progressId,
       ]);
       if (progress.rows[0].phase > lastRate) break;
-      await advanceNativeErasure(pool, progressId);
+      await advanceNativeErasure(pool, progressId, acknowledgeErasure);
     }
     expect((await nativeRates(erased.accountId)).rows).toEqual([]);
     const bootstrap = await pool.query(

@@ -67,7 +67,9 @@ synchronous. See [Content deletion](../services/kernel/src/content/README.md#del
    Every producer of personal data uses an indexed native ownership relation or records the exact locator. A new
    personal field or store needs its erasure disposition before release.
 5. **Retention.** Private, unlisted and already deleted material is erased, including archived versions. Eligible
-   public contributions keep only the published contribution with de-identified attribution (`Deleted account`). A
+   public contributions keep only the published contribution with de-identified attribution (`Deleted account` or
+   `Deleted organization`) and no author/account link. Only the authoritative deleted identity permits that label;
+   missing, pending or unavailable identity remains unavailable, as defined by [public identity](accounts.md#public-identity). A
    dynamic Collection keeps its last completely published generation, never a pending one or a fresh evaluation.
    Published reading logs are erased. Financial records keep only the legally required subset, restricted and with
    an expiry. That subset is defined by the payment and tax retention schedule: jurisdiction, record categories,

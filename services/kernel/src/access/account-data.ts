@@ -17,7 +17,7 @@ import publicIdentityObservationRead from './public-identity-observation.sql';
 import publicRead from './account-public-read.sql';
 import agentPageRead from './agent-verification-page-read.sql';
 import organizationRoleRead from './account-organization-role.sql';
-import { accountAgentId, accountAgentsForSubjects } from '../semantic/agents.ts';
+import { accountAgentId, accountAgentsForSubjects } from '../semantic/access-capabilities.ts';
 import { contributionAttribution, type ContributionAttribution } from './contribution-attribution.ts';
 import { accessNativeWork, type AccessWorkAccounting } from './work.ts';
 
@@ -162,19 +162,54 @@ export async function readPublicAccountByAgent(
   return pointer || identity.some((value) => 'subject' in value && value.subject?.id === subjectId) ? identity : [];
 }
 
-/** Live agent identity, or a deleted-account tombstone when only the native graph link remains. */
+/** Bounded current attribution for a retained-contribution page, including unavailable owners.
+ * Deduplicate seeks without changing identity: no label/handle search or graph redirect is involved.
+ * Each native batch contains at most 100 Account anchors; errors retain the owner's normal failure semantics.
+ */
+export async function readContributionAttributions(
+  client: Queryable,
+  accountIds: readonly string[],
+): Promise<Map<string, ContributionAttribution>> {
+  const result = new Map<string, ContributionAttribution>();
+  const anchors: { id: string; route: number }[] = [];
+  for (const id of new Set(accountIds)) {
+    result.set(id, null);
+    const route = routeOf(id);
+    if (route !== null) anchors.push({ id, route });
+  }
+  for (let offset = 0; offset < anchors.length; offset += 100) {
+    const page = anchors.slice(offset, offset + 100);
+    const identities = await readPublicIdentities(
+      client,
+      page.map(({ route }) => route),
+      page.map(({ id }) => id),
+    );
+    for (const identity of identities) result.set(identity.id, contributionAttribution(identity));
+  }
+  return result;
+}
+
+/** Resolve retained attribution through the exact bounded native owner relation.
+ * Public profile absence is not deletion; only the anchored account tombstone is.
+ * This does not compose avatar, biography, graph labels or account-page disclosure.
+ */
 export async function agentContributionAttribution(
-  client: Pool,
+  client: Queryable,
   subjectId: string,
-): Promise<ContributionAttribution | null> {
-  const identities = await readPublicAccountByAgent(client, subjectId);
-  if (identities[0]) return contributionAttribution(identities[0]);
-  const accountId = (await accountAgentsForSubjects(client, [subjectId])).get(subjectId)?.account;
+): Promise<ContributionAttribution> {
+  const route = routeOf(subjectId);
+  if (route === null) return null;
+  const pointer = await agentPageRead.run(client, { route, subject_id: subjectId });
+  const native = pointer ? undefined : (await accountAgentsForSubjects(client, [subjectId])).get(subjectId);
+  const accountId = pointer?.accountId ?? native?.account;
   if (!accountId) return null;
   const accountRoute = routeOf(accountId);
   if (accountRoute === null) return null;
-  const account = await readPublicAccount(client, accountRoute, accountId);
-  return contributionAttribution(account ?? { accountId, state: 'deleted' });
+  const row = await publicRead.run(client, { route: accountRoute, account_id: accountId });
+  if (!row) return null;
+  // A stale catalogue page cannot assign a live contribution to a different current binding.
+  if (row.state !== 'deleted' && pointer && (!row.agentVerified || row.agentSubjectId !== subjectId)) return null;
+  return contributionAttribution(row);
 }
 
 async function publicIdentityForAccount(

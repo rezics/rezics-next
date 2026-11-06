@@ -1,3 +1,4 @@
+import { acknowledgeErasure } from '../../src/access/erasure.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { advanceNativeErasure, openNativeErasure } from '../../src/access/erasure-native.ts';
 import { createGrantCommands } from '../../src/access/grant-commands.ts';
@@ -44,8 +45,8 @@ for (const axis of ['unrelated', 'history'] as const) {
     }
     await deletePersona({ pool: db.pool, auth }, target);
     const progressId = await openNativeErasure(db.pool, target.accountId);
-    await advanceNativeErasure(db.pool, progressId); // empty preferences
-    await advanceNativeErasure(db.pool, progressId); // preceding 100 raw keys really purged
+    await advanceNativeErasure(db.pool, progressId, acknowledgeErasure); // empty preferences
+    await advanceNativeErasure(db.pool, progressId, acknowledgeErasure); // preceding 100 raw keys really purged
     expect(
       (await db.admin.query('SELECT phase,page FROM access.erasure_native_progress WHERE progress_id=$1', [progressId]))
         .rows,
@@ -61,7 +62,9 @@ for (const axis of ['unrelated', 'history'] as const) {
     try {
       // Prime the durable discovery replay. The dependency separately proves its
       // ordered range seek; this slice measures real mutation/proof/checkpoint work.
-      await expect(advanceNativeErasure(db.pool, progressId)).rejects.toThrow('growth checkpoint fault');
+      await expect(advanceNativeErasure(db.pool, progressId, acknowledgeErasure)).rejects.toThrow(
+        'growth checkpoint fault',
+      );
       selected = (
         await db.admin.query(
           `SELECT result FROM access.erasure_progress
@@ -96,7 +99,9 @@ for (const axis of ['unrelated', 'history'] as const) {
           );
         },
         async operation() {
-          await expect(advanceNativeErasure(db.pool, progressId)).rejects.toThrow('growth checkpoint fault');
+          await expect(advanceNativeErasure(db.pool, progressId, acknowledgeErasure)).rejects.toThrow(
+            'growth checkpoint fault',
+          );
           // The admin observations do not enter the measured native work.
           const copy = (
             await db.admin.query(
@@ -118,7 +123,7 @@ for (const axis of ['unrelated', 'history'] as const) {
       await db.admin.query('DROP TRIGGER fail_native_growth_checkpoint ON access.erasure_native_progress');
       await db.admin.query('DROP FUNCTION public.fail_native_growth_checkpoint()');
     }
-    await advanceNativeErasure(db.pool, progressId);
+    await advanceNativeErasure(db.pool, progressId, acknowledgeErasure);
     expect(
       (await db.admin.query('SELECT page FROM access.erasure_native_progress WHERE progress_id=$1', [progressId]))
         .rows[0].page,

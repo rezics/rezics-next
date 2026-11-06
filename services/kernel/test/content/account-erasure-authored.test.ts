@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import type { ContributionAttribution } from '../../src/access/public-identity.ts';
 import { fromPlainText } from '@rezics/document';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { createInterface } from 'node:readline';
@@ -382,6 +383,19 @@ afterAll(async () => {
 
 test("account erasure keeps a published post with only its current revision and erases the account's draft, deleted and taken-down posts", async () => {
   const before = await snapshot(neighbours);
+  type PresentedPost = {
+    authorId?: string;
+    attribution: ContributionAttribution;
+    revisionId: string;
+    sha256: string | null;
+    licence: string;
+    subjectIds: string[];
+    mediaIds: string[];
+    body: unknown;
+  };
+  const live = await http<{ post: PresentedPost }>('moderator', 'GET', `/v1/posts/${published.firstPost.id}`);
+  expect(live.post.authorId).toBe(system.actors.author.actor.accountId);
+  expect(live.post.attribution).toMatchObject({ id: system.actors.author.actor.accountId, kind: 'actor' });
   // Ordinary published history remains immutable before the committed obligation.
   const old = (await snapshot([published.firstPost.id])).find((r) => r.revision_id !== published.firstPost.revisionId)!;
   await expect(
@@ -435,14 +449,28 @@ test("account erasure keeps a published post with only its current revision and 
       [routeOf(published.id), published.firstPost.revisionId],
     ),
   ).rejects.toMatchObject({ code: '23514' });
-  const read = await http<{ post: { authorId: string; revisionId: string } }>(
-    'moderator',
-    'GET',
-    `/v1/posts/${published.firstPost.id}`,
-  );
+  const read = await http<{ post: PresentedPost }>('moderator', 'GET', `/v1/posts/${published.firstPost.id}`);
   expect(read.post).toMatchObject({
-    authorId: system.actors.author.actor.accountId,
+    attribution: { displayName: 'Deleted account' },
     revisionId: published.firstPost.revisionId,
+    sha256: live.post.sha256,
+    licence: live.post.licence,
+    subjectIds: live.post.subjectIds,
+    mediaIds: live.post.mediaIds,
+    body: live.post.body,
+  });
+  expect(read.post).not.toHaveProperty('authorId');
+  expect(read.post.attribution).toEqual({ displayName: 'Deleted account' });
+  const neighbour = await http<{ post: PresentedPost & { parent: unknown } }>(
+    'other',
+    'GET',
+    `/v1/posts/${neighbours[0]}`,
+  );
+  expect(neighbour.post.authorId).toBe(system.actors.other.actor.accountId);
+  expect(neighbour.post.attribution).toMatchObject({ id: system.actors.other.actor.accountId, kind: 'actor' });
+  expect(neighbour.post.parent).toEqual({
+    postId: published.firstPost.id,
+    attribution: { displayName: 'Deleted account' },
   });
 }, 120000);
 

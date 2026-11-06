@@ -113,7 +113,14 @@ and sitemap enumeration do not deliver Account search. [Universal search](search
 The deleted identity contract is exactly `{ id, state, kind }`, with no person/automation label.
 [account-data.ts][account-data] returns that shape for deleted actors and organizations.
 
-Live attribution exposes `id`, `kind`, `handle`, `displayName`, public state, `automated` and `operatorId`.
+Retained contribution attribution is a live `{ id, kind, displayName }`, a deleted
+`{ displayName: "Deleted account" | "Deleted organization" }`, or `null` when an identity is absent, pending or
+unavailable. Only an authoritative deleted identity produces the deletion label; absence never proves deletion.
+Deleted contributions expose no author/account link. Live organizations keep their kind, and a suspended account
+retains its live attribution without revealing suspension. Consumers preserve this distinction through enrichment
+and apply their current disclosure before sending retained contribution bytes.
+
+Live public identity exposes `id`, `kind`, `handle`, `displayName`, public state, `automated` and `operatorId`.
 The handle profile can also expose biography, links, avatar, verification and the account's public-view choices.
 It never selects email, credentials, sessions, consent, controller, birth date or private preferences. Activity
 and organization speaker lists respect the account's publication settings; hiding a list does not change

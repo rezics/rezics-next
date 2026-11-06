@@ -12,7 +12,7 @@ import {
   type CommandAttempt,
 } from '../command/command.ts';
 import { readAccount, readAccountCommandState, readPublicAccount, type Account } from '../access/account-data.ts';
-import { contributionAttribution, type ContributionAttribution } from '../access/contribution-attribution.ts';
+import { contributionAttribution, type ContributionAttribution } from '../access/public-identity.ts';
 import { readPublicViews } from '../access/index.ts';
 import publicGeneration from './collection-public-generation.sql';
 import { nativePolicyCatalogueForAccess } from '../access/policy-core.ts';
@@ -847,7 +847,7 @@ export function createCollectionReads(
               readPublicAccount(deadlineClient(client, deadline), curatorRoute, curatorId),
             ),
           )
-        : ({ displayName: 'Deleted account' } as const);
+        : null;
     if (row.membershipKind !== 'dynamic' || (row.visibility !== 'public' && row.visibility !== 'unlisted'))
       return { attribution };
     const collectionRoute = routeOf(row.id);
