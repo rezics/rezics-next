@@ -1,5 +1,5 @@
 import { join, resolve } from 'node:path';
-import { startDevServer } from '../tests/support/dev-server.ts';
+import { startDevServer, type DevServerOptions } from '../tests/support/dev-server.ts';
 import {
   sharedDevServerEnvName,
   writeSharedDevServer,
@@ -42,7 +42,7 @@ export async function startSharedWebDevServer(
     env,
   });
   let firstEnMs = 0;
-  const server = await startDevServer({
+  const start: DevServerOptions = {
     exclusive: true,
     cwd: appDirectory,
     env: {
@@ -57,8 +57,9 @@ export async function startSharedWebDevServer(
       if (timing.phase === 'first response' && timing.path === '/en') firstEnMs = timing.elapsedMs;
       options.onPhase?.(timing);
     },
-    ...(options.signal ? { signal: options.signal } : {}),
-  });
+  };
+  if (options.signal) start.signal = options.signal;
+  const server = await startDevServer(start);
   if (server.pid === undefined) throw new Error('Shared Web dev server started without a process id');
   writeSharedDevServer(options.descriptorPath, {
     origin: server.origin,
