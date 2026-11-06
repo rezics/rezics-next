@@ -30,11 +30,13 @@ import {
   observePersonIdentity,
   personIdentityForSource,
   personReviewSource,
+  publishReviewedPersonMerge,
   selectPersonReviewPair,
   showcasePersonReview,
   type CurrentPersonIdentity,
   type PersonReviewSource,
   type PersonReviewPair,
+  type ReviewedPersonPublication,
 } from './showcase-person-identity.ts';
 import { createAccountTokenProvider, VNDB_IMPORTER_SCOPES } from './credentials.ts';
 import { createSeedDenialDiagnostics } from './showcase-denial-diagnostics.ts';
@@ -2129,7 +2131,7 @@ export type CrossMediaPort = Pick<
 > &
   Partial<Pick<ReturnType<typeof createImportTransport>, 'requestMedia' | 'mediaStatus'>>;
 export type CrossMediaReading = {
-  /** Original claim target; independent reads may return its canonical Subject. */
+  /** Original claim target; independent reads may return its canonical Person. */
   boundSubjectId?: string;
   source: Provider;
   externalId: string;
@@ -3427,6 +3429,8 @@ export type CrossMediaSeedCliOptions = {
 export type CrossMediaSeedReport = CrossMediaSeedResult & {
   persona?: DevelopmentShowcaseResult;
   showcase?: ShowcasePublicationResult;
+  /** Native paired merge of the selected Person pair, observed after its identifiers were adopted. */
+  personMerge?: ReviewedPersonPublication;
 };
 
 export async function runCrossMediaSeedCli(
@@ -3511,7 +3515,7 @@ export async function runCrossMediaSeedCli(
     scopes: [
       ...VNDB_IMPORTER_SCOPES,
       'subject:read',
-      ...(showcasePath ? (['context:accept', 'context:adopt'] as const) : []),
+      ...(showcasePath ? (['context:accept', 'context:adopt', 'subject:merge'] as const) : []),
     ],
   });
   const resultPath = resolve(values.get('--result')!);
@@ -4517,6 +4521,16 @@ export async function runCrossMediaSeedCli(
         tagParentAcknowledgements,
         tagParentRefreshes,
       });
+    // The reviewed endpoints exist only after the preceding showcase adoption has committed.
+    const personMerge =
+      journal && publicClient && combinedResult.personReview?.pair.state === 'selected'
+        ? await publishReviewedPersonMerge({
+            pair: combinedResult.personReview.pair.sources,
+            transport: importPort,
+            readPublic: (id) => publicClient.readSubject(id),
+            journal,
+          })
+        : undefined;
     const { bangumiGenrePublication, bangumiGameGenrePublication, ...publicCombinedResultFields } = combinedResult;
     const publicCombinedResult = {
       ...publicCombinedResultFields,
@@ -4529,6 +4543,13 @@ export async function runCrossMediaSeedCli(
     const report = {
       ...publicCombinedResult,
       ...(persona ? { persona } : {}),
+      ...(personMerge
+        ? {
+            personMerge,
+            // A pending, unconfirmed or withheld merge is a resumable gap; the next run replays its journal.
+            ...(personMerge.state === 'published' ? {} : { status: 'imported-with-gaps' as const }),
+          }
+        : {}),
       facts: {
         works: Object.fromEntries(result.facts.works),
         releases: Object.fromEntries(result.facts.releases),

@@ -228,6 +228,16 @@ test('mounted anonymous Character keeps assertions separate, retries only credit
     expect(document.activeElement?.closest('[data-work-statement]')?.getAttribute('data-work-statement')).toBe(id(11));
   }));
 
+test('an appearance naming a merged original keeps its qualified statement only through the redirect', () => {
+  const section = visit().sections.characters as any;
+  const link = section.section.body.links[0];
+  link.assertion.value.content = id(5);
+  link.related[id(5)] = { ...summary(5, 'Merged original'), redirect: id(1) };
+  expect(characterWorkRows(section, id(1), 'en', 0)[0]?.original).toMatchObject({ id: id(10) });
+  delete link.related[id(5)].redirect;
+  expect(characterWorkRows(section, id(1), 'en', 0)[0]?.original).toBeUndefined();
+});
+
 test('session ABA retires pending public rows; Context replacements fence late A and whole-row spoilers hide evidence', async () =>
   mounted(async (host, render, client) => {
     let settle!: (v: ConnectionVisit) => void;
