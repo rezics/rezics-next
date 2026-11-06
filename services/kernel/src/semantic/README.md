@@ -152,9 +152,15 @@ the existing action scopes and Global/Context resource authority still apply. Bu
 remain public. Native grant APIs, visible-operation filtering and served OpenAPI use the existing platform
 system; declarations alone prove no runtime, source or CPU outcome.
 
-Custom publication, advanced identity mutation, reviewed vocabulary seeds and measured-input expansion
-remain deferred until polished. Source metadata authority and reviewed vocabulary seeds retain their
-explicit platform authority and seed review requirements. Ordinary provider imports do not auto-seed them.
+Grant-controlled catalogue publication is the author workspace at `/catalogue/definitions/publish`:
+`POST /v1/definitions/imports` reviews native validation and exact digest identity, then existing publish,
+build, activation and independent GET continue the same immutable bodies. Advanced identity mutation,
+reviewed vocabulary seeds and measured-input expansion remain deferred until polished. Source metadata
+authority and reviewed vocabulary seeds retain their explicit platform authority and seed review
+requirements. Ordinary provider imports do not auto-seed them.
+
+Decision: fewest tests pin user-visible publication behaviour and named-state stories only;
+`expansion.test.ts` remains the ten-Type and one-hundred-manifest measurement.
 
 ### Definition publication admission cost
 
