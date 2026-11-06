@@ -226,18 +226,23 @@ export type LibrarySourceFrame = Readonly<{
     deadline: number,
   ): NativeCollectionWork | null;
 }>;
+/** The command runner used for this frame's durable and ordinary Library steps; the default is runCommand. */
+export type LibraryCommandRunner = typeof runCommand;
+/** `run` is the command runner for this frame's durable and ordinary Library steps. It defaults to runCommand. */
 export type LiveLibrarySource = Readonly<{
   context: IdentitySourceConsumerMaintenanceContext;
   work: NativeCollectionWork;
+  run: typeof runCommand;
 }>;
 export function resolveLiveLibrarySource(
   frame: LibrarySourceFrame,
   pool: Pool,
   context: IdentitySourceConsumerMaintenanceContext,
+  run: typeof runCommand = runCommand,
 ): LiveLibrarySource {
   const work = frame.libraryWork(pool, context.identityConsumerWork, context.deadline);
   if (!work) throw unavailable("Library identity receiver requires Semantic's exact live Source maintenance frame");
-  return Object.freeze({ context, work });
+  return Object.freeze({ context, work, run });
 }
 
 function roleOfDriver(value: unknown): LibraryIdentityRole {
@@ -301,7 +306,7 @@ export async function prepareLibraryIdentityNativeEffect(
     planKey: libraryIdentityPlanKey(key),
     disposition: selection.disposition,
     deadline: context.deadline,
-  });
+  }, source.run);
   return effect;
 }
 
@@ -440,10 +445,11 @@ async function registerLibraryIdentityNativeEffect(
     disposition: IdentityReceivingSelection['disposition'];
     deadline: number;
   }>,
+  run: typeof runCommand,
 ): Promise<void> {
   const { deadline } = locator;
   await withRequestDeadline(deadline, async () => {
-    const observed = await runCommand(
+    const observed = await run(
       pool,
       { partition: effect.receipt.partition, deadline },
       async (tx) => noEffect(await lookupIdentityReceivingEffect(tx, effect)),
@@ -461,7 +467,7 @@ async function registerLibraryIdentityNativeEffect(
     )
       throw unavailable('Native Library effect needs an exact same-home owner handoff');
     const home = identityJobPartition(effect.job);
-    await runCommand(pool, { partition: home, deadline }, async (tx) => {
+    await run(pool, { partition: home, deadline }, async (tx) => {
       const current = await lookupIdentityReceivingEffect(tx, effect);
       if (!current || current.owner !== record.owner || current.plan.transactionId !== record.plan.transactionId)
         throw stale('Library receiving custody changed before participant registration');
@@ -551,9 +557,15 @@ async function registerLibraryIdentityNativeEffect(
 /** One source-local effect. Invalidation retains partial/ready bases, never private fact values.
  * This scope is separate from OLD/NEW canonical rekeys, follow effects and publication fences.
  */
-async function applySourceInvalidation(pool: Pool, job: IdentityJobRef, row: QueuedEffect, deadline: number) {
+async function applySourceInvalidation(
+  pool: Pool,
+  job: IdentityJobRef,
+  row: QueuedEffect,
+  deadline: number,
+  run: typeof runCommand,
+) {
   const effect = effectOf(job, row);
-  await runCommand(pool, { partition: effect.receipt.partition, deadline }, async (tx) => {
+  await run(pool, { partition: effect.receipt.partition, deadline }, async (tx) => {
     const record = await lookupIdentityReceivingEffect(tx, effect);
     if (!record || libraryIdentityInvalidationRole(record.source.scope) !== row.role)
       throw stale('Library source invalidation scope changed');
@@ -608,7 +620,7 @@ async function applySourceInvalidation(pool: Pool, job: IdentityJobRef, row: Que
   // Release effect home BEFORE control custody, and Source ACK BEFORE dequeue.
   // Lost results reuse the exact committed receiving locator and frontier.
   await reconcileIdentityReceivingEffect(pool, effect);
-  await runCommand(pool, { partition: identityJobPartition(job), deadline }, async (tx) => {
+  await run(pool, { partition: identityJobPartition(job), deadline }, async (tx) => {
     const custody = await tx.query(
       `SELECT 1 FROM semantic.identity_epoch_receiving_custody
        WHERE partition_no=$1 AND job_id=$2 AND effect_key=$3`,
@@ -674,11 +686,12 @@ async function applyLibraryPlanEffect(
   row: QueuedEffect,
   deadline: number,
   work: NativeCollectionWork,
+  run: typeof runCommand,
 ): Promise<void> {
   if (row.source_route === null || !row.source_id || !row.plan_key || !row.disposition)
     throw stale('Library native effect lost its sealed source-plan locator');
   const effect = effectOf(job, row);
-  const observed = await runCommand(pool, { partition: effect.receipt.partition, deadline }, async (tx) =>
+  const observed = await run(pool, { partition: effect.receipt.partition, deadline }, async (tx) =>
     noEffect(await lookupIdentityReceivingEffect(tx, effect)),
   );
   const retained = observed.value;
@@ -728,7 +741,7 @@ async function applyLibraryPlanEffect(
   )
     throw stale('Library effect operation differs from its exact retained selection');
 
-  const applied = await runCommand(pool, { partition: effect.receipt.partition, deadline }, async (tx) => {
+  const applied = await run(pool, { partition: effect.receipt.partition, deadline }, async (tx) => {
     const record = await lookupIdentityReceivingEffect(tx, effect);
     if (!record) throw stale('Library native receiving record disappeared');
     if (record.applied) return noEffect<'custody' | 'handoff'>('custody');
@@ -821,7 +834,7 @@ async function applyLibraryPlanEffect(
   });
   if (applied.value === 'handoff') return;
   await reconcileIdentityReceivingEffect(pool, effect);
-  await runCommand(pool, { partition: identityJobPartition(job), deadline }, async (tx) => {
+  await run(pool, { partition: identityJobPartition(job), deadline }, async (tx) => {
     const custody = await tx.query(
       `SELECT 1 FROM semantic.identity_epoch_receiving_custody
        WHERE partition_no=$1 AND job_id=$2 AND effect_key=$3`,
@@ -914,9 +927,14 @@ async function retainFollowHandoff(
  * so a crash resumes from the saved cursor and a lost result re-reads the same locator. Returns false when no
  * open obligation remains; an empty queue alone is never reported as completion proof.
  */
-export async function advanceLibraryIdentityFollowPage(pool: Pool, job: IdentityJobRef, deadline: number): Promise<boolean> {
+export async function advanceLibraryIdentityFollowPage(
+  pool: Pool,
+  job: IdentityJobRef,
+  deadline: number,
+  run: typeof runCommand,
+): Promise<boolean> {
   const partition = identityJobPartition(job);
-  const picked = await runCommand(pool, { partition, deadline }, async (tx) => {
+  const picked = await run(pool, { partition, deadline }, async (tx) => {
     const result = await tx.query<FollowWorkRow>(
       `SELECT w.effect_key, w.original::text AS original, w.disposition,
               w.follow_partition, w.follow_after::text AS follow_after, e.operation
@@ -939,7 +957,7 @@ export async function advanceLibraryIdentityFollowPage(pool: Pool, job: Identity
       : { partition: row.follow_partition, accountId: row.follow_after };
   const { previousTerminal, terminal } = row.operation.change;
 
-  await runCommand(pool, { partition, deadline }, async (tx) => {
+  await run(pool, { partition, deadline }, async (tx) => {
     const page = await applyFollowIdentityPage(tx, {
       partition,
       original: row.original,
@@ -1042,7 +1060,7 @@ async function advanceLibraryIdentityCanonicalStage(
 ): Promise<CanonicalStageState> {
   const partition = identityJobPartition(job);
   const deadline = source.context.deadline;
-  const collections = await runCommand(pool, { partition, deadline }, async (tx) =>
+  const collections = await source.run(pool, { partition, deadline }, async (tx) =>
     noEffect(
       (
         await tx.query<{ source_route: number; source_id: string }>(
@@ -1107,7 +1125,7 @@ export async function stepLibraryIdentityEpochWithSource(
   const deadline = Math.min(context.deadline, workStepDeadline());
   const saved = await withReadTransaction(pool, (tx) => identityEpochStore().readJob(tx, job));
   if (!saved || saved.state !== 'pending') throw stale('Library native receiver requires the pending admitted job');
-  const pending = await runCommand(pool, { partition: identityJobPartition(job), deadline }, async (tx) => {
+  const pending = await source.run(pool, { partition: identityJobPartition(job), deadline }, async (tx) => {
     const result = await tx.query<QueuedEffect>(
       `SELECT original,effect_key,role,receiving_partition,receiving_epoch,
               receiving_position::text,receiving_transaction_id::text,source_route,source_id::text,
@@ -1121,11 +1139,11 @@ export async function stepLibraryIdentityEpochWithSource(
   });
   if (pending.value) {
     const row = pending.value;
-    if (row.source_route === null) await applySourceInvalidation(pool, job, row, deadline);
-    else await applyLibraryPlanEffect(pool, job, row, deadline, work);
+    if (row.source_route === null) await applySourceInvalidation(pool, job, row, deadline, source.run);
+    else await applyLibraryPlanEffect(pool, job, row, deadline, work, source.run);
     return { state: 'progress', effectKey: row.effect_key, work: work.receipt() };
   }
-  const status = await runCommand(pool, { partition: identityJobPartition(job), deadline }, async (tx) => {
+  const status = await source.run(pool, { partition: identityJobPartition(job), deadline }, async (tx) => {
     const [scopes, handoffs] = await Promise.all([
       tx.query<{ count: string }>(
         `SELECT count(*)::text AS count FROM library.identity_epoch_participant_scope
@@ -1142,7 +1160,7 @@ export async function stepLibraryIdentityEpochWithSource(
   });
   if (status.value.scopes) return { state: 'source-scopes', effectKey: null, work: work.receipt() };
   // Follow pages run before canonical and handoff reporting: a blocked or foreign item never stops supported work.
-  if (await advanceLibraryIdentityFollowPage(pool, job, deadline))
+  if (await advanceLibraryIdentityFollowPage(pool, job, deadline, source.run))
     return { state: 'follow-progress', effectKey: null, work: work.receipt() };
   const canonical = await advanceLibraryIdentityCanonicalStage(pool, job, source);
   if (canonical === 'progress') return { state: 'canonical-progress', effectKey: null, work: work.receipt() };
@@ -1195,7 +1213,7 @@ export const stepLibraryIdentityEpoch: IdentityEpochStep = (pool, job) =>
     if (pending.value) {
       if (pending.value.source_route !== null)
         throw unavailable('Native six-driver Library effects require Semantic\'s live prepaid Source receiver');
-      await applySourceInvalidation(pool, job, pending.value, deadline);
+      await applySourceInvalidation(pool, job, pending.value, deadline, runCommand);
     }
     // No complete step/native ACK. Invalidation is only part of the ALL-role contract.
     // Empty registration cannot prove current birth/first-apply/late-writer closure.
