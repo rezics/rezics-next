@@ -1,4 +1,5 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { afterEach, describe, expect, test } from 'bun:test';
 import {
@@ -280,6 +281,19 @@ describe('architecture boundaries', () => {
     const graph = changedGraph(root, current, ['src/a.ts', 'src/b.ts']);
     const result = auditArchitecture(root, current, baseline(), graph);
     expect(result.errors.join('\n')).toContain('value-import cycle');
+  });
+
+  test('check tooling resolves oxc-parser from the canonical root package without NODE_PATH', () => {
+    const resolved = createRequire(join(process.cwd(), 'package.json')).resolve('oxc-parser');
+    expect(resolved.includes(`${join('node_modules', 'oxc-parser')}`)).toBe(true);
+    const architectureSource = readFileSync(join(process.cwd(), 'scripts/architecture.ts'), 'utf8');
+    expect(architectureSource).toContain(
+      "createRequire(join(dirname(fileURLToPath(import.meta.url)), '..', 'package.json'))",
+    );
+    expect(architectureSource).not.toContain('NODE_PATH');
+    const mapSource = readFileSync(join(process.cwd(), 'scripts/architecture-map.ts'), 'utf8');
+    expect(mapSource).not.toMatch(/from ['"]oxc-parser['"]/);
+    expect(mapSource).not.toMatch(/require\(['"]oxc-parser['"]\)/);
   });
 
   test('prints a compact map', () => {

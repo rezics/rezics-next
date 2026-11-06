@@ -258,7 +258,11 @@ name alone does not admit a container. Walk stacks do not change check placement
 hosts a and b.
 
 Decision: walk stacks are a bounded, queued replacement for the local-container refusal, granted only to workers whose
-brief lists native or browser acceptance.
+brief lists native or browser acceptance. Local stack-lease tests set `KERNEL_CHECK_REMOTE` to a missing hosts file
+before spawn so they exercise the local lease rather than falling back to shared check hosts. Isolated-stack compiler
+and Kernel databases attach with `container:<id>` and an independent TCP-to-Unix forwarder; walk stacks keep published
+loopback ports. Management walk setup idle-in-transaction is received through that database lifetime; Content retains
+launcher, stack and cleanup. Original walks remain open.
 
 Decision: keep one causal binding regression and the existing launcher assertions. Kernel setup persists the selected
 loopback Auth issuer, audience, JWKS URL, Kernel host and API port in `services/kernel/.env`; start applies the same

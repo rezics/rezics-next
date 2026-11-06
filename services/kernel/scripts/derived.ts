@@ -14,8 +14,16 @@ import { createHash } from 'node:crypto';
 import { dirname, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { migrate, POSTGRES_IMAGE, schemaDumps, validateMigrationVersions } from './database.ts';
-import { cleanup, docker, run } from './check.ts';
+import { cleanup, cleanupStale, docker, run } from './check.ts';
 import { cgroupArgs } from './search.ts';
+import {
+  dockerNetworkArgs,
+  isolatedPostgresSocketDir,
+  ownerProcessIdentity,
+  postgresPublishArgs,
+  resolvePostgresListenUrl,
+  sharesIsolatedStackNetwork,
+} from '../../../scripts/compiler-database.ts';
 import { withCommandPhase } from './command-phases.ts';
 import { prepareReyloAnalysisCache } from './reylo-cache.ts';
 
@@ -243,6 +251,7 @@ function inspectDerivedContainer(name: string): DerivedContainer | undefined {
 }
 
 function mappedPort(container: string): string {
+  if (sharesIsolatedStackNetwork()) return '5432';
   const port = docker(['port', container, '5432/tcp']).match(/127\.0\.0\.1:(\d+)/)?.[1];
   if (!port) throw new Error('Could not determine the throwaway database port');
   return port;
@@ -304,14 +313,15 @@ export function throwawayDatabaseRunArgs(pid = process.pid): string[] {
   const labels = [`rezics.kernel.derived.pid=${owner.pid}`];
   if (owner.start) labels.push(`rezics.kernel.derived.start=${owner.start}`);
   if (owner.boot) labels.push(`rezics.kernel.derived.boot=${owner.boot}`);
+  const network = dockerNetworkArgs();
   return [
     'run',
     '-d',
     '--rm',
+    ...network,
     ...cgroupArgs(),
     ...labels.flatMap((label) => ['--label', label]),
-    '-p',
-    '127.0.0.1::5432',
+    ...postgresPublishArgs(pid, network),
     '--mount',
     `type=volume,destination=/var/lib/postgresql,${labels.map((label) => `volume-label=${label}`).join(',')}`,
     '-e',
@@ -394,20 +404,31 @@ export async function withThrowawayDatabase<T>(
   const analysis = options.analysis ?? true;
   let container = '';
   let disposeAnalysis: (() => void) | undefined;
+  let derivedListenStop: (() => void) | undefined;
   const inheritedUrl = process.env.DATABASE_URL;
   const inheritedContainer = process.env.KERNEL_DATABASE_CONTAINER;
   const inheritedAnalysis = process.env.REYLO_CONFIG;
+  const stopListen = (): void => {
+    derivedListenStop?.();
+    derivedListenStop = undefined;
+    rmSync(isolatedPostgresSocketDir(), { recursive: true, force: true });
+  };
   const onSigint = (): void => {
+    stopListen();
     if (!reuse) cleanup([container]);
     process.exit(130);
   };
   const onSigterm = (): void => {
+    stopListen();
     if (!reuse) cleanup([container]);
     process.exit(143);
   };
   process.on('SIGINT', onSigint);
   process.on('SIGTERM', onSigterm);
   try {
+    if (process.env.KERNEL_CHECK_SKIP_STALE_CLEANUP !== '1' && !process.env.KERNEL_CHECK_ON_REMOTE) {
+      cleanupStale('derived');
+    }
     let url = '';
     if (reuse) {
       const migrations = Array.from(new Bun.Glob('db/**/migrations/*.sql').scanSync({ cwd: directory }));
@@ -415,10 +436,12 @@ export async function withThrowawayDatabase<T>(
       container = prepared.container;
       url = prepared.url;
     } else {
-      await withCommandPhase('database-image', () => {
+      await withCommandPhase('database-image', async () => {
+        process.stdout.write(`Derived database owner ${ownerProcessIdentity()}\n`);
         container = docker(throwawayDatabaseRunArgs());
-        const port = mappedPort(container);
-        url = `postgres://rezics:rezics@127.0.0.1:${port}/rezics?sslmode=disable`;
+        const listen = await resolvePostgresListenUrl(container);
+        derivedListenStop = listen.stop;
+        url = listen.url;
       });
       await withCommandPhase('migrations', () => {
         migrate(url);
@@ -439,6 +462,7 @@ export async function withThrowawayDatabase<T>(
     return await work(env);
   } finally {
     disposeAnalysis?.();
+    stopListen();
     if (!reuse) await withCommandPhase('cleanup', () => cleanup([container]));
     // A later consumer must not inherit a URL or analysis this one-run container no longer serves.
     if (inheritedUrl === undefined) delete process.env.DATABASE_URL;

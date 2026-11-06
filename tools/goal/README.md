@@ -1533,7 +1533,8 @@ prefix. It runs `bun scripts/page-data-check.ts`, records each section's class a
 `flow_events`, and includes the section results by run in flow reports. A section moving from `DATA`, `EMPTY`,
 `UNAUTHORIZED` or `UNAVAILABLE` to `API`, `WEB` or `SEED` returns to the latest integrated task that changed one of
 its mapped files when its retained session can resume; otherwise one repair task is dispatched to that section's
-Goal. A local-stack boot failure is recorded and sent to the supermanager with its first error line in the same run.
+Goal. A local-stack boot failure is recorded and sent to the supermanager with its first substantive error line in the same
+run, skipping Task `$ ` command echoes, retaining the useful log reference, and redacting credentials.
 
 A `control-plane` brief may declare only `tools/goal/` paths; dispatch refuses outside paths and tells the manager to
 split them into a dev task. A control-plane brief without a `target` line, including launch, settle, wake, retry, train

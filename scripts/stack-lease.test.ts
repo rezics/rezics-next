@@ -93,6 +93,12 @@ afterEach(async () => {
   for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
 });
 
+test('local stack-lease runs set KERNEL_CHECK_REMOTE to a missing hosts file before spawn', () => {
+  const env = environment();
+  expect(env.KERNEL_CHECK_REMOTE).toBe(join(env.REZICS_STACK_LEASE_DIR!, 'no-such-hosts.json'));
+  expect(existsSync(env.KERNEL_CHECK_REMOTE)).toBe(false);
+});
+
 test("a slot is held for the command's life and released when it exits", async () => {
   const env = environment();
   const run = start(env, 'holder');

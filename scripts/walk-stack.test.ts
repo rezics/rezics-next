@@ -10,7 +10,11 @@ test('walk admission preserves an occupied slot and reuses it after its listener
   const listener = createServer();
   await new Promise<void>((resolve) => listener.listen(0, '127.0.0.1', resolve));
   const port = (listener.address() as { port: number }).port;
-  const env = { REZICS_STACK_LEASE_DIR: directory, REZICS_STACK_SLOTS: '2' };
+  const env = {
+    REZICS_STACK_LEASE_DIR: directory,
+    REZICS_STACK_SLOTS: '2',
+    KERNEL_CHECK_REMOTE: join(directory, 'no-such-hosts.json'),
+  };
   const available = (index: number) =>
     walkStackPortsAvailable({ web: 0, issuer: 0, native: 0, kernel: 0, database: 0, search: index === 1 ? port : 0 });
   try {
