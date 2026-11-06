@@ -166,20 +166,25 @@ test('a direct Context action grant allows accept without a resource role', () =
     types: new Map([['semantic.context', { owner: 'semantic.context.owner', standing: [] }]]),
   });
   expect(uniqueNativePolicyResourceType(compiled, 'context:accept')).toBe('semantic.context');
+  const request = {
+    action: 'context:accept',
+    resourceType: 'semantic.context',
+    anonymous: false,
+    hasPrincipal: false,
+    authenticatedBenefit: false,
+    scope: true,
+    floor: false,
+    mode: 'ordinary' as const,
+  };
+  expect(decideNativePermission(compiled, request, projection({ actorActionGrant: true })).decision).toBe('allow');
+  const { deadlineLive: _omitted, ...withoutDeadline } = projection({ actorActionGrant: true });
   expect(
-    decideNativePermission(
-      compiled,
-      {
-        action: 'context:accept',
-        resourceType: 'semantic.context',
-        anonymous: false,
-        hasPrincipal: false,
-        authenticatedBenefit: false,
-        scope: true,
-        floor: false,
-        mode: 'ordinary',
-      },
-      projection({ actorActionGrant: true }),
-    ).decision,
+    decideNativePermission(compiled, request, {
+      ...withoutDeadline,
+      live: true,
+    } as NativePermissionProjection).decision,
   ).toBe('allow');
+  expect(
+    decideNativePermission(compiled, request, projection({ actorActionGrant: true, deadlineLive: null })).decision,
+  ).toBe('unavailable');
 });

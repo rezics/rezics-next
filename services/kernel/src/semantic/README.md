@@ -293,7 +293,7 @@ Access. Editorial revisions do not alter the identity version, and a redirect ch
 
 ## Authorization
 
-Semantic writes use the route action and authority below. When the authority and target are in different partitions, the route binds a server-owned anchor, validates it, and evaluates Access before checking out the target command partition. Same-partition checks stay on `authorizeCommand`. Community Context anchors are looked up by `(route, context_id)` at command time; the Global Context anchor verifies the seeded global row. Context creation uses the parent creation authorization path.
+Semantic writes use the route action and authority below. When the authority and target are in different partitions, the route binds a server-owned anchor, validates it, and evaluates Access before checking out the target command partition. Same-partition checks stay on `authorizeCommand`. Context accept, reject and adopt evaluate the declared `semantic.context` page type; the permission formula's live deadline bit is the policy-core `deadlineLive` operand. Community Context anchors are looked up by `(route, context_id)` at command time; the Global Context anchor verifies the seeded global row. Context creation uses the parent creation authorization path.
 
 | Semantic write                     | Action                 | Authority anchor                           |
 | ---------------------------------- | ---------------------- | ------------------------------------------ |

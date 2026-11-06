@@ -166,7 +166,10 @@ export function decideNativePermission(
   const facts: PolicyFacts = {
     standing: true,
     assignment: row.assignmentValid,
-    deadlineLive: row.deadlineLive,
+    deadlineLive:
+      row.deadlineLive !== undefined
+        ? row.deadlineLive
+        : ((row as NativePermissionProjection & { live?: boolean | null }).live ?? null),
     scope: input.scope,
     localDenial: explicit ? row.explicitLocalDenied : row.localDenied,
     publicFloor: explicit ? false : input.floor,
