@@ -29,7 +29,7 @@ import { createPool } from '../../../src/database/pool.ts';
 import { createKernel } from '../../../src/http/kernel.ts';
 import { actionCatalogue } from '../../../src/http/request.ts';
 import { createEntryCommands } from '../../../src/library/entries.ts';
-import type { Access, AccountActor } from '../../../src/request/access.ts';
+import { accessCheck, type Access, type AccountActor } from '../../../src/request/access.ts';
 import { deadlineFor } from '../../../src/request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { linkProjection } from '../../../src/semantic/links.ts';
@@ -252,7 +252,8 @@ export async function createProfileEntryFixture(
       const claims = { accountId, clientId, scopes };
       // Native growth setup reuses this genuine five-minute test credential across requests.
       // Each native command still supplies and enforces its own physical operation deadline.
-      const actor = await authenticateAccount(access, { pool, deadline: deadlineFor(300_000) }, claims);
+      // Use wall time, not deadlineFor: a leaked request ALS deadline is the kernel's 30s budget.
+      const actor = await authenticateAccount(access, { pool, deadline: Date.now() + 300_000 }, claims);
       return { actor, bearer: await accountToken(claims) };
     }
     // Grant-routes and outcome-driver admit platform.governance only on a token
@@ -266,18 +267,20 @@ export async function createProfileEntryFixture(
     const other = await identity(entryScopes);
     await bootstrapGovernance(pool, steward.actor.accountId);
     // Bootstrap writes platform.governance on the Global Context for this steward.
-    // Access admits that identity only on the deadline that authenticated it.
-    // Re-authenticate the original catalogue scopes onto each grant command;
-    // HTTP /v1/grants binds a wrapped request actor that command admission
-    // does not accept. gate:any on those original scopes covers library-gate
-    // delegation; putting gate:personal_library on the grantor identity does not.
+    // Grant-routes authenticates that original bearer onto a fresh command boundary
+    // and records the live account/resource/role binding. gate:any on those original
+    // scopes covers library-gate delegation; a minted sibling token does not.
     const grants = createGrantCommands({
       pool,
       access,
       managementAction: 'access:grant',
       ...(options.clock === undefined ? {} : { clock: options.clock }),
     });
-    async function grantFacts(actor: AccountActor, granted: readonly string[]) {
+    async function grantFacts(
+      actor: AccountActor,
+      granted: readonly string[],
+      boundary: { pool: typeof pool; deadline: number },
+    ) {
       const roles = await reader.query(
         `SELECT grant_role AS fact, subject_kind, subject_id::text AS subject
            FROM access.resource_role_grant
@@ -299,14 +302,24 @@ export async function createProfileEntryFixture(
       );
       const roleActions = [...(resourceRoleCatalogue(access)?.roles.get(PLATFORM_GOVERNANCE_ROLE) ?? [])];
       const needed = ['access:grant', 'gate:any', ...granted];
+      const permitted: Record<string, boolean | string> = {};
+      for (const action of needed) {
+        try {
+          permitted[action] = await (await accessCheck(access, actor, action, global, boundary))(pool);
+        } catch (error) {
+          permitted[action] = error instanceof Error ? error.message : String(error);
+        }
+      }
       return {
         role: PLATFORM_GOVERNANCE_ROLE,
         roles: roles.rows,
         grants: held.rows,
         account: account.rows[0] ?? null,
         bound: actor.accountId === steward.actor.accountId && actor.clientId === steward.actor.clientId,
+        scopes: actor.scopes.length,
         missingFromToken: needed.filter((action) => !actor.scopes.includes(action)),
         missingFromRole: needed.filter((action) => !roleActions.includes(action)),
+        permitted,
       };
     }
     async function grantOnDeadline(
@@ -314,18 +327,11 @@ export async function createProfileEntryFixture(
       actions: readonly string[],
       revoke = false,
     ) {
-      const deadline = deadlineFor(30_000);
-      const actor = await authenticateAccount(
-        access,
-        { pool, deadline },
-        {
-          accountId: steward.actor.accountId,
-          clientId: steward.actor.clientId,
-          scopes: steward.actor.scopes,
-          authnEpoch: steward.actor.authnEpoch,
-          ...(steward.actor.requestedBy ? { requestedBy: steward.actor.requestedBy } : {}),
-        },
-      );
+      // grant-routes authenticates the original steward bearer onto a fresh wall-clock
+      // boundary, then spreads that same object into the command. deadlineFor can
+      // reuse a leaked request ALS deadline; a minted sibling token drops coverage.
+      const boundary = { pool, deadline: Date.now() + 10_000 };
+      const actor = await access.authenticate(steward.bearer, boundary);
       const input = {
         resource: global,
         subject,
@@ -333,13 +339,13 @@ export async function createProfileEntryFixture(
         valid: '(,)',
         key: entryKey(),
       };
-      const command = { pool, actor, deadline };
+      const command = { ...boundary, actor };
       try {
         if (revoke) await grants.revoke(command, input);
         else await grants.create(command, input);
       } catch (error) {
         throw new Error(
-          `Grant ${revoke ? 'revoke' : 'create'} denied: ${error instanceof Error ? error.message : String(error)} facts=${JSON.stringify(await grantFacts(actor, actions))}`,
+          `Grant ${revoke ? 'revoke' : 'create'} denied: ${error instanceof Error ? error.message : String(error)} facts=${JSON.stringify(await grantFacts(actor, actions, boundary))}`,
           { cause: error },
         );
       }
