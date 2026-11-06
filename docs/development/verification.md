@@ -35,6 +35,10 @@ snapshots support review by eye. The development publication is `https://storybo
 
 ## Check selection and failures
 
+Dev's floor, in order: development continues, and dev runs, so problems can be debugged. A broken dev never holds
+landings. The dev verifier's boot smoke catches a dev that does not start and dispatches an urgent repair to the commit
+that broke it.
+
 Decision: product outcomes land first and are repaired after. A worker attempt returns success when its outcome is
 written and every changed workspace type-checks, even if some of its own tests fail. Its summary names each failing
 test and its first error, and the owning manager briefs those repairs as complete outcomes. Type errors always block,
