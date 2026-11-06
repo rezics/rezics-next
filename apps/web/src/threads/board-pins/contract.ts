@@ -70,7 +70,7 @@ export type BoardPinBoardRead =
       state: 'ready';
       boardId: string;
       management: 'allowed' | 'denied';
-      pinRevision?: string;
+      pinRevision: string;
       opening?: ReceivedBoardOpeningPage;
       pinnedThreads: readonly BoardPinJsonRecord[];
       threads: readonly BoardPinJsonRecord[];
@@ -247,12 +247,7 @@ export function parseBoardPinBoard(boardId: string, body: unknown): BoardPinBoar
   const rankRefreshedAt =
     body.rankRefreshedAt === null || typeof body.rankRefreshedAt === 'string' ? body.rankRefreshedAt : undefined;
   const pinRevision = validBoardPinRevision(body.pinRevision) ? body.pinRevision : undefined;
-  if (
-    next === undefined ||
-    rankRefreshedAt === undefined ||
-    (Object.hasOwn(body, 'pinRevision') && pinRevision === undefined)
-  )
-    return { state: 'unavailable' };
+  if (next === undefined || rankRefreshedAt === undefined || pinRevision === undefined) return { state: 'unavailable' };
   const management = body.management === 'allowed' ? 'allowed' : 'denied';
   const authors = body.authors === undefined ? null : authorMap(body.authors);
   if (authors === undefined) return { state: 'unavailable' };
@@ -260,7 +255,7 @@ export function parseBoardPinBoard(boardId: string, body: unknown): BoardPinBoar
     state: 'ready',
     boardId,
     management,
-    ...(pinRevision === undefined ? {} : { pinRevision }),
+    pinRevision,
     pinnedThreads,
     threads,
     next,

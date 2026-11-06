@@ -216,6 +216,7 @@ async function pageFor(input: BoardReadInput, label: string): Promise<CommunityB
             title: `${label} Board`,
             visibility: input.credentialMode === 'session' ? 'protected' : 'public',
           },
+          pinRevision: '1',
           pinnedThreads: [],
           threads: threads.map((thread) => ({
             thread,

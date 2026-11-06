@@ -58,14 +58,11 @@ navigate after their admission retires.
 
 ## Review header handoff
 
-Decision: the mounted review header consumes only the official installed `ReadingPageResponse.reviewContext`. It
-passes citation references through the existing [post-history reader and return lifetime](post-history-lifetime.md),
-preserving source post, source revision, question and vote revision as independent identities. Historical question
-labels and scales remain unavailable; no second history reader or lifetime host is added.
-
-The connected review-and-reply handoff requires the official root-derived reading callable to publish both top-level
-`reviewContext` and `conversationActivity`. Until that publication is installed, preserve the existing receiver and
-native projections. The older nested feed context and unavailable activity display do not complete this journey.
+Decision: the mounted review header consumes only the official installed `ReadingPageResponse.reviewContext`. It links
+the current disclosed subject and each exact published citation through the existing subject and exact-revision
+readers, preserving source post, source revision, question and vote revision as independent identities. Historical
+question labels and scales remain unavailable; no second history reader or lifetime host is added. Private-page
+redaction removes review context with the posts and current activity.
 
 The disclosure uses `browserObservation` and `subscribeCache` with a retiring lease scoped to the mounted page.
 Invalidation or fetching, equal session replacement, remount and an observed away-and-back session transition retire

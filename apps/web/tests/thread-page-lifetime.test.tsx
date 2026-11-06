@@ -145,6 +145,7 @@ function pageFor(
       ],
       documents: [
         {
+          pageIndex: 0,
           postId: firstPost.id,
           threadId,
           revisionId: firstPost.revisionId,

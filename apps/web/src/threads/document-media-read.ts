@@ -1,9 +1,9 @@
-import type { KernelClient } from '@rezics/client';
-import type { DocumentNode } from '@rezics/document';
-import { DOCUMENT_MEDIA_LIMIT, loadDocumentMedia, type DocumentImagePresentation } from './document-media';
+import type { ReadingPageResponse } from '@rezics/client';
+import type { DocumentImagePresentation } from './document-media';
 import type { ThreadPost } from './thread-page';
 
 type DocumentBinding = Readonly<{
+  pageIndex: number;
   postId: string;
   threadId: string;
   revisionId: string;
@@ -16,59 +16,77 @@ export type ThreadDocumentMedia =
   | { kind: 'ready'; images: readonly DocumentImagePresentation[]; documents: readonly DocumentBinding[] }
   | { kind: 'unavailable'; reason?: 'overflow' };
 
-export async function readThreadDocumentMedia(
-  client: KernelClient,
+type ReadingPageMedia = ReadingPageResponse['documentMedia'];
+
+/** Adapt the already-admitted ReadingPage projection for the existing post renderer. */
+export function receiveThreadDocumentMedia(
+  projection: ReadingPageMedia,
   posts: readonly ThreadPost[],
-  authorization?: string | null,
-  signal?: AbortSignal,
-): Promise<ThreadDocumentMedia> {
-  const ids = new Set<string>();
+): ThreadDocumentMedia {
+  if (projection.state !== 'available')
+    return { kind: 'unavailable', ...(projection.state === 'overflow' ? { reason: 'overflow' as const } : {}) };
+
+  const images = new Map<string, DocumentImagePresentation>();
   const documents: DocumentBinding[] = [];
-  for (const post of posts) {
-    if (post.availability !== 'available') continue;
+  const seenPosts = new Set<string>();
+  for (const source of projection.documents) {
+    const pageIndex = posts.findIndex(
+      (candidate) =>
+        candidate.availability === 'available' &&
+        candidate.id === source.postId &&
+        candidate.threadId === source.threadId &&
+        candidate.revisionId === source.revisionId &&
+        candidate.sha256 === source.sha256,
+    );
+    if (pageIndex < 0) continue;
+    const post = posts[pageIndex]!;
+    if (seenPosts.has(post.id)) return { kind: 'unavailable' };
+    seenPosts.add(post.id);
     const declared = new Set(post.mediaIds);
-    const referenced = new Set<string>();
-    function visit(node: DocumentNode) {
-      if (ids.size > DOCUMENT_MEDIA_LIMIT) return;
-      if (node.type === 'image' && typeof node.attrs?.src === 'string' && declared.has(node.attrs.src)) {
-        ids.add(node.attrs.src);
-        referenced.add(node.attrs.src);
-      }
-      for (const child of node.content ?? []) visit(child);
+    const selected: string[] = [];
+    const selectedSet = new Set<string>();
+    if (source.state !== 'available') return { kind: 'unavailable' };
+    for (const item of source.images) {
+      if (item.state !== 'available') return { kind: 'unavailable' };
+      const image = item.presentation;
+      if (
+        !declared.has(item.id) ||
+        image.id !== item.id ||
+        image.containerId !== post.threadId ||
+        selectedSet.has(item.id)
+      )
+        return { kind: 'unavailable' };
+      const previous = images.get(item.id);
+      if (previous && JSON.stringify(previous) !== JSON.stringify(image)) return { kind: 'unavailable' };
+      if (!previous) images.set(item.id, image);
+      selected.push(item.id);
+      selectedSet.add(item.id);
     }
-    visit(post.body.doc);
-    // Overflow keeps every body readable and makes all images unavailable, without truncation or a second batch.
-    if (ids.size > DOCUMENT_MEDIA_LIMIT) return { kind: 'unavailable', reason: 'overflow' };
-    if (referenced.size)
+    if (selected.length)
       documents.push({
+        pageIndex,
         postId: post.id,
         threadId: post.threadId,
         revisionId: post.revisionId,
         sha256: post.sha256,
-        mediaIds: [...referenced],
+        mediaIds: selected,
       });
   }
-  const result = await loadDocumentMedia(client, [...ids], authorization, signal);
-  if (result.kind === 'unavailable') return result;
-  return {
-    kind: 'ready',
-    documents,
-    images: [...result.images.values()].filter((image) =>
-      documents.some((document) => document.threadId === image.containerId && document.mediaIds.includes(image.id)),
-    ),
-  };
+  return { kind: 'ready', images: [...images.values()], documents };
 }
 
 /** Index only exact current-document disclosures. Building the index never reads or guesses attachment URLs. */
 export function documentImagesForPost(
   media: ThreadDocumentMedia | undefined,
   post: ThreadPost,
+  pageIndex = 0,
 ): ReadonlyMap<string, DocumentImagePresentation> {
   const images = new Map<string, DocumentImagePresentation>();
   if (media?.kind !== 'ready' || post.availability !== 'available') return images;
   const bound = new Set<string>();
   for (const document of media.documents) {
     if (
+      document.pageIndex === pageIndex &&
       document.postId === post.id &&
       document.threadId === post.threadId &&
       document.revisionId === post.revisionId &&
@@ -91,6 +109,7 @@ export function documentImageForPost(
   media: ThreadDocumentMedia | undefined,
   post: ThreadPost,
   mediaId: string,
+  pageIndex = 0,
 ): DocumentImagePresentation | null {
-  return documentImagesForPost(media, post).get(mediaId) ?? null;
+  return documentImagesForPost(media, post, pageIndex).get(mediaId) ?? null;
 }

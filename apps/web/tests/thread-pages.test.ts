@@ -66,6 +66,7 @@ test('the actual board feed uses heading-style titles and the available opening 
         };
         return Response.json({
           board: boardRecording.board,
+          pinRevision: '1',
           pinnedThreads: [],
           threads: [
             {
