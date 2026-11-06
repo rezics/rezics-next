@@ -189,6 +189,7 @@ async function runWorker() {
         access: Access;
         kernel: ReturnType<typeof createKernel>;
         instant: string | undefined;
+        clock: () => Date;
         authPool?: Pool;
       }
     | undefined;
@@ -240,6 +241,7 @@ async function runWorker() {
           access,
           kernel,
           instant: undefined,
+          clock,
           ...(config.authDatabaseUrl
             ? { authPool: new Pool({ connectionString: config.authDatabaseUrl, max: 1 }) }
             : {}),
@@ -285,7 +287,7 @@ async function runWorker() {
       const dependencies = {
         pool: runtime.pool,
         access: runtime.access,
-        clock: () => new Date(runtime?.instant ?? Date.now()),
+        clock: runtime.clock,
         readConsent: ({ actorAccountId, clientId }: { actorAccountId: string; clientId: string }) =>
           consent.readCurrentConsent({ actorAccountId, clientId }),
       };

@@ -127,7 +127,6 @@ type World = {
   kernel: Pool;
   facts: Pool;
   auth: Pool;
-  proofs: Pool;
   host: Awaited<ReturnType<typeof createAuthHost>>;
   service: AuthService;
   access: Access;
@@ -147,11 +146,10 @@ async function openWorld(
   configureTestReceiptKeys(kernel);
   const facts = new Pool({ connectionString: databaseUrl(kernelName), max: 2 });
   const auth = new Pool({ connectionString: databaseUrl(authName) });
-  const proofs = new Pool({ connectionString: databaseUrl(authName), max: 2 });
   // Hooked before the first connection, so no connection escapes the injected failures.
   kernel.on('connect', instrument('kernel'));
   auth.on('connect', instrument('auth'));
-  for (const pool of [facts, auth, proofs]) pool.on('error', () => {});
+  for (const pool of [facts, auth]) pool.on('error', () => {});
   let service: AuthService | undefined;
   // Native bindings and restored operator management must resolve the same roles as Access.
   // Keep internal metadata authoritative, including actions without mounted routes.
@@ -174,7 +172,9 @@ async function openWorld(
         required(service, 'Auth service is stopped').handler(new Request(`${issuer}/.well-known/jwks.json`)),
     },
   });
-  const workflowProofs = createNativeWorkflowProofPorts({ database: proofs });
+  // Native proof producers must lease from the same versioned Pool as Auth.
+  // A second Pool on this database does not inherit Auth's per-lease producer tags.
+  const workflowProofs = createNativeWorkflowProofPorts({ database: auth });
   const bindings = createNativeAccountBindings({
     pool: kernel,
     access,
@@ -185,8 +185,8 @@ async function openWorld(
     auth: () => required(service, 'Auth service is stopped'),
     proofs: {
       workflow: workflowProofs,
-      provisioning: createProvisioningEvidenceVerifier({ database: proofs }),
-      barriers: createBarrierProofVerifier({ database: proofs }),
+      provisioning: createProvisioningEvidenceVerifier({ database: auth }),
+      barriers: createBarrierProofVerifier({ database: auth }),
     },
   });
   const host = await createAuthHost({
@@ -198,17 +198,7 @@ async function openWorld(
     signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
     siteActions: actions,
     trustedAccess: bindings.trustedAccess,
-    access: {
-      ...bindings.workflowPorts,
-      async createPending(input) {
-        try {
-          return await bindings.workflowPorts.createPending(input);
-        } catch (error) {
-          console.error('Permission fixture native createPending failed', error);
-          throw error;
-        }
-      },
-    },
+    access: bindings.workflowPorts,
     stagingKey,
     maintenanceSchedule: '0 0 1 1 *',
     executorId: `permission-${authName}`,
@@ -219,7 +209,6 @@ async function openWorld(
     kernel,
     facts,
     auth,
-    proofs,
     host,
     service,
     access,
@@ -228,7 +217,7 @@ async function openWorld(
       try {
         await host.stop();
       } finally {
-        await Promise.allSettled([kernel.end(), facts.end(), auth.end(), proofs.end()]);
+        await Promise.allSettled([kernel.end(), facts.end(), auth.end()]);
       }
     },
   };

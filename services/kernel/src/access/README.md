@@ -1184,6 +1184,15 @@ compares strict native edition sale authority, then exercises ordinary grant/rev
 read. It also pins scalar/batch work receipt forwarding. Historical publication and command replay confer no current
 sale or read authority. These are implemented native fixtures, not evidence of promoted or browser acceptance;
 Financial's complete order/retention/expiry journey remains its receiving acceptance.
+The permission fixture composes native workflow/provisioning/barrier proof ports with the exact Auth-owned Pool,
+not another Pool on the same database: Auth installs native producer versions on each lease and resets them on release.
+An independent untagged writer is correctly refused by Auth before permission preparation. Worker sale restoration
+uses the same installed domain clock as worker Access, including its initial trusted instant.
+
+Typed parent page preparation and scalar preparation must both preserve an adapter's additional authorization
+requirements and their exact attempt/time/deadline association. A scalar-only requirements wrapper does not cover
+a typed parent page; absent evidence must continue to deny. Current-role diagnosis begins only after this preparation
+boundary succeeds, without weakening sale authority or synthesizing requirement evidence.
 
 Consent configuration is read once for this composition. An absent group installs a reader that throws typed,
 retryable `AccessUnavailableError('overloaded')` when invoked; partial configuration still throws `ConfigError`.
