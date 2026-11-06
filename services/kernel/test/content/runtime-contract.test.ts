@@ -93,7 +93,16 @@ test('kernel forwards native ports unchanged without executing jobs, I/O, access
       expect(received.routeKey).toBe(base.routeKey);
       expect(typeof received.clock).toBe('function');
       expect(Object.keys(received).sort()).toEqual(
-        ['pool', 'routeKey', 'clock', 'tokens', 'access', 'realmParticipation', ...Object.keys(content)].sort(),
+        [
+          'pool',
+          'routeKey',
+          'clock',
+          'tokens',
+          'access',
+          'realmParticipation',
+          'viewerActionRuntime',
+          ...Object.keys(content),
+        ].sort(),
       );
       expect(JSON.stringify(kernel.routes.map(({ method, path, hooks }) => ({ method, path, hooks })))).toBe(baseline);
     }

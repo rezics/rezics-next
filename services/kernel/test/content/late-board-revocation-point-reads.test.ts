@@ -17,7 +17,7 @@ const routeKey = new Uint8Array(32).fill(7);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(8)]]) };
 const boardRoute = 0x4321;
 const threadRoute = 0x1234;
-const subject = newId(0x6789);
+const subjectRoute = 0x6790;
 const authorId = newId(0x9abc);
 let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
 let app: ReturnType<typeof createKernel>;
@@ -48,12 +48,19 @@ afterAll(async () => {
   await db?.close();
 });
 
+/** A published Board on a visible concept, as Subject threads use; a Board's public read needs its concept to be visible. */
 async function board() {
   const id = newId(boardRoute);
+  const concept = newId(subjectRoute);
+  await db.admin.query(
+    `INSERT INTO semantic.subject(route,subject_id,type,recorded_transaction_id,visibility,security_revision)
+     VALUES ($1,$2,'schema:Book',$2,'visible',1)`,
+    [subjectRoute, concept],
+  );
   await db.admin.query(
     `INSERT INTO content.board(route,board_id,subject_id,title,visibility,security_revision,recorded_transaction_id)
      VALUES ($1,$2,$3,'Current board','published',1,$2)`,
-    [boardRoute, id, subject],
+    [boardRoute, id, concept],
   );
   return id;
 }
