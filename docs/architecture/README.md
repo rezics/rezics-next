@@ -4,6 +4,10 @@ Decision: Keep the current workspace and capability boundaries, assign each modu
 
 Decision: Register Access, Bounds, and Operations as pure core modules with only their exported package entries; grant dependencies to the concrete Kernel adapter modules that actually import them, and keep native implementation choice in composition roots.
 
+Decision: The client declaration closure depends on the public Access, Bounds, Money, Operations, Progress and
+Search Text packages used by mounted contracts. Register those dependencies alongside the client's existing package
+dependencies; generated declarations retain the native package identities and the boundary baseline does not grow.
+
 `modules.json` assigns the production sources in Kernel, Auth, Importer, Web, and the runtime packages to one module each. Tests, stories, fixtures, and workspace configuration are not production source roots. Each module records its kind, owner Goal, registered capabilities, public entries, and current allowed module dependencies. Kernel foundation code with no product owner is assigned to `platform`.
 
 The checker enforces source coverage, public entry imports (including type-only edges), module dependency direction and cycles, new value-import cycles, pure core and contract imports, adapter SQL ownership, package isolation from apps and services, and ratchet integrity. Current violations are grouped by source module in `boundary-baseline.json` with the module owner and reason `pre-boundary code`. A disappearing entry is reported so the group can be reduced.

@@ -36,6 +36,11 @@ SQL analysis environment, including its Reylo project when the database URL is i
 Decision: publish the complete mounted and public-root declaration closure for every admitted Kernel input
 independently of future source candidates or unfinished consumers.
 
+Decision: register the client's native public Access, Bounds, Money, Operations, Progress and Search Text package
+dependencies in the architecture module map. Generated declarations preserve these shared contract identities;
+the existing architecture check verifies the dependency graph without a baseline exception. Retain the installed
+public-root receiving tests and use that check to cover this manifest repair instead of adding a parallel oracle.
+
 Decision: public client aliases retain their names while referencing native modules; provisional transports are removed
 when complete mounted declarations provide their callables. Reviewed Person transport stays unchanged until its
 native Semantic operands are admitted. The admitted producer now declares the guarded read/merge operands and a
