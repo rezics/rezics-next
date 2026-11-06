@@ -94,12 +94,22 @@ export async function createViewerActionsDriver(): Promise<NativeViewerActionsDr
   // The fixture owns this executor. Drain it before observations so background
   // effect delivery cannot hold the measurement's vacuum horizon. HTTP reads do
   // not depend on effects; membership/ban workflows finish before it is stopped.
+  // A worker that does not exit within the bound is killed, so the Auth host behind this driver still closes.
   async function stopWorker() {
-    if (worker && worker.exitCode === null) {
-      worker.kill('SIGTERM');
-      await worker.exited;
-    }
+    const current = worker;
     worker = undefined;
+    if (!current || current.exitCode !== null) return;
+    current.kill('SIGTERM');
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const exited = await Promise.race([
+      current.exited.then(() => true),
+      new Promise<boolean>((resolve) => {
+        timer = setTimeout(() => resolve(false), 15_000);
+      }),
+    ]);
+    clearTimeout(timer);
+    if (!exited) current.kill('SIGKILL');
+    await current.exited;
   }
   async function startWorker() {
     if (worker && worker.exitCode === null) return;
