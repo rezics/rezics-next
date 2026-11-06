@@ -16,7 +16,7 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import type { definitionRoutes } from '../../src/semantic/http/definitions.ts';
 import { decodeSession } from '../../src/tokens/session.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
-import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
+import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
 
 const route = 0xc120;
 const subject = newId(route);
@@ -194,7 +194,7 @@ beforeAll(async () => {
   );
   await fence(false);
   app = mounted();
-  root = createKernel(dependencies());
+  root = createKernel({ ...dependencies(), receiptKeys: testReceiptKeys() });
 });
 afterAll(async () => {
   await db?.close();

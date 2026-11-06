@@ -80,7 +80,15 @@ test("the content worker's Access sees a grant written at a command's T on a clo
         async registerQueue() {},
         async applySchedules() {},
       } as unknown as WorkClient,
-      env: { KERNEL_ROUTE_KEY: routeKey },
+      env: {
+        KERNEL_ROUTE_KEY: routeKey,
+        KERNEL_SESSION_KEYS: `1:${Buffer.alloc(32, 2).toString('base64url')}`,
+        KERNEL_RECEIPT_KEYS: `1:${Buffer.alloc(32, 17).toString('base64url')}`,
+        KERNEL_WORKFLOW_REFERENCE_KEYS: JSON.stringify({
+          current: 1,
+          keys: { '1': Buffer.alloc(32, 19).toString('base64url') },
+        }),
+      },
       clock,
     });
     const access = workerAccess;
