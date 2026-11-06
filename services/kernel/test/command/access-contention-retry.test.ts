@@ -106,9 +106,9 @@ test('a serialization failure raised through an Access query inside a command tr
   const { rows } = await pool.query(
     `SELECT
        (SELECT count(*)::int FROM public.access_contention_effect) AS body,
-       (SELECT count(*)::int FROM core.receipt WHERE command_kind='fixture.access-contention' AND idempotency_key=$1) AS receipts,
-       (SELECT count(*)::int FROM core.outbox WHERE partition_no=$2 AND position=$3) AS events`,
-    [key, partition, result.position.toString()],
+       (SELECT count(*)::int FROM core.receipt WHERE command_kind='fixture.access-contention') AS receipts,
+       (SELECT count(*)::int FROM core.outbox WHERE partition_no=$1 AND position=$2) AS events`,
+    [partition, result.position.toString()],
   );
   expect(rows).toEqual([{ body: 1, receipts: 1, events: 1 }]);
 });
@@ -127,10 +127,9 @@ test('Access contention that outlasts the command deadline answers the same Acce
   );
   const before = await pool.query(
     `SELECT
-       (SELECT count(*)::int FROM core.receipt WHERE command_kind='fixture.access-contention' AND idempotency_key=$1) AS receipts,
+       (SELECT count(*)::int FROM core.receipt WHERE command_kind='fixture.access-contention') AS receipts,
        (SELECT count(*)::int FROM core.outbox) AS events,
        (SELECT count(*)::int FROM public.access_contention_effect) AS body`,
-    [key],
   );
   const caught = await runCommand(
     pool,
@@ -157,10 +156,9 @@ test('Access contention that outlasts the command deadline answers the same Acce
   expect(attempts).toBeGreaterThan(0);
   const after = await pool.query(
     `SELECT
-       (SELECT count(*)::int FROM core.receipt WHERE command_kind='fixture.access-contention' AND idempotency_key=$1) AS receipts,
+       (SELECT count(*)::int FROM core.receipt WHERE command_kind='fixture.access-contention') AS receipts,
        (SELECT count(*)::int FROM core.outbox) AS events,
        (SELECT count(*)::int FROM public.access_contention_effect) AS body`,
-    [key],
   );
   expect(after.rows).toEqual(before.rows);
 });

@@ -25,6 +25,9 @@ through the ordinary command after Access bootstrap; Access keeps Global point c
 `platform.governance` is the first holder. No test-only grant rows. Subject writes load Semantic's installed
 source-set module through History's adapter at `src/semantic/record-source-set.ts`; a declaration file alone stays
 unavailable. Direct `createKernel` / `runCommand` tests bind the dedicated receipt ring rather than seeding grants.
+Composed Entry/progress collection-read on a subject id is not library-entry authorization; native fixtures defer
+that denial and keep `library_entry` admission. Semantic `beginSemanticRecordSourceSet` already declares the set,
+so History tests must not declare it again; a fabricated handle fails owner provenance, not module-unavailable.
 
 ## Collection operation costs
 

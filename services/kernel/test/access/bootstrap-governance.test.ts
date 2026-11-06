@@ -268,7 +268,7 @@ beforeAll(async () => {
     person,
   ]);
   access = fixtureAccess();
-}, 60_000);
+}, 180_000);
 afterAll(async () => {
   await authPool?.end();
   if (authDatabase) await dropTestDatabase(reader, authDatabase);

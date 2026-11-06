@@ -92,7 +92,7 @@ test('a native-set declaration excludes repeated sets and small declarations; a 
       await declareCommandHistory(tx, kind, scope(person));
       return noEffect({ payload: 'must roll back rather than claim native membership' });
     }),
-  ).rejects.toBeInstanceOf(RecordSourceSetUnavailableError);
+  ).rejects.toBeInstanceOf(actualProducer() ? TypeError : RecordSourceSetUnavailableError);
   expect((await f.db.admin.query('SELECT count(*)::integer AS n FROM core.record_history_source_set')).rows[0].n).toBe(
     before,
   );
@@ -174,7 +174,6 @@ test('History consumes the actual Semantic one-set building seal locator revisio
   let locator: import('../../src/semantic/record-source-set.ts').SemanticRecordSourceSetLocator | undefined;
   const result = await command(async (tx) => {
     const set = await producer.beginSemanticRecordSourceSet(tx);
-    declareCommandRecordSourceSet(tx, set);
     locator = producer.semanticRecordSourceSetLocator(tx, set);
     expect(locator.partition).toBe(currentCommand(tx).partition);
     expect(locator.transactionId).toBe(currentCommand(tx).transactionId);
@@ -260,7 +259,6 @@ test('the native seal guard rolls back building source and generated work togeth
     command(async (tx) => {
       handle = await producer.beginSemanticRecordSourceSet(tx);
       locator = producer.semanticRecordSourceSetLocator(tx, handle);
-      declareCommandRecordSourceSet(tx, handle);
       await declareCommandHistory(tx, kind, scope(person));
       await stageHistoryWork(tx, {
         owner: 'record-purge-fixture',
