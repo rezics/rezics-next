@@ -139,7 +139,9 @@ export async function membersPreparationRuntime() {
       { ...resource, eligibility: collectionReadEligibility(resource) },
       context(),
     );
-    expect(await authorizeMintedRead(ownerRead, db.pool, context().deadline), JSON.stringify(authority.rows)).toBe(true);
+    expect(await authorizeMintedRead(ownerRead, db.pool, context().deadline), JSON.stringify(authority.rows)).toBe(
+      true,
+    );
     const read = await capture(
       db,
       async () => {
