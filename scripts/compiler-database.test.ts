@@ -4,15 +4,23 @@ import { chmodSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
+  COMPILER_NONCE_LABEL,
+  COMPILER_PID_LABEL,
+  DOCKER_PROBE_TIMEOUT_MS,
+  DOCKER_RUN_TIMEOUT_MS,
   cleanupStaleCompilerDatabases,
   compilerDatabaseListenUrl,
+  compilerDatabaseRunArgs,
   dockerNetworkArgs,
+  dockerTimeoutMs,
   isolatedPostgresSocketDir,
   ownerProcessIdentity,
   postgresContainerReadyArgs,
   postgresPublishArgs,
   postgresReadyProbe,
+  reapCompilerNonce,
   sharesIsolatedStackNetwork,
+  startCompilerContainer,
   startInProcessPostgresForwarder,
   startPostgresForwarder,
   waitForPostgresContainer,
@@ -23,6 +31,48 @@ const fixtures: string[] = [];
 
 afterEach(() => {
   for (const directory of fixtures.splice(0)) rmSync(directory, { recursive: true, force: true });
+});
+
+test('docker run, create and forced rm use Auth run timeout; probes stay short', () => {
+  expect(DOCKER_RUN_TIMEOUT_MS).toBe(120_000);
+  expect(DOCKER_PROBE_TIMEOUT_MS).toBe(5_000);
+  expect(dockerTimeoutMs(['run', '-d', '--rm', 'postgres'])).toBe(DOCKER_RUN_TIMEOUT_MS);
+  expect(dockerTimeoutMs(['create', '--name', 'x', 'postgres'])).toBe(DOCKER_RUN_TIMEOUT_MS);
+  expect(dockerTimeoutMs(['rm', '-f', '-v', 'x'])).toBe(DOCKER_RUN_TIMEOUT_MS);
+  expect(dockerTimeoutMs(['exec', 'x', 'pg_isready'])).toBe(DOCKER_PROBE_TIMEOUT_MS);
+  expect(dockerTimeoutMs(['ps', '-a'])).toBe(DOCKER_PROBE_TIMEOUT_MS);
+  expect(dockerTimeoutMs(['port', 'x', '5432/tcp'])).toBe(DOCKER_PROBE_TIMEOUT_MS);
+});
+
+test('the one-run compiler database uses --rm and a labelled volume, not a 1 GiB tmpfs', () => {
+  const args = compilerDatabaseRunArgs(9, 'nonce-9', []);
+  expect(args[0]).toBe('run');
+  expect(args).toContain('--rm');
+  expect(args).toContain('--stop-timeout');
+  expect(args).toContain(`${COMPILER_PID_LABEL}=9`);
+  expect(args).toContain(`${COMPILER_NONCE_LABEL}=nonce-9`);
+  expect(args).toContain('--mount');
+  expect(args).toContain(`type=volume,destination=/var/lib/postgresql,volume-label=${COMPILER_PID_LABEL}=9`);
+  expect(args).not.toContain('--tmpfs');
+  expect(args).toContain('-p');
+});
+
+test('a failed docker run reaps the nonce before the error escapes', () => {
+  const calls: string[][] = [];
+  const docker = (args: string[]): string => {
+    calls.push(args);
+    if (args[0] === 'run') {
+      throw Object.assign(new Error('spawnSync docker ETIMEDOUT'), { code: 'ETIMEDOUT' });
+    }
+    return args[0] === 'ps' ? 'created-unstarted' : '';
+  };
+  expect(() => startCompilerContainer(9, 'nonce-fail', docker, {})).toThrow(/ETIMEDOUT/);
+  expect(calls[0]![0]).toBe('run');
+  expect(calls[1]).toEqual(['ps', '-aq', '--filter', `label=${COMPILER_NONCE_LABEL}=nonce-fail`]);
+  expect(calls[2]).toEqual(['rm', '-f', '-v', 'created-unstarted']);
+  reapCompilerNonce('already-gone', 9, () => {
+    throw new Error('daemon timeout');
+  });
 });
 
 test('isolated stack attachment uses container identity, never a Linux ns path as a network name', () => {
