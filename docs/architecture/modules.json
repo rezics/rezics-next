@@ -620,6 +620,7 @@
         "services/kernel/src/semantic/read.ts",
         "services/kernel/src/semantic/search-source.ts",
         "services/kernel/src/semantic/identity-receiving-effects.ts",
+        "services/kernel/src/semantic/identity-receiving-effects-types.ts",
         "services/kernel/src/semantic/identity-search-receiving-statements.ts"
       ],
       "allowedDependencies": [
