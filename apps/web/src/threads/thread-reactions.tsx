@@ -13,7 +13,7 @@ import {
 } from 'react';
 import { flushSync } from 'react-dom';
 import { m } from '../paraglide/messages.js';
-import { getLocale } from '../paraglide/runtime.js';
+import { getLocale, type Locale } from '../paraglide/runtime.js';
 import { csrfHeaders } from './composer';
 import { changeReaction, readReaction } from './reactions';
 import {
@@ -26,19 +26,20 @@ import { Button } from '@rezics/ui/shadcn/button';
 import type { useSession } from '../session/query';
 import { browserObservation } from '../session';
 
-function reactionLabels(failed: string | null) {
+function reactionLabels(failed: string | null, locale: string) {
+  const options = { locale: locale as Locale };
   return {
-    upvote: m.reaction_upvote(),
-    downvote: m.reaction_downvote(),
-    like: m.reaction_like(),
-    love: m.reaction_love(),
-    laugh: m.reaction_laugh(),
-    insightful: m.reaction_insightful(),
-    sad: m.reaction_sad(),
-    react: m.reaction_react(),
-    reactions: m.reaction_reactions(),
-    choose: m.reaction_choose(),
-    failed: failed ?? m.reaction_failed(),
+    upvote: m.reaction_upvote({}, options),
+    downvote: m.reaction_downvote({}, options),
+    like: m.reaction_like({}, options),
+    love: m.reaction_love({}, options),
+    laugh: m.reaction_laugh({}, options),
+    insightful: m.reaction_insightful({}, options),
+    sad: m.reaction_sad({}, options),
+    react: m.reaction_react({}, options),
+    reactions: m.reaction_reactions({}, options),
+    choose: m.reaction_choose({}, options),
+    failed: failed ?? m.reaction_failed({}, options),
   };
 }
 
@@ -564,7 +565,7 @@ function ReactionCaller({
     <div
       ref={focusBoundary}
       role="group"
-      aria-label={m.reaction_reactions()}
+      aria-label={m.reaction_reactions({}, { locale: (locale ?? getLocale()) as Locale })}
       tabIndex={-1}
       className="flex min-w-0 flex-wrap items-center gap-2"
       aria-busy={recovering}
@@ -584,7 +585,7 @@ function ReactionCaller({
               ...(inlineKinds ? { inlineKinds: true } : {}),
             }
           : {})}
-        labels={reactionLabels(failed)}
+        labels={reactionLabels(failed, locale ?? getLocale())}
         locale={locale ?? getLocale()}
         {...(presentation ? { presentation } : {})}
         optimistic={optimistic}

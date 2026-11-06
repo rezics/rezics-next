@@ -9,7 +9,9 @@ import {
 } from '@rezics/definitions/media-import';
 import { DocumentSnapshotSchema, type DocumentSnapshot } from '@rezics/document';
 import { t } from 'elysia';
-import type { Static, TSchema } from 'typebox';
+import type { Static, TSchema, TProperties } from 'typebox';
+import { ContributionAttributionSchema } from '../access/public-identity.ts';
+import type { ContributedPostEntry } from './contribution-present.ts';
 import { Compile } from 'typebox/compile';
 import { CommunityPresentationSchema } from './community-presentation-model.ts';
 export { CommunityPresentationSchema } from './community-presentation-model.ts';
@@ -368,24 +370,26 @@ function item() {
 }
 
 /** The erased variant cannot carry authored bytes, even to an authorized reader. */
+function itemVariants<P extends TProperties>(fields: P) {
+  return t.Union([
+    t.Object({ ...fields, availability: t.Literal('available'), body: document() }, closed),
+    t.Object(
+      {
+        ...fields,
+        availability: t.Literal('erased'),
+        removed: t.Literal(true),
+        body: t.Null(),
+        sha256: t.Null(),
+        restorableUntil: t.Optional(t.String({ format: 'date-time' })),
+      },
+      closed,
+    ),
+  ]);
+}
+
 export function ItemViewSchema() {
   return memoizedValue(ItemViewSchema, () =>
-    t.Unsafe<ItemView & ViewerReactionSlot & ReactionCountsSlot>(
-      t.Union([
-        t.Object({ ...item(), availability: t.Literal('available'), body: document() }, closed),
-        t.Object(
-          {
-            ...item(),
-            availability: t.Literal('erased'),
-            removed: t.Literal(true),
-            body: t.Null(),
-            sha256: t.Null(),
-            restorableUntil: t.Optional(t.String({ format: 'date-time' })),
-          },
-          closed,
-        ),
-      ]),
-    ),
+    t.Unsafe<ItemView & ViewerReactionSlot & ReactionCountsSlot>(itemVariants(item())),
   );
 }
 export const ErasedPlaceholderSchema = t.Object(
@@ -402,27 +406,51 @@ export const ErasedPlaceholderSchema = t.Object(
   },
   closed,
 );
+function postVariants<P extends TProperties>(fields: P) {
+  return t.Union([
+    itemVariants(fields),
+    ErasedPlaceholderSchema,
+    t.Object(
+      {
+        ...fields,
+        availability: t.Literal('withheld'),
+        removed: t.Literal(true),
+        body: t.Null(),
+        sha256: t.Null(),
+        decisionId: t.Optional(ContentIdSchema),
+      },
+      closed,
+    ),
+  ]);
+}
+
 export function PostEntrySchema() {
   return memoizedValue(PostEntrySchema, () =>
-    t.Unsafe<PostEntry & ViewerReactionSlot & ReactionCountsSlot>(
-      t.Union([
-        ItemViewSchema(),
-        ErasedPlaceholderSchema,
-        t.Object(
-          {
+    t.Unsafe<PostEntry & ViewerReactionSlot & ReactionCountsSlot>(postVariants(item())),
+  );
+}
+
+/** Point reads serialize Accounts attribution without changing native authorization types. */
+export function ContributedPostResponseSchema() {
+  return memoizedValue(ContributedPostResponseSchema, () =>
+    t.Object(
+      {
+        post: t.Unsafe<ContributedPostEntry & ViewerReactionSlot & ReactionCountsSlot>(
+          postVariants({
             ...item(),
-            availability: t.Literal('withheld'),
-            removed: t.Literal(true),
-            body: t.Null(),
-            sha256: t.Null(),
-            decisionId: t.Optional(ContentIdSchema),
-          },
-          closed,
+            authorId: t.Optional(ContentIdSchema),
+            attribution: ContributionAttributionSchema(),
+            parent: t.Optional(
+              t.Object({ postId: ContentIdSchema, attribution: ContributionAttributionSchema() }, closed),
+            ),
+          }),
         ),
-      ]),
+      },
+      closed,
     ),
   );
 }
+
 export function ThreadViewSchema() {
   return memoizedValue(ThreadViewSchema, () =>
     t.Unsafe<ThreadView & ViewerReactionSlot & ReactionCountsSlot & Readonly<{ reviewContext?: FeedReviewContext }>>(

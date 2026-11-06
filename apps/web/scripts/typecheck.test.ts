@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { compileWebPrograms, WEB_COMPILER_PROGRAMS } from './typecheck.ts';
 
 test('official typecheck and the check gate share both Web compiler programs', () => {
@@ -34,12 +34,10 @@ test('Web typecheck declares Reylo in this workspace and does not compile Kernel
   expect(tsconfig.contentMappers).toEqual([{ package: 'reylo', extensions: ['.sql'] }]);
   const scripts = JSON.parse(readFileSync(join(appRoot, 'tsconfig.scripts.json'), 'utf8')) as {
     exclude: string[];
+    compilerOptions: { types: string[] };
   };
-  expect(scripts.exclude).toEqual([
-    'scripts/check.ts',
-    'scripts/seeded-content-ratings-reviews-walk.ts',
-    'scripts/vndb-seeded-journey.ts',
-  ]);
+  expect(scripts.exclude).toEqual([]);
+  expect(scripts.compilerOptions.types).toEqual(['bun']);
   const manifest = JSON.parse(readFileSync(join(appRoot, 'package.json'), 'utf8')) as {
     dependencies?: Record<string, string>;
     devDependencies?: Record<string, string>;
@@ -50,4 +48,20 @@ test('Web typecheck declares Reylo in this workspace and does not compile Kernel
   expect(source).not.toContain('prepareReyloAnalysisCache');
   expect(source).not.toContain('services/kernel/scripts/');
   expect(source).not.toContain('services/kernel/node_modules/reylo');
+});
+
+test('the owning compiler includes executable scripts without Worker ambient types', () => {
+  const cwd = resolve(import.meta.dir, '..');
+  const result = Bun.spawnSync(
+    [resolve(cwd, '../../node_modules/.bin/tsc'), '--showConfig', '-p', 'tsconfig.scripts.json'],
+    { cwd },
+  );
+  expect(result.exitCode, result.stderr.toString()).toBe(0);
+  const config = JSON.parse(result.stdout.toString()) as {
+    files: string[];
+    compilerOptions: { types: string[] };
+  };
+  for (const file of ['check', 'record', 'seeded-content-ratings-reviews-walk', 'seeded-question-management-walk'])
+    expect(config.files).toContain(`./scripts/${file}.ts`);
+  expect(config.compilerOptions.types).toEqual(['bun']);
 });

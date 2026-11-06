@@ -30,6 +30,21 @@ check admission, including callers of `dev` with `REZICS_TEST_RUNTIME=1`; the `-
 From `apps/web`, use `bun run storybook` for interface development and `bun run check` to generate, type-check, test,
 and build through the supported check route.
 
+## Workspace typing
+
+Decision: `bun run typecheck` compiles both `tsconfig.json` (product with Worker globals) and
+`tsconfig.scripts.json` (all executable scripts with Bun/Node globals), after localization and route generation.
+The scripts program clears the product program's exclusions, so `scripts/check.ts`, `scripts/record.ts` and
+`scripts/seeded-content-ratings-reviews-walk.ts` remain compiler roots. Both programs retain the Reylo mapper
+and use the same prepared compiler database. Diagnostics in either program fail the check; both programs run.
+The full Web check invokes this same workspace entry. Browser consumers use installed Client contracts;
+tooling may use the owning services' native interfaces without imposing Worker globals on those services.
+The compiler-root test checks resolved files and ambient types; the supported full compiler runs exercise Reylo,
+whose custom mapper settings are not emitted by TypeScript's `--showConfig` output.
+Existing receiving tests use the mounted reading-page fixture and preserve exact revision, body and no-extra-read
+assertions. Reaction fixtures retain compact and exact localized operands; unavailable Subject reactions remain
+distinct from unavailable Content votes, with neither fixture inventing a score.
+
 ## Prepared remote Web checks
 
 `scripts/check-placement.ts` is the Web receiving adapter. `routeWebCheck` prepares one invocation through the trusted
@@ -3538,3 +3553,9 @@ Same-tab inventory actions may add `editionOrigin`, an opaque receipt token, to 
 Return re-admits the saved native inventory cursor and focuses the exact Edition only when that ID appears on the admitted page. A missing or replaced occurrence requires an explicit inventory restart; the reader never scans other pages or matches by title. Refresh and retry preserve the same native address. Restart clears only the cursor. A full reload, new tab, account or locale change, replacement receipt, or changed authoring address can lose the return context; show the restart path and do not infer the former selection.
 
 Decision: optional origin-panel values may be explicitly absent, and return controls appear only when available. Same-page inventory capture uses the current canonical cursor address; adding the opaque origin token preserves the supplied href's query and fragment behavior.
+
+Decision: message catalogues use code-point key order and the same key set in every locale. Missing translations
+materialize the existing English fallback without replacing supplied translations. The existing messages test pins
+ordering and parity. Reaction controls apply their explicit locale to both number formatting and accessible labels.
+The focused action and provenance suites retain exact counts, score privacy, revision/body and no-added-read checks;
+fixtures provide ordinary browser location and identify headings independently of their CSS attributes.

@@ -29,6 +29,10 @@ comparison, types, current, reconciliation, operations, document). Fewest tests 
 route and typed readback of those admitted fields. Runtime schemas and SQL declarations stay on
 the generated kernel client; this package does not re-declare them.
 
+The Zone subject-list route type is the emitted `kernel/zones/subjects` declaration. The publisher
+records the importing public declaration and specifier when that file is absent from emit output.
+A SubjectRoutes alias is not a substitute for that emission.
+
 Decision: until whole-Kernel declaration emission succeeds, the personal VNDB binding mirrors the mounted
 Progress selection/result and conditional-vote additions in `services/kernel/src/library/list-import-vndb-routes.ts`.
 It preserves the generated methods and authenticated transport and yields to the generated Progress review union
@@ -59,5 +63,14 @@ literal widening is not a second public type.
 
 Decision: installed declarations resolve SQL modules through `.sql.d.ts`, not `.sql` specifiers, so a consumer
 Reylo mapper cannot load Kernel SQL sources. Diary page types are the installed `DiaryPage` / `DiaryOccurrence`
-exports; Web must not import Kernel source for them. Web typecheck also excludes scripts that import Kernel or
-Auth source, so Cloudflare workers-types cannot type those services.
+exports; Web must not import Kernel source for them. Web tooling scripts compile in their own Bun/Node program,
+invoked by the normal Web typecheck; its explicit script roots include the recorder, check runner and seeded Content
+walk without Worker ambient types.
+
+Reviewed Person admissions expose `identityOperationLocation` and `identityOperationId` from the public Client entry.
+Consumers retain the native HTTP 202 Location bound to the returned operation identity and poll through
+`reviewedPersonRequests(...).operationAt`; a missing Location cannot become a reconstructed admission.
+
+Decision: exact post point responses publish `ContributedPostEntry` and the Accounts contribution attribution types
+through the official Kernel declaration emitter. The public response may omit `authorId` for explicit deletion;
+native Content authorization types retain their required author. A null attribution carries no deletion assertion.

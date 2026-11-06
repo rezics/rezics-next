@@ -5193,3 +5193,8 @@ released before the next.
   or erased-artifact receipt supplies live-copy admission, financial retention or all-copy acknowledgment.
 - Growth check: retain original Accounts erasure/History custody acceptance and the new live-copy deletion/recovery
   cases. All native and physical execution is deferred; source-code bounds establish no measured closure.
+
+Decision: retained-contribution consumers import `readContributionAttributions`, `contributionAttribution`,
+`contributionDeleted` and their schema/types through `access/public-identity.ts`. The native reader deduplicates
+anchors, reads batches of at most 100 and preserves absent/pending identity as null. Only explicit deleted state
+produces an id-free Deleted account/organization label; missing IDs alone never establish deletion.

@@ -20,6 +20,12 @@ import type { ClientKernel as KernelType } from './kernel/http/kernel.ts';
 import type { subjectRoutes } from './kernel/semantic/http/subjects.ts';
 import type { ZoneSubjectListRoutes } from './kernel/zones/subjects.ts';
 
+export type {
+  ContributionAttribution,
+  DeletedContributionAttribution,
+  LiveContributionAttribution,
+} from './kernel/access/contribution-attribution';
+
 export type { ClientKernel as Kernel } from './kernel/http/kernel.ts';
 export { zoneCollections, zoneReadPage, zoneSubjects } from './zones.ts';
 export type {
@@ -144,11 +150,10 @@ type SharedRoutes<Mounted, Original> = Original extends { body: unknown; respons
     };
 
 // Many modules inherit subjectRoutes. Intersecting their repeated anonymous 422 unions grows exponentially.
-type InstalledSubjectRoutes = SharedRoutes<
+type SubjectRoutes = SharedRoutes<
   Routes['subjects'],
   ReturnType<typeof subjectRoutes>['~Routes']['v1']['subjects']
 >;
-type SubjectRoutes = InstalledSubjectRoutes;
 type InstalledZoneRoutes = SharedRoutes<Routes['zones'] & ZoneSubjectListRoutes, Routes['zones']>;
 /** Producer `ImportedPreview` from kernel definition-import; SharedRoutes yields to generated emission. */
 export type ImportedPreview = {
@@ -258,6 +263,7 @@ export type SourceClassificationClearInput = MethodBody<ClassificationMethod<'$c
 export type SourceClassificationClearResult = MethodResult<ClassificationMethod<'$clear'>>;
 
 export type KernelClient = GeneratedKernelClient;
+export type ContributedPostEntry = Routes['posts'][':id']['get']['response'][200]['post'];
 export type PostHistoryPage = NativePostHistoryPage;
 export type ModerationDecisionPage = Static<ReturnType<typeof DecisionPageSchema>>;
 export type DecisionPageAppeal = NonNullable<ModerationDecisionPage['appeal']>;

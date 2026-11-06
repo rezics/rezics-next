@@ -8,7 +8,10 @@ let session: { state: string; subject: string | null; csrfToken: string | null }
   subject: 'current-person',
   csrfToken: 'csrf',
 };
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const sessionQueries = await import('../src/session/query');
 mock.module('../src/session/query', () => ({
+  ...sessionQueries,
   useSession: () => session,
   sessionCsrfToken: () => session.csrfToken,
 }));

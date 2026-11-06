@@ -2,9 +2,14 @@ import { expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { fromPlainText } from '@rezics/document';
 import { createKernelClient } from '@rezics/client';
+import { DocumentBody } from '@rezics/ui/document-body';
 import { authoredReadingPage } from '../src/kernel/fake/thread-reading-page';
 import { loadThreadPage, type ReadingPage } from '../src/threads/thread-page';
-import { publishedCitationForPost, readingPageReviewContext } from '../src/threads/thread-page-context';
+import {
+  mentionsForThreadPost,
+  publishedCitationForPost,
+  readingPageReviewContext,
+} from '../src/threads/thread-page-context';
 import { RevisionProvenance } from '../src/threads/revision-provenance-view';
 import { m } from '../src/paraglide/messages.js';
 
@@ -56,6 +61,7 @@ function page() {
 
 test('the mounted review reaches the reader with its recorded zero, vote revision and independently supplied Subject', async () => {
   const response = page();
+  delete response.mentions;
   response.reviewContext = {
     source: { threadId, postId, revisionId },
     target: {
@@ -125,4 +131,48 @@ test('the mounted review reaches the reader with its recorded zero, vote revisio
   expect(concealed).toContain(m.subject_community_citation_unavailable());
   expect(concealed).not.toContain(questionId);
   expect(concealed).not.toContain(m.thread_provenance_unscored());
+});
+
+test('post mentions retain the first disclosed identity and only render references in the exact body occurrence', () => {
+  const post = {
+    ...opening,
+    body: {
+      ...opening.body,
+      doc: {
+        ...opening.body.doc,
+        content: [{ type: 'paragraph', content: [{ type: 'mention', attrs: { accountId } }] }],
+      },
+    },
+  };
+  const projection = {
+    state: 'current',
+    sources: [
+      {
+        postId,
+        threadId,
+        revisionId,
+        sha256: post.sha256,
+        pageIndex: 1,
+        references: [accountId, subjectId],
+        overflow: false,
+      },
+    ],
+    identities: [
+      { id: accountId, state: 'concealed' },
+      { id: accountId, state: 'active', handle: 'later-active' },
+      { id: subjectId, state: 'active', handle: 'not-in-body' },
+    ],
+  } as const;
+  const mentions = mentionsForThreadPost(projection, post, 1);
+  expect(mentions).toEqual({});
+  const html = renderToStaticMarkup(<DocumentBody document={post.body} mentions={mentions} />);
+  expect(html).not.toContain('later-active');
+  expect(html).not.toContain('not-in-body');
+  const disclosed = {
+    ...projection,
+    identities: [{ id: accountId, state: 'active', handle: 'first-active' }, ...projection.identities],
+  } as const;
+  expect(mentionsForThreadPost(disclosed, post, 1)).toEqual({ [accountId]: { handle: 'first-active' } });
+  expect(mentionsForThreadPost(disclosed, post, 0)).toEqual({});
+  expect(mentionsForThreadPost(disclosed, { ...post, revisionId: subjectId }, 1)).toEqual({});
 });

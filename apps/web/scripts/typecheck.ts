@@ -46,8 +46,9 @@ async function compile(env: NodeJS.ProcessEnv): Promise<number> {
     const code = await command(args, env);
     if (code !== 0) return code;
   }
-  // Kernel, Auth and Importer sources stay in those workspaces. Scripts that import them are excluded from
-  // tsconfig.scripts.json so this program does not compile them. Both programs still run when the web program is red.
+  // Tooling imports Kernel/Auth's Node interfaces. Its owning config includes every script with Bun/Node globals;
+  // the product program keeps Cloudflare Worker globals. Both retain the inherited Reylo content mapper.
+  // Both programs run even when the web program has diagnostics; the scripts are never skipped by a red web program.
   return compileWebPrograms((args) => command(args, env));
 }
 
