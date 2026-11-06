@@ -26,7 +26,7 @@ import { accessCheck, type AccessRealmRoleReader } from '../../../src/request/ac
 import { createAuthDatabase } from '../../support/auth-database.ts';
 import { dropTestDatabase } from '../../support/drop-test-database.ts';
 import { assertSetupResponse } from './setup-response.ts';
-import { grantAccountActions } from './native-board-host.ts';
+import { grantNativeCreationAuthority } from './native-board-host.ts';
 import type { ContentActors, ContentCredential, ContentSystem, ContentSystemOptions } from './system.ts';
 
 export type NativeContentSystem = Omit<ContentSystem, 'actors' | 'auth'> & {
@@ -549,9 +549,8 @@ async function createNativeContentSystemWithOptions(
     // Space/Realm/subject creation are separate receipts for the operator who provisions
     // boards and for the ordinary personas who may author later. Whether Access admits those
     // rows for Space/Realm creation is Access-owned.
-    const parentCreation = ['space:create', 'realm:create', 'subject:create'] as const;
     for (const actor of [governance, author, other, moderator, suspended])
-      await grantAccountActions(kernel, grantor, PLATFORM_RESOURCE, actor.actor.accountId, parentCreation);
+      await grantNativeCreationAuthority(kernel, grantor, actor.actor.accountId);
     await command(`/v1/accounts/${suspended.actor.accountId}:suspend`, { reason: 'Native suspended persona' }, 200);
 
     const deletion: AccountDeletionRuntime = {
