@@ -386,6 +386,7 @@ test('Bangumi credit replay keeps the durable source endpoint after its reviewed
 
   expect(result.gaps).toEqual([]);
   expect(result.identities['person:8']).toMatchObject({ id: bound['person:8'], type: 'schema:Person' });
+  expect(result.canonicalPersons['person:8']).toBe(canonicalPerson);
   expect(commands).toHaveLength(1);
   expect(commands[0]!.statement.value).toMatchObject({ type: 'value', content: bound['person:8'] });
 });
