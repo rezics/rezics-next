@@ -21,7 +21,5 @@ export function routingOf(pool?: Pool): RoutePort {
 }
 
 export function contentLifecycleOf(pool?: Pool): ContentLifecyclePort {
-  return (
-    resolvedSemanticDomain(pool)?.ports.contentLifecycle ?? ordinaryContentLifecycle ?? nativeContentLifecycle()
-  );
+  return resolvedSemanticDomain(pool)?.ports.contentLifecycle ?? ordinaryContentLifecycle ?? nativeContentLifecycle();
 }

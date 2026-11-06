@@ -102,8 +102,11 @@ const WIRE_BYTES = 65536;
 function meteredPool(pool: Pool, cost: PublicFilterCost, limit: number, deadline: number): Pool {
   let bytes = 0;
   const mutable = cost as { -readonly [K in keyof PublicFilterCost]: PublicFilterCost[K] };
-  const ended = (bound: 'keys' | 'bytes' | 'deadline', count: number, funding = bound === 'bytes' ? WIRE_BYTES : limit) =>
-    new BudgetEnded(bound, count, funding, deadline);
+  const ended = (
+    bound: 'keys' | 'bytes' | 'deadline',
+    count: number,
+    funding = bound === 'bytes' ? WIRE_BYTES : limit,
+  ) => new BudgetEnded(bound, count, funding, deadline);
   return new Proxy(pool, {
     get(target, key) {
       if (key !== 'connect') {

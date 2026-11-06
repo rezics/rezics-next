@@ -42,9 +42,7 @@ export async function changeZoneLifecycle(
   const zone = client.zones({ id: command.id });
   const options = { headers: headers(authorization, command.key, command.revision) };
   const result =
-    command.operation === 'delete'
-      ? await zone.delete(undefined, options)
-      : await zone.$restore.post({}, options);
+    command.operation === 'delete' ? await zone.delete(undefined, options) : await zone.$restore.post({}, options);
   if (result.status !== 200 || !result.data) return failure(result.status);
   return { ok: true, operation: command.operation, revision: result.data.zone.revision };
 }

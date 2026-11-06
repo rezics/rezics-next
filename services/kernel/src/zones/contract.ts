@@ -253,10 +253,7 @@ export const ZonePurgeInputSchema = t.Object(
 );
 export type ZonePurgeInput = Static<typeof ZonePurgeInputSchema>;
 export const ZoneHoldResponseSchema = t.Object({ id: routedUuidSchema, held: t.Boolean() }, closed);
-export const ZonePurgeResponseSchema = t.Object(
-  { id: routedUuidSchema, state: t.Literal('purge_pending') },
-  closed,
-);
+export const ZonePurgeResponseSchema = t.Object({ id: routedUuidSchema, state: t.Literal('purge_pending') }, closed);
 export type ZoneOwned = Static<ReturnType<typeof ZoneOwnedSchema>>;
 export type ZoneResponse = Static<ReturnType<typeof ZoneResponseSchema>>;
 export type ZoneMetadataResponse = Static<ReturnType<typeof ZoneMetadataResponseSchema>>;

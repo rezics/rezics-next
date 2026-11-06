@@ -78,7 +78,14 @@ test('moderator takedown maps denial and the controls stay usable on a narrow la
   const last: ZoneLifecycleResult = denied;
   const markup = renderToStaticMarkup(
     <div className="max-w-xs">
-      <ZoneLifecycleControls deleted={false} withheld last={last} busy={false} onDelete={() => {}} onRestore={() => {}} />
+      <ZoneLifecycleControls
+        deleted={false}
+        withheld
+        last={last}
+        busy={false}
+        onDelete={() => {}}
+        onRestore={() => {}}
+      />
     </div>,
   );
   expect(markup).toContain('Not allowed');
