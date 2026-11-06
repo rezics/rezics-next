@@ -334,8 +334,10 @@ publication stays with its owner. Relative timestamps use the Content `threads/b
 # Following private edges
 
 Decision: list recovery uses the collection GET; point read/write always call `follows({ targetId })`. FULL pages
-withhold a changed Source (`target: null`) while keeping the own edge. id+type snapshots use `subjectOf`; account
-and deleted target shapes stay unlabeled. Return from a target restores the original
+withhold a changed Source (`target: null`) while keeping the own edge. The FULL target union maps only supported
+subject-summary fields through one helper: require id+type, build the explicit id/type/types/label/cover snapshot,
+then call `subjectOf`. Account and deleted target shapes stay unlabeled. Private edge, destination and optional null
+target behaviour stay on the follow row. Return from a target restores the original
 list cursor, kind and row from this visit's history state with the current session; the destination URL never carries
 the private cursor. Command replay resends the original credential, idempotency key and body. Fewest tests: one typed
 transport bind and one return-frontier pin; native/browser/growth walks remain later integration.
