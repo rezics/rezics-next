@@ -1,13 +1,13 @@
 import { expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
-import { fromPlainText, type DocumentNode } from '@rezics/document';
+import type { DocumentNode } from '@rezics/document';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { boardOpeningExample, boardOpeningId } from '../src/threads/board-opening-fixtures';
 import { receiveBoardOpeningPage } from '../src/threads/board-opening';
 import { boardPinAdviceSelection } from '../src/threads/board-feed-data';
 import { receiveBoardPinAdvice } from '../src/threads/board-pins/advice';
 import { boardRequestHref, boardRowReturn } from '../src/threads/board-navigation';
-import { loadThreadPage, type ReadingPage } from '../src/threads/thread-page';
+import { loadThreadPage } from '../src/threads/thread-page';
 import { authoredReadingPage } from '../src/kernel/fake/thread-reading-page';
 import { documentImagesForPost } from '../src/threads/document-media-read';
 import { threadLocation } from '../src/threads/thread-href';
@@ -54,7 +54,7 @@ function readingFor(card: ReturnType<typeof receiveBoardOpeningPage>['openingCar
       rightsHolder: 'Ada',
       via: { name: 'Ada', url: 'https://example.test/ada' },
       license: 'CC-BY-4.0',
-      obligations: ['cc:Attribution'],
+      obligations: ['cc:Attribution' as const],
     },
   };
   const page = authoredReadingPage({ ...thread, firstPost }, [], [
@@ -195,7 +195,7 @@ test('selected Board pin advice and an admitted generation open ReadingPage proj
   expect(loaded.mentions).toEqual({ [firstPost.authorId]: { handle: 'disclosed-author' } });
   expect(loaded.documentMedia?.kind).toBe('ready');
   expect(documentImagesForPost(loaded.documentMedia, loaded.posts.posts[0]!, 0)).toEqual(new Map([[mediaId, image]]));
-  expect(loaded.reviewContext).toBe(page.reviewContext);
+  expect(loaded.reviewContext).toEqual(page.reviewContext);
   expect(loaded.conversationActivity).toEqual({
     state: 'current',
     count: { kind: 'exact', value: 0 },

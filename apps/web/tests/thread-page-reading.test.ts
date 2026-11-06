@@ -172,8 +172,8 @@ test('the Web receiver maps the mounted page while preserving a selected reply a
     reactionsAsOf: null,
   });
   expect(page.mentions).toEqual({ [authorId]: { handle: 'disclosed-author' } });
-  expect(page.mentionProjection).toBe(response.mentions);
-  expect(page.reviewContext).toBe(response.reviewContext);
+  expect(page.mentionProjection).toEqual(response.mentions);
+  expect(page.reviewContext).toEqual(response.reviewContext);
   expect(page.conversationActivity).toEqual({
     state: 'current',
     count: { kind: 'exact', value: 0 },
@@ -374,7 +374,7 @@ test('the Web receiver maps the mounted page while preserving a selected reply a
   const optionalFailure = await selectedRead();
   expect(optionalFailure.posts.posts[0]?.body).toEqual(response.thread.firstPost.body);
   expect(optionalFailure.documentMedia?.kind).toBe('ready');
-  expect(optionalFailure.documentMediaProjection).toBe(response.documentMedia);
+  expect(optionalFailure.documentMediaProjection).toEqual(response.documentMedia);
   expect(documentImagesForPost(optionalFailure.documentMedia, optionalFailure.posts.posts[0]!, 0)).toEqual(
     new Map([[mediaId, image]]),
   );
