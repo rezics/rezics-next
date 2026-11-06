@@ -179,7 +179,11 @@ test('History consumes the actual Semantic one-set building seal locator revisio
     expect(locator.transactionId).toBe(currentCommand(tx).transactionId);
     expect(() => declareCommandRecordSourceSet(tx, set)).toThrow();
     expect(() => declareCommandRecordSources(tx, [source])).toThrow();
-    await declareCommandHistory(tx, kind, scope(person));
+    const scopes = scope(person);
+    await declareCommandHistory(tx, kind, {
+      ...scopes,
+      events: [{ artifactType: 'outbox-event/v1', accounts: scopes.response.accounts }],
+    });
     await stageHistoryWork(tx, {
       owner: 'record-purge-fixture',
       intent: {
@@ -188,7 +192,7 @@ test('History consumes the actual Semantic one-set building seal locator revisio
         workflowId: workId,
         input: { accounts: [person.accountId], source: 'native' },
       },
-      scope: { artifactType: 'durable-work/v1', accounts: scope(person).response.accounts },
+      scope: { artifactType: 'durable-work/v1', accounts: scopes.response.accounts },
     });
     const building = await tx.query(
       `SELECT metadata_state,member_count,snapshot_digest,native_revision FROM core.record_history_source_set
@@ -204,7 +208,16 @@ test('History consumes the actual Semantic one-set building seal locator revisio
     // Real membership becomes known after nested work serialization, before native commit.
     await producer.appendSemanticRecordSourceSet(tx, set, { sources: [source], terms: [] });
     await producer.sealSemanticRecordSourceSet(tx, set);
-    return noEffect({ payload: 'native set' });
+    return {
+      value: { payload: 'native set' },
+      events: [
+        {
+          type: 'com.rezics.library.entry.purged.v1',
+          subject: person.accountId,
+          data: { deletionId: randomUUID() },
+        },
+      ],
+    };
   });
   if (!locator) throw new Error('Missing native locator');
   const snapshot = await producer.readSemanticRecordSourceSet({ pool: f.db.pool }, locator, {
@@ -217,7 +230,11 @@ test('History consumes the actual Semantic one-set building seal locator revisio
      WHERE source_partition=$1 AND set_locator=$2 AND set_revision=$3`,
     recordSourceSetStorageKey(locator),
   );
-  expect(copies.rows.map((row) => row.artifact_type).sort()).toEqual(['command-receipt/v1', 'durable-work/v1']);
+  expect(copies.rows.map((row) => row.artifact_type).sort()).toEqual([
+    'command-receipt/v1',
+    'durable-work/v1',
+    'outbox-event/v1',
+  ]);
   for (const copy of copies.rows) {
     expect(copy.original_transaction).toBe(result.transactionId);
     expect(BigInt(copy.original_position)).toBe(result.position);
@@ -259,7 +276,11 @@ test('the native seal guard rolls back building source and generated work togeth
     command(async (tx) => {
       handle = await producer.beginSemanticRecordSourceSet(tx);
       locator = producer.semanticRecordSourceSetLocator(tx, handle);
-      await declareCommandHistory(tx, kind, scope(person));
+      const scopes = scope(person);
+      await declareCommandHistory(tx, kind, {
+        ...scopes,
+        events: [{ artifactType: 'outbox-event/v1', accounts: scopes.response.accounts }],
+      });
       await stageHistoryWork(tx, {
         owner: 'record-purge-fixture',
         intent: {
@@ -268,12 +289,21 @@ test('the native seal guard rolls back building source and generated work togeth
           workflowId: workId,
           input: { accounts: [person.accountId] },
         },
-        scope: { artifactType: 'durable-work/v1', accounts: scope(person).response.accounts },
+        scope: { artifactType: 'durable-work/v1', accounts: scopes.response.accounts },
       });
       await producer.appendSemanticRecordSourceSet(tx, handle, { sources: [source], terms: [] });
-      return noEffect({ payload: 'unsealed' });
+      return {
+        value: { payload: 'unsealed' },
+        events: [
+          {
+            type: 'com.rezics.library.entry.purged.v1',
+            subject: person.accountId,
+            data: { deletionId: randomUUID() },
+          },
+        ],
+      };
     }),
-  ).rejects.toThrow();
+  ).rejects.toThrow('Unsealed or mismatched');
   if (!locator || !handle) throw new Error('Missing attempted native set');
   expect(
     await producer.readSemanticRecordSourceSet({ pool: f.db.pool }, locator, { deadline: Date.now() + 30_000 }),
