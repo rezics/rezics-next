@@ -62,8 +62,9 @@ export async function drainTombstone(
 }
 
 /**
- * Spawn the default kernel worker against this suite's database. Readiness is the
- * ready line, 5ms queue poll, and an effects consumer that has caught up.
+ * Spawn the live default kernel worker against this suite's database. The child keeps
+ * Content ambient and unsubscribes foreign tombstone consumers. Readiness is the ready
+ * line, 5ms queue poll, and an effects consumer that has caught up.
  */
 export async function startCommerceErasureWorker(pool: Pool, client: WorkClient, env: Record<string, string>) {
   let output = '';

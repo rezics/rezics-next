@@ -218,7 +218,8 @@ describe('native genuine-order retention', () => {
       consent.readCurrentConsent({ actorAccountId, clientId });
     // Content's native Access is already compiled from the full mounted catalogue,
     // including Commerce, and authenticates through Score `nativeAuth.handler`.
-    // A second Access on this pool disagrees at the board current-role seam.
+    // A second Access on this pool disagrees at the board current-role seam
+    // (Diagnostic7: owner role and board:read scope with boardAllowed=false).
     access = native.access;
     kernel = createKernel({
       pool,

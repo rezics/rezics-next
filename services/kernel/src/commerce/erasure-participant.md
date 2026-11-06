@@ -168,11 +168,14 @@ snapshot; Content's `native.auth.issue` actor object is not admitted there.
 `prepareNativeRetainedOrder` is the Accounts terminal-graph export.
 
 The Auth/persona/fresh-deletion fixture stays in the test parent. Only kernel worker setup runs in a child using
-actual `startWorker`/`readWorkerConfig` with live default composition (`undefined` modules, `workerTestEnv`) against
-the same owned database and loopback Stripe endpoint. `KERNEL_WORK_MODULES` remains a registration-name pin only.
-Readiness is the ready line, the existing 5ms queue poll, and an effects consumer that has ticked with no pending
-envelopes; the parent reaps the child with SIGKILL because
-retention coordinators sleep. Seller Global grants are `board:create` and `offer:create` only: Content's native
+actual `startWorker`/`readWorkerConfig` against the same owned database and loopback Stripe endpoint. The child
+keeps live default composition (Content ambient and the Semantic domain) through startWorker's module decorator,
+not an eagerly composed `KERNEL_WORK_MODULES` list. That constant remains a registration-name pin only. The
+decorator unsubscribes every tombstone consumer except `commerce_erasure`, including Semantic's overflowing
+Subject-source page, so unfinished foreign participants cannot occupy the shared effects executor. Content
+collection schedules are removed after launch, as in the financial outcome driver. Readiness is the ready line,
+the existing 5ms queue poll, and an effects consumer that has ticked with no pending envelopes; the parent reaps
+the child with SIGKILL because retention coordinators sleep. Seller Global grants are `board:create` and `offer:create` only: Content's native
 identities already install `subject:create`. Positive purchase targets are real subjects created through the native
 API from released metadata. Business assertions, including unused-actor History-coverage `pending`, replay, private
 concealment and late paid/refund money outcomes, remain required. The independent terminal-benefit cases remain
