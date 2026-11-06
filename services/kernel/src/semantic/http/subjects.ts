@@ -18,7 +18,7 @@ import {
 } from '../statement-disclosure.ts';
 import { readSubjectSummaries, summaryAuthorization } from '../summaries.ts';
 import { languageRanges } from '../language.ts';
-import { CoverSummarySchema, SubjectSummarySchema } from './summaries.ts';
+import { CoverSummarySchema, RelatedSubjectSummarySchema, SubjectSummarySchema } from './summaries.ts';
 import { SourceSchema, BatchReferenceSchema } from '@rezics/definitions/bulk';
 import { admitMergeSubjects, observeSubjectIdentityOperation, SubjectRedirectError } from '../merges.ts';
 import { IdentityEpochStoreError } from '../identity-adapters/index.ts';
@@ -962,7 +962,7 @@ function subjectRoutes(
           operationId: 'subject.terms',
           'x-exposure': 'public',
           'x-action': 'statement:propose',
-          'x-resource-types': ['semantic.revision'],
+          'x-resource-types': ['semantic.revision', 'semantic.context'],
           'x-authority-resource-types': ['semantic.context'],
           'x-authority-resource-id': GLOBAL_CONTEXT,
           security: [{ bearerAuth: [] }],
@@ -1725,7 +1725,7 @@ function subjectRoutes(
           operationId: 'subject.propose',
           'x-exposure': 'public',
           'x-action': 'statement:propose',
-          'x-resource-types': ['semantic.revision'],
+          'x-resource-types': ['semantic.revision', 'semantic.context'],
           'x-authority-resource-types': ['semantic.context'],
           'x-authority-resource-id': GLOBAL_CONTEXT,
           security: [{ bearerAuth: [] }],
@@ -2877,7 +2877,7 @@ function subjectRoutes(
                           { additionalProperties: false },
                         ),
                       ),
-                      related: t.Optional(t.Record(t.String(), SubjectSummarySchema)),
+                      related: t.Optional(t.Record(t.String(), RelatedSubjectSummarySchema)),
                       type: t.String(),
                       label: t.String(),
                       summary: SubjectSummarySchema,
@@ -3009,7 +3009,7 @@ function subjectRoutes(
                   t.Object(
                     {
                       statement: StatementSchema(),
-                      related: t.Optional(t.Record(t.String(), SubjectSummarySchema)),
+                      related: t.Optional(t.Record(t.String(), RelatedSubjectSummarySchema)),
                       target: t.Union([t.String({ format: 'uuid' }), t.Null()]),
                       external: t.Union([t.String(), t.Null()]),
                       type: t.Optional(t.String()),

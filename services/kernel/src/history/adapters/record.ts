@@ -4,6 +4,8 @@ import { hasCommandRecordSourceSet } from './record-source-set.ts';
 import { recordAgentIdentityCopy, releaseAgentIdentitySource } from './agent-identity-source.ts';
 import type { CommandTransaction } from '../../command/command.ts';
 import { currentCommand } from '../../command/command.ts';
+import { boundCommandHistoryEvidence, releaseCommandHistoryEvidence } from '../command-evidence.ts';
+export { bindCommandHistoryEvidence, commandHistoryIdentityAccounts } from '../command-evidence.ts';
 import { guardHistoryAccounts } from './gates.ts';
 import insert from './record.sql';
 import {
@@ -29,7 +31,15 @@ import {
 
 let commandKindTable: Map<string, number> | undefined;
 /** Built on first use: module initialisers never read another module's bindings. */
-const commandKinds = (): Map<string, number> => (commandKindTable ??= new Map(Object.entries(COMMAND_HISTORY_KINDS)));
+const commandKinds = (): Map<string, number> =>
+  (commandKindTable ??= new Map<string, number>([
+    ...Object.entries(COMMAND_HISTORY_KINDS),
+    ['zone.takedown', 3015],
+    ['zone.release_takedown', 3016],
+    ['zone.hold', 3017],
+    ['zone.release_hold', 3018],
+    ['zone.purge', 3019],
+  ]));
 /** Startup-only receiving port. IDs are permanent owner-assigned values, never registration ordinals. */
 export function registerCommandHistoryKind(kind: string, id: number): void {
   if (
@@ -63,19 +73,7 @@ export const COMMAND_HISTORY_COVERAGE = Object.freeze({
 });
 export const MAX_HISTORY_PAYLOAD_BYTES = 65_536;
 type Declaration = CommandHistoryScopes & { kind: CommandHistoryKind; partition: number };
-const identities = new WeakMap<CommandTransaction, readonly AccountReference[]>();
 const declarations = new WeakMap<CommandTransaction, Declaration>();
-
-/** Access calls this only with opaque verified permission evidence, once per executor attempt.
- * This server module is never an HTTP JSON input or an alternate permission evaluator. */
-export function bindCommandHistoryEvidence(tx: CommandTransaction, accounts: readonly AccountReference[]): void {
-  identities.set(tx, structuredClone(accounts));
-}
-
-/** The already verified evidence for this attempt, used only to enroll native data roles. */
-export function commandHistoryIdentityAccounts(tx: CommandTransaction): readonly AccountReference[] {
-  return structuredClone(identities.get(tx) ?? []);
-}
 
 /** Native owners declare subjects/related parties before their first write. Automatic identity
  * roles are separate and come from the authorization that admitted this exact attempt. */
@@ -87,7 +85,7 @@ export async function declareCommandHistory(
   const command = currentCommand(tx);
   if (!commandKinds().has(kind) || declarations.has(tx))
     throw new TypeError('Invalid or repeated command history declaration');
-  const identity = identities.get(tx);
+  const identity = boundCommandHistoryEvidence(tx);
   if (!identity) throw new TypeError('Missing command history evidence: verified actor/principal/human/delegate');
   if (scopes.events.length > 1000) throw new TypeError('Too many history event scopes');
   const response = unionHistoryScope(
@@ -213,7 +211,7 @@ export async function recordCommandHistory(
 export function releaseCommandHistory(tx: CommandTransaction): void {
   releaseAgentIdentitySource(tx);
   releaseCommandRecordSources(tx);
-  identities.delete(tx);
+  releaseCommandHistoryEvidence(tx);
   declarations.delete(tx);
 }
 

@@ -37,3 +37,8 @@ export const SubjectSummarySchema = t.Object(
   },
   object,
 );
+/** Related summaries of a merged original add the survivor it redirects to, so receiving routes can follow it. */
+export const RelatedSubjectSummarySchema = t.Object(
+  { ...SubjectSummarySchema.properties, redirect: t.Optional(t.String({ format: 'uuid' })) },
+  object,
+);

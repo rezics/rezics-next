@@ -28,6 +28,47 @@ const FOLLOW_EVENT = 'com.rezics.library.follow.updated.v1';
 
 export type FollowTarget = { targetId: string; targetType: FollowTargetType };
 
+/** Frozen original command identity. Replay and disclosure keep this frame, never a mutated live actor. */
+export type FollowCommandFrame = Readonly<{
+  accountId: string;
+  clientId: string;
+  requestedBy: string | null;
+  authnEpoch: number;
+  scopes: readonly string[];
+  targetId: string;
+  requestKey: string;
+  deadline: number;
+}>;
+
+function freezeFollowFrame(
+  actor: AccountActor,
+  targetId: string,
+  requestKey: string,
+  deadline: number,
+): FollowCommandFrame {
+  return Object.freeze({
+    accountId: actor.accountId,
+    clientId: actor.clientId,
+    requestedBy: actor.requestedBy,
+    authnEpoch: actor.authnEpoch,
+    scopes: Object.freeze([...actor.scopes]),
+    targetId,
+    requestKey,
+    deadline,
+  });
+}
+
+function actorFromFrame(frame: FollowCommandFrame): AccountActor {
+  return Object.freeze({
+    kind: 'account',
+    accountId: frame.accountId,
+    clientId: frame.clientId,
+    requestedBy: frame.requestedBy,
+    authnEpoch: frame.authnEpoch,
+    scopes: frame.scopes,
+  });
+}
+
 /** A committed follow command, or the current row when the follow did not change. */
 export type FollowWrite = {
   follow: Follow;
@@ -200,31 +241,35 @@ export function createFollowCommands(config: FollowDeps) {
     const kind = intent === 'follow' ? 'library.follow' : 'library.unfollow';
     const targetId = typeof input === 'string' ? input : asTarget(input).targetId;
     if (routeOf(targetId) === null) throw new LibraryNotFoundError();
+    const frame = freezeFollowFrame(actor, targetId, requestKey, deadline);
+    const owner = actorFromFrame(frame);
     // Preserve the existing target-shaped digest. Stored identity is read only in
     // this account's partition; an absent own row conveys no foreign target type.
-    const existing = await load(actor.accountId, targetId, deadline);
-    const target = existing
-      ? { targetId: existing.targetId, targetType: existing.targetType }
-      : typeof input === 'string'
-        ? await resolveTarget(actor, input, deadline)
-        : asTarget(input);
+    const existing = await load(frame.accountId, frame.targetId, frame.deadline);
+    const target = Object.freeze(
+      existing
+        ? { targetId: existing.targetId, targetType: existing.targetType }
+        : typeof input === 'string'
+          ? await resolveTarget(owner, input, frame.deadline)
+          : asTarget(input),
+    );
     return finish(
       () =>
         runner.ownAccountPrepared(
-          actor,
+          owner,
           {
             action,
             kind,
-            requestKey,
-            input: target ?? { targetId },
-            deadline,
+            requestKey: frame.requestKey,
+            input: target,
+            deadline: frame.deadline,
             followOperation: true,
             async prepare(attempt) {
               // Business failure is deferred until AFTER current owner admission and
               // exact receipt replay. A stored removal never visits the target home.
               if (intent === 'unfollow' && existing) return { target, error: null };
               try {
-                return { target: await resolveTarget(actor, target ?? input, deadline, attempt), error: null };
+                return { target: await resolveTarget(owner, target, frame.deadline, attempt), error: null };
               } catch (error) {
                 return { target: null, error };
               }
@@ -235,13 +280,13 @@ export function createFollowCommands(config: FollowDeps) {
               throw prepared.error;
             }
             if (!prepared.target) throw new LibraryNotFoundError();
-            const route = routeOf(actor.accountId)!;
-            const stored = await readStoredFollow(tx, route, actor.accountId, targetId);
+            const route = routeOf(frame.accountId)!;
+            const stored = await readStoredFollow(tx, route, frame.accountId, frame.targetId);
             if (stored && stored.targetType !== prepared.target.targetType) throw new LibraryNotFoundError();
             if (intent === 'unfollow' && existing && !stored) throw new LibraryNotFoundError();
             const changed = await applyFollow(tx, route, {
-              accountId: actor.accountId,
-              targetId,
+              accountId: frame.accountId,
+              targetId: frame.targetId,
               targetType: stored?.targetType ?? prepared.target.targetType,
               intent,
               reason: 'explicit',
@@ -251,14 +296,14 @@ export function createFollowCommands(config: FollowDeps) {
             if (!changed) {
               throw new UnchangedFollow();
             }
-            const follow = await readStoredFollow(tx, route, actor.accountId, targetId);
+            const follow = await readStoredFollow(tx, route, frame.accountId, frame.targetId);
             if (!follow) throw new Error('Follow write did not leave a row');
-            return { value: follow, events: [followEvent(actor.accountId, targetId)] };
+            return { value: follow, events: [followEvent(frame.accountId, frame.targetId)] };
           },
         ),
-      actor.accountId,
-      targetId,
-      deadline,
+      frame.accountId,
+      frame.targetId,
+      frame.deadline,
     );
   }
 

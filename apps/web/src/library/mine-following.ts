@@ -3,7 +3,6 @@ import type { KernelClient } from '@rezics/client';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 import {
-  libraryListQuery,
   LibraryReadForbiddenError,
   readLibraryResult,
   StaleCursorError,
@@ -11,9 +10,17 @@ import {
   type LibrarySubject,
 } from './reads';
 import { PERSONAL_DIRECTORY_CURSOR_LIMITS, personalDirectoryAddress } from './personal-directory-address';
+import {
+  deleteFollow,
+  followListQuery,
+  followWriteHeaders,
+  getFollowList,
+  type FollowEdge,
+  type FollowListPage,
+} from './follow-transport';
 
-type FollowRead = NonNullable<Awaited<ReturnType<KernelClient['follows']['get']>>['data']>;
-type RawFollow = FollowRead['follows'][number];
+type FollowRead = FollowListPage;
+type RawFollow = FollowEdge;
 
 export type MineFollow = {
   targetId: string;
@@ -70,11 +77,11 @@ export async function loadMineFollowingPage(
   )
     return { signedIn: true, follows: [], next: null, addressInvalid: true };
   const read = async (cursor?: string) => {
-    const result = await client.follows.get({
-      query: { ...libraryListQuery(cursor, 20), ...(kind === 'all' ? {} : { targetType: kind }) },
-      headers: { authorization },
-      fetch: { cache: 'no-store', redirect: 'manual' },
-    });
+    const result = await getFollowList(
+      client,
+      authorization,
+      followListQuery(cursor, 20, kind === 'all' ? undefined : kind),
+    );
     try {
       return readLibraryResult(result);
     } catch (error) {
@@ -110,8 +117,6 @@ export async function unfollowFollow(
   if (await prepareSession(request, sessionEnv)) return false;
   const authorization = viewerCredential(request);
   if (!authorization) return false;
-  const result = await client.follows({ targetId: input.targetId }).delete(undefined, {
-    headers: { authorization, 'idempotency-key': input.idempotencyKey } as { 'idempotency-key': string },
-  });
+  const result = await deleteFollow(client, input.targetId, followWriteHeaders(authorization, input.idempotencyKey));
   return !result.error;
 }

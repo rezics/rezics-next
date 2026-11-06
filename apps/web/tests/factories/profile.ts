@@ -1,5 +1,5 @@
 import type { KernelClient } from '@rezics/client';
-import { officialProfileRead } from '../../src/settings/editable-profile-source';
+import { officialProfileRead, type EditableProfileRead } from '../../src/settings/editable-profile-source';
 import type { ProfileValues } from '../../src/settings/profile-data';
 
 type Envelope = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['accounts']>['profile']['get']>>['data']>;
@@ -34,21 +34,9 @@ export function editableProfile({
   };
 }
 
-export function profileEnvelope(profile = editableProfile()): Envelope {
-  const read = officialProfileRead(structuredClone(profile));
-  return {
-    ...read,
-    editing: {
-      ...read.editing,
-      fields: {
-        ...read.editing.fields,
-        publicViews: {
-          ...read.editing.fields.publicViews,
-          flags: ['posts', 'reviews', 'collections', 'realms'] as const,
-        },
-      },
-    },
-  } as Envelope;
+/** The installed `{ profile, editing }` observation, typed by the producer rather than the client's profile-only read. */
+export function profileEnvelope(profile = editableProfile()): EditableProfileRead {
+  return officialProfileRead(structuredClone(profile));
 }
 
 export function profileAvatar(): NonNullable<Profile['avatar']> {

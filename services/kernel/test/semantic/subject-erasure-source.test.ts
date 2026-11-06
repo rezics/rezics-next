@@ -225,6 +225,36 @@ test('Search receives sealed role-complete Subject source disposition and actual
   ).toBe(false);
 }, 360_000);
 
+test('tombstone Source pages precheck the caller minimum and charge returned rows without overflowing', async () => {
+  const person = await f.person();
+  await f.tombstone(person);
+  const b = await barrier(person.accountId);
+  await local(b);
+  const tight = await createSubjectErasureSource(config()).readPage({
+    barrier: b,
+    frontier: null,
+    inputLimit: 4,
+    context: context(),
+  });
+  expect(tight.cost.inputKeys).toBeLessThanOrEqual(4);
+  expect(['pending', 'progress', 'complete', 'unavailable']).toContain(tight.status);
+  let advanced = false;
+  for (let step = 0; step < 8; step++) {
+    const page = await createSubjectErasureSource(config()).readPage({
+      barrier: b,
+      frontier: null,
+      inputLimit: 100,
+      context: context(),
+    });
+    expect(page.cost.inputKeys).toBeLessThanOrEqual(100);
+    if ('receipt' in page) {
+      advanced = true;
+      break;
+    }
+  }
+  expect(advanced).toBe(true);
+}, 180_000);
+
 test('sealed empty native role homes advance before filters while a hidden original never borrows visible terminal disposition', async () => {
   const author = await f.author();
   const moderator = await f.author();

@@ -26,6 +26,7 @@ import { GrantDeniedError, type GrantInput } from '../../src/access/grant-comman
 import { authTemplateName, createAuthDatabase } from '../support/auth-database.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import '../support/native-history-composition.ts';
 import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
 import {
@@ -456,7 +457,9 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
           'statement:propose',
           'media:read_reservation',
           'subject:read',
-          ...(options.publication ? ['context:read', 'media:read', 'context:accept', 'context:adopt'] : []),
+          ...(options.publication
+            ? ['context:read', 'media:read', 'context:accept', 'context:adopt', 'subject:merge']
+            : []),
           ...statisticScopes,
         ],
       };

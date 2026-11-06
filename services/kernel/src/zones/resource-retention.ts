@@ -1,7 +1,7 @@
 import { lockRecordPurgeAuthoritySource, type RecordPurgeAuthority } from '../semantic/record-purge-authority.ts';
 import { authoritativeTimeValue, currentCommand, type CommandTransaction } from '../command/command.ts';
 import { partitionOf } from '../route/route.ts';
-import { compareAndSetZone, lockZoneHead, type ZoneHead } from './resource-store.ts';
+import { compareAndSetZone, lockZoneHead, type ZoneHead } from './resource-head.ts';
 
 type ZoneRetentionInput = Readonly<{
   route: number;
@@ -67,4 +67,25 @@ export async function minimizeDeletedZone(
   );
   if (!changed) throw new Error('zone_record_retention_source_changed');
   return 'minimized';
+}
+
+/** Ordinary shared-phase completion. Rechecks the parent lock, hold and restore before the purged marker. */
+export async function completeDeletedZoneRetention(
+  tx: CommandTransaction,
+  input: { route: number; id: string },
+): Promise<'purged' | 'held' | 'cancelled'> {
+  const command = currentCommand(tx);
+  const row = await lockZoneHead(tx, input.route, input.id);
+  if (!row) throw new Error('zone_record_retention_source_missing');
+  if (row.state === 'active') return 'cancelled';
+  if (row.held) return 'held';
+  if (row.state === 'purged') return 'purged';
+  const changed = await compareAndSetZone(
+    tx,
+    row,
+    { ...row, state: 'purged' },
+    { at: authoritativeTimeValue(command.time), transactionId: command.transactionId },
+  );
+  if (!changed) throw new Error('zone_record_retention_source_changed');
+  return 'purged';
 }

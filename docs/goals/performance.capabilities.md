@@ -93,6 +93,19 @@ Search retains direct catalogue/prepared public checks; Commerce retains direct 
 the `POST /v1/zones/{id}:readPage` owner retains the per-plan composed-page check. Reuse their native plans and
 evidence rather than duplicate their checks or implement benchmark-only matching.
 
+## private-follow-edge
+
+**User job:** A seeded member follows a supported target, reads the private Following list and current target, pages,
+returns from the target to the original list frontier, removes the original edge, and recovers the acknowledged
+result on command replay. Empty exhaustion and other-member/anonymous views use their own authority.
+
+**Personas:** Alice on her own follows; Bob with an empty or unrelated list; anonymous without a private edge.
+
+**Decision for this increment:** land typed list/point transport, FULL withhold of a changed Source, frozen original
+command frame, and Following history-state return. Fewest tests: one HTTP follow/replay/foreign/empty journey, one
+FULL withhold, one typed transport bind, one return-frontier pin. Native Auth-persona/browser/growth walks stay
+open until their owning check.
+
 ## growth-harness
 
 **User job and persona:** an owner Goal contributor measures engine work at three seeded scales independently of

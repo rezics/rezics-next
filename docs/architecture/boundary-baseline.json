@@ -23265,22 +23265,12 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/routes/subjects/$id_.$slug_.addon.tsx",
-          "edge": "value import \"../../subject/load-subject\" #1 => apps/web/src/subject/load-subject.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/routes/subjects/$id_.$slug_.addon.tsx",
           "edge": "value import \"../../subject/subject-href\" #1 => apps/web/src/subject/subject-href.ts"
         },
         {
           "rule": "rule 2",
           "file": "apps/web/src/routes/subjects/$id_.$slug_.album.tsx",
           "edge": "value import \"../../features/catalogue/album-profile-session\" #1 => apps/web/src/features/catalogue/album-profile-session.tsx"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/routes/subjects/$id_.$slug_.album.tsx",
-          "edge": "value import \"../../subject/load-subject\" #1 => apps/web/src/subject/load-subject.ts"
         },
         {
           "rule": "rule 2",
@@ -23325,11 +23315,6 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/routes/subjects/$id_.$slug_.authored.tsx",
-          "edge": "value import \"../../subject/load-subject\" #1 => apps/web/src/subject/load-subject.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/routes/subjects/$id_.$slug_.authored.tsx",
           "edge": "value import \"../../subject/subject-href\" #1 => apps/web/src/subject/subject-href.ts"
         },
         {
@@ -23366,11 +23351,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/routes/subjects/$id_.$slug_.character.tsx",
           "edge": "value import \"../../features/catalogue/classification-create-return\" #1 => apps/web/src/features/catalogue/classification-create-return.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/routes/subjects/$id_.$slug_.character.tsx",
-          "edge": "value import \"../../subject/load-subject\" #1 => apps/web/src/subject/load-subject.ts"
         },
         {
           "rule": "rule 2",
@@ -23535,11 +23515,6 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/routes/subjects/$id_.$slug_.edit.tsx",
-          "edge": "value import \"../../subject/load-subject\" #1 => apps/web/src/subject/load-subject.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/routes/subjects/$id_.$slug_.edit.tsx",
           "edge": "value import \"../../subject/subject-href\" #1 => apps/web/src/subject/subject-href.ts"
         },
         {
@@ -23565,11 +23540,6 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/routes/subjects/$id_.$slug_.file.tsx",
-          "edge": "value import \"../../subject/load-subject\" #1 => apps/web/src/subject/load-subject.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/routes/subjects/$id_.$slug_.file.tsx",
           "edge": "value import \"../../subject/subject-href\" #1 => apps/web/src/subject/subject-href.ts"
         },
         {
@@ -23590,11 +23560,6 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/routes/subjects/$id_.$slug_.identifiers.tsx",
-          "edge": "value import \"../../subject/load-subject\" #1 => apps/web/src/subject/load-subject.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/routes/subjects/$id_.$slug_.identifiers.tsx",
           "edge": "value import \"../../subject/subject-href\" #1 => apps/web/src/subject/subject-href.ts"
         },
         {
@@ -23606,11 +23571,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/routes/subjects/$id_.$slug_.manga.tsx",
           "edge": "value import \"../../features/catalogue/manga-profile-session\" #1 => apps/web/src/features/catalogue/manga-profile-session.tsx"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/routes/subjects/$id_.$slug_.manga.tsx",
-          "edge": "value import \"../../subject/load-subject\" #1 => apps/web/src/subject/load-subject.ts"
         },
         {
           "rule": "rule 2",
@@ -23666,11 +23626,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/routes/subjects/$id_.$slug_.relation-edit.tsx",
           "edge": "value import \"../../subject/candidates\" #1 => apps/web/src/subject/candidates.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/routes/subjects/$id_.$slug_.relation-edit.tsx",
-          "edge": "value import \"../../subject/load-subject\" #1 => apps/web/src/subject/load-subject.ts"
         },
         {
           "rule": "rule 2",
@@ -23785,11 +23740,6 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/routes/subjects/$id_.$slug_.screen.tsx",
-          "edge": "value import \"../../subject/load-subject\" #1 => apps/web/src/subject/load-subject.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/routes/subjects/$id_.$slug_.screen.tsx",
           "edge": "value import \"../../subject/subject-href\" #1 => apps/web/src/subject/subject-href.ts"
         },
         {
@@ -23896,11 +23846,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/routes/subjects/$id_.$slug_.statement-consent.tsx",
           "edge": "value import \"../../subject/candidate-lifetime\" #2 => apps/web/src/subject/candidate-lifetime.tsx"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/routes/subjects/$id_.$slug_.statement-consent.tsx",
-          "edge": "value import \"../../subject/load-subject\" #1 => apps/web/src/subject/load-subject.ts"
         },
         {
           "rule": "rule 2",
@@ -24191,11 +24136,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/routes/subjects/$id_.relations.tsx",
           "edge": "value import \"../../features/pages/subject-queries\" #1 => apps/web/src/features/pages/subject-queries.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/routes/subjects/$id_.relations.tsx",
-          "edge": "value import \"../../subject/load-subject\" #1 => apps/web/src/subject/load-subject.ts"
         },
         {
           "rule": "rule 2",
@@ -28766,11 +28706,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/features/pages/context-subject.ts",
           "edge": "type import \"../../shell/head\" #1 => apps/web/src/shell/head.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/pages/context-subject.ts",
-          "edge": "value import \"../../subject/load-subject\" #1 => apps/web/src/subject/load-subject.ts"
         },
         {
           "rule": "rule 2",
@@ -34632,11 +34567,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/features/catalogue/subject-terms-request.ts",
           "edge": "value import \"../../subject/candidates\" #1 => apps/web/src/subject/candidates.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/catalogue/subject-terms-request.ts",
-          "edge": "value import \"../../subject/load-subject\" #1 => apps/web/src/subject/load-subject.ts"
         },
         {
           "rule": "rule 2",

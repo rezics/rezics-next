@@ -74,6 +74,8 @@ export type BangumiCreatorCreditResult = {
   fenced: string[];
   keys: string[];
   identities: Record<string, NativeIdentity>;
+  /** Current canonical Person of each admitted Person endpoint, beside its durable binding in `identities`. */
+  canonicalPersons: Record<string, string>;
 };
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -217,6 +219,7 @@ export async function deliverBangumiCreatorCredits(input: {
   const gaps: BangumiCreatorCreditGap[] = [];
   const keys: string[] = [];
   const identities: Record<string, NativeIdentity> = {};
+  const canonicalPersons: Record<string, string> = {};
   const reads = new Map<string, Promise<ReviewedSubjectRead | null>>();
   const readCurrent = (id: string): Promise<ReviewedSubjectRead | null> => {
     let pending = reads.get(id);
@@ -258,11 +261,13 @@ export async function deliverBangumiCreatorCredits(input: {
       const expectedType = input.expectedNativeType(key);
       const personIdentity = personIdentityForSource('bangumi', key, expectedType);
       if (personIdentity) {
-        if (!current || observePersonIdentity(personIdentity, current).state !== 'current') continue;
-        // Keep the proposal endpoint on its original durable binding; native reference reads follow redirects.
+        const observed = current ? observePersonIdentity(personIdentity, current) : undefined;
+        if (!observed || observed.state !== 'current') continue;
+        // The proposal keeps its durable binding; the merged original resolves to the canonical Person on native reads.
         const identity = { id: claim.subject, type: 'schema:Person', releaseDigest: bundledDigest };
         resolved[key] = identity;
         identities[key] = identity;
+        canonicalPersons[key] = observed.currentSubjectId;
         continue;
       }
       const organizationTupleIdentity = /^person:[1-9][0-9]*$/u.test(key) && expectedType === 'schema:Organization';
@@ -326,7 +331,7 @@ export async function deliverBangumiCreatorCredits(input: {
       keys.push(command.key);
     }
   }
-  return { proposals, gaps, fenced, keys, identities };
+  return { proposals, gaps, fenced, keys, identities, canonicalPersons };
 }
 
 export async function importBangumiCreatorCredits(input: {

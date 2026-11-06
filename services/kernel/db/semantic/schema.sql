@@ -809,6 +809,16 @@ BEGIN
  SELECT b.transaction_id INTO native_tx FROM core.partition p JOIN editorial.write_basis b
  ON b.partition_no=p.partition_no AND b.position=p.position
  WHERE p.partition_no=native_home AND b.xmin::text=pg_current_xact_id()::text;
+ IF native_tx IS NULL THEN
+  SELECT n.transaction_id INTO native_tx FROM core.partition p JOIN semantic.identity_epoch_native_commit n
+  ON n.partition_no=p.partition_no AND n.position=p.position
+  WHERE p.partition_no=native_home AND n.xmin::text=pg_current_xact_id()::text;
+ END IF;
+ IF native_tx IS NULL THEN
+  SELECT c.transaction_id INTO native_tx FROM core.partition p JOIN semantic.erasure_source_commit c
+  ON c.partition_no=p.partition_no AND c.position=p.position
+  WHERE p.partition_no=native_home AND c.xmin::text=pg_current_xact_id()::text;
+ END IF;
  IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN OLD; END IF;
  IF native_tx IS NULL THEN RAISE EXCEPTION 'Semantic source removal requires native command custody' USING ERRCODE='23514'; END IF;
  INSERT INTO semantic.erasure_source_commit(partition_no,transaction_id,epoch,position)
@@ -1320,24 +1330,24 @@ END; $$;
 CREATE FUNCTION semantic.capture_record_retention() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
-DECLARE kind text; owner_id uuid; record_id uuid; at timestamptz; deleted boolean; restarted boolean;
+DECLARE v_kind text; v_owner uuid; v_record uuid; v_at timestamptz; deleted boolean; restarted boolean;
 BEGIN
  IF TG_TABLE_NAME='record_lifecycle' THEN
-  kind:='candidate';owner_id:=NEW.subject_id;record_id:=NEW.candidate_id;
-  at:=NEW.deleted_at;deleted:=NEW.state IN ('deleted','purging');
+  v_kind:='candidate';v_owner:=NEW.subject_id;v_record:=NEW.candidate_id;
+  v_at:=NEW.deleted_at;deleted:=NEW.state IN ('deleted','purging');
  ELSIF TG_TABLE_NAME='context' THEN
-  kind:='context';owner_id:=NEW.context_id;record_id:=NEW.context_id;
-  at:=NEW.deleted_at;deleted:=NEW.state='deleted';
+  v_kind:='context';v_owner:=NEW.context_id;v_record:=NEW.context_id;
+  v_at:=NEW.deleted_at;deleted:=NEW.state='deleted';
  ELSE
-  kind:='zone';owner_id:=NEW.zone_id;record_id:=NEW.zone_id;
-  at:=NEW.deleted_at;deleted:=NEW.state='deleted';
+  v_kind:='zone';v_owner:=NEW.zone_id;v_record:=NEW.zone_id;
+  v_at:=NEW.deleted_at;deleted:=NEW.state='deleted';
  END IF;
  restarted:=TG_OP='INSERT';
  IF TG_OP='UPDATE' THEN restarted:=NEW.state='deleted' AND OLD.state='active'; END IF;
  IF deleted THEN
   INSERT INTO semantic.record_retention_home(partition_no) VALUES(NEW.route/16) ON CONFLICT DO NOTHING;
   INSERT INTO semantic.record_retention_key(partition_no,route,kind,owner_id,record_id,deleted_at)
-   VALUES(NEW.route/16,NEW.route,kind,owner_id,record_id,at)
+   VALUES(NEW.route/16,NEW.route,v_kind,v_owner,v_record,v_at)
    ON CONFLICT(route,kind,owner_id,record_id) DO UPDATE SET
     generation=CASE WHEN restarted OR record_retention_key.deleted_at<>EXCLUDED.deleted_at THEN gen_random_uuid() ELSE record_retention_key.generation END,
     phase=CASE WHEN restarted OR record_retention_key.deleted_at<>EXCLUDED.deleted_at THEN 'local' ELSE record_retention_key.phase END,
@@ -3893,12 +3903,17 @@ CREATE FUNCTION semantic.validate_erasure_source_commit() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
- IF NOT EXISTS(SELECT 1 FROM editorial.write_basis b
+ IF EXISTS(SELECT 1 FROM editorial.write_basis b
    WHERE b.partition_no=NEW.partition_no AND b.transaction_id=NEW.transaction_id
      AND b.epoch=NEW.epoch AND b.position=NEW.position AND b.xmin::text=pg_current_xact_id()::text) THEN
-  RAISE EXCEPTION 'Semantic Source receipt lacks same-command native custody' USING ERRCODE='23514';
+  RETURN NEW;
  END IF;
- RETURN NEW;
+ IF EXISTS(SELECT 1 FROM semantic.identity_epoch_native_commit n
+   WHERE n.partition_no=NEW.partition_no AND n.transaction_id=NEW.transaction_id
+     AND n.epoch=NEW.epoch AND n.position=NEW.position AND n.xmin::text=pg_current_xact_id()::text) THEN
+  RETURN NEW;
+ END IF;
+ RAISE EXCEPTION 'Semantic Source receipt lacks same-command native custody' USING ERRCODE='23514';
 END; $$;
 
 
@@ -6054,7 +6069,7 @@ CREATE TABLE semantic.identity_epoch_native_commit (
     "position" bigint NOT NULL,
     purpose text NOT NULL,
     CONSTRAINT identity_epoch_native_commit_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
-    CONSTRAINT identity_epoch_native_commit_purpose_check CHECK (((purpose = ANY (ARRAY['bootstrap'::text, 'admission'::text, 'mapping'::text, 'search-canonical-index'::text, 'library-private-follow-counts'::text, 'identity-receiving-plan'::text, 'identity-receiving-record'::text, 'identity-receiving-custody'::text, 'identity-prearm'::text, 'identity-prearm-cancel'::text, 'identity-scope-registration'::text, 'identity-scope-enrollment'::text, 'identity-scope-preparation'::text, 'identity-scope-cancellation'::text, 'identity-public-capture'::text, 'identity-scope-finish'::text, 'identity-scope-retirement'::text, 'identity-scope-directory-release'::text, 'identity-prearm-release'::text])) OR (purpose = 'identity-public-output-capture'::text) OR (purpose = ANY (ARRAY['identity-public-output-applied'::text, 'identity-public-output-cancelled'::text]))))
+    CONSTRAINT identity_epoch_native_commit_purpose_check CHECK (((purpose = ANY (ARRAY['bootstrap'::text, 'admission'::text, 'mapping'::text, 'search-canonical-index'::text, 'library-private-follow-counts'::text, 'identity-receiving-plan'::text, 'identity-receiving-record'::text, 'identity-receiving-custody'::text, 'identity-prearm'::text, 'identity-prearm-cancel'::text, 'identity-scope-registration'::text, 'identity-scope-enrollment'::text, 'identity-scope-preparation'::text, 'identity-scope-cancellation'::text, 'identity-public-capture'::text, 'identity-scope-finish'::text, 'identity-scope-retirement'::text, 'identity-scope-directory-release'::text, 'identity-prearm-release'::text])) OR (purpose = 'identity-public-output-capture'::text) OR (purpose = ANY (ARRAY['identity-public-output-applied'::text, 'identity-public-output-cancelled'::text])) OR (purpose = 'identity-platform-native-inverse-removal'::text)))
 );
 
 

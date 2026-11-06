@@ -8,7 +8,11 @@ import {
 } from '../command/command.ts';
 import { partitionOf } from '../route/route.ts';
 import { purgeAuthoredFieldForDeletedRecord } from '../content/authored-field-retention.ts';
-import { inspectDeletedZoneRetention, minimizeDeletedZone } from '../zones/resource-retention.ts';
+import {
+  completeDeletedZoneRetention,
+  inspectDeletedZoneRetention,
+  minimizeDeletedZone,
+} from '../zones/resource-retention.ts';
 import {
   prepareRecordPurgeAuthority,
   lockRecordPurgeAuthoritySource,
@@ -283,12 +287,24 @@ export function semanticRetention(pool: Pool, options: Readonly<{ clock?: () => 
                        WHERE route=$1 AND context_id=$2`,
                         [work.route, work.record_id],
                       );
-                    else
-                      await tx.query(
-                        `UPDATE zones.zone SET state='purged',revision=revision+1,lifecycle_revision=lifecycle_revision+1
-                      WHERE route=$1 AND zone_id=$2`,
-                        [work.route, work.record_id],
-                      );
+                    else {
+                      const outcome = await completeDeletedZoneRetention(tx, {
+                        route: work.route,
+                        id: work.record_id,
+                      });
+                      if (outcome === 'held') {
+                        unfinished = true;
+                        continue;
+                      }
+                      if (outcome === 'cancelled') {
+                        await tx.query(
+                          `UPDATE semantic.record_retention_key SET phase='complete' WHERE partition_no=$1
+                        AND key=$2 AND generation=$3`,
+                          [input.partition, work.key, work.generation],
+                        );
+                        continue;
+                      }
+                    }
                     await tx.query(
                       `UPDATE semantic.record_retention_key SET phase='complete'
                     WHERE partition_no=$1 AND key=$2 AND generation=$3`,

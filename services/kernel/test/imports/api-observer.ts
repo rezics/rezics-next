@@ -29,8 +29,11 @@ const envelope = (source: SourceEnvelope) => ({
   fieldGroup: source.field_group,
 });
 
-/** Independent reads of public evidence and route-leading native committed rows. */
-export async function openApiObserver(runtime: ApiRuntime) {
+/**
+ * Independent reads of public evidence and route-leading native committed rows. The reviewed-merge case also
+ * grants the merge and its gate, which the governance role holds on Global, so it consents to those actions.
+ */
+export async function openApiObserver(runtime: ApiRuntime, options: { reviewedMerge?: true } = {}) {
   const { identity, database } = runtime;
   const support = identitySupport(identity);
   const scopes = [
@@ -44,6 +47,7 @@ export async function openApiObserver(runtime: ApiRuntime) {
     'access:grant',
     'source_fence:takedown',
     'moderation:takedown',
+    ...(options.reviewedMerge ? ['subject:merge', 'gate:subject_identity', 'gate:any'] : []),
   ];
   const clientId = `import-observer-${randomUUID()}`;
   await identity.auth.internal.registerClient({ clientId, firstParty: true, scopes });

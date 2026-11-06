@@ -30,8 +30,11 @@ selected identity and destinations without discarding a row's uncertain command.
 exposure, parent origin, close and source replacement fence responses, clipboard feedback and focus. One page and
 one selection/request are retained, with no row/return payload in local storage or public URLs. Inspection focuses
 its heading; Escape or Close synchronously restores its current trigger. Links use ordinary browser navigation;
-the browser keeps the requested cursor address. Page hide retires inspection, and a restored browser document
-requests a current page reread before a new inspection. Until a fresh page arrives, inspection and target links stay
+the browser keeps the requested cursor address. Ordinary left-click on a supplied destination captures cursor, kind
+and target on this Following history entry (`followingReturn` in `history.state`) for the current session; modified
+clicks leave no private frontier. Page hide retires inspection, and a restored browser document
+requests a current page reread before a new inspection, then focuses the original row when that frontier still
+matches. Until a fresh page arrives, inspection and target links stay
 suspended, with a readable updating state; the current trigger remains focusable. Retry focuses the inspection heading
 before replacing its button with the preparing state. Collection exposure withdrawal also retires existing inspection
 and retained link callbacks without replacing the follow command owner. Destination admission remains authoritative, so denied or

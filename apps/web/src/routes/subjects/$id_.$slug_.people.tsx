@@ -1,4 +1,6 @@
-import { useLocation, createFileRoute } from '@tanstack/react-router';
+import { useLocation, createFileRoute, notFound, redirect } from '@tanstack/react-router';
+import { createServerFn } from '@tanstack/react-start';
+import { setResponseHeader } from '@tanstack/react-start/server';
 import { PeopleProfileSession } from '../../features/catalogue/people-profile-session';
 import { getLocale } from '../../paraglide/runtime';
 import { m } from '../../paraglide/messages.js';
@@ -7,10 +9,43 @@ import {
   validatePeopleCurrentVisitSearch,
 } from '../../features/catalogue/people-current-visit';
 import { PeopleCurrentVisitView } from '../../features/catalogue/people-current-visit-view';
-import { keepSearch } from '../../subject/subject-href';
+import { canonicalRedirect, keepSearch } from '../../subject/load-subject';
+
+const canonicalPeopleProfile = createServerFn({ method: 'GET', strict: false })
+  .validator((input: { id: string; slug: string; locale: string; search: string }) => {
+    if (
+      !input ||
+      typeof input.id !== 'string' ||
+      input.id.length > 128 ||
+      typeof input.slug !== 'string' ||
+      input.slug.length > 128 ||
+      typeof input.locale !== 'string' ||
+      typeof input.search !== 'string' ||
+      input.search.length > 16384
+    )
+      throw notFound();
+    return input;
+  })
+  .handler(async ({ data }) => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const [{ kernelClient }, { loadSubject }] = await Promise.all([
+      import('../../kernel/client'),
+      import('../../subject/load-subject'),
+    ]);
+    // Only a merged or re-slugged Person redirects; every other outcome keeps the reader's own states.
+    const canonical = await loadSubject(kernelClient(data.locale), data.id, data.locale as never);
+    if (canonical?.kind !== 'subject') return null;
+    if (canonical.value.id !== data.id || canonical.value.slug !== data.slug)
+      throw redirect(canonicalRedirect(`${canonical.value.href}/people`, data.search));
+    return null;
+  });
 
 export const Route = createFileRoute('/subjects/$id_/$slug_/people')({
   staticData: { publicCache: false },
+  loader: ({ params, location }) =>
+    canonicalPeopleProfile({
+      data: { ...params, locale: getLocale(), search: keepSearch('', location.searchStr, location.hash) },
+    }),
   head: () => ({ meta: [{ title: m.people_profile_title() }, { name: 'robots', content: 'noindex, nofollow' }] }),
   validateSearch: (search: Record<string, unknown>) => search,
   component: PeopleProfileRoute,

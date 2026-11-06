@@ -10,6 +10,10 @@ export function deriveAccess(base: Access, overrides: Partial<Access>): Access {
   const derived: Access = {
     authenticate,
     ...(base.prepare ? { prepare: base.prepare.bind(base) } : {}),
+    ...(base.preparePage ? { preparePage: base.preparePage.bind(base) } : {}),
+    ...(base.authorizePage ? { authorizePage: base.authorizePage.bind(base) } : {}),
+    ...(base.authorizeExplicit ? { authorizeExplicit: base.authorizeExplicit.bind(base) } : {}),
+    ...(base.prepareReadDecisions ? { prepareReadDecisions: base.prepareReadDecisions.bind(base) } : {}),
     ...(base.replayAuthorization ? { replayAuthorization: base.replayAuthorization.bind(base) } : {}),
     authorize: base.authorize.bind(base),
     ...overrides,

@@ -406,7 +406,10 @@ but before its output was journalled. Do not add another Accounts status, decisi
 The current reversal's pending receipt/catalogue comparison still prevents an old delivery undoing newer review.
 
 Ordinary merge uses real Global `subject:merge` through `authorizeSemanticWrite` and `globalContextAnchor` in
-`semantic/http/subjects.ts`, preserving native current required anchor checks. `runCommand` mints native time and
+`semantic/http/subjects.ts`, preserving native current required anchor checks. A cross-partition proof is bound to one
+command partition, so every identity command obtains its own through `authorizationFor(partition)`: receipt lookup and claim
+at the actor partition, admission at the home partition, acceptance at the binding partition, and the terminal merge at
+the redirected partition. `runCommand` mints native time and
 calls `authorization.authorize` before `readReceipt`, even on replay; `currentCommand(tx)` exposes the completed
 binding only on that live transaction. Never serialize that binding as permission. Replaying a user response must
 re-authorize the current request. In contrast, admitted immutable job intent is trusted internal durable work
@@ -1739,15 +1742,17 @@ Collection command.
 
 Cancellation first commits an immutable no-future-use fence. Each subsequent call closes at most one retained
 page/plan (16 cuts), then acknowledges that exact closure ordinal. A never-delivered cut is tombstoned with a
-real native release receipt. An admitted inverse is deliberately retained with `foreign_closure_missing`:
-its installed `capture_erasure_source_removal` requires actual editorial write-basis custody, which a platform
-capture command does not possess. The producer does not bypass erasure or delete through a fabricated basis.
-The necessary owner delta is an actual platform-native inverse removal/retirement operation, same control
-Pool/home/T, returning its charged eight-axis receipt and committed provenance. A retired boolean alone is
-insufficient: the installed pre-arm export still includes such inverses. Any ordinary consumer intent also
-refuses disposition until its actual copy/writer closure is installed. Ordinary output closure and identity-job
-Search closure are separate authorities. Scoped finish/retire refuse this output branch while that foreign
-identity-job closure composition is absent. These refusals preserve all retained obligations.
+real native release receipt. An admitted inverse is deleted in that same control Pool/home/T by
+`removePlatformNativeInverse`: it records `erasure_source_commit` immediately (position+1 before the fence)
+and deletes `identity_epoch_prearm_inverse` and `identity_scope_inverse` keyed to the cut. A retired boolean
+alone is insufficient: the installed pre-arm export still includes such inverses. The producer does not
+fabricate editorial write-basis. `capture_erasure_source_removal` and `validate_erasure_source_commit`
+accept current-position `editorial.write_basis`, `identity_epoch_native_commit`, or `erasure_source_commit`
+whose xmin is this command. Cut release still records purpose `identity-scope-directory-release`. Charged eight-axis cost is
+the instrumented delete/commit statements. Any ordinary consumer intent also refuses disposition until its
+actual copy/writer closure is installed. Ordinary output closure and identity-job Search closure are
+separate authorities. Scoped finish/retire refuse this output branch while that foreign identity-job
+closure composition is absent. These refusals preserve all retained obligations.
 
 `receivePublicIdentityOutputCapturePrearm(pool,ticket,work,cancellation?)` resolves the real released native
 ticket before opening the Collection command. It invalidates the original scope revision and records the

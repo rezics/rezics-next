@@ -43,6 +43,9 @@ import s38 from './identity-public-output-close-progress.sql';
 import existingSQL from './identity-public-output-existing.sql';
 import dispositionLocatorSQL from './identity-public-output-disposition-locator.sql';
 import cutLiveSQL from './identity-public-output-cut-live.sql';
+import inverseCommitSQL from './deletion/platform-native-inverse-commit.sql';
+import inversePrearmSQL from './deletion/platform-native-inverse-prearm.sql';
+import inverseScopeSQL from './deletion/platform-native-inverse-scope.sql';
 import prearmAttemptSQL from './identity-public-output-prearm-attempt.sql';
 import prearmUnsafeSQL from './identity-public-output-prearm-unsafe.sql';
 import prearmAttemptInsertSQL from './identity-public-output-prearm-attempt-insert.sql';
@@ -88,6 +91,9 @@ function plans() {
         [existingSQL.sql, [1, 8, 1, 64, 0, 0, 1]],
         [dispositionLocatorSQL.sql, [1, 8, 1, 256, 0, 0, 1]],
         [cutLiveSQL.sql, [2, 16, 2, 64, 0, 0, 1]],
+        [inverseCommitSQL.sql, [1, 8, 1, 128, 0, 0, 1]],
+        [inversePrearmSQL.sql, [1, 16, 2, 256, 0, 0, 1]],
+        [inverseScopeSQL.sql, [1, 16, 2, 256, 0, 0, 1]],
         [prearmAttemptSQL.sql, [1, 8, 1, 1024, 0, 0, 1]],
         [prearmUnsafeSQL.sql, [2, 32, 4, 512, 0, 0, 3, 3]],
         [prearmAttemptInsertSQL.sql, [4, 48, 6, 4096, 0, 0, 5, 5]],

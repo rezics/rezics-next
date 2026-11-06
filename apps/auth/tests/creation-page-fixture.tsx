@@ -7,15 +7,24 @@ const { Window } = require(
 );
 let currentSignal: AbortSignal | undefined;
 const nativeEnv = { AUTH_SECURITY_SCOPE_CONFIGURATION: 'catalogue:20' };
+// Start's compiled RPC bridge validates input; the fixture forwards the value unchanged.
+type ServerFnInput = { data?: unknown; signal?: AbortSignal | undefined };
+type ServerFnBuilder = {
+  validator(validate: unknown): ServerFnBuilder;
+  handler(handler: (context: ServerFnInput) => unknown): (options?: ServerFnInput) => unknown;
+};
+function serverFn(): ServerFnBuilder {
+  const builder: ServerFnBuilder = {
+    validator: () => builder,
+    handler: (handler) => (options) => {
+      currentSignal = options?.signal;
+      return handler({ data: options?.data, signal: options?.signal });
+    },
+  };
+  return builder;
+}
 mock.module('@tanstack/react-start', () => ({
-  createServerFn: () => ({
-    handler:
-      (handler: (context: { data?: unknown; signal?: AbortSignal }) => unknown) =>
-      (options?: { data?: unknown; signal?: AbortSignal }) => {
-        currentSignal = options?.signal;
-        return handler({ data: options?.data, signal: options?.signal });
-      },
-  }),
+  createServerFn: () => serverFn(),
   createServerOnlyFn: <T extends (...args: never[]) => unknown>(handler: T) => handler,
 }));
 mock.module('cloudflare:workers', () => ({ env: nativeEnv }));
@@ -27,7 +36,7 @@ mock.module('@tanstack/react-start/server', () => ({
     }),
   setResponseHeader() {},
 }));
-globalThis.__AUTH_ORIGIN__ = '';
+(globalThis as { __AUTH_ORIGIN__?: string }).__AUTH_ORIGIN__ = '';
 export const dom = new Window({ url: 'https://auth.test/organizations/new' });
 const previous = new Map<string, PropertyDescriptor | undefined>();
 const globals = Object.fromEntries(

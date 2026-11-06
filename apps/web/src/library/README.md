@@ -324,6 +324,14 @@ duplicate Subject/session data or mutation command. Native stale-cursor recovery
 read; only its admitted restarted result resets accepted coordinates to the first position and keeps the restart
 notice. Unavailable, denied, preparing, signed-out and invalid-address states do not admit a window.
 
+# Following private edges
+
+Decision: list recovery uses the collection GET; point read/write always call `follows({ targetId })`. FULL pages
+withhold a changed Source (`target: null`) while keeping the own edge. Return from a target restores the original
+list cursor, kind and row from this visit's history state with the current session; the destination URL never carries
+the private cursor. Command replay resends the original credential, idempotency key and body. Fewest tests: one typed
+transport bind and one return-frontier pin; native/browser/growth walks remain later integration.
+
 # Progress return navigation
 
 Decision: keep private Progress return context in router history state, re-read the native index before restoring row focus, and offer first-page/current-work recovery when the original address no longer admits the selected session; an explicit new session keeps its filters and removes only the Progress cursor.

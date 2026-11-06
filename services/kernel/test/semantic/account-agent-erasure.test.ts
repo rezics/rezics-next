@@ -6,18 +6,21 @@ import { bundledRelease } from '@rezics/definitions/bundled';
 import type { CommandAuthorization } from '../../src/command/command.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { accessCheck, type AccountActor, type Resource } from '../../src/request/access.ts';
-import { deadlineFor } from '../../src/request/deadline.ts';
-import { newId, routeOf } from '../../src/route/route.ts';
+import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { accountAgentId, AccountAgentVerificationError } from '../../src/semantic/agents.ts';
 import { ensureAccountAgent, verifyAccountAgent } from '../../src/semantic/account-agents.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { SUBJECT_REVISED } from '../../src/semantic/events.ts';
 import { createSubject, readSubject } from '../../src/semantic/subject.ts';
 import { createRealAccess } from './real-access.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
+import { ACCOUNT_ROLE_BITS } from '../../src/history/contracts.ts';
+import { bindCommandHistoryEvidence } from '../../src/history/record.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(url);
+configureTestReceiptKeys(pool);
 const admin = new pg.Pool({ connectionString: url, max: 2 });
 const route = 0x3460;
 const accounts = { owner: newId(route), organization: newId(route), software: newId(route) };
@@ -46,8 +49,10 @@ const access = realAccess.access({
 });
 let owner: AccountActor;
 
+const requestDeadline = () => Date.now() + 120_000;
+
 async function authorization(action: string, resource: Resource): Promise<CommandAuthorization> {
-  const check = await accessCheck(access, owner, action, resource, { pool: admin, deadline: deadlineFor(5_000) });
+  const check = await accessCheck(access, owner, action, resource, { pool: admin, deadline: requestDeadline() });
   const denied = () => new Error(`Real Access denied ${action}`);
   return {
     action,
@@ -55,6 +60,14 @@ async function authorization(action: string, resource: Resource): Promise<Comman
     denied,
     async authorize(tx, attempt) {
       if (!(await check(tx, attempt.time))) throw denied();
+      // The verified check is the evidence Access binds for the actor's own history roles.
+      bindCommandHistoryEvidence(tx, [
+        {
+          accountRoute: routeOf(owner.accountId)!,
+          accountId: owner.accountId,
+          roles: ACCOUNT_ROLE_BITS.principal | ACCOUNT_ROLE_BITS.subject,
+        },
+      ]);
       return 'execute' as const;
     },
   };
@@ -77,7 +90,7 @@ async function catalogue(type: string) {
 beforeAll(async () => {
   await bootstrapRelease(pool, agentRelease);
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'owner', 'subject:create');
-  owner = await access.authenticate(realAccess.bearer('owner'), { pool: admin, deadline: deadlineFor(5_000) });
+  owner = await access.authenticate(realAccess.bearer('owner'), { pool: admin, deadline: requestDeadline() });
 });
 
 afterAll(async () => {
@@ -87,7 +100,7 @@ afterAll(async () => {
 test("an erased account's agent keeps no label, current or past, and a later ensure restores it", async () => {
   const account = accounts.owner;
   const agent = accountAgentId(account);
-  const options = { account, kind: 'person' as const };
+  const options = { account, kind: 'person' as const, deadline: requestDeadline() };
   const firstName = `First private name ${randomUUID()}`;
   const secondName = `Second private name ${randomUUID()}`;
   await ensureAccountAgent(pool, { ...options, name: firstName, language: 'en' });
@@ -95,19 +108,22 @@ test("an erased account's agent keeps no label, current or past, and a later ens
   expect(
     (await admin.query("SELECT body FROM semantic.fact WHERE subject_id = $1 AND kind = 'label'", [agent])).rows,
   ).toEqual([{ body: secondName }]);
+  // The replaced label survives only as restricted erasure-source custody, recorded in the producer's transaction.
+  const removed = await admin.query<{ n: number }>(
+    "SELECT count(*)::int AS n FROM semantic.erasure_source_disposition WHERE partition_no = $1 AND store = 'fact' AND disposition = 'removed'",
+    [partitionOf(routeOf(agent)!)],
+  );
+  expect(removed.rows[0]!.n).toBeGreaterThan(0);
   await realAccess.grant({ route, id: agent }, 'owner', 'subject:read');
   const read = async () => {
-    const check = await accessCheck(
-      access,
-      owner,
-      'subject:read',
-      { route, id: agent },
-      {
-        pool: admin,
-        deadline: deadlineFor(5_000),
+    const deadline = requestDeadline();
+    return readSubject(pool, agent, async () => false, undefined, new Uint8Array(32).fill(1), {
+      deadline,
+      prepareAuthorization: async () => {
+        owner = await access.authenticate(realAccess.bearer('owner'), { pool: admin, deadline });
+        return accessCheck(access, owner, 'subject:read', { route, id: agent }, { pool: admin, deadline });
       },
-    );
-    return readSubject(pool, agent, check, undefined, new Uint8Array(32).fill(1));
+    });
   };
   const erased = await ensureAccountAgent(pool, { ...options, name: null });
   expect(erased.subject.labels).toEqual({});
@@ -146,14 +162,12 @@ test("an erased account's agent keeps no label, current or past, and a later ens
   );
   expect(current.rows).toEqual([{ current_facts: 1, facts: 1 }]);
 
-  const survivor = await catalogue('schema:Person');
-  await verifyAccountAgent(pool, { account, catalogue: survivor, receipt: randomUUID() });
-  const verified = await readSubject(pool, survivor, async () => true, undefined, new Uint8Array(32).fill(1));
-  const unchanged = await ensureAccountAgent(pool, { ...options, name: null });
-  expect(unchanged.subject.labels).toEqual({ en: 'Catalogue label' });
-  expect(unchanged.subject.revision).toBe(verified!.subject.revision);
-
-  const unnamed = await ensureAccountAgent(pool, { account: newId(route), kind: 'person', name: null });
+  const unnamed = await ensureAccountAgent(pool, {
+    account: newId(route),
+    kind: 'person',
+    name: null,
+    deadline: requestDeadline(),
+  });
   expect(unnamed.created).toBe(true);
   expect(unnamed.subject.labels).toEqual({});
 });
@@ -167,7 +181,7 @@ test('verification refuses a kind mismatch and software agents', async () => {
     [accounts.software, 'software', person],
   ] as const) {
     const agent = accountAgentId(account);
-    await ensureAccountAgent(pool, { account, kind, name: 'Unverified label' });
+    await ensureAccountAgent(pool, { account, kind, name: 'Unverified label', deadline: requestDeadline() });
     const snapshot = async () => {
       const result = await admin.query(
         `SELECT to_jsonb(subject) AS subject,

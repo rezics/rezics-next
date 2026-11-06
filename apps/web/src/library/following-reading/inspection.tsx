@@ -7,6 +7,7 @@ import { currentSpaceDestination, suppliedRealmMembershipHref, type FollowingDes
 import { FollowingReference } from './reference';
 import { readFollowingSpace } from './space-actions';
 import type { SpaceReading, SpaceReadInput, SpaceRead } from './space-reader';
+import { followingDestinationClick, type FollowingReturnFrontier } from './return-context';
 
 export type FollowingSpaceReader = (input: SpaceReadInput) => Promise<SpaceRead>;
 const nativeRead: FollowingSpaceReader = (data) => readFollowingSpace({ data });
@@ -80,6 +81,7 @@ export function FollowingInspection({
   canReadCollection,
   close,
   readSpace,
+  returnFrontier = null,
 }: {
   selection: FollowingSelection;
   subject: string | null;
@@ -87,6 +89,7 @@ export function FollowingInspection({
   canReadCollection: boolean;
   close: () => void;
   readSpace?: FollowingSpaceReader | undefined;
+  returnFrontier?: FollowingReturnFrontier | null;
 }) {
   const heading = useRef<HTMLHeadingElement>(null);
   const { follow, title, kind, reason, destination: supplied } = selection.row;
@@ -186,7 +189,11 @@ export function FollowingInspection({
             })}
             href={destination.href}
             onClick={(event) => {
-              if (!selection.current() || (isSpace && !space.current())) event.preventDefault();
+              followingDestinationClick(
+                event,
+                () => selection.current() && (!isSpace || space.current()),
+                returnFrontier,
+              );
             }}
           >
             {destination.kind === 'realm'
@@ -206,7 +213,7 @@ export function FollowingInspection({
           })}
           href={actionHref}
           onClick={(event) => {
-            if (!selection.current() || !space.current()) event.preventDefault();
+            followingDestinationClick(event, () => selection.current() && space.current(), returnFrontier);
           }}
         >
           {m.realm_membership_label()}

@@ -2094,7 +2094,10 @@ export async function publishShowcase(input: {
       omissions.push({ provider: 'vndb', sourceKey: workId, code });
     }
   }
+  // A subject stops only for its own identity. A refused or failed fact stops just its own property group,
+  // so a malformed neighbour never suppresses a valid fact.
   const stoppedSubjects = new Set<string>();
+  const stoppedGroups = new Set<string>();
   for (const { record, assertion } of assertions) {
     const id = record.subjectId;
     if (
@@ -2104,6 +2107,7 @@ export async function publishShowcase(input: {
       vndbTagMembership(record, assertion) ||
       (assertion.property === 'schema:genre' && blockedTagSubjects.has(id)) ||
       stoppedSubjects.has(id) ||
+      stoppedGroups.has(groupKey(id, assertion.property)) ||
       blockedCoverCandidates.has(assertion.candidateId)
     )
       continue;
@@ -2140,7 +2144,7 @@ export async function publishShowcase(input: {
     if (candidate.decision === 'accepted') continue;
     if (candidate.decision === 'rejected') {
       omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'candidate-currently-rejected' });
-      stoppedSubjects.add(id);
+      stoppedGroups.add(groupKey(id, assertion.property));
       continue;
     }
     const body = { context: GLOBAL_CONTEXT, expected_head: candidate.head ?? null };
@@ -2150,7 +2154,7 @@ export async function publishShowcase(input: {
     if (prior?.state === 'acknowledged') continue;
     if (prior?.state === 'refused' && permanentReviewRefusal(prior.error_code)) {
       omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: prior.error_code! });
-      if (assertion.property !== 'schema:image') stoppedSubjects.add(id);
+      if (assertion.property !== 'schema:image') stoppedGroups.add(groupKey(id, assertion.property));
       continue;
     }
     const sealedBody = input.journal.prepareAction(key, body, idempotencyKey) as typeof body;
@@ -2162,7 +2166,7 @@ export async function publishShowcase(input: {
     } catch (error) {
       input.journal.refuseAction(key, errorCode(error));
       omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: errorCode(error) });
-      if (assertion.property !== 'schema:image') stoppedSubjects.add(id);
+      if (assertion.property !== 'schema:image') stoppedGroups.add(groupKey(id, assertion.property));
     }
   }
 
@@ -2174,6 +2178,7 @@ export async function publishShowcase(input: {
       !validated.has(assertion.candidateId) ||
       (assertion.property === 'schema:genre' && blockedTagSubjects.has(id)) ||
       stoppedSubjects.has(id) ||
+      stoppedGroups.has(groupKey(id, assertion.property)) ||
       blockedCoverCandidates.has(assertion.candidateId)
     )
       continue;
@@ -2690,7 +2695,8 @@ export async function publishShowcase(input: {
     if (
       !id ||
       (group.property === 'schema:genre' && blockedTagSubjects.has(id)) ||
-      (stoppedSubjects.has(id) && !(refreshWeights && group.ids.size === 0))
+      ((stoppedSubjects.has(id) || stoppedGroups.has(groupKey(id, group.property))) &&
+        !(refreshWeights && group.ids.size === 0))
     )
       continue;
     if (group.property === 'schema:image') {
@@ -2720,7 +2726,7 @@ export async function publishShowcase(input: {
         sourceKey: group.record.sourceKey,
         code: 'adoption-current-read-unavailable',
       });
-      if (group.property !== 'schema:image') stoppedSubjects.add(id);
+      if (group.property !== 'schema:image') stoppedGroups.add(groupKey(id, group.property));
       continue;
     }
     const previous = page.adoption;
@@ -2731,7 +2737,7 @@ export async function publishShowcase(input: {
         sourceKey: group.record.sourceKey,
         code: 'adoption-selection-unavailable',
       });
-      if (group.property !== 'schema:image') stoppedSubjects.add(id);
+      if (group.property !== 'schema:image') stoppedGroups.add(groupKey(id, group.property));
       continue;
     }
     const currentAdoption = adoptionSnapshot(previous);
@@ -2802,7 +2808,7 @@ export async function publishShowcase(input: {
         sourceKey: group.record.sourceKey,
         code: 'adoption-selection-bounded',
       });
-      if (group.property !== 'schema:image') stoppedSubjects.add(id);
+      if (group.property !== 'schema:image') stoppedGroups.add(groupKey(id, group.property));
       continue;
     }
     const dependencyIds = new Set<string>();
@@ -2856,7 +2862,7 @@ export async function publishShowcase(input: {
       }
     }
     if (!dependencyReady) {
-      if (group.property !== 'schema:image') stoppedSubjects.add(id);
+      if (group.property !== 'schema:image') stoppedGroups.add(groupKey(id, group.property));
       continue;
     }
     const body = {
@@ -2877,7 +2883,7 @@ export async function publishShowcase(input: {
         sourceKey: group.record.sourceKey,
         code: priorAction.error_code!,
       });
-      if (group.property !== 'schema:image') stoppedSubjects.add(id);
+      if (group.property !== 'schema:image') stoppedGroups.add(groupKey(id, group.property));
       continue;
     }
     if (currentAdoption && sameAdoptionSelection(currentAdoption.selection, body.selection)) {
@@ -2898,7 +2904,7 @@ export async function publishShowcase(input: {
     } catch (error) {
       input.journal.refuseAction(action, errorCode(error));
       omissions.push({ provider: group.record.provider, sourceKey: group.record.sourceKey, code: errorCode(error) });
-      if (group.property !== 'schema:image') stoppedSubjects.add(id);
+      if (group.property !== 'schema:image') stoppedGroups.add(groupKey(id, group.property));
     }
   }
 

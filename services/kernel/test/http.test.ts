@@ -32,6 +32,7 @@ const failures: Record<string, () => Error> = {
   moved: () => new CommandUnavailableError('moved', 7, 'node-b'),
   contention: () => new CommandUnavailableError('contention', 7),
   deadline: () => new CommandUnavailableError('deadline', 7),
+  'abort-timeout': () => new DOMException('The operation timed out.', 'TimeoutError'),
   unexpected: () => new Error('connection to 10.0.0.7 refused; SELECT secret FROM core.partition'),
 };
 const app = createApp({ pool, writeRate: { spend: async () => ({ allowed: true }) } })
@@ -132,6 +133,7 @@ test('kernel errors map to their problems, statuses and headers', async () => {
     moved: [503, 'partition_unavailable', true, { 'retry-after': '1' }],
     contention: [503, 'transaction_retry_exhausted', true, { 'retry-after': '1' }],
     deadline: [503, 'deadline_exceeded', true, {}],
+    'abort-timeout': [503, 'deadline_exceeded', true, {}],
   };
   for (const [failure, [status, code, retryable, headers]] of Object.entries(expected)) {
     const { response, body } = await call('GET', `/probe/${failure}`);

@@ -6,7 +6,7 @@ import { locales, type Locale } from '../paraglide/runtime.js';
 import { originalLanguage } from './language';
 import type { Subject } from './types';
 import { accountHref, subjectHref } from './subject-href';
-export { keepSearch, subjectUrlForView, subjectViewPaths } from './subject-href';
+export { canonicalRedirect, keepSearch, subjectUrlForView, subjectViewPaths } from './subject-href';
 
 const agentRoots = new Set(['schema:Person', 'schema:Organization']);
 

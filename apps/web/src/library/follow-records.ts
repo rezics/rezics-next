@@ -3,9 +3,10 @@ import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platfo
 import { MediaProblem } from '../media/kernel';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
+import { deleteFollow, followStateOf, followWriteHeaders, getFollowPoint, putFollow } from './follow-transport';
 
-type NativeFollow = NonNullable<Awaited<ReturnType<KernelClient['follows']['get']>>['data']>['follows'][number];
-export type FollowTargetType = NativeFollow['targetType'];
+export type { FollowTargetType } from './follow-transport';
+
 export type FollowState =
   | { state: 'ready'; following: boolean }
   | { state: 'pending' | 'unavailable' | 'forbidden' | 'signed-out' | 'closed' };
@@ -28,22 +29,13 @@ export async function readFollowRecord(
   authorization: string,
 ): Promise<FollowState> {
   try {
-    const result = await client.follows({ targetId }).get({
-      query: { view: 'BASIC' },
-      headers: { authorization },
-      fetch: { cache: 'no-store', redirect: 'manual' },
-    });
+    const result = await getFollowPoint(client, targetId, authorization);
     if (isPlatformClosedProblem(result.status, result.error?.value)) return { state: 'closed' };
     if (result.status === 404) return { state: 'ready', following: false };
     if (result.status === 401 || result.status === 403) return { state: 'forbidden' };
-    if (
-      result.error ||
-      !result.data?.follow ||
-      (result.data.follow.targetId !== undefined && result.data.follow.targetId !== targetId) ||
-      !['following', 'unfollowed'].includes(result.data.follow.state)
-    )
-      return { state: 'unavailable' };
-    return { state: 'ready', following: result.data.follow.state === 'following' };
+    const state = followStateOf(result.data, targetId);
+    if (result.error || !state) return { state: 'unavailable' };
+    return { state: 'ready', following: state === 'following' };
   } catch (error) {
     return { state: isPlatformClosedError(error) ? 'closed' : 'unavailable' };
   }
@@ -97,9 +89,10 @@ export async function writeFollowRecord(
     const stale = await prepareSession(request, sessionEnv);
     const authorization = viewerCredential(request);
     if (stale || !authorization) return { ok: false, reason: 'unauthorized' };
-    const headers = { authorization, 'idempotency-key': input.idempotencyKey };
-    const target = client.follows({ targetId: input.targetId });
-    const result = input.following ? await target.put(null, { headers }) : await target.delete(undefined, { headers });
+    const headers = followWriteHeaders(authorization, input.idempotencyKey);
+    const result = input.following
+      ? await putFollow(client, input.targetId, headers)
+      : await deleteFollow(client, input.targetId, headers);
     const body = result.error?.value;
     if (isPlatformClosedProblem(result.status, body)) return { ok: false, reason: 'closed' };
     if (result.status === 409 || (body && 'code' in body && body.code === 'idempotency_conflict'))
@@ -108,14 +101,9 @@ export async function writeFollowRecord(
     if (result.status === 403) return { ok: false, reason: 'forbidden' };
     if (result.status === 400 || result.status === 404 || result.status === 422)
       return { ok: false, reason: 'invalid' };
-    if (
-      result.error ||
-      result.status !== 200 ||
-      !result.data?.follow ||
-      !['following', 'unfollowed'].includes(result.data.follow.state)
-    )
-      return { ok: false, reason: 'unavailable' };
-    return { ok: true, following: result.data.follow.state === 'following' };
+    const state = followStateOf(result.data, input.targetId);
+    if (result.error || result.status !== 200 || !state) return { ok: false, reason: 'unavailable' };
+    return { ok: true, following: state === 'following' };
   } catch (error) {
     if (isPlatformClosedError(error)) return { ok: false, reason: 'closed' };
     if (error instanceof MediaProblem && error.problem.status === 403) return { ok: false, reason: 'forbidden' };
