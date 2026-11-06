@@ -22,12 +22,17 @@ source; restore and rename lock the exact parent rather than scanning the owner 
 remain the oracles; this landing adds no parallel Label suite.
 Decision: native Label fixtures create the steward's Global `definitions:publish` / `definitions:activate` grants
 through the ordinary command after Access bootstrap; Access keeps Global point checks on the SQL evaluator so
-`platform.governance` is the first holder. No test-only grant rows. Subject writes load Semantic's installed
-source-set module through History's adapter at `src/semantic/record-source-set.ts`; a declaration file alone stays
-unavailable. Direct `createKernel` / `runCommand` tests bind the dedicated receipt ring rather than seeding grants.
-Composed Entry/progress collection-read on a subject id is not library-entry authorization; native fixtures defer
-that denial and keep `library_entry` admission. Semantic `beginSemanticRecordSourceSet` already declares the set,
-so History tests must not declare it again; a fabricated handle fails owner provenance, not module-unavailable.
+`platform.governance` is the first holder. No test-only grant rows. The operator bootstrap CLI installs native
+History before `runCommand`, matching server and worker. Subject writes load Semantic's installed source-set module
+through History's adapter at `src/semantic/record-source-set.ts`; a declaration file alone stays unavailable.
+`beginSemanticRecordSourceSet` already declares the set and registers work, so a successful History test returns an
+ordinary result rather than `noEffect`; a fabricated handle fails owner provenance, not module-unavailable. Direct
+`createKernel` / `runCommand` tests bind the dedicated receipt ring rather than seeding grants. Composed
+Entry/progress collection-read on a subject id is not library-entry authorization; native fixtures defer that denial
+and keep `library_entry` admission. FULL by-label withheld pages open `reading_progress` and carry
+`progress_session:list`; a suspended own-account viewer is unauthenticated. Whitespace prefix continuation uses one frozen clock so sealed tokens compare. Generic prefix plans may
+Bitmap Heap Scan `personal_label_live_name`; Seq Scan stays refused. Assignment Seq Scan oracles stay the
+existing SQL.
 
 ## Collection operation costs
 

@@ -475,8 +475,17 @@ test('missing or nonhuman, inactive or fenced accounts refuse without marker, gr
 
 test('only the seeded real Global row admits installation and native failure rolls everything back', async () => {
   for (const failure of ['missing-global', 'wrong-kind', 'audit']) {
-    if (failure === 'missing-global')
-      await reader.query('DELETE FROM semantic.context WHERE route=0 AND context_id=$1', [PLATFORM_RESOURCE.id]);
+    if (failure === 'missing-global') {
+      const client = await reader.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query("SELECT set_config('semantic.erasure_cleanup', 'on', true)");
+        await client.query('DELETE FROM semantic.context WHERE route=0 AND context_id=$1', [PLATFORM_RESOURCE.id]);
+        await client.query('COMMIT');
+      } finally {
+        client.release();
+      }
+    }
     if (failure === 'wrong-kind')
       await reader.query("UPDATE semantic.context SET kind='community' WHERE route=0 AND context_id=$1", [
         PLATFORM_RESOURCE.id,

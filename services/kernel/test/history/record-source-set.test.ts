@@ -204,7 +204,7 @@ test('History consumes the actual Semantic one-set building seal locator revisio
     // Real membership becomes known after nested work serialization, before native commit.
     await producer.appendSemanticRecordSourceSet(tx, set, { sources: [source], terms: [] });
     await producer.sealSemanticRecordSourceSet(tx, set);
-    return noEffect({ payload: 'native set' });
+    return { value: { payload: 'native set' }, events: [] };
   });
   if (!locator) throw new Error('Missing native locator');
   const snapshot = await producer.readSemanticRecordSourceSet({ pool: f.db.pool }, locator, {

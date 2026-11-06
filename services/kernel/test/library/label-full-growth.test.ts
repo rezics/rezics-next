@@ -139,7 +139,7 @@ test('An owner opens a label shelf with current label headings and bounded profi
   await json(owner.bearer, 'DELETE', `/v1/libraryLabels/${l.id}?revision=2`, 200);
   await json(owner.bearer, 'GET', path + '&view=FULL', 404);
   await f.suspend(owner.actor.accountId);
-  await json(owner.bearer, 'GET', `/v1/libraryLabelAssignments?labelId=${empty.id}&view=FULL`, 403);
+  await json(owner.bearer, 'GET', `/v1/libraryLabelAssignments?labelId=${empty.id}&view=FULL`, 401);
   await f.activate(f.originalDigest);
 }, 120000);
 

@@ -13,10 +13,11 @@ import {
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 let db: GrowthDatabase, f: NativeProfileFixture;
 let labels: ReturnType<typeof createPersonalLabelCommands>;
+const clock = () => new Date('2026-01-01T00:00:00.000Z');
 beforeAll(async () => {
   db = await openGrowthDatabase();
-  f = await createProfileEntryFixture({ pool: db.pool });
-  labels = createPersonalLabelCommands({ pool: db.pool, tokens: f.tokens });
+  f = await createProfileEntryFixture({ pool: db.pool, clock });
+  labels = createPersonalLabelCommands({ pool: db.pool, tokens: f.tokens, clock });
 }, 120000);
 afterAll(async () => {
   await f?.close();
@@ -73,7 +74,7 @@ function assertPlans(raw: Capture) {
   const labels = plans.filter((n) => n.Schema === 'library' && n['Relation Name'] === 'personal_label');
   expect(labels.length).toBeGreaterThan(0);
   for (const node of labels) {
-    expect(['Seq Scan', 'Bitmap Heap Scan']).not.toContain(node['Node Type']);
+    expect(node['Node Type']).not.toBe('Seq Scan');
     const examined =
       (Number(node['Actual Rows']) + Number(node['Rows Removed by Filter'] ?? 0)) * Number(node['Actual Loops']);
     expect(examined).toBeLessThanOrEqual(5); // P=4, plus the equal-name continuation point.
