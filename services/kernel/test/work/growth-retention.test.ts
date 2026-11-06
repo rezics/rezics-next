@@ -18,12 +18,7 @@ import {
   WORKFLOW_RETENTION_SELECT_TAG,
   createWorkflowRetentionSelector,
 } from '../../src/work/retention-selector.ts';
-import {
-  checkGrowth,
-  openGrowthDatabase,
-  type GrowthDatabase,
-  type GrowthReport,
-} from '../support/growth.ts';
+import { checkGrowth, openGrowthDatabase, type GrowthDatabase, type GrowthReport } from '../support/growth.ts';
 import {
   deleteOwnedRetentionRows,
   expectedRetentionInventory,
