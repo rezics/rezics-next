@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import type { ChildProcess } from 'node:child_process';
 import { dlopen, FFIType, ptr } from 'bun:ffi';
 
@@ -101,9 +101,10 @@ function processGroupExists(pid: number): boolean {
   }
 }
 
-type ProcessIdentity = { state: string; ppid: number; pgrp: number };
+/** Linux /proc stat: state, parent, group, then start time in clock ticks since boot, which names one process. */
+export type ProcessIdentity = { state: string; ppid: number; pgrp: number; startTicks: string };
 
-function processIdentity(pid: number): ProcessIdentity | undefined {
+export function processIdentity(pid: number): ProcessIdentity | undefined {
   try {
     const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
     const closeParen = stat.lastIndexOf(')');
@@ -112,11 +113,26 @@ function processIdentity(pid: number): ProcessIdentity | undefined {
     const state = rest[0];
     const ppid = Number(rest[1]);
     const pgrp = Number(rest[2]);
-    if (!state || !Number.isInteger(ppid) || ppid < 0 || !Number.isInteger(pgrp) || pgrp <= 0) return undefined;
-    return { state, ppid, pgrp };
+    const startTicks = rest[19];
+    if (
+      !state ||
+      !Number.isInteger(ppid) ||
+      ppid < 0 ||
+      !Number.isInteger(pgrp) ||
+      pgrp <= 0 ||
+      !startTicks ||
+      !/^[0-9]+$/.test(startTicks)
+    )
+      return undefined;
+    return { state, ppid, pgrp, startTicks };
   } catch {
     return undefined;
   }
+}
+
+/** Start time that names one process for as long as it lives; a reused PID reports a different value. */
+export function processStartTicks(pid: number): string | undefined {
+  return processIdentity(pid)?.startTicks;
 }
 
 function readProcessTable(): Map<number, ProcessIdentity> {
@@ -196,10 +212,6 @@ export function liveProcessGroupMemberIds(pgid: number): number[] {
   });
 }
 
-function liveProcessGroup(pgid: number): boolean {
-  return liveProcessGroupMemberIds(pgid).length > 0;
-}
-
 /** Reap zombies in the group that this process adopted after the original parent exited. */
 export function reapExitedProcessGroupMembers(pgid: number): void {
   const table = readProcessTable();
@@ -208,12 +220,6 @@ export function reapExitedProcessGroupMembers(pgid: number): void {
     if (!identity || identity.state !== 'Z' || identity.ppid !== process.pid) continue;
     waitpidNoHang(pid);
   }
-}
-
-function groupGone(pgid: number): boolean {
-  reapExitedProcessGroupMembers(pgid);
-  // Unreaped zombies still answer kill(-pgid, 0). Settlement follows live members.
-  return !liveProcessGroup(pgid);
 }
 
 /** True when the pid is absent from /proc or is already a zombie. */
@@ -245,16 +251,6 @@ function observeLeaderExit(pid: number | undefined, observed: Promise<void>, pol
   });
 }
 
-async function waitUntil(predicate: () => boolean, timeoutMs: number, pollIntervalMs: number): Promise<boolean> {
-  const deadline = Date.now() + timeoutMs;
-  for (;;) {
-    if (predicate()) return true;
-    const remaining = deadline - Date.now();
-    if (remaining <= 0) return predicate();
-    await wait(Math.min(pollIntervalMs, remaining));
-  }
-}
-
 async function completedWithin(promise: Promise<void>, timeoutMs: number): Promise<boolean> {
   if (timeoutMs <= 0) return false;
   try {
@@ -280,8 +276,189 @@ function makeOutputRecorder(options: ProcessCustodyOptions, errors: unknown[]) {
   return { recordOutput, diagnostics: () => outputText };
 }
 
+/** A process the custody recorded as its own, named by PID and start time; a reused PID never matches. */
+export type OwnedMember = { readonly pid: number; readonly startTicks: string };
+type TrackedMember = OwnedMember & { readonly ppid: number; readonly pgrp: number };
+
+/** Signal a recorded process only while its PID still names that exact process; zombies and reused PIDs are skipped. */
+export function signalOwnedProcess(member: OwnedMember, signal: NodeJS.Signals): boolean {
+  const identity = processIdentity(member.pid);
+  if (!identity || identity.startTicks !== member.startTicks || identity.state === 'Z') return false;
+  try {
+    process.kill(member.pid, signal);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ESRCH') return false;
+    throw error;
+  }
+}
+
+/** Kernels with CONFIG_PROC_CHILDREN list each process's children; otherwise the custody scans the whole table. */
+const childrenFeature = existsSync(`/proc/${process.pid}/task/${process.pid}/children`);
+const FULL_SCAN_INTERVAL_MS = 500;
+
+function childPids(pid: number): number[] {
+  try {
+    return readFileSync(`/proc/${pid}/task/${pid}/children`, 'utf8')
+      .split(/\s+/)
+      .filter((text) => /^[0-9]+$/.test(text))
+      .map(Number);
+  } catch {
+    return [];
+  }
+}
+
+function trackedOf(pid: number, identity: ProcessIdentity): TrackedMember {
+  return { pid, startTicks: identity.startTicks, ppid: identity.ppid, pgrp: identity.pgrp };
+}
+
+/** The recorded process only while it is still the same non-zombie process. */
+function liveIdentity(member: OwnedMember): ProcessIdentity | undefined {
+  const identity = processIdentity(member.pid);
+  return identity && identity.startTicks === member.startTicks && identity.state !== 'Z' ? identity : undefined;
+}
+
+type OwnedTree = {
+  sample(full: boolean): void;
+  live(): TrackedMember[];
+  signal(signal: NodeJS.Signals, errors: unknown[]): void;
+  reapOwnZombies(): void;
+  remaining(): string;
+  stop(): void;
+};
+
+/**
+ * Owned processes from launch to close. A descendant is recorded while its parent is live with the recorded start
+ * time, so it stays owned after leaving the group and being reparented. Settlement and signals follow only recorded
+ * members whose start time still matches.
+ */
+function createOwnedTree(rootPid: number, pollIntervalMs: number): OwnedTree {
+  const members = new Map<string, TrackedMember>();
+  const keyOf = (member: OwnedMember) => `${member.pid}:${member.startTicks}`;
+  const rootIdentity = processIdentity(rootPid);
+  const rootMember: OwnedMember | undefined = rootIdentity
+    ? { pid: rootPid, startTicks: rootIdentity.startTicks }
+    : undefined;
+  if (rootIdentity) {
+    const tracked = trackedOf(rootPid, rootIdentity);
+    members.set(keyOf(tracked), tracked);
+  }
+  const sampleMs = Math.min(50, Math.max(5, pollIntervalMs));
+  const fullEvery = Math.max(1, Math.round(FULL_SCAN_INTERVAL_MS / sampleMs));
+  let timer: ReturnType<typeof setInterval> | undefined;
+  let ticks = 0;
+
+  const live = (): TrackedMember[] => [...members.values()].filter((member) => liveIdentity(member) !== undefined);
+
+  const sample = (full: boolean) => {
+    const current = live();
+    const liveByPid = new Map(current.map((member) => [member.pid, member]));
+    if (childrenFeature && !full) {
+      for (const parent of current) {
+        for (const pid of childPids(parent.pid)) {
+          const identity = processIdentity(pid);
+          if (!identity || identity.ppid !== parent.pid) continue;
+          const tracked = trackedOf(pid, identity);
+          if (members.has(keyOf(tracked))) continue;
+          members.set(keyOf(tracked), tracked);
+        }
+      }
+      return;
+    }
+    // Group members of the root, and children of live owned members, found to a fixed point.
+    const table = readProcessTable();
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const [pid, identity] of table) {
+        const tracked = trackedOf(pid, identity);
+        if (members.has(keyOf(tracked))) continue;
+        const groupMember = pid !== rootPid && identity.pgrp === rootPid;
+        if (!groupMember && !liveByPid.has(identity.ppid)) continue;
+        members.set(keyOf(tracked), tracked);
+        liveByPid.set(pid, tracked);
+        grew = true;
+      }
+    }
+  };
+
+  const signal = (signalName: NodeJS.Signals, errors: unknown[]) => {
+    const current = live();
+    // A group id stays reserved while any member keeps it, so a live member in the group proves the group is ours.
+    const groupOwned =
+      (rootMember !== undefined && liveIdentity(rootMember) !== undefined) ||
+      current.some((member) => processIdentity(member.pid)?.pgrp === rootPid);
+    if (groupOwned) {
+      try {
+        process.kill(-rootPid, signalName);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ESRCH') errors.push(error);
+      }
+    }
+    for (const member of current) {
+      try {
+        signalOwnedProcess(member, signalName);
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+  };
+
+  const reapOwnZombies = () => {
+    for (const member of members.values()) {
+      const identity = processIdentity(member.pid);
+      if (
+        !identity ||
+        identity.startTicks !== member.startTicks ||
+        identity.state !== 'Z' ||
+        identity.ppid !== process.pid
+      )
+        continue;
+      waitpidNoHang(member.pid);
+    }
+  };
+
+  const remaining = (): string => {
+    const rows: string[] = [];
+    for (const member of members.values()) {
+      const identity = processIdentity(member.pid);
+      if (!identity || identity.startTicks !== member.startTicks) continue;
+      const classification = identity.state === 'Z' ? 'unreaped-zombie' : 'live';
+      rows.push(`${member.pid} ${classification} state=${identity.state} ppid=${identity.ppid} pgrp=${identity.pgrp}`);
+      if (rows.length === 16) break;
+    }
+    return rows.length > 0 ? rows.join('; ') : 'none';
+  };
+
+  const stop = () => {
+    if (timer === undefined) return;
+    clearInterval(timer);
+    timer = undefined;
+  };
+
+  const tick = () => {
+    ticks += 1;
+    sample(ticks % fullEvery === 0);
+    if (live().length === 0) stop();
+  };
+
+  sample(true);
+  timer = setInterval(tick, sampleMs);
+  timer.unref?.();
+
+  return {
+    sample,
+    live,
+    signal,
+    reapOwnZombies,
+    remaining,
+    stop,
+  };
+}
+
 function makeProcessCustody(
   pid: number | undefined,
+  tree: OwnedTree | undefined,
   childCompletion: Promise<void>,
   outputCompletion: Promise<void>,
   errors: unknown[],
@@ -296,61 +473,45 @@ function makeProcessCustody(
   let isSettled = false;
   let closing: Promise<void> | undefined;
 
+  /** Sample the owned tree while waiting, so a process spawned during teardown is still recorded. */
+  const awaitOwnedExit = async (timeoutMs: number): Promise<boolean> => {
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      if (!tree) return true;
+      tree.sample(false);
+      if (tree.live().length === 0) return true;
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) return false;
+      await wait(Math.min(pollIntervalMs, remaining));
+    }
+  };
+
   const closeOnce = async () => {
     const cleanupErrors: unknown[] = [];
     let groupSettled = pid === undefined;
     let childSettled = false;
     let outputIsSettled = false;
-    const owned = new Set<number>(pid === undefined ? [] : relatedProcessIds(pid));
-    const refreshOwned = () => {
-      if (pid === undefined) return;
-      for (const member of relatedProcessIds(pid)) owned.add(member);
-    };
-    const liveOwned = () => {
-      refreshOwned();
-      return [...owned].filter((member) => {
-        if (member === process.pid) return false;
-        const identity = processIdentity(member);
-        return identity !== undefined && identity.state !== 'Z';
-      });
-    };
-    const signalGroup = (signal: NodeJS.Signals) => {
-      if (pid === undefined) return;
-      const members = liveOwned();
-      try {
-        process.kill(-pid, signal);
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ESRCH') cleanupErrors.push(error);
-      }
-      for (const member of members) {
-        try {
-          process.kill(member, signal);
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== 'ESRCH') cleanupErrors.push(error);
-        }
-      }
-    };
 
-    if (pid !== undefined) {
+    if (pid !== undefined && tree) {
+      tree.sample(true);
       const graceDeadline = Date.now() + termGraceMs;
-      signalGroup('SIGTERM');
+      tree.signal('SIGTERM', cleanupErrors);
       childSettled = await completedWithin(childCompletion, termGraceMs);
       if (!childSettled) directChildExitCode(pid);
       const remainingGrace = graceDeadline - Date.now();
-      if (remainingGrace > 0 && liveOwned().length > 0) {
-        await waitUntil(() => groupGone(pid) && liveOwned().length === 0, remainingGrace, pollIntervalMs);
-      }
-      if (liveOwned().length > 0) {
-        signalGroup('SIGKILL');
+      if (remainingGrace > 0) await awaitOwnedExit(remainingGrace);
+      if (tree.live().length > 0) {
+        tree.signal('SIGKILL', cleanupErrors);
         if (!childSettled) childSettled = await completedWithin(childCompletion, settleTimeoutMs);
         directChildExitCode(pid);
-        const gone = await waitUntil(() => groupGone(pid) && liveOwned().length === 0, settleTimeoutMs, pollIntervalMs);
-        if (!gone) cleanupErrors.push(new Error(`${label} process group ${pid} remained after SIGKILL`));
+        await awaitOwnedExit(settleTimeoutMs);
       }
-      groupSettled = groupGone(pid) && liveOwned().length === 0;
-      if (!groupSettled) {
-        cleanupErrors.push(new Error(`${label} process group ${pid} remained after SIGKILL`));
-      }
+      tree.sample(true);
+      tree.reapOwnZombies();
+      groupSettled = tree.live().length === 0;
+      tree.stop();
+      if (!groupSettled)
+        cleanupErrors.push(new Error(`${label} owned processes remained after SIGKILL: ${tree.remaining()}`));
     }
 
     const completions = await Promise.allSettled([
@@ -379,7 +540,10 @@ function makeProcessCustody(
     get settled() {
       return isSettled;
     },
-    diagnostics,
+    diagnostics() {
+      const root = pid === undefined ? 'no root' : `root pid ${pid} start ${processStartTicks(pid) ?? 'exited'}`;
+      return `${root}\n${diagnostics()}`;
+    },
     close: () => {
       if (!closing) {
         onCloseRequested?.();
@@ -432,8 +596,10 @@ export function ownBunProcess(child: Bun.Subprocess, options: ProcessCustodyOpti
   );
   void outputCompletion.catch(() => {});
   void childCompletion.catch(() => {});
+  const tree = child.pid === undefined ? undefined : createOwnedTree(child.pid, options.pollIntervalMs ?? 25);
   return makeProcessCustody(
     child.pid,
+    tree,
     childCompletion,
     outputCompletion,
     errors,
@@ -482,7 +648,8 @@ export function ownNodeProcess(child: ChildProcess, options: ProcessCustodyOptio
   const outputCompletion = closed;
   void childCompletion.catch(() => {});
   void outputCompletion.catch(() => {});
-  return makeProcessCustody(child.pid, childCompletion, outputCompletion, errors, options, recorder.diagnostics);
+  const tree = child.pid === undefined ? undefined : createOwnedTree(child.pid, options.pollIntervalMs ?? 25);
+  return makeProcessCustody(child.pid, tree, childCompletion, outputCompletion, errors, options, recorder.diagnostics);
 }
 
 async function collectCleanupErrors(actions: readonly CleanupAction[], options: CleanupOptions): Promise<Error[]> {
