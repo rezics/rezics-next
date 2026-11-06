@@ -313,3 +313,5 @@ Native source consent binds the canonical identity epoch, accepting type, profil
 The native date caller preserves its prepared intent when an unexpected dispatch or acknowledgement error throws. Only known native refusal/conflict results become terminal field outcomes; a retry reconciles the original receipt. Receiving fixtures include the generated Progress result even for a state-only decision, where its value is null.
 
 Date admission prepares current matching and profile evidence before the native journal transaction checks out its owner connection. The transaction still locks and validates the retained consent, source digest and exact occurrence binding before a fresh effect. Recovery may append private coordinator receipts and events; it must preserve native Entry and Progress facts.
+
+Label-adoption review and recovery checkpoints emit the same private import-change event as other retained-source commands. Date callers take their revision from the current journal read, independently of the Progress session revision. Native acceptance retains exact failed owner-read problem details rather than inferring applied status from import acknowledgements.

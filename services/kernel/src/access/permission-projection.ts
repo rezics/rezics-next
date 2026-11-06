@@ -3,7 +3,6 @@
  */
 export const nativePermissionProjectionBound = Object.freeze({
   assignmentValid: false,
-  deadlineLive: false,
   live: false,
   localDenied: false,
   actorActionGrant: false,

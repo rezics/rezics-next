@@ -343,13 +343,14 @@ test('journalled explicit review and changed reimport survive lost delivery and 
   const journal = new ShowcaseJournal(':memory:');
   let loseApply = true;
   const requests: string[] = [];
+  const readFailures: string[] = [];
   const client = createKernelClient('http://kernel.test', {
     headers: { authorization: `Bearer ${f.owner.bearer}` },
     fetch: (async (input, init) => {
       const request = new Request(input, init);
       const response = await f.handle(request.clone());
       if (request.method === 'GET' && !response.ok)
-        throw new Error(`Owner read ${request.url}: ${response.status} ${await response.clone().text()}`);
+        readFailures.push(`Owner read ${request.url}: ${response.status} ${await response.clone().text()}`);
       if (new URL(request.url).pathname.endsWith(':apply')) {
         requests.push(await request.text());
         if (loseApply) {
@@ -443,7 +444,7 @@ test('journalled explicit review and changed reimport survive lost delivery and 
     });
     expect(replaced.state).toBe('acknowledged');
     const current = await readShowcasePersonalLibrary({ client });
-    if (current.state !== 'current') throw new Error(current.code);
+    if (current.state !== 'current') throw new Error([current.code, ...readFailures].join('\n'));
     expect(current.value.libraryEntries.find((entry) => entry.subjectId === targetId)).toMatchObject({
       state: 'completed',
       incarnationId: installed.incarnationId,
@@ -979,7 +980,11 @@ test('VNDB typed dates select one repeat, preserve precision, and clear only wit
   await sessions.patchSessionJournal(
     f.owner.actor,
     second.id,
-    { revision: 1, startDate: { year: 1999 }, finishDate: { year: 2000 } },
+    {
+      revision: (await sessions.readSessionJournal(f.owner.actor, second.id)).revision,
+      startDate: { year: 1999 },
+      finishDate: { year: 2000 },
+    },
     entryKey(),
   );
   const clear = await json('POST', `${base}/${uploadId}/dates/review`, {
