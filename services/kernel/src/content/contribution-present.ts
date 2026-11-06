@@ -1,19 +1,12 @@
 import type { Pool } from 'pg';
-import { contributionAttribution, contributionDeleted } from '../access/contribution-attribution.ts';
-import { readPublicAccount } from '../access/public-identity.ts';
+import { contributionDeleted } from '../access/contribution-attribution.ts';
+import { readContributionAttributions } from '../access/public-identity.ts';
 import { routeOf } from '../route/route.ts';
 import readPostAuthor from './read-post-author.sql';
 import type { ItemView, PostEntry } from './reads.ts';
 import { isErasedPlaceholder } from './model.ts';
 
 type AuthorRow = { author_account_id: string };
-
-async function publicIdentity(pool: Pool, accountId: string | null | undefined) {
-  if (!accountId) return null;
-  const route = routeOf(accountId);
-  if (route === null) return null;
-  return readPublicAccount(pool, route, accountId);
-}
 
 async function parentAuthor(pool: Pool, postId: string): Promise<string | null> {
   const route = routeOf(postId);
@@ -30,18 +23,22 @@ function withoutAuthorId<T extends { authorId?: string }>(value: T): Omit<T, 'au
 
 /** Adds contribution attribution and, for replies, parent attribution.
  * Deleted authors drop `authorId` so the wire cannot name the account.
+ * Live, explicit-deletion and unavailable identities stay distinct.
  */
 export async function presentContributedPost(pool: Pool, post: PostEntry): Promise<PostEntry> {
   if (isErasedPlaceholder(post) || !('authorId' in post)) return post;
   const item = post as ItemView;
-  const attribution = contributionAttribution(await publicIdentity(pool, item.authorId));
   const parentId = item.parentId;
+  const parentAccountId = parentId === null ? null : await parentAuthor(pool, parentId);
+  const ids = [item.authorId, parentAccountId].filter((id): id is string => typeof id === 'string' && id.length > 0);
+  const current = ids.length ? await readContributionAttributions(pool, ids) : new Map();
+  const attribution = item.authorId ? (current.get(item.authorId) ?? null) : null;
   const parent =
     parentId === null
       ? undefined
       : {
           postId: parentId,
-          attribution: contributionAttribution(await publicIdentity(pool, await parentAuthor(pool, parentId))),
+          attribution: parentAccountId ? (current.get(parentAccountId) ?? null) : null,
         };
   const presented = parent ? { ...item, attribution, parent } : { ...item, attribution };
   if (!contributionDeleted(attribution)) return presented;

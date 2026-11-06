@@ -4,6 +4,7 @@ import readEndpoints from '../../src/content/read-first-erasure-post.sql';
 import { createKernel } from '../../src/http/kernel.ts';
 import { newId } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase } from '../support/growth.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { createAuthorErasureFixture, type AuthorErasureFixture } from './author-erasure-native-operation-fixture.ts';
 import { observeSql } from './support/sql-observer.ts';
 
@@ -136,6 +137,7 @@ test('author erasure read admission keeps actual statements and rows constant at
       access: () => f.system.access,
       routeKey: f.system.routeKey,
       tokens: f.system.tokenKeys,
+      receiptKeys: testReceiptKeys(),
     });
     const report = await checkGrowth(db, {
       name: 'current native author erasure admission',

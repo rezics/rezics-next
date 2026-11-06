@@ -1641,7 +1641,9 @@ all applicable artifacts are minimized or removed, and registered locator effect
 coordinator's open locator-work rule. It reports `erased` if any artifact ever applied; `none` is valid only after
 complete sealed coverage and proof that zero artifacts applied. Missing coverage, pending effects, an incomplete
 page or failed removal keeps acknowledgement pending and erasure incomplete; none is never inferred from an empty
-page or a missing DBOS row. The native gate in `acknowledgeErasure` rejects shared-history acknowledgement without matching complete coverage, registry and committed Auth copies proof. Aggregate completion remains unavailable as described below.
+page or a missing DBOS row. The native gate in `acknowledgeErasure` rejects shared-history acknowledgement without matching complete coverage, registry and committed Auth copies proof. Local Access acknowledgement is that command; pending shared-history custody stays a distinct participant until its sealed locator coverage is complete. Aggregate completion remains unavailable as described below.
+
+Live-copy discovery seal and inventory minimize bind Work and History on the actual Pool through `erasure-operational-client.ts` before any operational evaluation, then probe `access.live_copy_domain` against `core.partition` node, epoch and write state. Missing lineage throws `LiveCopyPendingError` (`Live copy domain requires native lineage reconciliation before activation`) and does not activate the home. Tests install native History at the composition root; Access never imports composition.
 
 Shared-history cleanup covers operational receipts, event payloads and durable execution copies. It does not erase
 semantic provenance, whose owner retains its own attribution and evidence contract, or delivery custody for content,

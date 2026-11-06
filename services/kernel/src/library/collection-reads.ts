@@ -11,8 +11,8 @@ import {
   type AuthoritativeTime,
   type CommandAttempt,
 } from '../command/command.ts';
-import { readAccount, readAccountCommandState, readPublicAccount, type Account } from '../access/account-data.ts';
-import { contributionAttribution, type ContributionAttribution } from '../access/public-identity.ts';
+import { readAccount, readAccountCommandState, type Account } from '../access/account-data.ts';
+import { readContributionAttributions, type ContributionAttribution } from '../access/public-identity.ts';
 import { readPublicViews } from '../access/index.ts';
 import publicGeneration from './collection-public-generation.sql';
 import { nativePolicyCatalogueForAccess } from '../access/policy-core.ts';
@@ -839,15 +839,13 @@ export function createCollectionReads(
     deadline: number,
   ) {
     const curatorId = row.curatorAccountId;
-    const curatorRoute = curatorId ? routeOf(curatorId) : null;
-    const attribution =
-      curatorId && curatorRoute !== null
-        ? contributionAttribution(
-            await withConnection(pool, (client) =>
-              readPublicAccount(deadlineClient(client, deadline), curatorRoute, curatorId),
-            ),
+    const attribution = curatorId
+      ? ((
+          await withConnection(pool, (client) =>
+            readContributionAttributions(deadlineClient(client, deadline), [curatorId]),
           )
-        : null;
+        ).get(curatorId) ?? null)
+      : null;
     if (row.membershipKind !== 'dynamic' || (row.visibility !== 'public' && row.visibility !== 'unlisted'))
       return { attribution };
     const collectionRoute = routeOf(row.id);

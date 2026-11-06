@@ -29,7 +29,6 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { actionCatalogue, IDEMPOTENCY_HEADER, requestDigest } from '../../src/http/request.ts';
 import { EVENT_TYPES } from '../../src/events/log.ts';
-import { migrate } from '../../scripts/database.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 import { accountToken, admittedAccess } from '../support/admitted-access.ts';
 import { runCommand, noEffect } from '../../src/command/command.ts';
@@ -175,11 +174,13 @@ async function accountState(id: string) {
 beforeAll(async () => {
   admin = new Pool({ connectionString: sourceUrl, max: 1 });
   databaseName = `verification_reversal_${process.pid}_${randomUUID().replaceAll('-', '')}`;
+  const source = new URL(sourceUrl!);
+  const template = decodeURIComponent(source.pathname.slice(1));
+  if (!/^[a-zA-Z0-9_]+$/.test(template)) throw new Error('DATABASE_URL must name a migrated kernel template');
   const target = new URL(sourceUrl!);
   target.pathname = `/${databaseName}`;
   databaseUrl = target.toString();
-  await admin.query(`CREATE DATABASE "${databaseName}"`);
-  migrate(databaseUrl);
+  await admin.query(`CREATE DATABASE "${databaseName}" TEMPLATE "${template.replaceAll('"', '""')}"`);
   pool = createPool(databaseUrl);
   await bootstrapRelease(pool, bundledRelease);
   const receiptKeys = testReceiptKeys();
@@ -206,7 +207,7 @@ beforeAll(async () => {
   await bootstrapGovernance(pool, staff.id);
   const opened = await post('/v1/platform/exposure/agent_verification:open', await bearer(staff));
   expect(opened.response.status).toBe(200);
-}, 60_000);
+}, 120_000);
 
 afterAll(async () => {
   await pool?.end();

@@ -3,7 +3,8 @@ import type { OperationalTransaction } from '../command/operational.ts';
 import type { Pool, PoolClient } from 'pg';
 import { withReadTransaction } from '../semantic/read.ts';
 import { runOperationalTransaction } from '../command/operational.ts';
-import { createWorkClient } from '../work/client.ts';
+import { withErasureOperationalClient } from './erasure-operational-client.ts';
+import { readLiveCopyLineage } from './live-copy-lineage.ts';
 import { routeOf, partitionOf } from '../route/route.ts';
 import type { LiveCopyRole } from './live-copy.ts';
 import { LiveCopyPendingError } from './live-copy.ts';
@@ -71,13 +72,12 @@ export async function prepareLiveCopyDiscovery(pool: Pool, store: string, accoun
     return row;
   });
   const partition = frontier.partition_no;
-  const client = await createWorkClient(pool.options.connectionString!, pool);
-  let sealed = false;
-  try {
-    sealed = await runOperationalTransaction(
+  const sealed = await withErasureOperationalClient(pool, async (client) =>
+    runOperationalTransaction(
       pool,
       { mode: 'work-step', partition, kind: 'access.liveCopy.seal', accounts: [], workClient: client },
       async (tx) => {
+        await readLiveCopyLineage(tx, partition);
         const coverage = (
           await tx.query<{
             covered: boolean;
@@ -94,10 +94,8 @@ export async function prepareLiveCopyDiscovery(pool: Pool, store: string, accoun
         await sealLiveCopyInventory(tx, partition, accountId);
         return true;
       },
-    );
-  } finally {
-    await client.close();
-  }
+    ),
+  );
   if (sealed) return partition;
   // Coverage debt bars EOF/sealing, not minimization of already known copies.
   // Native inverse deletion is the maintained progress for this bounded pending
@@ -149,8 +147,7 @@ export async function minimizeLiveCopyInventory(
     Buffer.byteLength(JSON.stringify(key)) > 1024
   )
     throw new TypeError('Invalid live copy erasure locator');
-  const client = await createWorkClient(pool.options.connectionString!, pool);
-  try {
+  return withErasureOperationalClient(pool, async (client) => {
     let changedSubject: string | null = null;
     const body = async (
       tx: OperationalTransaction | CommandTransaction,
@@ -308,6 +305,7 @@ export async function minimizeLiveCopyInventory(
           workClient: client,
         },
         async (tx) => {
+          await readLiveCopyLineage(tx, partitionOf(route));
           const done = await body(tx);
           if (changedSubject) throw new PublicChange();
           return done;
@@ -322,6 +320,7 @@ export async function minimizeLiveCopyInventory(
       }
       try {
         const result = await runCommand(pool, { partition: partitionOf(route), deadline }, async (tx, command) => {
+          await readLiveCopyLineage(tx, partitionOf(route));
           const done = await body(tx, {
             time: authoritativeTimeValue(command.time),
             transactionId: command.transactionId,
@@ -344,9 +343,7 @@ export async function minimizeLiveCopyInventory(
       }
     }
     throw new Error('Live copy minimization deadline exceeded');
-  } finally {
-    await client.close();
-  }
+  });
 }
 class PublicChange extends Error {}
 class MetadataOnly extends Error {}

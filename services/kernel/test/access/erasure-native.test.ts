@@ -6,6 +6,7 @@ import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { readErasureStatus } from '../../src/access/erasure.ts';
 import { createGrantCommands } from '../../src/access/grant-commands.ts';
 import { nativeFixture, scopes } from './native-account-bindings-fixture.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { deletePersona } from '../support/account-deletion.ts';
 import { expect, test } from 'bun:test';
 import type { AuthErasureObligation, AuthErasureObligationCursor } from '@rezics/auth-contract';
@@ -303,6 +304,7 @@ describe('Access native terminal cleanup', () => {
       pool,
       routeKey: new Uint8Array(32).fill(28),
       tokens: auth.referenceKeys,
+      receiptKeys: testReceiptKeys(),
       access: () => auth.access,
       writeRate: createWriteRateLimiter({
         secret: 'erasure-native-write-limiter-secret',

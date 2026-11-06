@@ -14,6 +14,7 @@ import { createSubject } from '../../src/semantic/subject.ts';
 import { writeProposal } from '../../src/semantic/candidates.ts';
 import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import { checkGrowth, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 
 setDefaultTimeout(120_000);
 
@@ -161,6 +162,7 @@ async function erase(id: string, actor: Actor, key = randomUUID()) {
 beforeAll(async () => {
   db = await openGrowthDatabase();
   db.pool.options.max = 1;
+  configureTestReceiptKeys(db.pool);
   await bootstrapRelease(db.pool, bundledRelease);
   access = admittedAccess({ actions: new Map(actionNames.map((action) => [action, { anonymous: false }])) });
   const accounts = await Promise.all(actorIds.map(insertAccount));
