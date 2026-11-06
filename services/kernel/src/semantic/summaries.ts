@@ -13,8 +13,15 @@ import { partitionReadClient, partitionReadClients } from '../database/read-snap
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartitions } from '../partition/partition.ts';
 import { activeRelease, GLOBAL_CONTEXT } from './definitions.ts';
-import { accessCheck, type Access, type AccessCheck, type Actor } from '../request/access.ts';
-import { relatedReadEligibility } from './eligibility.ts';
+import {
+  prepareReadDecisions,
+  type Access,
+  type AccessClient,
+  type AccessDecision,
+  type Actor,
+  type ReadDecisions,
+} from '../request/access.ts';
+import { relatedReadDecisionEligibility } from './eligibility.ts';
 import type { Statement } from './item.ts';
 import { slotId } from './slots.ts';
 import { chooseLabel } from './language.ts';
@@ -90,12 +97,12 @@ const preparations = new WeakMap<SummaryAuthorize, (batches: Batches) => Promise
  * native checks execute on that snapshot; no allow decision is retained.
  */
 export function summaryAuthorization(
-  prepare: (id: string, batch: readonly string[]) => Promise<AccessCheck>,
+  prepare: (id: string, batch: readonly string[]) => Promise<(client: AccessClient) => Promise<boolean>>,
 ): SummaryAuthorize {
   const authorize: SummaryAuthorize = async (client, id, batch) =>
     routeOf(id) === null ? false : (await prepare(id, batch))(client);
   preparations.set(authorize, async (batches) => {
-    const checks = new Map<string, AccessCheck>();
+    const checks = new Map<string, (client: AccessClient) => Promise<boolean>>();
     for (const batch of batches) {
       for (const id of new Set(batch)) {
         if (routeOf(id) !== null && !checks.has(id)) checks.set(id, await prepare(id, batch));
@@ -104,6 +111,52 @@ export function summaryAuthorization(
     return async (client, id) => (await checks.get(id)?.(client)) ?? false;
   });
   return authorize;
+}
+
+const SUBJECT_READ_PAGE = 200;
+
+async function subjectReadDecisions(deps: SummaryReaderDependencies, deadline: number): Promise<ReadDecisions> {
+  return prepareReadDecisions(deps.access, {
+    actor: deps.actor,
+    actions: new Set(['subject:read']),
+    context: { pool: deps.pool, deadline, ...(deps.work ? { work: deps.work } : {}) },
+  });
+}
+
+async function decideSubjectReads(
+  decisions: ReadDecisions,
+  client: AccessClient,
+  ids: readonly string[],
+): Promise<Readonly<Record<string, AccessDecision>>> {
+  const unique = [...new Set(ids)].filter((id) => routeOf(id) !== null);
+  const result: Record<string, AccessDecision> = Object.create(null);
+  for (let offset = 0; offset < unique.length; offset += SUBJECT_READ_PAGE) {
+    const slice = unique.slice(offset, offset + SUBJECT_READ_PAGE);
+    if (slice.length === 0) continue;
+    Object.assign(
+      result,
+      await decisions.decide(client, {
+        action: 'subject:read',
+        resourceType: 'semantic.subject',
+        ids: slice,
+        eligibility: relatedReadDecisionEligibility(),
+      }),
+    );
+  }
+  return result;
+}
+
+function summaryPageAuthorization(decisions: ReadDecisions): SummaryAuthorize {
+  const cache = new WeakMap<object, Promise<Readonly<Record<string, AccessDecision>>>>();
+  return async (client, id, batch) => {
+    if (routeOf(id) === null) return false;
+    let pending = cache.get(batch);
+    if (!pending) {
+      pending = decideSubjectReads(decisions, client, batch);
+      cache.set(batch, pending);
+    }
+    return (await pending)[id]?.allowed === true;
+  };
 }
 
 class SummaryPlanChanged extends Error {
@@ -175,23 +228,10 @@ export async function readSubjectSummaryObservation(
       requireAccessDeadline(deps.deadline);
       // Reprepare native disclosure outside the source snapshot. The same
       // initial and representative batches preserve related-read eligibility.
-      const checks: AccessCheck[] = [];
-      for (const batch of batches) {
-        for (const id of new Set(batch)) {
-          if (!disclosed.has(id)) continue;
-          const route = routeOf(id);
-          if (route === null) continue;
-          checks.push(
-            await accessCheck(
-              deps.access,
-              deps.actor,
-              'subject:read',
-              { route, id, eligibility: relatedReadEligibility({ route, id }, batch) },
-              { pool: deps.pool, deadline: deps.deadline, ...(deps.work ? { work: deps.work } : {}) },
-            ),
-          );
-        }
-      }
+      const disclosedIds = batches.flatMap((batch) =>
+        [...new Set(batch)].filter((id) => disclosed.has(id) && routeOf(id) !== null),
+      );
+      const decisions = disclosedIds.length ? await subjectReadDecisions(deps, deps.deadline) : undefined;
       return withReadTransaction(
         deps.pool,
         async (client) => {
@@ -211,7 +251,13 @@ export async function readSubjectSummaryObservation(
             const found = current.get(source.partition);
             if (!found || found.epoch !== source.epoch || found.position !== source.position) return false;
           }
-          for (const check of checks) if (!(await check(client))) return false;
+          if (!decisions) return true;
+          for (const batch of batches) {
+            const ids = [...new Set(batch)].filter((id) => disclosed.has(id) && routeOf(id) !== null);
+            if (ids.length === 0) continue;
+            const allowed = await decideSubjectReads(decisions, client, ids);
+            if (ids.some((id) => allowed[id]?.allowed !== true)) return false;
+          }
           return true;
         },
         deps.deadline,
@@ -235,28 +281,22 @@ async function readSummaryBatch(
   const results = new Map<string, SubjectSummary | null>(ids.map((id) => [id, null]));
   if (!ids.length) return results;
   const deadline = deps.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
-  const authorize =
-    'access' in deps
-      ? summaryAuthorization(async (id, batch) =>
-          accessCheck(
-            deps.access,
-            deps.actor,
-            'subject:read',
-            { route: routeOf(id)!, id, eligibility: relatedReadEligibility({ route: routeOf(id)!, id }, batch) },
-            { pool: deps.pool, deadline, ...(deps.work ? { work: deps.work } : {}) },
-          ),
-        )
-      : deps.authorize;
-  const prepare = preparations.get(authorize);
+  const authorize = 'access' in deps ? undefined : deps.authorize;
+  const prepare = authorize ? preparations.get(authorize) : undefined;
   const owned = currentReadSnapshot(deps.pool);
   // An already-owned snapshot can use previously prepared checks, but must never
   // acquire preparation evidence through another same-pool checkout.
-  if (owned && prepare) throw new AccessUnavailableError('contention');
+  if (owned && ('access' in deps || prepare)) throw new AccessUnavailableError('contention');
   let plan: Map<string, string> | undefined;
   for (let attempt = 0; attempt < 3; attempt++) {
     requireAccessDeadline(deadline);
     const planned = [...new Set(plan?.values() ?? [])].filter((id) => !results.has(id));
-    const ready = prepare ? await prepare([[...results.keys()], planned]) : authorize;
+    const ready =
+      'access' in deps
+        ? summaryPageAuthorization(await subjectReadDecisions(deps, deadline))
+        : prepare
+          ? await prepare([[...results.keys()], planned])
+          : authorize!;
     try {
       return await withReadTransaction(
         deps.pool,
@@ -283,7 +323,7 @@ async function readSummaryBatch(
             [...results.keys()],
             languages,
             plan,
-            Boolean(prepare),
+            'access' in deps || Boolean(prepare),
             'access' in deps,
             observe,
             labelLanguages,

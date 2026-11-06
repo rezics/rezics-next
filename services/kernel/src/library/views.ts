@@ -24,7 +24,7 @@ import { SubjectSummarySchema } from '../semantic/http/summaries.ts';
 import { readSubjectSummaryObservation, type SubjectSummary } from '../semantic/summaries.ts';
 import { currentCommandWorkAssociation } from '../command/work-context.ts';
 import { authoritativeTimeValue, mintReadTime } from '../command/command.ts';
-import { resolveSubject } from './subject-anchor.ts';
+import { mapSubjectTerminals, resolveSubject } from './subject-anchor.ts';
 import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { createCollectionReads } from './collection-reads.ts';
@@ -149,12 +149,12 @@ class ViewReader {
 
   async loadSubjects(ids: readonly string[]) {
     const unique = [...new Set(ids)];
-    const resolved = new Map<string, string>();
-    await bounded(unique, async (id) => {
-      const value = await this.resolve(id);
-      if (value) resolved.set(id, value.subjectId);
-      else this.subjects.set(id, null);
-    });
+    for (const id of unique) if (routeOf(id) === null) this.subjects.set(id, null);
+    const resolved = await mapSubjectTerminals(
+      this.deps.pool,
+      unique.filter((id) => routeOf(id) !== null),
+    );
+    for (const id of unique) if (!resolved.has(id) && routeOf(id) !== null) this.subjects.set(id, null);
     const terminals = [...new Set(resolved.values())];
     if (terminals.length === 0) return;
     const observed = await readSubjectSummaryObservation(this.observationDeps(), terminals, { displayFallback: true });
@@ -239,10 +239,11 @@ export async function fullView<T>(
   }> = {},
 ): Promise<Embedding<T>> {
   if (view !== 'FULL') return body as Embedding<T>;
+  const deadline = options.deadline ?? deadlineFor(WORK_STEP_DEADLINE_MS);
   const reader = new ViewReader(
     deps,
     actor,
-    options.deadline ?? deadlineFor(WORK_STEP_DEADLINE_MS),
+    deadline,
     options.follow,
     options.withholdChangedSource === true,
   );
@@ -264,7 +265,7 @@ export async function fullView<T>(
     }
   }
   const followingSpaces = options.followingSpaces
-    ? await options.followingSpaces(actor, [...spaceTargetIds], options.deadline ?? deadlineFor(WORK_STEP_DEADLINE_MS))
+    ? await options.followingSpaces(actor, [...spaceTargetIds], deadline)
     : new Map<string, FollowingSpaceProjection>();
   await reader.loadSubjects([...subjectIds]);
   await bounded([...accountIds], async (id) => {

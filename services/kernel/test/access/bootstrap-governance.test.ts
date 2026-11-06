@@ -15,15 +15,16 @@ import {
   PLATFORM_RESOURCE,
   PLATFORM_GOVERNANCE_ROLE,
 } from '../../src/access/bootstrap-governance.ts';
-import { createAccess } from '../../src/access/index.ts';
+import { createAccess, INTERNAL_ACTIONS } from '../../src/access/index.ts';
 import { createGrantCommands } from '../../src/access/grant-commands.ts';
-import { resolveResourceRoles } from '../../src/access/resource-roles.ts';
+import { resolveResourceRoles, resourceRoleCatalogue } from '../../src/access/resource-roles.ts';
 import { accessCheck, type AccountActor } from '../../src/request/access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
 import { readBatch, EVENT_TYPES } from '../../src/events/log.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 const root = new URL('../../../../', import.meta.url).pathname;
 const script = 'services/kernel/scripts/bootstrap-governance.ts';
@@ -64,10 +65,16 @@ let authDatabase: string;
 let access: ReturnType<typeof createAccess>;
 const password = 'correct horse battery staple';
 
+function receiptKeysEnv(): string {
+  return [...testReceiptKeys().keys.entries()]
+    .map(([version, key]) => `${version}:${Buffer.from(key).toString('base64url')}`)
+    .join(',');
+}
+
 function cli(id: string) {
   return Bun.spawn(['bun', script, '--account', id], {
     cwd: root,
-    env: { ...process.env, DATABASE_URL: url },
+    env: { ...process.env, DATABASE_URL: url, KERNEL_RECEIPT_KEYS: receiptKeysEnv() },
     stdout: 'pipe',
     stderr: 'pipe',
   });
@@ -170,6 +177,25 @@ function fixtureAccess(entries: ReturnType<typeof actionCatalogue> = catalogue) 
   });
 }
 
+let mountedActions: ReturnType<typeof actionCatalogue> | undefined;
+function mountedCatalogue() {
+  return (mountedActions ??= actionCatalogue(
+    createKernel({ pool, routeKey: new Uint8Array(32), receiptKeys: testReceiptKeys() }),
+  ));
+}
+
+async function deleteGlobalContext() {
+  const client = await reader.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query("SELECT set_config('semantic.erasure_cleanup', 'on', true)");
+    await client.query('DELETE FROM semantic.context WHERE route=0 AND context_id=$1', [PLATFORM_RESOURCE.id]);
+    await client.query('COMMIT');
+  } finally {
+    client.release();
+  }
+}
+
 beforeAll(async () => {
   authDatabase = `bootstrap_auth_${process.pid}`;
   const authUrl = new URL(url);
@@ -229,9 +255,8 @@ beforeAll(async () => {
     scopes: [
       ...new Set([
         ...actions,
-        ...[...actionCatalogue(createKernel({ pool, routeKey: new Uint8Array(32) })).keys()].filter(
-          (scope) => scope !== 'media:complete',
-        ),
+        ...INTERNAL_ACTIONS.keys(),
+        ...[...mountedCatalogue().keys()].filter((scope) => scope !== 'media:complete'),
         'gate:any',
       ]),
     ],
@@ -265,7 +290,7 @@ beforeAll(async () => {
     person,
   ]);
   access = fixtureAccess();
-}, 60_000);
+}, 180_000);
 afterAll(async () => {
   await authPool?.end();
   if (authDatabase) await dropTestDatabase(reader, authDatabase);
@@ -316,7 +341,7 @@ test('exact root CLI installs one durable normal Global role and one registered 
 });
 
 test('Auth-issued scopes and installed formula govern delegation, revocation and unrelated resources', async () => {
-  const semanticActions = actionCatalogue(createKernel({ pool, routeKey: new Uint8Array(32) }));
+  const semanticActions = mountedCatalogue();
   const semantic = fixtureAccess(semanticActions);
   const semanticContext = await context(person, actions, semantic);
   expect(
@@ -362,6 +387,41 @@ test('Auth-issued scopes and installed formula govern delegation, revocation and
   for (const action of imports) expect(await allowed(automated, action)).toBe(true);
   expect(await allowed(automated, imports[0]!, PLATFORM_RESOURCE, ['access:grant'])).toBe(false);
   expect(await allowed(automated, 'subject:create')).toBe(false);
+  const definitionGrants = createGrantCommands({ pool, access: semantic, managementAction: 'access:grant' });
+  const definitions = ['definitions:publish', 'definitions:activate'] as const;
+  const governor = await context(person, ['access:grant', ...definitions], semantic);
+  expect(
+    await (
+      await accessCheck(semantic, governor.actor, 'definitions:publish', PLATFORM_RESOURCE, governor)
+    )(pool),
+  ).toBe(true);
+  expect(
+    await (
+      await accessCheck(semantic, governor.actor, 'definitions:activate', PLATFORM_RESOURCE, governor)
+    )(pool),
+  ).toBe(true);
+  await definitionGrants.create(governor, {
+    resource: PLATFORM_RESOURCE,
+    subject: { kind: 'account', id: automated },
+    actions: [...definitions],
+    valid: '(,)',
+    key: 'delegate-definitions',
+  });
+  expect(
+    (
+      await reader.query(
+        'SELECT action FROM access.resource_grant WHERE route=0 AND resource_id=$1 AND subject_id=$2 AND action = ANY($3) ORDER BY action',
+        [PLATFORM_RESOURCE.id, automated, [...definitions]],
+      )
+    ).rows.map((r) => r.action),
+  ).toEqual([...definitions].sort());
+  await definitionGrants.revoke(governor, {
+    resource: PLATFORM_RESOURCE,
+    subject: { kind: 'account', id: automated },
+    actions: [...definitions],
+    valid: '(,)',
+    key: 'revoke-definitions',
+  });
   // The human can revoke delegated rights through the same formula.
   await grants.revoke(await context(person), { ...input, key: 'revoke-imports' });
   expect(
@@ -373,7 +433,8 @@ test('Auth-issued scopes and installed formula govern delegation, revocation and
     ).rows,
   ).toHaveLength(0);
   for (const action of imports) expect(await allowed(automated, action)).toBe(false);
-  await grants.revokeRole(await context(person, [...actions, 'gate:any']), {
+  const revokeScopes = resourceRoleCatalogue(access)!.roles.get(PLATFORM_GOVERNANCE_ROLE)!;
+  await grants.revokeRole(await context(person, [...revokeScopes]), {
     resource: PLATFORM_RESOURCE,
     subject: { kind: 'account', id: person },
     role: PLATFORM_GOVERNANCE_ROLE,
@@ -397,7 +458,7 @@ test('reserved governance expansion intersects mounted actions while arbitrary r
   });
   expect(resolved.roles.get(PLATFORM_GOVERNANCE_ROLE)).toEqual(['subject:create']);
   expect(resolved.roles.has('custom.invalid')).toBe(false);
-  const semantic = actionCatalogue(createKernel({ pool, routeKey: new Uint8Array(32) }));
+  const semantic = mountedCatalogue();
   const governance = resolveResourceRoles(semantic).roles.get(PLATFORM_GOVERNANCE_ROLE);
   expect(semantic.has('media:import_from_url')).toBe(true);
   expect(semantic.has('gate:any')).toBe(false);
@@ -437,8 +498,7 @@ test('missing or nonhuman, inactive or fenced accounts refuse without marker, gr
 
 test('only the seeded real Global row admits installation and native failure rolls everything back', async () => {
   for (const failure of ['missing-global', 'wrong-kind', 'audit']) {
-    if (failure === 'missing-global')
-      await reader.query('DELETE FROM semantic.context WHERE route=0 AND context_id=$1', [PLATFORM_RESOURCE.id]);
+    if (failure === 'missing-global') await deleteGlobalContext();
     if (failure === 'wrong-kind')
       await reader.query("UPDATE semantic.context SET kind='community' WHERE route=0 AND context_id=$1", [
         PLATFORM_RESOURCE.id,
@@ -601,7 +661,7 @@ test('local showcase uses one native identity grant, authoritative validity and 
   ).toEqual([{ authoritative: true }]);
   await bootstrapLocalShowcaseBoardCreation(pool, person);
   expect(await showcaseSnapshot()).toEqual(installed);
-  const mounted = actionCatalogue(createKernel({ pool, routeKey: new Uint8Array(32) }));
+  const mounted = mountedCatalogue();
   const using = fixtureAccess(mounted);
   // Self-renunciation uses the existing native grant command and a genuine Auth-issued actor.
   const ctx = await context(
@@ -640,8 +700,7 @@ test('local showcase refuses current Global/operator-marker mismatches before re
     if (installed) await bootstrapLocalShowcaseBoardCreation(pool, person);
     for (const failure of ['missing-global', 'wrong-kind', 'missing-marker', 'wrong-operator', 'other-account']) {
       const marker = (await snapshot()).marker[0];
-      if (failure === 'missing-global')
-        await reader.query('DELETE FROM semantic.context WHERE route=0 AND context_id=$1', [PLATFORM_RESOURCE.id]);
+      if (failure === 'missing-global') await deleteGlobalContext();
       if (failure === 'wrong-kind')
         await reader.query("UPDATE semantic.context SET kind='community' WHERE route=0 AND context_id=$1", [
           PLATFORM_RESOURCE.id,

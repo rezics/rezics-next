@@ -20,6 +20,31 @@ The Source adapter ABI keeps Search `ScopeWorkContext`; contract `work` stays un
 admission SQL drives from the one-row request through LATERAL LIMIT-1 primary-key points and the 32-row reserved
 source; restore and rename lock the exact parent rather than scanning the owner catalogue. Those growth suites
 remain the oracles; this landing adds no parallel Label suite.
+Decision: native Label fixtures create the steward's Global `definitions:publish` / `definitions:activate` grants
+through the ordinary command after Access bootstrap; Access keeps Global point checks on the SQL evaluator so
+`platform.governance` is the first holder. No test-only grant rows. The operator bootstrap CLI installs native
+History before `runCommand`, matching server and worker. Subject writes load Semantic's installed source-set module
+through History's adapter at `src/semantic/record-source-set.ts`; a declaration file alone stays unavailable.
+`beginSemanticRecordSourceSet` already declares the set and registers work, so a successful History test returns an
+ordinary `access.account.preferences` result with `account-updated` rather than `noEffect`; a fabricated handle fails
+owner provenance, not module-unavailable. Native digest verification requires 64 lowercase hex characters; a
+same-width mismatch returns false. Direct `createKernel` / `runCommand` tests bind the dedicated receipt ring
+rather than seeding grants. The operator bootstrap CLI binds that same ring from `KERNEL_RECEIPT_KEYS` because
+standing-parent installation writes receipts. Composed Entry/progress collection-read on a subject id is not
+library-entry authorization; native fixtures defer that denial and keep `library_entry` admission. FULL by-label
+withheld pages open `reading_progress` and carry `progress_session:list`; a suspended own-account viewer is
+unauthenticated. Whitespace-only prefix continuation matches the unfiltered page; authenticated list tokens stay
+unique per issuance. Growth seed encoding resets its visited-node ceiling on each insert batch. Generic prefix plans may
+Bitmap Heap Scan `personal_label_live_name`; Seq Scan stays refused. Assignment Seq Scan oracles stay the
+existing SQL. FULL empty-shelf gate denials keep raw capture so private Library plans must be absent; FULL HTTP
+growth folds native plan notices so Access formula EXPLAIN stays inside the telemetry cap, charging one
+provenance summary per notice rather than one telemetry entry per EXPLAIN node, and walks each notice
+under the per-tree node cap rather than the capture-wide 20 000-node telemetry budget; Seq Scan
+on Library relations stays refused. FULL assignment pages hydrate Subject summaries from the admitted
+request deadline and one Semantic `prepareReadDecisions` page, not per-subject Access point formulas.
+The folded FULL warmup still sees 34 `personal_label` parent
+observations and zero sequential scans. Existing Label command, HTTP and growth suites pin this; no extra
+tests or stories.
 
 ## Collection operation costs
 
