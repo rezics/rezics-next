@@ -579,6 +579,8 @@ export async function openApiRuntime(
           return response;
         } catch (error) {
           if (event) event.error = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+          if (!current)
+            throw new Error(`Native importer HTTP ${req.method} ${new URL(req.url).pathname} failed`, { cause: error });
           throw error;
         } finally {
           if (event) httpEvents.push(event);
@@ -860,7 +862,13 @@ export async function openApiRuntime(
         await importer!.close();
         importer = openImporter();
       },
-      replay: (req: Request) => app.handle(req),
+      replay: async (req: Request) => {
+        try {
+          return await app.handle(req);
+        } catch (error) {
+          throw new Error(`Native replay HTTP ${req.method} ${new URL(req.url).pathname} failed`, { cause: error });
+        }
+      },
     };
   } catch (error) {
     await close();
