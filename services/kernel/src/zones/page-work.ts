@@ -3,7 +3,6 @@ import { ZonePagePositionSchema } from './page-position.ts';
 import { jsonParameter } from '../database/json.ts';
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
-import { ProblemError } from '../http/problem.ts';
 import type { Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import {
@@ -13,7 +12,7 @@ import {
   type ListCursorProfile,
 } from '../tokens/list-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { zoneDigest, zoneUnavailable, type ZoneWork } from './membership.ts';
+import { zoneCursorFailure, zoneDigest, zoneUnavailable, type ZoneWork } from './membership.ts';
 import type { ZoneUnionPosition } from './union.ts';
 import read from './page-work-read.sql';
 import save from './page-work-save.sql';
@@ -63,7 +62,7 @@ export async function zonePageWork(deps: { pool: Pool; tokens: KeyRing; clock: (
     ? await decodeListCursor(deps.tokens, binding, input.cursor, deps.clock(), { profile })
     : null;
   if (input.cursor && input.unusable === 'stale') {
-    if (!decoded?.ok) throw new ProblemError(decoded?.reason === 'expired' ? 'stale_cursor' : 'invalid_cursor');
+    if (!decoded?.ok) zoneCursorFailure(decoded?.reason === 'expired' ? 'expired' : 'invalid');
   }
   input.work.select('control', 'id', 1);
   // Exact PK reads/writes; nativeRows charges plan bounds, including conflict/Zone-head points.
@@ -91,7 +90,7 @@ export async function zonePageWork(deps: { pool: Pool; tokens: KeyRing; clock: (
     decoded.after[1] === stored.predecessor.generation &&
     decoded.after[2] === stored.predecessor.revision;
   const usable = Boolean(current || predecessor);
-  if (input.cursor && input.unusable === 'stale' && decoded?.ok && !usable) throw new ProblemError('stale_cursor');
+  if (input.cursor && input.unusable === 'stale' && decoded?.ok && !usable) zoneCursorFailure('stale');
   const generation = usable ? retained!.generation : randomUUID();
   const position: ZonePagePosition = usable ? { reads: stored!.reads } : { reads: {} };
   const revision = retained?.revision;

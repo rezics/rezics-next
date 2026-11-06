@@ -1,13 +1,11 @@
 import type { CompositionDocument } from '@rezics/composition';
 import { createFileRoute, notFound, useRouter } from '@tanstack/react-router';
-import { type RoutePageData } from '../../features/pages/route';
+import { type RoutePageData, zonePageDestinations, ZoneRoutePage } from '../../features/pages/route';
 import { subjectPageMessages } from '../../features/pages/route-support';
-import { zonePageDestinations, ZoneRoutePage } from '../../features/pages/zone-page';
-import { zonePageSearch } from '../../features/pages/zone-destinations';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { ZonePageSurface, ZoneReadBoundary, ZoneShell, zonePageTitle, zoneRouteHeading } from '../../zones/zone-shell';
-import { readZonePageRequest } from '../../zones/zone-read';
+import { readZonePageRequest, zonePageSearch } from '../../zones/zone-read';
 
 const configuredRoute = /^(?!subjects(?:\/|$))[a-z0-9]+(?:-[a-z0-9]+)*(?:\/[a-z0-9]+(?:-[a-z0-9]+)*)*$/;
 

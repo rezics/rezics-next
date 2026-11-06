@@ -1,13 +1,6 @@
-import { createContext } from 'react';
-
-export type ZoneDestinations = {
-  zoneId: string;
-  locale: string;
-  route: string;
-  cursor?: string;
-};
-
-export const ZoneDestinationsContext = createContext<ZoneDestinations | null>(null);
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const cursorPattern = /^[A-Za-z0-9_-]{1,4864}$/;
+const listPattern = /^[A-Za-z0-9_-]{1,64}$/;
 
 export function zoneRouteHref(locale: string, zoneId: string, route = '', cursor?: string, list?: string): string {
   const suffix = route ? `/${route.split('/').map(encodeURIComponent).join('/')}` : '';
@@ -27,10 +20,6 @@ export function zoneSubjectHref(locale: string, zoneId: string, subjectId: strin
 export function zoneReturnHref(locale: string, zoneId: string, route = ''): string {
   return zoneRouteHref(locale, zoneId, route);
 }
-
-const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-const cursorPattern = /^[A-Za-z0-9_-]{1,4864}$/;
-const listPattern = /^[A-Za-z0-9_-]{1,64}$/;
 
 export function zonePageSearch(search: string): { cursor?: string; list?: string } {
   const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);

@@ -13,6 +13,14 @@ import { loadSubjectPage, type SubjectPageData } from '../features/pages/subject
 import { loadViewPages } from '../features/pages/subject-frame';
 import { locales } from '../paraglide/runtime.js';
 
+export {
+  isZoneSubjectId,
+  zonePageSearch,
+  zoneReturnHref,
+  zoneRouteHref,
+  zoneSubjectHref,
+} from './destinations.ts';
+
 type ZoneRouteClient = {
   zones(input: { id: string }): {
     $readPage: {

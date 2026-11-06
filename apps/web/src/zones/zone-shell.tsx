@@ -1,5 +1,4 @@
 import { pickZoneName, type CompositionDocument, type View } from '@rezics/composition';
-import { zoneReturnHref } from '../features/pages/zone-destinations';
 import { useLocation, useRouter, notFound } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
@@ -26,6 +25,7 @@ import type { PagePaths } from '../shell/head';
 import {
   continueZonePageRequest,
   readZonePageRequest,
+  zoneReturnHref,
   type ZonePageInput,
   type ZonePageRouteOutcome,
 } from './zone-read';

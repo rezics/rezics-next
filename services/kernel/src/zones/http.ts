@@ -31,11 +31,10 @@ import {
   ZoneSubjectListQuerySchema,
   ZoneSubjectListProgressSchema,
 } from './page-continuation.ts';
-import { readStaticZonePage } from './page-runtime.ts';
+import { readStaticZonePage, readZoneSubjects } from './page-runtime.ts';
 import { createZoneCommands, zoneIfMatch } from './resource-commands.ts';
 import { createZoneReads, requireZoneAccount } from './resource-reads.ts';
 import { readZoneCollections } from './mounted-collections.ts';
-import { readZoneSubjects } from './subjects.ts';
 
 const closed = { additionalProperties: false } as const;
 const params = t.Object({ id: t.String() }, closed);

@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import canonicalize from 'canonicalize';
 import type { PageRead } from '../../src/presentation/reads.ts';
-import { zoneObservedReadKey } from '../../src/presentation/zone-reads.ts';
+import { zoneObservedReadKey } from '../../src/zones/page-runtime.ts';
 import { validateSearchLimit } from '../../src/search/hits.ts';
 
 test('Zone TypeList observed keys match readPage search canonical form including default limit and languages', () => {
