@@ -566,8 +566,9 @@ public catalogue observation for seal and activation. The native proofs are
 Decision: an owner Source whole-query publication evaluates the complete predicate through Search's owner scope, and
 its catalogue leaves pin the public observation for seal and activation; a catalogue Source requires catalogue leaves
 only. The rule-results owner review keeps one instance across page observations and resets through its binding, so
-an in-flight owner read settles on the handler that started it. Server rendering cannot show admission-gated owner
-links, because operation admission is client-side.
+an in-flight owner read settles on the handler that started it. Saved-results rule and publish links belong in the
+first HTML when the authenticated page already names that curator; rule edit also requires `collection_rule.update` in
+the page's viewerActions. `useOperation` stays on command controls that have no page action list.
 
 This adoption records the native plan and preserves required native-case freezing. It adds no production code, exported
 runtime symbol, schema migration, API tests or gate. File presence and document format/link validation establish

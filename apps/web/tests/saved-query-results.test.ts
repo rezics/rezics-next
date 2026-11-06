@@ -40,6 +40,9 @@ const savedPage = {
   description: null,
   curator: null,
   curatorAccountId: 'owner',
+  membershipKind: 'dynamic' as const,
+  visibility: 'public' as const,
+  revision: 1,
   // The authenticated owner's detail read carries this admitted action beside the page.
   viewerActions: {
     state: 'ready' as const,

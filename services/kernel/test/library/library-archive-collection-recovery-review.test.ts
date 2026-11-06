@@ -44,7 +44,7 @@ beforeAll(async () => {
   const fixture = await createRealAccess(db.admin, { owner }, scopes);
   await db.admin.query(
     `INSERT INTO access.exposure_opening("group",valid,transaction_id)
-    SELECT g,'(,)'::tstzrange,$1 FROM unnest($2::text[]) g`,
+    SELECT g,tstzrange('2000-01-01',NULL,'[)'),$1 FROM unnest($2::text[]) g`,
     [owner, ['personal_library', 'reading_progress', 'collections']],
   );
   work = await createWorkClient(db.url, db.pool);
