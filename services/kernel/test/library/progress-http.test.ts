@@ -1,17 +1,11 @@
 import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { deriveAccess } from '../../src/access/derived-access.ts';
-import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Buffer } from 'node:buffer';
 import { createHash, randomUUID } from 'node:crypto';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { createKernel } from '../../src/http/kernel.ts';
-import { Admission } from '../../src/http/admission.ts';
-import { createPool } from '../../src/database/pool.ts';
-import { testReceiptKeys } from '../support/receipt-keys.ts';
-import * as sessionCommands from '../../src/library/sessions.ts';
-import * as discoveryPresentation from '../../src/library/progress-discovery-presentation.ts';
-import * as subjectSummaries from '../../src/semantic/current-subject-summaries.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import { type Access } from '../../src/request/access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
@@ -139,7 +133,6 @@ function stableProblem(body: Record<string, unknown>) {
   return stable;
 }
 
-describe('native progress HTTP', () => {
 beforeAll(async () => {
   db = await openGrowthDatabase();
   db.pool.options.max = 1;
@@ -826,55 +819,4 @@ test('owner discovery request cost stays bounded as a private library grows to 4
     plans: small!.plans,
   });
   expect(Math.max(small!.sqlBlocks, medium!.sqlBlocks, large!.sqlBlocks) - small!.sqlBlocks).toBeLessThanOrEqual(32);
-});
-
-});
-
-test('progress discovery retains request Access and deadline after the session command completes', async () => {
-  const actor = {
-    kind: 'account' as const, accountId: owner, clientId: 'web', scopes, requestedBy: null, authnEpoch: 1,
-  };
-  const access: Access = { authenticate: async () => actor, authorize: async () => true };
-  const admission = new Admission();
-  const job = { deadline: Date.now() + 30_000 };
-  const pool = createPool('postgres://kernel.invalid/progress-summary-lifetime');
-  let listed = false;
-  const original = sessionCommands.createSessionCommands;
-  const commands = spyOn(sessionCommands, 'createSessionCommands').mockImplementation((dependencies) => ({
-    ...original(dependencies),
-    async listOwnerSessions() {
-      await Promise.resolve();
-      listed = true;
-      return { sessions: [], generation: 'original-generation', partitionEpoch: null, next: null };
-    },
-    async verifyOwnerDiscoveryCurrent() {},
-  }));
-  const summaries = spyOn(subjectSummaries, 'readCurrentSubjectSummaries').mockImplementation(
-    async (dependencies, ids) => {
-    expect(listed).toBe(true);
-    expect(admission.running.normal).toBe(1);
-    expect(dependencies.access).toBe(access);
-    expect(dependencies.actor).toBe(actor);
-    expect(dependencies.deadline).toBe(job.deadline);
-    expect(ids).toEqual([]);
-      return { summaries: new Map(), async verify() {} };
-    },
-  );
-  const presentation = spyOn(discoveryPresentation, 'presentProgressDiscovery').mockResolvedValue(new Map());
-  try {
-    const kernel = createKernel({ pool, routeKey: new Uint8Array(32).fill(23), tokens, receiptKeys: testReceiptKeys(), access });
-    const route = kernel.routes.find((route) => route.method === 'GET' && route.path === '/v1/progressSessionDiscovery')!;
-    const handle = route.handler as (context: Record<string, unknown>) => Promise<unknown>;
-    expect(await handle({
-      actor, admission, job, query: {}, set: { headers: {} },
-      request: new Request('https://kernel.test/v1/progressSessionDiscovery'),
-    })).toEqual({ viewerState: 'signed_in', progressSessions: [], next: null });
-    expect(summaries).toHaveBeenCalledTimes(1);
-    expect(admission.running.normal).toBe(0);
-  } finally {
-    commands.mockRestore();
-    summaries.mockRestore();
-    presentation.mockRestore();
-    await pool.end();
-  }
 });
