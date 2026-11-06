@@ -1,4 +1,4 @@
-import { afterAll, expect, test } from 'bun:test';
+import { afterAll, expect, mock, test } from 'bun:test';
 import AxeBuilder from '@axe-core/playwright';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
@@ -6,7 +6,8 @@ import { join } from 'node:path';
 import { chromium, type Browser, type BrowserContextOptions, type Page } from 'playwright';
 import { createKernelClient, type KernelClient } from '@rezics/client';
 import { slug } from '@rezics/definitions/slug';
-import { createFakeKernelFetch } from '../src/kernel/fake.ts';
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { createFakeKernelFetch } = await import('../src/kernel/fake.ts');
 import fixtures from '../src/kernel/fixtures.json';
 
 const app = join(import.meta.dir, '..');

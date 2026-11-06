@@ -83,6 +83,8 @@ a served-page binding marked pending does not become covered merely by linking a
   recovery never refills a window or turns a nonterminal success into known empty.
 - **Decision**: Retire withdrawn public bodies, metadata and callbacks together; explicit recovery admits a new
   native reading with current locale/viewer/CSRF provenance, without reusing a retired continuation.
+  Question directory and caption-history windows share the existing Stay/Leave control; an equal address
+  rerender keeps the admitted read and its keyboard focus, while a changed address retires its authority.
 - **Personas**: Anonymous, Alice, native suspended persona; real dependency outage and projection barrier.
 - **Fixture data**: Cold subject view held behind its real worker, unavailable owner, private/unknown Collection,
   empty public list, native `suspended` persona from `services/kernel/test/support/personas.ts` with a

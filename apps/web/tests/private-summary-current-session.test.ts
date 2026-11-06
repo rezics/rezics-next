@@ -1,10 +1,12 @@
 import { describe, expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
-import { nativeContinueSource } from '../src/library/continue-adapter';
-import { CONTINUE_LIMIT, loadContinue, loadContinueState } from '../src/library/continue-read';
-import { followCountsSearch, loadPrivateFollowCounts } from '../src/library/private-follow-counts';
 import type { SessionEnv } from '../src/session/client';
-import { prepareSession, requestCsrfToken, sessionSubject, viewerCredential } from '../src/session/request';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { nativeContinueSource } = await import('../src/library/continue-adapter');
+const { CONTINUE_LIMIT, loadContinue, loadContinueState } = await import('../src/library/continue-read');
+const { followCountsSearch, loadPrivateFollowCounts } = await import('../src/library/private-follow-counts');
+const { prepareSession, requestCsrfToken, sessionSubject, viewerCredential } = await import('../src/session/request');
 
 const target = { targetType: 'collection' as const, targetId: '0192f3a0-6c1e-7b2a-9d4e-000000000021' };
 const viewer = { subject: 'current-reader', csrfToken: 'A'.repeat(22) };

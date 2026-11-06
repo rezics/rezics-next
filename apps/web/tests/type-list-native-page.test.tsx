@@ -1,9 +1,11 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
-import { OverviewContext } from '../src/features/pages/overview';
+
 import { m } from '../src/paraglide/messages.js';
-import { TypeList, TypeListContext } from '../src/features/pages/type-list';
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { OverviewContext } = await import('../src/features/pages/overview');
+const { TypeList, TypeListContext } = await import('../src/features/pages/type-list');
 
 const node = 'books';
 const id = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e06';

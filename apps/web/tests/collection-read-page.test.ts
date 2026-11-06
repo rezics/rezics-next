@@ -1,4 +1,6 @@
 import { expect, mock, test } from 'bun:test';
+import { bundledRelease } from '@rezics/definitions/bundled';
+import { defaultCoverRatio } from '@rezics/ui/cover';
 import { createKernelClient } from '@rezics/client';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -86,7 +88,17 @@ test('Collection read page has real owner actions, readable member rows and comp
   expect(html.match(/data-slot="member-list-row-title"[^>]*>/g)?.join('')).not.toContain('text-primary');
   expect(html).not.toContain('<input');
   expect(html).not.toContain('<textarea');
-  expect(collectionMemberRatio({ type: 'schema:Movie' })).toBe('16:9');
+  // Movie uses the admitted portrait presentation; a missing definition uses the shared default.
+  expect(collectionMemberRatio({ type: 'schema:Movie' })).toBe(defaultCoverRatio);
+  expect(
+    collectionMemberRatio(
+      { type: 'schema:Movie' },
+      {},
+      {
+        'schema:Movie': bundledRelease.types['schema:Movie']!.listPresentation!,
+      },
+    ),
+  ).toBe(defaultCoverRatio);
   expect(collectionMemberRatio({ type: 'custom:Bookish' }, { 'custom:Bookish': '2:3' })).toBe('2:3');
 
   for (const status of [200, 202, 503]) {
@@ -364,7 +376,7 @@ test('Members recovery retains its Collection, filter and opaque cursor through 
   });
   for (const [next, state] of [
     [500, 'failed'],
-    [0, 'failed'],
+    [0, 'unavailable'],
     [503, 'unavailable'],
     [202, 'preparing'],
     [200, 'ready'],

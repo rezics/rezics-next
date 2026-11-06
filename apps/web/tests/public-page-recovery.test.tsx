@@ -80,7 +80,12 @@ test('route loaders distinguish cold preparation, missing, denied and owner outa
 test('the real composition retains native preparation and retry, then admits a terminal native empty page', async () => {
   const document = {
     root: { props: {} },
-    content: [{ type: 'TypeList', props: { id: 'books', title: { en: 'Books' }, types: ['schema:Book'] } }],
+    content: [
+      {
+        type: 'TypeList',
+        props: { id: 'books', title: { en: 'Books' }, types: ['schema:Book'], limit: 24, sort: 'name' },
+      },
+    ],
   };
   const page = (read: unknown) => ({
     profile: 'sha256:current',
