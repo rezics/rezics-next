@@ -48,6 +48,21 @@ export function countWaitingByPool(attempts: readonly { pool: string; state: str
   return countByPool(attempts, (state) => state === 'waiting');
 }
 
+type ReadingWindow = PoolReading['windows'][number];
+
+/**
+ * Providers stamp one window's reset a few milliseconds or seconds apart between readings, so readings pair within this
+ * tolerance. A real reset moves the stamp by a window length and starts a new series.
+ */
+const sameResetToleranceMs = 60_000;
+
+/** Equal window length and a reset stamp within the tolerance; an unknown stamp matches only another unknown one. */
+function sameWindow(past: ReadingWindow, window: ReadingWindow): boolean {
+  if (past.minutes !== window.minutes) return false;
+  if (past.resetsAt === null || window.resetsAt === null) return past.resetsAt === window.resetsAt;
+  return Math.abs(past.resetsAt - window.resetsAt) <= sameResetToleranceMs;
+}
+
 // Milliseconds per hour, minutes per day and percentages below are unit conversions, not admission policy.
 /** Same-window consumption over the measurement span, excluding resets. All reserve and pacing thresholds are local policy. */
 export function burnPerHour(
@@ -70,9 +85,7 @@ export function burnPerHour(
         if (past.allowanceKey !== current.allowanceKey || !past.observedAt) continue;
         const at = Date.parse(past.observedAt);
         if (!Number.isFinite(at) || at < start || at >= currentAt) continue;
-        const old = past.windows.find(
-          (candidate) => candidate.resetsAt === window.resetsAt && candidate.minutes === window.minutes,
-        );
+        const old = past.windows.find((candidate) => sameWindow(candidate, window));
         if (!old) continue;
         if (earliestAt === undefined || at < earliestAt) {
           earliestAt = at;
