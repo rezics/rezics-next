@@ -117,7 +117,7 @@ function admitsWorkingPublication(
   metadata: Awaited<ReturnType<typeof readNativeCollectionWorkingMetadata>>['metadata'],
   actorId: string,
   revision: number,
-) {
+): metadata is NonNullable<Awaited<ReturnType<typeof readNativeCollectionWorkingMetadata>>['metadata']> {
   return (
     !!metadata &&
     metadata.curatorAccountId === actorId &&

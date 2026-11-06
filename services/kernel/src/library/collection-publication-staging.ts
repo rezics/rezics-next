@@ -14,7 +14,7 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import { compileCurrentOwnerFilter } from '../search/current-filter-plan.ts';
 import { readCataloguePublicationPage } from '../search/catalogue-publication.ts';
 import { zeroScopeWork } from '../search/scope-execution.ts';
-import { createSearchScopeSource, type ScopeBasis } from '../search/scope-source.ts';
+import { createSearchScopeSource, type PreparedSearchScope, type ScopeBasis } from '../search/scope-source.ts';
 import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
 import { createIdentityScopedObservations } from '../semantic/identity-scoped-observations.ts';
 import {
@@ -334,43 +334,44 @@ export async function stageCollectionPublicationStep(
     if (!catalogueOnly && (plan.leaves.some((leaf) => leaf.kind === 'catalogue') || !plan.leaves.some((leaf) => leaf.kind === 'owner')))
       throw unavailable();
     const scope = catalogueOnly ? null : createSearchScopeSource(options);
-    const prepared = catalogueOnly
-      ? {
-          prepared: {
-            basis: Object.freeze({
-              release: native.releaseDigest,
-              query: createHash('sha256')
-                .update(canonicalize({ filter: native.definition.filter, source: 'catalogue' })!)
-                .digest('hex'),
-              profile: native.observation.basis.digest,
-              canonical: createHash('sha256')
-                .update(
-                  canonicalize({
-                    ...native.identityObservation,
-                    committedRevision: native.identityObservation.committedRevision.toString(),
-                  })!,
-                )
-                .digest('hex'),
-              nativeOwner: Object.freeze({
-                source: structuredClone(native.sourceIdentity),
-                observation: structuredClone(native.observation),
-              }),
-            }) as ScopeBasis,
-          },
-        }
-      : await work.compose(async (allowance) => {
-          const prepared = await scope!.prepare(native.definition.filter, {
-            releaseDigest: native.releaseDigest,
-            order: { kind: 'id', source: native.sourceIdentity },
-            allowance,
-            readOnly: true,
-          });
-          return { prepared, work: scope!.work(prepared) };
-        });
+    const ownerPrepared: PreparedSearchScope | null = catalogueOnly
+      ? null
+      : (
+          await work.compose(async (allowance) => {
+            const prepared = await scope!.prepare(native.definition.filter, {
+              releaseDigest: native.releaseDigest,
+              order: { kind: 'id', source: native.sourceIdentity },
+              allowance,
+              readOnly: true,
+            });
+            return { prepared, work: scope!.work(prepared) };
+          })
+        ).prepared;
+    const basis: ScopeBasis = catalogueOnly
+      ? (Object.freeze({
+          release: native.releaseDigest,
+          query: createHash('sha256')
+            .update(canonicalize({ filter: native.definition.filter, source: 'catalogue' })!)
+            .digest('hex'),
+          profile: native.observation.basis.digest,
+          canonical: createHash('sha256')
+            .update(
+              canonicalize({
+                ...native.identityObservation,
+                committedRevision: native.identityObservation.committedRevision.toString(),
+              })!,
+            )
+            .digest('hex'),
+          nativeOwner: Object.freeze({
+            source: structuredClone(native.sourceIdentity),
+            observation: structuredClone(native.observation),
+          }),
+        }) as ScopeBasis)
+      : ownerPrepared!.basis;
     if (
-      prepared.prepared.basis.release !== native.releaseDigest ||
-      !prepared.prepared.basis.nativeOwner ||
-      !isDeepStrictEqual(prepared.prepared.basis.nativeOwner, {
+      basis.release !== native.releaseDigest ||
+      !basis.nativeOwner ||
+      !isDeepStrictEqual(basis.nativeOwner, {
         source: native.sourceIdentity,
         observation: native.observation,
       })
@@ -411,7 +412,7 @@ export async function stageCollectionPublicationStep(
           locator.ownerAccountId,
           definitionDigest(native),
           json(binding(native)),
-          json(prepared.prepared.basis),
+          json(basis),
           source.generation,
           source.basis.digest,
           json(initialCollectionPublicationFrontier()),
@@ -426,7 +427,7 @@ export async function stageCollectionPublicationStep(
       row.generation !== native.output.ref.generation ||
       row.definition_digest !== definitionDigest(native) ||
       !isDeepStrictEqual(row.binding, binding(native)) ||
-      !isDeepStrictEqual(row.scope_basis, prepared.prepared.basis) ||
+      !isDeepStrictEqual(row.scope_basis, basis) ||
       row.canonical_generation !== source.generation ||
       row.canonical_basis_digest !== source.basis.digest ||
       row.fact_fence !== source.metadata.factFence ||
@@ -471,7 +472,7 @@ export async function stageCollectionPublicationStep(
         frontier = enterCataloguePublicationMembers(frontier, page.subjects, page.exhausted);
       } else {
         const page = await work.compose((allowance) =>
-          scope!.sourcePrefix(prepared.prepared, {
+          scope!.sourcePrefix(ownerPrepared!, {
             afterSubjectId: frontier.after,
             candidateLimit: 16,
             allowance,
@@ -487,7 +488,7 @@ export async function stageCollectionPublicationStep(
       if (catalogueOnly) {
         const settled = settleCollectionPublicationSubject(frontier, {
           values: [true],
-          basis: prepared.prepared.basis,
+          basis,
           usage: { keys: 1, native: { points: 0, witnesses: 0, rows: 0, bytes: 0, emptySeeks: 0 } },
           evidence: [],
           progress: null,
@@ -498,7 +499,7 @@ export async function stageCollectionPublicationStep(
       } else {
         const evaluated = await work.compose(async (allowance) => {
           const r = allowance.remaining;
-          const evaluation = await scope!.evaluate(prepared.prepared, [subject!], {
+          const evaluation = await scope!.evaluate(ownerPrepared!, [subject!], {
             rawKeys: Math.min(256, r.candidateKeys),
             allowance,
             native: {
