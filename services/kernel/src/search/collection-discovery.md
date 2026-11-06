@@ -105,6 +105,21 @@ eligible identity appears in its global position; continuation is a sort keyset,
   Focused native tests pin catalogue unique members, directory recency/popularity order, composition slot skip and
   TypeList Search-page admission; browser walks remain deferred.
 
+Decision: catalogue Collection publication snapshots public Search population into selected A through
+`readCataloguePublicationPage`/`observeCataloguePublication`. The producer carries the original deadline and
+`SearchRequestWork`, reserves limit+1 candidates before dispatch, and fails closed when generation, UUID or
+release currentness change. Library stages, seals and rereads that observation; working membership B stays
+private. Configured TypeList BFF prepares the session on every read and attaches credentials only for a
+selected realm. TypeList completion, revocation and suspension reuse that same session transport.
+Decision: typecheck repairs keep those assertions; fixtures carry `source` (owner unless catalogue), omit
+undefined `expected`, and FULL members pages pass only cursor, limit and languages. Catalogue publication
+observation uses the stored accepted release digest; it does not hash FilterRelease as Release. HTTP
+createKernel fixtures pass dedicated receipt keys, open gate:search and selling exposure, call the official SearchService
+`complete` callback, and keep index prefixes within 48 characters. Native kind-metadata SearchService hits use
+identity-admitted created subjects and install the released templates before indexing. Catalogue producer mocks honor
+`search_after`. Access observation wraps only prepare ports. createKernel write fixtures inspect mounted composed
+rates and the merged `subject:read` resource types.
+
 ## Readiness
 
 Factory/registration readiness means the callable native ports are installed. Ready default generations additionally

@@ -21,8 +21,8 @@ import {
   type CollectionSourceWorkState,
 } from './collection-source-work-native.ts';
 
-import type { WorkAllowance, WorkDimensions, WorkReceipt } from './contract/work-dimensions.ts';
-export type { WorkAllowance, WorkDimensions, WorkReceipt };
+import type { WorkAllowance, WorkReceipt } from './contract/work-dimensions.ts';
+export type { WorkAllowance, WorkDimensions, WorkReceipt } from './contract/work-dimensions.ts';
 
 type SourceWorkContext<W extends ScopeWorkContext = ScopeWorkContext> = W extends ScopeWorkContext
   ? Readonly<{ actor?: never; at?: never; work: W }>

@@ -108,7 +108,7 @@ export async function prepareCollectionPublicationSource(
 
 async function stage(context: Context, input: WorkflowInput): Promise<'more' | 'sealed' | 'done'> {
   const locator = validate(input);
-  const runtime = collectionPublicationScopeRuntime(context as WorkContext);
+  const runtime = collectionPublicationScopeRuntime(context);
   if (!runtime || runtime.pool !== context.pool) throw unavailable();
   const { access } = context.getAuthorization();
   const routeKey = readMembershipWorkConfig(context.env).routeKey;

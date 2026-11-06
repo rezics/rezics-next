@@ -32,11 +32,45 @@ import type { SubjectSource } from './source.ts';
 
 export type SearchConfig = { url: string; prefix: string };
 
+/** DBOS recovers workflows during launch, before addService offers the live preparation. */
+export function createSearchServiceGate<T>(unavailable: () => Error) {
+  let value: T | undefined;
+  let stopped = false;
+  let resolve!: (next: T) => void;
+  let reject!: (error: unknown) => void;
+  const pending = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  void pending.catch(() => {});
+  return {
+    get current() {
+      return value;
+    },
+    async ready(): Promise<T> {
+      if (stopped) throw unavailable();
+      if (value) return value;
+      return pending;
+    },
+    offer(next: T) {
+      if (stopped) throw unavailable();
+      if (value) throw new Error('Search preparation service is already running');
+      value = next;
+      resolve(next);
+    },
+    stop() {
+      stopped = true;
+      value = undefined;
+      reject(unavailable());
+    },
+  };
+}
+
 const collectionPublicationScopeRuntimes = new WeakMap<WorkContext, ScopeRuntime>();
 
 /** The Library consumer borrows this worker's existing Search client and rated source for a guarded step. */
-export function collectionPublicationScopeRuntime(context: WorkContext): ScopeRuntime | undefined {
-  return collectionPublicationScopeRuntimes.get(context);
+export function collectionPublicationScopeRuntime(context: WeakKey): ScopeRuntime | undefined {
+  return collectionPublicationScopeRuntimes.get(context as WorkContext);
 }
 
 /** `undefined` when search is not configured. The URL and prefix are refused by name. */
@@ -290,13 +324,16 @@ export function createSearchWorkModule(
           },
         },
       ]);
-      let active: PublicPreparation | undefined;
-      let scoped: ReturnType<typeof createScopePreparation> | undefined;
+      const preparationGate = createSearchServiceGate<PublicPreparation>(
+        () => new SearchUnavailableError('Search preparation service is not running'),
+      );
+      const scopeGate = createSearchServiceGate<ReturnType<typeof createScopePreparation>>(
+        () => new SearchUnavailableError('Search scope preparation service is not running'),
+      );
       const scopeStore = createScopePreparationStore(context.pool, config.prefix, context.client);
       const scopeStep = DBOS.registerStep(
         async (scopeId: string, revision: string) => {
-          if (!scoped) throw new SearchUnavailableError('Search scope preparation service is not running');
-          await scoped.run(scopeId, revision);
+          await (await scopeGate.ready()).run(scopeId, revision);
         },
         { name: 'search.scopePreparationStep', ...COMMAND_STEP_RETRIES },
       );
@@ -308,9 +345,7 @@ export function createSearchWorkModule(
       );
       const step = DBOS.registerStep(
         async (id: string, revision: string) => {
-          const preparation = active;
-          if (!preparation) throw new SearchUnavailableError('Search preparation service is not running');
-          await preparation.run(id, revision);
+          await (await preparationGate.ready()).run(id, revision);
         },
         { name: 'search.publicPreparationStep', retriesAllowed: true, maxAttempts: 3, intervalSeconds: 1 },
       );
@@ -327,47 +362,54 @@ export function createSearchWorkModule(
         let runtime: ReturnType<typeof createDefaultPublicFilterRuntime> | undefined;
         let discoveryProducers: DiscoveryProducerEntry | undefined;
         let searchAccess: Access | undefined;
-        createKernel({
-          pool: context.pool,
-          routeKey,
-          ...defaults,
-          workClient: context.client,
-          onAccessReady(access) {
-            searchAccess = access;
-            bindErasureAccess(access);
-            discoveryProducers = composeDiscovery({
-              pool: context.pool,
-              routeKey,
-              access,
-              tokens: defaults.tokens,
-              clock: context.clock,
-              subjects: source,
-            });
-            scoped = createScopePreparation({
-              search,
-              pool: context.pool,
-              prefix: config.prefix,
-              routeKey,
-              access,
-              clock: context.clock,
-            });
-            runtime = createDefaultPublicFilterRuntime({
-              pool: context.pool,
-              routeKey,
-              access,
-              search,
-              prefix: config.prefix,
-              clock: context.clock,
-            });
-          },
-        });
-        if (!runtime || !discoveryProducers || !searchAccess)
-          throw new Error('Search worker Access composition is incomplete');
-        const publicRuntime = runtime;
-        if (active) {
-          await publicRuntime.close();
-          throw new Error('Search preparation service is already running');
+        try {
+          createKernel({
+            pool: context.pool,
+            routeKey,
+            ...defaults,
+            workClient: context.client,
+            onAccessReady(access) {
+              searchAccess = access;
+              bindErasureAccess(access);
+              discoveryProducers = composeDiscovery({
+                pool: context.pool,
+                routeKey,
+                access,
+                tokens: defaults.tokens,
+                clock: context.clock,
+                subjects: source,
+              });
+              scopeGate.offer(
+                createScopePreparation({
+                  search,
+                  pool: context.pool,
+                  prefix: config.prefix,
+                  routeKey,
+                  access,
+                  clock: context.clock,
+                }),
+              );
+              runtime = createDefaultPublicFilterRuntime({
+                pool: context.pool,
+                routeKey,
+                access,
+                search,
+                prefix: config.prefix,
+                clock: context.clock,
+              });
+            },
+          });
+        } catch (error) {
+          preparationGate.stop();
+          scopeGate.stop();
+          throw error;
         }
+        if (!runtime || !discoveryProducers || !searchAccess) {
+          preparationGate.stop();
+          scopeGate.stop();
+          throw new Error('Search worker Access composition is incomplete');
+        }
+        const publicRuntime = runtime;
         let scopeTick: Promise<void> | undefined;
         let scopeStopped = false;
         const scopeTimer = setInterval(() => {
@@ -381,6 +423,13 @@ export function createSearchWorkModule(
               scopeTick = undefined;
             });
         }, 1000);
+        const halt = async () => {
+          scopeStopped = true;
+          clearInterval(scopeTimer);
+          await scopeTick;
+          preparationGate.stop();
+          scopeGate.stop();
+        };
         const preparation = createPublicPreparation({
           pool: context.pool,
           work: context.client,
@@ -390,7 +439,13 @@ export function createSearchWorkModule(
           runtime,
           prefix: config.prefix,
         });
-        active = preparation;
+        try {
+          preparationGate.offer(preparation);
+        } catch (error) {
+          await halt();
+          await publicRuntime.close();
+          throw error;
+        }
         let runner: Awaited<ReturnType<typeof startSearchIndexing>>;
         try {
           runner = await startSearchIndexing({
@@ -404,10 +459,7 @@ export function createSearchWorkModule(
             publicPreparation: preparation,
           });
         } catch (error) {
-          if (active === preparation) active = undefined;
-          scopeStopped = true;
-          clearInterval(scopeTimer);
-          await scopeTick;
+          await halt();
           try {
             await preparation.stop();
           } finally {
@@ -420,10 +472,7 @@ export function createSearchWorkModule(
           resume: runner.resume,
           refresh: runner.refresh,
           async stop() {
-            scopeStopped = true;
-            clearInterval(scopeTimer);
-            await scopeTick;
-            if (active === preparation) active = undefined;
+            await halt();
             try {
               await runner.stop();
             } finally {
