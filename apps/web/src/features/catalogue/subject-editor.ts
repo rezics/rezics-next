@@ -126,5 +126,7 @@ export function selectedSynopsisStatement(
   inspection: SelectedSynopsisEditorInspection,
 ): SubjectRead['subject']['statements'][string][number] | undefined {
   if (inspection.kind !== 'matched') return;
-  return read.subject.statements[SELECTED_SYNOPSIS_PROPERTY]?.find((statement) => statement.id === inspection.statement);
+  return read.subject.statements[SELECTED_SYNOPSIS_PROPERTY]?.find(
+    (statement) => statement.id === inspection.statement,
+  );
 }
