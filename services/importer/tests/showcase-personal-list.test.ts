@@ -8,6 +8,7 @@ import {
   readShowcasePersonalLibrary,
   readShowcasePersonalListExport,
   reviewShowcasePersonalList,
+  runShowcasePersonalLifecycle,
   seedShowcasePersonalList,
 } from '../src/showcase-personal-list.ts';
 
@@ -151,7 +152,7 @@ test('reopen preserves the original response, current authority and terminal ref
     journal.close();
     await rm(directory, { recursive: true, force: true });
   }
-});
+}, 120000);
 
 test('private exports are bounded regular owner-only UTF-8 files; the native endpoint owns XML admission', async () => {
   await mkdir(tempRoot, { recursive: true });
@@ -279,6 +280,20 @@ test('explicit review and confirmation keep original operands across reopen, par
     expect(await readShowcasePersonalLibrary({ client })).toEqual({ state: 'current', value: current });
     expect(calls.at(-1)?.path).toBe('/v1/libraryEntries');
     expect(calls.at(-1)?.language).toBe('en');
+    reply = () =>
+      Response.json({
+        uploadId,
+        state: 'active',
+        expiresAt: '2099-01-01T00:00:00Z',
+        total: 1,
+        next: null,
+        rows: [],
+      });
+    const { readShowcasePersonalList } = await import('../src/showcase-personal-list.ts');
+    expect((await readShowcasePersonalList({ client, uploadId, language: 'ja' })).state).toBe('current');
+    expect(calls.at(-1)?.path).toBe(`/v1/libraryImports/vndb/${uploadId}`);
+    expect(calls.at(-1)?.language).toBe('ja');
+    reply = () => Response.json(current);
     expect(await readShowcasePersonalLibrary({ client, language: 'ja' })).toEqual({ state: 'current', value: current });
     expect(calls.at(-1)?.language).toBe('ja');
     reply = () => Response.json({ detail: 'private response must not enter a journal failure' }, { status: 403 });
@@ -290,4 +305,235 @@ test('explicit review and confirmation keep original operands across reopen, par
     journal.close();
     await rm(directory, { recursive: true, force: true });
   }
-});
+}, 120000);
+
+test('preview, explicit review, partial apply, reopen, changed reimport and independent Library/Progress stay separately observable', async () => {
+  await mkdir(tempRoot, { recursive: true });
+  const directory = await mkdtemp(join(tempRoot, 'personal-list-lifecycle-'));
+  const path = join(directory, 'showcase.sqlite');
+  const journal = new ShowcaseJournal(path);
+  const uploadId = '01900000-0000-4000-8000-000000000001';
+  const changedId = '01900000-0000-4000-8000-000000000009';
+  const targetId = '01900000-0000-4000-8000-000000000002';
+  const reviewId = '01900000-0000-4000-8000-000000000003';
+  const scoreReviewId = '01900000-0000-4000-8000-000000000004';
+  const xml =
+    '<vndb-export version="1.0"><vns><vn id="v123"><title>Original</title><vote>7.0</vote></vn></vns></vndb-export>';
+  const changedXml = xml.replace('Original', 'Changed').replace('7.0', '8.2');
+  const calls: { path: string; cache: RequestCache; language: string | null; method: string }[] = [];
+  const client = createKernelClient(identity.origin, {
+    headers: { authorization: 'Bearer owner' },
+    fetch: (async (input, init) => {
+      const request = new Request(input, init);
+      const path = new URL(request.url).pathname;
+      calls.push({
+        path,
+        cache: request.cache,
+        language: request.headers.get('accept-language'),
+        method: request.method,
+      });
+      if (path.endsWith(':preview')) {
+        const body = (await request.json()) as { xml: string };
+        return Response.json({ uploadId: body.xml === changedXml ? changedId : uploadId, rows: 1, limits: {} });
+      }
+      if (path.endsWith(':review')) {
+        const body = (await request.json()) as { action?: string };
+        return Response.json(
+          body.action === 'score'
+            ? {
+                reviewId: scoreReviewId,
+                status: 'reviewed',
+                targetId,
+                action: 'vote',
+                units: 14,
+                question: {
+                  id: 'q',
+                  revision: 1,
+                  grain: 'work',
+                  meaning: 'enjoyment',
+                  scale: { min: 0, max: 20, step: 1 },
+                },
+                currentVote: { state: 'absent' },
+                consent: 'adopt-native-vote',
+                sourceReason: 'exact native units',
+                nativeAdmission: 'conditional',
+              }
+            : {
+                reviewId,
+                status: 'reviewed',
+                targetId,
+                state: 'playing',
+                baseline: null,
+                replace: false,
+                action: 'state',
+                progress: null,
+              },
+        );
+      }
+      if (path.endsWith(':apply')) {
+        const body = (await request.json()) as {
+          rows: { ordinal: number; reviewId?: string; scoreReviewId?: string }[];
+        };
+        return Response.json({
+          uploadId,
+          outcomes: body.rows.map((row) =>
+            row.scoreReviewId
+              ? { ordinal: row.ordinal, scoreReviewId: row.scoreReviewId, status: 'unavailable' }
+              : { ordinal: row.ordinal, reviewId: row.reviewId, status: 'applied' },
+          ),
+          stopped: null,
+        });
+      }
+      if (path.endsWith(':cancel')) return Response.json({ uploadId, state: 'cancelled' });
+      if (request.method === 'DELETE') return Response.json({ uploadId: changedId, state: 'deleted' });
+      if (path.endsWith('/libraryEntries'))
+        return Response.json({
+          libraryEntries: [
+            {
+              subjectId: targetId,
+              state: 'playing',
+              revision: 2,
+              createdAt: '2026-11-06T00:00:00.000Z',
+              updatedAt: '2026-11-06T00:00:00.000Z',
+              activeProgressSession: { id: '01900000-0000-4000-8000-000000000005', amount: '0', unit: 'minute' },
+            },
+          ],
+          next: null,
+          viewerFacts: {
+            state: 'current',
+            question: {
+              id: 'q',
+              revision: 1,
+              grain: 'work',
+              meaning: 'enjoyment',
+              scale: { min: 0, max: 20, displayStep: 1 },
+            },
+            rows: [],
+          },
+        });
+      if (path.endsWith('/progressSessions'))
+        return Response.json({
+          progressSessions: [{ id: '01900000-0000-4000-8000-000000000005', amount: '0', unit: 'minute' }],
+          next: null,
+        });
+      return Response.json({
+        uploadId: path.includes(changedId) ? changedId : uploadId,
+        state: 'active',
+        expiresAt: '2099-01-01T00:00:00Z',
+        total: 1,
+        next: null,
+        rows: [{ ordinal: 0, title: path.includes(changedId) ? 'Changed' : 'Original' }],
+      });
+    }) as typeof fetch,
+  });
+  try {
+    const first = await runShowcasePersonalLifecycle({
+      client,
+      journal,
+      identity,
+      commands: [
+        { kind: 'preview', xml },
+        { kind: 'page', uploadId, language: 'ja' },
+        {
+          kind: 'review',
+          intentId: 'state',
+          uploadId,
+          body: { ordinal: 0, action: 'state', targetId, state: 'playing', replace: false },
+        },
+        {
+          kind: 'review',
+          intentId: 'score',
+          uploadId,
+          body: {
+            ordinal: 0,
+            action: 'score',
+            targetId,
+            questionId: '00000000-0000-7000-8000-000000000001',
+            questionRevision: 1,
+            selection: { kind: 'vote', units: 14 },
+            consent: 'adopt-native-vote',
+          },
+        },
+        {
+          kind: 'apply',
+          intentId: 'confirm',
+          uploadId,
+          body: {
+            rows: [
+              { ordinal: 0, reviewId },
+              { ordinal: 0, scoreReviewId },
+            ],
+          },
+        },
+        { kind: 'page', uploadId },
+        { kind: 'preview', xml: changedXml },
+        { kind: 'page', uploadId: changedId },
+        { kind: 'library', language: 'zh-Hant' },
+        { kind: 'progress', subjectId: targetId, language: 'zh-Hant' },
+        { kind: 'cancel', intentId: 'stop', uploadId },
+        { kind: 'delete', intentId: 'remove-changed', uploadId: changedId },
+      ],
+    });
+    expect(first.map((step) => step.kind)).toEqual([
+      'preview',
+      'page',
+      'review',
+      'review',
+      'apply',
+      'page',
+      'preview',
+      'page',
+      'library',
+      'progress',
+      'cancel',
+      'delete',
+    ]);
+    expect(first[0]).toEqual({ kind: 'preview', value: { state: 'uploaded', uploadId, rows: 1 } });
+    expect(first[2]?.kind === 'review' && first[2].value.state === 'acknowledged').toBe(true);
+    expect(first[3]?.kind === 'review' && first[3].value.state === 'acknowledged').toBe(true);
+    expect(first[4]).toMatchObject({
+      kind: 'apply',
+      value: {
+        state: 'acknowledged',
+        value: {
+          uploadId,
+          outcomes: [
+            { ordinal: 0, reviewId, status: 'applied' },
+            { ordinal: 0, scoreReviewId, status: 'unavailable' },
+          ],
+          stopped: null,
+        },
+      },
+    });
+    expect(first[6]).toEqual({ kind: 'preview', value: { state: 'uploaded', uploadId: changedId, rows: 1 } });
+    expect(first[8]?.kind === 'library' && first[8].value.state === 'current').toBe(true);
+    expect(first[9]?.kind === 'progress' && first[9].value.state === 'current').toBe(true);
+    expect(first[10]).toMatchObject({
+      kind: 'cancel',
+      value: { state: 'acknowledged', value: { uploadId, state: 'cancelled' } },
+    });
+    expect(first[11]).toMatchObject({
+      kind: 'delete',
+      value: { state: 'acknowledged', value: { uploadId: changedId, state: 'deleted' } },
+    });
+    expect(calls.every((call) => call.cache === 'no-store')).toBe(true);
+    expect(calls.find((call) => call.path === `/v1/libraryImports/vndb/${uploadId}`)?.language).toBe('ja');
+    expect(calls.find((call) => call.path === '/v1/libraryEntries')?.language).toBe('zh-Hant');
+    expect(calls.find((call) => call.path === '/v1/progressSessions')?.language).toBe('zh-Hant');
+    expect(calls.some((call) => call.path.endsWith(':cancel') && call.method === 'POST')).toBe(true);
+    expect(calls.some((call) => call.path.endsWith(`/${changedId}`) && call.method === 'DELETE')).toBe(true);
+    const sent = calls.length;
+    expect(
+      await runShowcasePersonalLifecycle({
+        client,
+        journal,
+        identity: { ...identity, actor: { ...identity.actor, accountId: 'other-person' } },
+        commands: [{ kind: 'cancel', intentId: 'stop', uploadId }],
+      }),
+    ).toEqual([{ kind: 'cancel', value: { state: 'unavailable', code: 'sealed-identity-changed' } }]);
+    expect(calls).toHaveLength(sent);
+  } finally {
+    journal.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 120000);

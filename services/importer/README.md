@@ -58,6 +58,15 @@ Selected Bangumi synopsis uses its exact source record and document snapshot, `u
 Selected Bangumi Game publication adopts the acknowledged provider identifier through a separate reviewer before reopening the unchanged import and checking public readings. A source claim alone does not admit a current public identity; date adoption and source-fence assertions remain separate.
 
 Decision: seed fixtures return the exact current VNDB Person identifier; only the existing common publisher plus authorized review, Global adoption and independent readback qualify showcase publication.
+The personal caller also exposes explicit generated review/apply methods with stable intent IDs and the existing
+private journal. Retry sends the original operands even if a form changes, and a deadline resumes the same selection.
+Current preview and FULL Library reads always go to their native owners; journal acknowledgements supply no current
+facts. [Personal VNDB import](../../docs/library-import-vndb.md) owns matching, consent, privacy and native admission.
+Each invocation adds one addressed native request, bounded by the existing eight-row page/action limits; each command
+adds one exact intent key containing its bounded original body. The journal retains private command operands under its
+existing private-run retention and cleanup policy, independently of the native upload's 24-hour lifetime.
+Decision: `showcase-personal-list.test.ts` is the importer pin for sealed preview/review/apply, reopen, changed
+reimport, Progress, cancel/delete and the independent FULL Library read with explicit language and no-store.
 
 Creator/voice candidates retain exact source relationships, Person identity, role qualifiers and citations. VNDB credited spelling comes from the exact `staff_alias` selected by `aid`; relationship notes remain source provenance and never become P1932 names. Source weights, votes and ranks are not native votes, confidence, acceptance, adoption or publication. Ordinary imports only propose; selected showcase runs reuse the same converter, publisher, resolver and journal. Facts fences apply to unchanged and cached records too. `task seed:dev` reports complete only after shared publication is current and published. Its report retains source keys, Subject IDs, candidate IDs, Global head/rank and exact statement readbacks. The [capability acceptance](../../docs/goals/imports.capabilities.md) owns the full native, browser and independent-page scenarios.
 
@@ -135,9 +144,10 @@ Bounds below describe importer-owned logical work, not PostgreSQL physical visib
   Each invocation adds one addressed native request, bounded by the existing eight-row page/action limits, and each
   command adds one exact intent key containing its bounded original body. Reopen reuses the original upload and sealed
   review/apply commands. These reads write no votes and renew no source
-  retention. `apps/web/src/library/personal-list-import/transport.test.ts`, `reopen.test.ts` and
-  `apps/web/tests/m1-vndb-library-return.test.tsx` cover bounded receiving; `services/kernel/test/library/list-import-vndb-http.test.ts`
-  covers the native score choice and changed-export readback.
+  retention. `tests/showcase-personal-list.test.ts`, `apps/web/src/library/personal-list-import/transport.test.ts`,
+  `reopen.test.ts` and `apps/web/tests/m1-vndb-library-return.test.tsx` cover bounded receiving;
+  `services/kernel/test/library/list-import-vndb-http.test.ts` covers the native score choice, Progress readback and
+  changed-export Library return.
 - VNDB tag seed: ≤96 selected works, 512 dictionary tags, 256 associations, 1,024 parent edges, 8 closure steps, 512 vocabulary records and 64 KiB per selected-work record. Kana reads ≤512 bound tags, each ≤64 KiB, 6 MiB total, 3.5 seconds/request and 120 seconds/run; pending replay adds no request. Growth/native evidence: `tests/showcase-tags.test.ts`, `tests/showcase-cross-provider-tags.test.ts`, `tests/showcase-publication.test.ts`, `services/kernel/test/imports/m1-cross-provider-tags.test.ts`, `services/kernel/test/imports/vndb-public-tags.test.ts`.
 - VNDB work links/franchise relations: at most three families, 256 works/family and 32 links/owner (`W≤768`, `L≤32`); selected joins/candidates are O(W×L), dictionary work O(selected keys). No extra per-field permission queries. `tests/showcase-work-links.test.ts`, `tests/showcase-vndb-work-relations.test.ts`, `tests/showcase-franchise.test.ts` and `services/kernel/test/imports/showcase-work-links.test.ts` cover exact joins, typed reciprocal provenance, limits, adoption, reopen and facts fences.
 - Selected VNDB release dates/states: ≤64 releases, 64 vocabulary rows, 300 candidates; one date/state per Release and one status per Work; supersession depth 8 and ≤128 relation rows. `tests/showcase-vndb-releases.test.ts` and `services/kernel/test/imports/showcase-vndb-releases.test.ts` cover changed classification, retraction, reopen and reads.

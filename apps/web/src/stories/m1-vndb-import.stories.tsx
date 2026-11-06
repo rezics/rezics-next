@@ -1,156 +1,205 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { createVndbJourney } from '../library/personal-list-import/controller';
-import type { VndbPort, VndbRow } from '../library/personal-list-import/contract';
+import type { ReactNode } from 'react';
+import { expect, within } from 'storybook/test';
 import { VndbReviewPage } from '../library/personal-list-import/review';
 import { VndbResultPage } from '../library/personal-list-import/results';
+import { VndbUploadForm } from '../library/personal-list-import/upload';
+import { VndbSignedOut } from '../library/personal-list-import/states';
 import { ImportLibraryView } from '../library/showcase-import-return/view';
+import {
+  vndbLifecycleChangedReimportSnapshot,
+  vndbLifecycleLibrarySnapshot,
+  vndbLifecycleOtherViewerSnapshot,
+  vndbLifecyclePartialResultSnapshot,
+  vndbLifecyclePreviewSnapshot,
+  vndbLifecycleReopenSnapshot,
+  vndbLifecycleScoreReviewSnapshot,
+} from '../library/personal-list-import/lifecycle';
 import { PatternStory } from './page';
 import { m } from '../paraglide/messages.js';
-import recordedLibrary from '../kernel/recorded/library-entries.json';
+import type { VndbJourneySnapshot } from '../library/personal-list-import/controller';
 import type { ImportLibrarySnapshot } from '../library/showcase-import-return/browser';
 
-// Reuse the recorded native Library rows; their identities are unrelated to this import acknowledgement.
-const retainedLibrary: ImportLibrarySnapshot = {
-  visible: { state: 'current', page: { libraryEntries: recordedLibrary.libraryEntries.slice(0, 8), next: null } },
-  cursor: null,
-  pending: null,
-  failed: { intent: { cursor: null, kind: 'refresh' }, result: { state: 'unavailable' } },
-  revision: 2,
-  retired: false,
-};
-
-// Illustrative native-format states; these do not claim a seeded running-product pass.
 const noop = () => {};
-const uploadId = '00000000-0000-4000-8000-000000000001';
-const targetId = '00000000-0000-4000-8000-000000000002';
-const row: VndbRow = {
-  ordinal: 0,
-  kind: 'vn',
-  title: 'とても長い原題 — 繁體中文與日本語を含む物語のタイトル',
-  identifier: { provider: 'vndb', kind: 'vn', value: 'v123' },
-  labels: ['Playing'],
-  suggestedRole: 'active',
-  fields: { score: { kind: 'value', raw: '07.3', value: 7.3, scale: { min: 1, max: 10, step: 0.1 } } },
-  retainedReason: '',
-  evidence: { releases: [{ id: 'r456' }] },
-  match: { status: 'matched', candidates: [targetId] },
-  target: {
-    targetId,
-    states: [{ id: 'playing', labels: { en: 'Playing', ja: 'プレイ中', 'zh-Hant': '遊玩中' } }],
-    baseline: null,
-  },
-  decision: null,
-  scoreDecision: null,
-  consumptionDateReview: null,
-  consumptionDateOutcome: null,
-  nativeScore: {
-    question: null,
-    currentVote: { state: 'unavailable' },
-    sourceReason: 'private source',
-    exactUnits: null,
-    admission: { status: 'unavailable', reason: 'native-question-unavailable' },
-  },
-  fieldsTreatment: { state: 'review', score: 'private source', other: 'retain' },
-};
-async function snapshot(results: boolean) {
-  const unavailable = async () => ({ kind: 'unavailable' as const, status: 503 });
-  const port: VndbPort = {
-    preview: async () => ({
-      kind: 'previewed',
-      value: {
-        uploadId,
-        rows: 1,
-        limits: {
-          bytes: 2097152,
-          wireBytes: 12582976,
-          depth: 32,
-          rows: 5000,
-          evidenceBytes: 16777216,
-          page: 8,
-          uploads: 4,
-          lifetimeMs: 86400000,
-          applyMs: 5000,
-        },
-      },
-    }),
-    page: async () => ({
-      kind: 'page',
-      value: { uploadId, state: 'active', expiresAt: '2099-01-01T00:00:00Z', total: 1, next: null, rows: [row] },
-    }),
-    review: async () => ({
-      kind: 'reviewed',
-      value: {
-        reviewId: uploadId,
-        status: 'reviewed',
-        targetId,
-        state: 'playing',
-        baseline: null,
-        replace: false,
-        action: 'state' as const,
-        progress: null,
-      },
-    }),
-    apply: async () => ({
-      kind: 'applied',
-      value: { uploadId, outcomes: [{ ordinal: 0, reviewId: uploadId, status: 'applied' }], stopped: null },
-    }),
-    source: unavailable,
-    cancel: unavailable,
-    delete: unavailable,
-  };
-  const journey = createVndbJourney({
-    port,
-    visit: {
-      subject: targetId,
-      csrfToken: 'illustrative',
-      controller: new AbortController(),
-      current: () => true,
-      retire: noop,
-    },
-  });
-  await journey.preview('<vndb-export version="1.0"/>');
-  if (results) {
-    await journey.review({ ordinal: 0, action: 'state', targetId, state: 'playing', replace: false });
-    journey.openConfirm();
-    await journey.confirm();
-  }
-  return journey.snapshot();
-}
-const review = await snapshot(false);
-const results = await snapshot(true);
-function Example({ completed = false }: { completed?: boolean }) {
+const phone = { viewport: { value: 'phone390', isRotated: false } };
+const desktop = { viewport: { value: 'desktop1280', isRotated: false } };
+
+const preview = await vndbLifecyclePreviewSnapshot();
+const scoreReview = await vndbLifecycleScoreReviewSnapshot();
+const partial = await vndbLifecyclePartialResultSnapshot();
+const reopen = await vndbLifecycleReopenSnapshot();
+const changed = await vndbLifecycleChangedReimportSnapshot();
+const library = vndbLifecycleLibrarySnapshot();
+const otherViewer = vndbLifecycleOtherViewerSnapshot();
+
+function ImportShell({
+  children,
+  visitor = 'Signed In',
+}: {
+  children: ReactNode;
+  visitor?: 'Signed In' | 'Signed Out';
+}) {
   return (
-    <PatternStory>
+    <PatternStory path="/library/import-vndb" visitor={visitor}>
       <main className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6">
         <h1 className="text-2xl font-semibold">{m.library_vndb_title()}</h1>
-        {completed ? (
-          <>
-            <VndbResultPage snap={results} busy={false} onResume={noop} onReview={noop} onDiscard={noop} />
-            <ImportLibraryView result={null} snapshot={retainedLibrary} busy={false} onRead={noop} />
-          </>
-        ) : (
-          <VndbReviewPage
-            snap={review}
-            busy={false}
-            onReview={noop}
-            onNext={noop}
-            onPrevious={noop}
-            onRefresh={noop}
-            onConfirm={noop}
-            onSource={noop}
-            onHideSource={noop}
-          />
-        )}
+        {children}
       </main>
     </PatternStory>
   );
 }
+
+function ReviewStage({ snap }: { snap: VndbJourneySnapshot }) {
+  return (
+    <ImportShell>
+      <VndbReviewPage
+        snap={snap}
+        busy={false}
+        onReview={noop}
+        onNext={noop}
+        onPrevious={noop}
+        onRefresh={noop}
+        onConfirm={noop}
+        onSource={noop}
+        onHideSource={noop}
+      />
+    </ImportShell>
+  );
+}
+
+function ResultStage({
+  snap,
+  snapshot,
+}: {
+  snap: VndbJourneySnapshot;
+  snapshot: ImportLibrarySnapshot;
+}) {
+  return (
+    <ImportShell>
+      <VndbResultPage snap={snap} busy={false} onResume={noop} onReview={noop} onDiscard={noop} />
+      <ImportLibraryView result={null} snapshot={snapshot} busy={false} onRead={noop} />
+    </ImportShell>
+  );
+}
+
 const meta = {
   title: 'Pages/Library/VNDB import',
-  component: Example,
   parameters: { layout: 'fullscreen' },
-} satisfies Meta<typeof Example>;
+} satisfies Meta;
 export default meta;
-type Story = StoryObj<typeof meta>;
-export const Review: Story = {};
-export const Results: Story = { args: { completed: true } };
+type Story = StoryObj;
+
+export const OwnerPreviewDesktop: Story = {
+  name: 'Owner preview',
+  globals: desktop,
+  render: () => <ReviewStage snap={preview} />,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await view.findByText('v123');
+    await expect(view.getByText('Private source note', { exact: false })).toBeInTheDocument();
+    await expect(canvasElement.querySelector('[data-vndb-source-xml]')).not.toBeNull();
+  },
+};
+export const OwnerPreviewPhone: Story = { ...OwnerPreviewDesktop, globals: phone };
+
+export const ScoreReviewDesktop: Story = {
+  name: 'Explicit score review',
+  globals: desktop,
+  render: () => <ReviewStage snap={scoreReview} />,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await view.findByText('Enjoyment');
+    await expect(canvasElement.querySelector('[data-vndb-score-review="reviewed"]')).not.toBeNull();
+    await expect(view.getByText('14', { exact: false })).toBeInTheDocument();
+    await expect(view.getByText('0', { exact: false })).toBeInTheDocument();
+  },
+};
+export const ScoreReviewPhone: Story = { ...ScoreReviewDesktop, globals: phone };
+
+export const PartialResultDesktop: Story = {
+  name: 'Partial result',
+  globals: desktop,
+  render: () => <ResultStage snap={partial} snapshot={library} />,
+  play: async ({ canvasElement }) => {
+    await expect(canvasElement.querySelector('[data-vndb-result="applied"]')).not.toBeNull();
+    await expect(canvasElement.querySelector('[data-vndb-result="unavailable"]')).not.toBeNull();
+    await expect(canvasElement.querySelector('[data-vndb-library-return]')).not.toBeNull();
+  },
+};
+export const PartialResultPhone: Story = { ...PartialResultDesktop, globals: phone };
+
+export const UnchangedReopenDesktop: Story = {
+  name: 'Unchanged reopen',
+  globals: desktop,
+  render: () => <ReviewStage snap={reopen} />,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await view.findByText('v123');
+    await expect(canvasElement.querySelector('[data-vndb-stage="review"]')).not.toBeNull();
+  },
+};
+export const UnchangedReopenPhone: Story = { ...UnchangedReopenDesktop, globals: phone };
+
+export const ChangedReimportDesktop: Story = {
+  name: 'Changed reimport',
+  globals: desktop,
+  render: () => <ReviewStage snap={changed} />,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await view.findByText('Changed export title');
+    await expect(view.queryByText('Private source note')).toBeNull();
+  },
+};
+export const ChangedReimportPhone: Story = { ...ChangedReimportDesktop, globals: phone };
+
+export const LibraryReturnDesktop: Story = {
+  name: 'Current Library return',
+  globals: desktop,
+  render: () => (
+    <ImportShell>
+      <ImportLibraryView result={null} snapshot={library} busy={false} returned onRead={noop} />
+    </ImportShell>
+  ),
+  play: async ({ canvasElement }) => {
+    await expect(canvasElement.querySelector('[data-vndb-native-vote="present"]')).not.toBeNull();
+    await expect(canvasElement.querySelector('[data-vndb-native-vote="absent"]')).not.toBeNull();
+    await expect(canvasElement.querySelector('[data-vndb-native-vote="unavailable"]')).not.toBeNull();
+    await expect(canvasElement.querySelector('[data-vndb-native-vote-zero]')).not.toBeNull();
+    await expect(canvasElement.textContent).not.toContain('Private source note');
+  },
+};
+export const LibraryReturnPhone: Story = { ...LibraryReturnDesktop, globals: phone };
+
+export const OtherViewerDesktop: Story = {
+  name: 'Other viewer privacy',
+  globals: desktop,
+  render: () => (
+    <ImportShell visitor="Signed Out">
+      <VndbSignedOut />
+      <ImportLibraryView result={null} snapshot={otherViewer} busy={false} onRead={noop} />
+    </ImportShell>
+  ),
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await expect(view.queryByText('Private source note')).toBeNull();
+    await expect(canvasElement.querySelector('[data-vndb-source-xml]')).toBeNull();
+    await expect(canvasElement.querySelector('[data-vndb-native-question]')).toBeNull();
+    await expect(canvasElement.querySelector('[data-vndb-native-vote="present"]')).toBeNull();
+  },
+};
+export const OtherViewerPhone: Story = { ...OtherViewerDesktop, globals: phone };
+
+export const UploadDesktop: Story = {
+  name: 'Private upload',
+  globals: desktop,
+  render: () => (
+    <ImportShell>
+      <VndbUploadForm busy={false} onUpload={noop} onReadFailure={noop} />
+    </ImportShell>
+  ),
+};
+export const UploadPhone: Story = { ...UploadDesktop, globals: phone };
+
+/** Kept for existing catalogue references; the named owner preview is OwnerPreviewDesktop. */
+export const Review: Story = OwnerPreviewDesktop;
+export const Results: Story = PartialResultDesktop;
