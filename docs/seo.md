@@ -170,6 +170,9 @@ Each indexed page embeds one JSON-LD graph from the same data it renders:
   the production rewrite so
   canonical heads match the URL. Title years use the same disclosed Gregorian structured date JSON-LD would
   publish. CreativeWork is a released ancestry base, not a bundled type in catalogue page definitions.
+  Decision: route `pages:read` uses the same current catalogue release as subject pages so home TypeList
+  selectors are admitted; an empty catalogue cannot invent public types. Focused overlay HTML/JSON-LD tests
+  pin served facts; the composed native publication driver remains the acceptance suite.
 - an agent as `Person` or `Organization` with `sameAs` links the agent published;
 - `BreadcrumbList` for type and parent pages.
 
