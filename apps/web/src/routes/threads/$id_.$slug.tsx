@@ -1,9 +1,10 @@
 import { RemovedPost } from '../../threads/post-removed';
-import { ReplyContext, type ReplyParents } from '../../threads/reply-context';
+import { ReplyButton, ReplyContext, type ReplyParents } from '../../threads/reply-context';
 import { draftFetch, InlinePostEditor, SignInPrompt } from '../../threads/composer';
 import { erasePost, restorePost as restorePostAction, revisePost, type WriteFailure } from '../../threads/actions';
 import type { ThreadSubject } from '../../threads/subjects';
 import type { VoteCitation } from '../../threads/post-writes';
+import { publishedCitationForPost } from '../../threads/thread-page-context';
 import { RevisionProvenance } from '../../threads/revision-provenance-view';
 import { exactRevisionHref, exactRevisionRoute } from '../../threads/exact-revision-href';
 import { PostHistory } from '../../threads/post-history';
@@ -1218,6 +1219,7 @@ export function ThreadReadingPost({
             readerIdentity={lifetime}
             isReaderCurrent={() => current()}
           />
+          <ReplyButton disabled={replyPending || !personalReady} onReply={onReply} />
           <footer className="mt-3 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
             <p className="mr-auto min-w-0 text-xs text-muted-foreground [overflow-wrap:anywhere]">
               {m.thread_history_licence()}: {post.licence}
@@ -1240,6 +1242,13 @@ export function ThreadReadingPost({
                   currentVote={ownsPost ? (currentVote ?? null) : null}
                   review={review}
                   showLicence={false}
+                  publishedCitation={publishedCitationForPost(composed?.reviewContext, post)}
+                  reviewTarget={
+                    composed?.reviewContext?.source.postId === post.id &&
+                    composed.reviewContext.source.revisionId === post.revisionId
+                      ? composed.reviewContext.target
+                      : undefined
+                  }
                 />
                 {post.revisionId ? (
                   <a

@@ -315,8 +315,9 @@ negative and unsafe counts remain unavailable, and prepared fixtures do not esta
 ## Post reading rhythm
 
 `PostReadingFrame` owns the byline-to-body hierarchy and the visible permalink/focus surface; its action and reply
-context slots consume the existing controls unchanged. The header uses the installed `FeedActionBar` detail port;
-licence, history and provenance retain their positions after the body. `ThreadPostReadingBody` passes the complete snapshot to the
+context slots consume the existing controls unchanged. The header uses the installed `FeedActionBar` detail port
+for share and reply; licence, history and provenance retain their positions after the body. Share and reply are not
+repeated in that footer. `ThreadPostReadingBody` passes the complete snapshot to the
 existing `DocumentBody` and `NativeDocumentImage`, with a single exact-document media index. The current document's
 post, thread, revision, digest and declared media must all match the supplied disclosure. A replacement revision
 starts a fresh spoiler visit. Erased/withheld placeholders, keyed editing and current-reader retirement retain their
@@ -622,9 +623,11 @@ Erased and withheld rows gain no author, date or document fields. Board/Realm co
 keep their existing readers; images, mentions, review context and activity come from this page response.
 
 Decision: the thread reader consumes installed root `ReadingPageResponse` projections `documentMedia`, `mentions`,
-`reviewContext` and `conversationActivity` directly. Existing renderers adapt exact admitted image and mention sources;
-the page starts no separate media or identity hydration. Review context is passed through the thread header and is
-retired with the admitted page. The shared Media adapter remains for its other consumers.
+`reviewContext` and `conversationActivity` directly. `receiveThreadDocumentMedia` binds only exact current-document
+disclosures already on that page; the reader never calls `POST /v1/media/presentations`. Existing renderers adapt
+exact admitted image and mention sources; the page starts no separate media or identity hydration. Review context is
+passed through the thread header and is retired with the admitted page. The shared Media adapter remains for its
+other consumers.
 
 Decision: land the installed Board-to-thread reading outcome with clean Web, Kernel and UI workspace typechecks;
 retain nonfinancial failing outcome assertions for grouped capability repair, with native, browser and root

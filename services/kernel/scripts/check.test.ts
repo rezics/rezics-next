@@ -1,19 +1,32 @@
 import { expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { prepareArtifactRun, readArtifactCatalog, restoreArtifactReturns } from '../../../scripts/check-artifacts.ts';
+import { capture as captureProcess } from '../../../scripts/test-lanes.ts';
 import {
   assertSchemaConsistency,
+  capture,
   cleanup,
   createPostgresConnectionSampler,
   formatConnectionRunSummary,
   formatFileConnectionResult,
   formatPostgresErrors,
   invokeTypecheck,
+  moduleExtensionPolicyFailure,
   reportCheckFailure,
   reportPostgresErrors,
+  runKernelCheckStages,
   startPostgresContainer,
 } from './check.ts';
 import { prepareReyloAnalysisCache } from './reylo-cache.ts';
@@ -435,5 +448,310 @@ test('a failed analysis publishes nothing and reports itself unavailable, so the
     prepared.dispose();
   } finally {
     rmSync(repository, { recursive: true, force: true });
+  }
+});
+
+const COMBINED_DIAGNOSTICS = [
+  "src/owned.ts(1,1): error TS2322: Type 'string' is not assignable to type 'number'.",
+  'src/owned.sql(12,3): error reylo1: column "missing" does not exist',
+  '  Detail: relation items has columns id, name.',
+  'src/foreign.sql(4,1): error reylo14: relation "other" does not exist',
+  "error TS5083: Cannot read file 'tsconfig.base.json'.",
+  '',
+].join('\n');
+
+function writeExecutable(path: string, source: string): void {
+  writeFileSync(path, source);
+  chmodSync(path, 0o755);
+}
+
+function checkStageFixture(options: {
+  tscStatus: number;
+  tscOutput: string;
+  lintStatus?: number;
+  formatStatus?: number;
+}): {
+  directory: string;
+  programs: { tsc: string; lintProgram: string; formatProgram: string };
+  ran: string;
+  pass: string;
+  fail: string;
+  dispose: () => void;
+} {
+  const temporary = resolve(import.meta.dir, '../.temp');
+  mkdirSync(temporary, { recursive: true });
+  const directory = mkdtempSync(resolve(temporary, 'kernel-check-stages-'));
+  const ran = join(directory, 'ran.log');
+  const tsc = join(directory, 'tsc');
+  const lintProgram = join(directory, 'lint');
+  const formatProgram = join(directory, 'format');
+  writeExecutable(
+    tsc,
+    `#!/bin/sh
+printf 'tsc\\n' >> "$KERNEL_CHECK_RAN"
+cat <<'EOF'
+${options.tscOutput}EOF
+exit ${options.tscStatus}
+`,
+  );
+  writeExecutable(
+    lintProgram,
+    `#!/bin/sh
+printf 'lint\\n' >> "$KERNEL_CHECK_RAN"
+printf 'lint error in src/owned.ts\\n' >&2
+exit ${options.lintStatus ?? 1}
+`,
+  );
+  writeExecutable(
+    formatProgram,
+    `#!/bin/sh
+printf 'format\\n' >> "$KERNEL_CHECK_RAN"
+printf 'format error in src/owned.ts\\n' >&2
+exit ${options.formatStatus ?? 1}
+`,
+  );
+  writeFileSync(
+    join(directory, 'pass.test.ts'),
+    `import { appendFileSync } from 'node:fs';
+appendFileSync(process.env.KERNEL_CHECK_RAN!, 'pass.test.ts\\n');
+import { expect, test } from 'bun:test';
+test('passes', () => expect(1).toBe(1));
+`,
+  );
+  writeFileSync(
+    join(directory, 'fail.test.ts'),
+    `import { appendFileSync } from 'node:fs';
+appendFileSync(process.env.KERNEL_CHECK_RAN!, 'fail.test.ts\\n');
+import { expect, test } from 'bun:test';
+test('fails', () => expect(1).toBe(2));
+`,
+  );
+  return {
+    directory,
+    programs: { tsc, lintProgram, formatProgram },
+    ran,
+    pass: 'pass.test.ts',
+    fail: 'fail.test.ts',
+    dispose: () => rmSync(directory, { recursive: true, force: true }),
+  };
+}
+
+async function runSelectedTests(directory: string, files: string[], env: NodeJS.ProcessEnv): Promise<string[]> {
+  const failed: string[] = [];
+  for (const file of files) {
+    const result = await captureProcess(process.execPath, ['test', file], env, directory);
+    if (result.status !== 0) failed.push(file);
+  }
+  return failed;
+}
+
+function writeModuleTree(root: string, files: Record<string, string>): void {
+  for (const [path, content] of Object.entries(files)) {
+    mkdirSync(dirname(join(root, path)), { recursive: true });
+    writeFileSync(join(root, path), content);
+  }
+}
+
+function extensionPolicyMessage(root: string): string {
+  writeModuleTree(root, {
+    'db/clean/migrations/20261025000100_clean.sql':
+      '-- migrate:up\n-- create extension is for the kernel\nCREATE SCHEMA clean;\n',
+    'db/greedy/migrations/20261025000300_search.sql':
+      '-- migrate:up\ncreate\n  extension if not exists pg_trgm with schema greedy;\n',
+  });
+  const failure = moduleExtensionPolicyFailure(root);
+  if (!failure) throw new Error('expected a module CREATE EXTENSION product failure');
+  return failure;
+}
+
+test('one selected check runs every test after owned TS, Reylo, lint, format and module CREATE EXTENSION failures, then fails once with diagnostics and failed files', async () => {
+  const fixture = checkStageFixture({ tscStatus: 2, tscOutput: COMBINED_DIAGNOSTICS });
+  const phases: string[] = [];
+  const env = { ...process.env, KERNEL_CHECK_RAN: fixture.ran };
+  writeModuleTree(fixture.directory, {
+    'db/clean/migrations/20261025000100_clean.sql':
+      '-- migrate:up\n-- create extension is for the kernel\nCREATE SCHEMA clean;\n',
+  });
+  expect(moduleExtensionPolicyFailure(fixture.directory)).toBeNull();
+  const extensionFailure = extensionPolicyMessage(fixture.directory);
+  let failure = '';
+  try {
+    expect(extensionFailure).toContain('db/greedy/migrations/20261025000300_search.sql');
+    expect(extensionFailure).not.toContain('db/clean/migrations');
+    await runKernelCheckStages({
+      plan: {
+        files: ['src/owned.ts', 'src/owned.sql', fixture.pass, fixture.fail],
+        tests: [fixture.pass, fixture.fail],
+      },
+      environment: env,
+      reyloConfig: '/tmp/reylo.yaml',
+      ownedFiles: ['src/owned.ts', 'src/owned.sql', fixture.pass, fixture.fail],
+      programs: fixture.programs,
+      captureCommand: capture,
+      productFailures: [extensionFailure],
+      aroundCompiler: async (work) => {
+        phases.push('compiler');
+        return work();
+      },
+      afterQuality: async () => {
+        phases.push('quality');
+      },
+      runTests: async (files) => {
+        phases.push('tests');
+        return runSelectedTests(fixture.directory, files, env);
+      },
+    });
+  } catch (error) {
+    failure = error instanceof Error ? error.message : String(error);
+  } finally {
+    const log = existsSync(fixture.ran) ? readFileSync(fixture.ran, 'utf8') : '';
+    fixture.dispose();
+    expect(log).toContain('tsc');
+    expect(log).toContain('lint');
+    expect(log).toContain('format');
+    expect(log).toContain('pass.test.ts');
+    expect(log).toContain('fail.test.ts');
+    expect(phases).toEqual(['compiler', 'quality', 'tests']);
+    const [actionable, compiler] = failure.split('Compiler output:\n');
+    expect(actionable).toContain('error TS2322');
+    expect(actionable).toContain('error reylo1');
+    expect(actionable).toContain('error TS5083');
+    expect(actionable).toContain('Module migrations must not create extensions');
+    expect(actionable).toContain('db/greedy/migrations/20261025000300_search.sql');
+    expect(actionable).toContain('lint error in src/owned.ts');
+    expect(actionable).toContain('format error in src/owned.ts');
+    expect(actionable).toContain('Kernel tests failed for 1 file(s):\nfail.test.ts');
+    expect(actionable).not.toContain('reylo14');
+    expect(compiler).toContain('reylo14');
+  }
+});
+
+test('selected type-only and test-only failures, foreign Reylo success, full-module diagnostics and infrastructure stop at the failing stage', async () => {
+  const typeOnly = checkStageFixture({ tscStatus: 2, tscOutput: COMBINED_DIAGNOSTICS, lintStatus: 0, formatStatus: 0 });
+  const testOnly = checkStageFixture({ tscStatus: 0, tscOutput: '', lintStatus: 0, formatStatus: 0 });
+  const foreign = checkStageFixture({
+    tscStatus: 2,
+    tscOutput: 'src/foreign.sql(4,1): error reylo14: relation "other" does not exist\n',
+    lintStatus: 0,
+    formatStatus: 0,
+  });
+  const full = checkStageFixture({ tscStatus: 2, tscOutput: COMBINED_DIAGNOSTICS, lintStatus: 0, formatStatus: 0 });
+  const crashed = checkStageFixture({
+    tscStatus: 2,
+    tscOutput: 'fatal: compiler crashed\n',
+    lintStatus: 0,
+    formatStatus: 0,
+  });
+  const search = checkStageFixture({ tscStatus: 2, tscOutput: COMBINED_DIAGNOSTICS, lintStatus: 0, formatStatus: 0 });
+  try {
+    const typeEnv = { ...process.env, KERNEL_CHECK_RAN: typeOnly.ran };
+    let typeFailure = '';
+    try {
+      await runKernelCheckStages({
+        plan: { files: ['src/owned.ts', 'src/owned.sql', typeOnly.pass], tests: [typeOnly.pass] },
+        environment: typeEnv,
+        reyloConfig: '/tmp/reylo.yaml',
+        ownedFiles: ['src/owned.ts', 'src/owned.sql', typeOnly.pass],
+        programs: typeOnly.programs,
+        captureCommand: capture,
+        runTests: async (files) => runSelectedTests(typeOnly.directory, files, typeEnv),
+      });
+    } catch (error) {
+      typeFailure = error instanceof Error ? error.message : String(error);
+    }
+    expect(typeFailure).toContain('error TS2322');
+    expect(typeFailure).toContain('Compiler output:');
+    expect(typeFailure).not.toContain('Kernel tests failed');
+    expect(readFileSync(typeOnly.ran, 'utf8')).toContain('pass.test.ts');
+
+    const testEnv = { ...process.env, KERNEL_CHECK_RAN: testOnly.ran };
+    await expect(
+      runKernelCheckStages({
+        plan: { files: [testOnly.pass, testOnly.fail], tests: [testOnly.pass, testOnly.fail] },
+        environment: testEnv,
+        reyloConfig: '/tmp/reylo.yaml',
+        ownedFiles: [testOnly.pass, testOnly.fail],
+        programs: testOnly.programs,
+        captureCommand: capture,
+        runTests: async (files) => runSelectedTests(testOnly.directory, files, testEnv),
+      }),
+    ).rejects.toThrow('Kernel tests failed for 1 file(s):\nfail.test.ts');
+    expect(readFileSync(testOnly.ran, 'utf8')).toContain('pass.test.ts');
+    expect(readFileSync(testOnly.ran, 'utf8')).toContain('fail.test.ts');
+
+    const foreignEnv = { ...process.env, KERNEL_CHECK_RAN: foreign.ran };
+    await runKernelCheckStages({
+      plan: { files: ['src/owned.ts', foreign.pass], tests: [foreign.pass] },
+      environment: foreignEnv,
+      reyloConfig: '/tmp/reylo.yaml',
+      ownedFiles: ['src/owned.ts', foreign.pass],
+      programs: foreign.programs,
+      captureCommand: capture,
+      runTests: async (files) => runSelectedTests(foreign.directory, files, foreignEnv),
+    });
+    expect(readFileSync(foreign.ran, 'utf8')).toContain('pass.test.ts');
+
+    const fullEnv = { ...process.env, KERNEL_CHECK_RAN: full.ran };
+    await expect(
+      runKernelCheckStages({
+        plan: { files: null, tests: [full.pass] },
+        environment: fullEnv,
+        reyloConfig: '/tmp/reylo.yaml',
+        ownedFiles: null,
+        programs: full.programs,
+        captureCommand: capture,
+        runTests: async (files) => runSelectedTests(full.directory, files, fullEnv),
+      }),
+    ).rejects.toThrow(/error reylo14/);
+    expect(readFileSync(full.ran, 'utf8')).toContain('pass.test.ts');
+
+    let testsRan = false;
+    const crashedExtension = extensionPolicyMessage(crashed.directory);
+    await expect(
+      runKernelCheckStages({
+        plan: { files: ['src/owned.ts'], tests: [crashed.pass] },
+        environment: { ...process.env, KERNEL_CHECK_RAN: crashed.ran },
+        reyloConfig: '/tmp/reylo.yaml',
+        ownedFiles: ['src/owned.ts'],
+        programs: crashed.programs,
+        captureCommand: capture,
+        productFailures: [crashedExtension],
+        runTests: async () => {
+          testsRan = true;
+          return [];
+        },
+      }),
+    ).rejects.toThrow(
+      /Module migrations must not create extensions[\s\S]*tsc exited with status 2 without diagnostics/,
+    );
+    expect(testsRan).toBe(false);
+    expect(readFileSync(crashed.ran, 'utf8')).not.toContain('lint');
+
+    testsRan = false;
+    await expect(
+      runKernelCheckStages({
+        plan: { files: ['src/owned.ts', 'src/owned.sql'], tests: [search.pass] },
+        environment: { ...process.env, KERNEL_CHECK_RAN: search.ran },
+        reyloConfig: '/tmp/reylo.yaml',
+        ownedFiles: ['src/owned.ts', 'src/owned.sql'],
+        programs: search.programs,
+        captureCommand: capture,
+        afterQuality: async () => {
+          throw new Error('Could not determine the test search port: ');
+        },
+        runTests: async () => {
+          testsRan = true;
+          return [];
+        },
+      }),
+    ).rejects.toThrow(/error TS2322[\s\S]*Could not determine the test search port/);
+    expect(testsRan).toBe(false);
+  } finally {
+    typeOnly.dispose();
+    testOnly.dispose();
+    foreign.dispose();
+    full.dispose();
+    crashed.dispose();
+    search.dispose();
   }
 });

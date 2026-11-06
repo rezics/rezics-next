@@ -158,3 +158,9 @@ keeps the edge; empty, other-member and anonymous views use their own admission;
 original list frontier with the current session. Web binds list GET and the callable point separately. Fewest tests:
 one HTTP journey, one FULL withhold, one transport bind, one return-frontier pin. Native, browser and growth walks
 remain later integration.
+Decision: pin Kernel check combined type, Reylo, lint, format, module CREATE EXTENSION and selected-test failure
+reporting with the existing runner tests in `scripts/check.test.ts`, `test/check-file-mode.test.ts`,
+`test/check-reylo.test.ts` and `test/check.test.ts`, plus changed-workspace typing in one worker-check, rather than a
+second suite. Named `*.test.ts` arguments run, including `scripts/check.test.ts`; full-module discovery stays
+`test/**/*.test.ts`. Module CREATE EXTENSION is a product failure that still reaches tests; future/duplicate
+migration versions and schema dump mismatch remain infrastructure.

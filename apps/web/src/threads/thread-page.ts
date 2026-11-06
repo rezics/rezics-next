@@ -12,6 +12,11 @@ import { boardRealmId, readBoardRealm, type BoardRealm } from './board-context';
 import { sameThreadSlug, threadTitle } from './thread-href';
 import { receiveThreadDocumentMedia, type ThreadDocumentMedia } from './document-media-read';
 import { receiveThreadDocumentMentions } from './thread-document-mentions';
+import {
+  readingPageDocumentMentions,
+  readingPageReviewContext,
+  type ThreadDocumentMentions,
+} from './thread-page-context';
 import { readingConversationActivity, type ConversationActivityDisplay } from './activity';
 
 type ThreadResource = ReturnType<KernelClient['threads']>;
@@ -24,7 +29,7 @@ export type ThreadPost = ReadingPage['thread']['firstPost'] | ReadingPage['repli
 export type ThreadPageAuthor = ReadingPage['authors']['items'][number];
 export type ThreadPageObservation = Pick<
   ReadingPage,
-  'target' | 'viewer' | 'query' | 'actions' | 'watch' | 'slowMode' | 'currentness' | 'reactionsAsOf'
+  'target' | 'viewer' | 'query' | 'actions' | 'watch' | 'slowMode' | 'currentness' | 'reactionsAsOf' | 'reviewContext'
 >;
 
 type PageInput = { id: string; cursor?: string; post?: string };
@@ -43,6 +48,7 @@ export type LoadedThreadPage = {
   authors: import('../identity/read').PageAuthors;
   mentions: DocumentMentions;
   mentionProjection?: ReadingPage['mentions'];
+  documentMentions?: ThreadDocumentMentions;
   documentMedia?: ThreadDocumentMedia;
   documentMediaProjection?: ReadingPage['documentMedia'];
   reviewContext?: ReadingPage['reviewContext'];
@@ -183,7 +189,10 @@ export async function loadThreadPage(
   const mentionProjection = readingPage.mentions;
   const documentMediaProjection = readingPage.documentMedia;
   const mentions = receiveThreadDocumentMentions(mentionProjection, posts.posts);
+  const documentMentions = readingPageDocumentMentions(readingPage);
   const documentMedia = receiveThreadDocumentMedia(documentMediaProjection, posts.posts);
+  const reviewContext = readingPageReviewContext(readingPage);
+  signal.throwIfAborted();
   // Only identities named by readable posts can enter this page's byline map.
   const disclosed = new Set(posts.posts.flatMap((post) => (post.availability === 'available' ? [post.authorId] : [])));
   const authors =
@@ -195,10 +204,21 @@ export async function loadThreadPage(
   const { target, viewer, query, actions, watch, slowMode, currentness, reactionsAsOf } = readingPage;
   return {
     authors,
-    composed: { target, viewer, query, actions, watch, slowMode, currentness, reactionsAsOf },
+    composed: {
+      target,
+      viewer,
+      query,
+      actions,
+      watch,
+      slowMode,
+      currentness,
+      reactionsAsOf,
+      ...(reviewContext ? { reviewContext } : {}),
+    },
     conversationActivity: readingConversationActivity(readingPage),
     mentions,
     mentionProjection,
+    documentMentions,
     documentMedia,
     documentMediaProjection,
     reviewContext: readingPage.reviewContext,

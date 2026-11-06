@@ -71,6 +71,8 @@ export interface ReactionsProps {
    * Reject to roll the optimistic counts and selection back.
    */
   onChange: (kind: ReactionKind | null) => Promise<void>;
+  /** False blocks further selections while the original change settles, preserving its queue and optimistic view. */
+  queueChanges?: boolean;
   /** Kind names and UI strings. Omitted strings keep the English defaults. */
   labels?: Partial<ReactionLabels>;
   /** Locale for compact counts. */
@@ -124,6 +126,7 @@ interface CurrentReactionProps {
   kinds: readonly ReactionKind[] | undefined;
   allowedKinds: readonly ReactionKind[] | undefined;
   optimistic: boolean | undefined;
+  queueChanges: boolean | undefined;
 }
 
 interface ReactionVisit {
@@ -236,6 +239,7 @@ export const Reactions = (props: ReactionsProps) => {
     kinds: props.kinds,
     allowedKinds: props.allowedKinds,
     optimistic: props.optimistic,
+    queueChanges: props.queueChanges,
   });
   const failedLabelRef = React.useRef(labels.failed);
 
@@ -262,6 +266,7 @@ export const Reactions = (props: ReactionsProps) => {
       kinds: props.kinds,
       allowedKinds: props.allowedKinds,
       optimistic: props.optimistic,
+      queueChanges: props.queueChanges,
     };
     failedLabelRef.current = labels.failed;
   }, [
@@ -272,6 +277,7 @@ export const Reactions = (props: ReactionsProps) => {
     props.kinds,
     props.allowedKinds,
     props.optimistic,
+    props.queueChanges,
     labels.failed,
   ]);
 
@@ -318,6 +324,7 @@ export const Reactions = (props: ReactionsProps) => {
       ? view
       : { queue, overlay: queue.overlay, failure: queue.failure, busy: queue.pendingJobs > 0 };
   const { overlay, failure, busy } = currentView;
+  const selectionDisabled = disabled || (props.queueChanges === false && busy);
 
   // Drop the optimistic view once the controlled props echo it and nothing is queued.
   React.useEffect(() => {
@@ -344,7 +351,7 @@ export const Reactions = (props: ReactionsProps) => {
   const phoneHidden = (kind: ReactionKind) => phoneRow !== null && !phoneRow.has(kind);
 
   const select = (kind: ReactionKind) => {
-    if (!isCurrent(queue, kind)) return;
+    if (!isCurrent(queue, kind) || (currentPropsRef.current.queueChanges === false && queue.pendingJobs > 0)) return;
     const onChange = props.onChange;
     queue.pendingJobs += 1;
     publish(queue);
@@ -425,7 +432,7 @@ export const Reactions = (props: ReactionsProps) => {
         aria-label={`${labels[kind]} ${formatExactCount(props.locale, count)}`}
         aria-pressed={pressed}
         className={className}
-        disabled={disabled || !admittedKinds(props.allowedKinds).includes(kind)}
+        disabled={selectionDisabled || !admittedKinds(props.allowedKinds).includes(kind)}
         onClick={() => select(kind)}
       >
         <Icon aria-hidden className={cn('size-5', pressed && 'fill-current')} />
@@ -504,7 +511,7 @@ export const Reactions = (props: ReactionsProps) => {
             className={cn(chipClass, pressed && pressedClass, phoneHidden(kind) && 'max-sm:hidden')}
             data-pressed={pressed ? 'true' : 'false'}
             data-slot="reaction-chip"
-            disabled={disabled || !admittedKinds(props.allowedKinds).includes(kind)}
+            disabled={selectionDisabled || !admittedKinds(props.allowedKinds).includes(kind)}
             key={kind}
             onClick={() => select(kind)}
             size="sm"
@@ -524,7 +531,7 @@ export const Reactions = (props: ReactionsProps) => {
         <Menu
           title={labels.choose}
           trigger={
-            <Button className={pickerClass} disabled={disabled} size="sm" variant="outline">
+            <Button className={pickerClass} disabled={selectionDisabled} size="sm" variant="outline">
               {pickerLabel}
             </Button>
           }
@@ -539,7 +546,7 @@ export const Reactions = (props: ReactionsProps) => {
                     aria-label={`${labels[kind]} ${formatAccessibleCount(props.locale, count)}`}
                     aria-pressed={pressed}
                     className={cn('relative w-full justify-start px-3 transition-none', pressed && pressedClass)}
-                    disabled={disabled || !admittedKinds(props.allowedKinds).includes(kind)}
+                    disabled={selectionDisabled || !admittedKinds(props.allowedKinds).includes(kind)}
                     key={kind}
                     onClick={() => select(kind)}
                     size="sm"

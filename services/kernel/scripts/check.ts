@@ -187,7 +187,7 @@ function seconds(started: number): number {
   return Math.round(((performance.now() - started) / 1000) * 1000) / 1000;
 }
 
-type CheckPlan = { files: string[] | null; tests: string[] };
+export type CheckPlan = { files: string[] | null; tests: string[] };
 
 function resolveTypeScriptImport(fromFile: string, specifier: string, moduleDirectory: string): string | null {
   if (!specifier.startsWith('.')) return null;
@@ -305,7 +305,10 @@ export function checkPlan(args: string[], moduleDirectory: string): CheckPlan {
   }
 
   const sortedFiles = Array.from(files).sort();
-  return { files: sortedFiles, tests: sortedFiles.filter((file) => testFiles.has(file)) };
+  return {
+    files: sortedFiles,
+    tests: sortedFiles.filter((file) => file.endsWith('.test.ts')),
+  };
 }
 
 /** Repository-relative paths changed since `revision`: committed, staged, unstaged and untracked. */
@@ -399,13 +402,16 @@ export function planCheck(
   };
 }
 
+const FILE_DIAGNOSTIC = /^(.+?)\(\d+,\d+\): error (?:TS|reylo)\d+\b/;
+const GLOBAL_DIAGNOSTIC = /^error (?:TS|reylo)\d+\b/;
+
 function diagnosticPath(line: string): string | null | undefined {
-  if (/^error TS\d+\b/.test(line)) return null;
-  return line.match(/^(.+?)\(\d+,\d+\): error TS\d+\b/)?.[1];
+  if (GLOBAL_DIAGNOSTIC.test(line)) return null;
+  return line.match(FILE_DIAGNOSTIC)?.[1];
 }
 
-export function ownDiagnostics(output: string, files: string[]): string[] {
-  const ownedFiles = new Set(files);
+export function ownDiagnostics(output: string, files: string[] | null): string[] {
+  const ownedFiles = files === null ? null : new Set(files);
   const diagnostics: string[] = [];
   let current: string[] = [];
   let keepCurrent = false;
@@ -421,7 +427,7 @@ export function ownDiagnostics(output: string, files: string[]): string[] {
     if (path !== undefined) {
       flush();
       current = [line];
-      keepCurrent = path === null || ownedFiles.has(path);
+      keepCurrent = path === null || ownedFiles === null || ownedFiles.has(path);
     } else if (current.length > 0 && /^[\t ]+/.test(line)) {
       current.push(line);
     } else {
@@ -460,15 +466,12 @@ export function writeReyloProject(directory: string, analysisUrl: string): strin
 /** Bind both full and selected compiler spawns to the check's explicit Reylo project. */
 export function invokeTypecheck<T>(
   program: string,
-  files: string[] | null,
+  _files: string[] | null,
   baseEnvironment: NodeJS.ProcessEnv,
   reyloConfig: string,
   invoke: (program: string, args: string[], environment: NodeJS.ProcessEnv) => T,
 ): T {
-  const args =
-    files === null
-      ? ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json']
-      : ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json', '--pretty', 'false'];
+  const args = ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json', '--pretty', 'false'];
   const environment = { ...baseEnvironment, REYLO_CONFIG: reyloConfig };
   return invoke(program, args, environment);
 }
@@ -559,6 +562,159 @@ export function capture(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<{ status: number; output: string }> {
   return captureIn(program, args, env, directory);
+}
+
+export type CapturedCommand = { status: number; output: string };
+export type QualityCommand = (
+  program: string,
+  args: string[],
+  env: NodeJS.ProcessEnv,
+) => Promise<CapturedCommand> | CapturedCommand;
+export type QualityPrograms = { tsc: string; lintProgram: string; formatProgram: string };
+export type QualityOutcome = { diagnostics: string[]; qualityFailures: string[]; compilerOutput: string };
+
+function commandFailed(program: string, args: string[], output: string): string {
+  return `${program} ${args.join(' ')} failed:\n${output}`;
+}
+
+function lintArgs(files: string[] | null): string[] | null {
+  if (files === null) return ['lint', '--no-script', '--config', '../../.oxlintrc.json', '.'];
+  const selected = files.filter((file) => file.endsWith('.ts'));
+  return selected.length ? ['lint', '--no-script', '--config', '../../.oxlintrc.json', ...selected] : null;
+}
+
+function formatCommandArgs(files: string[] | null): string[] | null {
+  if (files === null) return ['--check', '.'];
+  const selected = formattedFiles(files);
+  return selected.length ? ['--check', '--no-error-on-unmatched-pattern', ...selected] : null;
+}
+
+/** Owned and global TS/Reylo diagnostics are product failures; an exit with no file/line diagnostic is infrastructure. */
+export function classifyTypecheckResult(result: CapturedCommand, ownedFiles: string[] | null): QualityOutcome {
+  if (result.status !== 0 && !hasDiagnosticLine(result.output)) {
+    fail(`tsc exited with status ${result.status} without diagnostics:\n${result.output}`);
+  }
+  return {
+    diagnostics: result.status === 0 ? [] : ownDiagnostics(result.output, ownedFiles),
+    qualityFailures: [],
+    compilerOutput: result.output,
+  };
+}
+
+export async function collectLintFormatFailures(
+  files: string[] | null,
+  programs: QualityPrograms,
+  env: NodeJS.ProcessEnv,
+  captureCommand: QualityCommand,
+): Promise<string[]> {
+  const failures: string[] = [];
+  const lint = lintArgs(files);
+  if (lint) {
+    const result = await captureCommand(programs.lintProgram, lint, env);
+    if (result.status !== 0) failures.push(commandFailed(programs.lintProgram, lint, result.output));
+  }
+  const format = formatCommandArgs(files);
+  if (format) {
+    const result = await captureCommand(programs.formatProgram, format, env);
+    if (result.status !== 0) failures.push(commandFailed(programs.formatProgram, format, result.output));
+  }
+  return failures;
+}
+
+export function combinedCheckFailure(quality: QualityOutcome, failedFiles: string[]): string | null {
+  const parts: string[] = [];
+  if (quality.diagnostics.length) parts.push(quality.diagnostics.join('\n'));
+  parts.push(...quality.qualityFailures);
+  if (failedFiles.length) {
+    parts.push(`Kernel tests failed for ${failedFiles.length} file(s):\n${failedFiles.join('\n')}`);
+  }
+  if (quality.diagnostics.length) parts.push(`Compiler output:\n${quality.compilerOutput}`);
+  return parts.length ? parts.join('\n\n') : null;
+}
+
+export function withQualityFailures(message: string, quality: QualityOutcome): string {
+  const gathered = combinedCheckFailure(quality, []);
+  return gathered ? `${gathered}\n\n${message}` : message;
+}
+
+export type KernelCheckStages = {
+  plan: CheckPlan;
+  environment: NodeJS.ProcessEnv;
+  reyloConfig: string;
+  ownedFiles: string[] | null;
+  programs: QualityPrograms;
+  captureCommand: QualityCommand;
+  productFailures?: string[];
+  aroundCompiler?: <T>(work: () => Promise<T>) => Promise<T>;
+  onQualitySeconds?: (seconds: number) => void;
+  afterQuality?: (quality: QualityOutcome) => Promise<void>;
+  runTests: (files: string[]) => Promise<string[]>;
+};
+
+/**
+ * A module CREATE EXTENSION migration is executable SQL and a product policy failure, not an engine-startup failure.
+ * Selected tests still run; the check fails once with this message among the other reached product failures.
+ */
+export function moduleExtensionPolicyFailure(root = directory): string | null {
+  const files = moduleExtensionFiles(root);
+  return files.length ? `Module migrations must not create extensions:\n${files.join('\n')}` : null;
+}
+
+function asFailureMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * Typecheck, lint and format always run to completion for product failures, then every selected test file runs.
+ * One final failure lists owned/global compiler diagnostics, lint/format and other product failures and the exact
+ * failed files. Infrastructure (compiler exit without diagnostics, spawn failure, after-quality/test setup) stops at
+ * that stage and keeps any product failures already collected visible.
+ */
+export async function runKernelCheckStages(input: KernelCheckStages): Promise<void> {
+  const aroundCompiler = input.aroundCompiler ?? (async <T>(work: () => Promise<T>) => work());
+  const productFailures = input.productFailures ?? [];
+  const quality: QualityOutcome = { diagnostics: [], qualityFailures: [...productFailures], compilerOutput: '' };
+  try {
+    const typecheck = await aroundCompiler(() =>
+      Promise.resolve(
+        invokeTypecheck(
+          input.programs.tsc,
+          input.plan.files,
+          input.environment,
+          input.reyloConfig,
+          input.captureCommand,
+        ),
+      ),
+    );
+    const classified = classifyTypecheckResult(typecheck, input.ownedFiles);
+    quality.diagnostics = classified.diagnostics;
+    quality.compilerOutput = classified.compilerOutput;
+  } catch (error) {
+    fail(withQualityFailures(asFailureMessage(error), quality));
+  }
+  const qualityStarted = performance.now();
+  try {
+    quality.qualityFailures = [
+      ...productFailures,
+      ...(await collectLintFormatFailures(input.plan.files, input.programs, input.environment, input.captureCommand)),
+    ];
+  } catch (error) {
+    fail(withQualityFailures(asFailureMessage(error), quality));
+  }
+  input.onQualitySeconds?.(seconds(qualityStarted));
+  try {
+    await input.afterQuality?.(quality);
+  } catch (error) {
+    fail(withQualityFailures(asFailureMessage(error), quality));
+  }
+  let failedFiles: string[];
+  try {
+    failedFiles = await input.runTests(input.plan.tests);
+  } catch (error) {
+    fail(withQualityFailures(asFailureMessage(error), quality));
+  }
+  const message = combinedCheckFailure(quality, failedFiles);
+  if (message) fail(message);
 }
 
 async function psql(sql: string): Promise<void> {
@@ -952,8 +1108,9 @@ async function main(): Promise<void> {
   const runStarted = performance.now();
   let compilerSeconds = 0;
   let qualitySeconds = 0;
-  const extensionFiles = moduleExtensionFiles();
-  if (extensionFiles.length) fail(`Module migrations must not create extensions:\n${extensionFiles.join('\n')}`);
+  const productFailures: string[] = [];
+  const extensionFailure = moduleExtensionPolicyFailure();
+  if (extensionFailure) productFailures.push(extensionFailure);
 
   // Remote hosts are shared: only this run's explicit cleanup may remove their containers.
   if (process.env.KERNEL_CHECK_SKIP_STALE_CLEANUP !== '1' && !process.env.KERNEL_CHECK_ON_REMOTE) cleanupStale();
@@ -1006,174 +1163,160 @@ async function main(): Promise<void> {
   const tsc = resolve(directory, '../../node_modules/.bin/tsc');
   const oxfmt = resolve(directory, '../../node_modules/.bin/oxfmt');
   let searchUrl: string | undefined;
-  await runChecksThenStartSearch(
-    planNeedsSearch(plan, directory),
-    async () => {
-      if (plan.files === null) {
-        let phaseStarted = performance.now();
-        await withCommandPhase('compiler', () => {
-          invokeTypecheck(tsc, null, analysisEnvironment, reyloConfig, run);
-        });
-        compilerSeconds += seconds(phaseStarted);
-        phaseStarted = performance.now();
-        run(process.execPath, ['lint', '--no-script', '--config', '../../.oxlintrc.json', '.'], analysisEnvironment);
-        run(oxfmt, ['--check', '.'], analysisEnvironment);
-        qualitySeconds += seconds(phaseStarted);
-      } else {
-        const compilerStarted = performance.now();
-        const typecheck = await withCommandPhase('compiler', () =>
-          invokeTypecheck(tsc, plan.files, analysisEnvironment, reyloConfig, capture),
-        );
-        compilerSeconds += seconds(compilerStarted);
-        const diagnostics = ownDiagnostics(
-          typecheck.output,
-          diagnosticFiles(plan.files, directory, process.env.KERNEL_CHECK_AFFECTED || null),
-        );
-        if (diagnostics.length) fail(diagnostics.join('\n'));
-        if (typecheck.status !== 0 && !hasDiagnosticLine(typecheck.output)) {
-          fail(`tsc exited with status ${typecheck.status} without diagnostics:\n${typecheck.output}`);
-        }
+  const ownedFiles =
+    plan.files === null ? null : diagnosticFiles(plan.files, directory, process.env.KERNEL_CHECK_AFFECTED || null);
 
-        const qualityStarted = performance.now();
-        const lintFiles = plan.files.filter((file) => file.endsWith('.ts'));
-        if (lintFiles.length)
-          run(
-            process.execPath,
-            ['lint', '--no-script', '--config', '../../.oxlintrc.json', ...lintFiles],
-            analysisEnvironment,
-          );
-
-        const formatFiles = formattedFiles(plan.files);
-        if (formatFiles.length)
-          run(oxfmt, ['--check', '--no-error-on-unmatched-pattern', ...formatFiles], analysisEnvironment);
-        qualitySeconds += seconds(qualityStarted);
+  await runKernelCheckStages({
+    plan,
+    environment: analysisEnvironment,
+    reyloConfig,
+    ownedFiles,
+    programs: { tsc, lintProgram: process.execPath, formatProgram: oxfmt },
+    captureCommand: capture,
+    productFailures,
+    aroundCompiler: async (work) => {
+      const started = performance.now();
+      try {
+        return await withCommandPhase('compiler', work);
+      } finally {
+        compilerSeconds += seconds(started);
       }
     },
-    async () =>
-      withCommandPhase('database-image', async () => {
-        const searchImage = buildSearchImage();
-        searchContainer = docker([
-          'run',
-          '-d',
-          ...cgroupArgs(),
-          '--label',
-          `rezics.kernel.check.pid=${pid}`,
-          '-p',
-          '127.0.0.1::9200',
-          '--tmpfs',
-          '/usr/share/opensearch/data:rw,size=1g,uid=1000,gid=1000,mode=0755',
-          '-e',
-          'discovery.type=single-node',
-          '-e',
-          subjectAutoCreateIndexSetting,
-          '-e',
-          'DISABLE_SECURITY_PLUGIN=true',
-          '-e',
-          'DISABLE_INSTALL_DEMO_CONFIG=true',
-          '-e',
-          'OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m',
-          searchImage,
-        ]);
-        const searchPortOutput = docker(['port', searchContainer, '9200/tcp']);
-        const searchPortMatch = searchPortOutput.match(/127\.0\.0\.1:(\d+)/);
-        if (!searchPortMatch?.[1]) fail(`Could not determine the test search port: ${searchPortOutput}`);
-        const searchUrl = `http://127.0.0.1:${searchPortMatch[1]}`;
-        await waitForSearch(searchUrl, searchContainer);
-        return searchUrl;
-      }),
-  ).then((url) => {
-    searchUrl = url ?? undefined;
-  });
-
-  const testFiles = plan.tests;
-  const samplerClient = new Client({
-    connectionString: url.replace(/\/rezics(?=\?)/, '/postgres'),
-    application_name: 'kernel-check-connection-sampler',
-    connectionTimeoutMillis: 1000,
-    query_timeout: 1000,
-    statement_timeout: 1000,
-  });
-  let samplerConnected = false;
-  try {
-    await samplerClient.connect();
-    samplerConnected = true;
-  } catch (error) {
-    process.stderr.write(
-      `PostgreSQL connection sampling is unavailable: ${error instanceof Error ? error.message : String(error)}\n`,
-    );
-  }
-  const sampler = createPostgresConnectionSampler(async (sql) => {
-    if (!samplerConnected) return [];
-    const result = await samplerClient.query(sql);
-    return result.rows as PostgresActivityRow[];
-  });
-  const filePeaks = new Map<string, number>();
-  sampler.start();
-  let failedFiles: string[] = [];
-  const outputByFile = new Map<string, string>();
-  const testStarted = performance.now();
-  try {
-    const result = await runLaneSuite({
-      service: 'kernel',
-      directory,
-      files: testFiles,
-      partial: plan.files !== null,
-      runTiming: (): CheckRunTiming => {
-        const testSeconds = seconds(testStarted);
-        const totalSeconds = seconds(runStarted);
-        return {
-          compilerSeconds,
-          qualitySeconds,
-          testSeconds,
-          totalSeconds,
-          otherSeconds: Math.max(
-            0,
-            Math.round((totalSeconds - compilerSeconds - qualitySeconds - testSeconds) * 1000) / 1000,
-          ),
-          analysisEntries: {
-            compilerBefore: compilerEntriesBefore,
-            compilerAfter: reyloEntryCount(compilerConfig),
-            sharedAfter: reyloEntryCount(reyloConfig),
+    onQualitySeconds: (value) => {
+      qualitySeconds += value;
+    },
+    afterQuality: async () => {
+      searchUrl =
+        (await runChecksThenStartSearch(
+          planNeedsSearch(plan, directory),
+          () => undefined,
+          async () =>
+            withCommandPhase('database-image', async () => {
+              const searchImage = buildSearchImage();
+              searchContainer = docker([
+                'run',
+                '-d',
+                ...cgroupArgs(),
+                '--label',
+                `rezics.kernel.check.pid=${pid}`,
+                '-p',
+                '127.0.0.1::9200',
+                '--tmpfs',
+                '/usr/share/opensearch/data:rw,size=1g,uid=1000,gid=1000,mode=0755',
+                '-e',
+                'discovery.type=single-node',
+                '-e',
+                subjectAutoCreateIndexSetting,
+                '-e',
+                'DISABLE_SECURITY_PLUGIN=true',
+                '-e',
+                'DISABLE_INSTALL_DEMO_CONFIG=true',
+                '-e',
+                'OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m',
+                searchImage,
+              ]);
+              const searchPortOutput = docker(['port', searchContainer, '9200/tcp']);
+              const searchPortMatch = searchPortOutput.match(/127\.0\.0\.1:(\d+)/);
+              if (!searchPortMatch?.[1]) fail(`Could not determine the test search port: ${searchPortOutput}`);
+              const started = `http://127.0.0.1:${searchPortMatch[1]}`;
+              await waitForSearch(started, searchContainer);
+              return started;
+            }),
+        )) ?? undefined;
+    },
+    runTests: async (testFiles) => {
+      const samplerClient = new Client({
+        connectionString: url.replace(/\/rezics(?=\?)/, '/postgres'),
+        application_name: 'kernel-check-connection-sampler',
+        connectionTimeoutMillis: 1000,
+        query_timeout: 1000,
+        statement_timeout: 1000,
+      });
+      let samplerConnected = false;
+      try {
+        await samplerClient.connect();
+        samplerConnected = true;
+      } catch (error) {
+        process.stderr.write(
+          `PostgreSQL connection sampling is unavailable: ${error instanceof Error ? error.message : String(error)}\n`,
+        );
+      }
+      const sampler = createPostgresConnectionSampler(async (sql) => {
+        if (!samplerConnected) return [];
+        const result = await samplerClient.query(sql);
+        return result.rows as PostgresActivityRow[];
+      });
+      const filePeaks = new Map<string, number>();
+      sampler.start();
+      let failedFiles: string[] = [];
+      const outputByFile = new Map<string, string>();
+      const testStarted = performance.now();
+      try {
+        const result = await runLaneSuite({
+          service: 'kernel',
+          directory,
+          files: testFiles,
+          partial: plan.files !== null,
+          runTiming: (): CheckRunTiming => {
+            const testSeconds = seconds(testStarted);
+            const totalSeconds = seconds(runStarted);
+            return {
+              compilerSeconds,
+              qualitySeconds,
+              testSeconds,
+              totalSeconds,
+              otherSeconds: Math.max(
+                0,
+                Math.round((totalSeconds - compilerSeconds - qualitySeconds - testSeconds) * 1000) / 1000,
+              ),
+              analysisEntries: {
+                compilerBefore: compilerEntriesBefore,
+                compilerAfter: reyloEntryCount(compilerConfig),
+                sharedAfter: reyloEntryCount(reyloConfig),
+              },
+            };
           },
-        };
-      },
-      onRunTiming: (timing) => {
-        process.stdout.write(
-          `Kernel check phases: compiler=${timing.compilerSeconds}s quality=${timing.qualitySeconds}s tests=${timing.testSeconds}s other=${timing.otherSeconds}s total=${timing.totalSeconds}s\n`,
-        );
-        process.stdout.write(
-          `Reylo analysis entries: compiler=${timing.analysisEntries.compilerBefore}->${timing.analysisEntries.compilerAfter}; shared-test-project=${timing.analysisEntries.sharedAfter}\n`,
-        );
-      },
-      createDatabase: (database) => psql(`CREATE DATABASE ${database} TEMPLATE rezics`),
-      dropDatabase: (database) => psql(`DROP DATABASE IF EXISTS ${database} WITH (FORCE)`),
-      environment: (database) =>
-        fileEnvironment(analysisEnvironment, { url, database, ...(searchUrl ? { searchUrl } : {}), reyloConfig }),
-      onFileComplete: (outcome, timing) => {
-        if (outcome.error) outputByFile.set(outcome.file, outcome.error.message);
-        else outputByFile.delete(outcome.file);
-        const peak = sampler.peakFor(outcome.database);
-        timing.peakConnections = peak;
-        filePeaks.set(outcome.file, peak);
-        const testCases = timing.tests.reduce((total, test) => total + test.time, 0);
-        process.stdout.write(
-          `Kernel file phases: ${outcome.file} clone=${timing.create}s module-load=${timing.moduleLoad === undefined ? 'unmeasured' : `${timing.moduleLoad}s`} outside-tests=${timing.outsideTests}s test-cases=${Math.round(testCases * 1000) / 1000}s process=${timing.wall}s drop=${timing.drop}s fixture-phases=${timing.fixturePhases === undefined ? 'unmeasured' : JSON.stringify(timing.fixturePhases)}\n`,
-        );
-        process.stdout.write(`${formatFileConnectionResult(outcome.file, outcome.error ? 'FAIL' : 'PASS', peak)}\n`);
-      },
-    });
-    failedFiles = result.failed;
-    failedFileOutputs = failedFiles.flatMap((file) => {
-      const output = outputByFile.get(file);
-      return output === undefined ? [] : [output];
-    });
-  } finally {
-    await sampler.stop();
-    if (samplerConnected) await samplerClient.end().catch(() => undefined);
-    process.stdout.write(`${formatConnectionRunSummary(sampler.peakTotal(), filePeaks)}\n`);
-  }
-  process.stderr.write(`Reylo analyses written: ${reyloEntryCount(reyloConfig)}\n`);
-  if (failedFiles.length) fail(`Kernel tests failed for ${failedFiles.length} file(s):\n${failedFiles.join('\n')}`);
+          onRunTiming: (timing) => {
+            process.stdout.write(
+              `Kernel check phases: compiler=${timing.compilerSeconds}s quality=${timing.qualitySeconds}s tests=${timing.testSeconds}s other=${timing.otherSeconds}s total=${timing.totalSeconds}s\n`,
+            );
+            process.stdout.write(
+              `Reylo analysis entries: compiler=${timing.analysisEntries.compilerBefore}->${timing.analysisEntries.compilerAfter}; shared-test-project=${timing.analysisEntries.sharedAfter}\n`,
+            );
+          },
+          createDatabase: (database) => psql(`CREATE DATABASE ${database} TEMPLATE rezics`),
+          dropDatabase: (database) => psql(`DROP DATABASE IF EXISTS ${database} WITH (FORCE)`),
+          environment: (database) =>
+            fileEnvironment(analysisEnvironment, { url, database, ...(searchUrl ? { searchUrl } : {}), reyloConfig }),
+          onFileComplete: (outcome, timing) => {
+            if (outcome.error) outputByFile.set(outcome.file, outcome.error.message);
+            else outputByFile.delete(outcome.file);
+            const peak = sampler.peakFor(outcome.database);
+            timing.peakConnections = peak;
+            filePeaks.set(outcome.file, peak);
+            const testCases = timing.tests.reduce((total, test) => total + test.time, 0);
+            process.stdout.write(
+              `Kernel file phases: ${outcome.file} clone=${timing.create}s module-load=${timing.moduleLoad === undefined ? 'unmeasured' : `${timing.moduleLoad}s`} outside-tests=${timing.outsideTests}s test-cases=${Math.round(testCases * 1000) / 1000}s process=${timing.wall}s drop=${timing.drop}s fixture-phases=${timing.fixturePhases === undefined ? 'unmeasured' : JSON.stringify(timing.fixturePhases)}\n`,
+            );
+            process.stdout.write(
+              `${formatFileConnectionResult(outcome.file, outcome.error ? 'FAIL' : 'PASS', peak)}\n`,
+            );
+          },
+        });
+        failedFiles = result.failed;
+        failedFileOutputs = failedFiles.flatMap((file) => {
+          const output = outputByFile.get(file);
+          return output === undefined ? [] : [output];
+        });
+      } finally {
+        await sampler.stop();
+        if (samplerConnected) await samplerClient.end().catch(() => undefined);
+        process.stdout.write(`${formatConnectionRunSummary(sampler.peakTotal(), filePeaks)}\n`);
+      }
+      process.stderr.write(`Reylo analyses written: ${reyloEntryCount(reyloConfig)}\n`);
+      return failedFiles;
+    },
+  });
 }
 
 if (import.meta.main) {

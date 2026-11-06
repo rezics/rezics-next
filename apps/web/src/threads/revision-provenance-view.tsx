@@ -4,6 +4,7 @@ import { subjectHref } from '../subject/subject-href';
 import type { VoteCitation } from './post-writes';
 import { differingReviewVote } from './revision-provenance';
 import { subjectTitle, type ThreadSubject } from './subjects';
+import type { ThreadPublishedCitation, ThreadReviewContext } from './thread-page-context';
 
 /** Native revision metadata is a reading region; shadcn has no equivalent provenance component. */
 export function RevisionProvenance({
@@ -12,6 +13,8 @@ export function RevisionProvenance({
   currentVote,
   review = false,
   showLicence = true,
+  publishedCitation,
+  reviewTarget,
 }: {
   revision: { licence: string; subjectIds: readonly string[]; voteCitation?: VoteCitation | null };
   subjects: readonly ThreadSubject[];
@@ -20,9 +23,22 @@ export function RevisionProvenance({
   review?: boolean;
   /** False when the reader already displays this revision's licence beside its disclosure control. */
   showLicence?: boolean;
+  /** The mounted page supplies recorded units separately from unavailable historical question metadata. */
+  publishedCitation?: ThreadPublishedCitation;
+  reviewTarget?: ThreadReviewContext['target'];
 }) {
   const locale = getLocale();
-  const comparison = differingReviewVote(revision.voteCitation, currentVote);
+  const citation = publishedCitation
+    ? publishedCitation.state === 'available'
+      ? {
+          questionId: publishedCitation.questionId,
+          units: publishedCitation.units,
+          revision: publishedCitation.voteRevision,
+        }
+      : null
+    : revision.voteCitation;
+  const citationWithheld = publishedCitation?.state === 'withheld';
+  const comparison = differingReviewVote(citation, currentVote);
   const formatNumber = (value: number) => new Intl.NumberFormat(locale).format(value);
   const formatVoteCitation = (vote: VoteCitation) =>
     m.thread_provenance_vote({
@@ -35,14 +51,29 @@ export function RevisionProvenance({
     const subject = subjectsById.get(id);
     return !subject || !subjectTitle(subject, locale);
   });
-  const hasExactSourceDetails =
-    unresolvedSubjectIds.length > 0 || (revision.voteCitation !== null && revision.voteCitation !== undefined);
+  const hasExactSourceDetails = unresolvedSubjectIds.length > 0 || (citation !== null && citation !== undefined);
   return (
     <aside aria-label={m.thread_provenance_heading()} className="min-w-0 space-y-3 text-sm text-muted-foreground">
       {showLicence ? (
         <p className="break-words">
           <span className="font-medium">{m.thread_history_licence()}:</span> {revision.licence}
         </p>
+      ) : null}
+      {reviewTarget ? (
+        <div data-slot="thread-review-target" className="space-y-1">
+          <p className="font-medium">{m.subject_community_original_target()}</p>
+          {reviewTarget.state === 'available' && reviewTarget.subject.label ? (
+            <a
+              href={subjectHref({ id: reviewTarget.subject.id, label: reviewTarget.subject.label.value }, locale).href}
+              lang={reviewTarget.subject.label.language || undefined}
+              className="inline-flex min-h-11 max-w-full items-center rounded-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [overflow-wrap:anywhere]"
+            >
+              {reviewTarget.subject.label.value}
+            </a>
+          ) : (
+            <p>{m.subject_community_review_target_unavailable()}</p>
+          )}
+        </div>
       ) : null}
       {revision.subjectIds.length ? (
         <div className="space-y-1">
@@ -66,13 +97,11 @@ export function RevisionProvenance({
           </ul>
         </div>
       ) : null}
-      {revision.voteCitation ? (
+      {citation ? (
         <dl className="space-y-2 [overflow-wrap:anywhere]">
           <div>
             <dt className="font-medium">{m.thread_provenance_rating()}</dt>
-            <dd>
-              {m.discussion_provenance_details_rating_units({ units: formatNumber(revision.voteCitation.units) })}
-            </dd>
+            <dd>{m.discussion_provenance_details_rating_units({ units: formatNumber(citation.units) })}</dd>
           </div>
           {comparison ? (
             <div>
@@ -81,8 +110,13 @@ export function RevisionProvenance({
             </div>
           ) : null}
         </dl>
+      ) : citationWithheld ? (
+        <p>{m.subject_community_citation_unavailable()}</p>
       ) : review ? (
         <p>{m.thread_provenance_unscored()}</p>
+      ) : null}
+      {publishedCitation?.state === 'available' ? (
+        <p data-slot="thread-historical-question-unavailable">{m.search_review_historical_question_unavailable()}</p>
       ) : null}
       {hasExactSourceDetails ? (
         <details className="min-w-0 [overflow-wrap:anywhere]">
@@ -96,10 +130,10 @@ export function RevisionProvenance({
                 <dd>{m.thread_provenance_subject_reference({ id })}</dd>
               </div>
             ))}
-            {revision.voteCitation ? (
+            {citation ? (
               <div>
                 <dt className="font-medium">{m.thread_provenance_rating()}</dt>
-                <dd>{formatVoteCitation(revision.voteCitation)}</dd>
+                <dd>{formatVoteCitation(citation)}</dd>
               </div>
             ) : null}
             {comparison ? (

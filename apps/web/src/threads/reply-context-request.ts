@@ -23,6 +23,8 @@ export async function replyToThreadRequest(
     );
     if (result.response === undefined) return { ok: false, reason: 'unavailable' };
     if (result.error) {
+      if (typeof result.status !== 'number' || result.status < 400 || result.status > 499)
+        return { ok: false, reason: 'unavailable' };
       const failure = refusal(result.status, result.headers, result.error.value);
       if (failure.reason === 'media-unavailable') {
         failure.media = await readDraftMediaStates(client, authorization, data.mediaIds ?? []);

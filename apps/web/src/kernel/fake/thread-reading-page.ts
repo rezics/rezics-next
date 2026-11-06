@@ -16,7 +16,6 @@ export function authoredReadingPage(
     documentMedia: { state: 'unavailable', documents: [] },
     replies: { items, next: null },
     authors: { state: 'current', retryable: false, items: authors },
-    mentions: { state: 'current', retryable: false, overflow: false, sources: [], identities: [] },
     actions: { state: 'unavailable', retryable: true, references: [], reply: { state: 'unavailable' } },
     watch: { state: 'sign_in_required' },
     slowMode: { state: 'unavailable', retryable: true },

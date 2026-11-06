@@ -13,6 +13,9 @@ import type { VerificationConfig } from '../../report/turnstile';
 
 const actionClass =
   'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm px-2 text-sm font-medium whitespace-normal [overflow-wrap:anywhere] text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const noSubscribe = () => () => {};
+const unknownObservation = { state: 'unknown' } as const;
+const readUnknownObservation = () => unknownObservation;
 
 /** Only exact controls admitted by the selected native card are mounted here. */
 export function SubjectCommunityInteractions({
@@ -45,9 +48,9 @@ export function SubjectCommunityInteractions({
   const client = useContext(QueryClientContext);
   const observationStore = client ? browserObservation(client) : undefined;
   const observation = useSyncExternalStore(
-    observationStore?.subscribe ?? (() => () => {}),
-    observationStore?.getSnapshot ?? (() => ({ state: 'unknown' as const })),
-    observationStore?.getServerSnapshot ?? (() => ({ state: 'unknown' as const })),
+    observationStore?.subscribe ?? noSubscribe,
+    observationStore?.getSnapshot ?? readUnknownObservation,
+    observationStore?.getServerSnapshot ?? readUnknownObservation,
   );
   const sessionState = client?.getQueryState(['session']);
   const session = normalizeSessionObservation(client?.getQueryData(['session']));
@@ -121,6 +124,8 @@ export function SubjectCommunityInteractions({
           returnTo={replyHref}
           personalReady
           reactionOrigin={lifetime}
+          readAuthority={readAuthority}
+          queueChanges={false}
           settleWithRead
           sourceWatermark={reactionsAsOf!}
           presentation="chips"

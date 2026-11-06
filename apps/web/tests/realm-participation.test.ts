@@ -285,6 +285,33 @@ test('current membership plus uncertain leave intent cannot carry across a known
   }
 });
 
+async function renderStartThread(
+  queries: QueryClient,
+  advice: 'allowed' | 'denied' | 'sign-in' = 'allowed',
+  viewer?: { participation: 'allowed' | 'denied' | 'sign-in' | 'unavailable' },
+) {
+  const board = {
+    id: '0192f3a0-6c1e-7b2a-9d4e-000000000301',
+    realmId,
+    availability: 'available',
+    visibility: 'published',
+  } as Parameters<typeof BoardStartThread>[0]['board'];
+  const root = createRootRoute({
+    component: () =>
+      createElement(BoardStartThread, {
+        board,
+        advice,
+        returnTo,
+        ...(viewer ? { viewer } : {}),
+      }),
+  });
+  const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: ['/'] }) });
+  await router.load();
+  return renderToStaticMarkup(
+    createElement(QueryClientProvider, { client: queries }, createElement(RouterProvider, { router })),
+  );
+}
+
 test('Board start visibility follows mounted action advice', async () => {
   const queries = new QueryClient();
   try {
@@ -297,6 +324,26 @@ test('Board start visibility follows mounted action advice', async () => {
     }
     session = { state: 'signed-in', subject: null, csrfToken: 'csrf' };
     expect(await renderMembershipEntries(queries, 'allowed')).not.toContain(m.board_start_thread());
+  } finally {
+    queries.clear();
+  }
+});
+
+test('Board start-thread requires the mounted viewer participation when the page supplies it', async () => {
+  const queries = new QueryClient();
+  try {
+    session = { state: 'signed-in', subject: 'current-person', csrfToken: 'csrf' };
+    expect(await renderStartThread(queries, 'allowed', { participation: 'allowed' })).toContain(m.board_start_thread());
+    expect(await renderStartThread(queries, 'allowed', { participation: 'denied' })).not.toContain(
+      m.board_start_thread(),
+    );
+    expect(await renderStartThread(queries, 'allowed', { participation: 'unavailable' })).not.toContain(
+      m.board_start_thread(),
+    );
+    session = { state: 'signed-out', csrfToken: null, subject: null };
+    expect(await renderStartThread(queries, 'denied', { participation: 'sign-in' })).toContain(
+      m.board_sign_in_to_start(),
+    );
   } finally {
     queries.clear();
   }

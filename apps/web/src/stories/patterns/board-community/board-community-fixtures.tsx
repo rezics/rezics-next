@@ -104,6 +104,7 @@ function CommunityExample({ state }: { state: CommunityState }) {
         <BoardStartThread
           board={shown.board}
           advice={shown.actions.createThread}
+          viewer={shown.viewer}
           returnTo={`/${getLocale()}/boards/${id}`}
         />
       }

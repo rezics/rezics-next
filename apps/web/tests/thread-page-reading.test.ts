@@ -5,6 +5,7 @@ import { authoredReadingPage } from '../src/kernel/fake/thread-reading-page';
 import type { ReadingPage } from '../src/threads/thread-page';
 import { isThreadPageCursorError, loadThreadPage } from '../src/threads/thread-page';
 import { documentImagesForPost, receiveThreadDocumentMedia } from '../src/threads/document-media-read';
+import { mentionsForThreadPost } from '../src/threads/thread-page-context';
 
 const threadId = '11111111-1111-4111-8111-111111111111';
 const boardId = '22222222-2222-4222-8222-222222222222';
@@ -87,7 +88,10 @@ test('the Web receiver maps the mounted page while preserving a selected reply a
         overflow: false,
       },
     ],
-    identities: [{ id: authorId, state: 'active', handle: 'disclosed-author' }],
+    identities: [
+      { id: authorId, state: 'active', handle: 'disclosed-author' },
+      { id: boardId, state: 'active', handle: 'unrelated' },
+    ],
   };
   response.conversationActivity = {
     state: 'current',
@@ -173,6 +177,7 @@ test('the Web receiver maps the mounted page while preserving a selected reply a
   });
   expect(page.mentions).toEqual({ [authorId]: { handle: 'disclosed-author' } });
   expect(page.mentionProjection).toEqual(response.mentions);
+  expect(mentionsForThreadPost(page.documentMentions!, { ...opening, revisionId: reply.revisionId })).toEqual({});
   expect(page.reviewContext).toEqual(response.reviewContext);
   expect(page.conversationActivity).toEqual({
     state: 'current',
@@ -409,6 +414,7 @@ test('the Web receiver maps the mounted page while preserving a selected reply a
   expect(optionalFailure.posts.next).toBe('sparse-next');
   expect(optionalFailure.linkedPostUnavailable).toBe(false);
   expect(optionalFailure.posts.posts[1]?.body).toEqual(reply.body);
+  expect(paths.some((path) => path.startsWith('/v1/media/'))).toBe(false);
   abortRead = new AbortController();
   await expect(selectedRead(abortRead.signal)).rejects.toThrow('Reading visit ended');
   expect(paths.slice(-2)).toEqual([
