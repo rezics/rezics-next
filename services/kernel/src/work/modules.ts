@@ -50,11 +50,17 @@ export function createKernelWorkModules(
   ambient?: ContentWorkAmbient,
 ): readonly WorkModule[] {
   const bound = tryContentApplication()?.ambient;
-  const resolved: ContentWorkAmbient = {
-    fetch: ambient?.fetch ?? bound?.fetch ?? ((request) => globalThis.fetch(request)),
-    now: ambient?.now ?? bound?.now ?? (() => Date.now()),
-    ...(ambient?.id ?? bound?.id ? { id: ambient?.id ?? bound?.id } : {}),
-  };
+  const id = ambient?.id ?? bound?.id;
+  const resolved: ContentWorkAmbient = id
+    ? {
+        fetch: ambient?.fetch ?? bound?.fetch ?? ((request) => globalThis.fetch(request)),
+        now: ambient?.now ?? bound?.now ?? (() => Date.now()),
+        id,
+      }
+    : {
+        fetch: ambient?.fetch ?? bound?.fetch ?? ((request) => globalThis.fetch(request)),
+        now: ambient?.now ?? bound?.now ?? (() => Date.now()),
+      };
   const searchWorkModule = createSearchWorkModule(composeDiscovery, composeRuntimeDefaults);
   const semanticWorkModule = createSemanticWorkModule(composeSemantic);
   const contentWorkModule = contentDeclaration().work(resolved);

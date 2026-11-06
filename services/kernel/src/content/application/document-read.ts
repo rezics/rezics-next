@@ -16,8 +16,8 @@ export function createDocumentReads(ports: Pick<ContentApplicationPorts, 'docume
         route,
         deadline,
         now: ambient.now(),
-        maxSourceBytes,
         maxBytes: CONTENT_DOCUMENT_BYTES,
+        ...(maxSourceBytes === undefined ? {} : { maxSourceBytes }),
       });
     },
     async read(

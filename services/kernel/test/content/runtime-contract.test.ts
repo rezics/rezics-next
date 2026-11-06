@@ -14,6 +14,8 @@ type KernelContent = ContentRuntime &
   Partial<Pick<ContentBoardDependencies, 'cursorNow'>> & {
     readConsent?: CurrentConsentReader;
     shelfTitleInputs?: ContentShelfTitleInputs;
+    now?: () => number;
+    id?: () => string;
   };
 test('trusted optional content runtime types retain exactly the native ports and the Auth consent reader', () => {
   expectTypeOf<ContentRuntime>().toEqualTypeOf<

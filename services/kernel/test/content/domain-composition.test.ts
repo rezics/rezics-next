@@ -26,9 +26,7 @@ function fakePorts(overrides: Partial<ContentApplicationPorts> = {}): ContentApp
   return {
     documents: {
       async read(_client, _route, id) {
-        return id === subject
-          ? { availability: 'available', origin: 'account', subject, candidate }
-          : null;
+        return id === subject ? { availability: 'available', origin: 'account', subject, candidate } : null;
       },
     },
     authoredFields: {
@@ -93,9 +91,9 @@ test('Content application ranks, rejects media authored fields and budgets worke
   expect(application.normalizeBoardQuery('  hello  ')).toBe(normalizeBoardQuery('  hello  '));
   expect(application.nextAuthoredFieldId()).toBe('33333333-3333-4333-8333-333333333333');
   application.admitAuthoredField(authored);
-  expect(() =>
-    application.admitAuthoredField({ ...authored, document: { type: 'image' } }),
-  ).toThrow(AuthoredFieldRejectedError);
+  expect(() => application.admitAuthoredField({ ...authored, document: { type: 'image' } })).toThrow(
+    AuthoredFieldRejectedError,
+  );
   expect(application.workerStepDeadline()).toBe(1_000 + CONTENT_WORKER_STEP_MS);
   expect(await application.eraseAuthoredField(subject, 2_000)).toEqual({
     id: subject,

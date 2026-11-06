@@ -9,7 +9,7 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import { readCandidateDisclosure } from '../semantic/disclosure.ts';
 import { subjectReadEligibility } from '../semantic/eligibility.ts';
 import { CONTENT_DOCUMENT_BYTES } from './contract/index.ts';
-import { admitDocumentRead, documentReadExhausted } from './core/index.ts';
+import { admitDocumentRead, deadlineElapsed } from './core/index.ts';
 import { MAX_DOCUMENT_BYTES } from './document.ts';
 import { tupleRoute } from './imported-contract.ts';
 import { readImportedField, readImportedFieldBounded, type ImportedFieldView } from './imported-fields.ts';
@@ -150,12 +150,13 @@ export async function readDocument(
 ): Promise<{ document: DocumentView; anchors: readonly AnchoredPosition[] } | null> {
   const route = routeOf(id);
   if (
+    route === null ||
     !admitDocumentRead({
       route,
       deadline: context.deadline,
       now: dependencies.now(),
-      maxSourceBytes,
       maxBytes: CONTENT_DOCUMENT_BYTES,
+      ...(maxSourceBytes === undefined ? {} : { maxSourceBytes }),
     })
   )
     return null;
@@ -229,7 +230,7 @@ export async function readDocument(
       if (!disclosure?.disclosed || disclosure.security_revision !== semantic.security_revision) return null;
       return current.origin === 'import' ? viewImported(current.row) : viewAuthored(current.row);
     });
-    if (documentReadExhausted(dependencies.now(), context.deadline, final.value)) return null;
+    if (!final.value || deadlineElapsed(dependencies.now(), context.deadline)) return null;
     return { document: final.value, anchors: fenceAnchor ? [fenceAnchor, final.anchor] : [final.anchor] };
   } catch (error) {
     if (error instanceof GrantDeniedError || error instanceof RangeError) return null;
