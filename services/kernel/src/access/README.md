@@ -47,8 +47,9 @@ existing `access.account` profile. Point actions without one exact target type r
 `ActionCatalogue`, resolved resource roles/types and exact `globalReach` registration. Point/page checks and
 `prepareReadDecisions().decide` use this adapter only when the exact action/type pair is registered. The existing
 `permission-check.sql` statement supplies qualified local and optional Global primitive grants, denials, assignment
-validity and deadline validity for those profiles; its final SQL booleans are reserved for profiles whose exact
-target type is not registered or inferable. The adapter evaluates every target at the same native snapshot and uses
+validity and deadline validity for those profiles; deadline validity is selected once as `deadlineLive` from
+`deadline_live` and again as consumed `live` for the policy adapter. Its final SQL booleans are reserved for
+profiles whose exact target type is not registered or inferable. The adapter evaluates every target at the same native snapshot and uses
 the same core for ordinary and explicit advice. Own-account action metadata binds its existing account target as
 `access.account`. The ordinary formula retains the verified public floor independently of scope. Explicit advice
 excludes that floor and resource-role grants. A core decision reached through registered Global authority still
