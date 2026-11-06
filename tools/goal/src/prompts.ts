@@ -66,8 +66,11 @@ const OWN_TESTS =
 const REGRESSION = `Do not run the root typecheck or other regression suites yourself; the landing runs them. ${OWN_TESTS}`;
 const MINIMAL_SESSION_COMMANDS =
   'Commands that finish locally in under a minute (`bun test` of a few plain unit files, oxfmt, tsc on tools/goal) still run in the session.';
+// The result rule travels with the wrapper result protocol in the footer; the condition body states the check itself.
+const MINIMAL_RESULT =
+  'Then commit and return success (blocker null, `"checks":[]`), naming what you completed and the deferred acceptance, which is neither a blocker nor a reason to wait; return waiting only for a still-running check UUID this attempt started.';
 const PROTOCOL_FOOTER: Partial<Record<ConditionId, string>> = {
-  'minimal-verification': `${MINIMAL_SESSION_COMMANDS} ${WRAPPER_RESULT}`.trimEnd(),
+  'minimal-verification': `${MINIMAL_RESULT} ${MINIMAL_SESSION_COMMANDS} ${WRAPPER_RESULT}`.trimEnd(),
   'local-placement': `${WAIT} ${REGRESSION}`,
   wrapper: `${WAIT} ${REGRESSION}`,
   'no-wrapper': `${WAIT} ${REGRESSION}`,

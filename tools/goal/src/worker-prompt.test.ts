@@ -305,10 +305,30 @@ test('minimal verification asks for one combined check after the outcome is writ
       'Acceptance, native, browser and root checks run after integration; you need not run them.',
     );
     expect(prompt).toContain('After the whole outcome is written, run one check');
-    expect(prompt).toContain('one wrapper invocation joining with &&');
+    expect(prompt).toContain('never joins them with `&&`');
+    expect(prompt).toContain("`sh -c 'cmd1; s=$?; cmd2 || s=1; cmd3 || s=1; exit $s'`");
+    expect(prompt).toContain('Fix every failure the check reports before the rerun');
     expect(prompt).toContain('Rerun it once after a fixed failure');
     expect(prompt).not.toContain('overrides');
     expect(prompt).not.toMatch(/do not run|must not run|prohibit/i);
+  } finally {
+    directory.close();
+  }
+});
+
+test('the documented combined check runs every command after one fails and exits nonzero', () => {
+  const directory = temporaryDirectory();
+  try {
+    writeFileSync(join(directory.path, 'verification-mode'), 'minimal\n');
+    const prompt = renderCheckProtocol('/work/trees/t1', 'Check the changed outcome.', directory.path);
+    const script = /sh -c '([^']+)'/.exec(prompt)![1]!;
+    const run = spawnSync(
+      'sh',
+      ['-c', script.replace('cmd1', 'false').replace('cmd2', 'echo second').replace('cmd3', 'echo third')],
+      { encoding: 'utf8' },
+    );
+    expect(run.stdout).toBe('second\nthird\n');
+    expect(run.status).toBe(1);
   } finally {
     directory.close();
   }
@@ -556,7 +576,9 @@ test('a worker is told where reference projects are and to read the ones its con
 /** The behaviour the minimal verification policy must state wherever it is rendered. */
 const MINIMAL_RULES = [
   'After the whole outcome is written, run one check',
-  'one wrapper invocation joining with &&',
+  'never joins them with `&&`',
+  "`sh -c 'cmd1; s=$?; cmd2 || s=1; cmd3 || s=1; exit $s'`",
+  'Fix every failure the check reports before the rerun',
   'typecheck of each changed workspace',
   'the changed test files',
   'services/kernel and services/auth may use the compiler database or a check host',

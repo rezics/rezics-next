@@ -29,11 +29,11 @@ filter|c|@/filter|-
 ui|u|@/ui:{*,.,hooks/*,hooks/use-highlighted-code,hooks/use-mobile,lib/*,list-row,shadcn/*,styles.css,utils}|document
 wapp|u|w/kernel/client.ts,w/paraglide/messages.d.ts,w/paraglide/messages.js,w/paraglide/runtime.d.ts,w/paraglide/runtime.js,w/session/index.ts,w/session/reader.ts,w/subject/definitions.ts,w/subject/quantity-presentation.ts,w/subject/reader.ts,w/subject/reading-state/index.tsx|client,composition,definitions,document,filter,ui,wcommerce,wcontent,wdisplay-definition-cache,wlibrary,wperformance,wsearch,wsemantic
 wcommerce|u|w/checkout/reader-origin.ts|client,money,ui,wapp,wcontent,wsearch
-wcontent|u|w/media/cover-src.ts|client,composition,definitions,document,krating,ui,waccounts,wapp,wlibrary,wsearch
+wcontent|u|w/community/realm-catalogue-entry.ts,w/community/realm-reading-return.ts,w/media/cover-src.ts|client,composition,definitions,document,krating,ui,waccounts,wapp,wlibrary,wsearch
 wdisplay-definition-cache|d|w/subject/display-definition-cache/index.ts|-
 wlibrary|u|w/library/follow-control.tsx|client,composition,definitions,filter,progress,ui,waccounts,wapp,wcontent,wperformance,wsearch,wsemantic
 wperformance|u|w/settings/preferences.ts|client,ui,waccounts,wapp,wcontent,wlibrary,wsearch
-wsearch|u|w/features/pages/agent-reader-read/index.ts,w/features/pages/showcase-work/index.ts,w/search/language-preferences.tsx,w/search/release-window.ts,w/search/search-window/index.ts,w/search/search.tsx|client,composition,curation-opening-read,definitions,document,filter,public-reaction-recovery,search-personal-recovery,search-text,subject-catalogue-metadata,subject-page-read-lifetime,ui,waccounts,wapp,wcontent,wlibrary,wperformance,wsemantic
+wsearch|u|w/features/pages/agent-reader-read/index.ts,w/features/pages/showcase-work/index.ts,w/search/language-preferences.tsx,w/search/query-text-limit.ts,w/search/release-window.ts,w/search/search-window/index.ts,w/search/search.tsx|client,composition,curation-opening-read,definitions,document,filter,public-reaction-recovery,search-personal-recovery,search-text,subject-catalogue-metadata,subject-page-read-lifetime,ui,waccounts,wapp,wcontent,wlibrary,wperformance,wsemantic
 wsemantic|u|-|client,composition,definitions,document,filter,kzones,ui,wapp,wcontent,wlibrary,wsearch
 Other modules: docs/architecture/modules.json
 
