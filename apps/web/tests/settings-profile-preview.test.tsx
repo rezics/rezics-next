@@ -156,3 +156,18 @@ test('matching current fields do not mark the local preview as saved while the o
   expect(html).toContain(m.settings_profile_preview_draft());
   expect(html).not.toContain(m.settings_profile_preview_saved());
 });
+
+test('a clean or confirmed current profile displays the saved preview while pending command readback stays local', () => {
+  for (const [changed, localAvatar, attempt, acknowledged, local] of [
+    [false, false, null, false, false],
+    [true, false, null, false, true],
+    [false, true, null, false, true],
+    [false, false, {}, false, true],
+    [false, false, {}, true, true],
+  ] as const) {
+    const hasUnsavedChanges = profileHasLocalPreview(changed, localAvatar, attempt, acknowledged);
+    expect(hasUnsavedChanges).toBe(local);
+    const html = renderToStaticMarkup(<ProfilePreview {...draft} hasUnsavedChanges={hasUnsavedChanges} />);
+    expect(html).toContain(local ? m.settings_profile_preview_draft() : m.settings_profile_preview_saved());
+  }
+});

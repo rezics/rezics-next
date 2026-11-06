@@ -8,7 +8,7 @@ import type { RealmHome } from './space';
 import { RealmParticipationView, type MembershipProblem, type MembershipRefreshState } from './realm-participation';
 import { changeRealmMembership } from './space-actions';
 import { readRealmJoinAdvice } from './realm-membership-actions';
-import { realmMembershipQuery, refreshRealmMembership } from './realm-membership-queries';
+import { realmMembershipQuery, refreshRealmMembership, type RealmViewer } from './realm-membership-queries';
 import {
   beginRealmMembershipRead,
   hasCurrentRealmMembership,
@@ -85,7 +85,11 @@ export function RealmMembership({
     if (admittedAction !== undefined && admittedAction !== 'sign-in') return null;
     if (realm.visibility === 'protected')
       return (
-        <section className="rounded-2xl bg-card p-3 text-card-foreground" aria-label={m.realm_membership_label()}>
+        <section
+          className="rounded-2xl bg-card p-3 text-card-foreground"
+          aria-label={m.realm_membership_label()}
+          data-slot="realm-membership"
+        >
           <p className="text-sm">{m.realm_protected_admission()}</p>
         </section>
       );
@@ -93,6 +97,7 @@ export function RealmMembership({
       <section
         className="rounded-2xl bg-card p-3 text-card-foreground"
         aria-label={m.realm_membership_label()}
+        data-slot="realm-membership"
         data-member-state="none"
       >
         <div className="flex flex-wrap items-center gap-3">
@@ -358,6 +363,7 @@ function NativeMembership({
       tabIndex={-1}
       aria-label={m.realm_membership_label()}
       className="flex min-w-0 flex-wrap items-center gap-3"
+      data-slot="realm-membership"
       data-member-state={source.viewer.state === 'member' ? source.viewer.membership : source.viewer.state}
       data-native-advice={
         attempt
@@ -465,7 +471,9 @@ function PersonalMembership({
   const [completed, setCompleted] = useState<RealmMembershipCompletion | null>(null);
   const delivered = useRef(new WeakSet<RealmMembershipCompletion>());
   const standingIsCurrent = hasCurrentRealmMembership(client, realm.id, subject, caller);
-  const viewer = standingIsCurrent ? query.data : undefined;
+  const viewer = standingIsCurrent
+    ? (query.data ?? client.getQueryData<RealmViewer>(realmMembershipQuery(realm.id, subject).queryKey))
+    : undefined;
   const currentPending = pending?.caller.isCurrent() ? pending : null;
   const currentBusy = busy?.caller.isCurrent() ? busy.value : false;
   const currentProblem = viewer || problem?.outcome === 'closed' ? problem : null;
@@ -740,9 +748,9 @@ function PersonalMembership({
       !csrfToken ||
       isLocked() ||
       currentPending ||
-      query.isFetching ||
       query.isError ||
       query.isPending ||
+      (!viewer && query.isFetching) ||
       (currentRecovery && !(retryLeave && action === 'leave' && currentRecovery.kind === 'uncertain')) ||
       (action === 'join' && realm.visibility === 'protected') ||
       (admittedAction !== undefined && admittedAction !== action)
@@ -790,9 +798,9 @@ function PersonalMembership({
             ? 'pending'
             : currentRecovery && viewer
               ? viewer.state
-              : !caller.isReady() || query.isPending || query.isFetching
+              : currentRefresh === 'checking' || (!viewer && (!caller.isReady() || query.isPending || query.isFetching))
                 ? 'loading'
-                : query.isError || !viewer
+                : !viewer || currentRefresh === 'unavailable'
                   ? 'unavailable'
                   : viewer.state
         }

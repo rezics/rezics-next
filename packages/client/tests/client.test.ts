@@ -3,6 +3,8 @@ import {
   createKernelClient,
   reviewedPersonRequests,
   isReviewedPersonEndpoint,
+  isReviewedPersonSource,
+  reviewedPersonMergeInput,
   type ReviewedPersonMerge,
   SESSION_HEADER,
   type Kernel,
@@ -328,4 +330,79 @@ test('reviewed Person requests use native evidence query and preserve ordered de
   expect(JSON.parse(remote.sent[1]!.body!)).toEqual(body);
   expect(isReviewedPersonEndpoint(endpoint)).toBe(true);
   expect(isReviewedPersonEndpoint({ ...endpoint, privateClaim: ID })).toBe(false);
+});
+
+test('reviewed Person evidence accepts exactly the four source keys with their interpreted identifiers', async () => {
+  const OTHER = '019a1b2c-3d4e-7f00-8a00-000000000002';
+  const claims = [
+    { source: 'bangumi', externalId: 'person:123', property: 'wdt:P6298', value: '123' },
+    { source: 'bangumi_cross_media', externalId: 'person:123', property: 'wdt:P6298', value: '123' },
+    { source: 'vndb', externalId: 's123', property: 'wdt:P3180', value: 's123' },
+    { source: 'vndb_cross_media', externalId: 's123', property: 'wdt:P3180', value: 's123' },
+  ] as const;
+  const endpoints = claims.map((claim) => ({
+    subject: ID,
+    revision: 7,
+    securityRevision: '9007199254740993',
+    claimTransactionId: ID,
+    ...claim,
+  }));
+  for (const endpoint of endpoints) {
+    expect(isReviewedPersonEndpoint(endpoint)).toBe(true);
+    expect(isReviewedPersonEndpoint({ ...endpoint, value: '124' })).toBe(false);
+  }
+  expect(isReviewedPersonSource({ source: 'bangumi_cross_media', externalId: 's123' })).toBe(false);
+  expect(isReviewedPersonSource({ source: 'vndb_cross_media', externalId: 'person:123' })).toBe(false);
+  expect(isReviewedPersonSource({ source: 'anilist', externalId: 'person:123' })).toBe(false);
+  const input = reviewedPersonMergeInput({
+    subjects: [ID, OTHER],
+    expectedIdentity: { endpoints: [endpoints[1], { ...endpoints[3], subject: OTHER }] },
+  });
+  expect(input.expectedIdentity.endpoints.map((endpoint) => endpoint.source)).toEqual([
+    'bangumi_cross_media',
+    'vndb_cross_media',
+  ]);
+  expect(() =>
+    reviewedPersonMergeInput({
+      subjects: [ID, OTHER],
+      expectedIdentity: { endpoints: [{ ...endpoints[3], subject: OTHER }, endpoints[1]] },
+    }),
+  ).toThrow(TypeError);
+  const remote = kernel([() => json(200, { subject, reviewedIdentity: null })]);
+  await reviewedPersonRequests(createKernelClient(ORIGIN, { fetch: remote.fetch })).read(ID, claims[3]);
+  expect(new URL(remote.sent[0]!.url).searchParams.get('reviewIdentitySource')).toBe('vndb_cross_media');
+  expect(new URL(remote.sent[0]!.url).searchParams.get('reviewIdentityExternalId')).toBe('s123');
+});
+
+test('installed identity operation poll types distinguish pending from published results', async () => {
+  const OTHER = '019a1b2c-3d4e-7f00-8a00-000000000002';
+  const remote = kernel([
+    () => json(200, { operation: { id: ID, done: false } }),
+    () =>
+      json(200, {
+        operation: {
+          id: ID,
+          done: true,
+          result: { survivor: ID, redirected: OTHER, revision: 2 },
+        },
+      }),
+  ]);
+  const reviewed = reviewedPersonRequests(createKernelClient(ORIGIN, { fetch: remote.fetch }));
+  const pending = await reviewed.operation(ID);
+  expect(pending.status).toBe(200);
+  expect(pending.data?.operation).toEqual({ id: ID, done: false });
+  const published = await reviewed.operation(ID);
+  expect(published.data?.operation).toEqual({
+    id: ID,
+    done: true,
+    result: { survivor: ID, redirected: OTHER, revision: 2 },
+  });
+  expect(remote.sent.map((row) => row.url)).toEqual([
+    `${ORIGIN}/v1/subjectIdentityOperations/${ID}`,
+    `${ORIGIN}/v1/subjectIdentityOperations/${ID}`,
+  ]);
+  expectTypeOf(published.data!.operation).toMatchTypeOf<
+    | { id: string; done: false }
+    | { id: string; done: true; result: { survivor: string; redirected: string; revision: number } }
+  >();
 });

@@ -1303,6 +1303,10 @@ language through the client's `accept-language`.
   also adds 1 D. Boards and publications are single pages, never walked.
 - **Growth check:** `tests/realm-pages-cost.test.ts`: `the Realm page reads its fixed set once, however many boards, publications and memberships there are` at 1, 10 and 100
 
+Decision: when the Realm is unavailable, the page shows its own unavailable state and never substitutes Global boards or publications.
+Decision: `RealmCommunityBoards` is the one community shelf and shows native recent discussion prefixes when home or board-shelf admits them; membership completion restores the header control rather than a shelf heading.
+Decision: the VN Realm catalogue-to-community walk uses actual seeded work identities. `seed:dev` still publishes a Global Board, so the walk creates one public visual-novel Realm through the documented Space, Realm, Board, thread and publication commands, then discovers or opens that Realm. It never substitutes Global.
+
 ### Realm claim review
 
 The existing Space/Realm home mounts `community/realm-claim-controls.tsx` in its management area. The native Realm

@@ -235,7 +235,7 @@ function CurrentCopiesRead({
               if (origin.isCurrent()) void query.refetch();
             }}
           >
-            {m.subject_view_retry()}
+            {windows.pending ? m.library_window_retry() : m.subject_view_retry()}
           </button>
         ) : null}
       </div>

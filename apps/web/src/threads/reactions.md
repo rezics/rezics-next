@@ -1,11 +1,18 @@
 # Reaction caller lifetime
 
+Acceptance pairs the focused unavailable-Subject and mounted-thread lifetime regressions with a real development
+showcase thread and post. Two ordinary members independently add and remove an admitted reaction, refresh, and
+compare their own slot and public totals with fresh native reads after each write. An anonymous reader sees public
+totals without a member selection; returning through Home or Context retains one action host and the current
+reader's state. The existing reaction command and reader remain the authority throughout this journey.
+
 `ThreadReactions` owns one mounted reader/target visit. Changing target kind or ID, withdrawing signed-in admission
 or personal readiness, unmounting, or observing loss/replacement of the browser session retires that visit. Account
 and CSRF token are both identity fields. Replacing the QueryClient also creates a new visit, even with identical
 session fields. Even an observed away/back transition creates a new visit. The shared
 `Reactions` child remounts with the current controlled counts and selection; old optimistic state and refusal copy
-cannot follow it. Ordinary rerenders, callback changes and count echoes retain the current serialized queue.
+cannot follow it. Ordinary rerenders, callback changes and count echoes retain the current serialized queue. Each
+queued command keeps the refresh callback of the render that issued it, so a later replacement does not redirect it.
 Every committed success update of the exact one-segment session Query retires earlier work synchronously, even
 when all serialized fields are equal and structural sharing retains the data object. Fetch starts, observer
 attachment/results notifications and invalidation without a successful replacement preserve current work.
@@ -63,3 +70,28 @@ Equal-success regression campaigns also cover manual cache updates and real Quer
 commits, through the ordinary Subject consumer and production Zone personal loader. Fresh admissions share one
 matching own response among mounted readers; independent Zone preferences, Library and public counts keep their
 original load. These authored campaigns and the original native cost campaigns remain **UNRUN** until integration.
+
+Zone appearance merging retains the document root while its source document and appearance are unchanged, so
+personal readback cannot remount the composition's action host and lose queued choices or focus. Equal session
+success retains the combined Zone payload; Follow's operation callbacks still require its current admission
+under the shared session contract. A changed browser session state retires the combined source and loads a new one;
+removing the session cache requires an explicit fresh session read before private recovery. The focused tests use a known initial
+session for reaction recovery and cover session loss separately.
+
+Composition slots invoke Puck's render callbacks instead of mounting those newly created functions as component
+types. Pending session fetches and current private readback therefore retain the same action elements and queue;
+the reaction caller still retires them on a committed session replacement through its existing admission.
+
+Mounted regression transports supply the configured definition origin as well as the native client, so Library
+choices come from the recorded release through its production reader. Follow cost assertions compare with the
+settled StrictMode mount baseline. Healthy same-reader session replacement and reaction-only fetch notifications
+preserve that edge read under Follow's existing operation lifetime. Public Zone route fixtures provide the Worker's
+declared startup secret without authenticating a persona; they remain separate from seeded browser/native acceptance.
+
+Mounted regressions flush native completion through the React consumer before inspecting its DOM, and await
+Follow's enabled control before asserting its independent read count after a session replacement. Public reaction
+totals use their accessible names, and overflow entries use their menuitem roles across presentation modes.
+
+Provider replacement regressions retain the same delivered Zone page, isolating private reaction retirement from
+a separate page replacement. Actual session loss withdraws the action host; recovery requires a fresh Follow read
+and enabled controls, with subsequent independent read costs measured from that recovered mount's baseline.

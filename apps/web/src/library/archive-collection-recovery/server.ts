@@ -164,3 +164,15 @@ export const cancelArchiveCollectionRecovery = createServerFn({ method: 'POST' }
     return { uploadId: requireId(input.uploadId) };
   })
   .handler(({ data }) => port().cancel({ kind: 'cancel', uploadId: data.uploadId }));
+
+export const readReceivingCollection = createServerFn({ method: 'GET' })
+  .validator((input: unknown) => {
+    if (!object(input)) throw new Error('Invalid Collection recovery request');
+    if (input.cursor !== undefined && (typeof input.cursor !== 'string' || input.cursor.length > RECOVERY_CURSOR_CHARS))
+      throw new Error('Invalid Collection recovery request');
+    return {
+      collectionId: requireId(input.collectionId),
+      ...(typeof input.cursor === 'string' ? { cursor: input.cursor } : {}),
+    };
+  })
+  .handler(({ data }) => port().receivingCollection(data.collectionId, data.cursor));

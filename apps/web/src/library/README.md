@@ -113,9 +113,9 @@ fallback language. Unavailable edition/profile/detail reads use the existing ret
 The final action row stays reachable in the form's scroll surface, including the keyboard-sized viewport and bottom
 safe area. Pending and uncertain commands announce their state. An explicit retry sends the captured command with
 its original credential, key, kind, revision and fields; later visible edits never rewrite that command. Conflicts
-only adopt a newly read revision after explicit review and the existing draft-discard decision. Delete cancellation
-returns to the original connected delete control, and save/delete/readback still use the existing native writer and
-inventory address/occurrence rules.
+adopt newly read values for untouched draft fields after explicit review, keep local edits including a cleared
+amount or field, and take the incoming revision without a discard prompt. Delete cancellation returns to the original connected delete control, and
+save/delete/readback still use the existing native writer and inventory address/occurrence rules.
 
 Shell close, Escape, backdrop, drawer dismissal and browser navigation use `CopyDraftNavigation`. Dirty drafts need
 a deliberate discard; pending or uncertain commands keep the editor open. A completed shell close can return focus

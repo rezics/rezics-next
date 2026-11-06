@@ -49,6 +49,8 @@ function site(): Promise<string> {
     };
     child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
       cwd: app,
+      // Public fixture routes do not authenticate, but the Worker declares this required secret at startup.
+      env: { ...process.env, WEBSITE_CLIENT_KEY: 'unused-by-public-zone-fixtures' },
       detached: true,
       stdio: ['ignore', 'pipe', 'pipe'],
     });

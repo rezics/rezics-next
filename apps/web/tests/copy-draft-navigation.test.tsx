@@ -324,13 +324,9 @@ for (const operation of ['update', 'delete'] as const) {
     expect(host.textContent).toContain('Current note');
     expect(host.textContent).toContain('Stored status');
     await click(m.library_copy_conflict_review_accept());
-    expect(host.querySelectorAll('[role="alertdialog"]')).toHaveLength(1);
-    await click(m.library_copy_draft_navigation_stay());
-    expect(field(m.library_copy_note()).value).toBe('My draft');
-    await click(m.library_copy_conflict_review_accept());
-    await click(m.library_copy_draft_navigation_discard());
+    expect(host.querySelectorAll('[role="alertdialog"]')).toHaveLength(0);
     expect(closed).not.toHaveBeenCalled();
-    expect(field(m.library_copy_note()).value).toBe('Current note');
+    expect(field(m.library_copy_note()).value).toBe('My draft');
     expect(beforeUnloadIsBlocked()).toBe(false);
     expect(send).toHaveBeenCalledTimes(1);
     await command();

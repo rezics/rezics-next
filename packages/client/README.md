@@ -23,7 +23,12 @@ The declarations in `src/kernel/` are generated through managed compiler placeme
 
 Decision: until whole-Kernel declaration emission succeeds, the personal VNDB binding mirrors the mounted
 Progress selection/result and conditional-vote additions in `services/kernel/src/library/list-import-vndb-routes.ts`.
-It preserves the generated methods and authenticated transport and yields to the generated Progress review union.
+It preserves the generated methods and authenticated transport and yields to the generated Progress review union
+when that union is present on the installed `libraryImports.vndb` method.
+
+Decision: merge admission and poll use the generated `subjects.$merge` 202 body and
+`src/kernel/semantic/http/identity-operations.d.ts` until whole-Kernel emission publishes
+`subjectIdentityOperations`. Callers keep authenticated transport; a synchronous 200 merge is not admission.
 
 Decision: until declaration emission succeeds, the Copy list compatibility seam mirrors the mounted native
 kind/status query and filterOptions schema; Web derives its wire types only from this official client.

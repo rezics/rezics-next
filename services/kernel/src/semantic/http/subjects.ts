@@ -4,6 +4,7 @@ import { readDocument } from '../../content/document-read.ts';
 import {
   ReviewedPersonEndpointSchema,
   ReviewedPersonExpectationSchema,
+  ReviewedPersonGuardUnavailableError,
   validReviewedPersonExpectation,
   isReviewedPersonSource,
 } from '../reviewed-person-identity.ts';
@@ -46,7 +47,7 @@ import { activeRelease, GLOBAL_CONTEXT, readRelease, StaleEditorialHeadError } f
 import { effectiveRelease } from '../extensions.ts';
 import { termContext } from '@rezics/definitions/extension';
 import { partitionOf, routeOf } from '../../route/route.ts';
-import type { Access, AccountActor, Resource } from '../../request/access.ts';
+import type { Access, AccessCheck, AccountActor, Resource } from '../../request/access.ts';
 import { accessCheck, AuthenticationError } from '../../request/access.ts';
 import { readRevisionDetail } from '../revision-detail.ts';
 import { createApp } from '../../http/app.ts';
@@ -293,6 +294,7 @@ function candidateError(error: unknown): never {
     if (error.code === 'identity_epoch_busy') throw new ProblemError('overloaded');
     throw new ProblemError('partition_unavailable');
   }
+  if (error instanceof ReviewedPersonGuardUnavailableError()) throw new ProblemError('atomic_guard_unavailable');
   if (error instanceof SubjectNotFoundError) throw new ProblemError('not_found');
   if (error instanceof ContextNotFoundError) throw new ProblemError('not_found');
   if (error instanceof EditorialConflictError) throw new ProblemError('conflict');
@@ -1064,6 +1066,7 @@ function subjectRoutes(
             'semantic_not_ready',
             'overloaded',
             'partition_unavailable',
+            'atomic_guard_unavailable',
             'transaction_retry_exhausted',
             'deadline_exceeded',
           ),
@@ -1084,17 +1087,20 @@ function subjectRoutes(
         if (!active) throw new ProblemError('semantic_not_ready');
         const [, redirected] = [...body.subjects].sort();
         const commandRoute = routeOf(redirected!);
-        const authorization = await authorizeSemanticWrite({
-          access: access(),
-          actor,
-          action: 'subject:merge',
-          anchor: globalContextAnchor,
-          pool,
-          deadline: job.deadline,
-          targetPartition: commandRoute === null ? 0 : partitionOf(commandRoute),
-          authorizeCommand,
-          denied: () => new SubjectAccessDeniedError(),
-        });
+        // The admission and the redirect run on different native partitions; each needs its own authorization.
+        const authorizationAt = (targetPartition: number) =>
+          authorizeSemanticWrite({
+            access: access(),
+            actor,
+            action: 'subject:merge',
+            anchor: globalContextAnchor,
+            pool,
+            deadline: job.deadline,
+            targetPartition,
+            authorizeCommand,
+            denied: () => new SubjectAccessDeniedError(),
+          });
+        const authorization = await authorizationAt(commandRoute === null ? 0 : partitionOf(commandRoute));
         try {
           const { component, ...result } = await admission.run('normal', job, () =>
             admitMergeSubjects(pool, {
@@ -1107,6 +1113,7 @@ function subjectRoutes(
               digest: requestDigest('subject.merge', actor, body),
               release: active,
               authorization,
+              authorizationFor: authorizationAt,
               deadline: job.deadline,
               clock,
             }),
@@ -1172,28 +1179,40 @@ function subjectRoutes(
           throw new ProblemError('not_found');
         };
         try {
+          // Discover the immutable tuple without disclosing it; accessCheck prepares through the pool, so every
+          // preparation runs outside the transaction that consumes it.
+          const discovered = await admission.run('normal', job, () =>
+            withReadTransaction(pool, (tx) => observeSubjectIdentityOperation(tx, params.id), job.deadline),
+          );
+          if (!discovered) return conceal();
+          const reads: { subject: string; route: number; readable: AccessCheck }[] = [];
+          for (const subject of [discovered.original, discovered.terminal]) {
+            const route = routeOf(subject);
+            if (route === null) return conceal();
+            const readable = await accessCheck(
+              access(),
+              actor,
+              'subject:read',
+              { route, id: subject, eligibility: subjectReadEligibility({ route, id: subject }) },
+              { pool, deadline: job.deadline },
+            );
+            reads.push({ subject, route, readable });
+          }
+          // One final read transaction consumes merge authority, both reads, visibility and the current observation.
           const observed = await admission.run('normal', job, () =>
             withReadTransaction(
               pool,
               async (tx) => {
                 if (!(await mergeGrant(tx))) return null;
-                const saved = await observeSubjectIdentityOperation(tx, params.id);
-                if (!saved) return null;
-                for (const subject of [saved.original, saved.terminal]) {
-                  const route = routeOf(subject);
-                  if (route === null) return null;
-                  const readable = await accessCheck(
-                    access(),
-                    actor,
-                    'subject:read',
-                    { route, id: subject, eligibility: subjectReadEligibility({ route, id: subject }) },
-                    { pool, deadline: job.deadline },
-                  );
+                const current = await observeSubjectIdentityOperation(tx, params.id);
+                if (!current || current.original !== discovered.original || current.terminal !== discovered.terminal)
+                  return null;
+                for (const { subject, route, readable } of reads) {
                   if (!(await readable(tx))) return null;
                   const visible = await readVisibility.run(tx, { route, subject_id: subject });
-                  if (!visible || visible.visibility !== 'visible') return null;
+                  if (visible?.visibility !== 'visible') return null;
                 }
-                return saved;
+                return current;
               },
               job.deadline,
             ),

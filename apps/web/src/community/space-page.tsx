@@ -56,6 +56,7 @@ import { withSubjectVisitReturn } from '../features/pages/subject-visit-navigati
 import { requestLanguages } from '../kernel/languages';
 import {
   useRealmCompletionFocus,
+  isRealmPublicationCompletion,
   type RealmCompletion,
   type RealmCompleted,
   type RealmPublicationCompletion,
@@ -673,6 +674,7 @@ function SpaceHome({
       const sourceHref = realmReadingReturn(readingReturnRef.current, locale);
       const routeHref = realmReadingReturn(initialReturn, locale);
       if (
+        !isRealmPublicationCompletion(receipt) ||
         !realm ||
         !lifetime ||
         receipt.realmId !== realm.id ||

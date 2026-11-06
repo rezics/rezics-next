@@ -341,6 +341,9 @@ export async function seedReviewedCatalogue(input: {
       };
       const pending = session.bindings.prepare(o, sourceDigest(create), { commands: [create] });
       const result = await input.port.batch(JSON.parse(pending.bytes), input.signal);
+      const bootstrap = result.results[0]!;
+      if ('problem' in bootstrap)
+        throw new Error(`Reviewed catalogue bootstrap ${seed.key}: ${JSON.stringify(bootstrap.problem)}`);
       session.bindings.acknowledge(o, pending.key, result);
       const claim = session.bindings.claim(o);
       ensure(claim?.state === 'bound');
@@ -368,6 +371,9 @@ export async function seedReviewedCatalogue(input: {
         const journal = session.bindings.journal(o, command.key);
         ensure(journal);
         const result = await input.port.batch(JSON.parse(journal.bytes), input.signal);
+        const proposal = result.results[0]!;
+        if ('problem' in proposal)
+          throw new Error(`Reviewed catalogue proposal ${seed.key}: ${JSON.stringify(proposal.problem)}`);
         session.bindings.acknowledge(o, command.key, result);
         store.acknowledge(run, result, { recordKey: o.external_id });
         const entry = result.results[0]!;

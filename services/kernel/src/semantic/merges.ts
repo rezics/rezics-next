@@ -124,7 +124,10 @@ export async function admitMergeSubjects(
     idempotencyKey: string;
     digest: Uint8Array;
     release: { digest: string; release: Release };
+    /** The redirect command's authorization, prepared for the redirected Subject's partition. */
     authorization: CommandAuthorization;
+    /** Authorizations for the admission's own partitions; the store asks for each one it runs on. */
+    authorizationFor: (partition: number) => Promise<CommandAuthorization>;
     deadline?: number;
     clock?: () => Date;
   } & (
@@ -165,7 +168,7 @@ export async function admitMergeSubjects(
         clientId: options.actor.clientId,
         requestedBy: options.actor.requestedBy,
       },
-      authorization: options.authorization,
+      authorizationFor: options.authorizationFor,
       ...(options.deadline === undefined ? {} : { deadline: options.deadline }),
       ...(options.clock === undefined ? {} : { clock: options.clock }),
     },

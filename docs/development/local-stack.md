@@ -42,6 +42,7 @@ changing origins or restarting the stack does not renew existing session authori
 ```sh
 task dev:persona
 task dev
+
 # In another terminal, after the stack is ready:
 task seed:dev
 ```
@@ -245,6 +246,30 @@ Decision: keep one causal binding regression and the existing launcher assertion
 loopback Auth issuer, audience, JWKS URL, Kernel host and API port in `services/kernel/.env`; start applies the same
 tuple after reading that file, overriding a previous stack's identity. Native Library growth and browser qualification
 remain separate acceptance outcomes.
+
+## Seeded journey walks
+
+One area outcome shares one admitted current-revision stack session and one supported seed result. Start that session
+with `bun services/auth/scripts/dev-stack.ts walk -- <command...>`. The slot lock is the admission: the environment
+names the slot, and the command inherits that stack's container names, loopback ports and origins. Obtain the
+controller-owned stack, browser and persona handles, then record the source revision, completed `result.json` and
+actual native identities. Missing credentials, private exports or required seeded roles are setup inputs for the
+controller. Keep actual doctor volumes and live process and browser sessions. Use `127.0.0.1` throughout.
+
+Inside `<command>`, provision with `bun services/auth/scripts/dev-stack.ts persona` and seed with
+`bun scripts/datasets/cross-media-seed.ts --dev` after loading the private `seed.env` that persona wrote. Do not run
+`task seed:dev` or `task dev:persona` inside a walk: those depend on `dev:infra` and would start the default-port
+stack beside the admitted slot. Ordinary member personas use actual signup; privileged roles come from native
+admission. Browser launch sets `TMPDIR` to a short root such as `/tmp/rw` when the inherited root is missing, so
+Chromium Unix socket paths fit; the controller supplies a healthy connector if that root is unavailable.
+
+Execute real pages through the production BFF, API and native commands for every served persona. Trace and repair
+defects where they occur, then rerun the complete area journey. Record secret-free source, seed and persona
+provenance, route, request and response operands, visible DOM, and independent native readback after writes under
+`.temp`. Native and browser execution happen inside the attempt. Phone 390 and desktop 1280/1440, both themes, primary
+en/zh-Hant/ja labels and the eight launch locales use one session per authorized persona. Focus checks on actual
+repairs. Absent external input stays explicitly unaccepted. Apply native authorization, command lifetime and strict
+money contracts.
 
 ## Cross-media dump cache
 

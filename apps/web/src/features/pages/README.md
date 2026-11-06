@@ -8,6 +8,10 @@ locale replacement. A new source establishes a new reading. Equal question/cache
 actual source replacement retires it. Public DTOs may describe visible controls, but only the current prepared
 observation and native admission can make a private action current.
 
+## Composition render identity
+
+Decision: `CompositionRender` keeps its Puck render config while its registry has equal entries and its definitions, root and document root are unchanged, and each slot callback is invoked for its content, so composed controls stay mounted through sibling and route re-renders while a new document or registry entry still remounts them.
+
 ## Platform Home
 
 The anonymous catalogue reads the active native `/` composition once and renders its supplied `TypeList` windows with the existing Search owner, limits and total read budget. A 404 is missing, rejected native requests remain rejected, and 5xx or fetch dependency failures remain unavailable with deliberate reload. The checked-in platform profile continues to declare the four intended populations; changing its source does not activate it. The publisher owns active profile delivery.

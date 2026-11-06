@@ -22,11 +22,11 @@ The mounted visit captures the existing encrypted original-sender credential bef
 function admits the expected current viewer and credential epoch before opening that credential. The browser keeps
 it only with the mounted visit; an uncertain command never swaps to a newly captured sender.
 
-The file control admits an original file up to 34 MiB before reading its text. The generated upload sends that text
-unchanged. Only the native decoder interprets JSON, with depth 32, 100,000 records, 32 MiB compact record bytes and
+The file control admits an original file up to 34 MiB before reading its text. The generated upload sends the installed V1/V2/V3 text
+unchanged after any version-4 projection. Only the native decoder interprets JSON, with depth 32, 100,000 records, 32 MiB compact record bytes and
 120,000 bytes per record. Completed V1/V2/V3 artifacts follow current native support when the installed review client
-has an operand; V4 remains refused, even though
-new exports emit it. Malformed, incomplete, unsupported and inconsistent files retain their native outcomes.
+has an operand. A completed version 4 capture is projected to the installed version 3 envelope at upload, so Entry
+recovery can reuse a current owner export without sending refused provider sections. Malformed, incomplete, unsupported and inconsistent files retain their native outcomes.
 
 One upload identity and one preview page of at most 100 records are retained. Inventory shows native computed
 section counts, capture and treatment alongside validated overall manifest rows and compact bytes. It explains empty
@@ -109,10 +109,14 @@ Next, Refresh and read Retry each add one preview or result request at the same 
 never scans every page or account-wide labels and adds no smaller native cap. Source bounds are not observed
 byte/growth acceptance.
 
+Decision: keep the original admitted text for Restart after an acknowledged disposition, and offer a completed export
+from this signed-in owner. Acknowledged Entry destinations reopen Library and Subject readers; journals reopen the
+current Session.
+
 Focused Web tests cover mounted file admission, three preview windows, independent reader histories, empty selected
-projections with native continuation, exact failed-read retry, immutable review/apply, pending cancellation,
+projections with native continuation, exact failed-read retry, original-intent retries, immutable review/apply, pending cancellation,
 acknowledged destination retention, current Entry and label-assignment reads, and original request bounds using the
-existing typed native fixture. Retained assessment and source-observation notices explain fields that cannot yet be
+existing typed native fixture. The native Web owner walk uploads a completed export and rereads current Entry facts. Retained assessment and source-observation notices explain fields that cannot yet be
 selected, while retaining evidence unchanged. Existing controller fence and bounded-growth assertions remain. Browser,
 installed-root, byte/caller observations, broader native acceptance and promotion remain integration
 responsibilities.

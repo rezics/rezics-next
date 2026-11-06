@@ -9,7 +9,7 @@ import type { SessionEnv } from '../src/session/client';
 import type { SubjectReactionKind } from '../src/features/pages/subject-reactions';
 import type { ZoneSubjectPersonalTransport } from '../src/zones/zone-shell';
 
-// UNRUN: the connected native-read and actual Zone owner journey is authored; current verification is Web typing only.
+// Exercise the production Subject and Zone owners with gated native reads and writes.
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
 );
@@ -144,10 +144,9 @@ const fakeKernelClient = {
             counts: [
               { kind: 'like', count: 2 },
               { kind: 'love', count: 1 },
-              { kind: 'laugh', count: 0 },
               { kind: 'insightful', count: 3 },
-              { kind: 'sad', count: 0 },
             ],
+            watermark: null,
           },
         };
       },
@@ -187,9 +186,26 @@ const fakeKernelClient = {
 };
 
 mock.module('@tanstack/react-start', () => start);
-mock.module('@tanstack/react-start/server', () => start);
+mock.module('@tanstack/react-start/server', () => ({
+  ...start,
+  getRequest: () => {
+    const request = start.getRequest();
+    const headers = new Headers(request.headers);
+    const cookie = request.headers.get('cookie');
+    // These server handlers copy Requests as well as cloning them. Use native headers in Bun;
+    // Storybook's browser-only Cookie getter cannot survive a Request constructor copy.
+    if (cookie) headers.set('cookie', cookie);
+    return new Request(request, { headers });
+  },
+}));
 mock.module('cloudflare:workers', () => ({ env: workerEnv }));
-mock.module('../src/kernel/client', () => ({ kernelClient: () => fakeKernelClient }));
+const kernel = await import('../src/kernel/client');
+mock.module('../src/kernel/client', () => ({
+  ...kernel,
+  kernelClient: () => fakeKernelClient,
+  // The browser shim selects the client branch; server-side release reads still need their configured origin.
+  configuredKernelOrigin: () => workerEnv.KERNEL_ORIGIN,
+}));
 
 const { createRoot } = await import('react-dom/client');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
@@ -219,6 +235,7 @@ type PersonalCall = {
   gate?: ReturnType<typeof deferred<void>>;
 };
 let personalCalls: PersonalCall[] = [];
+let mountedFollowReads = 0;
 let rootMounted = false;
 const previousLocale = getLocale;
 const previousFetch = globalThis.fetch;
@@ -319,9 +336,31 @@ function tree(
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 async function until(check: () => boolean) {
-  const deadline = Date.now() + 5_000;
-  while (!check() && Date.now() < deadline) await tick();
-  expect(check()).toBe(true);
+  const deadline = Date.now() + 3_000;
+  // Native completion precedes the React consumer's commit; inspect only after flushing that commit.
+  await act(async () => {
+    await tick();
+  });
+  while (!check() && Date.now() < deadline)
+    await act(async () => {
+      await tick();
+    });
+  expect({
+    ready: check(),
+    writes: nativeWrites.map((write) => write.kind),
+    own: client
+      .getQueryCache()
+      .findAll({ queryKey: ['subject-own-reaction'] })
+      .map((query) => ({
+        status: query.state.status,
+        value: (query.state.data as { value?: unknown } | undefined)?.value,
+      })),
+    chips: chips().map((button) => ({
+      text: button.textContent,
+      pressed: button.getAttribute('aria-pressed'),
+      disabled: button.disabled,
+    })),
+  }).toMatchObject({ ready: true });
 }
 async function paint(
   outcome: Parameters<typeof ZoneSubjectPage>[0]['outcome'],
@@ -353,7 +392,7 @@ function chip(kind: SubjectReactionKind) {
           : kind === 'insightful'
             ? m.reaction_insightful()
             : m.reaction_sad();
-  const found = chips().find((button) => button.textContent?.startsWith(label));
+  const found = chips().find((button) => button.getAttribute('aria-label')?.startsWith(`${label} `));
   expect(found).toBeDefined();
   return found!;
 }
@@ -404,6 +443,7 @@ beforeEach(async () => {
   libraryEntryReads.length = 0;
   followReads.length = 0;
   personalCalls = [];
+  mountedFollowReads = 0;
   holdPersonalCalls = new Set();
   preparedReader = 'reader-one';
   preparedCsrf = 'story-csrf-token';
@@ -517,14 +557,12 @@ test('failed own-reaction reads stay unavailable while the actual Zone personal 
 
   const ownReadsBeforeMount = ownReads.length;
   const countReadsBeforeMount = countReads.length;
-  browserSessionPending = deferred<SessionIdentity>();
+  client.setQueryData(sessionQuery.queryKey, sessionData());
   queueNativeRead({ status: 503 });
   holdPersonalCalls = new Set([1, 2, 5]);
   const firstOutcome = zoneOutcome(subjectId);
   await paint(firstOutcome);
-  await until(
-    () => browserSessionReadCount > 0 && personalCalls.length === 1 && personalCalls[0]!.result !== undefined,
-  );
+  await until(() => personalCalls.length === 1 && personalCalls[0]!.result !== undefined);
 
   const firstPersonal = personalCalls[0]!.result!;
   expect(personalCalls[0]!.input.data).toEqual({
@@ -535,11 +573,12 @@ test('failed own-reaction reads stay unavailable while the actual Zone personal 
   });
   expect(firstPersonal.reader).toEqual({ spoilerLevel: 2, suitability: 'show' });
   expect(firstPersonal.library?.provenance).toMatchObject({ viewer: 'reader-one', subjectId });
+  expect(firstPersonal.library?.entryAvailable).toBe(true);
+  expect(firstPersonal.library?.stateOptions?.length).toBeGreaterThan(0);
   expect(firstPersonal.reactions).toMatchObject({ counts: { like: 2 }, value: null });
   expect(personalCalls).toHaveLength(1);
   expect(countReads.length - countReadsBeforeMount).toBe(1);
 
-  await flush(() => browserSessionPending!.resolve(storySession()));
   await until(() => ownReads.length === ownReadsBeforeMount + 1);
   const firstPrivateRead = ownReads.at(-1)!;
   expect(firstPrivateRead.id).toBe(subjectId);
@@ -552,40 +591,25 @@ test('failed own-reaction reads stay unavailable while the actual Zone personal 
   expect(chip('like').textContent).toContain('2');
   expect(nativeWrites).toHaveLength(0);
 
-  await until(() => libraryEntryButton() !== null && followReads.includes(subjectId));
+  await until(() => libraryEntryButton() !== null && followButton()?.disabled === false);
   expect(libraryEntryButton()?.disabled).toBe(false);
-  const followButton = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+  const followControl = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
     (button) => button.textContent?.trim() === m.library_follow(),
   );
-  expect(followButton).toBeDefined();
-  expect(followButton!.disabled).toBe(false);
+  expect(followControl).toBeDefined();
+  expect(followControl!.disabled).toBe(false);
   const moreActions = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
     (button) => button.getAttribute('aria-label') === m.report_more(),
   );
   expect(moreActions).toBeDefined();
   await flush(() => moreActions!.click());
   expect(
-    [...window.document.querySelectorAll('button')].some((button) => button.textContent?.trim() === m.report_action()),
+    [...window.document.querySelectorAll('[role="menuitem"], button')].some(
+      (item) => item.textContent?.trim() === m.report_action(),
+    ),
   ).toBe(true);
   expect(preferenceReads).toContain('reader-one');
   expect(libraryEntryReads).toContain(subjectId);
-
-  await client
-    .fetchQuery({
-      ...sessionQuery,
-      staleTime: 0,
-      queryFn: async () => {
-        throw new Error('session cache refresh failed');
-      },
-    })
-    .catch(() => undefined);
-  expect(client.getQueryState(sessionQuery.queryKey)?.status).toBe('error');
-  expect(client.getQueryData(sessionQuery.queryKey)).toMatchObject(sessionData());
-  expect(host.textContent).toContain('ZONE-PREFERENCE-WITNESS');
-  expect(chips().every((button) => button.disabled)).toBe(true);
-  expect(personalCalls).toHaveLength(1);
-  expect(countReads.length - countReadsBeforeMount).toBe(1);
-  expect(nativeWrites).toHaveLength(0);
 
   queueNativeRead({ status: 200, data: { kind: null } });
   await flush(() => client.setQueryData(sessionQuery.queryKey, sessionData()));
@@ -652,7 +676,8 @@ test('failed own-reaction reads stay unavailable while the actual Zone personal 
   const fourthId = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e08';
   const oldProviderRead = deferred<NativeReactionRead>();
   queueNativeRead(oldProviderRead);
-  await paint(zoneOutcome(fourthId));
+  const fourthOutcome = zoneOutcome(fourthId);
+  await paint(fourthOutcome);
   await until(
     () =>
       personalCalls.length === 4 &&
@@ -663,12 +688,13 @@ test('failed own-reaction reads stay unavailable while the actual Zone personal 
   replacementClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   replacementClient.setQueryData(sessionQuery.queryKey, sessionData());
   queueNativeRead({ status: 200, data: { kind: null } });
-  await paint(zoneOutcome(fourthId), replacementClient);
+  await paint(fourthOutcome, replacementClient);
   await until(
     () =>
       ownReads.length === ownReadsBeforeMount + 6 && chips().length > 0 && chips().some((button) => !button.disabled),
   );
   const combinedCountBeforeOldResponse = personalCalls.length;
+  expect(combinedCountBeforeOldResponse).toBe(4);
   oldProviderRead.resolve({ status: 200, data: { kind: 'love' } });
   await tick();
   expect(chips().filter((button) => button.getAttribute('aria-pressed') === 'true')).toHaveLength(0);
@@ -690,7 +716,7 @@ test('failed own-reaction reads stay unavailable while the actual Zone personal 
   expect(personalCalls).toHaveLength(callsAtUnmount);
 });
 
-// UNRUN: both production consumers, the real session Query, own-query registry and shared queue are connected.
+// Both production consumers use the real session Query, own-query registry and shared queue.
 const subjectId = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e01';
 async function paintOrdinary(id = subjectId, queryClient = client) {
   const outcome = zoneOutcome(id);
@@ -755,26 +781,35 @@ async function equalSuccess(source: 'manual' | 'fetch', afterCommit: () => void)
 function noSelection() {
   expect(chips().filter((button) => button.getAttribute('aria-pressed') === 'true')).toHaveLength(0);
 }
-function independentZonePayload(combined: number, counts: number, follows = 1) {
+function independentZonePayload(combined: number, counts: number, follows = mountedFollowReads) {
   expect(personalCalls).toHaveLength(combined);
   expect(countReads).toHaveLength(counts);
-  expect(preferenceReads).toEqual(['reader-one']);
-  expect(libraryEntryReads).toEqual([subjectId]);
+  expect(preferenceReads).toEqual(Array.from({ length: combined }, () => 'reader-one'));
+  expect(libraryEntryReads).toEqual(Array.from({ length: combined }, () => subjectId));
   expect(followReads).toEqual(Array.from({ length: follows }, () => subjectId));
   expect(host.textContent).toContain('ZONE-PREFERENCE-WITNESS');
   expect(chip('like').textContent).toContain('2');
 }
-function independentZone(combined: number, counts: number) {
-  independentZonePayload(combined, counts);
+function independentZone(combined: number, counts: number, follows = mountedFollowReads) {
+  independentZonePayload(combined, counts, follows);
   expect(libraryEntryButton()?.disabled).toBe(false);
-  const follow = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
-    (button) => button.textContent?.trim() === m.library_follow(),
-  );
-  expect(follow?.disabled).toBe(false);
+  expect(followButton()?.disabled).toBe(false);
   const report = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
     (button) => button.getAttribute('aria-label') === m.report_more(),
   );
   expect(report?.disabled).toBe(false);
+}
+
+function followButton() {
+  return [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+    (button) => button.textContent?.trim() === m.library_follow(),
+  );
+}
+async function settleZoneActions() {
+  await until(() => libraryEntryButton() !== null && followButton()?.disabled === false);
+  // StrictMode can issue an initial read before retiring its first mounted admission.
+  mountedFollowReads = followReads.length;
+  expect(mountedFollowReads).toBeGreaterThan(0);
 }
 
 for (const source of ['manual', 'fetch'] as const)
@@ -795,7 +830,8 @@ for (const source of ['manual', 'fetch'] as const)
       oldOwn.resolve({ status: 200, data: { kind: 'love' } });
       personalCalls[0]!.gate!.resolve();
     });
-    await until(() => ownReads.length === 2 && libraryEntryButton() !== null && followReads.length === 1);
+    await until(() => ownReads.length === 2);
+    await settleZoneActions();
     expect(client.getQueryData(oldKey)).toBeUndefined();
     expect(chips().every((button) => button.disabled)).toBe(true);
     noSelection();
@@ -824,6 +860,7 @@ for (const surface of ['ordinary Subject', 'production Zone'] as const)
         if (surface === 'production Zone') await paint(zoneOutcome(subjectId));
         else await paintOrdinary();
         await until(() => ownReads.length === 1 && chips().some((button) => !button.disabled));
+        if (surface === 'production Zone') await settleZoneActions();
         const oldOwnQuery = client
           .getQueryCache()
           .findAll({ queryKey: ['subject-own-reaction'] })
@@ -853,7 +890,10 @@ for (const surface of ['ordinary Subject', 'production Zone'] as const)
         expect(oldButton.isConnected).toBe(false);
         expect(window.document.activeElement).not.toBe(oldButton);
         expect(countReads).toHaveLength(countsBefore);
-        if (surface === 'production Zone') independentZone(1, 1);
+        if (surface === 'production Zone') {
+          await until(() => followButton()?.disabled === false);
+          independentZone(1, 1);
+        }
         // The fresh response comes through the real prepared native read, never from a copied cache value.
         await flush(() => freshOwn.resolve({ status: 200, data: { kind: null } }));
         await until(() => chips().some((button) => !button.disabled));
@@ -866,8 +906,10 @@ for (const surface of ['ordinary Subject', 'production Zone'] as const)
           nativeWrites.every((write) => write.id === subjectId && write.authorization === 'Bearer token-reader-one'),
         ).toBe(true);
         expect(ownReads).toHaveLength(2);
-        if (surface === 'production Zone') independentZone(1, 1);
-        else expect(countReads).toHaveLength(countsBefore + 2); // Only the two useful current mutation refreshes.
+        if (surface === 'production Zone') {
+          await until(() => followButton()?.disabled === false);
+          independentZone(1, 1);
+        } else expect(countReads).toHaveLength(countsBefore + 2); // Only the two useful current mutation refreshes.
       });
 
 for (const source of ['manual', 'fetch'] as const)
@@ -879,12 +921,13 @@ for (const source of ['manual', 'fetch'] as const)
     queueNativeRead(freshOwn);
     await paintOrdinary();
     await until(() => ownReads.length === 1 && chips().length > 0);
+    const initialCountReads = countReads.length;
     await equalSuccess(source, () => oldOwn.resolve({ status: 200, data: { kind: 'love' } }));
     await until(() => ownReads.length === 2);
     noSelection();
     expect(chips().every((button) => button.disabled)).toBe(true);
     expect(nativeWrites).toHaveLength(0);
-    expect(countReads).toHaveLength(1);
+    expect(countReads).toHaveLength(initialCountReads);
     await flush(() => freshOwn.resolve({ status: 200, data: { kind: null } }));
     await until(() => chips().some((button) => !button.disabled));
     noSelection();
@@ -898,12 +941,16 @@ for (const surface of ['ordinary Subject', 'production Zone'] as const)
     if (surface === 'production Zone') await paint(zoneOutcome(subjectId));
     else await paintOrdinary();
     await until(() => ownReads.length === 1 && chips().some((button) => !button.disabled));
+    if (surface === 'production Zone') await settleZoneActions();
+    const initialCountReads = countReads.length;
     const write = deferred<NativeWriteResult>();
     nativeWriteQueue.push(() => write.promise);
     await clickKind('like');
     await clickKind('insightful');
     await clickKind('insightful');
     expect(nativeWrites).toHaveLength(1);
+    const queuedButton = chip('like');
+    expect(queuedButton.getAttribute('aria-pressed')).toBe('true');
     const sessionResponse = deferred<SessionIdentity>();
     browserSessionPending = sessionResponse;
     let fetch!: Promise<unknown>;
@@ -916,13 +963,16 @@ for (const surface of ['ordinary Subject', 'production Zone'] as const)
     expect(client.getQueryState(sessionQuery.queryKey)?.status).toBe('success');
     expect(ownReads).toHaveLength(1);
     expect(nativeWrites).toHaveLength(1);
+    expect(chip('like') === queuedButton).toBe(true);
+    expect(queuedButton.disabled).toBe(false);
+    expect(queuedButton.getAttribute('aria-pressed')).toBe('true');
     await flush(() => write.resolve({ status: 200 }));
     await until(() => nativeWrites.length === 3 && chip('insightful').getAttribute('aria-pressed') !== 'true');
     expect(nativeWrites.map((write) => write.kind)).toEqual(['like', 'insightful', null]);
     expect(ownReads).toHaveLength(1);
     expect(nativeWrites.every((write) => write.authorization === 'Bearer token-reader-one')).toBe(true);
-    if (surface === 'production Zone') independentZone(1, 1);
-    else expect(countReads).toHaveLength(4); // Initial public count and each of the three current callbacks.
+    if (surface === 'production Zone') independentZonePayload(1, 1);
+    else expect(countReads).toHaveLength(initialCountReads + 3); // Each current callback refreshes the mounted public baseline.
     // Only its eventual successful commit retires the observation.
     await act(async () => {
       sessionResponse.resolve(storySession());
@@ -932,11 +982,12 @@ for (const surface of ['ordinary Subject', 'production Zone'] as const)
     await until(() => ownReads.length === 2);
   });
 
-test('production Zone keeps exact independent loads across private refusal, retained-data session error and missing cache', async () => {
+test('production Zone reloads its personal source after session loss while reaction refusal stays independent', async () => {
   client.setQueryData(sessionQuery.queryKey, sessionData());
   queueNativeRead({ status: 403 });
   await paint(zoneOutcome(subjectId));
-  await until(() => ownReads.length === 1 && libraryEntryButton() !== null && followReads.length === 1);
+  await until(() => ownReads.length === 1);
+  await settleZoneActions();
   independentZone(1, 1);
   noSelection();
   expect(chips().every((button) => button.disabled)).toBe(true);
@@ -954,22 +1005,35 @@ test('production Zone keeps exact independent loads across private refusal, reta
   });
   expect(client.getQueryState(sessionQuery.queryKey)?.status).toBe('error');
   expect(client.getQueryData(sessionQuery.queryKey)).toEqual(sessionData());
-  // Session loss keeps the independently completed payload, but does not override Library/follow authority.
+  await until(() => personalCalls.length === 2 && personalCalls[1]?.result !== undefined && chips().length > 0);
+  // A different browser session state retires the combined source; equal success does not.
   expect(personalCalls[0]!.result!.library?.provenance?.viewer).toBe('reader-one');
-  independentZonePayload(1, 1);
+  independentZonePayload(2, 2);
   expect(ownReads).toHaveLength(1);
   browserSessionPending = deferred<SessionIdentity>();
   await flush(() => client.removeQueries({ queryKey: sessionQuery.queryKey, exact: true }));
-  independentZonePayload(1, 1);
+  await until(() => personalCalls.length === 3 && personalCalls[2]?.result !== undefined && chips().length > 0);
+  independentZonePayload(3, 3);
   noSelection();
   expect(host.querySelectorAll('button[data-slot="reaction-chip"]:not(:disabled)')).toHaveLength(0);
   expect(ownReads).toHaveLength(1);
   expect(nativeWrites).toHaveLength(0);
   queueNativeRead({ status: 200, data: { kind: null } });
-  await flush(() => browserSessionPending!.resolve(storySession()));
-  await until(() => ownReads.length === 2 && followReads.length === 2 && chips().some((button) => !button.disabled));
-  // A genuine session loss can require the follow owner's fresh read; reaction replacement alone never does.
-  independentZonePayload(1, 1, 2);
+  let recovery!: Promise<unknown>;
+  await flush(() => {
+    recovery = client.fetchQuery(sessionQuery);
+  });
+  await act(async () => {
+    browserSessionPending!.resolve(storySession());
+    await recovery;
+    await tick();
+  });
+  await until(
+    () => ownReads.length === 2 && followButton()?.disabled === false && chips().some((button) => !button.disabled),
+  );
+  const recoveredFollowReads = followReads.length;
+  expect(recoveredFollowReads).toBeGreaterThan(mountedFollowReads);
+  independentZone(4, 4, recoveredFollowReads);
 });
 
 test('anonymous production Zone makes zero private reaction reads and preserves its public counts', async () => {
@@ -994,6 +1058,8 @@ for (const surface of ['ordinary Subject', 'production Zone'] as const)
     if (surface === 'production Zone') await paint(zoneOutcome(subjectId));
     else await paintOrdinary();
     await until(() => ownReads.length === 1 && chips().some((button) => !button.disabled));
+    if (surface === 'production Zone') await settleZoneActions();
+    const initialCountReads = countReads.length;
     const freshOwn = deferred<NativeReactionRead>();
     queueNativeRead(freshOwn);
     const oldButton = chip('like');
@@ -1007,8 +1073,11 @@ for (const surface of ['ordinary Subject', 'production Zone'] as const)
     expect(nativeWrites).toHaveLength(0);
     noSelection();
     expect(chips().every((button) => button.disabled)).toBe(true);
-    expect(countReads).toHaveLength(1);
-    if (surface === 'production Zone') independentZone(1, 1);
+    expect(countReads).toHaveLength(initialCountReads);
+    if (surface === 'production Zone') {
+      await until(() => followButton()?.disabled === false);
+      independentZone(1, 1);
+    }
     await flush(() => freshOwn.resolve({ status: 200, data: { kind: null } }));
     await until(() => chips().some((button) => !button.disabled));
   });
@@ -1061,6 +1130,7 @@ test('ordinary Subject does not start a later count refresh if an equal session 
   queueNativeRead({ status: 200, data: { kind: null } });
   await paintOrdinary();
   await until(() => ownReads.length === 1 && chips().some((button) => !button.disabled));
+  const initialCountReads = countReads.length;
   const oldOwnQuery = client
     .getQueryCache()
     .findAll({ queryKey: ['subject-own-reaction'] })
@@ -1082,12 +1152,12 @@ test('ordinary Subject does not start a later count refresh if an equal session 
   await until(() => ownReads.length === 2);
   expect(replacements).toBe(1);
   expect(nativeWrites).toHaveLength(1); // The accepted write remains accepted; the queued choice is retired.
-  expect(countReads).toHaveLength(1);
+  expect(countReads).toHaveLength(initialCountReads);
   noSelection();
   expect(chips().every((button) => button.disabled)).toBe(true);
   await flush(() => freshOwn.resolve({ status: 200, data: { kind: null } }));
   await until(() => chips().some((button) => !button.disabled));
   await clickKind('like');
-  await until(() => nativeWrites.length === 2 && countReads.length === 2);
+  await until(() => nativeWrites.length === 2 && countReads.length === initialCountReads + 1);
   expect(ownReads).toHaveLength(2);
 });

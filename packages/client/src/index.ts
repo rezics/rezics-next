@@ -13,6 +13,7 @@ import type {
   ReviewedPersonAdmission,
   ReviewedPersonOperation,
 } from './reviewed-person-identity.ts';
+import type { SubjectIdentityOperationRoutes } from './kernel/semantic/http/identity-operations.d.ts';
 
 export type { ClientKernel as Kernel } from './kernel/http/kernel.ts';
 export { zoneCollections } from './zones.ts';
@@ -183,19 +184,6 @@ type SubjectRoutes = Omit<InstalledSubjectRoutes, ':id' | '$merge'> & {
         expectedIdentity?: { endpoints: [ReviewedPersonEndpoint, ReviewedPersonEndpoint] };
       };
       response: Omit<InstalledMergePost['response'], 200> & { 202: ReviewedPersonAdmission };
-    };
-  };
-};
-type SubjectIdentityOperationRoutes = {
-  ':id': {
-    get: {
-      body: unknown;
-      params: { id: string };
-      query: unknown;
-      headers: unknown;
-      response: Pick<InstalledMergePost['response'], 401 | 404 | 503> & {
-        200: { operation: ReviewedPersonOperation };
-      };
     };
   };
 };
@@ -580,4 +568,11 @@ export type {
   ReviewedPersonRead,
   ReviewedPersonMerge,
   ReviewedPersonAdmission,
+  ReviewedPersonOperation,
 } from './reviewed-person-identity.ts';
+export type {
+  SubjectIdentityOperation,
+  SubjectIdentityOperationAdmission,
+  SubjectIdentityOperationRead,
+  SubjectIdentityOperationRoutes,
+} from './kernel/semantic/http/identity-operations.d.ts';

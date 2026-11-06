@@ -411,10 +411,7 @@ describe('Late Copy editor and Undo responses cannot modify a replacement page o
     await click(m.library_copy_conflict_review_open(), form());
     await settle(latest('detail'), { ok: true, copy });
     await click(m.library_copy_conflict_review_accept(), form());
-    await click(m.library_copy_draft_navigation_discard(), window.document);
-    // Accepting the reviewed read resets values inside the same disclosed form.
-    expect(field(m.library_copy_note()).value).toBe(copy.note!);
-    await text(m.library_copy_note(), 'Saved');
+    expect(field(m.library_copy_note()).value).toBe('Saved');
     await submit();
     expect(latest('update').input).toMatchObject({ data: { ...payload.data, idempotencyKey: expect.any(String) } });
     expect((latest('update').input as typeof payload).data.idempotencyKey).not.toBe(copy.idempotencyKey);

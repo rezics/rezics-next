@@ -83,7 +83,11 @@ import type {
 } from './identity-epoch-contract.ts';
 
 export type { IdentityAdmissionInput, IdentityAdmissionAuthority } from './identity-epoch-contract.ts';
-import type { IdentityAdmissionInput, IdentityAdmissionAuthority } from './identity-epoch-contract.ts';
+import {
+  commandAuthorityAt,
+  type IdentityAdmissionInput,
+  type IdentityAdmissionAuthority,
+} from './identity-epoch-contract.ts';
 import { guardReviewedPersonIdentity } from './reviewed-person-identity.ts';
 export type IdentityAdmissionProgress = Readonly<{
   job: IdentityJobRef;
@@ -289,7 +293,8 @@ async function closeUnreservedBinding(
   binding: IdentityReceiptBinding,
 ) {
   const data = identityBindingData(binding);
-  const first = await runCommand(pool, { partition: data.home }, async (tx) => {
+  const first = await runCommand(pool, await commandAuthorityAt(authority, data.home), async (tx) => {
+    await authorizeIdentityAdmission(tx, input.receipt, binding, input.intent);
     await tx.query(selectControl.sql, [data.home]);
     const existingJob = (await tx.query(job.sql, [data.home, data.job.jobId, data.job.epoch.toString()])).rows[0];
     if (existingJob) {
@@ -325,7 +330,7 @@ async function closeUnreservedBinding(
   if (!first.value) return false;
   const receipts: IdentityNativeReceipt[] = [];
   for (const home of [...new Set(data.sources.map((s) => s.partition_no))].sort((a, b) => a - b)) {
-    await deliverHome(pool, data.job, data.scope, home, 'closed');
+    await deliverHome(pool, data.job, data.scope, home, 'closed', undefined, authority);
     const received = await receivingReceipt(pool, data.job, home, 'closed');
     if (!received) throw unavailable();
     receipts.push({
@@ -335,7 +340,7 @@ async function closeUnreservedBinding(
       position: BigInt(received.native_position),
     });
   }
-  await runCommand(pool, { ...authority, partition: data.partition }, async (tx) => {
+  await runCommand(pool, await commandAuthorityAt(authority, data.partition), async (tx) => {
     const current = await lookupLocalBinding(tx, input, binding);
     if (current.state !== 'pending' && current.state !== 'accepted') return noEffect(null);
     for (const r of receipts)
@@ -543,7 +548,7 @@ async function prepareIdentityEpochAdmissionWithinDeadline(
   const binding = await bindIdentityEpochReceipt(pool, authority, input),
     data = identityBindingData(binding);
   if (data.state === 'accepted') return data.job;
-  const admitted = await runCommand(pool, { ...authority, partition: data.home }, (tx) =>
+  const admitted = await runCommand(pool, await commandAuthorityAt(authority, data.home), (tx) =>
     admitBoundIdentityEpoch(tx, { ...input, binding }),
   );
   await acceptIdentityBinding(pool, authority, input, binding);
@@ -613,7 +618,9 @@ async function deliverHome(
   home: number,
   stage: 'prepared' | 'acquired' | 'closed',
   measured?: Work,
+  authority?: IdentityAdmissionAuthority,
 ) {
+  const command = authority === undefined ? { partition: home } : await commandAuthorityAt(authority, home);
   const roles = await identityErasureRoles(pool, ref.jobId);
   try {
     if (stage === 'prepared') {
@@ -631,7 +638,7 @@ async function deliverHome(
           ).rows[0],
       );
       if (!source) throw unavailable();
-      await runCommand(pool, { partition: home }, async (tx) => {
+      await runCommand(pool, command, async (tx) => {
         const duplicate = (
           await tx.query(
             `SELECT job_id FROM semantic.identity_epoch_admission_handoff WHERE partition_no=$1 AND job_id=$2`,
@@ -659,7 +666,7 @@ async function deliverHome(
         };
       });
     }
-    await runCommand(pool, { partition: home }, async (tx) => {
+    await runCommand(pool, command, async (tx) => {
       bindSemanticProducerRoles(tx, roles);
       await measuredQuery(tx, selectControl.sql, [home], measured);
       // Acquire always checks the irreversible local fence, even after an earlier successful receipt.

@@ -27,6 +27,27 @@ import {
 import type { AccountRenameNavigation } from './account-rename-actions';
 import { settingsCommandKeyHeader } from './command-headers';
 
+// Shared Profile boundary for the Accounts editor.
+export { withProfileDeadline } from './profile-request-deadline';
+export { settingsCommandKeyHeader } from './command-headers';
+export {
+  createEditableProfileSource,
+  EditableProfileReadError,
+  nativeProfileFailure,
+  parseProfilePatchAck,
+  type EditableProfileFailure,
+} from './editable-profile-source';
+export {
+  loadProfileRecord,
+  profileControlFlow,
+  profilePatchAdmitted,
+  profileSaveSetupFailure,
+  serializeProfileResult,
+  type ObservedProfile,
+  type ProfilePatch,
+} from './profile-data';
+export { profileFieldErrors } from './profile-write';
+
 export type SpoilerLevel = 0 | 1 | 2;
 export type Suitability = 'blur' | 'show';
 export const shelfPreferenceLayouts = ['grid', 'list', 'table'] as const;

@@ -9,7 +9,7 @@ import { coverSrc } from '../media/cover-src';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { m } from '../paraglide/messages.js';
 import { uploadAvatar } from '../threads/upload';
-import { profileChanges, profileHasLocalPreview, profilePatchAdmitted } from './profile-data';
+import { profileChanges, profileHasLocalPreview, profilePatchAdmitted, profileFieldAdmitted } from './profile-data';
 import { ProfileEditor, profileFieldErrors, type ProfileScope, type ProfileEditorState } from './profile-write';
 import { useProfileEditor } from './profile-write-query';
 import { ProfileAvatar, useProfileAvatarUpload } from './profile-avatar';
@@ -234,7 +234,7 @@ export function ProfileCard({
       : {};
   const changed = Object.keys(profilePatch).length > 0;
   const admitted = (field: 'displayName' | 'biography' | 'avatar' | 'links') =>
-    state.editing === undefined || (!!state.editing && field in state.editing.fields);
+    profileFieldAdmitted(field, state.editing);
   const canSubmitPatch = changed && profilePatchAdmitted(profilePatch, state.editing);
   const localPreview = profileHasLocalPreview(changed, !!avatar.state.url, state.attempt, state.acknowledged);
   const errorMessage = (field: string) =>

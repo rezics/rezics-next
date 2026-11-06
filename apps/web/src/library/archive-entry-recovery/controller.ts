@@ -12,6 +12,7 @@ import {
 import { selectedArchiveRecoveryResults } from './results';
 import { type RecoverySection } from './selection';
 import { ArchiveRecoveryVisit, type RecoveryBinding, type RecoveryReadDirection, type RecoveryRequest } from './visit';
+import { recoveryArchiveText } from '../private-export/supported-recovery-artifact';
 
 type ResultPage = ReturnType<typeof selectedArchiveRecoveryResults>;
 type Confirmation = { uploadId: string; body: ArchiveConfirmation };
@@ -54,6 +55,8 @@ export class ArchiveEntryRecoveryJourney {
   #cancelAcknowledged = false;
   #cancelNeedsReconcile = false;
   #pendingUpload: { text: string; key: string; request: RecoveryRequest } | null = null;
+  #originalText: string | null = null;
+  #originalName = 'library.json';
   #evidenceId: string | null = null;
   #expiry: ReturnType<typeof setTimeout> | undefined;
 
@@ -79,6 +82,7 @@ export class ArchiveEntryRecoveryJourney {
       reviewed: state?.review ? this.#reviewed : [],
       readback: state ? this.#readback : null,
       uploadUncertain: this.#pendingUpload !== null,
+      hasOriginalArchive: this.#originalText !== null,
       retryOriginal:
         !!state &&
         (['uncertain', 'recoverable'].includes(state.phase) ||
@@ -129,7 +133,7 @@ export class ArchiveEntryRecoveryJourney {
     }
   }
 
-  /** File size is checked before reading; the native decoder alone interprets the contents. */
+  /** File size is checked before reading. V4 captures are projected to the installed V3 envelope before upload. */
   async upload(file: File) {
     if (file.size > archiveUploadBytes) {
       this.#notice = 'file_too_large';
@@ -143,8 +147,10 @@ export class ArchiveEntryRecoveryJourney {
     this.#readback = null;
     this.#reviewed = [];
     await this.#run(async () => {
-      const text = await file.text();
+      const text = recoveryArchiveText(await file.text(), 'entries');
       if (request.signal.aborted || !this.#current()) return;
+      this.#originalText = text;
+      this.#originalName = file.name;
       this.#pendingUpload = { text, key: crypto.randomUUID(), request };
       await this.#sendUpload();
     });
@@ -376,6 +382,21 @@ export class ArchiveEntryRecoveryJourney {
       }
       // Current facts never checkpoint the original archive command.
     });
+  }
+  restart() {
+    if (this.#busy || this.snapshot().retryOriginal) return;
+    this.#reviewed = [];
+    this.#readback = null;
+    this.#pendingUpload = null;
+    this.#notice = '';
+    this.#evidenceId = null;
+    this.visit.restart();
+    this.#emit();
+  }
+  async adoptOriginal() {
+    if (!this.#originalText || this.#busy || this.snapshot().retryOriginal) return;
+    const file = new File([this.#originalText], this.#originalName, { type: 'application/json' });
+    await this.upload(file);
   }
   async prune() {
     const id = this.#evidenceId!;

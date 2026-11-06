@@ -11,8 +11,9 @@ Decision: version 3 adds the private occurrence assessment to each journal recor
 upload/evidence sections because installed V3 captures already bind the 17-section vocabulary. Versions
 1, 2 and 3 keep their original record shapes; a missing legacy assessment is not inferred. The existing archive consumer
 continues to recover V2 annotations and journal dates/reflection. Copy/progress archive inspection accepts the exact
-V3 assessment inventory without adopting assessments; Entry/label merge accepts only V1/V2. All installed archive
-consumers refuse V4, whose provider evidence remains inert.
+V3 assessment inventory without adopting assessments; Entry/label merge accepts V1–V3; Collection recovery accepts
+V1/V2. Installed native consumers refuse V4 bytes, whose provider evidence remains inert. Web recovery visits project
+a completed V4 capture to that installed envelope at upload and keep the downloaded file unchanged.
 
 ## Mounted methods and Web handoff
 

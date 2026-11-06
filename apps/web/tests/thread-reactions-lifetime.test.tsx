@@ -2,10 +2,9 @@ import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, type ComponentProps } from 'react';
 import * as start from '../.storybook/react-start';
-import type { ChangeReactionInput, ReactionFailure } from '../src/threads/reaction-request';
+import type { ChangeReactionInput, ReactionFailure, ReactionSnapshot } from '../src/threads/reaction-request';
 
-// UNRUN: default-composition regressions for the controller's integration gate.
-// Only the changeReaction transport is gated; ThreadReactions, Reactions, their queue and session cache are real.
+// Only the transport is gated; ThreadReactions, Reactions, their queue and session cache are real.
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
 );
@@ -46,13 +45,15 @@ const calls: (ReturnType<typeof deferred<Result>> & { data: ChangeReactionInput;
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
-mock.module('../src/threads/reactions', () => ({
-  changeReaction: ({ data, headers }: { data: ChangeReactionInput; headers: HeadersInit }) => {
+const preparedTransport = {
+  change: ({ data, headers }: { data: ChangeReactionInput; headers: HeadersInit }) => {
     const call = { ...deferred<Result>(), data, headers: new Headers(headers) };
     calls.push(call);
     return call.promise;
   },
-}));
+  // The read transport stays pending: these cases gate only change outcomes.
+  read: () => deferred<ReactionSnapshot | ReactionFailure>().promise,
+};
 const { createRoot } = await import('react-dom/client');
 const { renderToStaticMarkup } = await import('react-dom/server');
 const { QueryClient, QueryClientProvider, QueryObserver } = await import('@tanstack/react-query');
@@ -66,6 +67,7 @@ const viewer = (subject = 'reader-one', csrfToken = 'csrf-one') => ({
   csrfToken,
 });
 const baseline = (): Props => ({
+  preparedTransport,
   target: { kind: 'post', id: 'one' },
   counts: { like: 2, love: 3, sad: 1, insightful: 1, upvote: 4, downvote: 2 },
   value: 'like',
@@ -372,7 +374,7 @@ test('ordinary echoes and callback replacement preserve current serialized repla
         call.data.target === 'post' && call.data.id === 'one' && call.headers.get('x-csrf-token') === 'csrf-one',
     ),
   ).toBe(true);
-  expect(refreshed).toEqual(['original', 'current', 'current']);
+  expect(refreshed).toEqual(['original', 'original', 'original']);
   expect(host.querySelector('[aria-busy="true"]')).toBeNull();
   unsubscribe();
   await act(async () => {

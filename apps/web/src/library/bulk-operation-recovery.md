@@ -45,7 +45,8 @@ original private admission remains current. Address, locale, mounted reader and 
 coordinates and failed targets through the existing origin; display rerenders retain them.
 
 Decision: use the existing localized window controls and render captured restore attempts separately from current
-native evidence, preserving uncertain Retry and completed results when a row leaves the page. No navigation creates,
+native evidence, preserving uncertain Retry and completed results when a row leaves the page. Native target results,
+deletion-receipt observation and restore-command outcomes remain distinct headings. No navigation creates,
 replaces or settles a restore command. Preparation and sending block movement. Refresh never follows an acknowledged
 restore automatically. Revisited targets use current authorized deletion evidence and the existing exact preparation;
 expired evidence retains its expired meaning. Applied outcomes and counts alone never authorize Undo.

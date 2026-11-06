@@ -9,7 +9,8 @@ merge or reuse command.
 
 ## What the visit supports
 
-The visit accepts export version 1, shows native coverage and omissions, and selects one eligible curated Collection.
+The visit accepts export versions 1 and 2. A completed version 3 or 4 capture is projected to the installed version 1
+envelope at upload so Collection recovery can reuse a current owner export. It shows native coverage and omissions, and selects one eligible curated Collection.
 It reads one native page at a time and shows each occurrence as its own item, including repeated Subjects, its actual
 note state and native order support. A selected occurrence is preserved with its stored note and validated native
 order; omitting the occurrence omits its note as well. The native review owns order movement and the final order
@@ -71,7 +72,13 @@ remains capped at `3R + 2` attempts. Upload transfer remains `O(U)`. The visit d
 each row, reconstruct rank keys, or load the archive into browser storage. Subject suggestions run only after an
 explicit search term.
 
+Decision: keep the original encoded archive after a successful read so Cancel then Restart can reuse it; a completed
+export from this signed-in owner is the same source. Results reopen the current Collection reader for actual title,
+privacy, member identities, notes and order.
+
 Stories cover upload, local preparation, file-read failure, reviewed selection, stale conflict and partial result.
-Focused Web acceptance exercises the mounted journey and bounded/source-session behavior; native HTTP producer
-acceptance remains owned by Commerce.
+Journey tests pin original-archive restart, exact original bytes, opaque sequential cursors, native Collection readback and other-member denial. The native Web owner
+and other-member walk exports a completed file, restores through the page, and rereads the Collection. Focused Web
+acceptance exercises the mounted journey and bounded/source-session behavior; native HTTP producer acceptance
+remains owned by Commerce.
 Preparation decoders and producer implementation are not Web delivery; this guide describes the delivered consumer.

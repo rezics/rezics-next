@@ -160,12 +160,14 @@ test('bounded deep destination and placement browsing preserves duplicate occurr
       ),
     );
     expect(host.querySelectorAll('[data-move-destination]')).toHaveLength(0);
-    expect(host.querySelector<HTMLButtonElement>('button')!.textContent).toBe(
-      m.library_collection_move_more_destinations(),
-    );
-    await settle(() => host.querySelector<HTMLButtonElement>('button')!.click());
+    const moreDestinations = () =>
+      [...host.querySelectorAll('button')].find(
+        (button) => button.textContent === m.library_collection_move_more_destinations(),
+      )!;
+    expect(moreDestinations().textContent).toBe(m.library_collection_move_more_destinations());
+    await settle(() => moreDestinations().click());
     expect(host.querySelectorAll('[data-move-destination]')).toHaveLength(0);
-    await settle(() => host.querySelector<HTMLButtonElement>('button')!.click());
+    await settle(() => moreDestinations().click());
     expect(host.querySelectorAll('[data-move-destination]')).toHaveLength(1);
     await settle(() => host.querySelector<HTMLButtonElement>('[data-move-destination="destination"]')!.click());
     expect(choice).toEqual({
@@ -284,4 +286,12 @@ test('placement reads reject a stale destination revision rather than offering a
   await expect(
     reads.loadMovePlacements(client, request, {}, { collectionId: 'destination', revision: 1 }),
   ).rejects.toThrow('Move destination changed');
+});
+
+test('current membership reads do not invent destination identity from member rows', async () => {
+  destinationIdentity = 'different-identity';
+  const members = await reads.loadMoveMembers(client, request, {}, { collectionId: 'destination' });
+  expect(members.members.map((member) => member.id)).toEqual(['anchor-first']);
+  expect(await destinationReads.loadCollectionDestination(client, request, {}, 'destination')).toBeNull();
+  destinationIdentity = 'destination';
 });

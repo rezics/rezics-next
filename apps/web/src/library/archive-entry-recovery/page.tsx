@@ -8,6 +8,8 @@ import { ArchiveEntryRecoveryJourney, supportedRecoverySection } from './control
 import { type ArchiveReviewItem, type ArchiveRow } from './native';
 import { browserArchiveRecoveryPort } from './port';
 import { type RecoveryBinding } from './visit';
+import { archiveFileFromCustody, bindArchiveCustodyOwner, completedArchiveFor } from '../private-export/custody';
+import { ArchiveRecoveryDestinations } from '../private-export/destinations';
 
 const control = 'min-h-11 min-w-11 rounded-md border px-3 py-2 disabled:opacity-50';
 const uuidPattern = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}';
@@ -88,6 +90,9 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
   const uploadLocked = busy || locked || snapshot?.uploadUncertain;
   const hasUpload = !!state?.upload;
   const live = state !== null && journey !== null;
+  const owner = journey?.visit.viewer ?? null;
+  if (owner) bindArchiveCustodyOwner(owner);
+  const completed = owner ? completedArchiveFor(owner) : null;
   const act = (action: Promise<void>) => {
     void action;
   };
@@ -97,6 +102,7 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
       <header className="space-y-3">
         <PageHeading>{m.library_archive_title()}</PageHeading>
         <p>{m.library_archive_intro()}</p>
+        <ArchiveRecoveryDestinations current="entries" />
       </header>
       <ol aria-label={m.library_archive_steps()} className="flex flex-wrap gap-4 text-sm">
         <li aria-current={!hasUpload ? 'step' : undefined}>1. {m.library_archive_upload_step()}</li>
@@ -140,6 +146,27 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
             {m.library_archive_recovery_retry_original()}
           </button>
         )}
+        {!hasUpload && snapshot?.hasOriginalArchive ? (
+          <button
+            type="button"
+            className={control}
+            disabled={!live || uploadLocked}
+            onClick={() => act(journey!.adoptOriginal())}
+          >
+            {m.library_archive_recovery_restart_original()}
+          </button>
+        ) : null}
+        {!hasUpload && completed && !snapshot?.hasOriginalArchive ? (
+          <button
+            type="button"
+            className={control}
+            disabled={!live || uploadLocked}
+            onClick={() => act(journey!.upload(archiveFileFromCustody(completed)))}
+          >
+            {m.library_archive_use_completed_export()}
+          </button>
+        ) : null}
+        {completed || snapshot?.hasOriginalArchive ? <p>{m.library_archive_completed_export_help()}</p> : null}
       </section>
       <section aria-labelledby="archive-scope" className="space-y-3">
         <h2 id="archive-scope" className="text-xl font-semibold">
@@ -386,13 +413,26 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
                     #{row.ordinal} · {row.section} · {row.status}
                   </p>
                   {row.subjectId && (
+                    <>
+                      <a
+                        className={`${control} inline-flex items-center underline`}
+                        href={localizeHref(`/subjects/${row.subjectId}`)}
+                      >
+                        {m.library_archive_entry_subject()}
+                      </a>
+                      <a className={`${control} inline-flex items-center underline`} href={localizeHref('/library')}>
+                        {m.library_archive_entry_open_library()}
+                      </a>
+                    </>
+                  )}
+                  {row.sessionId ? (
                     <a
                       className={`${control} inline-flex items-center underline`}
-                      href={localizeHref(`/subjects/${row.subjectId}`)}
+                      href={localizeHref(`/library/progress/${row.sessionId}`)}
                     >
-                      {m.library_archive_entry_subject()}
+                      {m.library_archive_progress_open_session()}
                     </a>
-                  )}
+                  ) : null}
                   {(row.subjectId || row.labelId) && (
                     <button
                       type="button"
@@ -479,12 +519,14 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
           </button>
         </>
       )}
+      {(phase === 'complete' || phase === 'cancelled' || phase === 'expired') && live ? (
+        <button type="button" className={control} disabled={busy || locked} onClick={() => journey!.restart()}>
+          {m.library_archive_recovery_restart()}
+        </button>
+      ) : null}
       <nav aria-label={m.library_archive_destinations()} className="flex flex-wrap gap-3">
         <a href={localizeHref('/library')} className={`${control} inline-flex items-center underline`}>
           {m.library_archive_return()}
-        </a>
-        <a href={localizeHref('/library/export')} className={`${control} inline-flex items-center underline`}>
-          {m.library_archive_export()}
         </a>
       </nav>
     </main>

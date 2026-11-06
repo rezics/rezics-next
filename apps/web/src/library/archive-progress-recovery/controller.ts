@@ -1,6 +1,7 @@
 import type { Application, Holdings, Occurrences, Reply, Result, Review, ReviewInput, Units, Upload } from './native';
 import { UPLOAD_BYTES } from './native';
 import type { ProgressRecoveryPort, NativePort } from './native';
+import { projectArchiveForRecovery } from '../private-export/supported-recovery-artifact';
 
 export type Occurrence = Occurrences['occurrences'][number]['evidence'];
 export type Snapshot<Choices = unknown> = {
@@ -23,6 +24,7 @@ export type Snapshot<Choices = unknown> = {
   removed: number;
   notice: 'ready' | 'uncertain' | 'recoverable' | 'refused' | 'expired' | 'oversize' | 'cancelled' | 'removed';
   refusal: number | null;
+  hasOriginalArchive: boolean;
 };
 type Sender = Omit<NativePort, 'subject'>;
 type Pending = { port: Sender; upload: Upload | null } & (
@@ -53,6 +55,7 @@ const empty = <Choices>(): Snapshot<Choices> => ({
   removed: 0,
   notice: 'ready',
   refusal: null,
+  hasOriginalArchive: false,
 });
 export function archiveBase64(bytes: Uint8Array): string {
   let binary = '';
@@ -65,6 +68,7 @@ export class ProgressRecoveryJourney<Choices = unknown> {
   #retired = false;
   #working = false;
   #selection = 0;
+  #original: { bytes: Uint8Array; name: string } | null = null;
   constructor(
     readonly port: ProgressRecoveryPort<Choices>,
     readonly binding: string,
@@ -94,7 +98,7 @@ export class ProgressRecoveryJourney<Choices = unknown> {
   snapshot(): Snapshot<Choices> {
     if (!this.#live()) return empty<Choices>();
     if (this.#state.upload && Date.now() >= Date.parse(this.#state.upload.expiresAt)) this.#expire();
-    return this.#state;
+    return { ...this.#state, hasOriginalArchive: this.#original !== null };
   }
   #expire() {
     Object.assign(this.#state, {
@@ -166,7 +170,9 @@ export class ProgressRecoveryJourney<Choices = unknown> {
       return;
     }
     await this.#work(async () => {
-      const base64 = archiveBase64(new Uint8Array(await file.arrayBuffer()));
+      const projected = projectArchiveForRecovery(new Uint8Array(await file.arrayBuffer()), 'progress');
+      this.#original = { bytes: new Uint8Array(projected), name: file.name };
+      const base64 = archiveBase64(projected);
       if (!this.#live()) return;
       // Store the exact request and original sender before delivery. No JSON parse/re-encode occurs.
       unresolved.set(this.binding, { kind: 'upload', base64, key: crypto.randomUUID(), port: this.port, upload: null });
@@ -384,6 +390,19 @@ export class ProgressRecoveryJourney<Choices = unknown> {
     this.#emit();
     // An in-flight original apply is allowed to finish its receipt. No replacement command is started.
     if (!this.#working && unresolved.has(this.binding)) await this.retry();
+  }
+  restart() {
+    if (!this.#live() || this.#working || unresolved.has(this.binding) || cancellations.has(this.binding)) return;
+    const original = this.#original;
+    this.#state = empty<Choices>();
+    this.#original = original;
+    this.#emit();
+  }
+  async adoptOriginal() {
+    if (!this.#original || !this.#editable() || this.#state.upload) return;
+    const copy = new Uint8Array(this.#original.bytes.byteLength);
+    copy.set(this.#original.bytes);
+    await this.upload(new File([copy.buffer as ArrayBuffer], this.#original.name, { type: 'application/json' }));
   }
   async remove() {
     if (!this.#editable() || !this.#state.upload) return;
