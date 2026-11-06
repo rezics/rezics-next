@@ -44,7 +44,8 @@ Source-commit validation accepts that native commit. Account-agent tests use the
 authenticate's short identity expiry. Page coverage rebinds by identity while routes stay in canonical
 order. The rebind journey publishes first so anonymous 404 is withholding, not an unpublished private Zone.
 Native kernel journeys and two web mapping tests pin lifecycle; no Storybook stories or expanded
-served walks. Catalogue commands live in lifecycle-zone.ts and the matching tsx re-exports them.
+served walks. Catalogue commands live in lifecycle-zone-commands.ts; lifecycle-zone.tsx re-exports them
+so bun --no-bundle landing transpile does not map a .ts/.tsx pair onto one .js path.
 collection-source.ts keeps the current Library contract; Collection restore stays Commerce's HTTP.
 
 Decision: live takedown keys are JSON pointers; `custody` is the retained-original bag and is excluded from

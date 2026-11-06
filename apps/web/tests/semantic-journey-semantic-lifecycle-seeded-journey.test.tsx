@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { act, createElement } from 'react';
 import { ZoneLifecycleControls } from '../src/features/catalogue/lifecycle-zone.tsx';
-import type { ZoneLifecycleResult } from '../src/features/catalogue/lifecycle-zone.ts';
+import type { ZoneLifecycleResult } from '../src/features/catalogue/lifecycle-zone-commands.ts';
 
 test('owner delete and restore complete through keyboard use on narrow and wide layouts', async () => {
   const { createRequire } = await import('node:module');

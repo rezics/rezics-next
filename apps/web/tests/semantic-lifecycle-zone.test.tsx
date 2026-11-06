@@ -6,7 +6,7 @@ import {
   changeZoneTakedown,
   type ZoneLifecycleClient,
   type ZoneLifecycleResult,
-} from '../src/features/catalogue/lifecycle-zone.ts';
+} from '../src/features/catalogue/lifecycle-zone-commands.ts';
 
 test('owner delete and restore map native status without leaking configuration', async () => {
   const calls: { method: string; path: string }[] = [];

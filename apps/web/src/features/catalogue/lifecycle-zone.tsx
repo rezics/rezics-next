@@ -1,5 +1,5 @@
 import { Button } from '@rezics/ui/shadcn/button';
-import type { ZoneLifecycleResult } from './lifecycle-zone.ts';
+import type { ZoneLifecycleResult } from './lifecycle-zone-commands.ts';
 
 export {
   changeZoneLifecycle,
@@ -9,7 +9,7 @@ export {
   type ZoneLifecycleFailure,
   type ZoneLifecycleResult,
   type ZoneTakedownCommand,
-} from './lifecycle-zone.ts';
+} from './lifecycle-zone-commands.ts';
 
 export function ZoneLifecycleControls(props: {
   deleted: boolean;

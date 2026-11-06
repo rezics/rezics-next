@@ -292,4 +292,5 @@ editorial write_basis. No fabricated basis. Retention capture names no plpgsql c
 Page coverage rebinds by identity while routes stay in canonical order. Live takedown keys are pointers;
 `custody` is excluded from those assertions. Internal Zone purge pages bind mechanical history evidence from
 the owner. Native kernel journeys and two web mapping tests pin Zone lifecycle; no Storybook stories or
-expanded served walks on this landing.
+expanded served walks on this landing. Catalogue commands live in lifecycle-zone-commands.ts so the
+matching tsx controls keep a distinct bun --no-bundle output path.

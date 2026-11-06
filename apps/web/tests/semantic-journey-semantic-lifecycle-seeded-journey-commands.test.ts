@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { changeZoneLifecycle, type ZoneLifecycleClient } from '../src/features/catalogue/lifecycle-zone.ts';
+import { changeZoneLifecycle, type ZoneLifecycleClient } from '../src/features/catalogue/lifecycle-zone-commands.ts';
 
 test('the catalogue Zone lifecycle client hides, restores and refuses a second owner without borrowing configuration', async () => {
   const client: ZoneLifecycleClient = {
