@@ -39,11 +39,13 @@ Decision: reading-card `placeId` is the Board identity. Subject discussion pages
 disclosed thread and the Board home separately; they do not pass the Board id to `readSubjectThread` as a place.
 Subject and author list query limits stay decimal-digit strings on the HTTP schema so a mismatched continuation is
 `400`, not a missing route. Focused post-editing browser cases remain the fewest that pin the mounted edit/delete
-journey; they consume the composed reading-page rather than split thread and post lists. Owner edit and erase use
-the reading-page viewer when that page was admitted for the account, otherwise the signed-in session subject after
-anonymous SSR. Inline revisions send the inherited native licence; a permanent author-erased slot shows
-“Removed by its author” without overflow, while a restorable deletion keeps its deleted tombstone and restore
-window. Edit discard confirms from live draft dirtiness, including Escape before the next paint.
+journey; they consume the composed reading-page rather than split thread and post lists. Conversation-row items are
+the post slots; nested presentation lists are not indexes. Journey navigation waits for DOMContentLoaded and
+hydration. Owner edit and erase use the reading-page viewer when that page was admitted for the account, otherwise
+the signed-in session subject after anonymous SSR. Inline revisions send the inherited native licence; a permanent
+author-erased slot shows “Removed by its author” without overflow, while a restorable deletion keeps its deleted
+tombstone and restore window. Edit discard confirms from live draft dirtiness, including editor host text and a
+pending snapshot so Escape can confirm before the next paint.
 
 | Surface cell             | Scope and scenarios                                                                                                                                                   |
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

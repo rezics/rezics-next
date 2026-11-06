@@ -1432,19 +1432,39 @@ function InlinePostEditorContent({
   );
   const ready =
     snapshotPhase === 'ready' && hasDocumentContent(body) && !draftHasMediaIssues(failure, body) && !uncertainChanged;
+  function liveEditorHost() {
+    return (
+      editorRoot.current?.querySelector<HTMLElement>(
+        '.ProseMirror[contenteditable="true"], [role="textbox"][contenteditable="true"]',
+      ) ?? null
+    );
+  }
+  function liveDraftDirty() {
+    if (
+      JSON.stringify(bodyRef.current) !== JSON.stringify(initialBodyRef.current) ||
+      snapshotPhaseRef.current !== 'ready' ||
+      pendingRef.current > 0 ||
+      editIntent.current.unresolved
+    )
+      return true;
+    const host = liveEditorHost();
+    return (
+      host !== null &&
+      host.innerText.replace(/\u00a0/g, ' ').trim() !== documentText(initialBodyRef.current).trim()
+    );
+  }
   const departureSignature = JSON.stringify([
     bodyRef.current,
     revisionId,
     pendingRef.current,
     submitting,
     editIntent.current.unresolved,
+    snapshotPhase,
   ]);
   const departure = useAuthoringDeparture(
     () =>
       lifetime.current() &&
-      (JSON.stringify(bodyRef.current) !== JSON.stringify(initialBodyRef.current) ||
-        pendingRef.current > 0 ||
-        editIntent.current.unresolved ||
+      (liveDraftDirty() ||
         !editIntent.current.canPrepare(
           { title: '', body: bodyRef.current, mediaIds: mediaIdsFromSources(imageSources(bodyRef.current)) },
           null,

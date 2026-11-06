@@ -8,7 +8,9 @@ during startup, because that compiled the Home client graph until Vite died at i
 starts skip SSR dependency discovery so the ready line is not held by the optimizer crawl. The same host answers
 the composed `reading-page` so edit, delete and edited-marker journeys see current posts. Owner edit and erase use
 the reading-page viewer when that page was admitted for the account, otherwise the signed-in session subject after
-anonymous SSR; the personal read still supplies reactions and review votes.
+anonymous SSR; the personal read still supplies reactions and review votes. Journey navigation waits for
+DOMContentLoaded and hydration, not network idle. Post slots are the thread conversation rows
+(`ol[id^="thread-"] > li`); nested presentation lists are not indexes.
 
 ## New-thread destination and community rules
 
@@ -172,7 +174,8 @@ and **Read full document** restores the complete reader without changing either 
 The inline edit still inherits native licence and review metadata and offers no separate controls for them.
 Revision commands send that inherited licence. An author-erased slot without a restore window shows
 “Removed by its author” and no overflow menu; a restorable deletion keeps the deleted tombstone, copy
-menu and restore control. Edit discard reads live draft dirtiness so Escape can confirm before React paints.
+menu and restore control. Edit discard reads live draft dirtiness, including the editor host text and a pending
+snapshot, so Escape can confirm before the debounced onChange paints.
 
 ## Browser-only writing recovery
 

@@ -598,7 +598,7 @@ async function open(
     },
   ]);
   const page = await context.newPage();
-  await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
+  await page.goto(`${origin}${path}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
   await hydrated(page);
   return { page, access: accessTokens.at(-1) };
 }
@@ -622,7 +622,7 @@ async function eventually(check: () => boolean) {
   expect(check()).toBe(true);
 }
 
-const postSlot = (page: Page, index = 0) => page.locator('main ol > li').nth(index);
+const postSlot = (page: Page, index = 0) => page.locator('main ol[id^="thread-"] > li').nth(index);
 const inlineEditor = (slot: ReturnType<typeof postSlot>) => slot.locator('.ProseMirror[contenteditable="true"]');
 const saveEdit = (slot: ReturnType<typeof postSlot>) => slot.getByRole('button', { name: 'Save changes', exact: true });
 
@@ -791,7 +791,8 @@ test(
       const deletion = calls.find((call) => call.method === 'DELETE' && call.path === `/v1/posts/${id(12)}`)!;
       expect(deletion.key).toMatch(/^[0-9a-f-]{36}$/i);
 
-      await page.reload({ waitUntil: 'networkidle' });
+      await page.reload({ waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await hydrated(page);
       await postSlot(page).getByText('Removed by its author', { exact: true }).waitFor();
       expect(await postSlot(page).getByRole('button', { name: 'More actions' }).count()).toBe(0);
       expect(await postSlot(page, 1).getByText('A reply', { exact: true }).count()).toBe(1);
