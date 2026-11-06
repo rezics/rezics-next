@@ -30,7 +30,7 @@ import { ContextNotFoundError, editorialContextAnchor, publicContextEligibility 
 import { routeOf } from '../../route/route.ts';
 import { MAX_BODY_LIMIT } from '../../http/body.ts';
 import type { Resource } from '../../request/access.ts';
-import { previewImportedDocument } from '../definition-import.ts';
+import { previewImportedDocument, type DefinitionImportRequest, type ImportedPreview } from '../definition-import.ts';
 import {
   activateExtension,
   activeExtension,
@@ -80,6 +80,14 @@ const extensionComparisonObject = t.Object(
     addedTerms: t.Array(t.String()),
     removedTerms: t.Array(t.String()),
     changedTerms: t.Array(t.String()),
+  },
+  { additionalProperties: false },
+);
+const importRequest = t.Object(
+  {
+    document: t.Any(),
+    context: t.Optional(t.String()),
+    expected_head: t.Optional(t.Union([t.Integer({ minimum: 1, maximum: 2147483646 }), t.Null()])),
   },
   { additionalProperties: false },
 );
@@ -619,16 +627,9 @@ export function definitionRoutes(
     .post(
       '/v1/definitions/imports',
       {
-        body: t.Object(
-          {
-            document: t.Any(),
-            context: t.Optional(t.String()),
-            expected_head: t.Optional(t.Union([t.Integer({ minimum: 1, maximum: 2147483646 }), t.Null()])),
-          },
-          { additionalProperties: false },
-        ),
+        body: t.Unsafe<DefinitionImportRequest>(importRequest),
         response: {
-          200: importPreviewResponse,
+          200: t.Unsafe<ImportedPreview>(importPreviewResponse),
           400: problemSchema('invalid_request'),
           401: unauthorized(),
           403: problemSchema('forbidden', 'platform_closed'),

@@ -34,6 +34,37 @@ export type ImportedPreview = {
   document: Release | Extension | null;
 };
 
+export type DefinitionImportRequest = {
+  document: unknown;
+  context?: string;
+  expected_head?: number | null;
+};
+
+/** Finite route type for POST /v1/definitions/imports so client emission keeps the mounted method. */
+export type DefinitionImportRoutes = {
+  v1: {
+    definitions: {
+      imports: {
+        post: {
+          body: DefinitionImportRequest;
+          params: {};
+          query: unknown;
+          headers: unknown;
+          response: {
+            200: ImportedPreview;
+            400: unknown;
+            401: unknown;
+            403: unknown;
+            404: unknown;
+            503: unknown;
+          };
+          error: never;
+        };
+      };
+    };
+  };
+};
+
 function typesOf(release: Release): { id: string }[] {
   return Object.keys(release.types)
     .sort((left, right) => (left < right ? -1 : left > right ? 1 : 0))

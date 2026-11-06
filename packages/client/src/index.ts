@@ -1,5 +1,17 @@
 import { treaty, type Treaty } from '@elysia/eden';
 import type { Static } from 'typebox';
+import type {
+  ActivationReconciliation,
+  EditorialHead,
+  ExtensionComparison,
+  PublicationDiagnostic,
+  PublicationDocumentKind,
+  PublicationIdentity,
+  PublicationOperations,
+  Release,
+  ReleaseComparison,
+} from '@rezics/definitions';
+import type { Extension } from '@rezics/definitions/extension';
 import type { PublicationPreparationSchema } from './kernel/community/publication-preparation.ts';
 import type { DecisionPageSchema } from './kernel/content/decision-page.ts';
 import type { DefaultMetadata, DefaultSingleton, Elysia } from 'elysia';
@@ -138,6 +150,43 @@ type InstalledSubjectRoutes = SharedRoutes<
 >;
 type SubjectRoutes = InstalledSubjectRoutes;
 type InstalledZoneRoutes = SharedRoutes<Routes['zones'] & ZoneSubjectListRoutes, Routes['zones']>;
+/** Producer `ImportedPreview` from kernel definition-import; SharedRoutes yields to generated emission. */
+export type ImportedPreview = {
+  kind: PublicationDocumentKind;
+  identity: PublicationIdentity | null;
+  diagnostics: PublicationDiagnostic[];
+  comparison: ReleaseComparison | ExtensionComparison | null;
+  types: { id: string }[];
+  current: EditorialHead | null;
+  reconciliation: ActivationReconciliation | null;
+  operations: PublicationOperations;
+  document: Release | Extension | null;
+};
+type DefinitionImportRequest = {
+  document: unknown;
+  context?: string;
+  expected_head?: number | null;
+};
+type DefinitionImportRoutes = {
+  imports: {
+    post: {
+      body: DefinitionImportRequest;
+      params: {};
+      query: unknown;
+      headers: unknown;
+      response: {
+        200: ImportedPreview;
+        400: unknown;
+        401: unknown;
+        403: unknown;
+        404: unknown;
+        503: unknown;
+      };
+      error: never;
+    };
+  };
+};
+type InstalledDefinitionRoutes = SharedRoutes<Routes['definitions'] & DefinitionImportRoutes, Routes['definitions']>;
 
 // Eden derives the wire client from `~Routes`; the remaining Elysia generics
 // describe server composition and are not part of the client's type surface.
@@ -149,7 +198,11 @@ type ClientApp = Elysia<
   DefaultMetadata,
   {
     [Prefix in keyof KernelType['~Routes']]: Prefix extends 'v1'
-      ? Omit<Routes, 'subjects' | 'zones'> & { subjects: SubjectRoutes; zones: InstalledZoneRoutes }
+      ? Omit<Routes, 'subjects' | 'zones' | 'definitions'> & {
+          subjects: SubjectRoutes;
+          zones: InstalledZoneRoutes;
+          definitions: InstalledDefinitionRoutes;
+        }
       : KernelType['~Routes'][Prefix];
   }
 >;
