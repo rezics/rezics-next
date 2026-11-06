@@ -79,7 +79,7 @@ test('urgent flag and front matter require a live supermanager session or its re
   }
 });
 
-test('reserved slots bypass ordinary starts, honour memory, retain waiting tasks and release on exit', async () => {
+test('reserved slots bypass ordinary starts, honour memory, free slots of waiting tasks and release on exit', async () => {
   const directory = temporaryDirectory(),
     db = openDb(':memory:'),
     store = new WorkerStore(db);
@@ -126,14 +126,11 @@ test('reserved slots bypass ordinary starts, honour memory, retain waiting tasks
     });
     db.query("UPDATE worker_attempts SET body=? WHERE task_id='one'").run(JSON.stringify({ state: 'waiting' }));
     releases[0]!();
-    // The waiting attempt keeps the first slot; the second is still reserved during preparation.
-    expect(store.capacityAttemptsCount(true)).toBe(1);
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(thirdStarted).toBe(false);
-    expect(capacityAvailable(store, directory.path)).toBe(false);
-    db.query("UPDATE worker_attempts SET body=? WHERE task_id='one'").run(JSON.stringify({ state: 'exited' }));
+    // A waiting attempt holds no session, so its urgent slot goes to the next start.
+    expect(store.capacityAttemptsCount(true)).toBe(0);
     releases.push(await third);
     expect(thirdStarted).toBe(true);
+    db.query("UPDATE worker_attempts SET body=? WHERE task_id='one'").run(JSON.stringify({ state: 'exited' }));
     expect(capacityWaiters(directory.path).has('queued')).toBe(true);
     db.query("UPDATE worker_attempts SET body=? WHERE task_id='ordinary'").run(JSON.stringify({ state: 'exited' }));
     releases.push(await ordinary); // Urgent reservations never use the ordinary slot.
