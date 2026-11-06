@@ -71,11 +71,15 @@ including the 11 GiB wait that still places on host b.
 
 Decision: pin user-visible transport, empty-directory return, 11 GiB/b-placement and host-exclusion behaviour with
 the existing remote-check/check-ssh unit files rather than a second suite. Admitted stack databases use `--rm`,
-labelled owner-pid cleanup, 120s `docker run`/`rm -f` and 5s probes, a labelled volume rather than 1 GiB tmpfs, nonce
-reap on create failure, `container:<id>` attachment and an independent TCP-to-Unix forwarder after in-container
-`pg_isready` plus a protocol reply; host-lifetime Python cleanup uses those same 120s/5s bounds and does not classify a
-`docker rm` timeout as install/preparation; SIGTERM removal is detached. Original remote context stays on those same tests. Management walk
-idle-in-transaction is that lifetime, not a second launcher. Original walks remain open.
+labelled owner-pid cleanup, 120s `docker run`/`rm -f` and 5s probes, 600s `docker build`/`pull`, a labelled volume
+rather than 1 GiB tmpfs, nonce reap on create failure, `container:<id>` attachment and an independent TCP-to-Unix
+forwarder after in-container `pg_isready` plus a protocol reply; Docker stdout/stderr is UTF-8 text whether the runtime
+returns a string or a Buffer; cleanup retains the original failure and the exact cleanup diagnostic. Host-lifetime
+Python cleanup uses those same 120s/5s bounds and does not classify a `docker rm` timeout as install/preparation;
+SIGTERM removal is detached. Compiler identity includes the installed Reylo mapper and Web/Auth manifests so local and
+remote typing share one workspace. Mapper-enabled workspace typechecks run one at a time so Kernel, Auth and Web
+compilers do not share an admitted 6GiB slice. Original remote context stays on those same tests. Management walk idle-in-transaction
+is that lifetime, not a second launcher. Original walks remain open.
 `GROWTH_PROFILE`, when set to a file inside the workspace, is forwarded to stack runs on check hosts as a
 workspace-relative path and returned with the run result. Existing local profile lines are preserved when the
 returned file is merged.

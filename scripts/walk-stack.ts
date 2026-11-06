@@ -189,3 +189,70 @@ export function admitWalkStack(
     (index) => walkPortsAvailable(Object.values(walkStackPorts(index))),
   );
 }
+
+/** Connection refused during hydration is startup, not a finished process. */
+export function isStartupTransportError(error: unknown): boolean {
+  if (error instanceof DOMException) return true;
+  if (error instanceof TypeError) return true;
+  const code = (error as NodeJS.ErrnoException | undefined)?.code;
+  return code === 'ECONNREFUSED' || code === 'ECONNRESET' || code === 'ETIMEDOUT' || code === 'EPIPE';
+}
+
+export function firstRedactedDiagnostic(text: string, secrets: readonly string[] = []): string {
+  let redacted = text;
+  for (const secret of secrets) {
+    if (secret) redacted = redacted.split(secret).join('[redacted]');
+  }
+  const line = redacted.split(/\r\n?|\n/).find((entry) => entry.trim() !== '');
+  return line?.trim() || redacted.slice(0, 500);
+}
+
+/** Admitted 6GiB slices cannot afford Kernel `--watch`. Local `task dev` keeps it. */
+export function kernelLaunchCommand(env: Record<string, string | undefined>, bun = process.execPath): string[] {
+  const script = env.REZICS_WALK_STACK_SLOT ? 'start' : 'dev';
+  return [bun, 'run', '--cwd', 'services/kernel', script];
+}
+
+export function nativeJwksUrl(nativeOrigin: string): string {
+  return `${nativeOrigin.replace(/\/$/, '')}/.well-known/jwks.json`;
+}
+
+export type StackStartPlan = {
+  kernel: string[];
+  nativeReady: string[];
+  kernelReady: string[];
+  pageReady: string[];
+  deferPages: boolean;
+};
+
+export function stackStartPlan(
+  env: Record<string, string | undefined>,
+  origins: { web: string; issuer: string; native: string; kernel: string },
+): StackStartPlan {
+  return {
+    kernel: kernelLaunchCommand(env),
+    nativeReady: [nativeJwksUrl(origins.native)],
+    kernelReady: [`${origins.kernel.replace(/\/$/, '')}/v1/definitions`],
+    pageReady: [
+      `${origins.issuer.replace(/\/$/, '')}/.well-known/openid-configuration`,
+      `${origins.web.replace(/\/$/, '')}/`,
+    ],
+    deferPages: Boolean(env.REZICS_WALK_STACK_SLOT),
+  };
+}
+
+export function seedJournalDatabaseIdentity(url: string): string {
+  const parsed = new URL(url);
+  const port = parsed.port || (parsed.protocol === 'postgres:' || parsed.protocol === 'postgresql:' ? '5432' : '');
+  return `${parsed.hostname}:${port}${parsed.pathname}`;
+}
+
+export function seedJournalsNameDifferentDatabase(recorded: string | undefined, current: string): boolean {
+  return recorded !== undefined && recorded !== '' && recorded !== current;
+}
+
+export const SEED_JOURNAL_IDENTITY_FILE = 'database-identity';
+
+export function stackPhaseLine(phase: string, identity: string): string {
+  return `stack: ${phase} ${identity}`;
+}
