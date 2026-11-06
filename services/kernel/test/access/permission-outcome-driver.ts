@@ -232,7 +232,7 @@ async function register(world: World, label: string): Promise<Person> {
   } catch (error) {
     // DIAG temporary: record the DBOS workflow status behind the registration refusal.
     const rows = await world.auth
-      .query("SELECT name, status, error FROM auth_dbos.workflow_status ORDER BY created_at DESC LIMIT 6")
+      .query("SELECT function_name, left(error, 600) AS error FROM auth_dbos.operation_outputs WHERE error IS NOT NULL ORDER BY function_id DESC LIMIT 4")
       .then((result) => result.rows)
       .catch((failure) => String(failure));
     console.error('DIAG_DBOS_REGISTER', JSON.stringify(rows).slice(0, 6000));
