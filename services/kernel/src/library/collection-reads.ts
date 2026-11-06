@@ -11,8 +11,12 @@ import {
   type AuthoritativeTime,
   type CommandAttempt,
 } from '../command/command.ts';
-import { readAccount, readAccountCommandState, readPublicAccount, type Account } from '../access/account-data.ts';
-import { contributionAttribution, type ContributionAttribution } from '../access/public-identity.ts';
+import { readAccount, readAccountCommandState, type Account } from '../access/account-data.ts';
+import {
+  contributionDeleted,
+  readContributionAttributions,
+  type ContributionAttribution,
+} from '../access/public-identity.ts';
 import { readPublicViews } from '../access/index.ts';
 import publicGeneration from './collection-public-generation.sql';
 import { nativePolicyCatalogueForAccess } from '../access/policy-core.ts';
@@ -518,7 +522,8 @@ export function createCollectionReads(
             const output = await client.query(outputHeadForRetention.sql, [route, id, sink.row.sourceGeneration]);
             if (!output.rows.length) return null;
           }
-          sink.row = { ...sink.row, curatorAccountId: null };
+          // Keep the original curator id so presentation can distinguish
+          // authoritative deletion from unavailable identity, then drop it on the wire.
         }
       }
       return disclose(sink.row, allowed, account, viewer);
@@ -831,7 +836,10 @@ export function createCollectionReads(
         : {}),
       ...(editor && row.coverMediaId !== null ? { coverMediaId: row.coverMediaId } : {}),
     };
-    return { ...view, ...(await collectionContribution(row, deadline)) };
+    const contribution = await collectionContribution(row, deadline);
+    const presented = { ...view, ...contribution };
+    if (!contributionDeleted(contribution.attribution)) return presented;
+    return { ...presented, curatorAccountId: null };
   }
 
   async function collectionContribution(
@@ -839,15 +847,13 @@ export function createCollectionReads(
     deadline: number,
   ) {
     const curatorId = row.curatorAccountId;
-    const curatorRoute = curatorId ? routeOf(curatorId) : null;
-    const attribution =
-      curatorId && curatorRoute !== null
-        ? contributionAttribution(
-            await withConnection(pool, (client) =>
-              readPublicAccount(deadlineClient(client, deadline), curatorRoute, curatorId),
-            ),
+    const attribution = curatorId
+      ? ((
+          await withConnection(pool, (client) =>
+            readContributionAttributions(deadlineClient(client, deadline), [curatorId]),
           )
-        : null;
+        ).get(curatorId) ?? null)
+      : null;
     if (row.membershipKind !== 'dynamic' || (row.visibility !== 'public' && row.visibility !== 'unlisted'))
       return { attribution };
     const collectionRoute = routeOf(row.id);

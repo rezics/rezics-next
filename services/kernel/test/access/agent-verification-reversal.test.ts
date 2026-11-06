@@ -7,7 +7,7 @@ import { createPool } from '../../src/database/pool.ts';
 import { bootstrapGovernance } from '../../src/access/bootstrap-governance.ts';
 import { accountAgentId } from '../../src/semantic/agents.ts';
 import { ensureAccountAgent } from '../../src/semantic/account-agents.ts';
-import { bootstrapRelease } from '../../src/semantic/definitions.ts';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createSubject } from '../../src/semantic/subject.ts';
 import {
   completeAgentVerification,
@@ -29,10 +29,17 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { actionCatalogue, IDEMPOTENCY_HEADER, requestDigest } from '../../src/http/request.ts';
 import { EVENT_TYPES } from '../../src/events/log.ts';
-import { migrate } from '../../scripts/database.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 import { accountToken, admittedAccess } from '../support/admitted-access.ts';
 import { runCommand, noEffect } from '../../src/command/command.ts';
+import { bindCommandHistoryEvidence } from '../../src/history/command-evidence.ts';
+import { ACCOUNT_ROLE_BITS } from '../../src/history/contract/index.ts';
+import { createWorkClient, type WorkClient } from '../../src/work/client.ts';
+import { composeWork } from '../../src/work/registry.ts';
+import { KERNEL_WORK_MODULES } from '../support/default-work-modules.ts';
+import { workerTestEnv } from '../support/worker-env.ts';
+import { startIdentityWorkProcess } from '../support/identity-work-process.ts';
+import { TEST_REQUEST_DEADLINE_MS } from '../support/test-kernel.ts';
 import {
   loadAccountIdentitySource,
   deliverAccountIdentity,
@@ -63,6 +70,9 @@ let access: ReturnType<typeof admittedAccess>;
 let kernel: ReturnType<typeof createKernel>;
 let staff: Seeded;
 let manager: Seeded;
+let workClient: WorkClient | undefined;
+let registration: Awaited<ReturnType<typeof composeWork>> | undefined;
+let identityWork: Awaited<ReturnType<typeof startIdentityWorkProcess>> | undefined;
 
 function key(): string {
   return randomUUID();
@@ -154,7 +164,14 @@ async function catalogueSubject(type: 'schema:Person' | 'schema:Organization', l
       action: 'subject:create',
       resource,
       denied: () => new Error('Fixture subject authorization denied'),
-      async authorize() {
+      async authorize(tx) {
+        bindCommandHistoryEvidence(tx, [
+          {
+            accountRoute,
+            accountId: staff.id,
+            roles: ACCOUNT_ROLE_BITS.principal | ACCOUNT_ROLE_BITS.actor | ACCOUNT_ROLE_BITS['acting-human'],
+          },
+        ]);
         return 'execute';
       },
     },
@@ -175,15 +192,24 @@ async function accountState(id: string) {
 beforeAll(async () => {
   admin = new Pool({ connectionString: sourceUrl, max: 1 });
   databaseName = `verification_reversal_${process.pid}_${randomUUID().replaceAll('-', '')}`;
+  const source = new URL(sourceUrl!);
+  const template = decodeURIComponent(source.pathname.slice(1));
+  if (!/^[a-zA-Z0-9_]+$/.test(template)) throw new Error('DATABASE_URL must name a migrated kernel template');
   const target = new URL(sourceUrl!);
   target.pathname = `/${databaseName}`;
   databaseUrl = target.toString();
-  await admin.query(`CREATE DATABASE "${databaseName}"`);
-  migrate(databaseUrl);
+  await admin.query(`CREATE DATABASE "${databaseName}" TEMPLATE "${template.replaceAll('"', '""')}"`);
   pool = createPool(databaseUrl);
   await bootstrapRelease(pool, bundledRelease);
   const receiptKeys = testReceiptKeys();
-  const initial = createKernel({ pool, routeKey, tokens, clock, receiptKeys });
+  const initial = createKernel({
+    pool,
+    routeKey,
+    tokens,
+    clock,
+    receiptKeys,
+    requestDeadlineMs: TEST_REQUEST_DEADLINE_MS,
+  });
   const actions = new Map(actionCatalogue(initial));
   for (const [action, value] of LIFECYCLE_ACTIONS) actions.set(action, value);
   actions.set('account:manage', { anonymous: false });
@@ -194,6 +220,7 @@ beforeAll(async () => {
     tokens,
     clock,
     receiptKeys,
+    requestDeadlineMs: TEST_REQUEST_DEADLINE_MS,
     access: () => access,
     writeRate: {
       async spend() {
@@ -201,21 +228,53 @@ beforeAll(async () => {
       },
     },
   });
+  workClient = await createWorkClient(databaseUrl, pool);
+  const routeKeyText = Buffer.from(routeKey).toString('base64url');
+  const searchPrefix = `reversal-${randomUUID().slice(0, 8)}-`;
+  registration = await composeWork(KERNEL_WORK_MODULES, {
+    databaseUrl,
+    pool,
+    client: workClient,
+    env: workerTestEnv({
+      KERNEL_ROUTE_KEY: routeKeyText,
+      OPENSEARCH_URL: process.env.OPENSEARCH_URL,
+      KERNEL_SEARCH_PREFIX: searchPrefix,
+    }),
+    receiptKeys,
+  });
+  identityWork = await startIdentityWorkProcess({
+    databaseUrl,
+    routeKey: routeKeyText,
+    openSearchUrl: process.env.OPENSEARCH_URL,
+    searchPrefix,
+  });
   staff = await seedAccount('reversal_staff');
   manager = await seedAccount('reversal_manager');
   await bootstrapGovernance(pool, staff.id);
+  await pool.query(
+    `INSERT INTO access.resource_grant(route, resource_id, subject_id, action, valid, transaction_id)
+     VALUES (0, $1, $2, 'subject:create', '(,)', $2)
+     ON CONFLICT DO NOTHING`,
+    [GLOBAL_CONTEXT, staff.id],
+  );
   const opened = await post('/v1/platform/exposure/agent_verification:open', await bearer(staff));
   expect(opened.response.status).toBe(200);
-}, 60_000);
+}, 180_000);
 
 afterAll(async () => {
-  await pool?.end();
   try {
-    if (databaseName) await dropTestDatabase(admin, databaseName);
+    await identityWork?.stop();
+    await registration?.shutdown();
+    await workClient?.close();
+    await pool?.end();
   } finally {
-    await admin?.end();
+    try {
+      if (databaseName) await dropTestDatabase(admin, databaseName);
+    } finally {
+      await admin?.end();
+    }
   }
-}, 30_000);
+}, 60_000);
 
 async function verified(kind: 'actor' | 'organization' = 'actor') {
   const account = await seedAccount(`reversal_${randomUUID().slice(0, 8)}`, { kind });
@@ -2520,13 +2579,17 @@ test("Original Account reversal writer publishes exact native reversal settlemen
   expect(await verify(reference, {} as typeof proof)).toBe(false);
   expect(await verify(reference, proof, 0)).toBe(false);
   expect(await independent()).toEqual(before);
-  // Original owner restoration invalidates both the read and a previously issued proof.
-  await pool.query('UPDATE core.partition SET epoch=epoch+1 WHERE partition_no=$1', [source.partition]);
+  // A fenced home invalidates both the read and a previously issued proof. Epoch rotation
+  // stays refused until native live-copy lineage is reconciled.
+  await expect(
+    pool.query('UPDATE core.partition SET epoch=epoch+1 WHERE partition_no=$1', [source.partition]),
+  ).rejects.toThrow('Live copy domain requires native lineage reconciliation before activation');
+  await pool.query("UPDATE core.partition SET write_state='fenced' WHERE partition_no=$1", [source.partition]);
   try {
     expect(await verify()).toBe(false);
     expect(await frame((context) => readAccountIdentityReversalSettlement(pool, reference, context))).toBeNull();
   } finally {
-    await pool.query('UPDATE core.partition SET epoch=epoch-1 WHERE partition_no=$1', [source.partition]);
+    await pool.query("UPDATE core.partition SET write_state='active' WHERE partition_no=$1", [source.partition]);
   }
   expect(await verify()).toBe(true);
   // Existing old-image-loss fixture: no synthetic terminal flags or fake receiver.

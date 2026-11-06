@@ -54,9 +54,9 @@ const WRAPPER_RESULT = wrapperResult(
   'missing, unknown or nonzero is not a pass',
   "A failure after the wrapper's own infrastructure rerun is final: a `tool` blocker.",
 );
-// Under the combined check a nonzero exit is decided by the type-error and money-code rules, not by the generic pass test.
+// Under the typecheck-only check a nonzero exit is a type error, or a money-path test failure when those paths changed.
 const MINIMAL_WRAPPER_RESULT = wrapperResult(
-  'missing or unknown is not a pass; a nonzero exit is judged by the type-error and money-code rules above',
+  'missing or unknown is not a pass; a type error is not a pass; a failing payment, payout, order settlement, points or balance test is not a pass',
   "A transport or infrastructure failure that survives the wrapper's own rerun is final: a `tool` blocker; type and test failures are not infrastructure failures.",
 );
 const OWNED_ONCE =
@@ -76,9 +76,9 @@ const OWN_TESTS =
   "After your last edit, run the test files you created or changed once, with the landing's command (`bun test <files>`; services/kernel: `bun run --cwd services/kernel check <files>`; apps/web: `bun apps/web/scripts/focused.ts --private-network -- bun test <files>`), and fix failures you caused.";
 const REGRESSION = `Do not run the root typecheck or other regression suites yourself; the landing runs them. ${OWN_TESTS}`;
 const MINIMAL_SESSION_COMMANDS =
-  'Commands that finish locally in under a minute (`bun test` of a few plain unit files, oxfmt, tsc on tools/goal) still run in the session.';
+  'Commands that finish locally in under a minute (oxfmt, tsc on tools/goal) still run in the session.';
 // The result rule travels with the wrapper result protocol in the footer; the condition body states the check itself.
-const MINIMAL_RESULT = `Then commit and return success (blocker null, \`"checks":[]\`) once every changed workspace type-checks, naming what you completed and the deferred acceptance, which is neither a blocker nor a reason to wait; return waiting only for a still-running check UUID this attempt started. A failing test blocks success only when the outcome changes payment, payout, order settlement, points or balance code. Otherwise name each changed test file the check still reports failing under a 'failing tests' label in the summary, with its first error line from the check output or its full log (write none when none fails); that list is not counted in the 120-word summary limit. Such a failing test need not be repaired, even when a check wake asks you to fix the cause.`;
+const MINIMAL_RESULT = `Then commit and return success (blocker null, \`"checks":[]\`) once every changed workspace type-checks, naming what you completed and the deferred acceptance, which is neither a blocker nor a reason to wait; return waiting only for a still-running check UUID this attempt started.`;
 const PROTOCOL_FOOTER: Partial<Record<ConditionId, string>> = {
   'minimal-verification': `${MINIMAL_RESULT} ${MINIMAL_SESSION_COMMANDS} ${MINIMAL_WRAPPER_RESULT}`.trimEnd(),
   'local-placement': `${WAIT} ${REGRESSION}`,
@@ -377,7 +377,7 @@ function promptView(input: WorkerPromptInput): PromptView {
     wrapperResult: local && runner ? WRAPPER_RESULT : '',
     localRun,
     minimalOwned: owned
-      ? 'This brief leaves validation to the worker. Choose or add focused tests that exercise the stated outcome, run them with the landing command below, and report the exact command and actual result; a missing acceptance command is not a pass. Broader acceptance remains deferred under this policy. '
+      ? 'This brief leaves validation to the worker. Choose or add focused tests that exercise the stated outcome; they run after landing in the dev verifier. A missing acceptance command is not a pass. Broader acceptance remains deferred under this policy. '
       : '',
     proofSourceCommit: proofSource,
     proofCheckId,

@@ -59,8 +59,10 @@ for (const axis of ['unrelated', 'history'] as const) {
       FOR EACH ROW EXECUTE FUNCTION public.fail_native_growth_checkpoint()`);
     let selected: unknown;
     try {
+      await auth.stop();
       // Prime the durable discovery replay. The dependency separately proves its
       // ordered range seek; this slice measures real mutation/proof/checkpoint work.
+      // Auth is stopped so its Access checkouts cannot enter the measured native page.
       await expect(advanceNativeErasure(db.pool, progressId)).rejects.toThrow('growth checkpoint fault');
       selected = (
         await db.admin.query(
@@ -117,6 +119,7 @@ for (const axis of ['unrelated', 'history'] as const) {
     } finally {
       await db.admin.query('DROP TRIGGER fail_native_growth_checkpoint ON access.erasure_native_progress');
       await db.admin.query('DROP FUNCTION public.fail_native_growth_checkpoint()');
+      await auth.restart();
     }
     await advanceNativeErasure(db.pool, progressId);
     expect(

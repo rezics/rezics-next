@@ -6,6 +6,8 @@ import { fromPlainText } from '@rezics/document';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { accessCommandAuthorization, type AccountActor, type Actor } from '../../src/request/access.ts';
 import { runCommand, principalCommandIdentity } from '../../src/command/command.ts';
+import { bindCommandHistoryEvidence, declareCommandHistory } from '../../src/history/application/index.ts';
+import { ACCOUNT_ROLE_BITS } from '../../src/history/contract/index.ts';
 import { appendAuthoredField, eraseAuthoredField, readAuthoredField } from '../../src/content/authored-fields.ts';
 import { ContentNotFoundError } from '../../src/content/commands.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
@@ -14,6 +16,7 @@ import { createSubject } from '../../src/semantic/subject.ts';
 import { writeProposal } from '../../src/semantic/candidates.ts';
 import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import { checkGrowth, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 
 setDefaultTimeout(120_000);
 
@@ -101,7 +104,20 @@ async function appendThroughSemanticSubjectCommand(): Promise<{ id: string; subj
       ...identity,
       partition: partitionOf(subjectRoute),
       deadline: context.deadline,
-      authorization,
+      authorization: {
+        ...authorization,
+        async authorize(tx, attempt, proof) {
+          const mode = await authorization.authorize(tx, attempt, proof);
+          bindCommandHistoryEvidence(tx, [
+            {
+              accountRoute: routeOf(authorId)!,
+              accountId: authorId,
+              roles: ACCOUNT_ROLE_BITS.principal | ACCOUNT_ROLE_BITS.actor | ACCOUNT_ROLE_BITS['acting-human'],
+            },
+          ]);
+          return mode;
+        },
+      },
       receipt: {
         kind: 'subject.propose',
         key: context.idempotencyKey,
@@ -137,17 +153,19 @@ async function appendThroughSemanticSubjectCommand(): Promise<{ id: string; subj
         },
       });
       if (!appended) throw new Error('The semantic proposal did not append its authored document');
-      return {
-        value: proposal.value,
-        events: [
-          ...proposal.events,
-          {
-            type: authoredCreated,
-            subject,
-            data: { id: appended.id, subject, candidate: proposal.value.candidate, authorId: author.accountId },
-          },
-        ],
-      };
+      const events = [
+        ...proposal.events,
+        {
+          type: authoredCreated,
+          subject,
+          data: { id: appended.id, subject, candidate: proposal.value.candidate, authorId: author.accountId },
+        },
+      ];
+      await declareCommandHistory(tx, 'subject.propose', {
+        response: { artifactType: 'command-receipt/v1', accounts: [] },
+        events: events.map(() => ({ artifactType: 'outbox-event/v1', accounts: [] })),
+      });
+      return { value: proposal.value, events };
     },
   );
   if (!appended) throw new Error('No authored field was appended');
@@ -161,6 +179,7 @@ async function erase(id: string, actor: Actor, key = randomUUID()) {
 beforeAll(async () => {
   db = await openGrowthDatabase();
   db.pool.options.max = 1;
+  configureTestReceiptKeys(db.pool);
   await bootstrapRelease(db.pool, bundledRelease);
   access = admittedAccess({ actions: new Map(actionNames.map((action) => [action, { anonymous: false }])) });
   const accounts = await Promise.all(actorIds.map(insertAccount));

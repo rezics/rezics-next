@@ -1853,6 +1853,12 @@ only on explicit conflict reload, never upload anonymous history, omit persisted
 
 ## Default public runtime composition
 
+Decision: request and continuation handles forward the same native page opener; irrelevant excluded-key
+reductions retain useful permitted pages during Search-only lag, while returned-subject and filter/order
+blocks still prepare. The existing native query-privacy cell owns anonymous/editor/suspended observations
+and ordinary relay recovery; owner hydration rereads at most 100 distinct identities per batch, including
+200-candidate windows. Browser and promoted-main acceptance remain separate.
+
 `server.startServer` installs `createDefaultPublicFilterRuntime` after the full Kernel action/resource catalogue
 has produced its actual native Access. The worker obtains that same binding through a headless Kernel composition,
 with the installed domain clock, canonical route key and existing WorkClient. The default service sends admitted,
@@ -1865,6 +1871,17 @@ unexhausted pages yield readiness and the producer's retained prepared job rathe
 Confidential continuations retain actual observation, execution/consumed and root-work locators within the
 existing principal/query/language and generation/comparator guards. Public kind
 metadata carries no inferred counts. Aggregate facets retain readiness until their native aggregate proof exists.
+
+### Request handle disclosure and Cost
+
+- Touches: the existing shared consumer's capture, raw-window traversal and native final Source observation;
+  handle construction forwards its private opener without another capture, Source read or engine request.
+- Bound: the same three rounds and `min(600, 6s + 3)` raw candidates for a direct page; prepared mixed traversal
+  keeps its 600-row ceiling. Initial and final owner summaries each use 100-identity batches over at most 200
+  candidates, deduplicating identities within each kind. All final reads stay inside the executed request deadline.
+- Growth check: `query-privacy-user-cases.test.ts` reuses the seven released Books to contrast an irrelevant
+  excluded word-count reduction with a returned-subject block during Search-only pause, then resumes the
+  ordinary relay. `owner-current-disclosure.test.ts` covers the full 200-candidate window and nested withdrawal.
 
 `PublicSuggestionCaptureInput` adds the canonical `{purpose:'suggest', prefix, size, generation?,
 filterDocument:undefined, text:undefined}` variant to `PublicCanonicalCaptureInput`, retained by custody and

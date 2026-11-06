@@ -6,6 +6,7 @@ import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { readErasureStatus } from '../../src/access/erasure.ts';
 import { createGrantCommands } from '../../src/access/grant-commands.ts';
 import { nativeFixture, scopes } from './native-account-bindings-fixture.ts';
+import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
 import { deletePersona } from '../support/account-deletion.ts';
 import { expect, test } from 'bun:test';
 import type { AuthErasureObligation, AuthErasureObligationCursor } from '@rezics/auth-contract';
@@ -34,6 +35,7 @@ async function person(db: Fixture, route: number) {
   return accountId;
 }
 async function erase(db: Fixture, accountId: string) {
+  configureTestReceiptKeys(db.pool);
   const access = admittedAccess({ actions: LIFECYCLE_ACTIONS });
   const actor = await authenticateAccount(
     access,
@@ -228,21 +230,27 @@ test('missing original native floor evidence remains pending and ownership chang
         [missing],
       ),
     ).rejects.toThrow();
-    await db.admin.query('UPDATE core.partition SET epoch=epoch+1 WHERE partition_no=1');
-    const afterMove = await person(db, 16);
-    await erase(db, afterMove);
-    expect(await ports.readAuthErasureObligation({ accountId: afterMove, deadline: deadline() })).toMatchObject({
-      state: 'pending',
-      reason: 'source-unavailable',
-    });
-    expect(await ports.readAuthErasureObligation({ accountId: missing, deadline: deadline() })).toMatchObject({
-      state: 'pending',
-      reason: 'source-unavailable',
-    });
-    expect(await ports.pageAuthErasureObligations({ cutId, cursor, deadline: deadline() })).toMatchObject({
-      state: 'pending',
-      reason: 'source-unavailable',
-    });
+    const before = (await db.admin.query('SELECT node,epoch,write_state FROM core.partition WHERE partition_no=1'))
+      .rows;
+    await expect(db.admin.query('UPDATE core.partition SET epoch=epoch+1 WHERE partition_no=1')).rejects.toThrow(
+      'Live copy domain requires native lineage reconciliation before activation',
+    );
+    expect(
+      (await db.admin.query('SELECT node,epoch,write_state FROM core.partition WHERE partition_no=1')).rows,
+    ).toEqual(before);
+    await db.admin.query("UPDATE core.partition SET write_state='fenced' WHERE partition_no=1");
+    try {
+      expect(await ports.readAuthErasureObligation({ accountId: missing, deadline: deadline() })).toMatchObject({
+        state: 'pending',
+        reason: 'source-unavailable',
+      });
+      expect(await ports.pageAuthErasureObligations({ cutId, cursor, deadline: deadline() })).toMatchObject({
+        state: 'pending',
+        reason: 'source-unavailable',
+      });
+    } finally {
+      await db.admin.query("UPDATE core.partition SET write_state='active' WHERE partition_no=1");
+    }
   } finally {
     await db.close();
   }
@@ -303,6 +311,7 @@ describe('Access native terminal cleanup', () => {
       pool,
       routeKey: new Uint8Array(32).fill(28),
       tokens: auth.referenceKeys,
+      receiptKeys: testReceiptKeys(),
       access: () => auth.access,
       writeRate: createWriteRateLimiter({
         secret: 'erasure-native-write-limiter-secret',

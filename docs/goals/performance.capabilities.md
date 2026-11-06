@@ -13,10 +13,7 @@ not evidence that the capabilities have passed.
 
 Decision: Published Log public lifecycle acceptance stays on the seven existing Log operation/growth/retention/source
 suites and the five retained Search scope/work-context suites, plus affected Web log tests. FULL withhold of a changed
-Source and the My Logs history-state return frontier are pinned on those suites. The public Back link uses a
-cursor-free My Logs address. An ordinary click restores history only when bound to the captured My Logs visit for
-this log and current session; a direct visit follows that address. History length alone does not identify the
-return visit. Session replacement uses current admission when recovering the list. Full native Auth walk,
+Source and the My Logs history-state return frontier are pinned on those suites. Full native Auth walk,
 64/512/4096 growth and rendered 720-hour retention remain open until observed passing. Verification.md keeps general
 check policy; these suites and the deferred native walk live here and in Library owners. Fewest tests: extend
 operation-bounds and retract causal, plus one FULL withhold and one My Logs return-frontier pin. A retired completed

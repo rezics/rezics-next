@@ -10,6 +10,7 @@ import {
 } from '../commerce/creator-sales-work.ts';
 import { recoverSubjectListing, bootstrapSubjectListingHome } from '../library/listing.ts';
 import { LiveCopyPendingError } from './live-copy.ts';
+import { readLiveCopyLineage } from './live-copy-lineage.ts';
 import { CommandUnavailableError } from './unavailable.ts';
 
 const WORKFLOW = 'access.liveCopy.recover';
@@ -69,6 +70,7 @@ async function recoverHome(context: Pick<WorkContext, 'pool' | 'client'>, partit
     context.pool,
     { mode: 'work-step', partition, kind: WORKFLOW, accounts: [], workClient: context.client },
     async (tx) => {
+      await readLiveCopyLineage(tx, partition);
       await tx.query(
         `UPDATE access.live_copy_transition SET next_run=now()+interval '10 minutes'
       WHERE route=$1 AND transition_id=$2 AND state='pending'`,
@@ -101,13 +103,15 @@ export async function registerLiveCopyRecovery(context: WorkContext) {
       await runOperationalTransaction(
         context.pool,
         { mode: 'work-step', partition: input.partition, kind: WORKFLOW, accounts: [], workClient: context.client },
-        (tx) =>
-          enqueueIntent(tx, {
+        async (tx) => {
+          await readLiveCopyLineage(tx, input.partition);
+          await enqueueIntent(tx, {
             queue: 'maintenance',
             workflowName: WORKFLOW,
             workflowId: `${input.root}:${input.segment}`,
             input,
-          }),
+          });
+        },
       );
     },
     { name: 'access.liveCopy.continue', ...COMMAND_STEP_RETRIES },

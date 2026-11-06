@@ -60,13 +60,17 @@ export async function revalidateOwnerCurrentSummaries<Candidate>(
   const current = new Map<string, DiscoveryOwnerMetadataSummary>();
   for (const [kind, ids] of idsByKind) {
     const adapter = registry.getOwnerAdapter(kind);
-    const summaries = await adapter.readCurrent(ids, context);
-    if (!summaries || typeof summaries.get !== 'function' || typeof summaries[Symbol.iterator] !== 'function')
-      throw new TypeError('Owner discovery adapter returned an invalid current summary set');
-    const requested = new Set(ids);
-    for (const [id, summary] of summaries) {
-      if (!requested.has(id)) throw new TypeError('Owner discovery adapter returned a foreign current summary');
-      current.set(`${kind}:${id}`, summary);
+    const unique = [...new Set(ids)];
+    for (let offset = 0; offset < unique.length; offset += 100) {
+      const batch = unique.slice(offset, offset + 100);
+      const summaries = await adapter.readCurrent(batch, context);
+      if (!summaries || typeof summaries.get !== 'function' || typeof summaries[Symbol.iterator] !== 'function')
+        throw new TypeError('Owner discovery adapter returned an invalid current summary set');
+      const requested = new Set(batch);
+      for (const [id, summary] of summaries) {
+        if (!requested.has(id)) throw new TypeError('Owner discovery adapter returned a foreign current summary');
+        current.set(`${kind}:${id}`, summary);
+      }
     }
   }
   return accepted.map((entry) => {

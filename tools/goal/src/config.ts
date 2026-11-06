@@ -449,6 +449,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
         runGate: verifierGate,
         runBootSmoke: bootSmokeGate,
         dispatchRepair: repairRouting.dispatchBootSmokeRepair,
+        dispatchTestRepair: repairRouting.dispatchTestFailureRepair,
         runPageData: async () =>
           runPageDataCycle({
             settings,
