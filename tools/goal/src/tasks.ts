@@ -83,6 +83,7 @@ import {
   type AuthenticatedManager,
 } from './priority-authority.ts';
 import type { PriorityGrant } from './types.ts';
+import { reapAttemptResources } from './attempt-resources.ts';
 
 export { git };
 
@@ -2080,6 +2081,7 @@ export class WorkerTasks {
         this.store.updateTask(ref, (t) => {
           t.state = cancelled ? 'cancelled' : 'stopped';
         });
+        await this.reapOwnedResources(this.store.task(taskId));
         return;
       }
       const settleLogPath = this.store.attempt(ref).logPath;
@@ -2133,6 +2135,7 @@ export class WorkerTasks {
         this.store.finishTermination(ref);
       }
       this.closeCurrentTermination(taskId, ref);
+      await this.reapOwnedResources(this.store.task(taskId));
     } finally {
       settlementLease?.release();
       lease.release();
@@ -2225,6 +2228,15 @@ export class WorkerTasks {
       if (error instanceof StaleAttemptError) return this.store.updateHeldRetryTask(ref, apply);
       throw error;
     }
+  }
+  private async reapOwnedResources(task: Task): Promise<void> {
+    await reapAttemptResources({
+      taskId: task.id,
+      stateDirectory: this.settings.stateDirectory,
+      ...(task.workspace ? {} : { worktree: task.worktree }),
+      graceMs: this.settings.terminationGraceMs,
+      containers: this.settings.policy?.containers ?? defaultPolicy.containers,
+    });
   }
   completionScope(goal: string): string[] {
     return this.store.db

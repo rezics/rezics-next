@@ -90,7 +90,7 @@ test('the one-run compiler database stays in the run slice on a labelled volume'
     expect(args).toContain('--mount');
     expect(args).toContain('type=volume,destination=/var/lib/postgresql,volume-label=rezics.kernel.derived.pid=4242');
     expect(args).not.toContain('--tmpfs');
-    expect(args).not.toContain('--rm');
+    expect(args).toContain('--rm');
   } finally {
     if (previousRemote === undefined) delete process.env.KERNEL_CHECK_ON_REMOTE;
     else process.env.KERNEL_CHECK_ON_REMOTE = previousRemote;

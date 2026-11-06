@@ -276,18 +276,44 @@ function createDatabaseContainer(name: string, checkout: string): string {
   ]).trim();
 }
 
-/** One-run compiler database: slice-confined, disk-backed, never a checkout bind mount. */
+function ownerIdentityLabels(pid: number): { pid: string; start: string; boot: string } {
+  let start = '';
+  let boot = '';
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+    const end = stat.lastIndexOf(')');
+    const fields = stat
+      .slice(end + 2)
+      .trim()
+      .split(/\s+/);
+    if (/^\d+$/.test(fields[19] ?? '')) start = fields[19]!;
+  } catch {
+    // Tests pass a pid with no /proc entry; the reaper then treats the owner as gone.
+  }
+  try {
+    boot = readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim();
+  } catch {
+    // Offline fixtures have no boot id; pid+start still fences reuse on a live host.
+  }
+  return { pid: String(pid), start, boot };
+}
+
+/** One-run compiler database: slice-confined, disk-backed, never a checkout bind mount. `--rm` drops it when it exits. */
 export function throwawayDatabaseRunArgs(pid = process.pid): string[] {
+  const owner = ownerIdentityLabels(pid);
+  const labels = [`rezics.kernel.derived.pid=${owner.pid}`];
+  if (owner.start) labels.push(`rezics.kernel.derived.start=${owner.start}`);
+  if (owner.boot) labels.push(`rezics.kernel.derived.boot=${owner.boot}`);
   return [
     'run',
     '-d',
+    '--rm',
     ...cgroupArgs(),
-    '--label',
-    `rezics.kernel.derived.pid=${pid}`,
+    ...labels.flatMap((label) => ['--label', label]),
     '-p',
     '127.0.0.1::5432',
     '--mount',
-    `type=volume,destination=/var/lib/postgresql,volume-label=rezics.kernel.derived.pid=${pid}`,
+    `type=volume,destination=/var/lib/postgresql,volume-label=rezics.kernel.derived.pid=${owner.pid}`,
     '-e',
     'POSTGRES_USER=rezics',
     '-e',
