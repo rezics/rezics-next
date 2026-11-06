@@ -14,7 +14,7 @@ import {
   preparationDefinitionBases,
   type MembersPreparation,
   type MembersPreparationHistory,
-  type PreparationDefinition,
+  type PreparationDefinitionInput,
   type PreparingEpisode,
 } from './members-preparation.ts';
 import { OPERATIONAL_WORK_LOCAL_DECLARATION, sumOperationalWork } from '../history/core/operational-work-budget.ts';
@@ -63,7 +63,7 @@ export async function runMembersPreparationRequest<T>(
   input: Readonly<{
     actor: Actor;
     collectionId: string;
-    definition: PreparationDefinition;
+    definition: PreparationDefinitionInput;
     deadline?: number;
   }>,
   source: (request: MembersPreparationRequest) => Promise<T>,
