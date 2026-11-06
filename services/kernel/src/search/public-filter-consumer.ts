@@ -37,6 +37,7 @@ import { prepareBoundedSortKeys } from './bounded-sort-keys.ts';
 import { subjectPartition } from './source.ts';
 import { writeIndexActions } from './write-actions.ts';
 import type { PublicFilterConsumerContext, PublicFilterQueriedObservation } from './public-filter-consumer-contract.ts';
+import { observationIsDisclosableFromUnknown } from './query-privacy-observation.ts';
 
 /** Internal compilation only. Native Source resolution, custody and disclosure remain mandatory. */
 export type CompiledPublicFilterConsumerCapture = Readonly<{
@@ -1057,8 +1058,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     const observed = await withPublicFilterCoverageStart(page.context, id, () =>
       observe(q, null, undefined, page.m, page.context),
     );
-    if (observed.blocking.length || observed.unacknowledged.length || observed.changed.length)
-      throw new ConsumerFailure('source_pending');
+    if (!observationIsDisclosableFromUnknown(observed)) throw new ConsumerFailure('source_pending');
     page.start = observed.start;
   }
   async function reservePage(
@@ -1647,7 +1647,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       // boundary are closed. Baseline preparation cannot manufacture that start.
       if (!page) {
         const observation = await observe(q, null, undefined, m, context);
-        if (observation.blocking.length || observation.unacknowledged.length || observation.changed.length)
+        if (!observationIsDisclosableFromUnknown(observation))
           return { status: 'preparing', repair: job, cost: m.cost };
       }
       return { status: 'captured', queried: q, repair: job, cost: m.cost };
@@ -1835,8 +1835,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       if ((page?.rounds ?? work.rounds) >= 3 || size > allowance - (page?.charged ?? work.charged)) return preparing();
       if (page) await beginPage(page, q, use, prefix, previousEncoded, allowance);
       const started = page ? { start: page.start! } : await observe(q, null, undefined, m, context);
-      if ('blocking' in started && (started.blocking.length || started.unacknowledged.length || started.changed.length))
-        return preparing();
+      if ('blocking' in started && !observationIsDisclosableFromUnknown(started)) return preparing();
       await physical(q, m, context);
       // Reserve this attempt before external dispatch. An uncertain engine result cannot regain allowance.
       const execution = randomUUID();
@@ -1973,7 +1972,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         return m.unavailable('observation_lost');
       if (!page) {
         const final = await observe(q, started.start, execution, m, context);
-        if (final.blocking.length || final.unacknowledged.length || final.changed.length) return preparing();
+        if (!observationIsDisclosableFromUnknown(final)) return preparing();
         await physical(q, m, context);
       }
       m.cost.outputSlots += positions.length;
@@ -2717,8 +2716,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           );
           if (sealed.rowCount !== 1) throw new ConsumerFailure('observation_lost');
           const final = await observe(page.queried, page.start, page.tail, page.m, context);
-          if (final.blocking.length || final.unacknowledged.length || final.changed.length)
-            throw new ConsumerFailure('source_pending');
+          if (!observationIsDisclosableFromUnknown(final)) throw new ConsumerFailure('source_pending');
           page.m.check();
           page.finished = true;
         }),

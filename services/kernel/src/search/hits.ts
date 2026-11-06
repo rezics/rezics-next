@@ -208,3 +208,47 @@ export async function projectFacts(
     ),
   );
 }
+
+export type RevalidatedHit = Readonly<{ subject: IndexedSubject; hit: SearchHit }>;
+
+/**
+ * Final displayed fields after nested facet or label reads. Hidden, taken-down and redirected
+ * subjects drop; withheld statements disappear from the current snapshot.
+ *
+ * Cost
+ * - Touches: one grouped current Source read of accepted hit ids, then the existing fact-target
+ *   disclosure for requested item properties.
+ * - Bound: at most 100 hits and four properties, in 256-key Source batches. No engine read.
+ * - Growth check: `test/search/query-privacy-page.test.ts` covers hydration reduction and nested
+ *   label revalidation.
+ */
+export async function revalidateProjectedHits(
+  source: SubjectSource,
+  subjects: readonly IndexedSubject[],
+  options: HitOptions,
+): Promise<Map<string, RevalidatedHit>> {
+  if (subjects.length > 100) throw new RangeError('Current hit revalidation admits at most 100 subjects');
+  const visible = await discloseFacetValues(
+    source,
+    subjects.map((subject) => subject.id),
+  );
+  const current: IndexedSubject[] = [];
+  for (const subject of subjects) {
+    const next = visible.get(subject.id);
+    if (next) current.push(next);
+  }
+  const facts =
+    options.properties && options.properties.length
+      ? await projectFacts(source, current, options.properties, options.languages)
+      : current.map(() => undefined);
+  const disclosed = new Map<string, RevalidatedHit>();
+  current.forEach((subject, index) => {
+    const projected = projectHit(subject, options);
+    const page = facts[index];
+    disclosed.set(subject.id, {
+      subject,
+      hit: page && Object.keys(page).length ? { ...projected, facts: page } : projected,
+    });
+  });
+  return disclosed;
+}

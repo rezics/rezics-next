@@ -27,6 +27,7 @@ import {
   type ScopedFacetObservation,
   type ScopedFacetPage,
 } from './scoped-facet-source.ts';
+import { sourceObservationIsDisclosable } from './query-privacy-observation.ts';
 
 const idle = 24 * 60 * 60 * 1000;
 const emptyCost = (): PublicFilterCost => ({
@@ -246,13 +247,7 @@ export function createFacetDiscoveryStorage(
       context,
     });
     add(meter, observed.cost);
-    return observed.status === 'observed' &&
-      observed.routingComplete &&
-      observed.unacknowledged.length === 0 &&
-      observed.changed.length === 0 &&
-      observed.blocking.length === 0
-      ? observed
-      : null;
+    return sourceObservationIsDisclosable(observed) ? observed : null;
   }
   async function safeScope(plan: FacetNativePlan, context: PublicFilterConsumerContext, meter: Meter) {
     if (!plan.scope) return true;

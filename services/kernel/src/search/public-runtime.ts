@@ -46,6 +46,7 @@ import type { CreditSearchSource } from './credit-search.ts';
 import type { FacetDiscoveryProvider } from './facet-discovery-native.ts';
 import { createFacetNativeOperations } from './facet-discovery-operations.ts';
 import { createScopedFacetSource } from './scoped-facet-source.ts';
+import { createQueryPrivacyConsumer, type QueryPrivacyConsumer } from './query-privacy-consumer.ts';
 
 export type DefaultPublicFilterRuntimeConfig = Readonly<{
   pool: Pool;
@@ -92,6 +93,8 @@ export type DefaultPublicFilterRuntime = Readonly<{
     job: PublicFilterConsumerJob,
     context: PublicFilterConsumerContext,
   ): ReturnType<PublicFilterConsumerOperations['repairStep']>;
+  /** Typed currentness and aggregate proofs over retained capture/query/repair. */
+  privacy(operations: PublicFilterConsumerOperations): QueryPrivacyConsumer;
   /** Trusted native facet composition; omitted generation or meaning stays closed. */
   facetProvider(): Promise<FacetDiscoveryProvider | undefined>;
   close(): Promise<void>;
@@ -428,6 +431,9 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
           throw error;
         }
       });
+    },
+    privacy(operations) {
+      return createQueryPrivacyConsumer(operations);
     },
     repair(job, context) {
       return track(async () => {

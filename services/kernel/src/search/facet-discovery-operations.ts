@@ -32,6 +32,7 @@ import {
   type ScopedFacetObservation,
 } from './scoped-facet-source.ts';
 import type { createScopedFacetSource } from './scoped-facet-source.ts';
+import { sourceObservationIsDisclosable } from './query-privacy-observation.ts';
 
 type Meter = { -readonly [K in keyof PublicFilterCost]: number };
 const empty = (): Meter => ({
@@ -79,13 +80,7 @@ function captureInput(plan: FacetNativePlan): PublicFilterConsumerCaptureInput {
 function clean(
   observed: Awaited<ReturnType<PublicFilterSource['readPrivacyReductionHeads']>>,
 ): observed is Extract<Awaited<ReturnType<PublicFilterSource['readPrivacyReductionHeads']>>, { status: 'observed' }> {
-  return (
-    observed.status === 'observed' &&
-    observed.routingComplete &&
-    observed.unacknowledged.length === 0 &&
-    observed.changed.length === 0 &&
-    observed.blocking.length === 0
-  );
+  return sourceObservationIsDisclosable(observed);
 }
 
 type StoredRow = {

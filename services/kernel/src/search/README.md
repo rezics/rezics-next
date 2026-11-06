@@ -479,19 +479,24 @@ Query-level privacy-reduction invalidation and acknowledgement is required **in 
 Local reductions invalidate public use in their authoritative transaction. Foreign source-fence, target, consent
 and Collection reductions invalidate affected public use immediately. Acknowledgement covers actual refresh-visible
 projection repair including dependent foreign repair. Observe required current safety state before execution and
-revalidate before disclosure. Unsafe, changed, missing or pending acknowledgement means preparation/readiness,
-never stale exclusion/order/results. Ordinary checkpoints, `securityRevision`, complete ordinary generations,
-returned-ID checks and omitted counts cannot certify this seam.
+revalidate before disclosure. A relevant blocking barrier, incomplete routing or a missing observation means
+preparation. Unacknowledged or changed heads that Source did not classify as blocking are trusted stale: they
+recover ordinary permitted pages after current native membership and field checks, and they never certify
+exclusion, order or aggregates by themselves. Ordinary checkpoints, `securityRevision`, complete ordinary
+generations, returned-ID checks and omitted counts cannot certify this seam.
 
 Decision: facet pages retain each exact native execution through value validation and cursor signing, then make one
 final query-level safety decision for all siblings. An unclean final observation withholds the complete facet
 response; engine exhaustion alone never upgrades source-backed sample totals to exact counts.
 
 Withholding a harem tag must protect positive harem results and **NOT harem**: returned-row checks miss the subject
-excluded by a stale tag. Paused-indexer negative/order/count cases must stay preparing until acknowledgement covers
-the local reduction and all affected foreign repair. This is a required abstract producer/consumer contract, not a
-certificate store, safety-token ABI, new permission authority or global identity/home sweep. Current native ports
-do not yet implement the complete seam. Omit unsafe engine totals/facet counts over unchecked populations; neither
+excluded by a stale tag. Affected paused-indexer negative/order/count queries stay preparing until acknowledgement
+covers that relevant blocking reduction and all affected foreign repair. Unrelated permitted queries recover. This is a required abstract producer/consumer contract, not a
+certificate store, safety-token ABI, new permission authority or global identity/home sweep. Capture, query, repair
+and refresh-visible acknowledgement consume Source blocking as the relevant barrier (`query-privacy.ts`). Incomplete
+routing or a nonempty blocking list prepares; trusted stale heads recover ordinary permitted pages after current
+native checks. An admitted cursor, a positive kind witness and an exact aggregate stay distinct proofs; sampled hits
+never certify totals. Omit unsafe engine totals/facet counts over unchecked populations; neither
 approximate/as_of labels nor zero/row-length substitutes repair privacy.
 
 ### Scope and composed-page admission
