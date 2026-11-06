@@ -170,7 +170,9 @@ async function keySignIn(accountId: string, valid = true) {
 }
 async function denial(response: Response, status: number, error: string) {
   expect(response.status).toBe(status);
-  expect(await response.json()).toEqual({ error });
+  expect(await response.json()).toEqual(
+    error === 'account_suspended' ? { error, code: 'ACCOUNT_SUSPENDED' } : { error },
+  );
   expect(response.headers.getSetCookie()).toEqual([]);
   const token = await auth.request('/token', {}, cookies(response));
   expect(token.status).toBe(401);

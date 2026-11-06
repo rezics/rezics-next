@@ -1390,9 +1390,15 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       },
       [{ accountId: row.account_id, role: 'subject' }],
     );
-    const result = required(
-      await DBOS.getEvent<RegistrationStartEvent>(workflowId(`registration:${row.request_key}`), 'pending', 30),
-    );
+    const id = workflowId(`registration:${row.request_key}`);
+    const result = await DBOS.getEvent<RegistrationStartEvent>(id, 'pending', 30);
+    if (result === null) {
+      // A failed native reservation must disclose its actual producer failure,
+      // rather than losing it behind the missing pending-event assertion.
+      const status = await DBOS.getWorkflowStatus(id);
+      if (status?.status === 'ERROR') await DBOS.retrieveWorkflow(id).getResult();
+      throw new Error(`Auth registration ${id} has no pending event (${status?.status ?? 'missing'})`);
+    }
     if ('error' in result) throw new RegistrationFailure(result.error);
     return result;
   }
