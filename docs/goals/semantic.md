@@ -23,6 +23,8 @@ Semantic owns Definitions, shared filters, native Semantic and Zones, their curr
 Detailed native fixture, lifecycle and receiving constraints belong to the
 [capability acceptance map](semantic.capabilities.md#native-fixture-and-lifecycle-acceptance-constraints).
 
+Decision: relations, references and history to exhaustion use authored native fixtures and Global public readback; the franchise journey owns imported cross-media navigation. Tests pin user-visible exhaustion, exact window return, honest unknown counts and persona authorization rather than filling a line budget.
+
 ## Ownership
 
 Placement decision: each existing owner remains the sole authority for its contract: Definitions for vocabulary, Semantic for native behavior, Conversion for value fidelity, Imports for acquisition and publication, and Web for reading and correction. The [Semantic module](../../services/kernel/src/semantic/README.md), [Definitions](../../packages/definitions/README.md), [Conversion](../../packages/conversion/README.md), [filters](../../packages/filter/README.md), [Zones](../zones.md), [membership](../zone-membership.md), [Collection sources](../collection-source.md), [dynamic Collections](../dynamic-collections.md) and [deletion](../deletion.md) hold their contracts.
