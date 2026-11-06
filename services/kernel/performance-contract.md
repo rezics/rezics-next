@@ -6,6 +6,14 @@ module's Cost section. Library domain composition (contract, core, application, 
 [Library performance](src/library/performance-contract.md). [Performance acceptance](../../docs/goals/performance.capabilities.md) owns scenarios; the
 [Performance Goal](../../docs/goals/performance.md) owns the outcome.
 
+## Library domain composition
+
+Decision: Library contract/core/application add no SQL, scan or extra statement. Native adapters are the existing
+Collection Source factory, Access command/fence/deadline, Semantic original/terminal and release, Search scope
+preparation and Content private-versus-activated classification; `composeLibraryDomain` binds them at process
+construction. Compact tests cover fake capabilities and ordinary adapter install; native Source/member/publication
+and identity-original/scope suites remain the bounded-work checks.
+
 ## Access domain composition
 
 Decision: Access contract/core/application add no SQL, scan or extra statement. Native ports are the existing

@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { composeLibraryDomain } from '../../src/composition/library.ts';
 import { createHash, randomUUID } from 'node:crypto';
-composeLibraryDomain();
 import { principalCommandIdentity, noEffect, runCommand, type CommandTransaction } from '../../src/command/command.ts';
 import { resourceAuthorization } from '../../src/access/resource-authorization.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
@@ -34,6 +33,8 @@ import type { IdentityJobRef } from '../../src/semantic/identity-epoch-contract.
 import type { WorkReceipt } from '../../src/library/contract/work-dimensions.ts';
 import { createProfileEntryFixture, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 import { epochFixture, digest, release, type EpochFixture } from '../semantic/support/identity-epoch.ts';
+
+composeLibraryDomain();
 
 let native: NativeProfileFixture, semantic: EpochFixture, job: IdentityJobRef;
 let original: string, terminal: string;

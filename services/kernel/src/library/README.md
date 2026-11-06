@@ -90,7 +90,15 @@ Content and run with fake capabilities. Native SQL catalogs and foreign Access/S
 in `library/adapters/**` and are bound only from `composition/library.ts`. `createKernelRuntimeDefaults`, the HTTP
 server and the worker call `composeLibraryDomain`. Compatibility entries (`identity-native-bounds.ts`,
 `account-grant.ts`, `ordinary-read-bounds.ts`, `builtin-runtime-query.ts`, `members-preparation.ts`,
-`collection-publication-work-admission.ts`) reach the composed implementation.
+`collection-publication-work-admission.ts`, `command-support.ts`) reach the composed implementation.
+
+Installed capabilities, bound by ordinary process composition: `authorization` (Access command, fence, deadline and
+lifecycle), `identityDisclosure` (Semantic original/terminal and release), `searchPreparation` (Search scope and
+owner-leaf), `contentPublication` (private working versus activated public), `identityNative` (SQL catalog and
+core matching) and `sourceCapture` (native Collection Source when pool and Access are present). Public entries:
+`kernel-library-contract` `contract/work-dimensions.ts` and `contract/index.ts`; `kernel-library-core`
+`core/index.ts`; `kernel-library-application` `application/index.ts`; adapter `adapters/index.ts` and
+`domain-binding.ts` plus the existing Library discovery and Access-capability entries.
 
 `account-grant.ts` remains a leaf: `grantCapable` takes account fields structurally. Owner-query Search preparation
 uses the Library `searchPreparation` capability through existing dependency objects; `CollectionWorkLedger` replaces
@@ -98,14 +106,16 @@ Search `ScopeWork` subclassing.
 
 Fewest tests: one `domain-composition.test.ts` suite covering fake-capability applications plus Source, member,
 publication and Entry/progress edges (actor, deadline, private working versus activated public, repeated ordered
-occurrences, nested admission, original/terminal disclosure). Selected identity seal cases keep the selected bind
-vector; transform fixtures use routable job IDs. Existing native and publication growth cases keep their unchanged
-assertions.
+occurrences, nested admission, original/terminal disclosure) and ordinary `composeLibraryDomain` adapter install.
+Selected identity seal cases keep the selected bind vector; transform fixtures use routable job IDs. Existing native
+and publication growth cases keep their unchanged assertions.
 
 Measured with `bun scripts/architecture.ts` against the Kernel value-import graph after this domain composition:
 record largest SCC, Library membership, all cycle files and architecture errors on the integrated base, then the
 candidate; obsolete baseline entries disappear. Preceding contract extraction measured largest SCC 388 to 385,
-Library membership 90 to 88, and all cycle files 405 to 402.
+Library membership 90 to 88, and all cycle files 405 to 402. Access wiring recorded kernel-access rule 2/3 at
+389/368 (from 403/376). This Library composition landing measures the candidate after integration; native domain
+cases still run if that audit reports an inherited failure.
 
 ## Scope and implementation boundary
 

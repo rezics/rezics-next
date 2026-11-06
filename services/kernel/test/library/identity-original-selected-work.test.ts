@@ -1,7 +1,6 @@
 import { expect, test } from 'bun:test';
 import { composeLibraryDomain } from '../../src/composition/library.ts';
 import { EventEmitter } from 'node:events';
-composeLibraryDomain();
 import type { Pool, PoolClient } from 'pg';
 import * as installed from '../../src/library/collection-source-work.ts';
 import {
@@ -19,6 +18,8 @@ import { LIBRARY_IDENTITY_SELECTED_STATEMENTS } from '../../src/library/identity
 import { nativeSourceCustodyFootprint } from '../../src/library/native-source-custody.ts';
 import { libraryIdentityFootprint } from '../../src/library/identity-native-planner-work.ts';
 import { LIBRARY_IDENTITY_NATIVE_OPERATION_DECLARATIONS } from '../../src/library/identity-native-bounds.ts';
+
+composeLibraryDomain();
 
 function expectedSelectedTotal(body: ReturnType<typeof assembleLibraryIdentitySelectedBodies>) {
   const page = LIBRARY_IDENTITY_SELECTED_STATEMENTS().page;

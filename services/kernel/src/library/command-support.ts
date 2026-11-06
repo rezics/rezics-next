@@ -35,6 +35,7 @@ import {
   type SessionOperationKind,
 } from './session-operation-bounds.ts';
 
+import { peekLibraryDomain } from './domain-binding.ts';
 import { enterShelfWrite } from './shelf-maintenance-runtime.ts';
 import {
   consumeFollowWork,
@@ -46,6 +47,23 @@ import {
 
 export { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
 import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
+
+function composedAuthorization() {
+  return peekLibraryDomain()?.authorization;
+}
+
+function commandAuthorization(
+  ...args: Parameters<typeof accessCommandAuthorization>
+): ReturnType<typeof accessCommandAuthorization> {
+  const composed = composedAuthorization()?.commandAuthorization;
+  return composed
+    ? (composed(...args) as ReturnType<typeof accessCommandAuthorization>)
+    : accessCommandAuthorization(...args);
+}
+
+function isLifecycleDenied(error: unknown): boolean {
+  return composedAuthorization()?.isLifecycleDenied(error) ?? error instanceof LifecycleDeniedError;
+}
 
 /** Bind a closed Library SQL declaration to the caller's existing accounting frame. */
 export function runLibraryBoundedStep<T>(operation: string, bound: Bound, dispatch: () => Promise<T>): Promise<T> {
@@ -187,7 +205,7 @@ function activeAccountAuthorization(accountId: string, route: number, follow = f
         try {
           await shareAccount(tx, accountId);
         } catch (error) {
-          if (error instanceof LifecycleDeniedError) throw new GrantDeniedError();
+          if (isLifecycleDenied(error)) throw new GrantDeniedError();
           throw error;
         }
         const current = await readAccountCommandState(tx, route, accountId);
@@ -259,7 +277,7 @@ export function createLibraryCommandRunner(config: {
     // Capture original command identity before any permission preparation awaits.
     const commandInput = followPlan?.original.input ?? plan?.original.input ?? request.input;
     const native = config.access
-      ? await accessCommandAuthorization(
+      ? await commandAuthorization(
           config.access,
           owner,
           request.action,
@@ -295,7 +313,7 @@ export function createLibraryCommandRunner(config: {
           try {
             await shareAccount(tx, owner.accountId);
           } catch (error) {
-            if (error instanceof LifecycleDeniedError) throw new GrantDeniedError();
+            if (isLifecycleDenied(error)) throw new GrantDeniedError();
             throw error;
           }
           const accessWork = currentCommandWorkAssociation()?.access;

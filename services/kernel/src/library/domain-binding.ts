@@ -17,3 +17,8 @@ export function requireLibraryDomain(): LibraryDomain {
   if (!domain) throw new TypeError('Library domain is not composed');
   return domain;
 }
+
+/** Tests restore the process binding; createKernel/server/worker rebind native adapters. */
+export function unbindLibraryDomain(): void {
+  domain = undefined;
+}

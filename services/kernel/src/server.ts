@@ -175,6 +175,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
       clock: defaults.clock,
       access: defaults.access,
       onAccessReady(access, viewerActions) {
+        composeLibraryDomain({ pool, access, routeKey: config.routeKey });
         if (openSearch && searchConfig) {
           if (!rated) throw new Error('Discovery Subject source composition is incomplete');
           publicFilters = createDefaultPublicFilterRuntime({

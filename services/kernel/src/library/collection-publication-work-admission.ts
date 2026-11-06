@@ -265,6 +265,16 @@ async function currentPublicationWork(
     rule,
   });
   if (!native || !livePublicationNamespace(tx, locator)) return null;
+  const capabilities = libraryCapabilities();
+  if (!capabilities) return null;
+  const admitted = capabilities.publicationAdmission.admit({
+    locator,
+    privateWorking: episode.source.input.kind === 'private_working_source',
+    observation: native.observation,
+    episodePresent: true,
+    initiator: episode.initiator,
+  });
+  if (!admitted.admitted) return null;
   const ruleRef = episode.source.rule;
   return {
     locator: Object.freeze({ ...locator }),

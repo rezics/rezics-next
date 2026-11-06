@@ -95,6 +95,7 @@ export type LibraryDomain = LibraryCapabilities &
         privateWorking: boolean;
         observation: CollectionSourceObservation | null;
         episodePresent: boolean;
+        initiator?: unknown;
       }): PublicationAdmissionResult;
     };
     entryProgress: {

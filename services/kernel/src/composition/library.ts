@@ -11,7 +11,12 @@ import {
   createNativeSourceCaptureAdapter,
   createSearchPreparationAdapter,
 } from '../library/adapters/index.ts';
-import { bindLibraryDomain, peekLibraryDomain } from '../library/domain-binding.ts';
+import {
+  bindLibraryDomain,
+  peekLibraryDomain,
+  requireLibraryDomain,
+  unbindLibraryDomain,
+} from '../library/domain-binding.ts';
 import {
   preparedSource,
   type LibraryCapabilities,
@@ -95,4 +100,4 @@ export function composeLibraryDomain(options: LibraryComposeOptions = {}): Libra
   return bindLibraryDomain(createLibraryApplications(capabilities));
 }
 
-export { peekLibraryDomain, bindLibraryDomain };
+export { peekLibraryDomain, bindLibraryDomain, requireLibraryDomain, unbindLibraryDomain };

@@ -1,7 +1,6 @@
 import { expect, test } from 'bun:test';
 import { composeLibraryDomain } from '../../src/composition/library.ts';
 import { EventEmitter } from 'node:events';
-composeLibraryDomain();
 import type { Pool } from 'pg';
 import { BOUND_AXES } from '@rezics/bounds';
 import {
@@ -44,6 +43,8 @@ import { LIBRARY_IDENTITY_SELECTED_STATEMENTS } from '../../src/library/identity
 import savedJob from '../../src/semantic/identity-epoch-store-select-job-4.sql';
 import partition from '../../src/partition/read.sql';
 import * as installedLibraryWork from '../../src/library/collection-source-work.ts';
+
+composeLibraryDomain();
 
 // This is a no-IO refusal fixture, never a native database or private Accounts grant fixture.
 function forbiddenPool(): { pool: Pool; calls: () => number } {

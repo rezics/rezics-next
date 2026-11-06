@@ -72,6 +72,16 @@ the affected Web/root checks; fast copy-on-write preparation does not establish 
 or unavailable evidence is neither denial nor a product pass. Use [verification](../development/verification.md)
 for evidence and check-host placement.
 
+## Kernel Library domain inversion
+
+Decision: Compact causal tests pin Source capture, member preparation, owner-query Search preparation, publication
+staging and Entry/progress admission against fake capabilities, including actor, deadline, private working versus
+activated public, repeated ordered occurrences, nested admission and original/terminal disclosure. Contract, core
+and application load no Access, Search, Semantic or Content implementations. Ordinary
+`createKernelRuntimeDefaults`/`server`/`worker` composition binds native SQL catalogs and foreign adapters.
+Compatibility command-support and publication-staging entries use those adapters. The split adds no query or extra
+statement; identity-native cost stays the existing producer declarations composed through `identityNative`.
+
 ## Kernel Access domain inversion
 
 Decision: Compact causal tests pin Access allow/deny, identity recovery with the original actor/request/deadline, and

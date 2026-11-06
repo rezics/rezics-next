@@ -1,4 +1,9 @@
 import { expect, test } from 'bun:test';
+import {
+  composeLibraryDomain,
+  peekLibraryDomain,
+  unbindLibraryDomain,
+} from '../../src/composition/library.ts';
 import { createLibraryApplications } from '../../src/library/application/index.ts';
 import type { LibraryCapabilities } from '../../src/library/contract/capabilities.ts';
 import type { LibraryActor } from '../../src/library/contract/actors.ts';
@@ -403,4 +408,46 @@ test('owner-query filter uses the Search preparation capability and records nest
   const filtered = await searchingOpen.filter({ all: [] }, 'digest');
   expect(filtered.prepared).toEqual({ filter: { all: [] }, releaseDigest: 'digest' });
   expect(searchingWork.receipt().used.statements).toBe(1);
+});
+
+test('ordinary composeLibraryDomain installs native identity, authorization and publication adapters', async () => {
+  unbindLibraryDomain();
+  const domain = composeLibraryDomain();
+  expect(peekLibraryDomain()).toBe(domain);
+  expect(domain.identityNative.jobSizeSQL).toContain('identity_epoch_job');
+  expect(domain.identityNative.basisStatements().length).toBeGreaterThan(0);
+  expect(
+    await domain.authorization.admitCollectionRead({
+      actor,
+      at: { epoch: 1 },
+      deadline: Date.now() + 1_000,
+      route: 1,
+      collectionId,
+      curatorAccountId: accountId,
+      visibility: 'private',
+      membershipKind: 'curated',
+      privateOwner: true,
+    }),
+  ).toEqual({ authorized: true });
+  expect(
+    domain.contentPublication.admitActivatedOutput({
+      observation: observation({ kind: 'curated' }),
+      privateWorking: true,
+    }),
+  ).toEqual({ admitted: true, reason: 'private_working' });
+  expect(
+    domain.contentPublication.admitActivatedOutput({
+      observation: observation({ kind: 'activated_output', generation: 'gen' }),
+      privateWorking: true,
+    }),
+  ).toEqual({ admitted: false, reason: 'unavailable' });
+  const disclosure = await domain.identityDisclosure.readOriginalTerminal({
+    actor,
+    subjectId,
+    deadline: Date.now() + 1_000,
+    at: { epoch: 1 },
+  });
+  expect(disclosure).toEqual({ original: subjectId, terminal: subjectId });
+  unbindLibraryDomain();
+  expect(peekLibraryDomain()).toBeUndefined();
 });

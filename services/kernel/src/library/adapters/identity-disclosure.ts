@@ -12,16 +12,11 @@ export function createIdentityDisclosureAdapter(pool?: Pool): IdentityDisclosure
       return readRelease(source as Parameters<typeof readRelease>[0], digest, options);
     },
     async readOriginalTerminal(input) {
-      if (input.actor.kind !== 'account' || !pool)
-        return { original: input.subjectId, terminal: input.subjectId };
-      try {
-        const mappings = await readIdentityMappings(pool, [input.subjectId]);
-        const mapped = mappings[0];
-        if (mapped?.state === 'mapped') return { original: mapped.original, terminal: mapped.terminal };
-        return { original: input.subjectId, terminal: input.subjectId };
-      } catch {
-        return { original: input.subjectId, terminal: input.subjectId };
-      }
+      if (input.actor.kind !== 'account' || !pool) return { original: input.subjectId, terminal: input.subjectId };
+      const mappings = await readIdentityMappings(pool, [input.subjectId]);
+      const mapped = mappings[0];
+      if (mapped?.state === 'mapped') return { original: mapped.original, terminal: mapped.terminal };
+      return { original: input.subjectId, terminal: input.subjectId };
     },
     initiatorCommitment(original) {
       return durableInitiatorCommitment(original as Parameters<typeof durableInitiatorCommitment>[0]);
