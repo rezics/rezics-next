@@ -1075,7 +1075,8 @@ The returned host exports:
   and `/account-operations/execute` when `AuthHostOptions.accountOperations`
   supplies the kernel `approve`, `resolveForCaller` and `admitGroup` ports (see
   "Public HTTP contract"); without them both routes answer 503
-  `account_operation_denied`.
+  `account_operation_denied`. Delete execute may carry `confirmation`; when Access
+  binds a handle reader it must match the current handle after NFC and case-folding.
 
 Sign-up validates the case-folded handle against
 `^[a-z0-9][a-z0-9_-]{1,62}[a-z0-9]$` before staging or calling Access: 3–64 ASCII

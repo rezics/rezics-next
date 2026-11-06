@@ -105,6 +105,16 @@ export type {
 } from './security-inventory.ts';
 export { createAuthHost, createAuthRestoreHost, AuthHostConfigurationError } from './host.ts';
 export type { AuthHostOptions } from './host.ts';
+export {
+  bindAuthErasureAcknowledgement,
+  authErasureAcknowledgement,
+  bindAuthDeletionHandleRead,
+  authDeletionHandleRead,
+  normalizeDeletionConfirmation,
+  deletionConfirmationMatches,
+  type AuthErasureAcknowledgement,
+  type AuthDeletionHandleRead,
+} from './kernel-access.ts';
 export { createInternalConsentHandler } from './internal-consent.ts';
 export type { InternalConsentAccessConfiguration } from './internal-consent.ts';
 export type { AccountOperationAccess } from './account-operations-transport.ts';

@@ -1513,7 +1513,13 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         // Every page commits/releases before continuing; no owner/client list is retained.
         for (;;) {
           const page = await nativeErasurePage(database, id, undefined, undefined, fenceKindConsentErasure);
-          if (page.state !== 'more') return;
+          if (page.state !== 'more') {
+            if (page.state !== 'consent') {
+              const { authErasureAcknowledgement } = await import('./kernel-access.ts');
+              await authErasureAcknowledgement(trustedAccess)?.acknowledgeAccountErasure(accountId, 'erased');
+            }
+            return;
+          }
         }
       },
       async stageCredentialEffect(input) {
