@@ -20,7 +20,7 @@ import bans from './ban-current-many-batch.sql';
 
 export type { CommunityPresentation } from './community-presentation-model.ts';
 export { CommunityPresentationSchema } from './community-presentation-model.ts';
-type Dependencies = Readonly<{ pool: Pool; access: Access; clock?: () => Date; deadlineNow: () => number }>;
+type Dependencies = Readonly<{ pool: Pool; access: Access; clock?: () => Date; deadlineNow?: () => number }>;
 const none = { state: 'none', value: null } as const;
 const unavailable = { state: 'unavailable', value: null } as const;
 const unknownMembers = { state: 'unknown', count: null, version: null } as const;

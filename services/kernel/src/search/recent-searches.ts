@@ -47,7 +47,7 @@ export const recentEntrySchema = t.Union([
 ]);
 export type RecentEntry = Static<typeof recentEntrySchema>;
 export type RecentDependencies = {
-  deadlineNow: () => number;
+  deadlineNow?: () => number;
   pool: Pool;
   access: Access;
   tokens: KeyRing;

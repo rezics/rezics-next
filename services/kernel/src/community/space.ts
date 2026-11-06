@@ -133,7 +133,7 @@ export async function readSpace(
  * the derived Realm id always uses the ordinary Realm reader and its own authorization.
  */
 export async function readSpaceForViewer(
-  deps: Pick<SpaceDependencies, 'pool' | 'access'> & CommunityAmbient,
+  deps: Pick<SpaceDependencies, 'pool' | 'access'> & Partial<CommunityAmbient>,
   actor: Actor,
   spaceId: string,
   time: string,

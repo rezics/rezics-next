@@ -123,7 +123,7 @@ export type MediaDependencies = Readonly<{
   access: Access;
   realmParticipation?: RealmParticipationCheck;
   clock?: () => Date;
-  deadlineNow: () => number;
+  deadlineNow?: () => number;
   /** Trusted per-request host context; never supplied by request JSON. */
   downloadContext?: DownloadContext;
 }>;

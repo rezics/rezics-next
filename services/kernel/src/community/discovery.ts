@@ -225,7 +225,7 @@ export async function listRealmDiscovery(
     const current = await currentDiscoveryCandidates(
       deps.pool,
       page.rows.filter((row) => first.has(row.realm_id)),
-      deadline,
+      { deadline, now: deps.deadlineNow },
     );
     const final = await readDiscoveryCards(deps.pool, decisions, current, cutoff, deps.clock().toISOString(), {
       deadline,

@@ -90,7 +90,7 @@ type Dependencies = {
   tokens: KeyRing;
   routeKey: Uint8Array;
   clock?: KernelClock;
-  deadlineNow: () => number;
+  deadlineNow?: () => number;
 };
 type ReadDependencies = Pick<Dependencies, 'pool' | 'deadlineNow'> & { access: Access };
 const closed = { additionalProperties: false } as const;

@@ -72,7 +72,7 @@ export type OwnMediaDependencies = Readonly<{
   access: Access;
   tokens: KeyRing;
   clock: () => Date;
-  deadlineNow: () => number;
+  deadlineNow?: () => number;
 }>;
 type ReadHome = Readonly<{ partition: number; ids: readonly string[] }>;
 type DecisionSet = Readonly<Record<string, { allowed: boolean; explicit: boolean }>>;
@@ -415,7 +415,11 @@ async function currentRealmActions(
       try {
         realmVisible =
           (await readRealm(
-            { pool: deps.pool, access: deps.access, deadlineNow: deps.deadlineNow },
+            {
+              pool: deps.pool,
+              access: deps.access,
+              ...(deps.deadlineNow === undefined ? {} : { deadlineNow: deps.deadlineNow }),
+            },
             actor,
             realmId,
             context,

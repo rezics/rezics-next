@@ -34,7 +34,7 @@ import { ensureRealmMemberGrant } from './participation.ts';
 import { realmContinuityView, realmGovernanceAuthorization, type RealmContinuity } from './realm-continuity.ts';
 import type { RealmVotes } from './realm-votes.ts';
 import type { SpaceDependencies, SpaceContext } from './space.ts';
-import type { CommunityAmbient } from './ambient.ts';
+import { systemCommunityAmbient, type CommunityAmbient } from './ambient.ts';
 import { emptyRealmPresentation, realmPresentation, type RealmPresentation } from './presentation.ts';
 import { claimRealmPresentationMedia } from '../content/realm-media.ts';
 import { prepareRealmRulesSelection } from '../content/community-presentation-rules.ts';
@@ -200,13 +200,14 @@ export async function readRealmSettingsHead(
  * and no current ban required for protected Realms. Missing and denied resources both return null.
  */
 export async function readRealm(
-  deps: Pick<RealmDependencies, 'pool' | 'access'> & CommunityAmbient,
+  deps: Pick<RealmDependencies, 'pool' | 'access'> & Partial<CommunityAmbient>,
   actor: Actor,
   realmId: string,
   context: { deadline: number },
 ): Promise<RealmView | null> {
   const route = routeOf(realmId);
-  if (route === null || !Number.isFinite(context.deadline) || deps.deadlineNow() >= context.deadline) return null;
+  const now = deps.deadlineNow ?? systemCommunityAmbient.deadlineNow;
+  if (route === null || !Number.isFinite(context.deadline) || now() >= context.deadline) return null;
   let current: RealmRow | null = null;
   const resource = { route, id: realmId };
   const eligibility = readEligibility(resource, (row) => {

@@ -61,7 +61,7 @@ function usable(row: Row, realmId: string): boolean {
  * Source and final Realm/media anchors share their exact home. The host is independently anchored,
  * even when co-located, and every checkout is released before preparing another Access formula. */
 export async function authorizedRealmMedia(
-  deps: Readonly<{ pool: Pool; access: Access; deadlineNow: () => number }>,
+  deps: Readonly<{ pool: Pool; access: Access; deadlineNow?: () => number }>,
   realmId: string,
   mediaIds: readonly (string | null)[],
   context: ReadContext,

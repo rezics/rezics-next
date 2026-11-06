@@ -166,8 +166,8 @@ export type ContentReadDependencies = Readonly<{
   access: Access;
   tokens: KeyRing;
   clock?: () => Date;
-  /** Real wall time for realm read deadlines, supplied by composition. */
-  deadlineNow: () => number;
+  /** Real wall time for realm read deadlines; absent callers keep the composition clock. */
+  deadlineNow?: () => number;
 }>;
 /** Retain the initial source and prepared native authority across foreign work.
  * The optional qualifier evaluates already-prepared native checks in the same
