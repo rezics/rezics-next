@@ -35,14 +35,8 @@ const actions = [
   'classification_ballot:read_own',
   'classification_ballot:read_aggregate',
 ];
-const actor: AccountActor = {
-  kind: 'account',
-  accountId,
-  scopes: actions,
-  clientId: 'web',
-  requestedBy: null,
-  authnEpoch: 1,
-};
+let actor: AccountActor;
+let applicationAccess: ReturnType<RealAccessFixture<'voter'>['access']>;
 const tokens = {
   current: 1,
   keys: new Map([[1, new Uint8Array(32).fill(23)]]),
@@ -95,6 +89,11 @@ beforeAll(async () => {
     receiptKeys: testReceiptKeys(),
     writeRate: access.writeRate,
   });
+  applicationAccess = access.access({ actions: actionCatalogue(app), clock: capabilities.clock });
+  actor = await applicationAccess.authenticate(access.bearer('voter'), {
+    pool: database.pool,
+    deadline: Date.now() + 30_000,
+  });
 });
 afterAll(async () => {
   await database?.close();
@@ -125,7 +124,7 @@ async function subject(body: unknown) {
 }
 function application() {
   return rating.application({
-    access: access.access({ actions: actionCatalogue(app) }),
+    access: applicationAccess,
     tokens,
     routeKey,
   });
