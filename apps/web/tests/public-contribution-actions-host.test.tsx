@@ -125,8 +125,11 @@ const {
 type ContributionActionsEpisode =
   import('../src/accounts/public-profile/contribution-actions/host').ContributionActionsEpisode;
 const { sessionQuery } = await import('../src/session/query');
-const { unavailableAuthorContributionActionsWire } =
-  await import('../src/accounts/public-profile/contribution-actions/receiver');
+const unavailableAuthorContributionActionsWire = {
+  read: async () => {
+    throw new Error('Private advice is unavailable in this fixture');
+  },
+};
 const { rememberContribution, restoreContributionRecovery, contributionReturnOccurrence } =
   await import('../src/accounts/public-profile/contributions/navigation');
 const { ContributionAdvicePresentation, ContributionWatch } =
@@ -427,6 +430,8 @@ test('mounted host shares reader retirement and reacquires only the current orig
     reviewsPublished: true,
     rows: [{ id: 'browser-row-only' }],
   };
+  const sourceQueryKey = ['profile-composition', 'selected'];
+  client.setQueryData(sourceQueryKey, initial.page);
   let latest: Value | null = null;
   let update: (value: typeof initial) => void = () => {};
   function Probe() {
@@ -438,10 +443,17 @@ test('mounted host shares reader retirement and reacquires only the current orig
     update = setScope;
     return (
       <QueryClientProvider client={client}>
-        <ContributionActionsHost {...scope} wire={wire}>
-          <Probe />
-          <a href="/en/threads/original?post=original">Public contribution</a>
-        </ContributionActionsHost>
+        <ContributionActionsPageScope
+          page={scope.page as import('../src/features/pages/subject').SubjectPageData}
+          cursor={scope.cursor}
+          view={scope.view}
+          sourceQueryKey={sourceQueryKey}
+        >
+          <ContributionActionsHost {...scope} wire={wire}>
+            <Probe />
+            <a href="/en/threads/original?post=original">Public contribution</a>
+          </ContributionActionsHost>
+        </ContributionActionsPageScope>
       </QueryClientProvider>
     );
   }
@@ -558,6 +570,20 @@ test('mounted host shares reader retirement and reacquires only the current orig
       expect(beforeABA.isCurrent()).toBe(false);
     });
     expect(operation.credential()).toBeNull();
+    const oldQuerySource = current();
+    const sourceOperation = oldQuerySource.operation('reaction')!;
+    await flush(() => {
+      const sourceQuery = client.getQueryCache().find({ queryKey: sourceQueryKey, exact: true })!;
+      sourceQuery.setState({ fetchStatus: 'fetching' });
+      expect(oldQuerySource.isCurrent()).toBe(false);
+      expect(sourceOperation.current()).toBe(false);
+      sourceQuery.setState({ fetchStatus: 'idle' });
+    });
+    const equalQuerySource = current();
+    await flush(() => {
+      client.setQueryData(sourceQueryKey, initial.page);
+      expect(equalQuerySource.isCurrent()).toBe(false);
+    });
     const oldSource = current();
     await flush(() => update({ ...initial, source: { actionSelection: selection }, rows: [] }));
     expect(oldSource.isCurrent()).toBe(false);

@@ -715,8 +715,10 @@ export function SubjectPage({
   recoverCatalogueFileReader,
   recoverMusicReleaseReader,
   readingAdmission,
+  communityQueryKey,
 }: {
   page: SubjectPageData;
+  communityQueryKey?: readonly unknown[] | undefined;
   verification?: VerificationConfig;
   refreshCommunityAdvice?: () => Promise<void>;
   /** Re-enter the current Subject route loader for catalogue-file recovery. */
@@ -1633,7 +1635,9 @@ export function SubjectPage({
               />
             ) : null}
             <SubjectCommunityRefreshContext.Provider value={refreshCommunityAdvice}>
-              <SubjectCommunityContext.Provider value={page.community}>
+              <SubjectCommunityContext.Provider
+                value={page.community ? { ...page.community, queryKey: communityQueryKey } : undefined}
+              >
                 <SubjectCommunityVerificationContext.Provider value={verification}>
                   <CompositionRender
                     document={composition.remaining}

@@ -66,12 +66,13 @@ async function includeReleasedWorkCatalogue(
 }
 
 export const subjectKernelClient = createServerOnlyFn(
-  async (locale: string, realm?: string, expectedReader?: string | null, signal?: AbortSignal) => {
+  async (locale: string, realm?: string, expectedReader?: string | null, signal?: AbortSignal, board?: string) => {
     signal?.throwIfAborted();
     const { kernelClient } = await import('../../kernel/client');
     signal?.throwIfAborted();
     // Eden's treaty client is thenable; wrap it so this async boundary does not make a request to /v1.
-    if (realm === undefined) return { client: kernelClient(locale), authorization: undefined, reader: null };
+    if (realm === undefined && board === undefined)
+      return { client: kernelClient(locale), authorization: undefined, reader: null };
     const { env } = await import('cloudflare:workers');
     const { prepareSession, viewerCredential, sessionSubject } = await import('../../session/request');
     signal?.throwIfAborted();
@@ -98,12 +99,15 @@ export const subjectKernelClient = createServerOnlyFn(
 
 /** Resolve the current request's cache partition. This value never grants native read authority. */
 export const subjectRequestReader = createServerFn({ method: 'GET', strict: false })
-  .validator((input: { realm?: string | undefined }) => ({ realm: validatePageRealm(input.realm) }))
+  .validator((input: { realm?: string | undefined; board?: string | undefined }) => ({
+    realm: validatePageRealm(input.realm),
+    board: validatePageBoard(input.board),
+  }))
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
     const signal = getRequest().signal;
     signal.throwIfAborted();
-    return (await subjectKernelClient('en', data.realm, undefined, signal)).reader;
+    return (await subjectKernelClient('en', data.realm, undefined, signal, data.board)).reader;
   });
 
 function validateReader(value: unknown): string | null {
@@ -136,7 +140,13 @@ const readSubjectPage = createServerFn({ method: 'GET', strict: false })
   .handler(async ({ data }) => {
     const signal = getRequest().signal;
     setResponseHeader('cache-control', 'private, no-store');
-    const { client, authorization } = await subjectKernelClient(data.locale, data.realm, data.reader);
+    const { client, authorization } = await subjectKernelClient(
+      data.locale,
+      data.realm,
+      data.reader,
+      signal,
+      data.board,
+    );
     assertSubjectPageReadActive(signal);
     let loaded = await loadSubjectPage(client, data.id, data.view, data.locale, {
       realm: data.realm,
@@ -229,7 +239,13 @@ const readSubjectViewPages = createServerFn({ method: 'GET', strict: false })
     setResponseHeader('cache-control', 'private, no-store');
     const { loadViewPages } = await import('./subject-frame');
     assertSubjectPageReadActive(signal);
-    const { client, authorization } = await subjectKernelClient(data.locale, data.realm, data.reader);
+    const { client, authorization } = await subjectKernelClient(
+      data.locale,
+      data.realm,
+      data.reader,
+      signal,
+      data.board,
+    );
     assertSubjectPageReadActive(signal);
     const loaded = await loadViewPages(client, data.id, data.view, data.locale, data.cursor, {
       realm: data.realm,

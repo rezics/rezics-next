@@ -1,5 +1,5 @@
 import { Button } from '@rezics/ui/shadcn/button';
-import type { QueryClient } from '@tanstack/react-query';
+import type { QueryClient, QueryKey } from '@tanstack/react-query';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
 import {
@@ -37,6 +37,8 @@ export type ContributionActionsPageScopeValue = {
   page: SubjectPageData;
   cursor: string | null;
   view: string;
+  /** The anonymous named-page query that supplied the original cohort. */
+  sourceQueryKey?: QueryKey | undefined;
   /** Report verification for this page's native owners; absent keeps report controls unavailable. */
   verification?: VerificationConfig | undefined;
 };
@@ -48,10 +50,11 @@ export function ContributionActionsPageScope({
   cursor,
   view,
   verification,
+  sourceQueryKey,
   children,
 }: ContributionActionsPageScopeValue & { children: ReactNode }) {
   return (
-    <ContributionActionsPageScopeContext.Provider value={{ page, cursor, view, verification }}>
+    <ContributionActionsPageScopeContext.Provider value={{ page, cursor, view, verification, sourceQueryKey }}>
       {children}
     </ContributionActionsPageScopeContext.Provider>
   );
@@ -104,6 +107,8 @@ export type ContributionActionsEpisode = {
   page: object | null;
   read: object;
   source: object;
+  sourceQuery?: object;
+  sourceCount?: number;
   selection: unknown;
   publication: object | null;
   postsPublished: boolean;
@@ -136,6 +141,8 @@ export function sameContributionActionsEpisode(left: ContributionActionsEpisode,
     left.page !== right.page ||
     left.read !== right.read ||
     left.source !== right.source ||
+    left.sourceQuery !== right.sourceQuery ||
+    left.sourceCount !== right.sourceCount ||
     left.selection !== right.selection ||
     left.publication !== right.publication ||
     left.wire !== right.wire ||
@@ -211,6 +218,17 @@ export function ContributionActionsHost({
 }) {
   const client = useQueryClient();
   const router = useRouter();
+  const sourceKey = useContributionActionsPageScope()?.sourceQueryKey;
+  const sourceQuery = sourceKey ? client.getQueryCache().find({ queryKey: sourceKey, exact: true }) : undefined;
+  const sourceCount = sourceQuery?.state.dataUpdateCount;
+  const sourceCurrent = () =>
+    !sourceKey ||
+    (!!sourceQuery &&
+      client.getQueryCache().find({ queryKey: sourceKey, exact: true }) === sourceQuery &&
+      sourceQuery.state.status === 'success' &&
+      sourceQuery.state.fetchStatus === 'idle' &&
+      !sourceQuery.state.isInvalidated &&
+      sourceQuery.state.dataUpdateCount === sourceCount);
   const observation = useMemo(() => browserObservation(client), [client]);
   const reader = useSyncExternalStore(observation.subscribe, observation.getSnapshot, observation.getServerSnapshot);
   const session = normalizeSessionObservation(client.getQueryData(sessionQueryKey));
@@ -274,6 +292,8 @@ export function ContributionActionsHost({
     page,
     read,
     source,
+    sourceQuery,
+    sourceCount,
     selection,
     publication,
     postsPublished,
@@ -294,13 +314,15 @@ export function ContributionActionsHost({
     if (visit) visit.episode = undefined;
     const next: Visit = { episode };
     const published = view === 'reviews' ? reviewsPublished : postsPublished;
-    const readAdmitted = !!input && published && rows.length <= 20 && signedIn && navigation.active && mount !== null;
+    const readAdmitted =
+      !!input && published && rows.length <= 20 && signedIn && navigation.active && mount !== null && sourceCurrent();
     if (readAdmitted) {
       const address = new ContributionActionsAddress(
         client,
         reader,
         () =>
           current.current === next &&
+          sourceCurrent() &&
           mounted.current === episode.mount &&
           navigationRef.current === episode.navigation &&
           navigationRef.current.active &&

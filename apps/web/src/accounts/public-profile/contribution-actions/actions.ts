@@ -29,5 +29,5 @@ export const readAuthorContributionActions = createServerFn({ method: 'POST' })
 
 /** The mounted host's browser transport. Server failures reach the receiver as failed reads. */
 export const contributionActionsWire: AuthorContributionActionsWire = {
-  read: (input) => readAuthorContributionActions({ data: input }),
+  read: (input, signal) => readAuthorContributionActions({ data: input, signal }),
 };

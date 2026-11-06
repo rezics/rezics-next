@@ -27,7 +27,12 @@ import {
   subjectRelationsQuery,
 } from '../../features/pages/subject-queries';
 import { useSession } from '../../session/query';
-import { validateViewCursor, validatePageBoard, validatePageRealm, validatePageNode } from '../../features/pages/view-cursor';
+import {
+  validateViewCursor,
+  validatePageBoard,
+  validatePageRealm,
+  validatePageNode,
+} from '../../features/pages/view-cursor';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { WriteReviewAction } from '../../subject/write-review';
@@ -174,7 +179,9 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
   }),
   loader: async ({ params, location, context, deps, abortController }) => {
     const signal = abortController.signal;
-    const reader = await awaitSubjectRoute(signal, () => subjectRequestReader({ data: { realm: deps.realm }, signal }));
+    const reader = await awaitSubjectRoute(signal, () =>
+      subjectRequestReader({ data: { realm: deps.realm, board: deps.board }, signal }),
+    );
     if (!isView(params.view) || params.view === 'overview') throw notFound();
     const view = params.view as View;
     const cursor = validateViewCursor(deps.cursor);
@@ -194,11 +201,17 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
       }),
     );
     // Reuse the current native reading for the head, never a retained navigation result.
-    const loaded = await awaitSubjectRoute(signal, () =>
-      context.queryClient.fetchQuery(
-        subjectViewPagesQuery(params.id, getLocale(), view, cursor, deps.realm, deps.node, reader, deps.board),
-      ),
+    const communityQuery = subjectViewPagesQuery(
+      params.id,
+      getLocale(),
+      view,
+      cursor,
+      deps.realm,
+      deps.node,
+      reader,
+      deps.board,
     );
+    const loaded = await awaitSubjectRoute(signal, () => context.queryClient.fetchQuery(communityQuery));
     signal.throwIfAborted();
     if (loaded.kind === 'missing') {
       const overview = await awaitSubjectRoute(signal, () =>
@@ -264,6 +277,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
             ...(loaded.node ? { node: loaded.node } : {}),
             cursor: loaded.next,
             ...(deps.realm ? { realm: deps.realm } : {}),
+            ...(deps.board ? { board: deps.board } : {}),
             ...(deps.streamProperty ? { streamProperty: deps.streamProperty } : {}),
             ...(deps.streamDirection ? { streamDirection: deps.streamDirection } : {}),
             ...(deps.via ? { via: deps.via } : {}),
@@ -274,6 +288,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
       reader,
       view,
       page: loaded.page,
+      communityQueryKey: communityQuery.queryKey,
       shareCard: loaded.shareCard,
       type: typeData,
       frame,
@@ -322,11 +337,12 @@ function SubjectViewRoute() {
     reader: initialReader,
     page,
     verification,
+    communityQueryKey,
   } = Route.useLoaderData();
   const browserSession = useSession();
   const { state: session } = browserSession;
   const search = Route.useSearch();
-  const readerKey = subjectReaderPartition(realm, initialReader, browserSession);
+  const readerKey = subjectReaderPartition(realm ?? page.requestedBoard, initialReader, browserSession);
   const currentReader = useSubjectReaderRefresh(initialReader, readerKey);
   const personal = useSubjectPersonalReader({
     subjectId: page.subject!,
@@ -351,6 +367,7 @@ function SubjectViewRoute() {
   if (!currentReader) return <PendingPage />;
   return (
     <SubjectViewPage
+      communityQueryKey={communityQueryKey}
       page={page}
       currentHref={currentHref}
       readingAdmission={JSON.stringify([browserSession.state, browserSession.subject, browserSession.csrfToken])}

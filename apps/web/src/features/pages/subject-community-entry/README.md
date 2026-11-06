@@ -48,3 +48,13 @@ Creation acknowledgement carries that original region inside the existing thread
 The thread reader offers a direct return to the region while its Board reading remains current; redirects,
 replies and pagination retain the same address. Changing the originating URL retires the mounted community
 reading until a new source observation arrives, even when its full-list destination stays the same.
+
+Decision: bind each mounted region to the shared browser observation and its exact composition query; use cached
+external-store snapshots for standalone ReviewList/ThreadList mounts. Fetching, invalidation and equal successful
+source replacement retire the old reading before a queued click can use it. Unrelated cache keys supply no authority.
+
+The exact showcase `community.source.subjectId` / `community.board.id` pair is passed in the Subject URL as `board`.
+An explicit Global Board read prepares the current viewer just like a Realm read; ordinary unselected public reads
+remain anonymous. Navigation carries the supplied preset and regional request, while native Subject/Realm/Board/Access
+observations remain in their readings and the composer obtains its own current admission. No authority is serialized
+into sign-in or return addresses.

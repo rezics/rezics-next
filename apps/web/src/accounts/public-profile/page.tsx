@@ -1,3 +1,4 @@
+import type { QueryKey } from '@tanstack/react-query';
 import type { ComponentProps } from 'react';
 import { SubjectPage } from '../../features/pages/subject';
 import { ContributionActionsPageScope } from './contribution-actions/host';
@@ -12,10 +13,12 @@ export function PublicProfilePage({
   reading,
   cursor = null,
   contributionWindowRoute,
+  sourceQueryKey,
   ...props
 }: ComponentProps<typeof SubjectPage> & {
   publicRealms: boolean;
   cursor?: string | null;
+  sourceQueryKey?: QueryKey | undefined;
   reading?: ProfileReading;
   contributionWindowRoute?: ContributionWindowRoute;
 }) {
@@ -39,6 +42,7 @@ export function PublicProfilePage({
         cursor={cursor}
         view={props.view ?? 'overview'}
         verification={props.verification}
+        sourceQueryKey={sourceQueryKey}
       >
         <ProfileReadingResponse value={reading?.response ?? 'public'}>
           <SubjectPage

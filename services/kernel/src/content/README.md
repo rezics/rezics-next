@@ -2108,8 +2108,8 @@ state. Erased or withheld sources do not gain author, media, action, comment, or
 does not trigger a refill, and unavailable activity never becomes a zero count.
 
 Decision: preserve the Subject page envelope, attach closed card disclosures to each retained thread, and expose
-only mounted selected-card action preconditions; leave creation advice absent because this endpoint has no concrete
-creation target.
+only mounted selected-card action preconditions. Creation advice is separate and requires the explicit selected
+Board entry described above.
 
 Examples include a populated entry with `card.presentation.state: 'current'`, `card.parentContext.kind: 'opening'`,
 `card.media.state: 'none'`, and `card.comments.state: 'unavailable'` when public coverage is not installed; a covered
