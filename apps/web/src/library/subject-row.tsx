@@ -13,7 +13,7 @@ import { pageText } from '../features/pages/shared';
 /** What `Cover` needs of an embedded subject; a subject nobody can read still gets its frame, titled as unavailable. */
 export function coverSubject(subject: LibrarySubject | null): CoverSubject {
   return subject
-    ? { id: subject.id, title: displayLibraryTitle(subject.label, getLocale()).text, types: subject.types }
+    ? { id: subject.id, title: displayLibraryTitle(subject.label, getLocale()).text, types: subject.types ?? [] }
     : { id: 'unavailable', title: m.library_subject_unavailable(), types: [] };
 }
 

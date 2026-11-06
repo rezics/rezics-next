@@ -1,5 +1,4 @@
 import { useId, useLayoutEffect, useRef } from 'react';
-import { useLocation } from '@tanstack/react-router';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { useIncarnationState } from '@rezics/ui/cover';
 import { m } from '../../../paraglide/messages.js';
@@ -35,11 +34,11 @@ type Props = {
   realm?: string | undefined;
 };
 
-/** Production observes the existing browser/session boundary; the renderer also remains usable in page stories. */
-export const WorkConceptTagsRoute = candidateSession(function WorkConceptTagsRoute(props: Omit<Props, 'currentHref'>) {
-  const currentHref = useLocation({ select: (location) => location.publicHref });
+/** Isolated Subject markup reuses DefaultReader QueryClient; tag return uses the visit address or the subject fallback. */
+export const WorkConceptTagsRoute = candidateSession(function WorkConceptTagsRoute(props: Props) {
   const label = pageText(props.subject.labels, props.locale).text;
   const fallbackHref = contextHref(subjectHref({ id: props.subject.id, label }, props.locale).href, props.realm);
+  const currentHref = props.currentHref ?? fallbackHref;
   const returnToFor = (selection: WorkTagReturn) =>
     workTagReturnHref(currentHref, fallbackHref, props.locale, selection);
   return <WorkTagReading {...props} currentHref={currentHref} returnToFor={returnToFor} />;

@@ -1,4 +1,5 @@
 import {
+  identityOperationLocation,
   isReviewedPersonEndpoint,
   isReviewedPersonSource,
   reviewedPersonRequests,
@@ -23,15 +24,20 @@ export type PersonComparison =
       merge: ReviewedPersonMerge | null;
     };
 export type PersonReviewCommand = { body: ReviewedPersonMerge; key: string };
-export type PersonReviewResult = ProviderFailure | { ok: true; admission: ReviewedPersonAdmission };
+export type PersonReviewResult = ProviderFailure | { ok: true; admission: ReviewedPersonAdmission; location: string };
 export type PersonPublication =
   | ProviderFailure
   | ({ ok: true } & ({ state: 'pending' | 'unconfirmed' } | { state: 'published'; read: SubjectRead }));
-export type PersonPublicationRequest = { command: PersonReviewCommand; operation: string };
+export type PersonPublicationRequest = { command: PersonReviewCommand; operation: string; location: string };
 export function personPublicationInput(value: unknown): PersonPublicationRequest {
   const v = value as PersonPublicationRequest | null;
-  if (!v || typeof v.operation !== 'string' || !uuid.test(v.operation)) throw new TypeError('Invalid Person operation');
-  return { command: personReviewCommandInput(v.command), operation: v.operation };
+  if (!v || typeof v.operation !== 'string' || !uuid.test(v.operation) || typeof v.location !== 'string')
+    throw new TypeError('Invalid Person operation');
+  return {
+    command: personReviewCommandInput(v.command),
+    operation: v.operation,
+    location: identityOperationLocation(new Headers({ location: v.location }), v.operation),
+  };
 }
 export type PersonReviewTransport = {
   compare: (pair: PersonReviewPair) => Promise<PersonComparison>;
@@ -136,17 +142,19 @@ export async function mergePersonComparison(
   const admission = response.data;
   if (!admission.operation || !uuid.test(admission.operation.id))
     throw new TypeError('Invalid native identity admission');
-  return { ok: true, admission };
+  const headers = (response as { response?: Response }).response?.headers ?? (response.headers as HeadersInit);
+  return { ok: true, admission, location: identityOperationLocation(headers, admission.operation.id) };
 }
 
 /** Publication comes from the native job; public facts are then read independently without review credentials. */
 export async function readPersonPublication(
   client: KernelClient,
   authorization: string,
-  { command, operation }: PersonPublicationRequest,
+  { command, operation, location }: PersonPublicationRequest,
   signal?: AbortSignal,
 ): Promise<PersonPublication> {
-  const response = await reviewedPersonRequests(client).operation(operation, {
+  identityOperationLocation(new Headers({ location }), operation);
+  const response = await reviewedPersonRequests(client).operationAt(location, {
     headers: { authorization },
     ...(signal === undefined ? {} : { fetch: { signal } }),
   });

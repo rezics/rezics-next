@@ -29,6 +29,9 @@ class ProtocolRefused extends Error {
 function deny(code: RefusalCode): never {
   throw new ProtocolRefused(code);
 }
+async function jsonRecord(response: Response): Promise<Record<string, unknown> | undefined> {
+  return protocolRecord(await response.clone().json());
+}
 const authorizationParameters = new Set([
   'client_id',
   'redirect_uri',
@@ -101,7 +104,7 @@ async function protocolResponse(run: () => Promise<Response>, token: boolean) {
     if (response.status >= 500) return failure('temporarily_unavailable');
     if (response.status >= 400) {
       if (!token) return failure('invalid_request');
-      const error = protocolErrorCode(await response.json());
+      const error = protocolErrorCode(await jsonRecord(response));
       return failure(error ?? 'temporarily_unavailable');
     }
     const headers = new Headers(response.headers);
@@ -529,7 +532,7 @@ export function websiteRoutes(input: {
           if (!response.ok) return response;
           let metadata: Record<string, unknown> | undefined;
           try {
-            metadata = protocolRecord(await response.clone().json());
+            metadata = await jsonRecord(response);
           } catch {
             return response;
           }
@@ -659,7 +662,7 @@ export function websiteRoutes(input: {
             if (
               invalidated &&
               response.status === 400 &&
-              protocolRecord(await response.clone().json())?.error === 'unsupported_token_type'
+              (await jsonRecord(response))?.error === 'unsupported_token_type'
             )
               return Response.json(null, { headers: { 'cache-control': 'no-store' } });
             return response;

@@ -20,7 +20,27 @@ export type ReviewedPersonOperation = NonNullable<
 >['operation'];
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const identityOperationPath =
+  /^\/v1\/subjectIdentityOperations\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i;
 const bytes = (value: string) => new TextEncoder().encode(value).length;
+
+/** Admit only the Location the 202 named, under the same operation identity. */
+export function identityOperationLocation(headers: HeadersInit, operationId: string): string {
+  const location = new Headers(headers).get('location');
+  if (!location) throw new TypeError('Invalid native identity admission');
+  const path = new URL(location, 'https://kernel.invalid').pathname;
+  if (!identityOperationPath.test(path) || path !== `/v1/subjectIdentityOperations/${operationId}`)
+    throw new TypeError('Invalid native identity admission');
+  return path;
+}
+
+/** Poll the supplied Location; a reconstructed path is not a substitute. */
+export function identityOperationId(location: string): string {
+  const path = new URL(location, 'https://kernel.invalid').pathname;
+  const id = identityOperationPath.exec(path)?.[1];
+  if (!id) throw new TypeError('Invalid native identity admission');
+  return id;
+}
 export function isReviewedPersonSource(value: unknown): value is ReviewedPersonSource {
   if (!value || typeof value !== 'object') return false;
   const v = value as ReviewedPersonSource;
@@ -105,6 +125,12 @@ export function reviewedPersonRequests(client: KernelClient) {
     },
     operation(id: string, options: { headers?: Record<string, string>; fetch?: { signal?: AbortSignal } } = {}) {
       return client.subjectIdentityOperations({ id }).get(options);
+    },
+    operationAt(
+      location: string,
+      options: { headers?: Record<string, string>; fetch?: { signal?: AbortSignal } } = {},
+    ) {
+      return client.subjectIdentityOperations({ id: identityOperationId(location) }).get(options);
     },
     merge(
       body: ReviewedPersonMerge,

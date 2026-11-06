@@ -10,6 +10,7 @@ mock.module('@tanstack/react-start/server', () => start);
 const { PageData } = await import('../src/features/pages/data');
 const { CollectionList } = await import('../src/features/pages/overview');
 const { sessionQuery } = await import('../src/session/query');
+const { m } = await import('../src/paraglide/messages.js');
 
 const row = { id: 'native /+?=#版%', title: 'Native collection', multiplicity: 3 };
 const page = (collections: unknown = [row], count: unknown = { value: 9, exact: true }, next: unknown = null) => ({
@@ -17,16 +18,16 @@ const page = (collections: unknown = [row], count: unknown = { value: 9, exact: 
   count,
   next,
 });
-function render(body: Record<string, unknown>) {
+function render(body: Record<string, unknown>, paged = false) {
   const document: CompositionDocument = {
     root: { props: {} },
-    content: [{ type: 'CollectionList', props: { id: 'lists', limit: 1 } }],
+    content: [{ type: 'CollectionList', props: { id: 'lists', limit: 1, ...(paged ? { paged: true } : {}) } }],
   };
   const subject = 'subject';
   const key = planReads(platformRegistry, document, { subject }).nodes.lists!;
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: null, csrfToken: null });
-  client.setQueryData(['exposure', 'anonymous'], ['collections']);
+  client.setQueryData(['exposure', 'anonymous'], { state: 'ready', admitted: ['collections'] });
   try {
     return renderToStaticMarkup(
       <QueryClientProvider client={client}>
@@ -44,7 +45,7 @@ function render(body: Record<string, unknown>) {
             search: 'Search',
           }}
         >
-          <CollectionList id="lists" limit={1} />
+          <CollectionList id="lists" limit={1} {...(paged ? { paged: true } : {})} />
         </PageData>
       </QueryClientProvider>,
     );
@@ -64,8 +65,25 @@ test('native rows retain exact destinations, optional attribution, zero counts a
     expect(html).toContain('data-slot="see-all"');
     if (curator) expect(html).toContain('@reader');
   }
-  expect(render(page([], { value: 0, exact: true }))).toBe('');
-  expect(render(page([], { value: 9, exact: true }, 'still-native'))).toBe('');
+  for (const html of [
+    render(page([], { value: 0, exact: true })),
+    render(page([], { value: 9, exact: true }, 'still-native')),
+  ]) {
+    expect(html).not.toContain('data-slot="collection-list"');
+    expect(html).not.toContain('Native collection');
+    expect(html).not.toContain('data-slot="continue-stream"');
+  }
+});
+
+test('paged CollectionList empty is terminal; a sparse page keeps its native continuation', () => {
+  const empty = render(page([], { value: 0, exact: true }), true);
+  expect(empty).toContain('data-slot="collection-list"');
+  expect(empty).toContain(m.public_read_empty());
+  expect(empty).not.toContain('data-slot="continue-stream"');
+  const sparse = render(page([], { value: 9, exact: true }, 'still-native'), true);
+  expect(sparse).toContain(m.public_read_sparse());
+  expect(sparse).toContain('data-slot="continue-stream"');
+  expect(sparse).toContain(`cursor=${encodeURIComponent('still-native')}`);
 });
 
 test('one malformed row fails the whole native page, including beyond the preview, without destinations or counts', () => {
