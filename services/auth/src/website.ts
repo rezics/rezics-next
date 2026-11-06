@@ -532,7 +532,7 @@ export function websiteRoutes(input: {
           if (!response.ok) return response;
           const metadata = await jsonRecord(response);
           // Native discovery is third-party JSON; only records can supply website metadata.
-          if (!metadata) return failure('temporarily_unavailable');
+          if (!metadata) return response;
           return Response.json(
             {
               ...metadata,

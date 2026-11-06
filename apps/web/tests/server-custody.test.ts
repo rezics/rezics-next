@@ -1,9 +1,19 @@
 import { afterAll, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   cleanupAll,
+  liveProcessGroupMemberIds,
   ownBunProcess,
   ownNodeProcess,
+  processHasExited,
+  processIdentity,
+  processStartTicks,
+  ProcessCustodyError,
+  reapExitedProcessGroupMembers,
+  signalOwnedProcess,
   withCleanup,
   type ProcessCustody,
 } from './support/server-custody.ts';
@@ -31,15 +41,6 @@ function processGroupExists(pid: number): boolean {
   }
 }
 
-async function waitUntilGone(pid: number, timeoutMs: number): Promise<boolean> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (!processGroupExists(pid)) return true;
-    await Bun.sleep(10);
-  }
-  return !processGroupExists(pid);
-}
-
 async function drainFixtureOutput(stream: ReadableStream<Uint8Array> | null): Promise<void> {
   if (!stream) return;
   for await (const _chunk of stream) {
@@ -49,7 +50,7 @@ async function drainFixtureOutput(stream: ReadableStream<Uint8Array> | null): Pr
 
 async function safetyCleanup(fixture: Fixture): Promise<void> {
   if (fixture.pid !== undefined) {
-    if (processGroupExists(fixture.pid)) {
+    if (processGroupExists(fixture.pid) || liveProcessGroupMemberIds(fixture.pid).length > 0) {
       try {
         process.kill(-fixture.pid, 'SIGKILL');
       } catch (error) {
@@ -63,7 +64,14 @@ async function safetyCleanup(fixture: Fixture): Promise<void> {
         if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
       }
     }
-    if (!(await waitUntilGone(fixture.pid, 2500)))
+    const deadline = Date.now() + 2500;
+    while (Date.now() < deadline) {
+      reapExitedProcessGroupMembers(fixture.pid);
+      if (liveProcessGroupMemberIds(fixture.pid).length === 0) break;
+      await Bun.sleep(10);
+    }
+    reapExitedProcessGroupMembers(fixture.pid);
+    if (liveProcessGroupMemberIds(fixture.pid).length > 0)
       throw new Error(`Independent fixture safety cleanup could not remove process group ${fixture.pid}`);
   }
   await Promise.race([
@@ -200,7 +208,7 @@ test('Node process custody escalates from TERM to KILL for a resistant descendan
   await fixture.custody.close();
   expect(Date.now() - began).toBeGreaterThanOrEqual(40);
   expect(fixture.custody.settled).toBe(true);
-  expect(fixture.pid === undefined ? false : processGroupExists(fixture.pid)).toBe(false);
+  expect(fixture.pid === undefined ? [] : liveProcessGroupMemberIds(fixture.pid)).toEqual([]);
 });
 
 test('Bun process custody settles a parent-exited group whose descendant still holds output pipes', async () => {
@@ -222,8 +230,133 @@ test('Bun process custody settles a parent-exited group whose descendant still h
   expect(process.kill(descendant, 0)).toBe(true);
   await fixture.custody.close();
   expect(fixture.custody.settled).toBe(true);
-  expect(processGroupExists(fixture.pid!)).toBe(false);
+  expect(liveProcessGroupMemberIds(fixture.pid!)).toEqual([]);
   expect(outputSettled).toBe(true);
+});
+
+test('Bun process custody preserves an AbortError captured before stop starts', async () => {
+  const child = Bun.spawn(['bun', '-e', 'setInterval(() => {}, 1000)'], {
+    detached: true,
+    stdin: 'ignore',
+    stdout: 'ignore',
+    stderr: 'ignore',
+  });
+  const streamFailure = new DOMException('cancelled before stop', 'AbortError');
+  const stdout = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.error(streamFailure);
+    },
+  });
+  const custody = ownBunProcess(child, {
+    label: 'pre-stop stream fixture',
+    streams: { stdout, stderr: null },
+    termGraceMs: 80,
+    settleTimeoutMs: 1500,
+    pollIntervalMs: 10,
+  });
+  await custody.outputSettled;
+
+  let failure: unknown;
+  try {
+    await custody.close();
+  } catch (error) {
+    failure = error;
+  }
+  expect(failure).toBeInstanceOf(ProcessCustodyError);
+  expect((failure as ProcessCustodyError).errors).toEqual(
+    expect.arrayContaining([expect.objectContaining({ cause: streamFailure })]),
+  );
+  expect(custody.settled).toBe(true);
+});
+
+test('Bun process custody settles an intentional stop whose output rejects after stop starts', async () => {
+  const child = Bun.spawn(['bun', '-e', 'setInterval(() => {}, 1000)'], {
+    detached: true,
+    stdin: 'ignore',
+    stdout: 'ignore',
+    stderr: 'ignore',
+  });
+  let failStdout: (error: unknown) => void = () => {};
+  const stdout = new ReadableStream<Uint8Array>({
+    start(controller) {
+      failStdout = (error) => controller.error(error);
+    },
+  });
+  const custody = ownBunProcess(child, {
+    label: 'post-stop stream fixture',
+    streams: { stdout, stderr: null },
+    termGraceMs: 80,
+    settleTimeoutMs: 1500,
+    pollIntervalMs: 10,
+  });
+  const closing = custody.close();
+  failStdout(new DOMException('stopped by the owner', 'AbortError'));
+  await closing;
+  expect(custody.settled).toBe(true);
+});
+
+async function readEscapedPid(path: string): Promise<number> {
+  const deadline = Date.now() + 3000;
+  for (;;) {
+    const text = readFileSync(path, 'utf8').trim();
+    if (/^[0-9]+$/.test(text)) return Number(text);
+    if (Date.now() > deadline) throw new Error(`escaped descendant pid was never written to ${path}`);
+    await Bun.sleep(10);
+  }
+}
+
+test('a descendant that leaves the group and is reparented before close is still terminated', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'custody-escape-'));
+  const pidFile = join(directory, 'escaped.pid');
+  // The leader starts a session-leading descendant, then stays alive until the test kills it.
+  const leader = Bun.spawn(['sh', '-c', 'setsid sleep 60 & echo $! > "$0"; wait', pidFile], {
+    detached: true,
+    stdin: 'ignore',
+    stdout: 'ignore',
+    stderr: 'ignore',
+  });
+  const custody = ownBunProcess(leader, {
+    label: 'escaped descendant fixture',
+    termGraceMs: 80,
+    settleTimeoutMs: 1500,
+    pollIntervalMs: 10,
+  });
+  let escaped: number | undefined;
+  try {
+    escaped = await readEscapedPid(pidFile);
+    // Give the owned tree time to record the escapee while its parent is alive.
+    await Bun.sleep(150);
+    expect(processIdentity(escaped)?.ppid).toBe(leader.pid);
+    process.kill(leader.pid, 'SIGKILL');
+    await leader.exited;
+    // The escapee now belongs to another parent and no longer shares the leader's group.
+    expect(processIdentity(escaped)?.ppid).not.toBe(leader.pid);
+    await custody.close();
+    expect(custody.settled).toBe(true);
+    expect(processHasExited(escaped)).toBe(true);
+  } finally {
+    if (escaped !== undefined && !processHasExited(escaped)) process.kill(escaped, 'SIGKILL');
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('a recorded process is never signalled once its PID names a different process', async () => {
+  const bystander = Bun.spawn(['bun', '-e', 'setInterval(() => {}, 1000)'], {
+    stdin: 'ignore',
+    stdout: 'ignore',
+    stderr: 'ignore',
+  });
+  try {
+    const startTicks = processStartTicks(bystander.pid) ?? '';
+    expect(startTicks).not.toBe('');
+    // A stale record names the same PID with another start time, as after PID reuse.
+    expect(signalOwnedProcess({ pid: bystander.pid, startTicks: `${startTicks}0` }, 'SIGKILL')).toBe(false);
+    expect(processHasExited(bystander.pid)).toBe(false);
+    expect(signalOwnedProcess({ pid: bystander.pid, startTicks }, 'SIGKILL')).toBe(true);
+    await bystander.exited;
+  } finally {
+    if (!processHasExited(bystander.pid)) bystander.kill('SIGKILL');
+  }
 });
 
 test('server group cleanup runs even when browser close rejects', async () => {

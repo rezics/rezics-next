@@ -77,7 +77,15 @@ export const SourceConceptSession = candidateSession(function SourceConceptSessi
       transport={{
         read: (next) =>
           readSubjectConcept({
-            data: { id, locale, expectedReader, role, cursor: next.cursor, session: next.session },
+            data: {
+              id,
+              locale,
+              expectedReader,
+              role,
+              cursor: next.cursor,
+              ...(next.membership ? { membership: next.membership } : {}),
+              session: next.session,
+            },
             headers: csrfHeaders(),
           }),
       }}

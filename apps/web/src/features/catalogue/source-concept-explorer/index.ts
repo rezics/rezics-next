@@ -10,12 +10,28 @@ import { conditionMetadata, type ConditionMetadata } from '../../../search/condi
 import {
   emptyMembership,
   readConceptMembership,
+  validMembershipCursor,
   type ConceptHierarchyState,
   type ConceptMembership,
+  type ConceptMembershipCursors,
 } from './membership';
 
-export type { ConceptHierarchyState, ConceptMembership, ConceptMembershipRow } from './membership';
-export { emptyMembership, readConceptMembership, membershipProperties } from './membership';
+export type {
+  ConceptHierarchyState,
+  ConceptMembership,
+  ConceptMembershipCursors,
+  ConceptMembershipRow,
+  ConceptMembershipStream,
+  MembershipProperty,
+} from './membership';
+export {
+  emptyMembership,
+  membershipContinuationLimit,
+  membershipPageCap,
+  membershipProperties,
+  readConceptMembership,
+  validMembershipCursor,
+} from './membership';
 
 export const conceptContinuationLimit = 4096;
 export function validConceptCursor(cursor: string | undefined): boolean {
@@ -231,12 +247,18 @@ export async function readSourceConcept(
   locale: string,
   input: {
     cursor?: string | undefined;
+    membership?: ConceptMembershipCursors | undefined;
     session?: string | undefined;
     role?: string | undefined;
   },
 ): Promise<ConceptRead> {
   try {
     if (!validConceptCursor(input.cursor)) return candidateFailure(400);
+    if (
+      input.membership &&
+      Object.values(input.membership).some((cursor) => cursor !== undefined && !validMembershipCursor(cursor))
+    )
+      return candidateFailure(400);
     const headers = headersOf(authorization, input.session);
     const query = { language: locale, includeViewerActions: true };
     const current = await client.subjects({ id }).get({ query, headers });
@@ -266,7 +288,7 @@ export async function readSourceConcept(
           ...(input.cursor ? { cursor: input.cursor } : {}),
         },
         works: { state: 'unsupported', types: [], properties: [], metadata: null },
-        membership: emptyMembership('unsupported'),
+        membership: emptyMembership('unsupported', input.membership),
         viewerActions,
         spoiler: false,
         ...(session ? { session } : {}),
@@ -410,7 +432,10 @@ export async function readSourceConcept(
     const spoiler = Object.values(current.data.subject.statements).some((statements) =>
       statements.some((statement) => spoilerLevel(statement) > 0),
     );
-    const membershipRead = await readConceptMembership(client, authorization, release, id, locale, { session });
+    const membershipRead = await readConceptMembership(client, authorization, release, id, locale, {
+      session,
+      ...(input.membership ? { cursors: input.membership } : {}),
+    });
     if (membershipRead.failure) return candidateFailure(membershipRead.failure);
     if (membershipRead.oversized) return { ok: false, reason: 'unavailable', oversized: true };
     session = membershipRead.session ?? session;

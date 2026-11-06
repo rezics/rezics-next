@@ -18,6 +18,7 @@ import {
   conceptVisitHref,
   conceptTargetHref,
   conceptVisitDescriptorFor,
+  conceptWorkSubjectHref,
   subjectVisitHref,
   type ConceptFocus,
   type ConceptHierarchyAddress,
@@ -339,10 +340,17 @@ function ConceptVisitView({
               <ConceptMembershipReading
                 membership={read.membership}
                 locale={locale}
-                returnTo={returnTo}
-                hrefFor={(base, row) => subjectVisitHref(base, addressFor({ section: 'works', row: row.id }))}
+                hrefFor={(row) =>
+                  subjectVisitHref(
+                    conceptWorkSubjectHref(row.id, row.label, locale),
+                    addressFor({ section: 'works', row: row.id }),
+                  )
+                }
                 busy={busy}
                 onRetry={() => void visit.refresh()}
+                onNext={(property) => void visit.membershipNext(property)}
+                onPrevious={(property) => void visit.membershipPrevious(property)}
+                indexFor={(property) => visit.membershipIndexFor(property)}
               />
 
               <section className="space-y-2" aria-labelledby="concept-actions-heading">

@@ -19,6 +19,7 @@ import { vndbPublicTagConceptUri, vndbPublicTagScheme } from '@rezics/conversion
 import {
   captureShowcaseCommands,
   publishShowcase,
+  sendDurableAdopt,
   servedCoverVariants,
   servedVariantDecisionCurrent,
   ShowcaseJournal,
@@ -1073,4 +1074,251 @@ test('a served cover is named by its public summary in normalized order, and eac
   } as const;
   expect(servedVariantDecisionCurrent(decision, { format: 'avif', width: 320 })).toBe(true);
   expect(servedVariantDecisionCurrent(decision, { format: 'webp', width: 320 })).toBe(false);
+});
+
+test('durable adopt resumes previous keys and later prepared actions before matching acknowledgements, then continues past 32 generations', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'durable-adopt-lifetime-'));
+  const journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
+  const subjectId = randomUUID();
+  const candidate = randomUUID();
+  const other = randomUUID();
+  const intent = 'manifest-digest';
+  const planned = {
+    context: globalContext,
+    property: 'schema:abstract',
+    mode: 'replace' as const,
+    expected_head: 1,
+    selection: [{ candidate, rank: 'normal' as const }],
+  };
+  const otherBody = { ...planned, selection: [{ candidate: other, rank: 'preferred' as const }] };
+  const adoptKey = (digest: string) => `adopt:${showcaseDigest({ identity: `${subjectId}:schema:abstract`, digest })}`;
+  const calls: { body: unknown; key: string }[] = [];
+  const review = {
+    async adoptReviewedCandidates(
+      _id: string,
+      body: { selection: { candidate: string; rank: string }[] },
+      key: string,
+    ) {
+      calls.push({ body, key });
+      return { adoption: { head: calls.length, selection: body.selection } };
+    },
+  } as Pick<ShowcaseReviewPort, 'adoptReviewedCandidates'>;
+  try {
+    const laterKey = adoptKey(showcaseDigest({ intent, generation: 1 }));
+    journal.prepareAction(laterKey, planned, showcaseDigest({ action: laterKey, body: planned }));
+    const gen0 = adoptKey(showcaseDigest({ intent, generation: 0 }));
+    journal.prepareAction(gen0, planned, showcaseDigest({ action: gen0, body: planned }));
+    journal.acknowledgeAction(gen0);
+    const historical = await sendDurableAdopt({
+      journal,
+      review,
+      subjectId,
+      intent,
+      planned,
+      current: { selection: planned.selection },
+    });
+    expect(historical.status).toBe('complete');
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.key).toBe(journal.action(laterKey)!.idempotency_key);
+
+    const previousJournal = new ShowcaseJournal(join(directory, 'previous.sqlite'));
+    const previousKey = adoptKey(showcaseDigest({ intent, body: planned }));
+    previousJournal.prepareAction(previousKey, planned, 'previous-key');
+    const previousCalls: string[] = [];
+    const previous = await sendDurableAdopt({
+      journal: previousJournal,
+      review: {
+        async adoptReviewedCandidates(_id, _body, key) {
+          previousCalls.push(key);
+          return { adoption: { head: 1, selection: planned.selection } };
+        },
+      } as Pick<ShowcaseReviewPort, 'adoptReviewedCandidates'>,
+      subjectId,
+      intent,
+      planned,
+      current: { selection: planned.selection },
+    });
+    expect(previous.status).toBe('complete');
+    expect(previousCalls).toEqual(['previous-key']);
+    previousJournal.close();
+
+    const emptyJournal = new ShowcaseJournal(join(directory, 'empty.sqlite'));
+    const emptyPlanned = { ...planned, selection: [] as typeof planned.selection };
+    const skipped = await sendDurableAdopt({
+      journal: emptyJournal,
+      review,
+      subjectId,
+      intent,
+      planned: emptyPlanned,
+      current: { selection: [] },
+    });
+    expect(skipped.status).toBe('complete');
+    expect(calls).toHaveLength(1);
+    const emptyKey = adoptKey(showcaseDigest({ intent }));
+    emptyJournal.prepareAction(emptyKey, emptyPlanned, 'empty-pending');
+    const emptied = await sendDurableAdopt({
+      journal: emptyJournal,
+      review,
+      subjectId,
+      intent,
+      planned: emptyPlanned,
+      current: { selection: [] },
+    });
+    expect(emptied.status).toBe('complete');
+    expect(calls).toHaveLength(2);
+    expect(calls[1]?.key).toBe('empty-pending');
+    emptyJournal.close();
+
+    const refreshed = await sendDurableAdopt({
+      journal,
+      review,
+      subjectId,
+      intent,
+      planned,
+      current: { selection: planned.selection },
+    });
+    expect(refreshed.status).toBe('complete');
+    expect(calls).toHaveLength(2);
+
+    const boundJournal = new ShowcaseJournal(join(directory, 'bound.sqlite'));
+    for (let generation = 0; generation < 32; generation += 1) {
+      const action = adoptKey(showcaseDigest({ intent, generation }));
+      boundJournal.prepareAction(action, otherBody, `bound-${generation}`);
+      boundJournal.acknowledgeAction(action);
+    }
+    const bound = await sendDurableAdopt({
+      journal: boundJournal,
+      review,
+      subjectId,
+      intent,
+      planned,
+      current: null,
+    });
+    expect(bound.status).toBe('complete');
+    expect(calls).toHaveLength(3);
+    expect(calls[2]?.body).toEqual(planned);
+    boundJournal.close();
+
+    const unknownPath = join(directory, 'unknown.sqlite');
+    const unknownJournal = new ShowcaseJournal(unknownPath);
+    for (let generation = 0; generation < 32; generation += 1) {
+      const action = adoptKey(showcaseDigest({ intent, generation }));
+      unknownJournal.prepareAction(action, otherBody, `unknown-${generation}`);
+      unknownJournal.acknowledgeAction(action);
+    }
+    const unknownCalls: { body: unknown; key: string }[] = [];
+    let lose = true;
+    const unknownReview = {
+      async adoptReviewedCandidates(
+        _id: string,
+        body: { selection: { candidate: string; rank: string }[] },
+        key: string,
+      ) {
+        unknownCalls.push({ body, key });
+        if (lose) {
+          lose = false;
+          throw new Error('Lost committed adoption');
+        }
+        return { adoption: { head: unknownCalls.length + 10, selection: body.selection } };
+      },
+    } as Pick<ShowcaseReviewPort, 'adoptReviewedCandidates'>;
+    const lost = await sendDurableAdopt({
+      journal: unknownJournal,
+      review: unknownReview,
+      subjectId,
+      intent,
+      planned,
+      current: null,
+    });
+    expect(lost.status).toBe('interrupted');
+    expect(unknownCalls).toHaveLength(1);
+    const sealedKey = unknownCalls[0]!.key;
+    const sealedBody = unknownCalls[0]!.body;
+    unknownJournal.close();
+
+    const reopened = new ShowcaseJournal(unknownPath);
+    const starveBody = { ...planned, property: 'schema:keywords', selection: [] as typeof planned.selection };
+    for (let index = 0; index < 64; index += 1)
+      reopened.prepareAction(`adopt:${index.toString(16).padStart(64, '0')}`, starveBody, `starve-${index}`);
+    const recovered = await sendDurableAdopt({
+      journal: reopened,
+      review: unknownReview,
+      subjectId,
+      intent,
+      planned: { ...planned, expected_head: 99 },
+      current: { selection: otherBody.selection },
+    });
+    expect(recovered.status).toBe('complete');
+    expect(unknownCalls).toHaveLength(2);
+    expect(unknownCalls[1]?.key).toBe(sealedKey);
+    expect(unknownCalls[1]?.body).toEqual(sealedBody);
+    reopened.close();
+  } finally {
+    journal.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('durable adopt recovers identity-bound generation 32 after close, a later recorded window, and another property prefix', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'durable-adopt-unknown-32-'));
+  const path = join(directory, 'showcase.sqlite');
+  const subjectId = randomUUID();
+  const candidate = randomUUID();
+  const other = randomUUID();
+  const intent = 'manifest-digest';
+  const planned = {
+    context: globalContext,
+    property: 'schema:abstract',
+    mode: 'replace' as const,
+    expected_head: 1,
+    selection: [{ candidate, rank: 'normal' as const }],
+  };
+  const otherBody = { ...planned, selection: [{ candidate: other, rank: 'preferred' as const }] };
+  const identity = `${subjectId}:schema:abstract:${intent}`;
+  const adoptKey = (digest: string) => `adopt:${showcaseDigest({ identity: `${subjectId}:schema:abstract`, digest })}`;
+  const sealedKey = 'unknown-32';
+  let journal = new ShowcaseJournal(path);
+  const calls: { body: unknown; key: string }[] = [];
+  const review = {
+    async adoptReviewedCandidates(
+      _id: string,
+      body: { selection: { candidate: string; rank: string }[] },
+      key: string,
+    ) {
+      calls.push({ body, key });
+      return { adoption: { head: calls.length + 20, selection: body.selection } };
+    },
+  } as Pick<ShowcaseReviewPort, 'adoptReviewedCandidates'>;
+  try {
+    for (let generation = 0; generation < 32; generation += 1) {
+      const action = adoptKey(showcaseDigest({ intent, generation }));
+      journal.prepareAction(action, otherBody, `acked-${generation}`);
+      journal.acknowledgeAction(action);
+    }
+    const generation32 = adoptKey(showcaseDigest({ intent, generation: 32 }));
+    journal.prepareAction(generation32, planned, sealedKey);
+    journal.recordPendingAdopt(identity, generation32);
+    journal.advanceAdoptGeneration(identity, 70);
+    journal.close();
+
+    journal = new ShowcaseJournal(path);
+    const starveBody = { ...planned, property: 'schema:keywords', selection: [] as typeof planned.selection };
+    for (let index = 0; index < 64; index += 1)
+      journal.prepareAction(`adopt:${index.toString(16).padStart(64, '0')}`, starveBody, `starve-${index}`);
+    const recovered = await sendDurableAdopt({
+      journal,
+      review,
+      subjectId,
+      intent,
+      planned: { ...planned, expected_head: 99 },
+      current: { selection: otherBody.selection },
+    });
+    expect(recovered.status).toBe('complete');
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.key).toBe(sealedKey);
+    expect(calls[0]?.body).toEqual(planned);
+  } finally {
+    journal.close();
+    await rm(directory, { recursive: true, force: true });
+  }
 });

@@ -2,7 +2,14 @@ import { expectedCandidateReader } from '../../../subject/candidate-admission';
 import { createServerFn } from '@tanstack/react-start';
 import { isExploreId } from '../../pages/graph-browser';
 import { exploreContext } from '../../pages/graph-browser/actions';
-import { readSourceConcept, validConceptCursor, type ConceptRead } from './index';
+import {
+  membershipProperties,
+  readSourceConcept,
+  validConceptCursor,
+  validMembershipCursor,
+  type ConceptMembershipCursors,
+  type ConceptRead,
+} from './index';
 
 export const readSubjectConcept = createServerFn({ method: 'POST', strict: false })
   .validator((value: unknown) => {
@@ -17,11 +24,13 @@ export const readSubjectConcept = createServerFn({ method: 'POST', strict: false
       throw new Error('Invalid concept address');
     if (input.cursor !== undefined && (typeof input.cursor !== 'string' || !validConceptCursor(input.cursor)))
       throw new Error('Invalid concept continuation');
+    const membership = membershipCursors(input.membership);
     return {
       expectedReader: input.expectedReader === null ? null : expectedCandidateReader(input),
       id: input.id,
       locale: input.locale,
       cursor: typeof input.cursor === 'string' ? input.cursor : undefined,
+      ...(membership ? { membership } : {}),
       role: typeof input.role === 'string' && input.role.length <= 128 ? input.role : undefined,
       session: typeof input.session === 'string' && input.session.length <= 16384 ? input.session : undefined,
     };
@@ -39,3 +48,19 @@ export const readSubjectConcept = createServerFn({ method: 'POST', strict: false
     }
     return readSourceConcept(prepared.client, prepared.authorization, release, data.id, data.locale, data);
   });
+
+function membershipCursors(value: unknown): ConceptMembershipCursors | undefined {
+  if (value === undefined) return;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid membership continuation');
+  const input = value as Record<string, unknown>;
+  const cursors: ConceptMembershipCursors = {};
+  for (const property of membershipProperties) {
+    const cursor = input[property];
+    if (cursor === undefined) continue;
+    if (typeof cursor !== 'string' || !validMembershipCursor(cursor)) throw new Error('Invalid membership continuation');
+    cursors[property] = cursor;
+  }
+  if (Object.keys(input).some((key) => !membershipProperties.includes(key as (typeof membershipProperties)[number])))
+    throw new Error('Invalid membership continuation');
+  return Object.keys(cursors).length ? cursors : undefined;
+}
