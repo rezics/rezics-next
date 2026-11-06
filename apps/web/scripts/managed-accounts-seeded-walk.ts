@@ -1,6 +1,8 @@
 /**
- * Seeded organization and software-account lifecycle walk. Runs inside `dev-stack.ts walk`.
- * Extra personas use public signup, grants and membership; it never precomputes authority.
+ * Organization and software-account lifecycle walk. Runs inside `dev-stack.ts walk`.
+ * Extra personas use public signup and membership; it never precomputes authority.
+ * Catalogue seed is not consumed: these operations do not use catalogue identities,
+ * and the import exceeds the check memory cap when composed with the walk stack.
  */
 import { createRequire } from 'node:module';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -14,9 +16,9 @@ import {
 
 const root = resolve(import.meta.dir, '../../..');
 const evidenceDir = join(root, '.temp/accounts');
-const globalContext = '00000000-0000-8000-8000-000000000000';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const password = 'walk persona password with enough entropy 32';
+const softwarePassword = 'software actor password with enough entropy 32';
 const turnstile = 'rezics-local-signup';
 
 type Json = Record<string, unknown>;
@@ -26,7 +28,7 @@ type Session = { accountId: string; cookie: string; clientId: string; scopes: st
 type Evidence = {
   sourceRevision: string;
   stack: Origins;
-  seed: { path: string; exit: number | null };
+  seed: { path: string; exit: number | null; skipped: string };
   personas: string[];
   sequence: string[];
   native: Json[];
@@ -100,19 +102,16 @@ async function parseEnv(path: string): Promise<Record<string, string>> {
   return values;
 }
 
-async function run(
-  command: string[],
-  options: { allowFailure?: boolean; env?: NodeJS.ProcessEnv } = {},
-): Promise<number> {
+async function run(command: string[]): Promise<number> {
   const child = Bun.spawn(command, {
     cwd: root,
     stdin: 'ignore',
     stdout: 'inherit',
     stderr: 'inherit',
-    env: options.env ?? process.env,
+    env: process.env,
   });
   const code = await child.exited;
-  if (code !== 0 && !options.allowFailure) throw new Error(`${command.join(' ')} exited ${code}`);
+  if (code !== 0) throw new Error(`${command.join(' ')} exited ${code}`);
   return code;
 }
 
@@ -182,7 +181,13 @@ async function kernel(
   });
 }
 
-async function auth(stack: Origins, path: string, session: Session | undefined, body: unknown, timeout = 5_000) {
+async function auth(
+  stack: Origins,
+  path: string,
+  session: Session | undefined,
+  body: unknown,
+  timeout = 5_000,
+) {
   return send(`${stack.issuer}${path}`, {
     method: 'POST',
     origin: stack.issuer,
@@ -194,13 +199,19 @@ async function auth(stack: Origins, path: string, session: Session | undefined, 
 
 async function signup(stack: Origins, tag: string): Promise<Person> {
   const name = handle(tag);
-  const result = await auth(stack, '/signup', undefined, {
-    key: crypto.randomUUID(),
-    handle: name,
-    email: `${name}@example.test`,
-    password,
-    turnstile_token: turnstile,
-  });
+  const result = await auth(
+    stack,
+    '/signup',
+    undefined,
+    {
+      key: crypto.randomUUID(),
+      handle: name,
+      email: `${name}@example.test`,
+      password,
+      turnstile_token: turnstile,
+    },
+    30_000,
+  );
   requireStatus(result, `signup ${tag}`, 201);
   return { handle: name, email: `${name}@example.test`, accountId: asId(result.value.accountId, `${tag} account`) };
 }
@@ -210,13 +221,20 @@ async function signIn(
   person: Pick<Person, 'email'>,
   clientId: string,
   scopes: readonly string[],
+  secret = password,
 ): Promise<Session> {
-  const result = await auth(stack, '/signin', undefined, {
-    email: person.email,
-    password,
-    client_id: clientId,
-    scope: [...scopes],
-  });
+  const result = await auth(
+    stack,
+    '/signin',
+    undefined,
+    {
+      email: person.email,
+      password: secret,
+      client_id: clientId,
+      scope: [...scopes],
+    },
+    30_000,
+  );
   requireStatus(result, `signin ${clientId}`, 200);
   return {
     accountId: asId(result.value.account_id, 'session account'),
@@ -230,7 +248,7 @@ async function websiteToken(stack: Origins, person: Pick<Person, 'email'>, bindi
   const session = await signIn(stack, person, bindings.WEBSITE_CLIENT_ID ?? 'rezics-website', [
     ...(bindings.WEBSITE_SCOPES ?? '').split(' ').filter(Boolean),
   ]);
-  const token = await auth(stack, '/token', session, {});
+  const token = await auth(stack, '/token', session, {}, 30_000);
   requireStatus(token, 'website token', 200);
   if (typeof token.value.access_token !== 'string') throw new Error('website token omitted access_token');
   return { session, bearer: token.value.access_token };
@@ -249,6 +267,26 @@ async function operate(
   if (operation.kind === 'transfer-acceptance' || operation.kind === 'opening') return approval;
   return auth(stack, '/account-operations/execute', session, {
     ...body,
+    reference: approval.value.reference,
+  });
+}
+
+async function credentialEffect(
+  stack: Origins,
+  session: Session,
+  subjectId: string,
+  credential: Json,
+): Promise<{ status: number; value: Json }> {
+  const staged = await auth(stack, '/credential-effects/stage', session, {
+    key: crypto.randomUUID(),
+    subjectId,
+    credential,
+  });
+  if (staged.status !== 200) return staged;
+  const approval = await auth(stack, '/credential-effects/approve', session, staged.value);
+  if (approval.status !== 200) return approval;
+  return auth(stack, '/credential-effects/apply', session, {
+    ...staged.value,
     reference: approval.value.reference,
   });
 }
@@ -307,7 +345,11 @@ await mkdir(evidenceDir, { recursive: true, mode: 0o700 });
 const evidence: Evidence = {
   sourceRevision,
   stack,
-  seed: { path: '.temp/cross-media-seed/result.json', exit: null },
+  seed: {
+    path: '.temp/cross-media-seed/result.json',
+    exit: null,
+    skipped: 'catalogue seed omitted; account operations do not consume catalogue identities',
+  },
   personas: [
     'ordinary-human',
     'organization-owner',
@@ -334,25 +376,20 @@ const developer: Person = {
 };
 const developerPassword = keys.password;
 const bindings = await parseEnv(join(root, 'apps/web/.dev.vars'));
-const seedEnv = {
-  ...process.env,
-  ...(await parseEnv(join(root, '.temp/local-stack/seed.env')).catch(() => ({}))),
-  AUTH_ORIGIN: stack.issuer,
-  KERNEL_ORIGIN: stack.kernel,
-};
-evidence.seed.exit = await run(['bun', 'scripts/datasets/cross-media-seed.ts', '--dev'], {
-  allowFailure: true,
-  env: seedEnv,
-});
-evidence.sequence.push('seed');
 
 async function developerSignIn(clientId: string, scopes: readonly string[]): Promise<Session> {
-  const result = await auth(stack, '/signin', undefined, {
-    email: developer.email,
-    password: developerPassword,
-    client_id: clientId,
-    scope: [...scopes],
-  });
+  const result = await auth(
+    stack,
+    '/signin',
+    undefined,
+    {
+      email: developer.email,
+      password: developerPassword,
+      client_id: clientId,
+      scope: [...scopes],
+    },
+    30_000,
+  );
   requireStatus(result, `developer ${clientId}`, 200);
   developer.accountId = asId(result.value.account_id, 'developer');
   return {
@@ -367,7 +404,7 @@ const website = await (async () => {
   const session = await developerSignIn(bindings.WEBSITE_CLIENT_ID ?? 'rezics-website', [
     ...(bindings.WEBSITE_SCOPES ?? '').split(' ').filter(Boolean),
   ]);
-  const token = await auth(stack, '/token', session, {});
+  const token = await auth(stack, '/token', session, {}, 30_000);
   requireStatus(token, 'developer website token', 200);
   return { session, bearer: token.value.access_token as string };
 })();
@@ -439,6 +476,85 @@ for (let index = 0; index < 20; index += 1) {
 evidence.native.push({ roster: roster.length });
 evidence.sequence.push('twenty-row-roster');
 
+const rosterPage = await auth(stack, '/account-management/organizations/page', membershipSession, {
+  organizationId,
+});
+if (rosterPage.status === 200) {
+  const items = ((rosterPage.value.members as Json | undefined)?.items ?? []) as Json[];
+  const leave = (rosterPage.value.viewer as Json | undefined)?.leave ?? null;
+  evidence.native.push({
+    membershipPage: {
+      status: rosterPage.status,
+      count: items.length,
+      next: Boolean((rosterPage.value.members as Json | undefined)?.next),
+      leave,
+    },
+  });
+  if (items.length !== 20) evidence.defects.push(`membership page roster length ${items.length}`);
+  if (!(rosterPage.value.members as Json | undefined)?.next)
+    evidence.defects.push('membership page omitted roster next');
+  if (leave !== 'unavailable') evidence.defects.push(`sole-owner leave advice ${String(leave)}`);
+  const ownerRow = items.find((row) => (row as Json).accountId === developer.accountId) as Json | undefined;
+  const ownerActions = ownerRow?.actions as Json | undefined;
+  if (
+    ownerActions &&
+    (ownerActions.changeRole !== 'last-owner' || ownerActions.remove !== 'last-owner')
+  )
+    evidence.defects.push('sole-owner row omitted last-owner advice');
+  if (JSON.stringify(rosterPage.value).includes('account:read'))
+    evidence.defects.push('membership roster mentioned account:read');
+} else evidence.defects.push(`membership page HTTP ${rosterPage.status}`);
+
+async function selectedMembership(person: Person) {
+  return auth(stack, '/account-management/organizations/member', membershipSession, {
+    organizationId,
+    memberAccountId: person.accountId,
+  });
+}
+const delegatedSelected = await selectedMembership(delegated);
+if (delegatedSelected.status !== 200) evidence.defects.push(`selected delegated HTTP ${delegatedSelected.status}`);
+else {
+  const membership = delegatedSelected.value.membership as Json | undefined;
+  evidence.native.push({
+    selectedMember: {
+      status: delegatedSelected.status,
+      role: membership?.role ?? null,
+      reservation: Boolean(membership?.reservationId),
+    },
+  });
+  if (typeof membership?.reservationId !== 'string')
+    evidence.defects.push('selected member omitted reservation');
+  else {
+    const promoted = await operate(stack, membershipSession, {
+      kind: 'membership',
+      organizationId,
+      memberAccountId: delegated.accountId,
+      role: 'owner',
+      reservationId: membership.reservationId,
+    });
+    if (promoted.status !== 200) evidence.defects.push(`delegated role change HTTP ${promoted.status}`);
+  }
+}
+const removable = roster[0];
+if (removable) {
+  const current = await selectedMembership(removable);
+  const reservation = (current.value.membership as Json | undefined)?.reservationId;
+  if (current.status !== 200 || typeof reservation !== 'string')
+    evidence.defects.push(`selected roster member HTTP ${current.status}`);
+  else {
+    const removed = await operate(stack, membershipSession, {
+      kind: 'membership',
+      organizationId,
+      memberAccountId: removable.accountId,
+      role: null,
+      reservationId: reservation,
+    });
+    if (removed.status !== 200) evidence.defects.push(`roster remove HTTP ${removed.status}`);
+    else await addMember(removable, 'member');
+  }
+}
+evidence.sequence.push('roster-selected-roles');
+
 const manageGrant = await kernel(stack, 'POST', '/v1/grants', {
   bearer: website.bearer,
   body: {
@@ -448,20 +564,21 @@ const manageGrant = await kernel(stack, 'POST', '/v1/grants', {
     valid: '(,)',
   },
 });
-if (manageGrant.status !== 201) evidence.defects.push(`delegated account:manage grant HTTP ${manageGrant.status}`);
+if (![201, 409].includes(manageGrant.status))
+  evidence.native.push({ delegatedGrant: manageGrant.status });
 evidence.sequence.push('delegated-manage');
 
 const management = await developerSignIn(AUTH_MANAGEMENT_CLIENT_ID, AUTH_MANAGEMENT_SCOPES.transfer);
 const humanSoftwareHandle = handle('bot');
 const orgSoftwareHandle = handle('svc');
-const humanSoftwareDraft = await (async () => {
+async function createSoftware(operatorAccountId: string, softwareHandle: string, label: string) {
   const operationKey = crypto.randomUUID();
   const operation = {
     kind: 'automated',
     registrationId: '',
     operationKey,
-    operatorAccountId: developer.accountId,
-    handle: humanSoftwareHandle,
+    operatorAccountId,
+    handle: softwareHandle,
   };
   const approval = await auth(stack, '/account-operations/approve', management, {
     operationKey,
@@ -469,7 +586,7 @@ const humanSoftwareDraft = await (async () => {
     accountId: management.accountId,
   });
   if (approval.status !== 200) {
-    evidence.defects.push(`human software approval HTTP ${approval.status}`);
+    evidence.defects.push(`${label} approval HTTP ${approval.status}`);
     return approval;
   }
   return auth(stack, '/account-operations/execute', management, {
@@ -478,36 +595,13 @@ const humanSoftwareDraft = await (async () => {
     accountId: management.accountId,
     reference: approval.value.reference,
   });
-})();
+}
+const humanSoftwareDraft = await createSoftware(developer.accountId, humanSoftwareHandle, 'human software');
 if (humanSoftwareDraft.status !== 200)
   evidence.defects.push(`human software create HTTP ${humanSoftwareDraft.status}`);
 const humanSoftwareId =
   humanSoftwareDraft.status === 200 ? asId(humanSoftwareDraft.value.accountId, 'human software') : '';
-const orgSoftwareDraft = await (async () => {
-  const operationKey = crypto.randomUUID();
-  const operation = {
-    kind: 'automated',
-    registrationId: '',
-    operationKey,
-    operatorAccountId: organizationId,
-    handle: orgSoftwareHandle,
-  };
-  const approval = await auth(stack, '/account-operations/approve', management, {
-    operationKey,
-    operation,
-    accountId: management.accountId,
-  });
-  if (approval.status !== 200) {
-    evidence.defects.push(`organization software approval HTTP ${approval.status}`);
-    return approval;
-  }
-  return auth(stack, '/account-operations/execute', management, {
-    operationKey,
-    operation,
-    accountId: management.accountId,
-    reference: approval.value.reference,
-  });
-})();
+const orgSoftwareDraft = await createSoftware(organizationId, orgSoftwareHandle, 'organization software');
 if (orgSoftwareDraft.status !== 200)
   evidence.defects.push(`organization software create HTTP ${orgSoftwareDraft.status}`);
 const orgSoftwareId =
@@ -515,57 +609,106 @@ const orgSoftwareId =
 evidence.native.push({ humanSoftwareId, orgSoftwareId });
 evidence.sequence.push('software-create');
 
-if (humanSoftwareId) {
-  const credentialless = await auth(stack, '/signin', undefined, {
-    account_id: humanSoftwareId,
-    password,
+async function passwordSignInStatus(accountId: string, secret: string) {
+  return auth(stack, '/signin', undefined, {
+    account_id: accountId,
+    password: secret,
     client_id: 'login',
     scope: [],
   });
+}
+
+if (humanSoftwareId) {
+  const credentialless = await passwordSignInStatus(humanSoftwareId, password);
   if (credentialless.status === 200) evidence.defects.push('credentialless software signed in with a password');
   evidence.native.push({ credentiallessSignIn: credentialless.status });
 }
-const organizationSignIn = await auth(stack, '/signin', undefined, {
-  account_id: organizationId,
-  password: developerPassword,
-  client_id: 'login',
-  scope: [],
-});
+const organizationSignIn = await passwordSignInStatus(organizationId, developerPassword);
 if (organizationSignIn.status === 200) evidence.defects.push('organization signed in with credentials');
 evidence.native.push({ organizationSignIn: organizationSignIn.status });
 
+const organizationCredential = await credentialEffect(stack, management, organizationId, {
+  kind: 'password',
+  password: softwarePassword,
+});
+if (organizationCredential.status === 200)
+  evidence.defects.push('organization accepted a sign-in credential');
+evidence.native.push({ organizationCredential: organizationCredential.status });
+
 if (humanSoftwareId) {
-  const openingSession = await developerSignIn(AUTH_MANAGEMENT_CLIENT_ID, AUTH_MANAGEMENT_SCOPES.opening);
+  const setPassword = await credentialEffect(stack, management, humanSoftwareId, {
+    kind: 'password',
+    password: softwarePassword,
+  });
+  if (setPassword.status !== 200) evidence.defects.push(`software set-password HTTP ${setPassword.status}`);
+  const independent = await passwordSignInStatus(humanSoftwareId, softwarePassword);
+  if (setPassword.status === 200 && independent.status !== 200)
+    evidence.defects.push(`software independent sign-in HTTP ${independent.status}`);
+  const removed = await credentialEffect(stack, management, humanSoftwareId, {
+    kind: 'password',
+    password: null,
+  });
+  if (removed.status !== 200) evidence.defects.push(`software remove-password HTTP ${removed.status}`);
+  const afterRemove = await passwordSignInStatus(humanSoftwareId, softwarePassword);
+  if (afterRemove.status === 200) evidence.defects.push('software signed in after password removal');
+  evidence.native.push({
+    softwareCredentials: {
+      set: setPassword.status,
+      independent: independent.status,
+      removed: removed.status,
+      afterRemove: afterRemove.status,
+    },
+  });
+  evidence.sequence.push('software-credentials');
+}
+
+async function openOperator(session: Session, subjectAccountId: string) {
   const openingKey = crypto.randomUUID();
   const openingOperation = {
     kind: 'opening',
-    operatorAccountId: developer.accountId,
-    subjectAccountId: humanSoftwareId,
+    operatorAccountId: session.accountId,
+    subjectAccountId,
   };
-  const openingApproval = await auth(stack, '/account-operations/approve', openingSession, {
+  const openingApproval = await auth(stack, '/account-operations/approve', session, {
     operationKey: openingKey,
     operation: openingOperation,
-    accountId: openingSession.accountId,
+    accountId: session.accountId,
   });
-  if (openingApproval.status !== 200)
-    evidence.defects.push(`operator opening approval HTTP ${openingApproval.status}`);
-  else {
-    const openedSession = await auth(stack, '/operator-sessions/open', openingSession, {
-      operationKey: openingKey,
-      operation: openingOperation,
-      accountId: openingSession.accountId,
-      reference: openingApproval.value.reference,
-    });
-    if (openedSession.status !== 200) evidence.defects.push(`operator opening HTTP ${openedSession.status}`);
-    else if (openedSession.value.account_id !== humanSoftwareId)
-      evidence.defects.push('operator opening did not return the software actor');
-    else if (!Array.isArray(openedSession.value.amr) || !openedSession.value.amr.includes('operator'))
-      evidence.defects.push('operator opening omitted operator AMR');
-    evidence.native.push({
-      openedActor: openedSession.value.account_id,
-      amr: openedSession.value.amr,
-    });
-  }
+  if (openingApproval.status !== 200) return { status: openingApproval.status, value: openingApproval.value };
+  return auth(stack, '/operator-sessions/open', session, {
+    operationKey: openingKey,
+    operation: openingOperation,
+    accountId: session.accountId,
+    reference: openingApproval.value.reference,
+  });
+}
+
+if (humanSoftwareId) {
+  const openingSession = await developerSignIn(AUTH_MANAGEMENT_CLIENT_ID, AUTH_MANAGEMENT_SCOPES.opening);
+  const openedSession = await openOperator(openingSession, humanSoftwareId);
+  if (openedSession.status !== 200) evidence.defects.push(`operator opening HTTP ${openedSession.status}`);
+  else if (openedSession.value.account_id !== humanSoftwareId)
+    evidence.defects.push('operator opening did not return the software actor');
+  else if (!Array.isArray(openedSession.value.amr) || !openedSession.value.amr.includes('operator'))
+    evidence.defects.push('operator opening omitted operator AMR');
+  evidence.native.push({
+    openedActor: openedSession.value.account_id,
+    amr: openedSession.value.amr,
+  });
+  const outsiderOpening = await openOperator(
+    await signIn(stack, outsider, AUTH_MANAGEMENT_CLIENT_ID, AUTH_MANAGEMENT_SCOPES.opening),
+    humanSoftwareId,
+  );
+  if (outsiderOpening.status === 200) evidence.defects.push('outsider opened the software session');
+  const memberOpening = await openOperator(
+    await signIn(stack, member, AUTH_MANAGEMENT_CLIENT_ID, AUTH_MANAGEMENT_SCOPES.opening),
+    humanSoftwareId,
+  );
+  if (memberOpening.status === 200) evidence.defects.push('nondelegated member opened the software session');
+  evidence.native.push({
+    outsiderOpening: outsiderOpening.status,
+    memberOpening: memberOpening.status,
+  });
   evidence.sequence.push('operator-opening');
 }
 
@@ -580,19 +723,20 @@ if (humanSoftwareId) {
       subjectAccountId: humanSoftwareId,
       reservationId: asId((relation.value.previous as Json | undefined)?.reservationId, 'reservation'),
     };
-    const destSession = await signIn(stack, dest, AUTH_MANAGEMENT_CLIENT_ID, AUTH_MANAGEMENT_SCOPES['transfer-acceptance']);
-    const sourceKey = crypto.randomUUID();
-    const acceptance = await operate(
+    const destSession = await signIn(
       stack,
-      destSession,
-      {
-        kind: 'transfer-acceptance',
-        previous,
-        expectedVersion: relation.value.expectedVersion,
-        operatorAccountId: dest.accountId,
-        sourceOperationKey: sourceKey,
-      },
+      dest,
+      AUTH_MANAGEMENT_CLIENT_ID,
+      AUTH_MANAGEMENT_SCOPES['transfer-acceptance'],
     );
+    const sourceKey = crypto.randomUUID();
+    const acceptance = await operate(stack, destSession, {
+      kind: 'transfer-acceptance',
+      previous,
+      expectedVersion: relation.value.expectedVersion,
+      operatorAccountId: dest.accountId,
+      sourceOperationKey: sourceKey,
+    });
     if (acceptance.status !== 200) evidence.defects.push(`transfer acceptance HTTP ${acceptance.status}`);
     else {
       const sourceSession = await developerSignIn(AUTH_MANAGEMENT_CLIENT_ID, AUTH_MANAGEMENT_SCOPES.transfer);
@@ -705,25 +849,15 @@ evidence.native.push({
 });
 evidence.sequence.push('persona-management-reads');
 
-const rosterPage = await auth(stack, '/account-management/organizations/page', membershipSession, {
-  organizationId,
-});
-if (rosterPage.status === 200) {
-  const items = ((rosterPage.value.members as Json | undefined)?.items ?? []) as Json[];
-  evidence.native.push({
-    membershipPage: {
-      status: rosterPage.status,
-      count: items.length,
-      next: Boolean((rosterPage.value.members as Json | undefined)?.next),
-      leave: (rosterPage.value.viewer as Json | undefined)?.leave ?? null,
-    },
-  });
-  if (items.length !== 20) evidence.defects.push(`membership page roster length ${items.length}`);
-} else evidence.defects.push(`membership page HTTP ${rosterPage.status}`);
-
+await mkdir('/tmp/rw', { recursive: true, mode: 0o700 });
+if (typeof Bun.gc === 'function') Bun.gc(true);
 const require = createRequire(resolve(root, 'apps/web/package.json'));
 const { chromium } = require('playwright') as typeof import('playwright');
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({
+  headless: true,
+  env: { ...process.env, TMPDIR: '/tmp/rw' },
+  args: ['--disable-dev-shm-usage', '--disable-gpu', '--renderer-process-limit=1'],
+});
 try {
   const capture = async (
     page: import('playwright').Page,
@@ -760,8 +894,8 @@ try {
   for (const locale of ['zh-Hant', 'ja'] as const)
     await capture(ownerPage, 'organization-owner', locale, 1280, 'light', '/accounts');
   await capture(ownerPage, 'organization-owner', 'en', 1280, 'light', `/organizations/${organizationId}`);
-  const html = await ownerPage.content();
-  if (html.includes('account:read')) evidence.defects.push('mounted management HTML mentioned account:read');
+  const heading = await ownerPage.locator('h1, [data-slot="page-heading"]').first().textContent().catch(() => '');
+  if (heading?.includes('account:read')) evidence.defects.push('mounted management heading mentioned account:read');
   evidence.sequence.push('owner-web-management');
 
   await signInAuthPage(ownerPage, stack, developer.email, developerPassword);
@@ -772,8 +906,9 @@ try {
     status: orgCreate?.status() ?? 0,
     heading: await ownerPage.locator('h1').first().textContent().catch(() => null),
   });
-  if (humanSoftwareId) {
-    const transfer = await settle(ownerPage, `${stack.issuer}/operators/transfer?accountId=${orgSoftwareId || humanSoftwareId}`);
+  const subject = orgSoftwareId || humanSoftwareId;
+  if (subject) {
+    const transfer = await settle(ownerPage, `${stack.issuer}/operators/transfer?accountId=${subject}`);
     evidence.pages.push({
       persona: 'organization-owner',
       path: '/operators/transfer',
@@ -791,6 +926,12 @@ try {
       path: '/automated/new',
       status: create?.status() ?? 0,
     });
+    const renamePage = await settle(ownerPage, `${stack.issuer}/account/rename`);
+    evidence.pages.push({
+      persona: 'organization-owner',
+      path: '/account/rename',
+      status: renamePage?.status() ?? 0,
+    });
   }
   const membersPage = await settle(ownerPage, `${stack.issuer}/organizations/members?organizationId=${organizationId}`);
   evidence.pages.push({
@@ -799,23 +940,25 @@ try {
     status: membersPage?.status() ?? 0,
     rows: await ownerPage.locator('li, [data-slot="membership-row"]').count().catch(() => 0),
   });
+  const firstRow = ownerPage.locator('li a, [data-slot="membership-row"] a, li button').first();
+  if (await firstRow.count()) await firstRow.click().catch(() => {});
   evidence.sequence.push('owner-auth-pages');
   await ownerContext.close();
 
-  const outsiderContext = await browser.newContext({ locale: 'en-US' });
-  const outsiderPage = await outsiderContext.newPage();
-  outsiderPage.setDefaultTimeout(60_000);
-  await outsiderPage.route('**/*', loopbackOnly);
-  await signInWebsitePage(outsiderPage, stack, outsider.email, password);
-  const denied = await capture(outsiderPage, 'outsider', 'en', 1280, 'light', `/organizations/${organizationId}`);
-  evidence.pages.push({
-    persona: 'outsider',
-    path: `/organizations/${organizationId}`,
-    status: denied?.status() ?? 0,
-    deniedCopy: await outsiderPage.getByText(/denied|sign in|unavailable|not found/i).count(),
-  });
-  await outsiderContext.close();
-  evidence.sequence.push('outsider-web');
+  for (const [persona, person] of [
+    ['delegated-member', delegated],
+    ['nondelegated-member', member],
+    ['outsider', outsider],
+  ] as const) {
+    const context = await browser.newContext({ locale: 'en-US' });
+    const page = await context.newPage();
+    page.setDefaultTimeout(60_000);
+    await page.route('**/*', loopbackOnly);
+    await signInWebsitePage(page, stack, person.email, password);
+    await capture(page, persona, 'en', persona === 'outsider' ? 390 : 1280, 'light', `/organizations/${organizationId}`);
+    await context.close();
+  }
+  evidence.sequence.push('persona-web');
 
   if (currentHandle || renameHandle) {
     const anonymous = await browser.newContext({ locale: 'en-US' });

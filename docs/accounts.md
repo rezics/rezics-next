@@ -235,9 +235,9 @@ Unknown-result handoff inputs stay concealed until an explicit current recovery 
 Imported transfer tuples are unverified source data. Proposed destination review establishes neither the source
 relation nor its approval or execution; those require the original native source and exact-intent commands.
 
-Decision: the organization and software-account journey walk uses the admitted stack's persona and seed commands,
-then creates extra named personas through public signup, grants and membership. A catalogue seed that stays
-incomplete does not stop those account operations once the persona exists.
+Decision: the organization and software-account journey walk uses the admitted stack's persona command, then
+creates extra named personas through public signup and membership. Catalogue seed is not part of this journey:
+these account operations do not consume catalogue identities.
 
 ## 3. Credentials, sessions and tokens
 
