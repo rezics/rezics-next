@@ -508,6 +508,8 @@ export async function createReleasedDiscoveryFixture(
               bytes ? JSON.parse(bytes) : undefined,
               Object.fromEntries(req.headers),
             );
+            if (response.status >= 400)
+              console.error('Reviewed import HTTP failure', method, url.pathname, response.status, JSON.stringify(response.body).slice(0, 1024));
             return Response.json(response.body, { status: response.status, headers: response.headers });
           }) as typeof fetch,
         });
