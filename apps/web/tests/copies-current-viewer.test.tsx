@@ -729,7 +729,7 @@ test('The actual Copies route retires retained private rows and editor state on 
   const { createRoot, hydrateRoot } = await import('react-dom/client');
   const { renderToString } = await import('react-dom/server');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
-  const { createRouter, createRootRoute, createMemoryHistory, RouterContextProvider } =
+  const { createRouter, createRootRoute, createRoute, createMemoryHistory, RouterContextProvider } =
     await import('@tanstack/react-router');
   const { viewerExposureLifetime, viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
   const { Route } = await import('../src/routes/library/copies');
@@ -808,9 +808,13 @@ test('The actual Copies route retires retained private rows and editor state on 
   const releaseAdmission = exposureLifetime.subscribe(admitCurrent);
   // Foreign unpartitioned private data is never a fallback.
   client.setQueryData(['copies'], response('FOREIGN').page);
+  const rootRoute = createRootRoute();
   const router = createRouter({
-    routeTree: createRootRoute(),
-    history: createMemoryHistory({ initialEntries: ['/en/library/copies'] }),
+    routeTree: rootRoute.addChildren([
+      createRoute({ getParentRoute: () => rootRoute, path: '/library/copies' }),
+      createRoute({ getParentRoute: () => rootRoute, path: '/library/loans' }),
+    ]),
+    history: createMemoryHistory({ initialEntries: ['/library/copies'] }),
   });
   const host = document.createElement('main');
   document.body.append(host);

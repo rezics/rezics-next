@@ -58,13 +58,10 @@ export default defineConfig((context) => {
       // after the first page has loaded.
       entries: ['src/routes/**/*.tsx'],
       holdUntilCrawlEnd: true,
-      include: ['react-day-picker', 'date-fns', '@date-fns/tz'],
     },
     ssr: {
       optimizeDeps: {
         include: ['@inlang/paraglide-js/urlpattern-polyfill'],
-        // Calendar days stay on react-day-picker; prebundling it for SSR blocks copies-page ready.
-        exclude: ['react-day-picker', 'date-fns', '@date-fns/tz'],
       },
     },
     plugins: [

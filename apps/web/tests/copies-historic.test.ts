@@ -1,6 +1,13 @@
 import { expect, mock, test } from 'bun:test';
 import { createElement, Fragment, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  RouterContextProvider,
+} from '@tanstack/react-router';
 import * as start from '../.storybook/react-start';
 import { createKernelClient, type KernelClient } from '@rezics/client';
 import { copyStatusChange, loadCopiesPage, loadCopyDetail, saveCopy, type CopyItem } from '../src/library/copies-read';
@@ -48,10 +55,6 @@ mock.module('../src/kernel/exposure', () => ({
   useOperationAdmission: () => 'available',
   readAdmitted: async () => [],
   readAdmittedResult: async () => ({ state: 'ready', admitted: [] }),
-}));
-mock.module('@tanstack/react-router', () => ({
-  Link: ({ children }: { children: ReactNode }) => createElement('a', null, children),
-  notFound: () => new Error('not found'),
 }));
 const { CopyForm, CopiesPage } = await import('../src/library/copies-page');
 const id = '01a17a3b-7065-7048-8c7f-f4ccfae1f400';
@@ -126,6 +129,19 @@ const form = (value: CopyItem, extra: object = {}) =>
       ...extra,
     }),
   );
+const pageMarkup = (page: Parameters<typeof CopiesPage>[0]['page']) => {
+  const rootRoute = createRootRoute();
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([
+      createRoute({ getParentRoute: () => rootRoute, path: '/library/copies' }),
+      createRoute({ getParentRoute: () => rootRoute, path: '/library/loans' }),
+    ]),
+    history: createMemoryHistory({ initialEntries: ['/library/copies'] }),
+  });
+  return renderToStaticMarkup(
+    createElement(RouterContextProvider, { router }, createElement(CopiesPage, { page })),
+  );
+};
 
 test('copy editor dates are locale calendar controls rather than native date inputs', () => {
   const html = form(copy());
@@ -152,7 +168,7 @@ test('raw list keeps two same-edition identities and original facts, with no poi
     expect(page.copies[index]?.kindLabel).toBeUndefined();
     expect(page.copies[index]?.statusLabel).toBeUndefined();
   }
-  const html = renderToStaticMarkup(createElement(CopiesPage, { page }));
+  const html = pageMarkup(page);
   expect(html).toContain('digital');
   expect(html).not.toContain('physical');
   expect(html.match(/data-slot="list-row"/g)).toHaveLength(2);
