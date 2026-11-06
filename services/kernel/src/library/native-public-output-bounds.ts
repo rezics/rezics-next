@@ -71,7 +71,6 @@ const hex = 'f'.repeat(64);
 const decimal = '9'.repeat(20);
 const text = String.fromCharCode(1);
 const jsonBytes = (value: unknown) => Buffer.byteLength(JSON.stringify(value));
-const sqlBytes = statementBytes;
 const placeholders = (sql: string) => {
   let count = 0;
   for (const match of sql.matchAll(/\$(\d+)/g)) count = Math.max(count, Number(match[1]));
@@ -129,7 +128,7 @@ const statement = (
 ): NativePublicOutputStatement => {
   const sql = sqlOf(source);
   const bindCount = bindCountOf(source);
-  const requestBytes = sqlBytes(sql) + jsonBytes(binds);
+  const requestBytes = statementBytes(sql) + jsonBytes(binds);
   const resultBytes = Math.max(plan.relationBytes, jsonBytes(result));
   return Object.freeze({
     name,
@@ -551,7 +550,7 @@ const control = (name: string, sql: string): NativePublicOutputStatement =>
     name,
     sql,
     bindCount: 0,
-    requestBytes: sqlBytes(sql) + jsonBytes([]),
+    requestBytes: statementBytes(sql) + jsonBytes([]),
     resultBytes: 0,
     resultRows: 0,
     bound: sqlBound({
@@ -562,7 +561,7 @@ const control = (name: string, sql: string): NativePublicOutputStatement =>
       nativePoints: 0,
       witnessKeys: 0,
       statements: 1,
-      bytes: sqlBytes(sql) + jsonBytes([]),
+      bytes: statementBytes(sql) + jsonBytes([]),
     }),
   });
 
@@ -582,7 +581,7 @@ function pageSql() {
 function pageBindCount() {
   return memoizedValue(pageBindCount, () => bindCountOf(page));
 }
-const pageRequestBytes = (limit: number) => sqlBytes(pageSql()) + jsonBytes(pageBinds(limit));
+const pageRequestBytes = (limit: number) => statementBytes(pageSql()) + jsonBytes(pageBinds(limit));
 const pageResultBytes = (limit: number) => jsonBytes(Array.from({ length: limit }, () => pageRow));
 function pageKeyWork() {
   return memoizedValue(pageKeyWork, () =>
@@ -631,7 +630,7 @@ function partitionBindCount() {
   return memoizedValue(partitionBindCount, () => bindCountOf(partition));
 }
 function partitionRequestBytes() {
-  return memoizedValue(partitionRequestBytes, () => sqlBytes(partitionSql()) + jsonBytes(partitionBinds));
+  return memoizedValue(partitionRequestBytes, () => statementBytes(partitionSql()) + jsonBytes(partitionBinds));
 }
 
 /** Same-snapshot size admission for the current partition node/moved_to projection. No fixed guess. */
@@ -753,7 +752,7 @@ function requestFits(entry: NativePublicOutputStatement, sql: string, values: re
   if (values.length !== entry.bindCount) return false;
   let encoded: number;
   try {
-    encoded = sqlBytes(sql) + jsonBytes(values);
+    encoded = statementBytes(sql) + jsonBytes(values);
   } catch {
     return false;
   }

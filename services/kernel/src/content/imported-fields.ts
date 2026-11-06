@@ -1,5 +1,6 @@
 import { Type } from 'typebox';
 import { jsonParameter } from '../database/json.ts';
+import { memoizedValue } from '../memoized.ts';
 import type { PoolClient } from 'pg';
 import { BatchReferenceSchema, SourceSchema } from '@rezics/definitions/bulk';
 import { Value } from 'typebox/value';
@@ -35,10 +36,11 @@ export type ImportedFieldView = ImportedFieldResult &
 export type StoredImportedField = ImportedFieldView;
 
 const controls = /[\u0000-\u001f\u007f-\u009f]/u;
-const ImportedSourceSchema = Type.Intersect([
-  SourceSchema,
-  Type.Object({ references: Type.Array(BatchReferenceSchema) }),
-]);
+function importedSourceSchema() {
+  return memoizedValue(importedSourceSchema, () =>
+    Type.Intersect([SourceSchema, Type.Object({ references: Type.Array(BatchReferenceSchema) })]),
+  );
+}
 
 const ImportedRightsSchema = Type.Object({
   license: Type.String(),
@@ -192,7 +194,7 @@ export async function readImportedField(
     revision: row.revision,
     body: row.body === null ? null : Buffer.from(row.body),
     availability: row.availability as ImportedFieldView['availability'],
-    source: Value.Decode(ImportedSourceSchema, row.source),
+    source: Value.Decode(importedSourceSchema(), row.source),
     rights: Value.Decode(ImportedRightsSchema, row.rights),
     language: row.language,
   };
@@ -219,7 +221,7 @@ export async function readImportedFieldBounded(
     body: row.body === null ? null : Buffer.from(row.body),
     bodyTooLarge: row.bodyTooLarge ?? false,
     availability: row.availability as ImportedFieldView['availability'],
-    source: Value.Decode(ImportedSourceSchema, row.source),
+    source: Value.Decode(importedSourceSchema(), row.source),
     rights: Value.Decode(ImportedRightsSchema, row.rights),
     language: row.language,
   };
