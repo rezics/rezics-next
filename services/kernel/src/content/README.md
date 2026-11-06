@@ -76,8 +76,9 @@ Reaction totals are read after a thread or post has passed its Board and Access 
 disclose the same item again after those totals, and the post page rechecks its containing thread after them, so the
 last authority check precedes the response. A Board takedown or protected read-grant revocation committed in that
 window yields `404` for a head or an absent item for a page; no totals leave for an item whose final disclosure
-fails. Subject discussions and author activity already observe each thread again after their totals. Board pages
-select and disclose their entries and parent authority in the final board snapshot.
+fails. Subject discussions observe each listed thread again after their totals. Author activity reads no totals: each
+listed item passes the point-read disclosure, and its context is finished before the response. Board pages select and
+disclose their entries and parent authority in the final board snapshot.
 
 The composed timing seam `disclosureBarrier` pauses a point read after its initial Board and Access checks and before
 its final disclosure. It changes timing only, is absent in production, and is used by the native
