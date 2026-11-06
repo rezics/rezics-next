@@ -44,7 +44,7 @@ function readableHandle(handle: string | null | undefined): handle is string {
 function FeedCardAuthor({ item, locale }: { item: FeedItem; locale: string }) {
   const summary = item.summary;
   const author = 'author' in summary ? summary.author : undefined;
-  const authorAvatar = author && 'avatar' in author ? author.avatar : null;
+  const authorAvatar = (author && 'avatar' in author ? author.avatar : null) as CoverSummary | null;
   const options = { locale: locale as Locale };
   const name = author?.displayName || (author?.handle ? `@${author.handle}` : m.thread_author_unknown({}, options));
   const identity = (

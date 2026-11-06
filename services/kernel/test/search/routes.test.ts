@@ -1,3 +1,4 @@
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { createPool } from '../../src/database/pool.ts';
 import type { PublicFigureView } from '../../src/rating/public-figure-http.ts';
@@ -128,8 +129,8 @@ const service: SearchService = {
     };
   },
 };
-const kernel = createKernel({ pool, access, tokens, routeKey, search: service });
-const offline = createKernel({ pool, access, tokens, routeKey });
+const kernel = createKernel({ receiptKeys: testReceiptKeys(), pool, access, tokens, routeKey, search: service });
+const offline = createKernel({ receiptKeys: testReceiptKeys(), pool, access, tokens, routeKey });
 
 async function call(
   app: typeof kernel,
@@ -406,6 +407,7 @@ test('HTTP forwards one resolved kernel instant to hits, ratings and facets whil
   const deadlines: number[] = [];
   let now = Date.now() - 2 * 60 * 60_000;
   const app = createKernel({
+    receiptKeys: testReceiptKeys(),
     pool,
     access,
     tokens,

@@ -82,7 +82,9 @@ export function CurrentReadingHead() {
   const preparing = useRouterState({
     select: (state) => state.matches.some((match) => match.status === 'error' && isPreparingReadError(match.error)),
   });
-  const failed = useRouterState({ select: (state) => state.matches.find((match) => match.status === 'error')?.error });
+  const failed: unknown = useRouterState({
+    select: (state) => state.matches.find((match) => match.status === 'error')?.error,
+  });
   const denied =
     failed && typeof failed === 'object' && 'status' in failed && (failed.status === 401 || failed.status === 403);
   const heading = pending
@@ -99,7 +101,11 @@ export function CurrentReadingHead() {
   return (
     <>
       {currentReadingTags(tags, withdrawn).map((tag) => (
-        <Asset {...tag} key={`tsr-meta-${JSON.stringify(tag)}`} nonce={router.options.ssr?.nonce} />
+        <Asset
+          {...tag}
+          key={`tsr-meta-${JSON.stringify(tag)}`}
+          {...(router.options.ssr?.nonce ? { nonce: router.options.ssr.nonce } : {})}
+        />
       ))}
       {withdrawn && (
         <>

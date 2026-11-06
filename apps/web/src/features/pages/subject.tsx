@@ -1,4 +1,4 @@
-import { PageReadError, pageReadError } from './page-read-failure';
+import { PageReadError, pageReadError, type NativePageBody } from './page-read-failure';
 export { PageReadError, pageReadError } from './page-read-failure';
 import { mangaObservedOrigin } from '../catalogue/manga-public-visit';
 import { SubjectArtworkSession } from '../catalogue/subject-artwork/session';
@@ -309,10 +309,11 @@ export async function loadSubjectPage(
       return { kind: 'redirect', id: body.redirect.to, target: 'account' };
   }
   if (result.status === 200 && result.data) {
-    if (typeof result.data.account === 'string') {
+    const native = result.data as NativePageBody;
+    if (typeof native.account === 'string') {
       const raw = {
-        ...result.data,
-        account: { id: result.data.account, handle: '' },
+        ...native,
+        account: { id: native.account, handle: '' },
       } as SubjectPageData;
       const reads = planReads(platformRegistry, raw.document as CompositionDocument, pageContext(raw)).reads;
       for (const [key, read] of Object.entries(reads)) {
@@ -320,19 +321,19 @@ export async function loadSubjectPage(
         // Account descriptors select by handle, which this envelope does not carry.
         // The native profile's immutable ID binds the planned slot to the admitted account.
         const profile = accountOf(raw.reads[key]?.body);
-        if (profile?.id === result.data.account && subjectIdPattern.test(profile.id) && profile.handle)
+        if (profile?.id === native.account && subjectIdPattern.test(profile.id) && profile.handle)
           return { kind: 'redirect', id: profile.handle, target: 'account' };
       }
       // An absent, handleless or foreign profile supplies no admitted public @ address.
-      const { account: _account, ...catalogue } = result.data;
+      const { account: _account, ...catalogue } = native;
       if (catalogue.subject !== id || (options.realm && !catalogue.context))
         throw new PageReadError('dependency_unavailable', 503);
       return { kind: 'page', page: { ...catalogue, subject: id, requestedRealm: options.realm } };
     }
-    const survivor = result.data.subject;
+    const survivor = native.subject;
     if (typeof survivor === 'string' && survivor !== id) return { kind: 'redirect', id: survivor };
-    if (options.realm && !result.data.context) throw new PageReadError('dependency_unavailable', 503);
-    const { account: _account, ...page } = result.data;
+    if (options.realm && !native.context) throw new PageReadError('dependency_unavailable', 503);
+    const { account: _account, ...page } = native;
     // Read the existing mounted Terms authority resource once, alongside this page reading.
     // An advice outage must never fail or conceal the admitted public page.
     const currentPage = page as SubjectPageData;

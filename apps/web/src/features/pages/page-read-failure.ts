@@ -1,4 +1,11 @@
+import type { KernelClient } from '@rezics/client';
 import { isRecord } from './shared';
+
+// Eden retains all successful bodies in data; callers select this type only after status 200.
+export type NativePageBody = Extract<
+  NonNullable<Awaited<ReturnType<KernelClient['pages']['$read']['post']>>['data']>,
+  { reads: unknown }
+>;
 
 export class PageReadError extends Error {
   readonly name = 'PageReadError';

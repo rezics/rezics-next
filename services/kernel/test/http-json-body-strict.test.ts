@@ -1,3 +1,4 @@
+import { testReceiptKeys } from './support/receipt-keys.ts';
 import { afterAll, expect, test } from 'bun:test';
 import { Elysia, t } from 'elysia';
 import { strictContentSchema } from '../src/content/schemas.ts';
@@ -44,6 +45,7 @@ const detail = {
   security: [{ bearerAuth: [] }, {}],
 };
 const kernel = createKernel({
+  receiptKeys: testReceiptKeys(),
   pool,
   routeKey: new Uint8Array(32).fill(1),
   access: {

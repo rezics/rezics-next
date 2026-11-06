@@ -6,7 +6,12 @@ import type { SessionEnv } from '../../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../../session/request';
 import { kernelClient } from '../../kernel/client';
 import { requestLanguages } from '../../kernel/languages';
-import { readDiscovery, readDiscoveryKinds, type DiscoveryRequest } from '../../search/discovery';
+import {
+  readDiscovery,
+  readDiscoveryKinds,
+  type DiscoveryRequest,
+  type DiscoveryKindsState,
+} from '../../search/discovery';
 import {
   homeFeedId,
   homeSpaceAddress,
@@ -117,7 +122,7 @@ export const readPrivateHomePage = createServerFn({ method: 'GET' })
   });
 
 /** Anonymous bounded registry metadata, read only when the Home control needs choices. No hits are retained. */
-export const readHomeKinds = createServerFn({ method: 'GET' })
+export const readHomeKinds = createServerFn({ method: 'GET', strict: false })
   .validator((input: { locale: string; cursor?: string }) => {
     localeInput(input.locale);
     if (
@@ -127,7 +132,7 @@ export const readHomeKinds = createServerFn({ method: 'GET' })
       throw new Error('Invalid kind cursor');
     return input;
   })
-  .handler(async ({ data }) => {
+  .handler(async ({ data }): Promise<DiscoveryKindsState> => {
     const client = kernelClient(data.locale);
     const request: DiscoveryRequest = {
       representation: 'discovery-v1',

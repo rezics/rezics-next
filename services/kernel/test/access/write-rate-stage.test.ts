@@ -1,3 +1,4 @@
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { afterAll, beforeEach, expect, test } from 'bun:test';
 import { t } from 'elysia';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
@@ -147,7 +148,12 @@ test('one opaque request charge covers duplicate stage invocation and refuses a 
 });
 
 test('the default kernel composition declares every mounted write and installs the real limiter', async () => {
-  const app = createKernel({ pool, routeKey: new Uint8Array(32), ratePeer: () => '192.0.2.1' });
+  const app = createKernel({
+    receiptKeys: testReceiptKeys(),
+    pool,
+    routeKey: new Uint8Array(32),
+    ratePeer: () => '192.0.2.1',
+  });
   const writes = app.routes.filter((route) => {
     const action = route.hooks?.detail?.['x-action'];
     const readOnly = typeof action === 'string' && /^[a-z][a-z_]*:(read|list)$/.test(action);
@@ -178,6 +184,7 @@ test('createKernel subject:read POST custom search authorizes without a write ch
     as_of: '2026-10-25T00:00:00.000Z',
   };
   const app = createKernel({
+    receiptKeys: testReceiptKeys(),
     pool,
     routeKey: new Uint8Array(32),
     access: ({ actions: catalogue }) => {
@@ -346,6 +353,7 @@ test('createKernel payout markPaid and offer delist spend once before effect wit
       .rows[0],
   ];
   const app = createKernel({
+    receiptKeys: testReceiptKeys(),
     pool,
     routeKey: new Uint8Array(32),
     access: (config) =>

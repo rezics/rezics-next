@@ -1,3 +1,4 @@
+import type { NativePageBody } from './page-read-failure';
 import { queryOptions } from '@tanstack/react-query';
 import { notFound, redirect } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
@@ -206,7 +207,7 @@ const readTypeList = createServerFn({ method: 'GET', strict: false })
         ...configuredListRetryAdmission(result.status, result.response?.headers),
       };
     }
-    const response = result.data;
+    const response = result.data as NativePageBody;
     const target: TypeListTarget =
       'subject' in data.target && response.subject && response.subject !== data.target.subject
         ? { ...data.target, subject: response.subject }
