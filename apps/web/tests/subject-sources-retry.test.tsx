@@ -88,8 +88,14 @@ test('actual Sources retry returns focus locally and retires focus across reader
           root.render(h(QueryClientProvider, { client }, h(routing.RouterProvider, { router })));
           await tick();
         });
+        // The route admits its loader result after an asynchronous request fingerprint check.
+        for (let attempt = 0; !host.querySelector('button') && attempt < 100; attempt++)
+          await act(async () => {
+            await new Promise((done) => setTimeout(done, 10));
+          });
         expect(document.activeElement === outside, mode).toBe(true);
         const opener = host.querySelector('button')!;
+        expect(opener, mode).not.toBeNull();
         expect(opener.textContent).toBe(m.sources_retry());
         expect(calls, mode).toHaveLength(1);
         let release!: (value: SourcesResult) => void;
