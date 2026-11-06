@@ -11170,5 +11170,9 @@
   "library_archive_recovery_restart_original": "원래 아카이브 사용",
   "library_archive_entry_open_library": "라이브러리 열기",
   "library_archive_progress_open_session": "현재 Session 열기",
-  "library_archive_progress_restart": "원래 아카이브로 복구를 다시 시작"
+  "library_archive_progress_restart": "원래 아카이브로 복구를 다시 시작",
+  "library_archive_observation_correct": "기존 관측 유지 또는 수정",
+  "library_archive_observation_admit": "새 관측 등록",
+  "library_archive_observation_revision": "현재 관측 리비전",
+  "library_archive_observation_admit_help": "등록 시 명시적 지우기를 포함한 모든 보관 필드를 사용합니다. 기본 검토에서 기존 관측이 없는지 확인합니다."
 }

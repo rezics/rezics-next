@@ -1,3 +1,4 @@
+import { archiveBytesBase64 } from '../private-export/archive-bytes';
 import {
   archiveUploadBytes,
   type ArchiveConfirmation,
@@ -12,7 +13,6 @@ import {
 import { selectedArchiveRecoveryResults } from './results';
 import { type RecoverySection } from './selection';
 import { ArchiveRecoveryVisit, type RecoveryBinding, type RecoveryReadDirection, type RecoveryRequest } from './visit';
-import { recoveryArchiveText } from '../private-export/supported-recovery-artifact';
 
 type ResultPage = ReturnType<typeof selectedArchiveRecoveryResults>;
 type Confirmation = { uploadId: string; body: ArchiveConfirmation };
@@ -56,8 +56,8 @@ export class ArchiveEntryRecoveryJourney {
   #cancelRequest: RecoveryRequest | null = null;
   #cancelAcknowledged = false;
   #cancelNeedsReconcile = false;
-  #pendingUpload: { text: string; key: string; request: RecoveryRequest } | null = null;
-  #originalText: string | null = null;
+  #pendingUpload: { base64: string; key: string; request: RecoveryRequest } | null = null;
+  #originalBytes: Uint8Array | null = null;
   #originalName = 'library.json';
   #evidenceId: string | null = null;
   #expiry: ReturnType<typeof setTimeout> | undefined;
@@ -84,7 +84,7 @@ export class ArchiveEntryRecoveryJourney {
       reviewed: state?.review ? this.#reviewed : [],
       readback: state ? this.#readback : null,
       uploadUncertain: this.#pendingUpload !== null,
-      hasOriginalArchive: this.#originalText !== null,
+      hasOriginalArchive: this.#originalBytes !== null,
       retryOriginal:
         !!state &&
         (['uncertain', 'recoverable'].includes(state.phase) ||
@@ -95,6 +95,8 @@ export class ArchiveEntryRecoveryJourney {
     this.#retired = true;
     clearTimeout(this.#expiry);
     this.visit.retire();
+    this.#originalBytes = null;
+    this.#originalName = 'library.json';
     this.#pendingUpload = null;
     this.#reviewed = [];
     this.#readback = null;
@@ -135,7 +137,7 @@ export class ArchiveEntryRecoveryJourney {
     }
   }
 
-  /** File size is checked before reading. V4 captures are projected to the installed V3 envelope before upload. */
+  /** File size is checked before reading; native validation receives the original bytes. */
   async upload(file: File) {
     if (file.size > archiveUploadBytes) {
       this.#notice = 'file_too_large';
@@ -149,11 +151,11 @@ export class ArchiveEntryRecoveryJourney {
     this.#readback = null;
     this.#reviewed = [];
     await this.#run(async () => {
-      const text = recoveryArchiveText(await file.text(), 'entries');
+      const bytes = new Uint8Array(await file.arrayBuffer());
       if (request.signal.aborted || !this.#current()) return;
-      this.#originalText = text;
+      this.#originalBytes = bytes;
       this.#originalName = file.name;
-      this.#pendingUpload = { text, key: crypto.randomUUID(), request };
+      this.#pendingUpload = { base64: archiveBytesBase64(bytes), key: crypto.randomUUID(), request };
       await this.#sendUpload();
     });
   }
@@ -162,7 +164,7 @@ export class ArchiveEntryRecoveryJourney {
   }
   async #sendUpload() {
     const original = this.#pendingUpload!;
-    const reply = await this.#port.upload(original.text, original.key, original.request.signal);
+    const reply = await this.#port.upload({ base64: original.base64 }, original.key, original.request.signal);
     if (!this.#current() || original !== this.#pendingUpload || original.request.signal.aborted) return;
     this.#feedback(reply);
     if (reply.kind === 'uncertain') return;
@@ -396,8 +398,10 @@ export class ArchiveEntryRecoveryJourney {
     this.#emit();
   }
   async adoptOriginal() {
-    if (!this.#originalText || this.#busy || this.snapshot().retryOriginal) return;
-    const file = new File([this.#originalText], this.#originalName, { type: 'application/json' });
+    if (!this.#originalBytes || this.#busy || this.snapshot().retryOriginal) return;
+    const file = new File([new Uint8Array(this.#originalBytes).buffer], this.#originalName, {
+      type: 'application/json',
+    });
     await this.upload(file);
   }
   async prune() {

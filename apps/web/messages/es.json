@@ -11170,5 +11170,9 @@
   "library_archive_recovery_restart_original": "Usar el archivo original",
   "library_archive_entry_open_library": "Abrir la biblioteca",
   "library_archive_progress_open_session": "Abrir la Session actual",
-  "library_archive_progress_restart": "Empezar otra recuperación con el archivo original"
+  "library_archive_progress_restart": "Empezar otra recuperación con el archivo original",
+  "library_archive_observation_correct": "Conservar o corregir una observación existente",
+  "library_archive_observation_admit": "Añadir una observación nueva",
+  "library_archive_observation_revision": "Revisión actual de la observación",
+  "library_archive_observation_admit_help": "Se usan todos los campos archivados, incluidos los borrados explícitos. La revisión nativa comprueba que no exista una observación."
 }

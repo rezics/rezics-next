@@ -11182,5 +11182,9 @@
   "library_archive_recovery_restart_original": "使用原始归档",
   "library_archive_entry_open_library": "打开书库",
   "library_archive_progress_open_session": "打开当前的 Session",
-  "library_archive_progress_restart": "用原始归档再开始一次恢复"
+  "library_archive_progress_restart": "用原始归档再开始一次恢复",
+  "library_archive_observation_correct": "保留或修正现有观察记录",
+  "library_archive_observation_admit": "录入新的观察记录",
+  "library_archive_observation_revision": "当前观察记录修订版本",
+  "library_archive_observation_admit_help": "录入会使用归档中的所有字段，包括明确清除的值。原生审核会确认没有现有记录。"
 }

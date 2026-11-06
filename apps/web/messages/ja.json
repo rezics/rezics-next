@@ -11279,5 +11279,9 @@
   "library_archive_recovery_restart_original": "元のアーカイブを使う",
   "library_archive_entry_open_library": "ライブラリを開く",
   "library_archive_progress_open_session": "現在の Session を開く",
-  "library_archive_progress_restart": "元のアーカイブで別の復元を始める"
+  "library_archive_progress_restart": "元のアーカイブで別の復元を始める",
+  "library_archive_observation_correct": "既存の観測を保持または修正",
+  "library_archive_observation_admit": "新しい観測を登録",
+  "library_archive_observation_revision": "現在の観測リビジョン",
+  "library_archive_observation_admit_help": "登録には明示的な消去を含む全アーカイブ項目を使います。既存の観測がないことをネイティブレビューで確認します。"
 }

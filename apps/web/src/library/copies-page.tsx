@@ -285,7 +285,7 @@ export function CopyForm({
       setCopy(next);
       setDraft(adopted.draft);
       setKind(adopted.kind);
-      originalDraft.current = { draft: adopted.draft, kind: adopted.kind, editionId: null };
+      originalDraft.current = { draft: draftOf(accepted), kind: accepted.kind ?? '', editionId: null };
       deleteStarted.current = null;
       setConfirming(false);
       setConflicted(false);

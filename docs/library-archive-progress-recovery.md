@@ -1,7 +1,7 @@
 # Native archive progress recovery
 
-This extends the existing private Library archive owner. It accepts completed Library export V1/V2/V3 artifacts;
-Web projects a completed V4 capture to that installed envelope at upload. It is not another importer or a general
+This extends the existing private Library archive owner. It accepts completed Library export V1/V2/V3/V4 artifacts
+with their original manifests and validated section totals. It is not another importer or a general
 progress engine. Each reviewed archive occurrence creates one fresh native Session. Existing Sessions, Entry state,
 entitlement, repeat history, publication and ownership are untouched.
 
@@ -58,8 +58,8 @@ current Session and exact completed IDs through their native owner methods. Appl
 claim complete historical recovery.
 
 Version compatibility and per-section byte accounting belong to the existing
-[bounded copy adapter](library-copy-archive-recovery.md). V2/V3 additions remain unsupported coverage here;
-only Session/unit records enter the existing progress evidence table. The installed producer emits V2; V3 is a
+[bounded copy adapter](library-copy-archive-recovery.md). V2/V3/V4 additions remain unsupported coverage here;
+only Session/unit records enter the existing progress evidence table. The installed producer emits V4; V3 is a
 declared decoding seam pending producer delivery. Recovery continues to use the persisted original native
 operands, key and checkpoint contract. Artifact versions do not change review epochs, native acknowledgement,
 current profile/Subject admission or partial outcomes.
@@ -220,10 +220,9 @@ memory, so navigation stays blocked while acknowledgement is unresolved. Native 
 Cancellation stops unclaimed effects and original-command replay reconciles an in-flight claim. Removal repeats the
 native bounded DELETE until complete; accepted Sessions remain independently readable.
 
-The installed export producer now defaults to V4, which these owners explicitly refuse. Native journey fixtures
-select an installed V2 capture before paging, then finish it through the mounted export owner; they do not relabel
-completed V4 artifacts or widen recovery admission. V1/V3 decoder and authorization acceptance stay with the native
-owner. This corrects the earlier prose's V2-default premise without inventing a recovery version.
+Current V4 files reach native validation as original bytes, including provider rows, exact version and final totals.
+Unsupported sections stay in manifest and coverage evidence; only explicitly reviewed Session/unit facts are adopted.
+Retained V1/V2/V3 artifacts keep their original inventories and absent assessment semantics.
 
 For a composed caller let H/O/T be holdings/occurrence/unit pages inspected, M membership reviews, R final reviews,
 A confirmed applications, L original-command retries and D bounded deletion calls. Native HTTP operations are

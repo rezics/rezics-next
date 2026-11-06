@@ -22,21 +22,19 @@ The mounted visit captures the existing encrypted original-sender credential bef
 function admits the expected current viewer and credential epoch before opening that credential. The browser keeps
 it only with the mounted visit; an uncertain command never swaps to a newly captured sender.
 
-The file control admits an original file up to 34 MiB before reading its text. The generated upload sends the installed V1/V2/V3 text
-unchanged after any version-4 projection. Only the native decoder interprets JSON, with depth 32, 100,000 records, 32 MiB compact record bytes and
-120,000 bytes per record. Completed V1/V2/V3 artifacts follow current native support when the installed review client
-has an operand. A completed version 4 capture is projected to the installed version 3 envelope at upload, so Entry
-recovery can reuse a current owner export without sending refused provider sections. Malformed, incomplete, unsupported and inconsistent files retain their native outcomes.
+The file control admits an original file up to 34 MiB before reading its bytes. Original V1/V2/V3/V4 bytes travel
+through a base64 server-function envelope and a JSON Blob to the generated native upload. Only the native decoder
+interprets JSON, with depth 32, 100,000 records, 32 MiB compact record bytes and 120,000 bytes per record. Browser
+code never rebuilds the manifest, removes unsupported rows or repairs incomplete totals. Malformed UTF-8 also
+reaches native validation unchanged. Original-intent retries and Restart keep those exact bytes.
 
 One upload identity and one preview page of at most 100 records are retained. Inventory shows native computed
 section counts, capture and treatment alongside validated overall manifest rows and compact bytes. It explains empty
 captures, retained unsupported evidence and manifest omissions. An empty page never substitutes for inventory. One
 upload, page size, selected-row limit and immutable review lifecycle cover every activated branch. V4 provider sections
-and rows without a producer-published review operand remain retained unsupported evidence. The installed client
-currently lacks `journal.fields.assessment` and the source-observation review variant; Content owns those generated
-route operands. The integrated native route already declares both; its installed client snapshot still needs
-publication. Assessment and observation mapping, native readback and their mounted/native acceptance remain dependent
-on that publication, including the correction's exact current observation revision.
+and rows without a producer-published review operand remain retained unsupported evidence. The installed client declares assessment and source-observation review. Observation rows use their exact provider
+and record identity with native admit/correct operations; correction starts with preserve and requires the current
+observation revision. Unsupported rows have evidence only. Neither branch uses generic assignment controls.
 
 ## Deliberate selection and immutable review
 
