@@ -509,8 +509,9 @@ function site(): Promise<string> {
         WEBSITE_SCOPES: scopes.join(' '),
         NODE_OPTIONS: '--max-old-space-size=4096',
       },
-      // Fetch `/en` only to learn Vite is up. Playwright-hydrating Home compiles its client graph
-      // until the default 2 GiB heap dies, so the authoring journey never starts.
+      // Fetch the thread route only to learn Vite is up. Playwright-hydrating Home compiles its
+      // client graph until the default 2 GiB heap dies, so the authoring journey never starts.
+      firstPath: threadPath(),
       warmUpPaths: [],
     });
     return server.origin;

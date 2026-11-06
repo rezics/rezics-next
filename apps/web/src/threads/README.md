@@ -3,10 +3,11 @@
 Decision: composed reader regressions use the existing per-file Web check lanes so server-module mocks cannot
 replace later files’ native client exports. Mounted route replacements update React state; privacy and return
 assertions remain unchanged. The native late-revocation cases remain the current-authority acceptance.
-Post-editing browser checks fetch `/en` only to learn Vite is up; they do not Playwright-hydrate Home during
-startup, because that compiled the Home client graph until Vite died at its 2 GiB heap. The same host answers the
-composed `reading-page` for the signed-in viewer so edit, delete and edited-marker journeys see current posts.
-Owner edit and erase use that page viewer immediately; the personal read still supplies reactions and review votes.
+Post-editing browser checks fetch the thread route only to learn Vite is up; they do not Playwright-hydrate Home
+during startup, because that compiled the Home client graph until Vite died at its 2 GiB heap. The same host answers
+the composed `reading-page` so edit, delete and edited-marker journeys see current posts. Owner edit and erase use
+the reading-page viewer when that page was admitted for the account, otherwise the signed-in session subject after
+anonymous SSR; the personal read still supplies reactions and review votes.
 
 ## New-thread destination and community rules
 
