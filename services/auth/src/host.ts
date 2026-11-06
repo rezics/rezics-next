@@ -139,7 +139,8 @@ export class AuthHostConfigurationError extends Error {
 export interface AuthHostOptions<Context = WorkflowContext> extends AuthServiceOptions {
   /** Both pools belong exclusively to this host and are released by stop(). */
   systemDatabasePool?: Pool;
-  /** Defaults to database.options.connectionString; must name the same Auth DB. */
+  /** Defaults to database.options.connectionString; must name the same Auth DB.
+   * An absolute libpq `host` socket directory is that identity. */
   systemDatabaseUrl?: string;
   stagingKey: Uint8Array;
   /** Cloudflare Siteverify configuration for the public sign-up endpoint. */
@@ -159,16 +160,17 @@ export interface AuthHostOptions<Context = WorkflowContext> extends AuthServiceO
 function databaseIdentity(value: string | undefined) {
   try {
     const url = new URL(value!);
+    const host = url.searchParams.get('host');
+    const socket = host?.startsWith('/') ? host : undefined;
     if (
       !['postgres:', 'postgresql:'].includes(url.protocol) ||
-      !url.hostname ||
+      (!url.hostname && !socket) ||
       url.pathname.length < 2 ||
-      ['host', 'hostaddr', 'port', 'database', 'dbname', 'service', 'options'].some((field) =>
-        url.searchParams.has(field),
-      )
+      (host !== null && !socket) ||
+      ['hostaddr', 'port', 'database', 'dbname', 'service', 'options'].some((field) => url.searchParams.has(field))
     )
       throw new Error();
-    return `${url.hostname}:${url.port || '5432'}${url.pathname}`;
+    return `${socket ?? url.hostname}:${url.port || '5432'}${url.pathname}`;
   } catch {
     throw new AuthHostConfigurationError('database');
   }

@@ -126,4 +126,6 @@ Global distribution reads admit the native aggregate shape; focused `--private-n
 PostgreSQL through a bind-mounted unix socket when the namespace is loopback-only, differs from PID 1, or cannot
 read PID 1's netns. Docker cannot join that netns, and a host-published port never appears on the unshared loopback.
 The server also listens on `/var/run/postgresql` so the image entrypoint's init `psql` (which clears `PGHOST`) can
-finish. Acceptance remains the existing native host walk; unit tests pin socket isolation and the dual listen path.
+finish. Auth host identity uses that absolute `host` socket directory as the database identity; a TCP `host` or
+`hostaddr` override remains refused. Acceptance remains the existing native host walk; unit tests pin socket isolation
+and the dual listen path.
