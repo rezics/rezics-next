@@ -1,15 +1,87 @@
 import { fork } from 'node:child_process';
-import { Pool } from 'pg';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 import { createAuthBindings } from '../../src/access/auth-bindings.ts';
 import { createRegistrationProofBindings } from '../../src/access/registration-proof.ts';
+import { configureReceiptKeys } from '../../src/command/receipt-key.ts';
+import { installNativeHistoryPreload } from '../../src/composition/preload.ts';
+import { createPool } from '../../src/database/pool.ts';
+import { initializeEventTypes } from '../../src/events/catalogue.ts';
 import { createRegistrationPorts } from '../support/registration-ports.ts';
 import { createOutcomeRpc } from '../search/support/outcome-rpc.ts';
 import { sharedAuth, closeOwnedSemanticAuth, type OwnedResourceObserver, type SharedAuth } from './outcome-auth.ts';
 
 type Registration = Parameters<SharedAuth['host']['workflows']['register']>[0];
 type Ready = { issuer: string; audience: string };
-type Init = { source: string; kernelUrl: string; routeKey: string; keys: [number, string][]; current: number };
+type EncodedRing = { current: number; keys: [number, string][] };
+type Init = {
+  source: string;
+  kernelUrl: string;
+  routeKey: string;
+  keys: EncodedRing;
+  receiptKeys: EncodedRing;
+};
+
+function encodeRing(ring: KeyRing): EncodedRing {
+  return {
+    current: ring.current,
+    keys: [...ring.keys].map(([id, key]) => [id, Buffer.from(key).toString('base64url')]),
+  };
+}
+
+function decodeRing(encoded: EncodedRing): KeyRing {
+  return {
+    current: encoded.current,
+    keys: new Map(encoded.keys.map(([id, key]) => [id, Buffer.from(key, 'base64url')])),
+  };
+}
+
+async function settleIndependently(
+  steps: readonly (() => unknown | Promise<unknown>)[],
+  message: string,
+  cause?: unknown,
+): Promise<void> {
+  const errors: unknown[] = [];
+  for (const step of steps) {
+    try {
+      await step();
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  if (cause && errors.length) throw new AggregateError([cause, ...errors], message, { cause });
+  if (cause) throw cause;
+  if (errors.length === 1) throw errors[0];
+  if (errors.length) throw new AggregateError(errors, message);
+}
+
+function withIsolatedOutput(error: unknown, output: string): never {
+  const failure = error instanceof Error ? error : new Error(String(error));
+  if (!output.trim() || failure.message.includes(output)) throw failure;
+  throw new Error(`${failure.message}\nIsolated Auth output: ${output}`, { cause: failure });
+}
+
+function reportOriginal<T extends object>(ports: T): T {
+  return new Proxy(ports, {
+    get(target, property, receiver) {
+      const value = Reflect.get(target, property, receiver);
+      if (typeof value !== 'function') return value;
+      return (...args: unknown[]) => {
+        try {
+          const result = Reflect.apply(value, target, args);
+          return result && typeof result === 'object' && 'then' in result
+            ? Promise.resolve(result).catch((error: unknown) => {
+                console.error(error);
+                throw error;
+              })
+            : result;
+        } catch (error) {
+          console.error(error);
+          throw error;
+        }
+      };
+    },
+  });
+}
 
 /** Only Auth crosses IPC. Kernel HTTP, Search and the supplied pools stay in the caller's capture context. */
 export async function isolatedOutcomeAuth(
@@ -17,6 +89,7 @@ export async function isolatedOutcomeAuth(
   kernelUrl: string,
   routeKey: Uint8Array,
   keys: KeyRing,
+  receiptKeys: KeyRing,
   onOwnedResource?: OwnedResourceObserver,
 ) {
   const child = fork(import.meta.filename, [], {
@@ -64,27 +137,30 @@ export async function isolatedOutcomeAuth(
   let closing: Promise<void> | undefined;
   function close(): Promise<void> {
     return (closing ??= (async () => {
-      const errors: unknown[] = [];
       let forced = false;
       const timer = setTimeout(() => {
         forced = true;
         child.kill('SIGKILL');
       }, 150_000);
       try {
-        try {
-          await rpc.request('close');
-        } catch (error) {
-          errors.push(error);
-        }
-        if (child.connected) child.disconnect();
-        const result = await exited;
-        if (forced || result.code !== 0 || result.signal !== null)
-          errors.push(new Error(`Isolated Auth did not drain: ${JSON.stringify(result)}: ${output}`));
+        await settleIndependently(
+          [
+            () => rpc.request('close'),
+            () => {
+              if (child.connected) child.disconnect();
+            },
+            async () => {
+              const result = await exited;
+              if (forced || result.code !== 0 || result.signal !== null)
+                throw new Error(`Isolated Auth did not drain: ${JSON.stringify(result)}: ${output}`);
+            },
+          ],
+          'Isolated Auth cleanup failed',
+        );
       } finally {
         clearTimeout(timer);
         rpc.close();
       }
-      if (errors.length) throw new AggregateError(errors, 'Isolated Auth cleanup failed');
     })());
   }
   try {
@@ -92,34 +168,38 @@ export async function isolatedOutcomeAuth(
       source: source.href,
       kernelUrl,
       routeKey: Buffer.from(routeKey).toString('base64url'),
-      keys: [...keys.keys].map(([id, key]) => [id, Buffer.from(key).toString('base64url')]),
-      current: keys.current,
+      keys: encodeRing(keys),
+      receiptKeys: encodeRing(receiptKeys),
     } satisfies Init);
     return {
       ...ready,
       service: { handler: (request: Request) => fetch(request) },
       host: {
         workflows: {
-          register: (input: Registration) => rpc.request<{ accountId: string }>('register', input),
+          register: (input: Registration) =>
+            rpc
+              .request<{ accountId: string }>('register', input)
+              .catch((error: unknown) => withIsolatedOutput(error, output)),
         },
       },
-      registerClient: (clientId: string, scopes: string[]) => rpc.request<void>('client', { clientId, scopes }),
+      registerClient: (clientId: string, scopes: string[]) =>
+        rpc.request<void>('client', { clientId, scopes }).catch((error: unknown) => withIsolatedOutput(error, output)),
       close,
     };
   } catch (error) {
-    try {
-      await close();
-    } catch (cleanup) {
-      throw new AggregateError([error, cleanup], 'Isolated Auth setup and cleanup failed');
-    }
+    await settleIndependently([() => close()], 'Isolated Auth setup and cleanup failed', error);
     throw error;
   }
 }
 
 if (import.meta.main) {
   if (!process.send) throw new Error('Isolated Auth requires private IPC');
+  // bun test preloads do not apply to this fork. Access commands need the same
+  // History composition and product event catalogue as server, worker and tests.
+  installNativeHistoryPreload();
+  initializeEventTypes();
   let auth: SharedAuth | undefined;
-  let seed: Pool | undefined;
+  let seed: ReturnType<typeof createPool> | undefined;
   let release: (() => void) | undefined;
   let starting: Promise<Ready> | undefined;
   let closing: Promise<void> | undefined;
@@ -128,12 +208,10 @@ if (import.meta.main) {
     (closing ??= (async () => {
       await starting?.catch(() => {});
       await Promise.allSettled([...operations]);
-      try {
-        await closeOwnedSemanticAuth();
-      } finally {
-        release?.();
-        await seed?.end();
-      }
+      await settleIndependently(
+        [() => closeOwnedSemanticAuth(), () => release?.(), () => seed?.end()],
+        'Isolated Auth child cleanup failed',
+      );
     })());
   const rpc = createOutcomeRpc(
     {
@@ -167,12 +245,10 @@ if (import.meta.main) {
               },
               true,
             );
-            seed = new Pool({ connectionString: input.kernelUrl, max: 10 });
-            seed.on('error', () => {});
-            const referenceKeys = {
-              current: input.current,
-              keys: new Map(input.keys.map(([id, key]) => [id, Buffer.from(key, 'base64url')])),
-            };
+            seed = createPool(input.kernelUrl, { connectionTimeoutMillis: 10_000 });
+            const referenceKeys = decodeRing(input.keys);
+            const receiptKeys = decodeRing(input.receiptKeys);
+            configureReceiptKeys(seed, receiptKeys);
             const registration = createRegistrationProofBindings({ pool: seed, referenceKeys });
             release = auth.bind({
               trustedAccess: createAuthBindings({
@@ -180,12 +256,14 @@ if (import.meta.main) {
                 ...registration,
                 verifyPendingIdentity: registration.verifyNativePendingIdentity,
               }),
-              access: createRegistrationPorts({
-                pool: seed,
-                authPool: auth.database,
-                routeKey: Buffer.from(input.routeKey, 'base64url'),
-                referenceKeys,
-              }).ports,
+              access: reportOriginal(
+                createRegistrationPorts({
+                  pool: seed,
+                  authPool: auth.database,
+                  routeKey: Buffer.from(input.routeKey, 'base64url'),
+                  referenceKeys,
+                }).ports,
+              ),
             });
             return { issuer: auth.issuer, audience: auth.audience };
           })());

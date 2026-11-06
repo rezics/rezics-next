@@ -57,6 +57,8 @@ export type ComposedPageBound = Readonly<{
   reads: number;
   slots: number;
   candidates: number;
+  discardedCandidates: number;
+  rereads: number;
   accessDependencyPoints: number;
   examinedRows: number;
   statements: number;
@@ -64,6 +66,9 @@ export type ComposedPageBound = Readonly<{
   connections: 1;
   privacyStatements: 2;
   privacyExaminedRows: (behindOrChangedHomes: number) => number;
+  preparationInputKeys: number;
+  preparationResultWrites: number;
+  nestedEngineSearches: number;
 }>;
 
 export type PreparationStepBound = Readonly<{
@@ -76,6 +81,17 @@ export type PreparationStepBound = Readonly<{
   engineSearches: number;
   connections: 1;
   responseBytes: number;
+}>;
+
+/** Nested Access/engine/preparation work, discarded candidates and the one-step reread ceiling. */
+export type NestedProducerBound = Readonly<{
+  discardedCandidates: number;
+  rereads: number;
+  accessDependencyPoints: number;
+  engineSearches: number;
+  preparationInputKeys: number;
+  preparationResultWrites: number;
+  preparationExaminedRows: number;
 }>;
 
 export function zeroCost(): PublicFilterCost {
@@ -195,6 +211,8 @@ export function deriveComposedPageBound(
     reads: reads.length,
     slots,
     candidates,
+    discardedCandidates: candidates,
+    rereads: reads.length,
     accessDependencyPoints,
     examinedRows,
     statements: composedStatementCeiling(reads.length),
@@ -202,6 +220,9 @@ export function deriveComposedPageBound(
     connections: 1,
     privacyStatements: 2,
     privacyExaminedRows: privacyExaminedRowCeiling,
+    preparationInputKeys: reads.length * PREPARATION_INPUT,
+    preparationResultWrites: reads.length * PREPARATION_RESULT_WRITES,
+    nestedEngineSearches: engineSearches + reads.length * PREPARATION_ENGINE_SEARCHES,
   };
 }
 
@@ -226,10 +247,25 @@ export function derivePreparationStepBound(): PreparationStepBound {
   };
 }
 
+export function deriveNestedProducerBound(kind: PlanKind, slots: number, preparationSteps = 0): NestedProducerBound {
+  const bound = deriveReadBound(kind, slots);
+  return {
+    discardedCandidates: bound.candidates,
+    rereads: 1,
+    accessDependencyPoints: bound.accessDependencyPoints(bound.candidates),
+    engineSearches: bound.engineSearches + preparationSteps * PREPARATION_ENGINE_SEARCHES,
+    preparationInputKeys: preparationSteps * PREPARATION_INPUT,
+    preparationResultWrites: preparationSteps * PREPARATION_RESULT_WRITES,
+    preparationExaminedRows: preparationSteps * examinedRowCeiling(PREPARATION_INPUT),
+  };
+}
+
 export const composedLimitBound = deriveComposedLimitBound();
 export const ordinaryDirectBound = deriveReadBound('direct', PAGE_SLOTS);
 export const ordinaryReadyBound = deriveReadBound('ready', PAGE_SLOTS);
 export const preparationStepBound = derivePreparationStepBound();
+export const ordinaryNestedBound = deriveNestedProducerBound('direct', PAGE_SLOTS);
+export const ordinaryReadyNestedBound = deriveNestedProducerBound('ready', PAGE_SLOTS);
 
 export function expectCost(cost: PublicFilterCost) {
   for (const count of Object.values(cost)) expect(Number.isSafeInteger(count) && count >= 0).toBe(true);
@@ -258,6 +294,20 @@ export type PlanEvidence = Readonly<{
   rereads: number;
 }>;
 
+export function expectNestedProducerBudget(evidence: PlanEvidence, size = PAGE_SLOTS) {
+  const nested = deriveNestedProducerBound(planKind(evidence.snapshot), size, evidence.preparationSteps);
+  expect(evidence.rejectedCandidates).toBeLessThanOrEqual(nested.discardedCandidates);
+  expect(evidence.rereads).toBeLessThanOrEqual(nested.rereads);
+  expect(evidence.pageCost.accessPoints + evidence.pageCost.dependencyPoints).toBeLessThanOrEqual(
+    nested.accessDependencyPoints,
+  );
+  expect(evidence.pageCost.engineSearches + evidence.preparationCost.engineSearches).toBeLessThanOrEqual(
+    nested.engineSearches,
+  );
+  expect(evidence.preparationCost.inputKeys).toBeLessThanOrEqual(nested.preparationInputKeys);
+  expect(evidence.preparationCost.resultWrites).toBeLessThanOrEqual(nested.preparationResultWrites);
+}
+
 export function expectPageBudget(evidence: PlanEvidence, size: number, outputSize: number) {
   expectCost(evidence.pageCost);
   const kind = planKind(evidence.snapshot);
@@ -275,6 +325,7 @@ export function expectPageBudget(evidence: PlanEvidence, size: number, outputSiz
   );
   expect(evidence.pageCost.outputSlots).toBeLessThanOrEqual(outputSize);
   expectCost(evidence.preparationCost);
+  expectNestedProducerBudget(evidence, size);
 }
 
 export function expectHarnessRows(examinedRows: number, candidates: number) {

@@ -115,14 +115,27 @@ hidden/denied/suspended/empty controls. Bound derivation is
 
 **Test choice:** Fewest tests: one HTTP/native helper per admitted public cell covering first/deep/empty together,
 sparse and unrelated-history growth as independent axes, one composed 16-read page, one alias/duplicate, one resume,
-one revocation, and named control cases; not-cooked and bulk stay frozen on Commerce prerequisites.
+one revocation, and named control cases; not-cooked and bulk stay frozen on Commerce prerequisites. Isolated Auth's
+fork installs the ordinary History composition and product event catalogue (bun test preloads do not apply there),
+binds the parent Kernel receipt ring to its Access pool, reports the original Access error on the child stream, and
+settles acquired fixture resources on setup failure as well as completion. Released classification, diet, books and
+recipes share one promise each and run on one editor stream so concurrent composed setup cannot double-create
+subjects. Empty classification-ballot cleanup after Access lifecycle still emits a command event; the follow-up
+is no-effect, and exact replay is receipt-only. Charge command/outbox/relay and that terminal no-effect, including
+empty and repeated-empty/replay, in Rating's lifecycle-cleanup Cost under the original actor and current request
+deadline. Derive preparation, rereads, discarded candidates and nested Access/engine producer costs from the
+published per-read ceilings before any page assertion. Accounts producer corrections arrive through ordinary
+`account-discovery-source` integration. An in-flight discovery generation whose allocated review owner is later
+omitted as preparing retires rather than looping as unsupported kinds.
 
-**Remaining evidence limits:** `quick-vegetarian-not-cooked` and `bulk-long-harem-light-novels` remain frozen on
-Commerce's unadopted completion/history and owner-query/libraryOperations contracts. Privacy-reduction served-share
-grows hidden unrelated subjects and checks a nondecreasing served share for the selected public job; it does not yet
-prove a production acknowledgement delay `τ`. Original/terminal alias uses native `POST /v1/subjects:merge`; if
-identity publication is still preparing, that cell reports the producer failure rather than a local matcher. Owner
-direct/prepared plans stay with Commerce. Native/browser/root acceptance after integration still owns promotion.
+**Remaining evidence limits:** Native public cells at 64/512/4096 execute through that isolated Auth/Access/History
+composition and the installed released fixture. `quick-vegetarian-not-cooked` and `bulk-long-harem-light-novels`
+remain frozen on Commerce's unadopted completion/history and owner-query/libraryOperations contracts.
+Privacy-reduction served-share grows hidden unrelated subjects and checks a nondecreasing served share for the
+selected public job; it does not yet prove a production acknowledgement delay `τ`. Original/terminal alias uses
+native `POST /v1/subjects:merge`; if identity publication is still preparing, that cell reports the producer
+failure rather than a local matcher. Owner direct/prepared plans stay with Commerce. Native/browser/root
+acceptance after integration still owns promotion.
 
 ## private-follow-edge
 

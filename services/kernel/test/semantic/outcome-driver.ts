@@ -243,8 +243,9 @@ async function startDriver(
 
     const routeKey = randomBytes(32);
     const sessionKeys = { current: 1, keys: new Map([[1, randomBytes(32)]]) };
+    const receiptKeys = testReceiptKeys();
     const auth = options.isolatedAuth
-      ? await isolatedOutcomeAuth(source, kernelUrl, routeKey, sessionKeys, options.onOwnedResource)
+      ? await isolatedOutcomeAuth(source, kernelUrl, routeKey, sessionKeys, receiptKeys, options.onOwnedResource)
       : await sharedAuth(source, options.onOwnedResource, options.strictCleanup ?? false);
     if ('close' in auth) release = () => auth.close();
     const { issuer, audience, service, host } = auth;
@@ -252,7 +253,7 @@ async function startDriver(
     let runtimeAuth: { issuer: string; audience: string; jwksUrl: string } | undefined;
     let access!: ReturnType<typeof createAccess>;
     const app = compose({
-      receiptKeys: testReceiptKeys(),
+      receiptKeys,
       pool: runtimePool,
       ...(options.clock ? { clock: options.clock } : {}),
       routeKey,

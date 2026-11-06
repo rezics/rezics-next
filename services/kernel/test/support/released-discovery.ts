@@ -424,10 +424,10 @@ export async function createReleasedDiscoveryFixture(
         revision: adoption.body.revision as number,
       };
     };
-    let classification: ClassificationGroup | undefined;
-    let diet: DietGroup | undefined;
-    let books: BookGroup | undefined;
-    let recipes: RecipeGroup | undefined;
+    let classification: Promise<ClassificationGroup> | undefined;
+    let diet: Promise<DietGroup> | undefined;
+    let books: Promise<BookGroup> | undefined;
+    let recipes: Promise<RecipeGroup> | undefined;
     // Cache the operation, including failure, so concurrent consumers cannot create a second import or holder.
     let importedHarem: Promise<ImportedHaremControl> | undefined;
     let statementConsent: Promise<StatementConsentControl> | undefined;
@@ -873,92 +873,97 @@ export async function createReleasedDiscoveryFixture(
       adopt,
       read: (subject, persona = 'anonymous') => request(persona, 'GET', `/v1/subjects/${subject.id}`),
       async classification() {
-        if (classification) return classification;
-        const formScheme = await createSubject('skos:ConceptScheme', 'Work forms');
-        const sourceScheme = await createSubject('skos:ConceptScheme', 'Bangumi public meta_tags');
-        const lightNovel = await createSubject('skos:Concept', 'Light novel');
-        const otherForm = await createSubject('skos:Concept', 'Different literary form');
-        const harem = await createSubject('skos:Concept', 'Bangumi public meta_tags: 后宫');
-        const facts = [];
-        for (const [concept, scheme] of [
-          [lightNovel, formScheme],
-          [otherForm, formScheme],
-          [harem, sourceScheme],
-        ] as const)
-          facts.push(await adopt(concept, discoveryStatement('skos:inScheme', scheme.id)));
-        // These are cited controlled assertions, not an executable Bangumi import or external identity registry.
-        facts.push(await adopt(lightNovel, discoveryStatement('schema:sameAs', fixture.meaning.lightNovel)));
-        const source = discoveryStatement('schema:url', 'https://bgm.tv/wiki/tag/list?type=1');
-        source.references = [{ parts: [snak('schema:url', 'https://bgm.tv/group/topic/406595')] }];
-        facts.push(await adopt(harem, source));
-        classification = { formScheme, sourceScheme, lightNovel, otherForm, harem, facts };
-        await fixture.catchUp([formScheme, sourceScheme, lightNovel, otherForm, harem]);
-        return classification;
+        return (classification ??= (async () => {
+          const formScheme = await createSubject('skos:ConceptScheme', 'Work forms');
+          const sourceScheme = await createSubject('skos:ConceptScheme', 'Bangumi public meta_tags');
+          const lightNovel = await createSubject('skos:Concept', 'Light novel');
+          const otherForm = await createSubject('skos:Concept', 'Different literary form');
+          const harem = await createSubject('skos:Concept', 'Bangumi public meta_tags: 后宫');
+          const facts = [];
+          for (const [concept, scheme] of [
+            [lightNovel, formScheme],
+            [otherForm, formScheme],
+            [harem, sourceScheme],
+          ] as const)
+            facts.push(await adopt(concept, discoveryStatement('skos:inScheme', scheme.id)));
+          // These are cited controlled assertions, not an executable Bangumi import or external identity registry.
+          facts.push(await adopt(lightNovel, discoveryStatement('schema:sameAs', fixture.meaning.lightNovel)));
+          const source = discoveryStatement('schema:url', 'https://bgm.tv/wiki/tag/list?type=1');
+          source.references = [{ parts: [snak('schema:url', 'https://bgm.tv/group/topic/406595')] }];
+          facts.push(await adopt(harem, source));
+          const group = { formScheme, sourceScheme, lightNovel, otherForm, harem, facts };
+          await fixture.catchUp([formScheme, sourceScheme, lightNovel, otherForm, harem]);
+          return group;
+        })());
       },
       async diet() {
-        if (diet) return diet;
-        const scheme = await createSubject('skos:ConceptScheme', 'Dietary suitability');
-        const vegetarian = await createSubject('skos:Concept', 'VegetarianDiet');
-        const nonvegetarian = await createSubject('skos:Concept', 'Explicit nonvegetarian control');
-        const facts = [
-          await adopt(vegetarian, discoveryStatement('skos:inScheme', scheme.id)),
-          await adopt(nonvegetarian, discoveryStatement('skos:inScheme', scheme.id)),
-          await adopt(vegetarian, discoveryStatement('schema:sameAs', fixture.meaning.vegetarian)),
-        ];
-        diet = { scheme, vegetarian, nonvegetarian, facts };
-        await fixture.catchUp([scheme, vegetarian, nonvegetarian]);
-        return diet;
+        return (diet ??= (async () => {
+          const scheme = await createSubject('skos:ConceptScheme', 'Dietary suitability');
+          const vegetarian = await createSubject('skos:Concept', 'VegetarianDiet');
+          const nonvegetarian = await createSubject('skos:Concept', 'Explicit nonvegetarian control');
+          const facts = [
+            await adopt(vegetarian, discoveryStatement('skos:inScheme', scheme.id)),
+            await adopt(nonvegetarian, discoveryStatement('skos:inScheme', scheme.id)),
+            await adopt(vegetarian, discoveryStatement('schema:sameAs', fixture.meaning.vegetarian)),
+          ];
+          const group = { scheme, vegetarian, nonvegetarian, facts };
+          await fixture.catchUp([scheme, vegetarian, nonvegetarian]);
+          return group;
+        })());
       },
       async words() {
         const { subjects, characterMeasurement, measurementAssociation } = await fixture.books();
         return { subjects, characterMeasurement, measurementAssociation };
       },
       async books() {
-        if (books) return books;
-        const c = await fixture.classification();
-        const subjects = {} as Record<BookName, CreatedSubject>;
-        const facts: AdoptedFact[] = [];
-        for (const [name, words, form, harem] of [
-          ['B-long', 1200001, 'light', true],
-          ['B-edge', 1000000, 'light', true],
-          ['B-short', 999999, 'light', false],
-          ['B-unknown', null, null, true],
-          ['B-characters', null, 'light', true],
-          ['B-tag-only', null, 'other', true],
-          ['B-form-only', null, 'light', false],
-        ] as const) {
-          const subject = (subjects[name] = await createSubject('schema:Book', name));
-          if (words !== null)
-            facts.push(
-              await adopt(subject, discoveryStatement(fixture.meaning.words, { amount: `+${words}`, unit: '1' })),
-            );
-          if (form)
-            facts.push(
-              await adopt(
-                subject,
-                discoveryStatement(fixture.meaning.form, (form === 'light' ? c.lightNovel : c.otherForm).id),
-              ),
-            );
-          if (harem) facts.push(await adopt(subject, discoveryStatement('schema:keywords', c.harem.id)));
-        }
-        const edition = await createSubject('bf:Instance', 'Book edition, pages are not work words');
-        facts.push(await adopt(edition, discoveryStatement('schema:exampleOfWork', subjects['B-unknown'].id)));
-        facts.push(await adopt(edition, discoveryStatement('schema:numberOfPages', { amount: '+1400000', unit: '1' })));
-        books = {
-          subjects,
-          edition,
-          facts,
-          characterMeasurement: pending(
-            'semantic',
-            'Release a separate local character-count property (1400000 on B-characters), without an invented external exact mapping.',
-          ),
-          measurementAssociation: pending(
-            'semantic',
-            'Adopt measured holder/text/version/language/method/scope/provenance grammar on the same statement/reference before freezing measurement assertions.',
-          ),
-        };
-        await fixture.catchUp([...Object.values(subjects), edition]);
-        return books;
+        return (books ??= (async () => {
+          const c = await fixture.classification();
+          const subjects = {} as Record<BookName, CreatedSubject>;
+          const facts: AdoptedFact[] = [];
+          for (const [name, words, form, harem] of [
+            ['B-long', 1200001, 'light', true],
+            ['B-edge', 1000000, 'light', true],
+            ['B-short', 999999, 'light', false],
+            ['B-unknown', null, null, true],
+            ['B-characters', null, 'light', true],
+            ['B-tag-only', null, 'other', true],
+            ['B-form-only', null, 'light', false],
+          ] as const) {
+            const subject = (subjects[name] = await createSubject('schema:Book', name));
+            if (words !== null)
+              facts.push(
+                await adopt(subject, discoveryStatement(fixture.meaning.words, { amount: `+${words}`, unit: '1' })),
+              );
+            if (form)
+              facts.push(
+                await adopt(
+                  subject,
+                  discoveryStatement(fixture.meaning.form, (form === 'light' ? c.lightNovel : c.otherForm).id),
+                ),
+              );
+            if (harem) facts.push(await adopt(subject, discoveryStatement('schema:keywords', c.harem.id)));
+          }
+          const edition = await createSubject('bf:Instance', 'Book edition, pages are not work words');
+          facts.push(await adopt(edition, discoveryStatement('schema:exampleOfWork', subjects['B-unknown'].id)));
+          facts.push(
+            await adopt(edition, discoveryStatement('schema:numberOfPages', { amount: '+1400000', unit: '1' })),
+          );
+          const group = {
+            subjects,
+            edition,
+            facts,
+            characterMeasurement: pending(
+              'semantic',
+              'Release a separate local character-count property (1400000 on B-characters), without an invented external exact mapping.',
+            ),
+            measurementAssociation: pending(
+              'semantic',
+              'Adopt measured holder/text/version/language/method/scope/provenance grammar on the same statement/reference before freezing measurement assertions.',
+            ),
+          };
+          await fixture.catchUp([...Object.values(subjects), edition]);
+          return group;
+        })());
       },
       async authoredRecipe(name, minutes) {
         const recipe = await createSubject('schema:Recipe', name);
@@ -983,32 +988,33 @@ export async function createReleasedDiscoveryFixture(
         return recipe;
       },
       async recipes() {
-        if (recipes) return recipes;
-        const d = await fixture.diet();
-        const subjects = {} as Record<RecipeName, CreatedSubject>;
-        const facts = [];
-        for (const [name, minutes, kind] of [
-          ['R-quick', 25, 'vegetarian'],
-          ['R-edge', 30, 'vegetarian'],
-          ['R-slow', 31, 'vegetarian'],
-          ['R-meat', 20, 'nonvegetarian'],
-          ['R-unknown', 20, null],
-          ['R-cooked', 20, 'vegetarian'],
-          ['R-other-cooked', 20, 'vegetarian'],
-        ] as const) {
-          const recipe = (subjects[name] = await fixture.authoredRecipe(name, minutes));
-          if (kind) facts.push(await adopt(recipe, discoveryStatement(fixture.meaning.diet, d[kind].id)));
-        }
-        recipes = {
-          subjects,
-          facts,
-          completedCooking: pending(
-            'commerce',
-            'Adopt completed cooking session and not-cooked owner-query wire; R-cooked requires Alice completion, R-other-cooked only Bob completion. No state!=cooked substitution.',
-          ),
-        };
-        await fixture.catchUp(Object.values(subjects));
-        return recipes;
+        return (recipes ??= (async () => {
+          const d = await fixture.diet();
+          const subjects = {} as Record<RecipeName, CreatedSubject>;
+          const facts = [];
+          for (const [name, minutes, kind] of [
+            ['R-quick', 25, 'vegetarian'],
+            ['R-edge', 30, 'vegetarian'],
+            ['R-slow', 31, 'vegetarian'],
+            ['R-meat', 20, 'nonvegetarian'],
+            ['R-unknown', 20, null],
+            ['R-cooked', 20, 'vegetarian'],
+            ['R-other-cooked', 20, 'vegetarian'],
+          ] as const) {
+            const recipe = (subjects[name] = await fixture.authoredRecipe(name, minutes));
+            if (kind) facts.push(await adopt(recipe, discoveryStatement(fixture.meaning.diet, d[kind].id)));
+          }
+          const group = {
+            subjects,
+            facts,
+            completedCooking: pending(
+              'commerce',
+              'Adopt completed cooking session and not-cooked owner-query wire; R-cooked requires Alice completion, R-other-cooked only Bob completion. No state!=cooked substitution.',
+            ),
+          };
+          await fixture.catchUp(Object.values(subjects));
+          return group;
+        })());
       },
       filters(c, d) {
         const words: Filter = {
@@ -1057,9 +1063,23 @@ export async function createReleasedDiscoveryFixture(
       },
       close: async () => {
         closed = true;
-        // Settle any admitted setup and its ordinary journal cleanup before closing the original driver.
-        await Promise.allSettled([importedHarem, statementConsent]);
-        return driver.close();
+        const errors: unknown[] = [];
+        await Promise.allSettled([
+          importedHarem,
+          statementConsent,
+          nativeStart,
+          classification,
+          diet,
+          books,
+          recipes,
+        ]);
+        try {
+          await driver.close();
+        } catch (cleanup) {
+          errors.push(cleanup);
+        }
+        if (errors.length === 1) throw errors[0];
+        if (errors.length) throw new AggregateError(errors, 'Released discovery cleanup failed');
       },
     };
     if (native) {
@@ -1070,11 +1090,14 @@ export async function createReleasedDiscoveryFixture(
     }
     return fixture;
   } catch (error) {
+    const errors: unknown[] = [];
+    await Promise.allSettled([nativeStart]);
     try {
       await driver.close();
     } catch (cleanup) {
-      throw new AggregateError([error, cleanup], 'Released discovery setup and cleanup failed');
+      errors.push(cleanup);
     }
+    if (errors.length) throw new AggregateError([error, ...errors], 'Released discovery setup and cleanup failed', { cause: error });
     throw error;
   }
 }
