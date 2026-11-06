@@ -671,6 +671,7 @@ own publication or first-release date at the precision the source states, as for
 and `schema:abstract` is its summary, a Content-owned document with a language tag, whose
 body keeps Content's custody and disclosure rules. These statements describe the series
 itself. They add no series-only term, and a member's facts never stand in for them.
+Decision: fewest tests pin BookSeries identifier, date and summary admission with citations, datatypes and historical release load; native showcase-books remains the publication proof.
 
 The following list cites the vocabulary terms and Wikidata mappings used here.
 SKOS and FOAF terms cite their publishing vocabularies. New terms have labels in
