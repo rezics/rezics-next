@@ -62,6 +62,7 @@ visit return. Session, upload and download use the existing personal BFF driver 
 Decision: The routed list, same-tab return and personal BFF session/media slices land with scoped tests only; the mounted served return and native page proof stay pending their own acceptance.
 Decision: Zone composition reaches Search page, visit-return and slot-admission helpers through existing public entries and the already-imported Zone reader files, not new manifest public entries.
 Decision: The public Zone shell type is the composition appearance, label and language vocabulary in the Zone reader; Web does not import kernel `contract.ts` for it.
+Decision: Web Zone page-request, owned-resource and configuration types live beside that shell; editor and reader share them instead of kernel `contract.ts`.
 Decision: Zone session/media binding prepares the current personal session on every served Zone BFF request and
 reuses the existing `/media` driver for upload intent, completion and download authorization; SessionMedia keeps
 those handlers, and PageStates keeps shared TypeList composition.

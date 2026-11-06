@@ -1,5 +1,5 @@
 import { APPEARANCE } from '@rezics/composition';
-import type { CompositionDocument, ZoneConfiguration, ZoneLanguage } from '@rezics/composition';
+import type { CompositionDocument, View, ZoneConfiguration, ZoneLanguage } from '@rezics/composition';
 
 export type ZoneAppearance = { [K in keyof typeof APPEARANCE]?: (typeof APPEARANCE)[K][number] };
 
@@ -12,6 +12,35 @@ export type ZonePublic = {
   visibility: 'private' | 'unlisted' | 'public';
   appearance: ZoneAppearance;
   navigation: { route: string }[];
+};
+
+export type ZoneOwned = ZonePublic & {
+  ownerId: string;
+  deletedAt: string | null;
+  restoreUntil: string | null;
+};
+
+export type ZoneConfigureInput = { configuration: ZoneConfiguration; mounts: string[] };
+export type ZonePublishInput = { visibility: ZonePublic['visibility'] };
+export type ZoneConfigurationResponse = {
+  zone: ZoneOwned;
+  configuration: ZoneConfiguration;
+  mounts: string[];
+};
+
+export type ZonePageTarget = { route: string } | { subject: string; view?: View };
+export type ZonePageRequest = { target: ZonePageTarget; languages?: string[] };
+export type ZonePageQuery = { cursor?: string };
+export type ZonePageReadProgress = { next: string };
+export type ZonePageTemplate = { scope: 'route' | 'type' | 'base' | 'generic'; key: string | null };
+export type ZonePageResponse = {
+  profile: string;
+  template: ZonePageTemplate;
+  document: unknown;
+  reads: Record<string, unknown>;
+  zone: ZonePublic;
+  subject?: string;
+  views?: string[];
 };
 
 type Tokens = ZoneAppearance;

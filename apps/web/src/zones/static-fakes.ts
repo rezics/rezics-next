@@ -1,4 +1,4 @@
-import type { ZonePageResponse } from '../../../../services/kernel/src/zones/contract.ts';
+import type { ZonePageResponse } from './appearance.ts';
 import subject from '../kernel/recorded/subject.json';
 import subjectPage from '../kernel/recorded/subject-page.json';
 import { slug } from '@rezics/definitions/slug';
