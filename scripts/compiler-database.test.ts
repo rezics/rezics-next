@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test';
-import { createConnection, createServer } from 'node:net';
+import { createServer } from 'node:net';
 import { chmodSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -12,6 +12,7 @@ import {
   compilerDatabaseListenUrl,
   compilerDatabaseRunArgs,
   dockerNetworkArgs,
+  dockerSpawnSyncOptions,
   dockerTimeoutMs,
   isolatedPostgresSocketDir,
   ownerProcessIdentity,
@@ -21,7 +22,6 @@ import {
   reapCompilerNonce,
   sharesIsolatedStackNetwork,
   startCompilerContainer,
-  startInProcessPostgresForwarder,
   startPostgresForwarder,
   waitForPostgresContainer,
   waitForPostgresReady,
@@ -42,6 +42,12 @@ test('docker run, create and forced rm use Auth run timeout; probes stay short',
   expect(dockerTimeoutMs(['exec', 'x', 'pg_isready'])).toBe(DOCKER_PROBE_TIMEOUT_MS);
   expect(dockerTimeoutMs(['ps', '-a'])).toBe(DOCKER_PROBE_TIMEOUT_MS);
   expect(dockerTimeoutMs(['port', 'x', '5432/tcp'])).toBe(DOCKER_PROBE_TIMEOUT_MS);
+  const removal = dockerSpawnSyncOptions(['rm', '-f', '-v', 'x']);
+  expect(removal.timeout).toBe(DOCKER_RUN_TIMEOUT_MS);
+  expect(removal.detached).toBe(true);
+  const probe = dockerSpawnSyncOptions(['ps', '-aq']);
+  expect(probe.timeout).toBe(DOCKER_PROBE_TIMEOUT_MS);
+  expect(probe.detached).toBeUndefined();
 });
 
 test('the one-run compiler database uses --rm and a labelled volume, not a 1 GiB tmpfs', () => {
@@ -238,14 +244,13 @@ function burn(ms: number): void {
   }
 }
 
-test('an independent forwarder keeps answering a peer while the owner burns CPU; in-process forwarding starves', async () => {
+test('an independent forwarder keeps answering a peer while the owner burns CPU', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'pg-forward-'));
   fixtures.push(directory);
   chmodSync(directory, 0o700);
   const echo = await unixEcho(directory);
   try {
     const child = await startPostgresForwarder(echo.path);
-    const inProcess = await startInProcessPostgresForwarder(echo.path);
     try {
       const observer = Bun.spawn(
         [
@@ -253,7 +258,6 @@ test('an independent forwarder keeps answering a peer while the owner burns CPU;
           '-e',
           `import { createConnection } from 'node:net';
 const childPort = Number(process.env.CHILD_PORT);
-const parentPort = Number(process.env.PARENT_PORT);
 await new Response(process.stdin).text();
 const once = (port, ms) => new Promise((resolve) => {
   const socket = createConnection({ host: '127.0.0.1', port }, () => socket.write('ping'));
@@ -262,18 +266,15 @@ const once = (port, ms) => new Promise((resolve) => {
   socket.on('error', (error) => { clearTimeout(timer); resolve(String(error)); });
 });
 const childReply = await once(childPort, 400);
-const parentReply = await once(parentPort, 150);
 if (String(childReply).includes('ping')) process.stdout.write('child-ok\\n');
 else process.stdout.write('child-' + childReply + '\\n');
-if (parentReply === 'timeout') process.stdout.write('parent-blocked\\n');
-else process.stdout.write('parent-' + parentReply + '\\n');
 `,
         ],
         {
           stdin: 'pipe',
           stdout: 'pipe',
           stderr: 'pipe',
-          env: { ...process.env, CHILD_PORT: String(child.port), PARENT_PORT: String(inProcess.port) },
+          env: { ...process.env, CHILD_PORT: String(child.port) },
         },
       );
       observer.stdin.write('go\n');
@@ -283,10 +284,8 @@ else process.stdout.write('parent-' + parentReply + '\\n');
       const err = await new Response(observer.stderr).text();
       expect(await observer.exited, output + err).toBe(0);
       expect(output).toContain('child-ok');
-      expect(output).toContain('parent-blocked');
     } finally {
       child.stop();
-      inProcess.stop();
       await child.child.exited;
     }
   } finally {

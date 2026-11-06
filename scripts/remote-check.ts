@@ -3023,20 +3023,28 @@ def emit_nonblocking(message):
         pass
 
 
+# Auth DEFAULT_RUN_TIMEOUT: busy-host docker rm exceeds a 3s probe (host-b SIGTERM cleanup).
+DOCKER_RM_TIMEOUT = 120
+DOCKER_PROBE_TIMEOUT = 5
+
 def clean_run_resources(run):
     scope = 'rezics-check-' + run + '.scope'
     slice_name = 'rezics-check-' + run.replace('-', '_') + '.slice'
-    def call(arguments):
-        return subprocess.run(arguments, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=3, text=True)
+    def call(arguments, timeout=DOCKER_PROBE_TIMEOUT):
+        return subprocess.run(arguments, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=timeout, text=True)
     call(['systemctl', 'stop', scope])
     containers = call(['docker', 'ps', '-aq', '--filter', 'label=rezics.check.run=' + run])
+    delayed = None
     for container in containers.stdout.split():
         token = container.strip().lower()
         if not token:
             continue
         if not re.fullmatch(r'[a-f0-9]{12,64}', token):
             raise RuntimeError('invalid owned container identity')
-        call(['docker', 'rm', '-f', '-v', token])
+        try:
+            call(['docker', 'rm', '-f', '-v', token], DOCKER_RM_TIMEOUT)
+        except subprocess.TimeoutExpired as error:
+            delayed = error
     call(['systemctl', 'stop', slice_name])
     group = call(['systemctl', 'show', '--property=ControlGroup', '--value', slice_name]).stdout.strip()
     if group:
@@ -3046,6 +3054,15 @@ def clean_run_resources(run):
                 raise RuntimeError('owned run cgroup is still populated')
         except FileNotFoundError:
             pass  # systemd removed the empty cgroup.
+    if delayed:
+        raise delayed
+
+
+def try_clean_run_resources(run):
+    try:
+        clean_run_resources(run)
+    except Exception as error:
+        emit_nonblocking('remote-check: owned-container cleanup: ' + str(error)[:512])
 
 
 RESOURCE_CGROUP_ROOT = '/sys/fs/cgroup'
@@ -3270,7 +3287,7 @@ def lifetime():
     try: resources.finish()
     except Exception: pass
     if reason == 'memory-limit':
-        clean_run_resources(run)
+        try_clean_run_resources(run)
         if not (root / '.memory-limit-reported').exists():
             emit_nonblocking(memory_limit_message(root))
             try:
@@ -3280,7 +3297,7 @@ def lifetime():
         code = 137
     elif reason:
         # Containers started by a daemon are outside this process tree, but retain exact run labels and cgroup custody.
-        clean_run_resources(run)
+        try_clean_run_resources(run)
         elapsed = round((time.monotonic() - started) * 1000)
         receipt = {'schema': 1, 'status': 'infrastructure-failure', 'phase': reason, 'host': host, 'run': run,
                    'limitMs': limit_ms, 'elapsedMs': elapsed, 'command': command[:256]}
@@ -3356,7 +3373,8 @@ except Exception as error:
                    'packageClassification': 'unknown'}
         (root / 'preparation-status.json').write_text(json.dumps(receipt))
         terminal_status(root).write_text('70\n')
-    print('remote-check: infrastructure failure install/preparation: ' + str(error), file=sys.stderr, flush=True)
+    phase = 'install/preparation' if sys.argv[1] in ['supervise', 'install'] else sys.argv[1]
+    print('remote-check: infrastructure failure ' + phase + ': ' + str(error), file=sys.stderr, flush=True)
     sys.exit(70)
 `;
 

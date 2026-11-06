@@ -79,8 +79,8 @@ successful fetch is the expected upload. Remaining command-time cost is `bun ins
 Connection count is bounded by configured hosts, not by polls or concurrent runs: one ControlMaster socket per host
 under `$XDG_RUNTIME_DIR/rezics-ssh` (relocated under `/tmp` when OpenSSH's unix_listener suffix would overflow).
 Throwaway Kernel/compiler PostgreSQL uses `--rm` plus labelled owner-pid cleanup so a killed owner or failed startup
-leaves no owned container. `docker run` and `rm -f` use Auth's 120-second spawn timeout; inspect/exec/ps/port probes
-use 5 seconds. A failed create reaps its nonce. Data stays on a labelled volume, not a 1 GiB tmpfs. Isolated-stack databases attach with `container:<id>`, never `ns:/proc/...`, and publish
+leaves no owned container. `docker run` and `rm -f` use Auth's 120-second spawn timeout, including host-lifetime Python
+cleanup; inspect/exec/ps/port probes use 5 seconds. Signal-path removal is detached so a 200ms SIGKILL cannot abort it. A failed create reaps its nonce. Data stays on a labelled volume, not a 1 GiB tmpfs. Isolated-stack databases attach with `container:<id>`, never `ns:/proc/...`, and publish
 PostgreSQL through an independent TCP-to-Unix child rather than a same-process proxy, and wait for in-container
 `pg_isready` plus a protocol reply before migrations. Empty-directory source and result manifests share the
 `directory\0` digest.
