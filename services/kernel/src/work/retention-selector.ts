@@ -12,6 +12,7 @@ import {
   type WorkflowRetentionSelection,
 } from './core/index.ts';
 import type { WorkflowRetentionSelector } from './retention.ts';
+import countOwnedFences from './retention-fence-count.sql';
 import countOwnedPayload from './retention-payload-count.sql';
 import selectTerminal from './retention-select.sql';
 
@@ -47,8 +48,8 @@ export async function readWorkflowRetentionPayload(
   ids: readonly string[],
 ): Promise<WorkflowRetentionPayloadInventory> {
   if (ids.length === 0) return emptyWorkflowRetentionInventory();
-  const rows = await countOwnedPayload.run(pool, { ids: [...ids] });
-  const row = rows[0];
+  const result = await countOwnedPayload.run(pool, { ids: [...ids] });
+  const row = Array.isArray(result) ? result[0] : result;
   if (!row) return emptyWorkflowRetentionInventory();
   return workflowRetentionInventory({
     workflow_status: Number(row.workflow_status),
@@ -67,9 +68,7 @@ export async function readWorkflowRetentionFences(
   ids: readonly string[],
 ): Promise<number> {
   if (ids.length === 0) return 0;
-  const result = await pool.query(
-    `SELECT count(*)::bigint AS n FROM dbos.${WORKFLOW_RETENTION_WRITER_FENCE_TABLE} WHERE workflow_uuid = ANY($1::text[])`,
-    [ids],
-  );
-  return Number(result.rows[0]?.n ?? 0);
+  const result = await countOwnedFences.run(pool, { ids: [...ids] });
+  const row = Array.isArray(result) ? result[0] : result;
+  return Number(row?.n ?? 0);
 }
