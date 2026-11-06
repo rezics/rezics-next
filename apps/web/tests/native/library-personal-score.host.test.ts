@@ -15,9 +15,9 @@ const standardQuestion = '00000000-0000-7000-8000-000000000001';
 const evidence = resolve(import.meta.dir, '../../../../.temp/library-personal-score');
 const label = 'Native library member';
 
-setDefaultTimeout(300_000);
+setDefaultTimeout(1_200_000);
 
-nativeBeforeAll(lifecycle, 600_000, async () => {
+nativeBeforeAll(lifecycle, 1_200_000, async () => {
   await mkdir(evidence, { recursive: true, mode: 0o700 });
   stacks.push(await startNativeWebStack());
 });

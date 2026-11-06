@@ -244,7 +244,10 @@ async function startWeb(
   child.once('close', () => {
     ended = true;
   });
-  const deadline = Date.now() + 150_000;
+  // Vite configuration, Paraglide and the Cloudflare plugin's Worker graph load run before the port listens.
+  // On a loaded check host that took more than four minutes, so this probe allows 720 seconds; it still
+  // requires the real Worker's 404 for an unknown subject.
+  const deadline = Date.now() + 720_000;
   try {
     while (Date.now() < deadline) {
       failIfExited();

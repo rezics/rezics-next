@@ -125,7 +125,9 @@ Decision: native personal-score walks grant editor actions through the mounted `
 through the Auth service handler captured before page wrapping; `/signin` and `/token` stay on that handler so the
 first governor grant returns 201. The governor token carries the mounted `platform.governance` actions, `access:grant`
 and `gate:any`, not the full catalogue, so delegated actions remain in the JWT. The native kernel request budget is
-the 30s test deadline with the same write-rate fixture ceiling as Library outcomes.
+the 30s test deadline with the same write-rate fixture ceiling as Library outcomes. Native host Worker
+startup uses the same 720-second probe as the measured Vite/Cloudflare Worker graph load, and still
+requires the real unknown-subject 404.
 
 Decision: host-walk tests pin the seeded voter/second-account/anonymous score journey; product lines cover the native
 order, own-vote currentness and public aggregate. Fewer test lines than product lines. The walk issues that first
