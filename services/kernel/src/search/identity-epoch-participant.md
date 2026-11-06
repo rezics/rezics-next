@@ -87,7 +87,8 @@ root helper that binds same-Pool Access, clock, generation-1 consumer/index and 
 declaration. Composition imports that declaration from the Semantic public entry
 `identity-search-receiving-statements.ts`. Native identity suites construct that composition and run each step
 inside Semantic's Source maintenance frame after composing the Library domain through `composeLibraryDomain`.
-Library cutover grants Collection actions on the owner account and keeps the verified Access actor for follow writes.
+Library cutover keeps Collection create on the owner account through own-account commands and JWT scopes,
+and keeps the verified Access actor for follow writes.
 The coordinator runs this callable inside the original live maintenance frame; the participant commits
 Source native `preparePlan` then enrolls common receiving there. It validates trusted deployment inputs and reads the
 actual admitted job, rejecting unknown, nonpending and mapping-incomplete locators before engine work.

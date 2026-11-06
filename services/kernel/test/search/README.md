@@ -90,6 +90,8 @@ Native identity receiving suites construct `searchIdentityReceivingComposition` 
 Semantic's Source maintenance frame. They consume published mappings and the resolved public-filter
 definition; a missing mapping is unavailable, not a self binding. Collection source setup composes the
 Library domain through `composeLibraryDomain`; Collection create does not invent a Search presentation
-path. Cutover grants Collection actions on the owner account and mounts follow:create/delete as
-own-account so follow writes keep the verified Access actor. Accounts original-funded transfer is
+path. Cutover keeps Collection create on the owner account through own-account commands and JWT
+scopes, and mounts follow:create/delete as own-account so follow writes keep the verified Access
+actor. access.grant of collection:* onto the owner-account resource is denied because
+collection:create is typed to library.collection. Accounts original-funded transfer is
 observed on the next native run.

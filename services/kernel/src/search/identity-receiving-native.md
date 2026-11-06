@@ -17,8 +17,10 @@ configuration derives `Parameters<typeof createIdentitySourceSupportReader>[0]` 
 consumer and physical index. Search aliases extract the canonical native unions; the public Library aliases and
 API remain Library-only. Native suites compose the Library domain through `composeLibraryDomain` before Collection
 source setup; Collection create does not invent a Search presentation path. Library cutover
-grants Collection actions on the owner account through ordinary grant commands, mounts
-follow:create/delete as own-account, and keeps the verified Access actor for follow writes.
+keeps Collection create on the owner account through own-account Collection commands and JWT
+scopes, mounts follow:create/delete as own-account, and keeps the verified Access actor for
+follow writes. access.grant of collection:* onto the owner-account resource is denied because
+collection:create is typed to library.collection.
 Common preparation and exact selection resolve committed native plan custody. A plan receipt still grants no complete Source or publication authority.
 
 Terminal reconciliation reads the complete bounded original directory through the installed Source support reader,
