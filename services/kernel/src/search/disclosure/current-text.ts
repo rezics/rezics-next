@@ -1,10 +1,5 @@
 import { publicNames } from '../document-names.ts';
-import {
-  analyzeInstalled,
-  CJK_ANALYZER,
-  NAME_PREFIX_ANALYZER,
-  type EngineToken,
-} from '../engine-analysis.ts';
+import { analyzeInstalled, CJK_ANALYZER, NAME_PREFIX_ANALYZER, type EngineToken } from '../engine-analysis.ts';
 import type { OpenSearch } from '../opensearch.ts';
 import type { IndexedSubject } from '../source.ts';
 import type { TextNode } from '../text.ts';
