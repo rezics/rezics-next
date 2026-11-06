@@ -102,6 +102,14 @@ function fieldKey(value: SqlTextList): string {
   return (value ?? []).join('\0');
 }
 
+function textFields(value: SqlTextList): string[] | null {
+  if (value == null) return null;
+  for (const field of value) {
+    if (field == null) throw new Error('Commerce retention field is missing');
+  }
+  return value as string[];
+}
+
 function routeForAccount(accountId: string): number {
   const route = routeOf(accountId);
   if (route === null) throw new Error('Invalid commerce erasure account');
@@ -122,7 +130,7 @@ function checkpointInput(
     phase,
     blocker: blocker ?? '',
     retention_store: retention?.retentionStore ?? progress.retentionStore,
-    retention_fields: retention?.retentionFields ?? progress.retentionFields,
+    retention_fields: textFields(retention?.retentionFields ?? progress.retentionFields),
     retention_purpose: retention?.retentionPurpose ?? progress.retentionPurpose,
     retention_expires_at: retention?.retentionExpiresAt ?? progress.retentionExpiresAt,
   };

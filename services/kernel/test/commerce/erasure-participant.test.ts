@@ -275,15 +275,18 @@ describe('native genuine-order retention', () => {
     grants = createGrantCommands({ pool, access, managementAction: 'access:grant' });
     expect(KERNEL_WORK_MODULES.some((module) => module.name === 'commerce')).toBe(true);
     await grantAccess(seller.accountId, GLOBAL, ['board:create', 'offer:create']);
-    const editions = await createNativeEditionFixture(async (method, path, body, headers = {}) => {
-      return kernel.handle(
-        new Request(`http://kernel.test${path}`, {
-          method,
-          headers: { authorization: `Bearer ${seller.bearer}`, ...headers },
-          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-        }),
-      );
-    });
+    const editions = await createNativeEditionFixture(
+      async (method, path, body, headers = {}) => {
+        return kernel.handle(
+          new Request(`http://kernel.test${path}`, {
+            method,
+            headers: { authorization: `Bearer ${seller.bearer}`, ...headers },
+            ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+          }),
+        );
+      },
+      { home: 'realm' },
+    );
     paidEdition = await editions.publish({
       title: 'Native erasure book',
       subjectTitle: 'Native erasure source',
@@ -299,9 +302,12 @@ describe('native genuine-order retention', () => {
     // grant.create cannot admit thread:read: it is not a platform-reach action.
     for (const edition of [paidEdition, lateEdition]) {
       const threadRoute = routeOf(edition.threadId);
-      if (threadRoute === null) throw new Error('Native edition thread locator is missing');
-      for (const accountId of [buyer.accountId, living.accountId])
+      const boardRoute = routeOf(edition.boardId);
+      if (threadRoute === null || boardRoute === null) throw new Error('Native edition locators are missing');
+      for (const accountId of [buyer.accountId, living.accountId]) {
         await seedGovernanceAuthority(pool, threadRoute, edition.threadId, accountId, ['thread:read']);
+        await seedGovernanceAuthority(pool, boardRoute, edition.boardId, accountId, ['board:read']);
+      }
     }
     commands = createCommerceCommands({
       pool,

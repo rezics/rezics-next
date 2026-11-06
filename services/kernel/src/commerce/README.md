@@ -1002,8 +1002,11 @@ which is already compiled from the full mounted catalogue (including Commerce) a
 tokens use the ordinary client and omit `media:complete`. A second Access on the same pool disagrees at the board
 current-role seam. `grant.create` authenticates the governance bearer on that Access so command admission sees the
 same actor snapshot; a Content-issued actor object is not reused. Seller Global grants are
-`board:create` and `offer:create` only, because Content already installed `subject:create`. Buyer sale capture
-seeds `thread:read` on each protected source thread; `grant.create` cannot admit that action. The composed worker is
+`board:create` and `offer:create` only, because Content already installed `subject:create`, `space:create` and
+`realm:create`. Genuine-order editions use a public Realm published board; Global showcase board current-role
+projection stays with Accounts. Buyer sale capture
+seeds `thread:read` on each protected source thread and `board:read` on that Realm board; `grant.create` cannot admit
+`thread:read`. The composed worker is
 startWorker's live default composition under `workerTestEnv`, decorated so only `commerce_erasure` consumes
 account tombstones; `KERNEL_WORK_MODULES` pins registration names only. Semantic's overflowing Subject-source
 page stays that owner's repair. Financial outcome-driver children use the same live composition. Readiness waits for the

@@ -157,9 +157,12 @@ retained Checkout record, not a whole-account disposition.
 Genuine purchase targets are published Content editions on Content's isolated native system. Access grants
 `board:create`/`offer:create` as account subjects on Global through the ordinary grant command after the governance
 account holds `board:create` via the native local-showcase bootstrap. Buyer `order:create` uses the same grant command
-after the governance account holds that action on the offer. Protected source threads are not a public read floor;
+after the governance account holds that action on the offer. Genuine-order editions live on a public Realm published
+board, the same buyer sale-capture composition acquisition uses. Global showcase board current-role projection remains
+Accounts' Diagnostic7 repair. Protected source threads are not a public read floor;
 the native fixture seeds `thread:read` for each buyer on those exact threads, matching acquisition's sale-authority
-setup, because `grant.create` cannot admit that action. Grants, publication and Commerce HTTP share one composed
+setup, because `grant.create` cannot admit that action. It also seeds `board:read` on that Realm board so buyer
+sale capture does not depend on the unrepaired showcase projection. Grants, publication and Commerce HTTP share one composed
 kernel. Content's native Access is already compiled from that complete catalogue, including Commerce, and
 authenticates through Score `nativeAuth.handler`. The composed kernel reuses that same Access instance and the
 ordinary Auth client (which omits `media:complete`). A second Access on the same pool is what produced
@@ -184,8 +187,8 @@ Subject-source page, so unfinished foreign participants cannot occupy the shared
 collection schedules are removed after launch, as in the financial outcome driver. Readiness is the ready line,
 the existing 5ms queue poll, and an effects consumer that has ticked with no pending envelopes; the parent reaps
 the child with SIGKILL because retention coordinators sleep. Seller Global grants are `board:create` and `offer:create` only: Content's native
-identities already install `subject:create`. Positive purchase targets are real subjects created through the native
-API from released metadata. Business assertions, including unused-actor History-coverage `pending`, replay, private
+identities already install `subject:create`, `space:create` and `realm:create`. Positive purchase targets are real
+subjects created through the native API from released metadata on that public Realm board. Business assertions, including unused-actor History-coverage `pending`, replay, private
 concealment and late paid/refund money outcomes, remain required. The independent terminal-benefit cases remain
 unchanged. Neither topology correction nor local pure settlement tests prove the missing custody outcome.
 
