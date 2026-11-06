@@ -42,6 +42,9 @@ classes:
       - endDate
       - numberOfParts
       - descriptiveLink
+      - bangumiSubjectId
+      - datePublished
+      - abstract
     annotations:
       facets: genre keywords startDate publisher contributor partOfSeries
       schema_org_type: https://schema.org/BookSeries

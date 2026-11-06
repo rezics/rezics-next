@@ -28,6 +28,7 @@ test('ordinary native composition binds the production adapters themselves', () 
   expect(installed.admitSharedHistory).toBe(nativeAdmitSharedHistory);
   expect(installed.sharedHistoryWorkModule).toBe(nativeSharedHistoryWorkModule);
   expect(installed.localSharedHistoryWorkModule).toBe(nativeLocalSharedHistoryWorkModule);
+  expect(installed.localSharedHistoryWorkModule).not.toBe(installed.sharedHistoryWorkModule);
   expect(composed.advanceSelectedHistoryOriginal).toBe(nativeAdvanceSelectedHistoryOriginal);
   expect(installed.historyExecutionPort).toBe(nativeHistoryExecutionPort);
   expect(composed.prepareRecordHistoryPurge).toBe(nativePrepareRecordHistoryPurge);

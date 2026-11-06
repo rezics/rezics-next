@@ -149,6 +149,11 @@ test('reader keeps book, volume and author identities after accept, adopt and on
     expect((volumeRead.subject as { type: string }).type).toBe('schema:Book');
     expect((personRead.subject as { type: string }).type).toBe('schema:Person');
     expect(JSON.stringify(volumeRead.subject)).not.toContain('9784757728066');
+    // The released BookSeries admits the series' own Bangumi identifier and source-precision date.
+    expect(contentsOf(seriesRead.subject as unknown as ReadSubject, 'wdt:P5732')).toEqual(['499']);
+    expect(contentsOf(seriesRead.subject as unknown as ReadSubject, 'schema:datePublished')).toMatchObject([
+      { time: '+2006-04-28T00:00:00Z', precision: 11 },
+    ]);
     const seriesSubject = seriesRead.subject as { statements?: Record<string, { value?: { content?: string } }[]> };
     const volumeSubject = volumeRead.subject as { statements?: Record<string, { value?: { content?: string } }[]> };
     expect(volumeSubject.statements?.['wdt:P179']?.some((row) => row.value?.content === seriesId)).toBe(true);
@@ -268,6 +273,12 @@ test('pinned light-novel families publish a native graph with separate acceptanc
     const series = await read('2815');
     expect(bookGirl.type).toBe('schema:BookSeries');
     expect(series.type).toBe('schema:BookSeries');
+    // The series keeps its own identifier, source-precision date and summary document, read back independently.
+    expect(contentsOf(series, 'wdt:P5732')).toEqual(['2815']);
+    expect(contentsOf(series, 'schema:datePublished')).toMatchObject([
+      { time: '+2004-06-08T00:00:00Z', precision: 11 },
+    ]);
+    expect(contentsOf(series, 'schema:abstract')).toMatchObject([{ language: 'und' }]);
     // A BookSeries admits publisher but not author or illustrator; those credits stay exact gaps.
     expect(first.creditGaps).toEqual(
       expect.arrayContaining([
