@@ -97,9 +97,10 @@ so the pin keeps that list empty and excludes the calendar packages.
 Generated `paraglide/runtime.js` imports the wrapper, which re-exports `urlpattern-polyfill`.
 Workerd's export-type inspection has workerd/worker/module/browser conditions, not `import`, so
 package exports miss and Node `main` loads CJS `index.cjs`. Prebundling that id evaluates CJS
-inside `runInRunnerObject` and throws `module is not defined`. Web aliases the id to ESM
-`index.js`, adds `import` to Worker resolve conditions, and leaves the package off include so
-the Worker transform pipeline evaluates ESM.
+inside `runInRunnerObject` and throws `module is not defined`. Adding `import` to those
+conditions hung Rolldown before Copies printed ready. Web aliases the id to ESM `index.js`,
+serves the ESM files through filtered Worker resolve/load hooks, and shims remaining CJS
+for Workerd evaluation. The package stays off include.
 `react-dom/server` stays off include and off exclude: TanStack would otherwise concatenate it
 into the optimizer and hang Rolldown before Copies prints ready, while excluding it loads CJS
 into Workerd. Vite then transforms React on the first Worker evaluation.

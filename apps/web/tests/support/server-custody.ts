@@ -107,6 +107,37 @@ function processIdentity(pid: number): ProcessIdentity | undefined {
   }
 }
 
+function readProcessTable(): Map<number, ProcessIdentity> {
+  const table = new Map<number, ProcessIdentity>();
+  try {
+    for (const entry of readdirSync('/proc')) {
+      if (!/^[0-9]+$/.test(entry)) continue;
+      const pid = Number(entry);
+      const identity = processIdentity(pid);
+      if (identity) table.set(pid, identity);
+    }
+  } catch {
+    return table;
+  }
+  return table;
+}
+
+/** Group members plus descendants of the spawned leader, including children that left the group. */
+export function relatedProcessIds(rootPid: number, table = readProcessTable()): number[] {
+  const related = new Set<number>([rootPid]);
+  for (const [pid, identity] of table) if (identity.pgrp === rootPid) related.add(pid);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const [pid, identity] of table) {
+      if (related.has(pid) || !related.has(identity.ppid)) continue;
+      related.add(pid);
+      grew = true;
+    }
+  }
+  return [...related];
+}
+
 const WNOHANG = 1;
 let waitpidSymbol:
   | { waitpid(pid: number, status: number, options: number): number }
@@ -145,18 +176,12 @@ export function directChildExitCode(pid: number): number | undefined {
 
 /** Live members of a process group, excluding unreaped zombies that still answer kill(-pgid, 0). */
 export function liveProcessGroupMemberIds(pgid: number): number[] {
-  try {
-    const members: number[] = [];
-    for (const entry of readdirSync('/proc')) {
-      if (!/^[0-9]+$/.test(entry)) continue;
-      const pid = Number(entry);
-      const identity = processIdentity(pid);
-      if (identity && identity.pgrp === pgid && identity.state !== 'Z') members.push(pid);
-    }
-    return members;
-  } catch {
-    return processGroupExists(pgid) ? [pgid] : [];
-  }
+  const table = readProcessTable();
+  if (table.size === 0) return processGroupExists(pgid) ? [pgid] : [];
+  return relatedProcessIds(pgid, table).filter((pid) => {
+    const identity = table.get(pid);
+    return identity !== undefined && identity.state !== 'Z';
+  });
 }
 
 function liveProcessGroup(pgid: number): boolean {
@@ -165,18 +190,11 @@ function liveProcessGroup(pgid: number): boolean {
 
 /** Reap zombies in the group that this process adopted after the original parent exited. */
 export function reapExitedProcessGroupMembers(pgid: number): void {
-  try {
-    for (const entry of readdirSync('/proc')) {
-      if (!/^[0-9]+$/.test(entry)) continue;
-      const pid = Number(entry);
-      const identity = processIdentity(pid);
-      if (!identity || identity.pgrp !== pgid || identity.state !== 'Z') continue;
-      // The group leader is the spawned child; Node/Bun own that waitpid.
-      if (pid === pgid) continue;
-      if (identity.ppid === process.pid) waitpidNoHang(pid);
-    }
-  } catch {
-    // /proc unread; live-member settlement still decides the group.
+  const table = readProcessTable();
+  for (const pid of relatedProcessIds(pgid, table)) {
+    const identity = table.get(pid);
+    if (!identity || identity.state !== 'Z' || identity.ppid !== process.pid) continue;
+    waitpidNoHang(pid);
   }
 }
 
@@ -205,6 +223,7 @@ function observeLeaderExit(pid: number | undefined, observed: Promise<void>, pol
     const tick = () => {
       if (settled) return;
       if (processHasExited(pid)) {
+        directChildExitCode(pid);
         finish();
         return;
       }
@@ -269,9 +288,22 @@ function makeProcessCustody(
     let groupSettled = pid === undefined;
     let childSettled = false;
     let outputIsSettled = false;
+    const owned = new Set<number>(pid === undefined ? [] : relatedProcessIds(pid));
+    const refreshOwned = () => {
+      if (pid === undefined) return;
+      for (const member of relatedProcessIds(pid)) owned.add(member);
+    };
+    const liveOwned = () => {
+      refreshOwned();
+      return [...owned].filter((member) => {
+        if (member === process.pid) return false;
+        const identity = processIdentity(member);
+        return identity !== undefined && identity.state !== 'Z';
+      });
+    };
     const signalGroup = (signal: NodeJS.Signals) => {
       if (pid === undefined) return;
-      const members = liveProcessGroupMemberIds(pid);
+      const members = liveOwned();
       try {
         process.kill(-pid, signal);
       } catch (error) {
@@ -290,17 +322,19 @@ function makeProcessCustody(
       const graceDeadline = Date.now() + termGraceMs;
       signalGroup('SIGTERM');
       childSettled = await completedWithin(childCompletion, termGraceMs);
+      if (!childSettled) directChildExitCode(pid);
       const remainingGrace = graceDeadline - Date.now();
-      if (remainingGrace > 0 && liveProcessGroup(pid)) {
-        await waitUntil(() => groupGone(pid), remainingGrace, pollIntervalMs);
+      if (remainingGrace > 0 && liveOwned().length > 0) {
+        await waitUntil(() => groupGone(pid) && liveOwned().length === 0, remainingGrace, pollIntervalMs);
       }
-      if (liveProcessGroup(pid)) {
+      if (liveOwned().length > 0) {
         signalGroup('SIGKILL');
         if (!childSettled) childSettled = await completedWithin(childCompletion, settleTimeoutMs);
-        const gone = await waitUntil(() => groupGone(pid), settleTimeoutMs, pollIntervalMs);
+        directChildExitCode(pid);
+        const gone = await waitUntil(() => groupGone(pid) && liveOwned().length === 0, settleTimeoutMs, pollIntervalMs);
         if (!gone) cleanupErrors.push(new Error(`${label} process group ${pid} remained after SIGKILL`));
       }
-      groupSettled = groupGone(pid);
+      groupSettled = groupGone(pid) && liveOwned().length === 0;
       if (!groupSettled) {
         cleanupErrors.push(new Error(`${label} process group ${pid} remained after SIGKILL`));
       }
@@ -455,9 +489,11 @@ export async function withCleanup<T>(
 
   const cleanupErrors = await collectCleanupErrors(actions, options);
   if (failed && cleanupErrors.length > 0)
-    throw new AggregateError([primary, ...cleanupErrors], 'The operation and its cleanup both failed', {
-      cause: primary,
-    });
+    throw new AggregateError(
+      [primary, ...cleanupErrors],
+      `${errorText(primary)}; The operation and its cleanup both failed`,
+      { cause: primary },
+    );
   if (failed) throw primary;
   if (cleanupErrors.length > 0) throw new AggregateError(cleanupErrors, 'One or more cleanup actions failed');
   return value as T;

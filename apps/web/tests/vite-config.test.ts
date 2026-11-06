@@ -158,7 +158,12 @@ test('SSR optimizeDeps keeps discovery off after the Cloudflare Worker environme
             assert.ok(mapped, command + ':' + name + ':urlpattern-polyfill alias');
             assert.equal(String(mapped.replacement).endsWith('index.cjs'), false, command + ':' + name + ':esm');
             assert.ok(String(mapped.replacement).endsWith('index.js'), command + ':' + name + ':' + mapped.replacement);
-            assert.ok(resolve.conditions.includes('import'), command + ':' + name + ':import-condition');
+            if (name !== 'root')
+              assert.equal(
+                (resolve.conditions ?? [])[0] === 'import',
+                false,
+                command + ':' + name + ':workerd-conditions',
+              );
           }
         }
       `,

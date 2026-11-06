@@ -2,7 +2,11 @@ import { afterAll, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { startDevServer, type DevServerOptions } from './support/dev-server.ts';
-import { liveProcessGroupMemberIds, reapExitedProcessGroupMembers } from './support/server-custody.ts';
+import {
+  liveProcessGroupMemberIds,
+  processHasExited,
+  reapExitedProcessGroupMembers,
+} from './support/server-custody.ts';
 
 const root = join(import.meta.dir, '../../..');
 const budgets = { ready: 10_000, firstResponse: 10_000, warmUp: 30_000 };
@@ -128,12 +132,7 @@ function report(error: string, phase: string, path: string, last: RegExp) {
 }
 
 async function alive(pid: number) {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
+  return !processHasExited(pid);
 }
 
 test('startDevServer returns after ready, the first response and every hydrated warm-up, and stop ends the process group', async () => {
