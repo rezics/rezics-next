@@ -188,7 +188,7 @@ function ReviewedSubjectLink({
 }: {
   id: string;
   title: string | null;
-  language?: string | null;
+  language?: string | null | undefined;
   locale: string;
 }) {
   const options = { locale: locale as Locale };
