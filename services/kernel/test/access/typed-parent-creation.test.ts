@@ -11,20 +11,21 @@ const globalParent = { resource: GLOBAL, resourceType: 'semantic.context', valid
 
 let f: Awaited<ReturnType<typeof standingFixture>>;
 beforeAll(async () => {
-  f = await standingFixture(['space:create']);
+  f = await standingFixture();
 }, 30000);
 beforeEach(() => f.reset());
 afterAll(() => f?.close());
 
+// post:create declares one resource type, the case where the child type used to select the parent's profile.
 async function createUnderGlobal(granted: boolean) {
-  if (granted) await f.grant(f.actor, 'space:create', GLOBAL);
+  if (granted) await f.grant(f.actor, 'post:create', GLOBAL);
   const context = await f.context();
   const child = { route: f.otherResource.route, id: newId(f.otherResource.route) };
   const { actor } = context;
   const authorization = parentCreationAuthorization({
     access: f.access,
     actor,
-    action: 'space:create',
+    action: 'post:create',
     parent: globalParent,
     context: { ...context, resource: child },
   });
