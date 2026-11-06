@@ -68,6 +68,12 @@ export type ShowcaseVndbCredits = {
   deliveryEdges(edges: CrossMediaPlan['edges']): CrossMediaPlan['edges'];
 };
 
+export {
+  observePersonIdentity,
+  personIdentityForSource,
+  rereadCanonicalPersonIdentities,
+} from './showcase-person-identity.ts';
+
 const emptyBindings: SourceVocabularyBindings = { releaseDigest: bundledDigest, schemes: [], concepts: [] };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 const CREDIT_CODE = /^[a-z][a-z0-9_-]{0,63}$/u;

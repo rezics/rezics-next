@@ -8,5 +8,9 @@ export function SuppliedNames({
 }: {
   reading: { public: SubjectRead; locale: string; link?: PageLink; release?: object; reader?: object };
 }) {
-  return <PeopleNamesEntry reading={reading} />;
+  return (
+    <div className="min-h-11 min-w-0 [overflow-wrap:anywhere]" data-slot="supplied-names">
+      <PeopleNamesEntry reading={reading} />
+    </div>
+  );
 }

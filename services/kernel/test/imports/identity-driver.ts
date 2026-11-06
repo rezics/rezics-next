@@ -9,6 +9,7 @@ import {
   type ImportIdentity,
 } from './identity-fixture.ts';
 import { observeAccount, observeAuthAccount, observeBootstrap, observeGrants } from './identity-observer.ts';
+import '../support/native-history-composition.ts';
 
 /** Caller ownership of the isolated application DB is separate from Auth ownership. */
 export function createImportIdentityDriver(): ImportIdentityDriver {

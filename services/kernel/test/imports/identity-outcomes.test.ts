@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import '../support/native-history-composition.ts';
 
 test('all real identity fixture outcomes pass', async () => {
   const suite = resolve(import.meta.dir, '../../../../specs/imports-identity.test.ts');

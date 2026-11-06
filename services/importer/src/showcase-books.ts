@@ -867,6 +867,7 @@ export async function importShowcaseBooks(input: {
       runs: {},
       readings: [],
       personIdentities: [],
+      canonicalPersons: {},
       mediaOutcomes: [],
       workLinks: [],
       vndbWorkRelations: [],

@@ -23,6 +23,7 @@ import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
 import { fixtureFetch } from './type-helpers.ts';
+import '../support/native-history-composition.ts';
 
 const characterKindsUri = 'https://rezics.com/schemes/bangumi/character-kinds';
 

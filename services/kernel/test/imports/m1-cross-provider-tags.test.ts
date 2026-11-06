@@ -172,6 +172,7 @@ test('exact VNDB parent assertions need separate native acceptance and adoption 
       runs: {},
       readings: [],
       personIdentities: [],
+      canonicalPersons: {},
       mediaOutcomes: [],
       workLinks: [],
       gaps: [],
