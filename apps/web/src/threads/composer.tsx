@@ -1083,6 +1083,7 @@ function PostComposerContent<T, Context = undefined>({
     submittingRef.current = true;
     setSubmitting(true);
     const owner = lifetime.controller.signal;
+    const publishCsrf = sessionCsrfToken();
     onIntentLockChange?.(true);
     if (!lifetime.current(owner)) return;
     onPendingChange?.(true);
@@ -1090,7 +1091,7 @@ function PostComposerContent<T, Context = undefined>({
     try {
       if (!lifetime.current(owner)) return;
       const result = await onSubmit(command);
-      if (!lifetime.current(owner)) return;
+      if (!lifetime.current(owner) || sessionCsrfToken() !== publishCsrf) return;
       if (!result.ok) {
         replyIntent.current.settle(result.reason !== 'unavailable');
         localWriting.draft?.settle(result.reason === 'unavailable' ? 'unknown' : 'refused');

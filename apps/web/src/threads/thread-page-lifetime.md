@@ -110,9 +110,11 @@ the safe runtime behavior, but does not claim that private SSR and private hydra
   bounded page read and subsequent personal read; extend the existing recovery assertion with delayed removal.
   Route-change, locale and mounted retirement flush abandon before a successor capture, so a second refresh does not
   join the predecessor fetch. A continuation that has not bound a page query does not retire
-  from predecessor cancel/remove. A same-account token refresh keeps the mounted reply command. Echo editor snapshots
-  do not disable Send. Refresh navigation compares the de-localized thread path so a locale prefix does not leave the
-  current page.
+  from predecessor cancel/remove; an external remove or session transition of that same queued recovery does. A
+  same-account token refresh keeps the mounted reply command and exact idempotency key, and a late reply does not
+  publish after credential replacement. Echo editor snapshots do not disable Send. Refresh navigation compares the
+  de-localized thread path so a locale prefix does not leave the current page. An owned cancel settlement that
+  rejects with CancelledError is still settlement.
 
 Decision: caller retirement, cancellation settlement and reply lifetime are one capability. The `thread-page-lifetime`
 suite is its acceptance; its assertions are repaired in that capability and are not weakened to pass.

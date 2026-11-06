@@ -63,8 +63,9 @@ and a changed or lost session release protection and retire the old editor.
 
 Each editor owns its in-flight reads, uploads and submission continuations. Unmounting, changing its container or
 new-thread intent, or losing/replacing the signed-in subject retires that work irreversibly, including switching
-away and back to the same account. A same-account token refresh keeps the mounted editor, dirty draft and uncertain
-command. Copied-image reads are aborted; late results cannot reserve an image, restore private writing, change a
+away and back to the same account. A same-account token refresh keeps the mounted editor, dirty draft, uncertain
+command and exact original idempotency key; a late reply does not publish, invalidate or rotate that key after
+credential replacement. Copied-image reads are aborted; late results cannot reserve an image, restore private writing, change a
 replacement editor or call its parent. A prepared editor with an unknown session does not gain upload authority.
 Choosing an ordinary reply parent keeps the current writing and reply-intent rules.
 

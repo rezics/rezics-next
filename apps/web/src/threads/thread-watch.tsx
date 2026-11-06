@@ -144,7 +144,7 @@ export function ThreadWatch(props: ThreadWatchProps) {
           ) : null}
         </div>
       ) : null}
-      {signedIn ? (
+      {signedIn && props.admitted ? (
         <p className="text-xs text-muted-foreground">
           {m.thread_watch_guidance()}{' '}
           <a className="inline-flex min-h-11 items-center underline" href={`/${getLocale()}/settings#notifications`}>

@@ -318,6 +318,7 @@ export function ThreadPage() {
   const pageIsPrivate = activeAdmission.identity.credentialMode === 'session' || activePage.viewerId !== undefined;
   const currentPageUnavailable =
     !binding.current ||
+    locale !== activeAdmission.identity.locale ||
     (pageIsPrivate &&
       activePage.viewerId !== undefined &&
       (session !== 'signed-in' || activePage.viewerId !== subject));
