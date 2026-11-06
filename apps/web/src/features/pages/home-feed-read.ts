@@ -76,7 +76,7 @@ export async function readHomeFeedPage(
             if (item.source !== 'discovery') return true;
             const summary = item.summary;
             if ('viewerReaction' in summary && summary.viewerReaction != null) return true;
-            // Reject private advice in public reads even before the next official publication.
+            // Reject private advice in public reads.
             if ('reactionAdvice' in summary) {
               const advice = summary.reactionAdvice;
               if (advice && typeof advice === 'object' && 'state' in advice && advice.state === 'current') return true;

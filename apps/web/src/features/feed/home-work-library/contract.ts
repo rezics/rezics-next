@@ -40,7 +40,7 @@ export type HomeWorkLibraryLease = Readonly<{
   isCurrent(): boolean;
 }>;
 
-/** Local presentation seam, not a native DTO. It stays unavailable until Content's generated page is installed. */
+/** Local presentation seam, not a native DTO. Home fills it from the installed page's personal facts only. */
 export type HomeWorkLibraryProjection = Readonly<{
   scope: HomeWorkLibraryScope;
   page: HomeWorkLibraryPage;
