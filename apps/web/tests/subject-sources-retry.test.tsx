@@ -208,7 +208,11 @@ test('actual Sources retry returns focus locally and retires focus across reader
         }
         if (mode === 'canonical') {
           expect(router.state.location.pathname).toEndWith('/renamed/sources');
-          expect(router.state.location.searchStr + router.state.location.hash).toBe(suffix.replace('#', ''));
+          expect(Object.fromEntries(new URLSearchParams(router.state.location.searchStr))).toEqual({
+            realm,
+            intent: 'exact read',
+          });
+          expect(router.state.location.hash).toBe('kept');
         }
         expect(client.getQueryData(sessionQuery.queryKey)).toEqual(session());
       } finally {
