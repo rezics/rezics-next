@@ -6,6 +6,7 @@ export const PRIVATE_DIARY_PAGE_LIMIT = 25;
 export const PRIVATE_DIARY_PAGE_BYTES = 65_536;
 
 export type DiaryPage = NonNullable<Awaited<ReturnType<KernelClient['libraryDiary']['get']>>['data']>;
+export type DiaryOccurrence = DiaryPage['occurrences'][number];
 export type ConsumptionSummary = NonNullable<
   Awaited<ReturnType<KernelClient['libraryConsumptionSummary']['get']>>['data']
 >;

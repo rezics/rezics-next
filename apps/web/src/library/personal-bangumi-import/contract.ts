@@ -8,8 +8,10 @@ import type {
   BangumiScoreOutcome as KernelBangumiScoreOutcome,
   BangumiScoreReview as KernelBangumiScoreReview,
   BangumiScoreSelection,
+  BangumiTag,
   PersonalEntrySourceAdmission,
 } from '@rezics/client';
+export type { BangumiScoreSelection, BangumiTag };
 import type { SourceAdmissionCustody } from '../rich-private-entry/admission';
 import type { SourceAdmissionOutcome, SourceAdmissionPreview } from '../rich-private-entry/admission';
 

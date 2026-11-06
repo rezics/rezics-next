@@ -328,3 +328,27 @@ export type VoteRead = Routes['subjects'][':id']['ratings'][':questionId']['vote
 export type PublicFigureRead = Routes['subjects'][':id']['figure']['get']['response'][200]['figure'];
 type RatingQuestionReadCall = ReturnType<ReturnType<KernelClient['rating-questions']>['get']>;
 export type RatingQuestionRead = NonNullable<Awaited<RatingQuestionReadCall>['data']>;
+
+export type {
+  BangumiChoice,
+  BangumiOutcome,
+  BangumiReview,
+  BangumiScoreChoice,
+  BangumiScoreCurrentVote,
+  BangumiScoreOutcome,
+  BangumiScoreReview,
+  BangumiScoreSelection,
+} from './kernel/library/list-import-bangumi-model.ts';
+export type { BangumiTag, BangumiTagPage } from './kernel/library/list-import-bangumi-label-model.ts';
+export type {
+  DiaryOccurrence,
+  DiaryPage,
+  DiaryQuery,
+  DiarySubject,
+} from './kernel/library/diary-model.ts';
+export type {
+  MalLabelOutcome,
+  MalLabelReview,
+  MalLabelSelection,
+  MalTagEvidence,
+} from './kernel/library/list-import-mal-tags.ts';
