@@ -110,19 +110,29 @@ test('Retry-After expiry during hydration enables only a manual retry without re
   const received = clock();
   let requests = 0;
   const errors: unknown[] = [];
-  const element = createElement(SearchRecovery, { state: { status: 'index-not-ready', retryAt: received + 1000 }, retryHref, restartHref, locale: 'en', onRetry: () => requests++ });
+  const element = createElement(SearchRecovery, {
+    state: { status: 'index-not-ready', retryAt: received + 1000 },
+    retryHref,
+    restartHref,
+    locale: 'en',
+    onRetry: () => requests++,
+  });
   try {
     Date.now = () => received;
     host.innerHTML = renderToString(element);
     expect(host.querySelector('button')!.disabled).toBe(true);
     Date.now = () => received + 2000;
-    await act(async () => { root = hydrateRoot(host, element, { onRecoverableError: (error) => errors.push(error) }); });
+    await act(async () => {
+      root = hydrateRoot(host, element, { onRecoverableError: (error) => errors.push(error) });
+    });
     expect(errors).toEqual([]);
     expect(host.querySelector('button')!.disabled).toBe(false);
     expect(requests).toBe(0);
     await act(async () => host.querySelector('button')!.click());
     expect(requests).toBe(1);
-  } finally { Date.now = clock; }
+  } finally {
+    Date.now = clock;
+  }
 });
 
 function kinds(): Props['initial'] {
