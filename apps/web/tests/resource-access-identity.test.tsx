@@ -267,7 +267,7 @@ async function reviewTransfer() {
   return within(window.document.body as unknown as HTMLElement).getByRole('alertdialog');
 }
 
-test('unavailable reload and current grant/permission retirement remove stale identities and transfer controls', async () => {
+test('unavailable retry and current grant/permission retirement remove stale identities and transfer controls', async () => {
   const page = realm();
   let current: AccessState = { status: 'ready', page };
   let finish: ((value: AccessState) => void) | undefined;
@@ -283,7 +283,7 @@ test('unavailable reload and current grant/permission retirement remove stale id
   await show(<ResourceAccessPage initial={{ status: 'unavailable' }} io={io} />);
   const canvas = within(host);
   expect(canvas.getByRole('alert').textContent).toBe(m.access_unavailable());
-  await act(async () => user.click(canvas.getByRole('button', { name: m.access_reload() })));
+  await act(async () => user.click(canvas.getByRole('button', { name: m.access_retry_page() })));
   await act(async () => finish!(current));
   await selectTransfer();
   expect(canvas.getByRole('heading', { name: m.access_transfer_owner() })).toBeTruthy();
@@ -450,7 +450,7 @@ test('recoverable admission retains transfer text but retires resolved identity 
   expect(host.querySelector('#owner-transfer-handle')).toBeNull();
   expect(host.textContent).not.toContain('@aki');
   current = { status: 'ready', page: structuredClone(page) };
-  await act(async () => user.click(canvas.getByRole('button', { name: m.access_reload() })));
+  await act(async () => user.click(canvas.getByRole('button', { name: m.access_retry_page() })));
   expect((canvas.getByLabelText(m.access_handle()) as HTMLInputElement).value).toBe('aki');
   expect(canvas.getByRole('button', { name: m.access_transfer_owner(), exact: true }).hasAttribute('disabled')).toBe(
     true,

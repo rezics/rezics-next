@@ -42,3 +42,7 @@ resource, subject, interval and role/actions; an empty or unrelated 2xx body rem
 When a supplied identity identifies the resource itself, its recognizable label leads the resource and transfer
 review. Exact references remain inspectable without new identity requests. Transfer confirmation includes the acting
 account and any delegating principal along with both owners and the source interval.
+
+Decision: an unavailable or denied page recovers through its Retry grant page control; the current-page reload appears
+only over a shown page. A restored draft has no verified recipient, so Review refuses with the invalid-form copy until
+a fresh lookup succeeds; Review is disabled only while a lookup is in flight.

@@ -331,10 +331,12 @@ test('a new grant draft survives unavailable admission and requires fresh recipi
   expect(host.querySelector('#access-handle')).toBeNull();
   expect(blocked()).toBe(true);
   current = { status: 'ready', page: structuredClone(snapshot) };
-  await click(button(m.access_reload()));
+  await click(button(m.access_retry_page()));
   expect((within(host).getByLabelText(m.access_handle()) as HTMLInputElement).value).toBe('aki');
   expect(within(host).queryByRole('button', { name: m.access_review_confirm() })).toBeNull();
-  expect(button(m.access_review_title()).disabled).toBe(true);
+  await click(button(m.access_review_title()));
+  expect(within(host).getByText(m.access_form_invalid())).toBeTruthy();
+  expect(within(host).queryByRole('button', { name: m.access_review_confirm() })).toBeNull();
   expect(blocked()).toBe(true);
   expect(io.lookup).toHaveBeenCalledTimes(1);
   expect(io.save).toHaveBeenCalledTimes(0);
