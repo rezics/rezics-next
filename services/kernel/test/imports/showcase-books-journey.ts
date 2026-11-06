@@ -89,13 +89,18 @@ async function ready(url: string, child: Bun.Subprocess) {
     }
     await Bun.sleep(1000);
   }
-  // The stack's own output names what it was doing; only the final 4 KiB of each stream enters the error.
+  // What the endpoint answers now separates a rejected boot (an error status) from one still pending (no response).
+  const answer = await fetch(url, { signal: AbortSignal.timeout(5000) }).then(
+    async (response) => `HTTP ${response.status}: ${(await response.text()).slice(0, 512)}`,
+    (error: unknown) => `no response (${error instanceof Error ? error.name : 'error'})`,
+  );
+  // The stack's own output names the phase it reached; only the final 4 KiB of each stream enters the error.
   const tails = await Promise.all(
     ['stack.log', 'stack-errors.log'].map(
       async (name) => `${name}: ${await Bun.file(resolve(directory, name)).slice(-4096).text()}`,
     ),
   );
-  throw new Error(`Local stack did not become ready: ${url}\n${tails.join('\n')}`);
+  throw new Error(`Local stack did not become ready: ${url} (${answer})\n${tails.join('\n')}`);
 }
 const tables: CrossMediaTables = {
   async *rows(provider, table) {

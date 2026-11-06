@@ -735,10 +735,10 @@ async function launch(action: 'pages' | 'web', args: string[]) {
 }
 
 /**
- * Starts the local stack in two bounded groups. The kernel side starts first: identity, the kernel, and its worker,
- * which launches the DBOS system schema the kernel's work client boots against. The kernel side must answer before
- * the Pages and Web processes, whose compilation is the heaviest startup work, begin beside it. Peak startup memory
- * therefore never covers every compiler at once.
+ * Starts the local stack in three ordered phases. The worker goes first: its DBOS launch creates the system schema the
+ * kernel boots against, and its "Worker ready" line marks that launch complete. The kernel boots next and must answer
+ * before the Pages and Web processes, whose compilation is the heaviest startup work, begin. Each phase logs when it
+ * is ready, so the stack output names the phase that stalled.
  */
 async function start() {
   const env = {
@@ -747,8 +747,8 @@ async function start() {
     ...developmentKernelBindings(),
   };
   const children: ReturnType<typeof Bun.spawn>[] = [];
-  const launch = (command: string[]) => {
-    const child = Bun.spawn(command, { cwd: root, env, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' });
+  const launch = (command: string[], stdout: 'inherit' | 'pipe' = 'inherit') => {
+    const child = Bun.spawn(command, { cwd: root, env, stdin: 'inherit', stdout, stderr: 'inherit' });
     children.push(child);
     return child;
   };
@@ -760,16 +760,20 @@ async function start() {
   process.once('SIGINT', stop);
   process.once('SIGTERM', stop);
   try {
+    const worker = launch(['bun', 'run', '--cwd', 'services/kernel', 'worker'], 'pipe');
     const identity = launch(['bun', 'services/auth/scripts/dev-stack.ts', 'host']);
+    await Promise.all([
+      untilOutput(worker, 'Worker ready'),
+      untilReady([`${origins.issuer}/.well-known/openid-configuration`], [identity, worker]),
+    ]);
+    console.info('stack: worker and identity ready');
     const kernel = launch(['bun', 'run', '--cwd', 'services/kernel', 'dev']);
-    const worker = launch(['bun', 'run', '--cwd', 'services/kernel', 'worker']);
-    await untilReady(
-      [`${origins.issuer}/.well-known/openid-configuration`, `${origins.kernel}/v1/definitions`],
-      [identity, kernel, worker],
-    );
+    await untilReady([`${origins.kernel}/v1/definitions`], [kernel, worker, identity]);
+    console.info('stack: kernel ready');
     launch(['bun', 'services/auth/scripts/dev-stack.ts', 'pages']);
     const web = launch(['bun', 'services/auth/scripts/dev-stack.ts', 'web']);
     await untilReady([`${origins.web}/`], [web]);
+    console.info('stack: web ready');
     const first = await Promise.race(children.map(async (child) => await child.exited));
     const interrupted = stopping;
     await stopChildren(children);
@@ -780,6 +784,31 @@ async function start() {
   } finally {
     process.off('SIGINT', stop);
     process.off('SIGTERM', stop);
+  }
+}
+
+/** Resolves once `child` prints `marker`; its output keeps flowing to this process's stdout for the child's lifetime. */
+async function untilOutput(child: ReturnType<typeof Bun.spawn>, marker: string): Promise<void> {
+  const decoder = new TextDecoder();
+  let recent = '';
+  let seen = false;
+  const pump = (async () => {
+    for await (const chunk of child.stdout as ReadableStream<Uint8Array>) {
+      const text = decoder.decode(chunk, { stream: true });
+      process.stdout.write(text);
+      if (!seen) {
+        recent = (recent + text).slice(-(marker.length + 256));
+        seen = recent.includes(marker);
+      }
+    }
+  })();
+  pump.catch(() => {});
+  const deadline = Date.now() + 600_000;
+  while (!seen) {
+    if (child.exitCode !== null || child.signalCode !== null)
+      throw new Error(`walk: "${marker}" was not printed; the process exited (${child.exitCode ?? child.signalCode})`);
+    if (Date.now() > deadline) throw new Error(`walk: "${marker}" was not printed within ten minutes`);
+    await Bun.sleep(250);
   }
 }
 
