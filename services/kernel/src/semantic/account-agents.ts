@@ -295,10 +295,12 @@ async function ensureInTransaction(
 const ACCOUNT_AGENT_PRODUCER = 'semantic-account-agent';
 
 /** The agent's own account is the attributed principal of its producer command. The write basis then exists, so a
- * replaced label's erasure-source removal is recorded in this transaction. Evidence is bound only for that account. */
+ * replaced label's erasure-source removal is recorded in this transaction. Evidence is bound only for that account.
+ * A command with a basis that creates an exact-self subject must be authorized as `subject:create`; this trusted
+ * authorization is never request-supplied. */
 function accountAgentProducer(account: string, agentRoute: number, agentId: string): CommandAuthorization {
   return {
-    action: 'semantic.account-agent-ensure',
+    action: 'subject:create',
     resource: Object.freeze({ route: agentRoute, id: agentId }),
     denied: () => new TypeError('Account agent producer authorization failed'),
     async authorize(tx) {

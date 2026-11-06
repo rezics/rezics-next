@@ -7,7 +7,7 @@ import type { CommandAuthorization } from '../../src/command/command.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { accessCheck, type AccountActor, type Resource } from '../../src/request/access.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
-import { newId, routeOf } from '../../src/route/route.ts';
+import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { accountAgentId, AccountAgentVerificationError } from '../../src/semantic/agents.ts';
 import { ensureAccountAgent, verifyAccountAgent } from '../../src/semantic/account-agents.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
@@ -107,6 +107,12 @@ test("an erased account's agent keeps no label, current or past, and a later ens
   expect(
     (await admin.query("SELECT body FROM semantic.fact WHERE subject_id = $1 AND kind = 'label'", [agent])).rows,
   ).toEqual([{ body: secondName }]);
+  // The replaced label survives only as restricted erasure-source custody, recorded in the producer's transaction.
+  const removed = await admin.query<{ n: number }>(
+    "SELECT count(*)::int AS n FROM semantic.erasure_source_disposition WHERE partition_no = $1 AND store = 'fact' AND disposition = 'removed'",
+    [partitionOf(routeOf(agent)!)],
+  );
+  expect(removed.rows[0]!.n).toBeGreaterThan(0);
   await realAccess.grant({ route, id: agent }, 'owner', 'subject:read');
   const read = async () => {
     const check = await accessCheck(
