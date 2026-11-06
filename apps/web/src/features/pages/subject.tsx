@@ -45,6 +45,8 @@ import { LiteraryProfileEntry } from '../catalogue/literary-profile-entry';
 import { LiteraryReaderEntry } from '../catalogue/literary-reader/entry';
 import { literaryGrain, literaryReaderType } from '../catalogue/literary-reader/model';
 import { literaryAddress } from '../catalogue/literary-reader/navigation';
+import { RecipePublicationEntry } from './recipe-publication';
+import { ReleasePublicationEntry } from './release-publication';
 import { PeopleProfileEntry } from '../catalogue/people-profile-entry';
 import { PersonOverview } from '../catalogue/person-reader/reader';
 import { CharacterOverview } from './showcase-people/character';
@@ -93,6 +95,7 @@ import type { Related, Subject, Summary } from '../../subject/types';
 import { accountHref, canonicalRedirect, subjectHref } from '../../subject/subject-href';
 import { m } from '../../paraglide/messages.js';
 import { dataComponents, PageData, pageText, SubjectSources, SubjectSourcesLink, type PageMessages } from './data';
+import { statementDocument } from './documents';
 import { publicSubjectReference, serializeJsonLd, subjectJsonLd } from './jsonld';
 import { holderItems } from './overview';
 import { layoutComponents, PageHost, PageRoot, pageDefinitions } from './layout';
@@ -447,11 +450,11 @@ export function subjectPageJsonLd(
     subject: {
       ...read.subject,
       statements: Object.fromEntries(
-        Object.entries(read.subject.statements).filter(
-          ([property, statements]) =>
-            !statements.some((statement) => statement.property.data_type === 'document') ||
-            documents?.properties.includes(property),
-        ),
+        Object.entries(read.subject.statements).filter(([property, statements]) => {
+          if (!statements.some((statement) => statement.property.data_type === 'document')) return true;
+          if (documents?.properties.includes(property)) return true;
+          return statements.some((statement) => statementDocument(read.subject.id, statement, read.documents));
+        }),
       ),
     },
     documents: read.documents,
@@ -1362,6 +1365,27 @@ export function SubjectPage({
                 selectedStreamProperty={selectedStreamProperty}
                 selectedStreamDirection={selectedStreamDirection}
                 viewer={page.requestedReader ?? null}
+              />
+            ) : null}
+            {overview && read && !page.account && read.subject.type === 'schema:Recipe' ? (
+              <RecipePublicationEntry
+                subject={read.subject}
+                related={read.related}
+                documents={read.documents}
+                definitions={page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined}
+                locale={locale}
+                reader={reader ?? defaultReader}
+                link={ContextLink}
+              />
+            ) : null}
+            {overview && read && !page.account && read.subject.type === 'wd:Q20631656' ? (
+              <ReleasePublicationEntry
+                subject={read.subject}
+                related={read.related}
+                definitions={page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined}
+                locale={locale}
+                reader={reader ?? defaultReader}
+                link={ContextLink}
               />
             ) : null}
             {!overview && heading && (

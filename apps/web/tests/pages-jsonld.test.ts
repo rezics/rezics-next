@@ -149,6 +149,29 @@ test('only values the representation discloses are emitted', () => {
   expect(Object.keys(bare).sort()).toEqual(['@context', '@graph', '@id', '@type', 'url']);
 });
 
+test('released work form is additionalType from the related Concept, not an external identifier', () => {
+  const form = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e21';
+  const document = subjectJsonLd({
+    subject: {
+      ...subject,
+      statements: {
+        'wdt:P7937': [statement('wdt:P7937', 'wikibase-item', { type: 'value', content: form })],
+      },
+    },
+    related: { ...related, [form]: { type: 'skos:Concept', labels: { en: 'Light novel' } } },
+    locale: 'en',
+    url,
+  } as never);
+  expect(document.additionalType).toEqual({
+    '@id': `https://rezics.com/id/${form}`,
+    '@type': 'Thing',
+    name: 'Light novel',
+    url: `https://rezics.com/en/subjects/${form}/light-novel`,
+  });
+  expect(document).not.toHaveProperty('P7937');
+  expect(JSON.stringify(document.identifier ?? [])).not.toContain(form);
+});
+
 test('types outside schema.org keep their meaning as an additional type', () => {
   expect(build({ type: 'wd:Q689445' })).toMatchObject({
     '@type': 'Thing',
