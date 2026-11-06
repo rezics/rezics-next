@@ -746,9 +746,9 @@ function PersonalMembership({
       !csrfToken ||
       isLocked() ||
       currentPending ||
-      query.isFetching ||
       query.isError ||
       query.isPending ||
+      (!viewer && query.isFetching) ||
       (currentRecovery && !(retryLeave && action === 'leave' && currentRecovery.kind === 'uncertain')) ||
       (action === 'join' && realm.visibility === 'protected') ||
       (admittedAction !== undefined && admittedAction !== action)
@@ -796,11 +796,11 @@ function PersonalMembership({
             ? 'pending'
             : currentRecovery && viewer
               ? viewer.state
-              : !caller.isReady() || query.isPending || query.isFetching
-                ? 'loading'
-                : query.isError || !viewer
-                  ? 'unavailable'
-                  : viewer.state
+              : viewer
+                ? viewer.state
+                : !caller.isReady() || query.isPending || query.isFetching
+                  ? 'loading'
+                  : 'unavailable'
         }
         visibility={realm.visibility}
         busy={currentBusy}
