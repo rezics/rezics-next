@@ -256,7 +256,9 @@ test('mounted cards retire browser epochs and descriptors until a fresh native o
     await show();
     populated();
     expect(host.querySelector('[data-slot="community-reaction-summary"]')).toBeNull();
-    expect(host.querySelector('button, a[href$="#reply"]')).toBeNull();
+    // An unavailable reaction baseline withholds reaction commands, independently of reply/watch advice.
+    expect(host.querySelector('[aria-label="Reactions"]') === null).toBe(true);
+    expect(host.querySelector('a[href$="#reply"]') !== null).toBe(true);
     const late = origin;
     await act(async () => root.render(null));
     expect(late.isCurrent()).toBe(false);
