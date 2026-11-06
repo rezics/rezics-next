@@ -26,9 +26,9 @@ export type NativeRetainedOrder = Readonly<{
 
 /**
  * Trusted Commerce owner seam for Accounts' terminal graph. No HTTP policy input.
- * Native genuine-order setup compiles Access from the composed kernel catalogue and
- * authenticates through Content's Score `nativeAuth.handler`. grant.create admits only
- * an actor snapshot from that Access; the Content-issued actor object is not reused.
+ * Native genuine-order setup reuses Content's compiled Access (full catalogue, Score
+ * `nativeAuth.handler`) on the composed kernel. grant.create admits only an actor
+ * snapshot from that Access; the Content-issued actor object is not reused.
  * The trusted callable attaches this policy after a real purchase, never as an HTTP default.
  */
 export async function prepareNativeRetainedOrder(pool: Pool, orderId: string, expiresAt: Date) {
