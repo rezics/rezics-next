@@ -77,16 +77,11 @@ export async function startWorker(
   const content = startContentApplication(config.clock ? { clock: config.clock } : undefined);
   const resolvedModules =
     modules ??
-    createKernelWorkModules(
-      createDiscoveryProducerEntry,
-      createKernelRuntimeDefaults,
-      composeSemanticDomain,
-      {
-        fetch: content.application.ambient.fetch,
-        now: content.application.ambient.now,
-        id: content.application.ambient.id,
-      },
-    );
+    createKernelWorkModules(createDiscoveryProducerEntry, createKernelRuntimeDefaults, composeSemanticDomain, {
+      fetch: content.application.ambient.fetch,
+      now: content.application.ambient.now,
+      id: content.application.ambient.id,
+    });
   const receiptKeys = readReceiptKeyRing(env, config.receiptKeys);
   initializeEventTypes();
   let pool: pg.Pool;

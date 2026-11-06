@@ -529,8 +529,7 @@ export function createIdentityRatingCommitParticipant(): IdentityRatingCommitPar
         operand.sourceHomes,
         native.evidence,
       );
-      if (reviewed.state === 'changed')
-        throw ratingReviewOf().subjectChanged();
+      if (reviewed.state === 'changed') throw ratingReviewOf().subjectChanged();
       // A withdrawn/replaced directory can make the new cut unclassifiable while
       // its source epoch stays unchanged. It still invalidates this exact review.
       if (
