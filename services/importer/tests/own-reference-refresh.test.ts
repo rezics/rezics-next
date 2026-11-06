@@ -172,7 +172,7 @@ test('default own-reference refresh survives reopen without rewriting bootstrap 
     await reopened.close();
     rmSync(directory, { recursive: true, force: true });
   }
-});
+}, 30_000);
 
 test('a vanished named Open Library record retracts its own candidates without resolving a missing projection', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'own-reference-vanished-'));

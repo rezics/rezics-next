@@ -856,6 +856,33 @@ export class RunStore<Projection = BatchStatement[]> {
     this.write('UPDATE run_generations SET status=? WHERE source=? AND id=?', status, run.source, run.id);
     this.write('UPDATE run_sources SET lease_run=NULL WHERE source=? AND lease_run=?', run.source, run.id);
   }
+  /** Prefix rows are the (source, run, ordinal) primary key; retire them by that key in pages of 100. */
+  private clearStagingPrefix(run: Run): void {
+    let after = 0;
+    for (;;) {
+      const page = this.all<{ ordinal: number }>(
+        'SELECT ordinal FROM run_staging_prefix WHERE source=? AND run_id=? AND ordinal>? ORDER BY ordinal LIMIT 100',
+        run.source,
+        run.id,
+        after,
+      );
+      if (!page.length) break;
+      for (const row of page) {
+        this.write(
+          'DELETE FROM run_staging_prefix WHERE source=? AND run_id=? AND ordinal=?',
+          run.source,
+          run.id,
+          row.ordinal,
+        );
+      }
+      if (page.length < 100) break;
+      after = page[page.length - 1]!.ordinal;
+    }
+  }
+  private clearStagingCapture(run: Run): void {
+    this.clearStagingPrefix(run);
+    this.write('DELETE FROM run_staging_checkpoints WHERE source=? AND run_id=?', run.source, run.id);
+  }
   /**
    * Snapshot the compared missing population before the capability is released.
    * One indexed INSERT...SELECT plus one header insert; failure rolls the seal back.
@@ -1104,8 +1131,7 @@ export class RunStore<Projection = BatchStatement[]> {
   }
   clearStagingCheckpoint(run: Run): void {
     this.transaction(() => {
-      this.write('DELETE FROM run_staging_prefix WHERE source=? AND run_id=?', run.source, run.id);
-      this.write('DELETE FROM run_staging_checkpoints WHERE source=? AND run_id=?', run.source, run.id);
+      this.clearStagingCapture(run);
     });
   }
   activeRun(source: string): Run | null {
@@ -1377,8 +1403,7 @@ export class RunStore<Projection = BatchStatement[]> {
           run.source,
           run.id,
         );
-      this.write('DELETE FROM run_staging_prefix WHERE source=? AND run_id=?', run.source, run.id);
-      this.write('DELETE FROM run_staging_checkpoints WHERE source=? AND run_id=?', run.source, run.id);
+      this.clearStagingCapture(run);
       return {
         status,
         prior: g.prior,
