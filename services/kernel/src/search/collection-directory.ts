@@ -3,11 +3,7 @@ import type { CollectionDiscoveryKey, CollectionDiscoveryQuery } from '../librar
 import type { PublicCollectionDiscoveryOperand } from '../library/collection-discovery-summaries.ts';
 import { compareCollectionDiscoveryOperands } from './collection-discovery.ts';
 import type { SearchSortValue } from './cursor.ts';
-import type {
-  CollectionDirectorySelection,
-  DiscoveryOwnerHit,
-  DiscoveryOwnerMetadataSummary,
-} from './discovery.ts';
+import type { CollectionDirectorySelection, DiscoveryOwnerHit, DiscoveryOwnerMetadataSummary } from './discovery.ts';
 
 export type CollectionDirectoryOrder = 'recency' | 'popularity';
 export type CollectionDirectoryRow = Readonly<{

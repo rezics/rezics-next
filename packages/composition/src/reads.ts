@@ -67,10 +67,7 @@ function* walkNodes(registry: CompositionRegistry, document: CompositionDocument
 }
 
 /** Configured-list lookup: registered slots in document order; unknown types and malformed slots are skipped. */
-export function* walkStructuralContent(
-  registry: CompositionRegistry,
-  content: unknown,
-): Generator<CompositionNode> {
+export function* walkStructuralContent(registry: CompositionRegistry, content: unknown): Generator<CompositionNode> {
   const components = new Map(registry.components.map((component) => [component.type, component]));
   function* visit(nodes: unknown): Generator<CompositionNode> {
     if (!Array.isArray(nodes)) return;

@@ -1,10 +1,5 @@
 import { expect, test } from 'bun:test';
-import {
-  planReads,
-  platformRegistry,
-  walkStructuralContent,
-  type CompositionDocument,
-} from '../src/index.ts';
+import { planReads, platformRegistry, walkStructuralContent, type CompositionDocument } from '../src/index.ts';
 
 const heading = (id: string) => ({
   type: 'Heading',

@@ -674,12 +674,7 @@ export function createCollectionPublicationEpisodes(config: {
             )
           ).metadata;
           if (
-            !admitsWorkingPublication(
-              prepared.saved,
-              metadata,
-              actor.accountId,
-              materialization ? 1 : input.revision,
-            )
+            !admitsWorkingPublication(prepared.saved, metadata, actor.accountId, materialization ? 1 : input.revision)
           )
             throw unavailable();
           const identity = await initializeCanonicalCollectionSource(tx, {
