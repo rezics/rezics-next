@@ -9,13 +9,13 @@ exports the receiving, record, operational, shared-work and identity facades; th
 capability. `kernel-history-adapters` implements that capability with native Postgres operations, command execution,
 and Access, Semantic, Search, Zones and Work owner bindings.
 
-Foreign Kernel modules import the declared History application and contract entries. Zones and Semantic account-agents take `ACCOUNT_ROLE_BITS` and `declareCommandHistory` from those entries, not retired `history/contracts.ts` or `history/record.ts` paths. Access keeps compatibility
-Foreign Kernel modules import the declared History application and contract entries. Zones purge and resource
-commands are such consumers: they import the records facade and contract vocabulary, and `kernel-zones` records
-those application and contract modules as allowed adapter-to-application/contract dependencies. Access keeps compatibility
-re-exports at `access/shared-history.ts` and `access/shared-history-work.ts` that resolve to those facades. Native adapters
-import owner facade leaves (`application/composition.ts`, `identity.ts`, `records.ts`, `receiving.ts`, `shared.ts`,
-`operational.ts`) rather than the application barrel, so sibling cycles stay on those public entries. The composition root in
+Foreign Kernel modules import the declared History application and contract entries. Zones purge/resource commands and
+Semantic account-agents consume the records facade and contract vocabulary; kernel-zones declares those application and
+contract dependencies. Access keeps compatibility re-exports at access/shared-history.ts and
+access/shared-history-work.ts that resolve to those facades.
+
+Native adapters import owner facade leaves (`application/composition.ts`, `identity.ts`, `records.ts`, `receiving.ts`,
+`shared.ts`, `operational.ts`) rather than the application barrel, so sibling cycles stay on those public entries. The composition root in
 `composition/history.ts` binds every capability method to its native adapter. Server and worker startup, and the shared
 runtime defaults in `composition/runtime-defaults.ts`, install that composition before use; `composition/preload.ts`
 exposes the same binding through an explicit preload hook used by
@@ -80,6 +80,11 @@ family open until its native producer and closure owner land. The single cleanup
 Semantic's sole Zone lifecycle owner operation is still undelivered. The next owner seam must lock and bind the
 committed account barrier, original Zone owner/transaction custody, current lifecycle/protection state and durable
 source/copy progress before it passes the existing receiving context. See `.temp/continuation/zone-history-semantic.md`.
+History closes the delivered Zone receipt/outbox consumers only when their exact Semantic delivery and receiving holds
+are closed. The complete branch-aware minimizer must still bind the same generation/version and await source
+inventory/pages, copies, released holds and late effects. No new receipt or ACK is adopted. See the
+[Zones cleanup contract](../../../../docs/zones.md#deletion-restoration-withholding-and-durable-cleanup); History
+support does not complete Zone cleanup.
 
 ## Recovered Account identity serializers
 
@@ -561,4 +566,3 @@ The delivered Core lifetime is now bound by the selected adapter and is not a mi
 term. Missing complete partitions still refuse before affected child I/O, and missing
 physical/native enrollment refuses the affected final proof. No complete Account erasure
 or all-copy completion is asserted.
-History closes the delivered Zone receipt/outbox consumers only when their exact Semantic delivery and receiving holds are closed. The complete branch-aware minimizer must still bind the same generation/version and await source inventory/pages, copies, released holds and late effects. No new receipt or ACK is adopted. See the [Zones cleanup contract](../../../../docs/zones.md#deletion-restoration-withholding-and-durable-cleanup); History support does not complete Zone cleanup.

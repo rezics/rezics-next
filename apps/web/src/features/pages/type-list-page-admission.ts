@@ -83,15 +83,56 @@ function nativeSummary(value: unknown, id: string, type: string): value is Exclu
   );
 }
 
-function plannedSearchLimit(read: unknown): number | undefined {
-  if (!isRecord(read) || read.kind !== 'search' || !isRecord(read.body) || !positiveInteger(read.body.limit))
-    return undefined;
-  return read.body.limit;
+function configuredTypes(value: unknown): string[] | undefined {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 8 || !value.every(nativeType)) return undefined;
+  const unique = new Set(value);
+  return unique.size === value.length ? value : undefined;
 }
 
-/** Admit a native TypeList page only when it is a search read at or under its planned limit. */
-export function nativeTypeListPage(read: unknown, body: unknown): NativeTypeListPage | undefined {
-  const limit = plannedSearchLimit(read);
+function plannedTypes(filter: unknown): string[] | undefined {
+  if (!isRecord(filter)) return undefined;
+  // TypeList planning places its configured restriction first, then intersects any authored public filter.
+  const first = Array.isArray(filter.and) ? filter.and[0] : filter;
+  if (!isRecord(first) || !isRecord(first.type)) return undefined;
+  return configuredTypes(first.type.in);
+}
+
+function sameTypes(left: readonly string[], right: readonly string[]): boolean {
+  const rightSet = new Set(right);
+  return left.length === right.length && left.every((type) => rightSet.has(type));
+}
+
+function plannedSearch(read: unknown, configuration: Record<string, unknown>) {
+  if (!isRecord(read) || read.kind !== 'search' || !isRecord(read.body)) return;
+  const types = configuredTypes(configuration.types);
+  const selectedTypes = plannedTypes(read.body.filter);
+  const sort = configuration.sort;
+  const limit = configuration.limit;
+  const paged = configuration.paged;
+  if (
+    !types ||
+    !selectedTypes ||
+    !sameTypes(types, selectedTypes) ||
+    (sort !== 'name' && sort !== 'collections') ||
+    (paged !== undefined && typeof paged !== 'boolean') ||
+    !positiveInteger(limit) ||
+    limit > 24
+  )
+    return;
+  const expectedLimit = paged === true ? Math.min(12, limit) : limit;
+  if (read.body.sort !== sort || read.body.limit !== expectedLimit) return;
+  return { limit: expectedLimit, types: new Set(types) };
+}
+
+/** Admit a complete native Search page only when its descriptor and every row match this TypeList. */
+export function nativeTypeListPage(
+  read: unknown,
+  body: unknown,
+  configuration: Record<string, unknown>,
+): NativeTypeListPage | undefined {
+  const plan = plannedSearch(read, configuration);
+  if (!plan) return undefined;
+  const limit = plan.limit;
   if (
     limit === undefined ||
     !isRecord(body) ||
@@ -107,14 +148,16 @@ export function nativeTypeListPage(read: unknown, body: unknown): NativeTypeList
     if (
       !isRecord(row) ||
       !nativeId(row.id) ||
-      seen.has(row.id.toLowerCase()) ||
       !nativeType(row.type) ||
+      !plan.types.has(row.type) ||
       !nativeLabels(row.labels) ||
       !Object.hasOwn(row, 'summary') ||
       !(row.summary === null || nativeSummary(row.summary, row.id, row.type))
     )
       return undefined;
-    seen.add(row.id.toLowerCase());
+    const identity = row.id.toLowerCase();
+    if (seen.has(identity)) continue;
+    seen.add(identity);
     subjects.push({
       id: row.id,
       type: row.type,

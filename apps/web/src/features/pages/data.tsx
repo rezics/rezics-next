@@ -1,4 +1,5 @@
 import { Members } from './member-list';
+import { ReactionSummary } from './reaction-summary';
 import type { MemberPageTarget } from './member-list-query';
 import {
   pickLanguage,
@@ -1232,6 +1233,7 @@ export const dataComponents = {
   ThreadList: overview.ThreadList,
   ReviewList: overview.ReviewList,
   CollectionList: overview.CollectionList,
+  ReactionSummary,
   Sources: overview.Sources,
   SubjectHeader,
   Statements,

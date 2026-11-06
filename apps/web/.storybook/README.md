@@ -5,6 +5,8 @@ page stories. The UI Storybook is built once into `/ui/` and composed into the s
 During development, the ref uses the UI dev server at `http://localhost:6007`.
 Set `STORYBOOK_UI_URL` to the own-worktree UI origin when using isolated ports; Web's local source remains available
 when the composed catalogue is offline.
+Page-only acceptance sets `STORYBOOK_DISABLE_COMPONENT_REF=1`; it exercises the Web page catalogue without requiring
+the separately served Components Storybook. Ordinary local review keeps the composed reference enabled.
 
 For an isolated worktree dev server, its local `/mcp` connection and component manifest, follow
 [Agent access](../../../docs/development/storybook.md#agent-access). The web preview supplies missing connected-story

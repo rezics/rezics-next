@@ -37,6 +37,9 @@ test('observed Zone TypeList slots skip Search and keep unique native order', as
   };
   const unique = uniqueCanonicalRows(body.subjects);
   expect(unique.map((row) => row.id)).toEqual([book]);
+  expect(admitObservedSearchPage(search, body)?.subjects).toEqual([
+    { id: book, type: 'schema:Book', labels: { en: 'Kokoro' }, summary },
+  ]);
   expect(admitObservedSearchPage(search, { ...body, subjects: unique })?.subjects).toHaveLength(1);
   const seen: string[] = [];
   const page = await readPage({
@@ -72,6 +75,9 @@ test('observed Zone Members slots unique aliases and admit an empty continuation
   };
   const unique = uniqueCanonicalRows(duplicate.members);
   expect(unique).toHaveLength(1);
+  expect(admitObservedMembersPage(members, duplicate)?.members).toEqual([
+    { kind: 'dynamic', subjectId: book, summary },
+  ]);
   expect(admitObservedMembersPage(members, { ...duplicate, members: unique })?.members).toHaveLength(1);
   expect(admitObservedSearchPage(search, { subjects: [], next: null })).toEqual({ subjects: [], next: null });
   expect(admitObservedSearchPage(search, { subjects: [], next: 'next_sparse-2' })).toEqual({

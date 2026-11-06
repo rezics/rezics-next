@@ -113,6 +113,7 @@ export function admitObservedSearchPage(read: PageRead, body: unknown): Observed
     !nativeNext(body.next)
   )
     return;
+  // Raw page size is the producer bound. Duplicate identities keep their first native occurrence after that check.
   if (body.subjects.length > limit) return;
   const seen = new Set<string>();
   const subjects: ObservedSearchPage['subjects'] = [];
@@ -120,7 +121,6 @@ export function admitObservedSearchPage(read: PageRead, body: unknown): Observed
     if (
       !isRecord(row) ||
       !nativeId(row.id) ||
-      seen.has(row.id.toLowerCase()) ||
       !nativeType(row.type) ||
       !nativeLabels(row.labels) ||
       !Object.hasOwn(row, 'summary') ||
@@ -128,7 +128,9 @@ export function admitObservedSearchPage(read: PageRead, body: unknown): Observed
       Object.keys(row).some((key) => key === 'ownerId' || key === 'mounts' || key === 'sources')
     )
       return;
-    seen.add(row.id.toLowerCase());
+    const identity = row.id.toLowerCase();
+    if (seen.has(identity)) continue;
+    seen.add(identity);
     subjects.push({ id: row.id, type: row.type, labels: row.labels, summary: row.summary });
   }
   return { subjects, next: body.next };
@@ -152,14 +154,15 @@ export function admitObservedMembersPage(read: PageRead, body: unknown): Observe
     if (
       !isRecord(row) ||
       !nativeId(row.subjectId) ||
-      seen.has(row.subjectId.toLowerCase()) ||
       (row.kind !== undefined && row.kind !== 'dynamic') ||
       !Object.hasOwn(row, 'summary') ||
       !(row.summary === null || nativeSummary(row.summary, row.subjectId)) ||
       Object.keys(row).some((key) => key === 'ownerId' || key === 'mounts' || key === 'sources')
     )
       return;
-    seen.add(row.subjectId.toLowerCase());
+    const identity = row.subjectId.toLowerCase();
+    if (seen.has(identity)) continue;
+    seen.add(identity);
     members.push({ kind: 'dynamic', subjectId: row.subjectId, summary: row.summary });
   }
   return { members, next: body.next };
