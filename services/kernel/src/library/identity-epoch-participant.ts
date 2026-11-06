@@ -315,6 +315,8 @@ export async function advanceLibraryIdentityNativeScope(
   // locator for the private Library receiving cursor.
   if (key.sourceIdentity.scope === 'public_output')
     return { state: 'unavailable', after, effect: null, work: work.receipt() };
+  // Narrowed here, outside the transaction callbacks, which lose property-path narrowing.
+  const accountId = key.sourceIdentity.accountId;
   if (key.job.epoch <= 0n || identityJobPartition(key.job) !== partitionOf(key.sourceIdentity.route))
     throw stale('Library native scope crossed its admitted source partition');
   const planKey = libraryIdentityPlanKey(key);
@@ -331,7 +333,7 @@ export async function advanceLibraryIdentityNativeScope(
           key.job.epoch.toString(),
           key.sourceIdentity.route,
           key.sourceIdentity.collectionId,
-          key.sourceIdentity.accountId,
+          accountId,
           planKey,
         ],
       )
@@ -369,7 +371,7 @@ export async function advanceLibraryIdentityNativeScope(
         key.job.epoch.toString(),
         key.sourceIdentity.route,
         key.sourceIdentity.collectionId,
-        key.sourceIdentity.accountId,
+        accountId,
         planKey,
       ],
     );
@@ -400,7 +402,7 @@ export async function advanceLibraryIdentityNativeScope(
         key.job.epoch.toString(),
         key.sourceIdentity.route,
         key.sourceIdentity.collectionId,
-        key.sourceIdentity.accountId,
+        accountId,
         planKey,
         afterPage?.effectKey ?? '',
         afterPage?.disposition ?? '',
@@ -852,7 +854,7 @@ export async function stepLibraryIdentityEpochWithSource(
   const { context, work } = source;
   if (routeOf(job.jobId) === null || job.epoch <= 0n) throw new TypeError('Invalid native identity job');
   const deadline = Math.min(context.deadline, workStepDeadline());
-  const saved = await withReadTransaction(pool, (tx) => identityEpochStore.readJob(tx, job));
+  const saved = await withReadTransaction(pool, (tx) => identityEpochStore().readJob(tx, job));
   if (!saved || saved.state !== 'pending') throw stale('Library native receiver requires the pending admitted job');
   const pending = await runCommand(pool, { partition: identityJobPartition(job), deadline }, async (tx) => {
     const result = await tx.query<QueuedEffect>(
