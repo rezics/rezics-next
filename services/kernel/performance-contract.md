@@ -32,8 +32,8 @@ receipt association and selected-admission adapters stay in `kernel-platform` an
 `createKernel` / `createKernelRuntimeDefaults` / `server` / `worker` composition. Product module assembly lives in
 `composition/work-modules.ts`. Compact `domain-composition` tests pin enqueue, registration, selected admission and
 retirement against fake ports; the existing growth-work-client, selected-runtime-native, sdk-transaction-fence,
-sdk-retirement-fence and growth-retention fixtures remain the bounded-work proof. Derived cost stays on the existing
-admitted path.
+sdk-retirement-fence and growth-retention fixtures remain the bounded-work proof. Retention deletion cost is selected
+IDs plus owned payload/FK cascade rows; a selected count alone cannot bound that payload.
 
 ## Semantic domain composition
 

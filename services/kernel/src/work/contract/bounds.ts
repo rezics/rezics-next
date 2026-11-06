@@ -17,6 +17,44 @@ export const WORKFLOW_RETENTION_SCHEDULE_EXPRESSION = '*/10 * * * *';
 export const TERMINAL_WORKFLOW_STATUSES = ['SUCCESS', 'ERROR', 'CANCELLED', 'MAX_RECOVERY_ATTEMPTS_EXCEEDED'] as const;
 
 export const WORKFLOW_RETENTION_SELECTOR_INDEX = 'workflow_retention_selector';
+export const WORKFLOW_RETENTION_START_STEP = 'kernel.workflowRetention.start';
+export const WORKFLOW_RETENTION_BATCH_STEP = 'kernel.workflowRetention.batch';
+export const WORKFLOW_RETENTION_SELECT_TAG = 'work:workflow-retention-select';
+export const WORKFLOW_RETENTION_PAYLOAD_TAG = 'work:workflow-retention-payload';
+export const WORKFLOW_RETENTION_WRITER_FENCE_TABLE = 'workflow_writer_fences';
+export const WORKFLOW_RETENTION_DAY_MS = 86_400_000;
+export const WORKFLOW_RETENTION_SELECT_STATEMENTS = 1;
+export const WORKFLOW_RETENTION_DELETE_CONTROL_STATEMENTS = 2;
+export const WORKFLOW_RETENTION_DELETE_DATA_STATEMENTS = 4;
+export const WORKFLOW_RETENTION_DELETE_STATEMENTS = 6;
+export const WORKFLOW_RETENTION_NONEMPTY_BATCH_STATEMENTS = 7;
+export const WORKFLOW_RETENTION_EMPTY_BATCH_STATEMENTS = 1;
+export const WORKFLOW_RETENTION_BATCH_ATTEMPTS = 3;
+
+export const WORKFLOW_RETENTION_EXPLICIT_DELETE_TABLES = [
+  'workflow_input',
+  'workflow_output',
+  'operation_outputs',
+  'workflow_status',
+] as const;
+
+export const WORKFLOW_RETENTION_CASCADE_TABLES = [
+  'workflow_events',
+  'workflow_events_history',
+  'notifications',
+  'streams',
+] as const;
+
+export const WORKFLOW_RETENTION_PAYLOAD_FAMILIES = [
+  { table: 'workflow_status', key: 'workflow_uuid', deletion: 'explicit' },
+  { table: 'workflow_input', key: 'workflow_uuid', deletion: 'explicit' },
+  { table: 'workflow_output', key: 'workflow_uuid', deletion: 'explicit' },
+  { table: 'operation_outputs', key: 'workflow_uuid', deletion: 'explicit' },
+  { table: 'workflow_events', key: 'workflow_uuid', deletion: 'cascade' },
+  { table: 'workflow_events_history', key: 'workflow_uuid', deletion: 'cascade' },
+  { table: 'notifications', key: 'destination_uuid', deletion: 'cascade' },
+  { table: 'streams', key: 'workflow_uuid', deletion: 'cascade' },
+] as const;
 
 export const SELECTED_ISSUE_DEADLINE_MS = 5_000;
 export const SELECTED_NATIVE_STATEMENT_LIMIT = 64;

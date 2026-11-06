@@ -4,13 +4,22 @@ import { ConfigError } from '../../src/commerce/config.ts';
 import {
   readWorkflowRetentionConfig,
   runWorkflowRetentionSweep,
+  WORKFLOW_RETENTION_BATCH_STEP,
+  WORKFLOW_RETENTION_START_STEP,
   WORKFLOW_RETENTION_WORKFLOW,
   type WorkflowRetentionSdk,
+  type WorkflowRetentionStart,
 } from '../../src/work/retention.ts';
 import { createWorkClient, enqueueWorkIntent } from '../../src/work/client.ts';
 import { WORK_QUEUES } from '../../src/work/queues.ts';
-import { createWorkflowRetentionSelector } from '../../src/work/retention-selector.ts';
+import {
+  createWorkflowRetentionSelector,
+  readWorkflowRetentionFences,
+  readWorkflowRetentionPayload,
+} from '../../src/work/retention-selector.ts';
+import { emptyWorkflowRetentionInventory } from '../../src/work/core/index.ts';
 import { readSdkWorkflowRetirement, retireSdkWorkflowWriters } from '../../src/work/sdk-retirement-fence.ts';
+import { insertRetentionPayload, RETENTION_OWNED_TABLES } from './support/retention-fixture.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -125,35 +134,7 @@ for (const lostResult of [false, true]) {
       workflowIDs.push(workflowID);
       await enqueue(workflowID);
       await setTerminal(workflowID, status, old);
-      await database.query('INSERT INTO dbos.workflow_output (workflow_uuid, output, error) VALUES ($1, $2, NULL)', [
-        workflowID,
-        '"output"',
-      ]);
-      await database.query(
-        `INSERT INTO dbos.operation_outputs (workflow_uuid, function_id, function_name, output)
-         VALUES ($1, 1, 'retention.test.step', '"step"')`,
-        [workflowID],
-      );
-      await database.query('INSERT INTO dbos.workflow_events (workflow_uuid, key, value) VALUES ($1, $2, $3)', [
-        workflowID,
-        'event',
-        '"value"',
-      ]);
-      await database.query(
-        `INSERT INTO dbos.workflow_events_history (workflow_uuid, function_id, key, value)
-         VALUES ($1, 1, 'event', '"history"')`,
-        [workflowID],
-      );
-      await database.query(
-        `INSERT INTO dbos.notifications (destination_uuid, topic, message, serialization)
-         VALUES ($1, 'retention-test', '"message"', 'portable_json')`,
-        [workflowID],
-      );
-      await database.query(
-        `INSERT INTO dbos.streams (workflow_uuid, key, value, "offset", function_id, serialization)
-         VALUES ($1, 'retention-test', '"stream"', 0, 1, 'portable_json')`,
-        [workflowID],
-      );
+      await insertRetentionPayload(database, [workflowID]);
     }
 
     for (const [index, workflowID] of workflowIDs.entries()) {
@@ -162,8 +143,17 @@ for (const lostResult of [false, true]) {
         completedAt: old,
       });
     }
+    expect(await readWorkflowRetentionPayload(database, workflowIDs)).toEqual({
+      workflow_status: 4,
+      workflow_input: 4,
+      workflow_output: 4,
+      operation_outputs: 4,
+      workflow_events: 4,
+      workflow_events_history: 4,
+      notifications: 4,
+      streams: 4,
+    });
     if (lostResult) {
-      // Real SDK deletion commits, but the batch cannot return a result to its checkpoint caller.
       const sdk: WorkflowRetentionSdk = {
         async deleteWorkflows(ids, deleteChildren) {
           expect(deleteChildren).toBe(false);
@@ -181,25 +171,14 @@ for (const lostResult of [false, true]) {
       );
     }
 
+    expect(await readWorkflowRetentionPayload(database, workflowIDs)).toEqual(emptyWorkflowRetentionInventory());
     for (const workflowID of workflowIDs) {
-      for (const table of [
-        'workflow_status',
-        'workflow_input',
-        'workflow_output',
-        'operation_outputs',
-        'workflow_events',
-        'workflow_events_history',
-        'notifications',
-        'streams',
-      ]) {
-        const keyColumn = table === 'notifications' ? 'destination_uuid' : 'workflow_uuid';
-        const result = await database.query(`SELECT 1 FROM dbos.${table} WHERE ${keyColumn} = $1 LIMIT 1`, [
-          workflowID,
-        ]);
+      for (const { table, key } of RETENTION_OWNED_TABLES) {
+        const result = await database.query(`SELECT 1 FROM dbos.${table} WHERE ${key} = $1 LIMIT 1`, [workflowID]);
         expect(result.rowCount, `${table} still owns a row for ${workflowID}`).toBe(0);
       }
     }
-    // Reselection after an uncheckpointed deletion and ordinary replay both find no remaining work.
+    expect(await runWorkflowRetentionSweep(30, client, new Date(), (batch) => batch(), select)).toBe(0);
     expect(await runWorkflowRetentionSweep(30, client, new Date(), (batch) => batch(), select)).toBe(0);
   });
 }
@@ -239,6 +218,7 @@ test('cancellation precedes writer closure and retention deletes only its termin
     (await database.query('SELECT 1 FROM dbos.workflow_input WHERE workflow_uuid = $1', [workflowID])).rowCount,
   ).toBe(0);
   expect(await readSdkWorkflowRetirement(workflowID, client)).toEqual(closure);
+  expect(await readWorkflowRetentionFences(database, [workflowID])).toBe(1);
   for (const value of [child, foreign]) {
     expect(await client.getWorkflow(value)).toBeDefined();
     expect((await database.query('SELECT 1 FROM dbos.workflow_input WHERE workflow_uuid = $1', [value])).rowCount).toBe(
@@ -337,22 +317,7 @@ for (const checkpoint of ['before', 'after'] as const) {
          FROM unnest($1::text[]) AS value`,
         [ids, old, application],
       );
-      // Seed every deletable SDK family, including the three payload tables without FKs.
-      for (const [table, columns, values] of [
-        ['workflow_input', 'inputs', "'[]'"],
-        ['workflow_output', 'output', "'null'"],
-        ['operation_outputs', 'function_id, function_name, output', "1, 'fixture.step', 'null'"],
-        ['workflow_events', 'key, value', "'event', 'null'"],
-        ['workflow_events_history', 'function_id, key, value', "1, 'event', 'null'"],
-        ['notifications', 'topic, message, serialization', "'fixture', 'null', 'portable_json'"],
-        ['streams', 'key, value, "offset", function_id, serialization', "'fixture', 'null', 0, 1, 'portable_json'"],
-      ]) {
-        const key = table === 'notifications' ? 'destination_uuid' : 'workflow_uuid';
-        await database.query(
-          `INSERT INTO dbos.${table} (${key}, ${columns}) SELECT value, ${values} FROM unnest($1::text[]) AS value`,
-          [ids],
-        );
-      }
+      await insertRetentionPayload(database, ids);
       for (const value of [child, recent, foreign]) await enqueue(value);
       await setTerminal(recent, 'SUCCESS', Date.now() - 15 * 86400000);
       await setTerminal(foreign, 'SUCCESS', old);
@@ -378,50 +343,38 @@ for (const checkpoint of ['before', 'after'] as const) {
       const firstOutput = await worker.until('interrupted');
       expect(firstOutput).toContain('deleted:1000');
       const steps = (await client.listWorkflowSteps(sweep))!;
-      const start = steps.find((step) => step.name === 'kernel.workflowRetention.start')!.output as {
-        now: number;
-        retentionDays: number;
-      };
+      const start = steps.find((step) => step.name === WORKFLOW_RETENTION_START_STEP)!.output as WorkflowRetentionStart;
       expect(start.retentionDays).toBe(30);
-      const batches = steps.filter((step) => step.name === 'kernel.workflowRetention.batch');
+      expect(start.applicationName).toBe(application);
+      const batches = steps.filter((step) => step.name === WORKFLOW_RETENTION_BATCH_STEP);
       expect(batches.map((step) => step.output)).toEqual(checkpoint === 'after' ? [1000] : []);
       await worker.stop();
       worker = recoveryWorker(application, 'recover');
       await worker.until('ready');
-      // Launch performs native recovery for this attempt's executor only. No resume,
-      // status rewrite or replacement workflow ID supplies the missing checkpoint.
       expect(await handle.getResult()).toBe(checkpoint === 'after' ? 1001 : 1);
       const recoveredOutput = await worker.until('deleted:1');
       const cutoffs = [...`${firstOutput}${recoveredOutput}`.matchAll(/selection:([^\s]+)/g)].map((match) => match[1]);
       expect(new Set(cutoffs)).toEqual(new Set([String(start.now - 30 * 86400000)]));
+      const applications = [...`${firstOutput}${recoveredOutput}`.matchAll(/application:([^\s]+)/g)].map(
+        (match) => match[1],
+      );
+      expect(new Set(applications)).toEqual(new Set([application]));
       expect((await client.getWorkflow(sweep))?.workflowID).toBe(sweep);
       expect(
         (await client.listWorkflowSteps(sweep))!
-          .filter((step) => step.name === 'kernel.workflowRetention.batch')
+          .filter((step) => step.name === WORKFLOW_RETENTION_BATCH_STEP)
           .map((step) => step.output),
       ).toEqual(checkpoint === 'after' ? [1000, 1] : [1]);
-      for (const table of [
-        'workflow_status',
-        'workflow_input',
-        'workflow_output',
-        'operation_outputs',
-        'workflow_events',
-        'workflow_events_history',
-        'notifications',
-        'streams',
-      ]) {
-        const key = table === 'notifications' ? 'destination_uuid' : 'workflow_uuid';
-        expect(
-          (await database.query(`SELECT 1 FROM dbos.${table} WHERE ${key}=ANY($1) LIMIT 1`, [ids])).rowCount,
-          table,
-        ).toBe(0);
-      }
+      expect(await readWorkflowRetentionPayload(database, ids)).toEqual(emptyWorkflowRetentionInventory());
       expect(await readSdkWorkflowRetirement(ids[0]!, client)).toEqual(closure);
+      expect(await readWorkflowRetentionFences(database, [ids[0]!])).toBe(1);
       for (const value of [child, recent, foreign]) expect(await client.getWorkflow(value)).toBeDefined();
       expect((await client.getWorkflow(child))?.status).toBe('ENQUEUED');
+      const frozenNow = new Date(start.now);
+      expect(await runWorkflowRetentionSweep(30, client, frozenNow, (batch) => batch(), select, application)).toBe(0);
+      expect(await runWorkflowRetentionSweep(30, client, frozenNow, (batch) => batch(), select, application)).toBe(0);
     } finally {
       await worker?.stop();
-      // Delete only this attempt's workflows and queue, including a failed sweep.
       await client.deleteWorkflows([...ids, sweep, child, recent, foreign], false);
       await client.deleteQueue(application);
     }

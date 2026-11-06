@@ -5,6 +5,7 @@ import { DBOS } from '@dbos-inc/dbos-sdk';
 import { createWorkClient } from '../../../src/work/client.ts';
 import { WORK_QUEUES } from '../../../src/work/queues.ts';
 import type { WorkContext } from '../../../src/work/registry.ts';
+import { WORKFLOW_RETENTION_SELECT_TAG } from '../../../src/work/contract/bounds.ts';
 import { workflowRetentionWorkModule } from '../../../src/work/retention.ts';
 
 const [application, mode] = process.argv.slice(2);
@@ -19,8 +20,6 @@ const pause = async () => {
   await new Promise(() => {});
 };
 
-// Run the production registration and durable steps. Only discovery's application
-// and schedule installation are isolated; no fixture worker polls shared queues.
 const isolated = new Proxy(client, {
   get(target, property) {
     if (property === 'applicationName') return application;
@@ -42,10 +41,12 @@ const originalQuery = pool.query.bind(pool);
 pool.query = ((query: unknown, values?: unknown) => {
   const config = typeof query === 'string' ? { text: query, values } : (query as { text?: string; values?: unknown });
   const text = String(config.text ?? '');
-  if (text.includes('work:workflow-retention-select') || text.includes('ORDER BY completed_at, workflow_uuid')) {
+  if (text.includes(WORKFLOW_RETENTION_SELECT_TAG) || text.includes('ORDER BY completed_at, workflow_uuid')) {
     const params = Array.isArray(config.values) ? config.values : Array.isArray(values) ? values : [];
     const cutoff = params.find((value) => Number(value) > 1_000_000_000_000);
-    console.log(`selection:${String(cutoff)}`);
+    const named = params.find((value) => value === application) ?? application;
+    const limit = params.find((value) => value === 1000) ?? 1000;
+    console.log(`selection:${String(cutoff)} application:${String(named)} limit:${String(limit)}`);
     if (mode === 'after' && ++selections === 2) return pause() as never;
   }
   return values === undefined ? originalQuery(query as never) : originalQuery(query as never, values as never);
