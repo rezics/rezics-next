@@ -1,6 +1,5 @@
 import type { CommunityAmbient } from './ambient.ts';
 import { registerDiscoveryWork } from './discovery-register.ts';
-import { createSpaceDiscoveryEffect } from './space-discovery.ts';
 import { publishNativeSpaceDiscoveryWitness } from './space-discovery-publisher.ts';
 import {
   initializeSpaceDiscoveryDependencies,
@@ -19,17 +18,16 @@ import {
 import { SPACE_DISCOVERY_INVALIDATED } from './space-discovery-events.ts';
 import { maintainRealmMemberCounts } from './member-count.ts';
 import { PARTITIONS, partitionOf } from '../route/route.ts';
-import { createPartyLocatorEffect } from './party-locator.ts';
-import { createRevisionLocatorEffect } from './revision-locator.ts';
-import { createCommunityAccountErasureEffect, registerCommunityAccountErasureWork } from './account-erasure.ts';
+import { registerCommunityAccountErasureWork } from './account-erasure.ts';
+import { communityDeclaredEffects } from './adapters/effects.ts';
 import { createHash } from 'node:crypto';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { MembershipWorkInput, MembershipWorkResult } from '@rezics/auth-contract';
 import { enqueueMembership } from '../access/membership-work.ts';
 import { AuthenticationError, type Access } from '../request/access.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
+import type { Effect } from '../events/effects.ts';
 import type { WorkContext, WorkModule } from '../work/registry.ts';
-import { createMemberLocatorEffect } from './member-locator.ts';
 import { createFollowCommands } from '../library/follows.ts';
 import { REALM_JOIN_WORKFLOW, REALM_LEAVE_WORKFLOW, type RealmMembershipWorkInput } from './join.ts';
 
@@ -63,8 +61,7 @@ const followAccess: Access = {
 };
 
 /** Registers the Realm join and leave workflows. Accounts must already be registered. */
-export function registerCommunityWork({ pool, client, clock, addEffects }: WorkContext): void {
-  addEffects([createMemberLocatorEffect(pool)]);
+export function registerCommunityWork({ pool, client, clock }: WorkContext): void {
   const follows = createFollowCommands({ pool, access: followAccess, clock });
   const enqueueJoin = DBOS.registerStep(
     async (input: RealmMembershipWorkInput, childId: string) => {
@@ -110,7 +107,13 @@ export function createCommunityWorkModule(ambient: CommunityAmbient): WorkModule
   return {
     name: 'community',
     async register(context) {
-      context.addEffects([createRevisionLocatorEffect(context.pool), createSpaceDiscoveryEffect(context.pool)]);
+      context.addEffects(
+        communityDeclaredEffects({
+          pool: context.pool,
+          clock: context.clock,
+          client: context.client,
+        }) as Effect[],
+      );
       await registerSpaceDiscoveryDependencies(context);
       registerCommunityWork(context);
       // Use the existing maintenance queue and native command segments. DBOS
@@ -164,7 +167,6 @@ export function createCommunityWorkModule(ambient: CommunityAmbient): WorkModule
       ]);
       registerCommunityAccountErasureWork(context, ambient);
       await registerDiscoveryWork(context, ambient);
-      context.addEffects([createPartyLocatorEffect(context.pool, context.clock), createCommunityAccountErasureEffect(context)]);
     },
   };
 }

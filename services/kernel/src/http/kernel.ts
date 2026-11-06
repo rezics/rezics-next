@@ -7,6 +7,7 @@ import { readCommerceMoneyPolicy, type CommerceMoneyPolicy } from '../commerce/m
 import type { CurrentConsentReader } from '../access/auth-consent.ts';
 import { createContentEditionBuyerFactReader } from '../commerce/content-edition-buyer-fact.ts';
 import { MAX_CONSENTED_SCOPES } from '@rezics/auth-contract';
+import { ensureCommunityApplication } from '../community/adapters/index.ts';
 import { createCommunityHttpDeclaration, type CommunityHttpDeclaration } from '../community/http-declaration.ts';
 import {
   assertReceiptKeyRing,
@@ -406,6 +407,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
   const communityAmbient = {
     deadlineNow: dependencies.deadlineNow ?? systemCommunityAmbient.deadlineNow,
   };
+  ensureCommunityApplication(communityAmbient);
   const communityDeclaration = createCommunityDeclaration(communityAmbient);
   const communityHttp = createCommunityHttpDeclaration(communityAmbient);
   const tokens = dependencies.tokens ?? {
@@ -444,7 +446,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     if (dependencies.workClient) return Promise.resolve(bindKernelExecution(dependencies.workClient));
     const url = dependencies.pool.options.connectionString;
     if (!url) return Promise.reject(new Error('Work client requires the pool connection string'));
-    opened ??= createWorkClient(url).then(bindKernelExecution);
+    opened ??= createWorkClient(url, dependencies.pool).then(bindKernelExecution);
     return opened;
   };
   const subjects = subjectRoutes(

@@ -46,7 +46,8 @@ existing `access.account` profile. Point actions without one exact target type r
 `services/kernel/src/access/policy-core.ts` imports the public `@rezics/access` entry and projects the live
 `ActionCatalogue`, resolved resource roles/types and exact `globalReach` registration. Action resource types that
 did not resolve for the mounted subset are dropped before compilation, so a focused Access catalogue cannot name
-an unknown type. Point/page checks and
+an unknown type. Point type inference uses the complete declaration before that subset, so two declared types with
+one resolved type stay non-unique; a page still supplies its exact type. Point/page checks and
 `prepareReadDecisions().decide` use this adapter only when the exact action/type pair is registered. The existing
 `permission-check.sql` statement supplies qualified local and optional Global primitive grants, denials, assignment
 validity and deadline validity for those profiles; its final SQL booleans are reserved for profiles whose exact

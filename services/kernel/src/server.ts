@@ -164,7 +164,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
     await setupSemantic(pool, bundledRelease);
     await setupContent(pool);
     await setupPresentation(pool);
-    workClient = createWorkClient(config.databaseUrl);
+    workClient = createWorkClient(config.databaseUrl, pool);
     // Observe startup rejection immediately; the webhook and stop still receive it.
     void workClient.catch(() => {});
     const client = workClient;

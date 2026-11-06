@@ -3,6 +3,7 @@ import { createWriteRateLimiter, type WriteRateLimiter } from '../access/write-r
 import { createAccess, type AccessConfig } from '../access/index.ts';
 import type { AuthenticationConfig } from '../access/authenticate.ts';
 import { composeAccessApplication } from './access.ts';
+import { composeCommunityApplication } from './community.ts';
 import { composeContentApplication } from './content.ts';
 import { composeWorkApplication } from './work.ts';
 import { bindOrdinaryContentLifecycle, nativeContentLifecycle } from '../semantic/adapters/index.ts';
@@ -76,6 +77,7 @@ export function createKernelRuntimeDefaults(overrides: KernelRuntimeOverrides = 
   composeAccessApplication();
   composeWorkApplication();
   composeContentApplication();
+  composeCommunityApplication();
   bindOrdinaryContentLifecycle(nativeContentLifecycle());
   const env = overrides.env ?? process.env;
   const tokens = overrides.tokens ?? readTokenKeys(env);
