@@ -137,7 +137,8 @@ export function createDiscoveryIndexer(pool: Pool, projection: DiscoveryProjecti
                   pool,
                   event as Parameters<typeof spaceDiscoveryInvalidation>[1],
                 );
-                if (invalidation?.target.kind === 'space') spaces.add(invalidation.target.id);
+                if (invalidation?.target.kind === 'space' && subjectPartition(invalidation.target.id) === partition)
+                  spaces.add(invalidation.target.id);
               }
               const changedSubject = subjectChanged(event);
               const changedAccount = [
