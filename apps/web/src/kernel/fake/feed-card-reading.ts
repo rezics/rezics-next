@@ -1,4 +1,5 @@
 import type { FeedItem } from '../../features/pages/home-feed-read';
+import { discoveryCollectionCard } from './discovery-collection-card';
 import { homeFeedStoryPage } from './home-feed-stories';
 
 /** Prepared native-shaped reading examples, not evidence of native selection or pending branch delivery. */
@@ -89,6 +90,11 @@ export function preparedFeedCardReading(long = false): FeedItem[] {
         id: 'prepared-collection',
         title: 'Prepared: short novels',
         description: 'Prepared public description. No private Collection rules are supplied.',
+        card: discoveryCollectionCard({
+          id: 'prepared-collection',
+          title: 'Prepared: short novels',
+          description: 'Prepared public description. No private Collection rules are supplied.',
+        }),
       },
       destination: { kind: 'collection', id: 'prepared-collection', title: 'Prepared: short novels' },
     },

@@ -10,6 +10,7 @@ import {
   type FeedPage,
   type HomeFeedResult,
 } from '../src/features/pages/home-feed-read';
+import { discoveryCollectionCard } from '../src/kernel/fake/discovery-collection-card';
 import { locales, setLocale } from '../src/paraglide/runtime.js';
 import { m } from '../src/paraglide/messages.js';
 
@@ -24,7 +25,12 @@ const collection: FeedItem = {
   source: 'discovery',
   occurredAt: null,
   key: { owner: 'commerce', kind: 'collection', route: 0, id },
-  summary: { id, title: 'Curated books', description: 'A careful selection <script>.' },
+  summary: {
+    id,
+    title: 'Curated books',
+    description: 'A careful selection <script>.',
+    card: discoveryCollectionCard({ id, title: 'Curated books', description: 'A careful selection <script>.' }),
+  },
   destination: { kind: 'collection', id, title: 'Curated books' },
 };
 const space: FeedItem = {
