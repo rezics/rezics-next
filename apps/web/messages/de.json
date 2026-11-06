@@ -1958,6 +1958,7 @@
   "thread_review_cite_vote": "Meine aktuelle Bewertung zitieren ({score}/10)",
   "thread_review_details_heading": "Details zur Rezension",
   "thread_review_details_selected_subject": "Rezension zu: {title}",
+  "thread_review_citation_absent": "Für diesen Beitrag wurde keine Bewertung zitiert.",
   "thread_review_details_citation_help": "Optional. Die zitierte Bewertung bleibt erhalten, auch wenn du deine Bewertung später änderst.",
   "thread_review_duplicate": "Du hast für dieses Thema bereits eine aktive Rezension in diesem Forum.",
   "thread_review_existing": "Vorhandene Rezension öffnen",

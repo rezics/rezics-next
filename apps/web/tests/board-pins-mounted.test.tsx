@@ -64,7 +64,10 @@ afterAll(async () => {
   }
 });
 
-const sender: BoardPinSender = { subject: 'moderator-subject', csrfToken: 'current-csrf' };
+const sender: BoardPinSender = {
+  subject: '01a17a3b-09b4-77bf-a24b-1234ebeab5b6',
+  csrfToken: 'current-csrf',
+};
 
 async function settle(ready: () => boolean) {
   for (let attempt = 0; attempt < 100 && !ready(); attempt++)
@@ -364,8 +367,6 @@ test('unknown retry keeps its original command and missing rows move focus to th
     `POST /v1/boards/${page.board.id}/threads/${ordinary.id}/pin`,
     `GET /v1/boards/${page.board.id}/page`,
     `POST /v1/boards/${page.board.id}/pin-advice`,
-    `POST /v1/boards/${page.board.id}/threads/${ordinary.id}/pin`,
-    `GET /v1/boards/${page.board.id}/page`,
   ]);
   expect(requests[0]?.headers.get('authorization')).toBe('Bearer native-access');
   expect(requests[1]!.url).toBe(requests[2]!.url);

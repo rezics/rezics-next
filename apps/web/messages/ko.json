@@ -1958,6 +1958,7 @@
   "thread_review_cite_vote": "현재 투표 인용 ({score}/10)",
   "thread_review_details_heading": "리뷰 상세 정보",
   "thread_review_details_selected_subject": "리뷰 대상: {title}",
+  "thread_review_citation_absent": "이 게시물에는 인용된 평점이 없습니다.",
   "thread_review_details_citation_help": "선택 사항입니다. 나중에 투표를 변경해도 인용한 평점은 그대로 유지됩니다.",
   "thread_review_duplicate": "이 항목과 게시판에는 이미 공개된 리뷰가 있습니다.",
   "thread_review_existing": "기존 리뷰 열기",
