@@ -38,6 +38,7 @@ import { workerTestEnv } from '../support/worker-env.ts';
 // application processes; each child owns and removes its private loader files.
 const compiledSql = new Map<string, { source: string; code: string }>();
 async function sqlLoader() {
+  Reflect.get(globalThis, Symbol.for('rezics.import.media.flush-sql-cache'))?.();
   // A host has already compiled the same migrated SQL before it starts its
   // worker. Carry only that compiler output into the child's private loader.
   if (process.env.MEDIA_SQL_CACHE) {
@@ -57,20 +58,26 @@ async function sqlLoader() {
     await writeFile(
       loader,
       `import { readFileSync, renameSync, writeFileSync } from 'node:fs';
-import compiler from ${JSON.stringify(import.meta.resolve('reylo/jest'))};
+import reylo from ${JSON.stringify(import.meta.resolve('reylo/esbuild'))};
 const path = ${JSON.stringify(cache)};
 const compiled = new Map(JSON.parse(readFileSync(path, 'utf8')));
-Bun.plugin({ name: 'native-reylo-cache', setup(build) {
-  build.onLoad({ filter: /\\.sql$/ }, ({ path: file }) => {
-    const source = readFileSync(file, 'utf8');
-    const previous = compiled.get(file);
-    if (previous?.source === source) return { loader: 'js', contents: previous.code };
-    const { code } = compiler.process(source, file, { supportsStaticESM: true, configString: '' });
-    compiled.set(file, { source, code });
-    writeFileSync(path + '.pending', JSON.stringify([...compiled]));
-    renameSync(path + '.pending', path);
-    return { loader: 'js', contents: code };
-  });
+Reflect.set(globalThis, Symbol.for('rezics.import.media.flush-sql-cache'), () => {
+  writeFileSync(path + '.pending', JSON.stringify([...compiled]));
+  renameSync(path + '.pending', path);
+});
+// The asynchronous build adapter keeps compilation off Reylo's synchronous
+// worker bridge while Bun is loading this process's application graph.
+reylo().setup({ onLoad(options, compile) {
+  Bun.plugin({ name: 'native-reylo-cache', setup(build) {
+    build.onLoad(options, async (args) => {
+      const source = readFileSync(args.path, 'utf8');
+      const previous = compiled.get(args.path);
+      if (previous?.source === source) return { loader: 'js', contents: previous.code };
+      const result = await compile(args);
+      compiled.set(args.path, { source, code: result.contents });
+      return { loader: 'js', contents: result.contents };
+    });
+  } });
 } });
 `,
     );
@@ -172,8 +179,12 @@ export async function launchBoundaryProcess(mode: 'host' | 'worker', env: Record
   } catch (error) {
     child.kill();
     await child.exited;
+    await reading;
+    await errors;
     await sql.close();
-    throw error;
+    throw new Error(`${error instanceof Error ? error.message : String(error)}\n${output}\n${errorOutput}`, {
+      cause: error,
+    });
   } finally {
     clearTimeout(startupTimer);
   }
@@ -1116,6 +1127,9 @@ if (import.meta.main && process.argv.some((arg) => arg.startsWith('--media-'))) 
         }
       },
     });
+    // Flush once at the process handoff, rather than serializing the growing
+    // compilation map after every imported SQL module.
+    Reflect.get(globalThis, Symbol.for('rezics.import.media.flush-sql-cache'))?.();
     console.log(`MEDIA_READY ${server.url.origin}`);
   } catch (error) {
     initialized.resolve(host);
