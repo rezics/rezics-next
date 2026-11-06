@@ -30,8 +30,20 @@
 // inactive file cache, and free disk. Each run has a nested slice shared with its containers, MemoryMax (default 6 GiB,
 // host memoryPerRunGiB) and MemorySwapMax 0; its cpu.stat and memory.peak report CPU seconds, average cores and peak
 // memory. A host with memoryMaxGiB 28 and 6 GiB per run therefore takes at most 4 concurrent runs.
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash, randomUUID } from 'node:crypto';
 import type { LifecycleHostControl } from './check-lifecycle-child.ts';
+import {
+  acquireHostControl,
+  releaseHostControl,
+  rsyncRemoteShell,
+  sshControlDirectory,
+  sshControlOptions,
+  sshExecutable,
+  type HostControlLease,
+} from './check-ssh.ts';
+
+export { controlSocketDirectoryPath, sshControlDirectory, unixListenerFits } from './check-ssh.ts';
 import {
   appendFileSync,
   chmodSync,
@@ -112,6 +124,8 @@ const REMOTE_CHECK_PRODUCER_CONTROL_FILES_JSON = JSON.stringify(REMOTE_CHECK_PRO
 const REMOTE_CHECK_PRODUCER_CONTROL_DIRECTORIES_JSON = JSON.stringify(REMOTE_CHECK_PRODUCER_CONTROL_DIRECTORIES);
 const REMOTE_CHECK_RUN_SCRATCH_PATHS_JSON = JSON.stringify(REMOTE_CHECK_RUN_SCRATCH_PATHS);
 const REMOTE_CHECK_SUPERVISOR_MARKER_SCHEMA_JSON = JSON.stringify(CHECK_HOST_SUPERVISOR_MARKER_SCHEMA);
+/** Source and result manifests hash an empty directory as this digest so the transferred tree compares equal. */
+export const EMPTY_DIRECTORY_DIGEST = createHash('sha256').update('directory\0').digest('hex');
 
 type ExpectedSourceManifest = NonNullable<RemoteCheck['expectedSourceManifest']>;
 
@@ -175,9 +189,10 @@ export function validateExpectedSourceManifest(manifest: ExpectedSourceManifest,
       !Number.isInteger(entry.mode) ||
       entry.mode < 0 ||
       entry.mode > 0o7777 ||
-      (entry.kind !== 'file' && entry.kind !== 'link') ||
+      (entry.kind !== 'file' && entry.kind !== 'link' && entry.kind !== 'directory') ||
       !/^[a-f0-9]{64}$/.test(entry.sha256) ||
       (entry.kind === 'file' && entry.target !== null) ||
+      (entry.kind === 'directory' && (entry.target !== null || entry.sha256 !== EMPTY_DIRECTORY_DIGEST)) ||
       (entry.kind === 'link' &&
         (typeof entry.target !== 'string' ||
           Buffer.byteLength(entry.target) > 4096 ||
@@ -246,6 +261,8 @@ export type RemoteCheck = {
   hosts: Host[];
   /** An optional narrowing of the configured performance pool. */
   allowedHosts?: string[];
+  /** Hosts skipped for this invocation; they remain in the configured pool for other callers. */
+  excludedHosts?: string[];
   workspace: string;
   cwd?: string;
   command: string[];
@@ -271,7 +288,13 @@ export type RemoteCheck = {
     sourceSha256: string;
     head: string;
     indexTree: string;
-    entries: Array<{ path: string; mode: number; kind: 'file' | 'link'; sha256: string; target: string | null }>;
+    entries: Array<{
+      path: string;
+      mode: number;
+      kind: 'file' | 'link' | 'directory';
+      sha256: string;
+      target: string | null;
+    }>;
     deleted: string[];
   };
   /** Bounded retry count. Check-run invocations use one physical run and reconcile that identity after loss. */
@@ -711,16 +734,13 @@ export async function transportLifecycleControl(
 ): Promise<string> {
   if (performanceHosts([host]).length === 0) throw new Error('lifecycle: unapproved control host');
   const script = await lifecycleControlScript(run, request);
-  const connection = randomUUID();
-  try {
-    const result = await boundedSsh(host, connection, script, 'lifecycle control', 5_000);
+  return withSshControl(process.cwd(), async () => {
+    const result = await boundedSsh(host, host.name, script, 'lifecycle control', 5_000);
     if (result.code !== 0)
       throw new Error(`lifecycle: control transport exited ${result.code}: ${result.output.slice(0, 512)}`);
     if (Buffer.byteLength(result.output) > 16_384) throw new Error('lifecycle: oversized control response');
     return result.output;
-  } finally {
-    await closeControlMaster(host, connection);
-  }
+  });
 }
 const SLICE = 'rezics-check.slice';
 const SLOT_BUSY = 75;
@@ -813,6 +833,13 @@ function configuredTimeout(value: number | undefined, envName: string, fallback:
 
 function transferTimeout(options: Pick<RemoteCheck, 'transferTimeoutMs'>): number {
   return configuredTimeout(options.transferTimeoutMs, 'REMOTE_CHECK_TRANSFER_TIMEOUT_MS', DEFAULT_TRANSFER_TIMEOUT_MS);
+}
+
+/** SSH command steps use ConnectTimeout, not the rsync no-progress watchdog. */
+const SSH_COMMAND_TIMEOUT_FLOOR_MS = 15_000;
+
+function sshCommandTimeout(options: Pick<RemoteCheck, 'transferTimeoutMs'>): number {
+  return Math.max(transferTimeout(options), SSH_COMMAND_TIMEOUT_FLOOR_MS);
 }
 
 function controlProbeTimeout(options: RemoteCheck): number {
@@ -995,52 +1022,29 @@ function quote(word: string): string {
   return /^[\w@%+=:,./-]+$/.test(word) ? word : `'${word.replaceAll("'", `'\\''`)}'`;
 }
 
-export function controlSocketDirectoryPath(
-  runtimeDirectory: string | undefined,
-  uid: number | undefined,
-  fallbackId = process.pid,
-): string {
-  return runtimeDirectory ? join(runtimeDirectory, 'rezics-ssh') : `/tmp/rezics-ssh-${uid ?? fallbackId}`;
+const sshControlContext = new AsyncLocalStorage<{ directory: string; leases: HostControlLease[] }>();
+
+function boundSshDirectory(workspace = process.cwd()): string {
+  return sshControlContext.getStore()?.directory ?? sshControlDirectory(workspace);
 }
 
-function controlSocketDirectory(): string {
-  const getuid = process.getuid;
-  if (typeof getuid !== 'function') throw new Error('remote-check: SSH control directories require a Unix user id');
-  const uid = getuid.call(process);
-  const directory = controlSocketDirectoryPath(process.env.XDG_RUNTIME_DIR, uid);
-  mkdirSync(directory, { recursive: true, mode: 0o700 });
-  const info = lstatSync(directory);
-  if (!info.isDirectory() || info.uid !== uid) {
-    throw new Error(`remote-check: SSH control directory is not a user-owned directory: ${directory}`);
+/** Every SSH and rsync path uses the host ControlMaster; connectionId/standalone arguments are ignored. */
+const sshOptions = (host: Host, _connectionId?: string, _standalone = false): string[] =>
+  sshControlOptions(host, boundSshDirectory());
+
+function rshOptions(host: Host, connectionId?: string): string {
+  return rsyncRemoteShell(host, boundSshDirectory());
+}
+
+async function withSshControl<T>(workspace: string, work: () => Promise<T>): Promise<T> {
+  const directory = sshControlDirectory(workspace);
+  const store = { directory, leases: [] as HostControlLease[] };
+  try {
+    return await sshControlContext.run(store, work);
+  } finally {
+    for (const lease of store.leases.splice(0)) releaseHostControl(lease);
   }
-  if ((info.mode & 0o777) !== 0o700) chmodSync(directory, 0o700);
-  return directory;
 }
-
-const sshOptions = (host: Host, connectionId?: string, standalone = false): string[] => [
-  '-i',
-  host.identity,
-  '-o',
-  'IdentitiesOnly=yes',
-  '-o',
-  'BatchMode=yes',
-  '-o',
-  'ConnectTimeout=15',
-  '-o',
-  'ServerAliveInterval=15',
-  '-o',
-  'ServerAliveCountMax=4',
-  ...(standalone
-    ? ['-o', 'ControlMaster=no', '-o', 'ControlPath=none']
-    : [
-        '-o',
-        'ControlMaster=auto',
-        '-o',
-        'ControlPersist=10m',
-        '-o',
-        `ControlPath=${join(controlSocketDirectory(), connectionId ? `${connectionId}-%C` : '%C')}`,
-      ]),
-];
 
 /** Reports the resources the next check would share with, falling back to host memory when the slice is unreadable. */
 function probeScript(host: Host): string {
@@ -1240,7 +1244,7 @@ exit 0`;
 async function reclaimSliceMemory(host: Host, bytes: number): Promise<void> {
   if (!Number.isSafeInteger(bytes) || bytes < 1) return;
   try {
-    const child = Bun.spawn(['ssh', ...sshOptions(host, undefined, true), host.address, reclaimScript(bytes)], {
+    const child = Bun.spawn([sshExecutable(), ...sshOptions(host), host.address, reclaimScript(bytes)], {
       stdin: 'ignore',
       stdout: 'ignore',
       stderr: 'ignore',
@@ -3208,6 +3212,7 @@ def lifetime():
         pass
     reason = None
     stopped_at = None
+    descendants_seen = None
     packages = []
     diagnostics = None
     while True:
@@ -3254,7 +3259,10 @@ def lifetime():
             if not remaining:
                 break
             if reason is None:
-                reason = 'owned-descendants'
+                if descendants_seen is None:
+                    descendants_seen = now
+                elif now - descendants_seen >= 0.25:
+                    reason = 'owned-descendants'
         time.sleep(0.01)
     try: resources.finish()
     except Exception: pass
@@ -3403,13 +3411,14 @@ def safe_source_path(path):
             len(path.encode())<=1024 and all(part not in ('','.','..') for part in path.split('/')))
 def reserved_source_path(path):
     return any(path==name or path.startswith(name+'/') or name.startswith(path+'/') for name in control_names)
+empty_directory_digest=hashlib.sha256(b'directory\x00').hexdigest()
 for entry in sorted(entries,key=lambda item:item['path']):
     path=entry['path']
     if not safe_source_path(path): raise SystemExit('source manifest contains an unsafe path')
     if reserved_source_path(path): raise SystemExit('source manifest collides with a reserved producer control: '+path)
-    if type(entry['mode']) is not int or entry['mode']<0 or entry['mode']>0o7777 or entry['kind'] not in ('file','link') or not re.fullmatch(r'[a-f0-9]{64}',str(entry['sha256'])):
+    if type(entry['mode']) is not int or entry['mode']<0 or entry['mode']>0o7777 or entry['kind'] not in ('file','link','directory') or not re.fullmatch(r'[a-f0-9]{64}',str(entry['sha256'])):
         raise SystemExit('source manifest entry identity is invalid: '+path)
-    if (entry['kind']=='file' and entry['target'] is not None) or (entry['kind']=='link' and
+    if (entry['kind']=='file' and entry['target'] is not None) or (entry['kind']=='directory' and (entry['target'] is not None or entry['sha256']!=empty_directory_digest)) or (entry['kind']=='link' and
             (not isinstance(entry['target'],str) or len(entry['target'].encode())>4096 or '\x00' in entry['target'] or
              hashlib.sha256(entry['target'].encode()).hexdigest()!=entry['sha256'])):
         raise SystemExit('source manifest link or file identity is invalid: '+path)
@@ -3444,6 +3453,10 @@ for entry in sorted(entries,key=lambda item:item['path']):
         if entry['kind']!='link' or entry['target']!=target or hashlib.sha256(target.encode()).hexdigest()!=entry['sha256']:
             raise SystemExit('source link mismatch: '+path)
         digest.update(('link\x00'+target+'\x00').encode())
+    elif stat.S_ISDIR(info.st_mode):
+        if entry['kind']!='directory' or os.listdir(absolute) or entry['sha256']!=empty_directory_digest:
+            raise SystemExit('source empty directory mismatch: '+path)
+        digest.update(('directory\x00'+empty_directory_digest+'\x00').encode())
     else:
         raise SystemExit('unsupported source input: '+path)
 for path in manifest['deleted']:
@@ -3472,6 +3485,8 @@ for current,dirs,files in os.walk(root,followlinks=False):
         if full.is_symlink():
             add_actual_path(relative_path)
             dirs.remove(name)
+        elif not os.listdir(full) and relative_path in expected_paths:
+            add_actual_path(relative_path)
     for name in files:
         full=Path(current)/name
         rel=full.relative_to(root).as_posix()
@@ -4497,7 +4512,19 @@ function parseProbe(output: string): HostProbe | null {
   };
 }
 
-async function probeHost(host: Host, uploadedDirectory?: string): Promise<HostProbe | null> {
+type HostProbeAttempt = { probe: HostProbe | null; error?: string };
+
+function probeErrorLine(stdout: string, stderr: string, code: number | null): string {
+  const line = `${stderr}\n${stdout}`
+    .split(/\r?\n/)
+    .map((entry) => entry.trim())
+    .find(Boolean);
+  if (line) return line;
+  if (code === null) return 'probe timed out';
+  return `exit ${code}`;
+}
+
+async function probeHost(host: Host, uploadedDirectory?: string): Promise<HostProbeAttempt> {
   const placementHeartbeat = uploadedDirectory
     ? `# Keep this uploaded placement alive while admission waits; a missing workspace must be uploaded again.
 [ -d ${quote(uploadedDirectory)} ] || exit 75
@@ -4505,15 +4532,27 @@ touch ${quote(`${uploadedDirectory}/.alive`)} || exit 75
 `
     : '';
   const child = Bun.spawn(
-    ['ssh', ...sshOptions(host, undefined, true), host.address, placementHeartbeat + probeScript(host)],
+    [sshExecutable(), ...sshOptions(host), host.address, placementHeartbeat + probeScript(host)],
     {
       stdin: 'ignore',
       stdout: 'pipe',
-      stderr: 'ignore',
+      stderr: 'pipe',
     },
   );
-  const [code, output] = await Promise.all([child.exited, new Response(child.stdout).text()]);
-  return code === 0 ? parseProbe(output) : null;
+  const output = Promise.all([
+    new Response(child.stdout).text(),
+    child.stderr instanceof ReadableStream ? new Response(child.stderr).text() : Promise.resolve(''),
+  ]);
+  const code = await within(16_000, child.exited);
+  if (code === null) {
+    await stopAndReap(child);
+    const [stdout, stderr] = await output;
+    return { probe: null, error: probeErrorLine(stdout, stderr, null) };
+  }
+  const [stdout, stderr] = await output;
+  if (code !== 0) return { probe: null, error: probeErrorLine(stdout, stderr, code) };
+  const probe = parseProbe(stdout);
+  return probe ? { probe } : { probe: null, error: probeErrorLine(stdout, stderr, code) };
 }
 
 function sessionLease(host: Host, holder: Bun.Subprocess<'pipe', 'pipe', 'ignore'>): SessionLease {
@@ -4565,7 +4604,7 @@ async function takeSession(
   step = 'slot take',
 ): Promise<SessionLease | null> {
   if (signal.aborted) throw new Aborted();
-  const holder = Bun.spawn(['ssh', ...sshOptions(host, connectionId), host.address, script], {
+  const holder = Bun.spawn([sshExecutable(), ...sshOptions(host, connectionId), host.address, script], {
     stdin: 'pipe',
     stdout: 'pipe',
     stderr: 'ignore',
@@ -4728,17 +4767,24 @@ async function rankedHosts(
   const probes = await Promise.all(
     hosts.map(async (host) => ({
       host,
-      probe: await probeHost(
+      result: await probeHost(
         host,
         uploadedPlacement?.host.address === host.address ? uploadedPlacement.directory : undefined,
       ),
     })),
   );
-  if (signal.aborted) throw new Aborted();
   const skipped: Array<{ host: Host; probe: HostProbe }> = [];
   for (const entry of probes) {
-    const probe = entry.probe;
-    if (probe === null) continue;
+    const probe = entry.result.probe;
+    if (probe === null) {
+      const reason = `${entry.host.name}: ${entry.result.error ?? 'no probe response'}`;
+      loggedSkips.set(entry.host.name, reason);
+      if (!loggedSkipLines.has(entry.host.name)) {
+        console.error(`remote-check: skipped ${reason}`);
+        loggedSkipLines.add(entry.host.name);
+      }
+      continue;
+    }
     const limit = probe.sliceProcessors * CHECK_HOST_MAX_LOAD_PER_PROCESSOR;
     const reason =
       probe.load > limit
@@ -4760,13 +4806,14 @@ async function rankedHosts(
       loggedSkipLines.add(entry.host.name);
     }
   }
+  if (signal.aborted) throw new Aborted();
   const ranked = probes
-    .filter((entry): entry is { host: Host; probe: HostProbe } => entry.probe !== null)
-    .filter(({ host, probe }) => !skipped.some(({ host: skippedHost }) => skippedHost.name === host.name))
-    .map(({ host, probe }) =>
+    .filter((entry): entry is { host: Host; result: { probe: HostProbe } } => entry.result.probe !== null)
+    .filter(({ host }) => !skipped.some(({ host: skippedHost }) => skippedHost.name === host.name))
+    .map(({ host, result }) =>
       rankHost(
         host,
-        probe,
+        result.probe,
         slots,
         estimateMs,
         gate,
@@ -4820,9 +4867,16 @@ type HostProvider = () => Host[];
 type Placement = Pick<Host, 'name' | 'address' | 'identity'>;
 
 /** Reads once per admission round and keeps the last complete valid configuration through partial rewrites. */
-function liveHosts(initial: Host[], file?: string, requested?: readonly string[]): HostProvider {
+function liveHosts(
+  initial: Host[],
+  file?: string,
+  requested?: readonly string[],
+  excluded: readonly string[] = [],
+): HostProvider {
   const allowed = requested === undefined ? undefined : new Set(requested);
-  const eligible = (hosts: Host[]) => performanceHosts(hosts).filter(({ name }) => !allowed || allowed.has(name));
+  const skipped = new Set(excluded);
+  const eligible = (hosts: Host[]) =>
+    performanceHosts(hosts).filter(({ name }) => (!allowed || allowed.has(name)) && !skipped.has(name));
   let lastValid = eligible(initial);
   let reportedInvalidRewrite = false;
   const available = () => {
@@ -5097,8 +5151,9 @@ async function acquire(
           .join(', ')
       : 'no responding hosts';
     const reasons = [...skippedHosts.values()];
+    const reservationGiB = (slots * memoryReservationBytes) / 2 ** 30;
     console.error(
-      `remote-check: every check slot is busy; waiting for a free one (${state}); configured ${waitingConfiguration}; priority ${priorityClass}${reasons.length ? `; skipped ${reasons.join('; ')}` : ''}`,
+      `remote-check: every check slot is busy; waiting for a free one (${state}); configured ${waitingConfiguration}; priority ${priorityClass}; reservation ${reservationGiB} GiB${reasons.length ? `; skipped ${reasons.join('; ')}` : ''}`,
     );
   };
   const announceWait = (ranked: RankedHost[]): void => {
@@ -5427,7 +5482,7 @@ async function boundedSsh(
   step: string,
   timeoutMs: number,
 ): Promise<{ code: number; output: string }> {
-  const child = Bun.spawn(['ssh', ...sshOptions(host, connectionId), host.address, script], {
+  const child = Bun.spawn([sshExecutable(), ...sshOptions(host, connectionId), host.address, script], {
     stdin: 'ignore',
     stdout: 'pipe',
     stderr: 'pipe',
@@ -5445,39 +5500,25 @@ async function boundedSsh(
   return { code, output: await output };
 }
 
-async function closeControlMaster(host: Host, connectionId: string): Promise<void> {
-  const child = Bun.spawn(['ssh', '-O', 'exit', ...sshOptions(host, connectionId), host.address], {
-    stdin: 'ignore',
-    stdout: 'ignore',
-    stderr: 'ignore',
-  });
-  if ((await within(1_000, child.exited)) === null) await stopAndReap(child);
+async function closeControlMaster(host: Host, _connectionId?: string): Promise<void> {
+  // Host masters persist for concurrent callers. ControlPersist reaps idle sockets; a completed run must not
+  // `-O exit` a master other runs still use.
+  void host;
 }
 
 /** Verifies a selected host's own master before any upload or run work uses it. */
-async function probeControl(host: Host, initialId: string, timeoutMs: number): Promise<string> {
-  let connectionId = initialId;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    try {
-      const result = await boundedSsh(
-        host,
-        connectionId,
-        `# REMOTE_CHECK_CONTROL_PROBE\nprintf 'REMOTE_CHECK_CONTROL_OK\\n'`,
-        'control probe',
-        timeoutMs,
-      );
-      if (result.code === 0 && result.output.includes('REMOTE_CHECK_CONTROL_OK')) return connectionId;
-      throw new RemoteTransportError(host.name, 'control probe', result.code || REMOTE_TRANSPORT_FAILURE);
-    } catch (error) {
-      if (attempt === 1) {
-        const code = error instanceof RemoteTransportError ? error.code : REMOTE_TRANSPORT_FAILURE;
-        throw new RemoteTransportError(host.name, 'control probe', code, false);
-      }
-      await closeControlMaster(host, connectionId);
-      connectionId = randomUUID().slice(0, 8);
-    }
+async function probeControl(host: Host, _initialId: string, timeoutMs: number): Promise<string> {
+  const store = sshControlContext.getStore();
+  const directory = boundSshDirectory();
+  try {
+    const lease = await acquireHostControl(host, directory, timeoutMs);
+    store?.leases.push(lease);
+    return host.name;
+  } catch (error) {
+    const code = error instanceof RemoteTransportError ? error.code : REMOTE_TRANSPORT_FAILURE;
+    const detail = (error instanceof Error ? error.message : String(error)).replace(/^remote-check: /, '');
+    throw new RemoteTransportError(host.name, 'control probe', code, false, detail);
   }
-  throw new RemoteTransportError(host.name, 'control probe', REMOTE_TRANSPORT_FAILURE);
 }
 
 type FinishedRsync = { code: number; bytesSent?: number; vanishedFiles: number };
@@ -5796,6 +5837,7 @@ def visit(full, path, info, selected):
         size = 0
         kind = 'directory'
         digest = hashlib.sha256(b'directory\\0').hexdigest()
+        # Empty directory leaves are first-class manifest members, matching local source inventory.
     elif stat.S_ISREG(info.st_mode):
         size = info.st_size
         if info.st_nlink != 1:
@@ -5873,7 +5915,7 @@ async function copyReturns(
   if (paths.length === 0) return { schema: 1, status: 'empty', entries: [], missing: [], failures: [] };
   for (const path of paths) assertReturnPath(path);
   const probe = Bun.spawn(
-    ['ssh', ...sshOptions(host, connectionId), host.address, returnsProbe(directory, paths, true)],
+    [sshExecutable(), ...sshOptions(host, connectionId), host.address, returnsProbe(directory, paths, true)],
     { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' },
   );
   const transferLimit = transferTimeout(options);
@@ -5970,15 +6012,15 @@ async function copyReturns(
   const sync = Bun.spawn(
     [
       'rsync',
-      '-dpt',
-      '--no-recursive',
+      '-rpt',
+      '--dirs',
       '--no-links',
       '--info=progress2',
       '--mkpath',
       '--from0',
       '--files-from=-',
       '-e',
-      ['ssh', ...sshOptions(host, connectionId)].map(quote).join(' '),
+      rshOptions(host, connectionId),
       `${host.address}:${directory}/`,
       `${resolve(options.workspace)}/`,
     ],
@@ -6005,14 +6047,19 @@ async function copyReturns(
   }
   for (const item of manifest) {
     const destination = resolve(options.workspace, item.path);
-    const stats = lstatSync(destination);
     safeOutputTreePath(options.workspace, item.path);
-    if (stats.isSymbolicLink() || (stats.isFile() && stats.nlink !== 1))
-      throw new Error(`remote-check: returned output became a link: ${item.path}`);
     if (item.kind === 'directory') {
-      if (!stats.isDirectory() || readdirSync(destination).length !== 0)
+      if (!existsSync(destination)) mkdirSync(destination, { recursive: true, mode: 0o700 });
+      const stats = lstatSync(destination);
+      if (stats.isSymbolicLink() || !stats.isDirectory())
+        throw new Error(`remote-check: returned empty directory differs from its manifest: ${item.path}`);
+      for (const child of readdirSync(destination)) rmSync(join(destination, child), { recursive: true, force: true });
+      if (readdirSync(destination).length !== 0 || item.sha256 !== EMPTY_DIRECTORY_DIGEST)
         throw new Error(`remote-check: returned empty directory differs from its manifest: ${item.path}`);
     } else {
+      const stats = lstatSync(destination);
+      if (stats.isSymbolicLink() || (stats.isFile() && stats.nlink !== 1))
+        throw new Error(`remote-check: returned output became a link: ${item.path}`);
       if (!stats.isFile() || stats.size !== item.size)
         throw new Error(`remote-check: returned file differs from its manifest: ${item.path}`);
       const digest = createHash('sha256')
@@ -6114,7 +6161,8 @@ async function uploadRun(
     throw new Error('remote-check: generic source evidence requires both its fingerprint and manifest');
   if (options.expectedSourceManifest)
     validateExpectedSourceManifest(options.expectedSourceManifest, options.expectedSourceSha256);
-  const base = await baseState(host, connectionId, transferLimit);
+  const sshTimeout = sshCommandTimeout(options);
+  const base = await baseState(host, connectionId, sshTimeout);
   if (signal.aborted) throw new Aborted();
   let localGitStage: string | undefined;
   let sourceManifestFile: string | undefined;
@@ -6179,7 +6227,7 @@ async function uploadRun(
             connectionId,
             fetchCheckGitScript(publication as CheckGitPublication, directory, `${ROOT}/check-git.git`),
             'GitHub fetch',
-            transferLimit,
+            sshTimeout,
           );
           if (result.code === CHECK_GIT_RUN_IDENTITY_IN_USE_EXIT) {
             rejectedIdentity = true;
@@ -6203,7 +6251,7 @@ async function uploadRun(
               connectionId,
               `rm -f -- ${overlay.removed.map((file) => quote(`${directory}/${file}`)).join(' ')}`,
               'Git workspace deletions',
-              transferLimit,
+              sshTimeout,
             );
             if (deleted.code !== 0) throw new Error('check-git: host workspace deletion failed');
           }
@@ -6222,7 +6270,7 @@ async function uploadRun(
                 connectionId,
                 `rm -rf -- ${quote(directory)}`,
                 'Git fallback cleanup',
-                transferLimit,
+                sshTimeout,
               );
               if (cleared.code !== 0) throw new Error('remote-check: Git fallback cleanup failed');
             } catch {
@@ -6267,7 +6315,7 @@ async function uploadRun(
         '--from0',
         '--files-from=-',
         '-e',
-        ['ssh', ...sshOptions(host, connectionId)].map(quote).join(' '),
+        rshOptions(host, connectionId),
         `${resolve(options.workspace)}/`,
         `${host.address}:${directory}/`,
       ],
@@ -6305,7 +6353,7 @@ async function cleanupPreparedRun(prepared: PreparedRun): Promise<RemoteCleanupR
     try {
       const cleanup = Bun.spawn(
         [
-          'ssh',
+          sshExecutable(),
           ...sshOptions(prepared.host, prepared.connectionId),
           prepared.host.address,
           cleanupScript(prepared.id, prepared.directory),
@@ -6354,7 +6402,12 @@ async function stopPreparedRun(prepared: PreparedRun): Promise<void> {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       const child = Bun.spawn(
-        ['ssh', ...sshOptions(prepared.host, prepared.connectionId), prepared.host.address, stopRunScript(prepared.id)],
+        [
+          sshExecutable(),
+          ...sshOptions(prepared.host, prepared.connectionId),
+          prepared.host.address,
+          stopRunScript(prepared.id),
+        ],
         { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' },
       );
       const [code, output] = await boundedTextChild(
@@ -6488,6 +6541,22 @@ export async function reconcileRemoteRun(
     controlProbeTimeoutMs?: number;
   },
   signal: AbortSignal = new AbortController().signal,
+): Promise<RemoteCheckSettlement> {
+  return withSshControl(options.workspace, () => reconcileRemoteRunOwned(options, signal));
+}
+
+async function reconcileRemoteRunOwned(
+  options: {
+    hosts: readonly Host[];
+    physical: { host: string; run: string };
+    workspace: string;
+    returns?: string[];
+    expectedSourceSha256?: string;
+    allowedHosts?: string[];
+    transferTimeoutMs?: number;
+    controlProbeTimeoutMs?: number;
+  },
+  signal: AbortSignal,
 ): Promise<RemoteCheckSettlement> {
   const { host: hostName, run: runId } = options.physical;
   if (!new RegExp(CHECK_HOST_NAME_PATTERN).test(hostName) || !/^[a-zA-Z0-9-]{1,96}$/.test(runId))
@@ -6742,7 +6811,7 @@ async function runLeased(
       ),
     );
     const launch = () =>
-      Bun.spawn(['ssh', ...sshOptions(host, connectionId), host.address, envelope.command], {
+      Bun.spawn([sshExecutable(), ...sshOptions(host, connectionId), host.address, envelope.command], {
         stdin: envelope.stdin,
         stdout: 'inherit',
         stderr: 'inherit',
@@ -6754,7 +6823,7 @@ async function runLeased(
     let heartbeatStopped = false;
     const heartbeat = setInterval(() => {
       if (!heartbeatStopped) {
-        Bun.spawn(['ssh', ...sshOptions(host, connectionId), host.address, heartbeatScript(directory)], {
+        Bun.spawn([sshExecutable(), ...sshOptions(host, connectionId), host.address, heartbeatScript(directory)], {
           stdin: 'ignore',
           stdout: 'ignore',
           stderr: 'ignore',
@@ -6985,18 +7054,20 @@ async function withOutputTreeSource(options: RemoteCheck): Promise<RemoteCheck> 
 }
 
 export async function remoteCheck(options: RemoteCheck, signal: AbortSignal): Promise<number> {
-  options = await withOutputTreeSource(options);
-  effectiveRunLifetimeMs(options.estimateMs, options.maxMs);
-  assertExecutionAllowed(options, signal);
-  admitRemoteRuntime(options); // Local runtime verification precedes placement/upload/admission, never a held host slot.
-  const files = workspaceFiles(options.workspace);
-  const result = await withExecutionCancellation(options, signal, (ownedSignal) =>
-    withCheckGitTransfer(options, (transfer) =>
-      runWithTransportRetries(options, options.hosts, files, ownedSignal, false, undefined, transfer),
-    ),
-  );
-  if (result === null) throw new Error('remote-check: no check host answered');
-  return result;
+  return withSshControl(options.workspace, async () => {
+    options = await withOutputTreeSource(options);
+    effectiveRunLifetimeMs(options.estimateMs, options.maxMs);
+    assertExecutionAllowed(options, signal);
+    admitRemoteRuntime(options); // Local runtime verification precedes placement/upload/admission, never a held host slot.
+    const files = workspaceFiles(options.workspace);
+    const result = await withExecutionCancellation(options, signal, (ownedSignal) =>
+      withCheckGitTransfer(options, (transfer) =>
+        runWithTransportRetries(options, options.hosts, files, ownedSignal, false, undefined, transfer),
+      ),
+    );
+    if (result === null) throw new Error('remote-check: no check host answered');
+    return result;
+  });
 }
 
 function assertExecutionAllowed(options: RemoteCheck, signal: AbortSignal): void {
@@ -7034,7 +7105,7 @@ async function runWithTransportRetries(
   const slots = options.slots ?? 1;
   const memoryReservationBytes =
     options.memoryGiB === undefined ? CHECK_SLOT_MEMORY_BYTES : options.memoryGiB * 2 ** 30;
-  const hostsForRound = liveHosts(initialHosts, options.hostsFile, options.allowedHosts);
+  const hostsForRound = liveHosts(initialHosts, options.hostsFile, options.allowedHosts, options.excludedHosts);
   const failedHosts = new Set<string>();
   let transportAttempts = 0;
   let lastFailure: RemoteTransportError | undefined;
@@ -7133,25 +7204,29 @@ async function runWithTransportRetries(
 
 /** Compatibility entry point that now fails closed instead of handing unavailable work to a local caller. */
 export async function remoteCheckUnlessUnreachable(options: RemoteCheck, signal: AbortSignal): Promise<number> {
-  options = await withOutputTreeSource(options);
-  effectiveRunLifetimeMs(options.estimateMs, options.maxMs);
-  assertExecutionAllowed(options, signal);
-  admitRemoteRuntime(options);
-  const files = workspaceFiles(options.workspace);
-  const result = await withExecutionCancellation(options, signal, (ownedSignal) =>
-    withCheckGitTransfer(options, (transfer) =>
-      runWithTransportRetries(options, options.hosts, files, ownedSignal, true, options.answered, transfer),
-    ),
-  );
-  if (result === null) throw new Error('remote-check: no check host answered');
-  return result;
+  return withSshControl(options.workspace, async () => {
+    options = await withOutputTreeSource(options);
+    effectiveRunLifetimeMs(options.estimateMs, options.maxMs);
+    assertExecutionAllowed(options, signal);
+    admitRemoteRuntime(options);
+    const files = workspaceFiles(options.workspace);
+    const result = await withExecutionCancellation(options, signal, (ownedSignal) =>
+      withCheckGitTransfer(options, (transfer) =>
+        runWithTransportRetries(options, options.hosts, files, ownedSignal, true, options.answered, transfer),
+      ),
+    );
+    if (result === null) throw new Error('remote-check: no check host answered');
+    return result;
+  });
 }
 
 /** Tries each available host once without waiting for a slot. */
 export async function tryRemoteCheck(options: RemoteCheck, signal: AbortSignal): Promise<TryOnce> {
   admitRemoteRuntime(options);
-  return withExecutionCancellation(options, signal, (ownedSignal) =>
-    withCheckGitTransfer(options, (transfer) => tryRemoteCheckOwned(options, ownedSignal, transfer)),
+  return withSshControl(options.workspace, () =>
+    withExecutionCancellation(options, signal, (ownedSignal) =>
+      withCheckGitTransfer(options, (transfer) => tryRemoteCheckOwned(options, ownedSignal, transfer)),
+    ),
   );
 }
 
@@ -7169,7 +7244,7 @@ async function tryRemoteCheckOwned(
   const memoryReservationBytes =
     options.memoryGiB === undefined ? CHECK_SLOT_MEMORY_BYTES : options.memoryGiB * 2 ** 30;
   const files = workspaceFiles(options.workspace);
-  const hostsForRound = liveHosts(options.hosts, options.hostsFile, options.allowedHosts);
+  const hostsForRound = liveHosts(options.hosts, options.hostsFile, options.allowedHosts, options.excludedHosts);
   const initial = hostsForRound();
   const ranked = await rankedHosts(
     initial,
@@ -7258,6 +7333,7 @@ function parse(argv: string[]): RemoteCheck {
   let gate = false;
   let returns: string[] | undefined;
   let allowedHosts: string[] | undefined;
+  let excludedHosts: string[] | undefined;
   const rest = [...argv];
   while (rest[0]?.startsWith('--') && rest[0] !== '--') {
     const flag = rest.shift();
@@ -7279,6 +7355,14 @@ function parse(argv: string[]): RemoteCheck {
       allowedHosts = value.split(',');
       if (allowedHosts.length === 0 || allowedHosts.some((name) => !new RegExp(CHECK_HOST_NAME_PATTERN).test(name)))
         throw new Error('--allowed-hosts contains an invalid host name');
+      continue;
+    }
+    if (flag === '--exclude-hosts') {
+      const value = rest.shift();
+      if (!value) throw new Error('--exclude-hosts needs a comma-separated host list');
+      excludedHosts = value.split(',');
+      if (excludedHosts.length === 0 || excludedHosts.some((name) => !new RegExp(CHECK_HOST_NAME_PATTERN).test(name)))
+        throw new Error('--exclude-hosts contains an invalid host name');
       continue;
     }
     if (flag === '--gate') {
@@ -7333,6 +7417,7 @@ function parse(argv: string[]): RemoteCheck {
   return {
     hosts: readHosts(hostsFile),
     ...(allowedHosts === undefined ? {} : { allowedHosts }),
+    ...(excludedHosts === undefined ? {} : { excludedHosts }),
     ...(cancellation === undefined ? {} : { cancellation }),
     completed: cliPhysicalReceipt,
     workspace,

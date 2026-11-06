@@ -39,6 +39,14 @@ import {
   registerArtifactDeclarations,
   writeArtifactCatalog,
 } from '../../../scripts/check-artifacts.ts';
+import {
+  dockerNetworkArgs,
+  isolatedPostgresSocketDir,
+  ownerProcessIdentity,
+  postgresPublishArgs,
+  resolvePostgresListenUrl,
+  type PostgresListen,
+} from '../../../scripts/compiler-database.ts';
 
 const directory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const pid = String(process.pid);
@@ -46,6 +54,7 @@ let container = '';
 let searchContainer = '';
 let reyloDirectory = '';
 let analysisDispose: (() => void) | undefined;
+let postgresListen: PostgresListen | undefined;
 let failedFileOutputs: string[] = [];
 const POSTGRES_MAX_CONNECTIONS = 500;
 const POSTGRES_CONNECTION_SAMPLE_MS = 250;
@@ -754,14 +763,16 @@ export function formatConnectionRunSummary(
 }
 
 export function startPostgresContainer(dockerCommand: DockerCommand = docker): string {
+  const network = dockerNetworkArgs();
   return dockerCommand([
     'run',
     '-d',
+    '--rm',
+    ...network,
     ...cgroupArgs(),
     '--label',
     `rezics.kernel.check.pid=${pid}`,
-    '-p',
-    '127.0.0.1::5432',
+    ...postgresPublishArgs(Number(pid), network),
     // Keep PostgreSQL data on disk instead of consuming memory that the check slot admission does not reserve.
     '--mount',
     `type=volume,destination=/var/lib/postgresql,volume-label=rezics.kernel.check.pid=${pid}`,
@@ -811,6 +822,7 @@ export function cleanupStale(kind: 'check' | 'derived' = 'check', dockerCommand:
       } catch {
         // A concurrent cleanup may already have removed it.
       }
+      rmSync(isolatedPostgresSocketDir(Number(owner)), { recursive: true, force: true });
     }
   }
 }
@@ -819,6 +831,9 @@ export function cleanup(
   containers: readonly string[] = [searchContainer, container],
   dockerCommand: DockerCommand = docker,
 ): void {
+  postgresListen?.stop();
+  postgresListen = undefined;
+  rmSync(isolatedPostgresSocketDir(Number(pid)), { recursive: true, force: true });
   for (const id of containers) {
     if (!id) continue;
     try {
@@ -917,12 +932,11 @@ async function main(): Promise<void> {
   if (process.env.KERNEL_CHECK_SKIP_STALE_CLEANUP !== '1' && !process.env.KERNEL_CHECK_ON_REMOTE) cleanupStale();
   let url = '';
   let env: NodeJS.ProcessEnv = process.env;
-  await withCommandPhase('database-image', () => {
+  await withCommandPhase('database-image', async () => {
+    process.stdout.write(`Kernel check database owner ${ownerProcessIdentity()}\n`);
     container = startPostgresContainer();
-    const portOutput = docker(['port', container, '5432/tcp']);
-    const match = portOutput.match(/127\.0\.0\.1:(\d+)/);
-    if (!match?.[1]) fail(`Could not determine the test database port: ${portOutput}`);
-    url = `postgres://rezics:rezics@127.0.0.1:${match[1]}/rezics?sslmode=disable`;
+    postgresListen = await resolvePostgresListenUrl(container, Number(pid));
+    url = postgresListen.url;
     process.env.KERNEL_DATABASE_CONTAINER = container;
     env = { ...process.env, DATABASE_URL: url, KERNEL_DATABASE_CONTAINER: container };
   });

@@ -76,3 +76,13 @@ original-work admission against fake ports; the existing native membership growt
 proof. Contract/core/application load no downstream implementations. Native adapters are bound by ordinary
 `createKernel`/`server`/`worker` composition. The split adds no query or extra statement; cost stays the existing
 producer declarations composed through `admitOriginalWork` and Kind-audience work vectors.
+Decision: pin this increment's user-visible check-infrastructure behaviour with the existing remote-check, check-ssh,
+compiler-database, Kernel script and page-data unit files rather than a second suite. Observed bounds: one OpenSSH
+ControlMaster per configured host under a short owned `$XDG_RUNTIME_DIR/rezics-ssh` (relocated under `/tmp` when
+unix_listener would overflow); throwaway PostgreSQL `--rm` plus owner-pid cleanup; `container:<id>` isolated-stack
+attachment with an independent TCP-to-Unix forwarder; migrations wait for in-container `pg_isready` and a protocol
+reply, not a TCP accept that EOFs; empty-directory manifests hash `directory\0`; page-data boot keeps the first
+substantive error after Task `$ ` echoes.
+Decision: Management walk setup idle-in-transaction and Access-deadline termination is received through that same
+throwaway/isolated-stack database lifetime. Content keeps the launcher, stack and cleanup. Original walks remain
+open. Driver main versus canonical publication is a control-plane owner item.

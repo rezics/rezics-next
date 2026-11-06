@@ -22,6 +22,7 @@ import {
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import {
   Aborted,
+  EMPTY_DIRECTORY_DIGEST,
   executionCancellation,
   executionCancellationFromEnvironment,
   parseRemotePhysicalRunReceipt,
@@ -383,6 +384,8 @@ async function inputFingerprint(
       assertContainedSymlink(root, absolute, target);
       hash.update(`link\0${target}\0`);
     } else if (stat.isFile()) hash.update(`file\0${await hashFile(absolute)}\0`);
+    else if (stat.isDirectory() && readdirSync(absolute).length === 0)
+      hash.update(`directory\0${EMPTY_DIRECTORY_DIGEST}\0`);
     else throw new CheckRunUnavailable(`check-run: unsupported source input type: ${file}`);
   }
   for (const file of gitList(root, ['ls-files', '--deleted', '-z'])) {
@@ -807,7 +810,7 @@ async function copyReturnedOutputs(
         result.entries.push({
           path: stagePath,
           size: 0,
-          sha256: createHash('sha256').update('directory\0').digest('hex'),
+          sha256: EMPTY_DIRECTORY_DIGEST,
           kind: 'directory',
         });
       }
@@ -989,6 +992,8 @@ async function buildCandidateSourceManifest(
       });
     } else if (stats.isFile()) {
       entries.push({ path, mode, kind: 'file', sha256: await hashFile(absolute), target: null });
+    } else if (stats.isDirectory() && readdirSync(absolute).length === 0) {
+      entries.push({ path, mode, kind: 'directory', sha256: EMPTY_DIRECTORY_DIGEST, target: null });
     } else {
       throw new CheckRunUnavailable(`check-run: unsupported source manifest input type: ${path}`);
     }
@@ -1005,6 +1010,7 @@ async function buildCandidateSourceManifest(
   for (const entry of entries) {
     hash.update(`${entry.path}\0${entry.mode}\0`);
     if (entry.kind === 'file') hash.update(`file\0${entry.sha256}\0`);
+    else if (entry.kind === 'directory') hash.update(`directory\0${entry.sha256}\0`);
     else hash.update(`link\0${entry.target}\0`);
   }
   for (const path of deleted) hash.update(`deleted\0${path}\0`);
