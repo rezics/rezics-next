@@ -311,23 +311,28 @@ test('mixed native failures present unavailable before denied and never enable n
 test('thrown setup yields a serializable unavailable result rather than an escaped transport failure', async () => {
   const leaked = 'private-setup-token';
   const headers: string[] = [];
+  // Armed only around the handler call: some runtimes evaluate a mock factory at registration, so a throwing getter would fire too early.
+  let armed = false;
   mock.module('@tanstack/react-start/server', () => ({
     getRequest() {
-      throw new Error(leaked);
+      if (armed) throw new Error(leaked);
+      return new Request('https://site.example.test/en/account/rename');
     },
     setResponseHeader(name: string, value: string) {
       headers.push(`${name}: ${value}`);
-    },
-  }));
-  mock.module('cloudflare:workers', () => ({
-    get env() {
-      throw new Error(leaked);
+      if (armed) throw new Error(leaked);
     },
   }));
   const setup = serializeAccountRenameResult(accountRenameSetupFailure(new Error(leaked)));
   expect(setup).toEqual({ context: null, failures: [{ kind: 'unavailable', status: null }] });
   expect(JSON.stringify(setup)).not.toContain(leaked);
-  const result = JSON.parse(JSON.stringify(await runAccountRenameHandler()));
+  let result: unknown;
+  armed = true;
+  try {
+    result = JSON.parse(JSON.stringify(await runAccountRenameHandler()));
+  } finally {
+    armed = false;
+  }
   expect(result).toEqual(setup);
   expect(JSON.stringify(result)).not.toContain(leaked);
   expect(headers).toEqual(['cache-control: private, no-store']);
