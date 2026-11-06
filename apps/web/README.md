@@ -131,6 +131,11 @@ Real guarantee: children of live owned members are sampled every 5 to 50 ms, and
 close. A descendant created and reparented between two samples is not recorded unless it stays in the root's group while
 the root still leads it. Full custody needs a launch-time mechanism the launcher owns; this module does not claim it.
 
+Decision: a dev server reads its Worker bindings once from `WEB_TEST_WORKER_BINDINGS` when Vite starts, and they stay
+fixed for that server. A running server is shared only with a request whose bindings are compatible; a private server
+reuses the shared run server's Vite cache directory when one is advertised. The production entry reads no fixture
+header and imports no test runtime, so no request header can inject origin, API or Auth bindings.
+
 Browser tests wait for `html[data-hydrated]` before interacting with a page.
 Browser tests start the dev server through `tests/support/dev-server.ts`, whose errors name the phase that failed; a test never imports another test file.
 Subject page reads and public collections work without JavaScript; Library writes use JavaScript and stay disabled until the page hydrates.
