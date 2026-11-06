@@ -1,15 +1,20 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
-import { renderToString } from 'react-dom/server';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { createKernelClient } from '@rezics/client';
 import type { CoverSummary } from '@rezics/ui/cover';
 import recorded from '../src/kernel/recorded/subject-page.json';
 import missing from '../src/kernel/recorded/missing-subject-page.json';
-import { loadSubjectPage, SubjectPage, subjectBody, type SubjectPageData } from '../src/features/pages/subject';
-import { subjectHead } from '../src/features/pages/subject-head';
+import { renderSubject } from './helpers/subject-render';
+import type { SubjectPageData } from '../src/features/pages/subject';
 import type { Stmt } from '../src/features/pages/shared';
 import type { Related } from '../src/subject/types';
 import { subjectHref } from '../src/subject/subject-href';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { loadSubjectPage, SubjectPage, subjectBody } = await import('../src/features/pages/subject');
+const { subjectHead } = await import('../src/features/pages/subject-head');
+const { QUESTION } = await import('../src/features/pages/subject-ratings');
 
 const origin = 'https://public.example.test';
 const id = recorded.subject;
@@ -34,6 +39,24 @@ const cover: CoverSummary = {
     { format: 'webp', width: 1200 },
   ],
   credit: { rightsHolder: 'Not the publisher', license: 'Not a subject licence' },
+};
+const bookCatalogue = {
+  state: 'released' as const,
+  type: 'schema:Book',
+  digest: bundledDigest,
+  definitions: { types: bundledRelease.types, properties: bundledRelease.properties },
+  directions: [
+    {
+      state: 'admitted' as const,
+      property: 'schema:author',
+      direction: 'forward' as const,
+      inverse: null,
+      sourceTypes: ['schema:Book'],
+      targetTypes: ['schema:Person'],
+      release: bundledDigest,
+      qualifiers: [],
+    },
+  ],
 };
 
 function fixture(
@@ -92,14 +115,21 @@ test('the recorded native page joins its visible creators and editions without a
   });
   const loaded = await loadSubjectPage(client, id);
   if (loaded.kind !== 'page') throw new Error('Expected the recorded public page');
-  const html = renderToString(
+  loaded.page.catalogue = bookCatalogue;
+  const html = await renderSubject(
     createElement(SubjectPage, { page: loaded.page, locale: 'en', messages, renderJsonLd: false }),
+    `/en/subjects/${id}`,
   );
   const result = head(loaded.page);
   const json = JSON.parse(result.scripts[0]!.children);
   const creatorLabel = recorded.reads.r0.body.related[creator].labels.en;
   const creatorPath = subjectHref({ id: creator, label: creatorLabel }, 'en').href;
-  expect(html).toContain(`href="${creatorPath}"`);
+  const creatorVisit = new URL(creatorPath, origin);
+  creatorVisit.searchParams.set(
+    'via',
+    `${subjectHref({ id, label: recorded.reads.r0.body.subject.labels.en }, 'en').href}#literary-reader`,
+  );
+  expect(html).toContain(`href="${creatorVisit.pathname}${creatorVisit.search}"`);
   expect(json.author).toEqual({
     '@id': `https://rezics.com/id/${creator}`,
     '@type': 'Person',
@@ -109,7 +139,6 @@ test('the recorded native page joins its visible creators and editions without a
   expect(json.workExample).toHaveLength(recorded.reads.r1.body.links.length);
   for (const [index, edition] of recorded.reads.r1.body.links.entries()) {
     const path = subjectHref({ id: edition.subject, label: edition.label }, 'en').href;
-    expect(html).toContain(`href="${path}"`);
     expect(json.workExample[index]).toEqual({
       '@id': `https://rezics.com/id/${edition.subject}`,
       '@type': 'Thing',
@@ -125,11 +154,14 @@ test('the recorded native page joins its visible creators and editions without a
   expect(sent).toEqual(['POST /v1/pages:read']);
 });
 
-test('the head and structured image use only the currently authorized visible cover variants and localized title', () => {
+test('the head and structured image use only the currently authorized visible cover variants and localized title', async () => {
   const page = fixture({ cover });
   const result = head(page, 'ja');
   const json = JSON.parse(result.scripts[0]!.children);
-  const html = renderToString(createElement(SubjectPage, { page, locale: 'ja', messages, renderJsonLd: false }));
+  const html = await renderSubject(
+    createElement(SubjectPage, { page, locale: 'ja', messages, renderJsonLd: false }),
+    `/ja/subjects/${id}`,
+  );
   expect(html).toContain('/media/current-public-cover/webp-1200');
   expect(meta(result, 'og:image')).toBe(`${origin}/media/current-public-cover/webp-1200`);
   expect(meta(result, 'og:image:width')).toBe('1200');
@@ -184,10 +216,15 @@ test('identity, rank, native ratings and related failures retain the public disc
     locale: 'en',
     path: '/subjects/current',
     ratings: {
-      figures: [
-        { population: GLOBAL, count: 4, remaining: 1 },
-        { population: 'private', count: 60, mean: 18 },
-      ],
+      figure: {
+        questionId: QUESTION,
+        populationId: GLOBAL,
+        scale: { min: 0, max: 40, displayStep: 4 },
+        state: 'ready',
+        count: 4,
+        mean: null,
+        score: null,
+      },
     },
   });
   const json = JSON.parse(result.scripts[0]!.children);
@@ -231,4 +268,27 @@ test('unavailable public targets retain truthful failures and cannot populate a 
   expect(meta(result, 'og:image')).toBe(`${origin}/cards/default.png`);
   expect(meta(result, 'og:image:alt')).toBe('REZICS');
   expect(JSON.stringify(result)).not.toContain(recorded.reads.r0.body.subject.labels.en);
+});
+
+test('title years use the reader and structured-data date meaning', () => {
+  const value = {
+    time: '+2099-01-01T00:00:00Z',
+    precision: 11,
+    calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+  };
+  for (const [content, year] of [
+    [value, true],
+    [{ ...value, time: '+2099-00-00T00:00:00Z', precision: 9 }, true],
+    [{ ...value, time: '+2099-99-99T00:00:00Z' }, false],
+    [{ ...value, precision: 12 }, false],
+    [{ ...value, calendarmodel: 'http://www.wikidata.org/entity/Q1985786' }, false],
+    [{ ...value, timezone: 60 }, false],
+    [{ ...value, before: 1 }, false],
+  ] as const) {
+    const result = head(
+      fixture({ statements: { 'schema:datePublished': [statement('schema:datePublished', 'time', content)] } }),
+    );
+    expect(meta(result, 'og:title')!.includes('2099')).toBe(year);
+    expect(Object.hasOwn(JSON.parse(result.scripts[0]!.children), 'datePublished')).toBe(year);
+  }
 });

@@ -85,6 +85,8 @@ Every indexed page sets, per locale:
 
 - a unique `<title>` (subject: title, type and year, then the site name) and a `meta description` from the
   summary in that locale, at most about 160 characters, never a raw identifier;
+  Decision: the title year is the same disclosed Gregorian structured date JSON-LD would publish, not a raw
+  time string, Julian calendar, uncertain bound, timezone offset or unsupported precision;
 - `<link rel="canonical">` to its own canonical URL;
 - `<link rel="alternate" hreflang>` to the same page in every locale, plus `x-default`, reciprocal on every
   alternate;

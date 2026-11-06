@@ -111,7 +111,7 @@ test('released Recipe overlay projects cook time, diet, ingredients and instruct
   expect(html).toContain('VegetarianDiet');
   expect(html).toContain('2 carrots');
   expect(html).toContain('Chop the carrots.');
-  expect(html).toMatch(/25\s*min/i);
+  expect(html.replaceAll('<!-- -->', '')).toMatch(/25\s*min/i);
 });
 
 test('withheld Recipe diet stays out of the overlay and JSON-LD keeps hydrated instruction documents', () => {
@@ -186,4 +186,53 @@ test('software-release overlay publishes platform, date and language from the cu
   expect(html).toContain('data-slot="release-publication"');
   expect(html).toContain('Nintendo Switch');
   expect(html).toContain('2025-03-04');
+});
+
+test('released Book form, word count and tag agree in JSON-LD and withheld author stays out', () => {
+  const form = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e31';
+  const tag = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e32';
+  const hiddenAuthor = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e33';
+  const page = structuredClone(recorded) as SubjectPageData;
+  page.reads.r0.body.subject = {
+    ...(recorded.reads.r0.body.subject as Subject),
+    type: 'schema:Book',
+    labels: { en: 'Lantern Archive' },
+    descriptions: { en: 'A journey through a lantern library.' },
+    statements: {
+      'schema:wordCount': [statement('schema:wordCount', 'quantity', { amount: '+1200001', unit: '1' })],
+      'wdt:P7937': [statement('wdt:P7937', 'wikibase-item', form)],
+      'schema:keywords': [statement('schema:keywords', 'wikibase-item', tag)],
+      'schema:author': [
+        statement('schema:author', 'wikibase-item', hiddenAuthor, {
+          qualifiers: [
+            {
+              property: { id: 'rezics:spoilerLevel', data_type: 'quantity' },
+              value: { type: 'value', content: { amount: '+1', unit: '1' } },
+            },
+          ],
+        }),
+      ],
+    },
+  };
+  page.reads.r0.body.related = {
+    [form]: { type: 'skos:Concept', labels: { en: 'Light novel' } },
+    [tag]: { type: 'skos:Concept', labels: { en: 'Harem' } },
+    [hiddenAuthor]: { type: 'schema:Person', labels: { en: 'Withheld Author Sentinel' } },
+  } as Related;
+  page.catalogue = { state: 'released', type: 'schema:Book', digest: bundledDigest, definitions };
+  const json = JSON.parse(subjectPageJsonLd(page, 'en', { origin: 'https://public.example.test' })!);
+  expect(json.wordCount).toBe(1_200_001);
+  expect(JSON.stringify(json.additionalType)).toContain('Light novel');
+  expect(JSON.stringify(json.keywords)).toContain('Harem');
+  expect(JSON.stringify(json)).not.toContain('Withheld Author Sentinel');
+  expect(json).not.toHaveProperty('author');
+});
+
+test('configured public origin is the only host in sharing metadata and JSON-LD', () => {
+  const page = structuredClone(recorded) as SubjectPageData;
+  const origin = 'https://canonical.example.test';
+  const json = JSON.parse(subjectPageJsonLd(page, 'en', { origin })!);
+  expect(json.url.startsWith(`${origin}/`)).toBe(true);
+  expect(json.url).not.toContain('untrusted-host.invalid');
+  expect(json.image === undefined || JSON.stringify(json.image).includes(origin)).toBe(true);
 });

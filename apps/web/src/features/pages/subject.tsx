@@ -46,7 +46,9 @@ import { LiteraryReaderEntry } from '../catalogue/literary-reader/entry';
 import { literaryGrain, literaryReaderType } from '../catalogue/literary-reader/model';
 import { literaryAddress } from '../catalogue/literary-reader/navigation';
 import { RecipePublicationEntry } from './recipe-publication';
+import { recipePublicationReading } from './recipe-publication/model';
 import { ReleasePublicationEntry } from './release-publication';
+import { releasePublicationReading } from './release-publication/model';
 import { PeopleProfileEntry } from '../catalogue/people-profile-entry';
 import { PersonOverview } from '../catalogue/person-reader/reader';
 import { CharacterOverview } from './showcase-people/character';
@@ -1367,7 +1369,15 @@ export function SubjectPage({
                 viewer={page.requestedReader ?? null}
               />
             ) : null}
-            {overview && read && !page.account && read.subject.type === 'schema:Recipe' ? (
+            {overview &&
+            read &&
+            !page.account &&
+            recipePublicationReading(
+              read.subject,
+              page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined,
+              locale,
+              reader ?? defaultReader,
+            ) ? (
               <RecipePublicationEntry
                 subject={read.subject}
                 related={read.related}
@@ -1378,7 +1388,15 @@ export function SubjectPage({
                 link={ContextLink}
               />
             ) : null}
-            {overview && read && !page.account && read.subject.type === 'wd:Q20631656' ? (
+            {overview &&
+            read &&
+            !page.account &&
+            releasePublicationReading(
+              read.subject,
+              page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined,
+              locale,
+              reader ?? defaultReader,
+            ) ? (
               <ReleasePublicationEntry
                 subject={read.subject}
                 related={read.related}

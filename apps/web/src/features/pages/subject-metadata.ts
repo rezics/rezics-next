@@ -37,12 +37,20 @@ function typeIsA(
   return (definitions.types[type]?.bases ?? []).some((candidate) => typeIsA(definitions, candidate, base, seen));
 }
 
+/** Released Recipe or software-release overlay, including descendants compiled into the page catalogue. */
+export function publicationOverlayKind(
+  type: string,
+  definitions?: PublicationDefinitions,
+): 'recipe' | 'release' | undefined {
+  if (RECIPE_TYPES.some((base) => typeIsA(definitions, type, base) || type === base)) return 'recipe';
+  if (RELEASE_TYPES.some((base) => typeIsA(definitions, type, base) || type === base)) return 'release';
+}
+
 /** Exact released identities, including descendants already compiled into the page catalogue. */
 export function publicationPropertiesFor(type: string, definitions?: PublicationDefinitions): readonly string[] {
-  if (RECIPE_TYPES.some((base) => typeIsA(definitions, type, base) || type === base))
-    return RECIPE_PUBLICATION_PROPERTIES;
-  if (RELEASE_TYPES.some((base) => typeIsA(definitions, type, base) || type === base))
-    return RELEASE_PUBLICATION_PROPERTIES;
+  const kind = publicationOverlayKind(type, definitions);
+  if (kind === 'recipe') return RECIPE_PUBLICATION_PROPERTIES;
+  if (kind === 'release') return RELEASE_PUBLICATION_PROPERTIES;
   return [];
 }
 

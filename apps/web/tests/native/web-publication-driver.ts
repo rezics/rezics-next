@@ -57,8 +57,21 @@ type FixtureEntry = {
   descriptions?: Record<string, string>;
 };
 
-function valueStatement(property: string, content: unknown) {
-  return { property: { id: property }, value: { type: 'value' as const, content } };
+function valueStatement(property: string, content: unknown, extras?: { spoiler?: number }) {
+  return {
+    property: { id: property },
+    value: { type: 'value' as const, content },
+    ...(extras?.spoiler
+      ? {
+          qualifiers: [
+            {
+              property: { id: 'rezics:spoilerLevel' },
+              value: { type: 'value', content: { amount: `+${extras.spoiler}`, unit: '1' } },
+            },
+          ],
+        }
+      : {}),
+  };
 }
 
 type ProcessInfo = {
@@ -314,6 +327,18 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
         label: data.subjects.release.platform,
         labels: { en: data.subjects.release.platform },
       },
+      {
+        key: 'withheld-author',
+        type: 'schema:Person',
+        label: data.withheld[0]!,
+        labels: { en: data.withheld[0]! },
+      },
+      {
+        key: 'withheld-harem',
+        type: 'skos:Concept',
+        label: data.withheld[1]!,
+        labels: { en: data.withheld[1]! },
+      },
     ];
     const personIndex = entries.findIndex(({ key }) => key === 'person');
     if (personIndex > 0) entries.unshift(entries.splice(personIndex, 1)[0]!);
@@ -343,6 +368,28 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
         type: 'schema:Book',
         label: title,
         labels: { en: title, [data.search.locale]: title },
+        descriptions: undefined,
+      });
+    }
+    for (let index = 1; index <= 16; index++) {
+      entries.push({
+        key: `sitemap-book-${String(index).padStart(2, '0')}`,
+        type: 'schema:Book',
+        label: `Public lantern ${index}`,
+        labels: { en: `Public lantern ${index}` },
+        descriptions: { en: `A public catalogue page ${index}.` },
+      });
+    }
+    for (const [key, label] of [
+      ['excluded-withheld', data.withheld[0]!],
+      ['excluded-private', 'Private context lantern'],
+      ['excluded-taken-down', 'Taken-down lantern'],
+    ] as const) {
+      entries.push({
+        key,
+        type: 'schema:Book',
+        label,
+        labels: { en: label },
         descriptions: undefined,
       });
     }
@@ -435,12 +482,18 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
     const statementsFor = (entry: FixtureEntry): Record<string, unknown[]> | undefined => {
       if (entry.key === 'book') {
         return {
-          'schema:author': [valueStatement('schema:author', requireCreated('person').id)],
+          'schema:author': [
+            valueStatement('schema:author', requireCreated('person').id),
+            valueStatement('schema:author', requireCreated('withheld-author').id, { spoiler: 1 }),
+          ],
           'schema:wordCount': [
             valueStatement('schema:wordCount', { amount: `+${data.subjects.book.wordCount}`, unit: '1' }),
           ],
           'wdt:P7937': [valueStatement('wdt:P7937', requireCreated('light-novel').id)],
-          'schema:keywords': [valueStatement('schema:keywords', requireCreated('harem').id)],
+          'schema:keywords': [
+            valueStatement('schema:keywords', requireCreated('harem').id),
+            valueStatement('schema:keywords', requireCreated('withheld-harem').id, { spoiler: 1 }),
+          ],
         };
       }
       if (entry.key === 'recipe') {
@@ -561,12 +614,31 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
         ];
       }),
     ) as PublicationFixture['views'];
-    const sitemap = Object.fromEntries(
-      (['subject', 'collection', 'realm', 'space', 'board', 'thread'] as const).map((kind) => [
-        kind,
-        { eligible: [], excluded: [] },
-      ]),
-    ) as PublicationFixture['sitemap'];
+    const localeUrls = (key: string) =>
+      data.locales.map((locale) => ({ url: urlFor(key, locale), lastmod: null as string | null }));
+    const sitemapSubjects = [
+      'book',
+      'recipe',
+      'game',
+      'release',
+      'person',
+      'organization',
+      'automated',
+      ...Array.from({ length: 16 }, (_, index) => `sitemap-book-${String(index + 1).padStart(2, '0')}`),
+    ];
+    const sitemap = {
+      subject: {
+        eligible: sitemapSubjects.flatMap((key) => localeUrls(key)),
+        excluded: ['excluded-withheld', 'excluded-private', 'excluded-taken-down'].flatMap((key) =>
+          data.locales.map((locale) => urlFor(key, locale)),
+        ),
+      },
+      collection: { eligible: [], excluded: [] },
+      realm: { eligible: [], excluded: [] },
+      space: { eligible: [], excluded: [] },
+      board: { eligible: [], excluded: [] },
+      thread: { eligible: [], excluded: [] },
+    } as PublicationFixture['sitemap'];
     const fixture: PublicationFixture = {
       releaseDigest: activeBody.digest,
       publicOrigin,
