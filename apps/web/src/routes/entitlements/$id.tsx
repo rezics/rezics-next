@@ -13,6 +13,8 @@ export const Route = createFileRoute('/entitlements/$id')({
   validateSearch: purchaseHistorySearch,
   loader: ({ params }) => readBuyerEntitlementCurrent({ data: { id: params.id, locale: getLocale() } }),
   staleTime: 0,
+  gcTime: 0,
+  shouldReload: true,
   head: ({ match }) =>
     pageHead({ title: m.entitlements_detail_heading(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
   component: function EntitlementRoute() {

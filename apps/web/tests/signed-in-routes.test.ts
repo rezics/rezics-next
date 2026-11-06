@@ -295,6 +295,11 @@ lifetimeTest(
     expect(offer).toContain("robots: 'noindex, nofollow'");
     expect(offer).toMatch(/staleTime:\s*0/);
     expect(offer).not.toContain('requireSignedIn');
+    for (const file of ['orders/$id.tsx', 'entitlements/$id.tsx'] as const) {
+      const source = await Bun.file(join(app, 'src/routes', file)).text();
+      expect(source, file).toMatch(/staleTime:\s*0/);
+      expect(source, file).toMatch(/shouldReload:\s*true/);
+    }
     for (const file of components) {
       const source = await Bun.file(join(app, 'src', file)).text();
       expect(source, file).not.toMatch(

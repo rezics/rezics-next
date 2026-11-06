@@ -19,6 +19,9 @@ export const Route = createFileRoute('/orders/')({
       data: { ...(address.cursor ? { cursor: address.cursor } : {}), locale: getLocale() },
     });
   },
+  staleTime: 0,
+  gcTime: 0,
+  shouldReload: true,
   head: ({ match }) =>
     pageHead({ title: m.orders_heading(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
   component: OrdersRoute,

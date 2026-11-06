@@ -28,6 +28,8 @@ export const Route = createFileRoute('/entitlements/')({
         : readBuyerEntitlementsCurrent({ data: { locale: getLocale(), ...(cursor === undefined ? {} : { cursor }) } }),
     ),
   staleTime: 0,
+  gcTime: 0,
+  shouldReload: true,
   head: ({ match }) =>
     pageHead({ title: m.entitlements_heading(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
   component: function EntitlementsRoute() {

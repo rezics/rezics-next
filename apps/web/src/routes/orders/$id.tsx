@@ -23,6 +23,8 @@ export const Route = createFileRoute('/orders/$id')({
   loader: ({ params }) => readOrder({ data: { id: params.id, locale: getLocale() } }),
   // Reader returns must re-admit this private detail before presenting its selected receipt.
   staleTime: 0,
+  gcTime: 0,
+  shouldReload: true,
   head: ({ loaderData, match }) =>
     pageHead(
       {

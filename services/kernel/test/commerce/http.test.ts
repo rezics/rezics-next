@@ -19,6 +19,7 @@ import {
   type GrowthDatabase,
   type Row,
 } from '../support/growth.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { startFakeStripe } from './support/fake-stripe.ts';
 
 let db: GrowthDatabase;
@@ -128,6 +129,7 @@ beforeAll(async () => {
     pool: db.pool,
     routeKey: new Uint8Array(32),
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(1)]]) },
+    receiptKeys: testReceiptKeys(),
     writeRate: {
       async spend() {
         return { allowed: true as const };
@@ -325,7 +327,9 @@ test('delisted public offers are concealed as unknown while captured purchases a
   const orderBefore = await request(`/v1/orders/${captured.id}`);
   const entitlementBefore = await request(`/v1/entitlements/${entitlement.id}`);
   expect(orderBefore.status).toBe(200);
+  expect(orderBefore.headers.get('cache-control')).toBe('private, no-store');
   expect(entitlementBefore.status).toBe(200);
+  expect(entitlementBefore.headers.get('cache-control')).toBe('private, no-store');
   const orderBody = await orderBefore.json();
   const entitlementBody = await entitlementBefore.json();
   expect(orderBody.order).toMatchObject({
@@ -370,8 +374,10 @@ test('delisted public offers are concealed as unknown while captured purchases a
   const orderAfter = await request(`/v1/orders/${captured.id}`);
   const entitlementAfter = await request(`/v1/entitlements/${entitlement.id}`);
   expect(orderAfter.status).toBe(200);
+  expect(orderAfter.headers.get('cache-control')).toBe('private, no-store');
   expect(await orderAfter.json()).toEqual(orderBody);
   expect(entitlementAfter.status).toBe(200);
+  expect(entitlementAfter.headers.get('cache-control')).toBe('private, no-store');
   expect(await entitlementAfter.json()).toEqual(entitlementBody);
   expect(await store.readOrder(db.pool, routeOf(captured.id)!, captured.id)).toEqual(captured);
   expect(await store.readEntitlement(db.pool, routeOf(entitlement.id)!, entitlement.id)).toEqual(entitlement);
@@ -450,6 +456,7 @@ test('entitlement pages stay in the buyer partition and reject tampering and oth
     second = await paid(selling.id);
   const page = await request('/v1/entitlements?limit=1');
   expect(page.status).toBe(200);
+  expect(page.headers.get('cache-control')).toBe('private, no-store');
   const body = await page.json();
   expect(body.entitlements.map((e: Entitlement) => e.id)).toEqual([second.id]);
   expect(typeof body.next).toBe('string');
