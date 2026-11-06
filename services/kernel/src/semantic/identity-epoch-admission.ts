@@ -23,6 +23,7 @@ import {
   type IdentityAdmissionSource,
 } from './identity-adapters/identity-epoch-binding.ts';
 import { assertIdentityTerminalGroupsOpen } from './identity-terminal-closure.ts';
+import { admitIdentityTerminalCapture, runIdentityTerminalCommand } from './identity-terminal-closure-command.ts';
 import sourcePoints from './identity-epoch-read-sources.sql';
 import handoff from './identity-epoch-admission-handoff.sql';
 import inputs from './identity-epoch-admission-inputs.sql';
@@ -403,6 +404,7 @@ export async function admitBoundIdentityEpoch(
     if (immediate && prior.state !== 'pending' && prior.state !== 'published') throw unavailable();
     return noEffect(data.job);
   }
+  await admitIdentityTerminalCapture(tx, idsOf(input.intent));
   const closed = (
     await tx.query(`SELECT state FROM semantic.identity_epoch_admission_attempt WHERE partition_no=$1 AND job_id=$2`, [
       home,
@@ -543,7 +545,7 @@ async function prepareIdentityEpochAdmissionWithinDeadline(
   const binding = await bindIdentityEpochReceipt(pool, authority, input),
     data = identityBindingData(binding);
   if (data.state === 'accepted') return data.job;
-  const admitted = await runCommand(pool, { ...authority, partition: data.home }, (tx) =>
+  const admitted = await runIdentityTerminalCommand(pool, { ...authority, partition: data.home }, (tx) =>
     admitBoundIdentityEpoch(tx, { ...input, binding }),
   );
   await acceptIdentityBinding(pool, authority, input, binding);

@@ -24,13 +24,17 @@ const MAX_REVIEW_KEYS = 2;
 const MAX_REVIEW_CONTROL_LOCATORS = 2;
 const MAX_REVIEW_OPERAND_BYTES = 16_384;
 
-/** Mapping-complete pending jobs already installed this epoch; classify them as mapped for current reads. */
+/** Mapping-complete pending jobs already installed this epoch; classify them as mapped only when
+ * every pending group on the page shares that job. A mixed page stays pending. */
 function installedMappingJob(evidence: IdentityMappingEvidence): IdentityJobRef | null {
   const support = identitySourceSupportJob();
   if (support) return support;
-  const pending = evidence.pendingRows.find((row) => row.pending_job !== null && row.pending_epoch !== null);
-  if (!pending?.pending_job || pending.pending_epoch === null) return null;
-  return { jobId: pending.pending_job, epoch: BigInt(pending.pending_epoch) };
+  const pending = evidence.pendingRows.filter((row) => row.pending_job !== null && row.pending_epoch !== null);
+  const first = pending[0];
+  if (!first?.pending_job || first.pending_epoch === null) return null;
+  const epoch = String(first.pending_epoch);
+  if (pending.some((row) => row.pending_job !== first.pending_job || String(row.pending_epoch) !== epoch)) return null;
+  return { jobId: first.pending_job, epoch: BigInt(first.pending_epoch) };
 }
 
 export type IdentityRatingControlLocator = Readonly<{ partition: number; group: string }>;
