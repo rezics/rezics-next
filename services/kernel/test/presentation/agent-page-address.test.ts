@@ -57,7 +57,7 @@ let manager: Seeded;
 // The production work modules publish identity epochs; verified-subject addresses depend on that publication.
 let workClient: WorkClient;
 let work: Awaited<ReturnType<typeof composeWork>> | undefined;
-const node =(type: string, id: string) => ({ type, props: { id } });
+const node = (type: string, id: string) => ({ type, props: { id } });
 const document = {
   root: { props: {} },
   content: [node('SubjectHeader', 'header'), node('AccountIdentity', 'identity')],
@@ -294,7 +294,11 @@ beforeAll(async () => {
     databaseUrl: db.url,
     pool,
     client: workClient,
-    env: workerTestEnv({ KERNEL_ROUTE_KEY: Buffer.from(routeKey).toString('base64url') }),
+    // Identity publication indexes through the Search participant, which the check runner configures per run.
+    env: workerTestEnv({
+      KERNEL_ROUTE_KEY: Buffer.from(routeKey).toString('base64url'),
+      OPENSEARCH_URL: process.env.OPENSEARCH_URL,
+    }),
     receiptKeys: testReceiptKeys(),
   });
   await work.launch();

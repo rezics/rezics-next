@@ -101,16 +101,26 @@ test('next-step derivation orders mapping, Search, Library and publication, and 
   expect(identityEpochNext(observation({ jobState: 'cancelling' }))).toBe('cancelling');
   expect(
     identityEpochNext(
-      observation({ jobState: 'published', control: { publishedEpoch: 7n, pendingJob: null, pendingEpoch: null, prepareJob: null, prepareEpoch: null } }),
+      observation({
+        jobState: 'published',
+        control: { publishedEpoch: 7n, pendingJob: null, pendingEpoch: null, prepareJob: null, prepareEpoch: null },
+      }),
     ),
   ).toBe('published');
   expect(
     identityEpochNext(
-      observation({ jobState: 'published', control: { publishedEpoch: 6n, pendingJob: null, pendingEpoch: null, prepareJob: null, prepareEpoch: null } }),
+      observation({
+        jobState: 'published',
+        control: { publishedEpoch: 6n, pendingJob: null, pendingEpoch: null, prepareJob: null, prepareEpoch: null },
+      }),
     ),
   ).toBe('publication-control-disagrees');
   expect(
-    identityEpochNext(observation({ control: { publishedEpoch: 6n, pendingJob: null, pendingEpoch: null, prepareJob: null, prepareEpoch: null } })),
+    identityEpochNext(
+      observation({
+        control: { publishedEpoch: 6n, pendingJob: null, pendingEpoch: null, prepareJob: null, prepareEpoch: null },
+      }),
+    ),
   ).toBe('reservation-lost');
 });
 

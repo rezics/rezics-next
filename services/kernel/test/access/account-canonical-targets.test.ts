@@ -74,7 +74,10 @@ async function linked(handle: string | null) {
     links: [],
     key: randomUUID(),
   });
-  const decision = await commands.approve(await context('reviewer'), { requestId: request.value.id, key: randomUUID() });
+  const decision = await commands.approve(await context('reviewer'), {
+    requestId: request.value.id,
+    key: randomUUID(),
+  });
   const receiptId = decision.value.decisionReceiptId!;
   const workflow = { ...(await readAgentVerificationWorkflowRequest(f.pool, request.value.id))!, receiptId };
   await recordPendingAgentVerification(f.pool, workflow, () => new Date());
