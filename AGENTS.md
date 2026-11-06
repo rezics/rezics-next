@@ -41,6 +41,15 @@ The `legacy` branch (tags `legacy-final` and `legacy-main-final`) is a read-only
 - Keep instructions and documents within their layers, owners and budgets:
   [instructions and documentation](docs/development/documentation.md).
 
+## Failure discipline
+
+- A failure seen twice is fixed as a class, in the control plane or its owner module, not by another script or a
+  manual cleanup.
+- Everything an attempt starts (processes, containers, volumes, ports) is owned by that attempt and is gone when it ends.
+- Older worktrees read the shared `.temp/goal` config: add no key their code rejects, and run the CLI from an old
+  worktree after changing either.
+- Every watcher, alarm and wake-up spends model allowance; add one only when its cost is counted.
+
 A worker starts from its brief and reads only what the brief links. Other roles read the
 [development workflow](docs/development/README.md) and its linked Goal definitions, and load
 [rezics-workflow](.agents/skills/rezics-workflow/SKILL.md) for repository development work.
