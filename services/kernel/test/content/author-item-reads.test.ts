@@ -320,7 +320,7 @@ test('author routes return board summaries and reply entries newest first with s
   });
   const binding = {
     operation: 'author.items.list',
-    parameters: { accountId: author, list: 'threads', kind: null, viewer: null },
+    parameters: { accountId: author, list: 'threads', kind: 'discussion', viewer: null },
   };
   const decoded = decodeCursor(tokens, binding, first.body.next);
   expect(decoded.ok).toBe(true);

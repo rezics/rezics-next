@@ -83,6 +83,8 @@ Decision: retain original source authority through enrichment, preserve sparse c
 connection-free timing barriers for late-revocation acceptance. `disclosureBarrier` pauses after initial Board/Access
 checks; `pageDisclosureBarrier` pauses after page enrichment. Both change timing only and are absent in production.
 Author and Subject page HTTP limits validate URL strings from 1 through 20 before conversion to internal numbers.
+Selected reading references validate each Board’s own routed identity. Current thread-to-Board membership supplies
+placement authority; the Board and thread need not share a native home.
 Native tests create identities, Boards, threads, replies and revisions through HTTP and run production effects/relays.
 They cover anonymous takedown and protected read-grant revocation for heads, exact revisions, Subject discussions,
 author activity, all three Board orders and thread posts, including first/continuing pages and eligible controls.
