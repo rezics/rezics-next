@@ -215,25 +215,33 @@ export async function admitCreatorSale(client: Client, event: CloudEvent): Promi
       throw new Error('Creator sale event receipt provenance conflict');
     return;
   }
-  const roles = await creatorSaleEventRoles(
-    client,
-    { route, orderId: order.orderId, partition, position, eventSeq: row.event_seq },
-    [
-      { accountId: nativeOrder.buyer_account_id, roles: 1024 },
-      { accountId: nativeOrder.creator_account_id, roles: 2048 },
-    ],
-  );
-  await enrollCommerceCopyIntents(
-    client,
-    { route, orderId: order.orderId, partition, position, eventSeq: row.event_seq },
-    roles,
-  );
-  await client.query(
-    `INSERT INTO commerce.creator_sale_work(route,order_id) VALUES($1,$2)
+  try {
+    const roles = await creatorSaleEventRoles(
+      client,
+      { route, orderId: order.orderId, partition, position, eventSeq: row.event_seq },
+      [
+        { accountId: nativeOrder.buyer_account_id, roles: 1024 },
+        { accountId: nativeOrder.creator_account_id, roles: 2048 },
+      ],
+    );
+    await enrollCommerceCopyIntents(
+      client,
+      { route, orderId: order.orderId, partition, position, eventSeq: row.event_seq },
+      roles,
+    );
+    await client.query(
+      `INSERT INTO commerce.creator_sale_work(route,order_id) VALUES($1,$2)
        ON CONFLICT(route,order_id) DO UPDATE SET generation=commerce.creator_sale_work.generation+1,
          state='pending',gap=NULL,next_run=now()`,
-    [route, order.orderId],
-  );
+      [route, order.orderId],
+    );
+  } catch (error) {
+    // Checkout record/refresh/apply are unconverted: they have a receipt and an
+    // order.updated envelope, but no shared-history locator inventory. Pending
+    // identity is not an effects-checkpoint failure. Holding that checkpoint
+    // would block later tombstones on the same buyer home.
+    if (!(error instanceof LiveCopyPendingError)) throw error;
+  }
 }
 
 /** Fresh exact native financial truth. The buyer snapshot is released before any creator write. */
