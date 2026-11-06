@@ -109,7 +109,6 @@ test('a deadline problem writes exactly one attributed line instead of an intern
   });
 });
 
-
 test('native dependency failures retain an internal cause without disclosing it in the response', async () => {
   const { response, text, lines } = await call('GET', '/unavailable?token=query-secret');
   expect(response.status).toBe(503);
@@ -117,7 +116,11 @@ test('native dependency failures retain an internal cause without disclosing it 
   expect(text).not.toContain('AccessUnavailableError');
   expect(lines).toHaveLength(1);
   const line = JSON.parse(lines[0]![0] as string);
-  expect(line).toMatchObject({ event: 'dependency_unavailable', name: 'AccessUnavailableError', route: '/unavailable' });
+  expect(line).toMatchObject({
+    event: 'dependency_unavailable',
+    name: 'AccessUnavailableError',
+    route: '/unavailable',
+  });
   expect(line.stack).toContain('Access unavailable: overloaded');
   expect(lines[0]![0]).not.toContain('query-secret');
 });
