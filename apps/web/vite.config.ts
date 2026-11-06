@@ -314,7 +314,7 @@ export default defineConfig((context) => {
       ...cloudflare({
         viteEnvironment: { name: 'ssr' },
         inspectorPort,
-        ...(persistence.directory ? { persistState: { path: persistence.directory } : {}),
+        ...(persistence.directory ? { persistState: { path: persistence.directory } } : {}),
       }),
       {
         // Cloudflare's Worker environment sets noDiscovery false. Do not pin it true or empty
