@@ -11,7 +11,7 @@ import {
   type ZoneLifecycleClient,
   type ZoneLifecycleResult,
   type ZoneTakedownCommand,
-} from './lifecycle-zone';
+} from './lifecycle-zone.ts';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const revision = /^[1-9][0-9]*$/;

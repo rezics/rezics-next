@@ -1,5 +1,15 @@
 import { Button } from '@rezics/ui/shadcn/button';
-import type { ZoneLifecycleResult } from './lifecycle-zone';
+import type { ZoneLifecycleResult } from './lifecycle-zone.ts';
+
+export {
+  changeZoneLifecycle,
+  changeZoneTakedown,
+  type ZoneLifecycleAddress,
+  type ZoneLifecycleClient,
+  type ZoneLifecycleFailure,
+  type ZoneLifecycleResult,
+  type ZoneTakedownCommand,
+} from './lifecycle-zone.ts';
 
 export function ZoneLifecycleControls(props: {
   deleted: boolean;
@@ -7,8 +17,8 @@ export function ZoneLifecycleControls(props: {
   busy: boolean;
   onDelete: () => void;
   onRestore: () => void;
-  onRelease?: () => void;
-  last?: ZoneLifecycleResult;
+  onRelease?: (() => void) | undefined;
+  last?: ZoneLifecycleResult | undefined;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2">

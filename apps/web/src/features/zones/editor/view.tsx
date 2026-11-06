@@ -10,7 +10,7 @@ import { Alert, AlertTitle, AlertDescription } from '@rezics/ui/shadcn/alert';
 import { m } from '../../../paraglide/messages.js';
 import { PageHeading } from '../../../shell/page-heading';
 import { ZoneLifecycleControls } from '../../catalogue/lifecycle-zone.tsx';
-import type { ZoneLifecycleResult } from '../../catalogue/lifecycle-zone';
+import type { ZoneLifecycleResult } from '../../catalogue/lifecycle-zone.ts';
 import { readerHref, type Visibility, type ZoneEditorSession } from './model';
 
 import { ZoneNameFields } from './name-fields';

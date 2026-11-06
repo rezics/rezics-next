@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { act, createElement } from 'react';
 import { ZoneLifecycleControls } from '../src/features/catalogue/lifecycle-zone.tsx';
-import type { ZoneLifecycleResult } from '../src/features/catalogue/lifecycle-zone';
+import type { ZoneLifecycleResult } from '../src/features/catalogue/lifecycle-zone.ts';
 
 test('owner delete and restore complete through keyboard use on narrow and wide layouts', async () => {
   const { createRequire } = await import('node:module');
@@ -24,9 +24,9 @@ test('owner delete and restore complete through keyboard use on narrow and wide 
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 
   const { createRoot } = await import('react-dom/client');
-  const testing = require(require.resolve('storybook/test'));
-  const { within, waitFor } = await import(testing.resolve('@testing-library/dom'));
-  const { default: userEvent } = await import(testing.resolve('@testing-library/user-event'));
+  const storybook = createRequire(require.resolve('storybook/test'));
+  const { within, waitFor } = await import(storybook.resolve('@testing-library/dom'));
+  const { default: userEvent } = await import(storybook.resolve('@testing-library/user-event'));
 
   const host = window.document.createElement('main') as unknown as HTMLElement;
   window.document.body.append(host);
