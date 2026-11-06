@@ -211,7 +211,7 @@ test('exact VNDB parent assertions need separate native acceptance and adoption 
     const journal = new ShowcaseJournal(':memory:');
     journal.prepareCommand(proposal);
     const oldReceipt = sent.results[0]!;
-    if (oldReceipt.status !== 201 && oldReceipt.status !== 200) throw new Error('Expected native parent receipt');
+    if ('problem' in oldReceipt) throw new Error('Expected native parent receipt');
     journal.acknowledgeCommand(proposal, oldReceipt);
     const oldBytes = JSON.stringify(journal.acknowledgedCommands()[0]!.command);
     const publicationPort = captureShowcaseCommands(runtime.importTransport, journal);
@@ -353,10 +353,10 @@ test('exact VNDB parent assertions need separate native acceptance and adoption 
   }
 }, 180_000);
 
-test('shared reviewed-tag setup delegates omitted Global grants through the current governor', async () => {
+test('shared reviewed-tag setup delegates Global review grants through the current governor', async () => {
   const driver = await createSemanticDriver();
   try {
-    await driver.grant('acceptor', ['context:accept', 'context:adopt']);
+    await driver.grant('acceptor', ['context:accept', 'context:adopt'], GLOBAL_CONTEXT);
     await driver.grant('editor', ['statement:propose'], GLOBAL_CONTEXT);
   } finally {
     await driver.close();
