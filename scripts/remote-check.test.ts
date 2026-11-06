@@ -6458,12 +6458,18 @@ test('missing or unreadable remote configuration never starts a local kernel che
   expect(seen.some((event) => event.kind === 'docker')).toBe(false);
   expect(seen).toEqual([]);
 
-  // An unreadable hosts file does not fall back and does not hand off.
+  // An unreadable hosts file does not fall back and does not hand off. Already on an approved
+  // check-host run, placement returns before the hosts file is read and the in-process check may
+  // start Docker, matching KERNEL_CHECK_ON_REMOTE below.
   const missing = scenario({ a: { available: 4.5e9 } });
   const unavailable = await kernelCheck({ ...missing.env, KERNEL_CHECK_REMOTE: join(root, 'no-such-hosts.json') });
   expect(unavailable.code).not.toBe(0);
-  expect(missing.events().some((event) => event.kind === 'docker')).toBe(false);
-  expect(missing.events().filter((event) => event.kind !== 'docker')).toEqual([]);
+  if (onCheckHost(kernel)) {
+    expect(unavailable.stderr).toContain('stack-run: kernel check already on an approved remote-check run');
+  } else {
+    expect(missing.events().some((event) => event.kind === 'docker')).toBe(false);
+    expect(missing.events().filter((event) => event.kind !== 'docker')).toEqual([]);
+  }
 
   // The flag does not itself force local placement; actual check-host location still takes precedence.
   const onRemote = scenario({ a: { available: 4.5e9 } });
