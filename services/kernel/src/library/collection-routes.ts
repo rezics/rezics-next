@@ -3,6 +3,7 @@ import { t } from 'elysia';
 import type { Pool } from 'pg';
 import type { Static, TSchema } from 'typebox';
 import { Compile } from 'typebox/compile';
+import { ContributionAttributionSchema } from '../access/contribution-attribution.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { SitemapQuerySchema, SitemapBoardPageSchema } from '../content/schemas.ts';
 import type { KernelClock } from '../clock.ts';
@@ -72,6 +73,9 @@ export function collectionSchema() {
         cover: t.Optional(t.Union([CoverSummarySchema, t.Null()])),
         coverSource: t.Union([t.Literal('owner'), t.Literal('member'), t.Literal('none'), t.Literal('pending')]),
         coverMediaId: t.Optional(t.Union([t.String({ format: 'uuid' }), t.Null()])),
+        attribution: t.Optional(ContributionAttributionSchema()),
+        generation: t.Optional(t.String({ format: 'uuid' })),
+        subjectIds: t.Optional(t.Array(t.String({ format: 'uuid' }))),
         revision,
         memberCount: t.Integer(),
         orderEpoch: t.Integer({ minimum: 0 }),

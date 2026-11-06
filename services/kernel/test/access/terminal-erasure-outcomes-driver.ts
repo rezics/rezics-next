@@ -3,6 +3,7 @@ import { documentText, fromPlainText } from '@rezics/document';
 import bookStarter from '../../../../packages/definitions/presentation/book/zone.json';
 import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
+import { accountAgentId } from '../../src/semantic/agents.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createNativeEditionFixture } from '../commerce/support/native-edition-fixture.ts';
 import { drainEffects } from '../support/account-deletion.ts';
@@ -25,20 +26,12 @@ const PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
   'base64',
 );
-const DELETED = { displayName: 'Deleted account' };
 
 type World = Awaited<ReturnType<typeof createTerminalErasureFixture>>;
 type Actor = Persona | 'staff';
 
 function marker(label: string): string {
   return `${label}-${randomUUID().replaceAll('-', '').slice(0, 12)}`;
-}
-
-function deletedAttribution(value: unknown): Values {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return DELETED;
-  const row = value as Record<string, unknown>;
-  if (row.state === 'deleted' || row.displayName === 'Deleted account' || row.id == null) return DELETED;
-  return row as Values;
 }
 
 function unwrap(value: Json, keys: string[]): Json {
@@ -63,15 +56,7 @@ export async function createTerminalErasureDriver(): Promise<TerminalErasureDriv
   const world = await createTerminalErasureFixture();
   let worker: Awaited<ReturnType<World['startWorker']>> | undefined;
   let clockMs = Date.now();
-  let published = {
-    collectionId: '',
-    generation: '',
-    subjectIds: [] as string[],
-    postId: '',
-    aliceId: '',
-    bobId: '',
-    entryMarker: '',
-  };
+  let published = { collectionId: '', aliceId: '' };
 
   const people = () => world.people;
   const bearer = (actor: Actor): string | null => {
@@ -120,60 +105,14 @@ export async function createTerminalErasureDriver(): Promise<TerminalErasureDriv
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return raw;
     if (/^\/v1\/posts\/[^/]+$/.test(path)) {
       const post = unwrap(raw, ['post']) as Record<string, Json>;
-      if (post && typeof post === 'object' && !Array.isArray(post)) {
-        const parentId = typeof post.parentId === 'string' ? post.parentId : '';
-        const author = post.author ?? post.attribution;
-        const attribution =
-          parentId === published.postId && post.authorId === published.bobId
-            ? published.aliceId
-              ? deletedAttribution(
-                  author && typeof author === 'object' ? author : { id: published.aliceId },
-                )
-              : DELETED
-            : deletedAttribution(author ?? (post.authorId === published.aliceId ? { id: published.aliceId } : null));
-        return {
-          ...post,
-          id: post.id,
-          authorId: post.authorId,
-          body: plainBody(post.body),
-          attribution,
-          parent: post.parent ?? { postId: parentId, attribution },
-        };
-      }
+      if (post && typeof post === 'object' && !Array.isArray(post))
+        return { ...post, body: plainBody(post.body) as Json };
     }
-    if (/^\/v1\/collections\/[^/]+$/.test(path)) {
-      const collection = unwrap(raw, ['collection']) as Record<string, Json>;
-      if (collection && typeof collection === 'object' && !Array.isArray(collection)) {
-        const id = typeof collection.id === 'string' ? collection.id : '';
-        return {
-          ...collection,
-          id,
-          attribution: deletedAttribution(collection.curator ?? collection.attribution ?? collection.author),
-          generation:
-            collection.generation ??
-            (id === published.collectionId ? published.generation : collection.sourceGeneration),
-          subjectIds:
-            collection.subjectIds ??
-            (id === published.collectionId ? published.subjectIds : ((collection.members as Json) ?? [])),
-        };
-      }
-    }
+    if (/^\/v1\/collections\/[^/]+$/.test(path)) return unwrap(raw, ['collection']);
     if (path.startsWith('/v1/follows/') || path === '/v1/follows') {
       const follow = unwrap(raw, ['follow']) as Record<string, Json>;
-      if (follow && typeof follow === 'object' && !Array.isArray(follow)) {
-        const targetId = typeof follow.targetId === 'string' ? follow.targetId : '';
-        const target = follow.target ?? { id: targetId };
-        return {
-          ...follow,
-          id: follow.id ?? targetId,
-          ownerId: follow.ownerId ?? follow.accountId ?? published.bobId,
-          target: deletedAttribution(
-            targetId === published.aliceId || JSON.stringify(target).includes(published.aliceId)
-              ? target
-              : target,
-          ),
-        };
-      }
+      if (follow && typeof follow === 'object' && !Array.isArray(follow))
+        return { ...follow, id: follow.id ?? follow.targetId };
     }
     return raw;
   }
@@ -185,6 +124,11 @@ export async function createTerminalErasureDriver(): Promise<TerminalErasureDriv
     if (!response.ok || !type.includes('json')) return { response };
     const raw = (await clone.json()) as Json;
     return { response, value: mapValue(request.path, raw) as T };
+  }
+
+  async function drainAlice(accountId: string) {
+    const route = routeOf(accountId);
+    if (route !== null) await drainEffects(world.pool, partitionOf(route), { deadlineMs: 45_000 });
   }
 
   const driver: TerminalErasureDriver = {
@@ -199,6 +143,7 @@ export async function createTerminalErasureDriver(): Promise<TerminalErasureDriv
       const bobHandle = await world.accountHandle(bobPerson);
       const aliceId = alicePerson.accountId;
       const bobId = bobPerson.accountId;
+      const aliceAgent = accountAgentId(aliceId);
       for (const group of [
         'collections',
         'personal_library',
@@ -224,7 +169,13 @@ export async function createTerminalErasureDriver(): Promise<TerminalErasureDriv
       const entryMarker = marker('entry');
       const book = await world.subject(entryMarker);
       const subjectId = book.subject.id;
-      await json('alice', 'PUT', `/v1/libraryEntries/${subjectId}`, { state: 'planned' });
+      const entryKey = JSON.stringify(`entry:${subjectId}`);
+      await handle('alice', {
+        method: 'PUT',
+        path: `/v1/libraryEntries/${subjectId}`,
+        body: { state: 'planned' },
+        headers: { 'idempotency-key': entryKey },
+      });
       await json('alice', 'PUT', `/v1/libraryEntries/${subjectId}/annotations`, {
         revision: 0,
         note: { op: 'set', value: entryMarker },
@@ -234,12 +185,12 @@ export async function createTerminalErasureDriver(): Promise<TerminalErasureDriv
       const label = await json<{ label: { id: string } }>('alice', 'POST', '/v1/libraryLabels', { name: labelMarker });
       await json('alice', 'POST', `/v1/libraryLabels/${label.label.id}:assign`, { subjectId });
       const sessionMarker = marker('session');
-      const session = await json<{ progressSession: { id: string } }>(
-        'alice',
-        'POST',
-        '/v1/progressSessions',
-        { subjectId, mode: 'scalar_amount', unit: 'page', total: '120' },
-      );
+      const session = await json<{ progressSession: { id: string } }>('alice', 'POST', '/v1/progressSessions', {
+        subjectId,
+        mode: 'scalar_amount',
+        unit: 'page',
+        total: '120',
+      });
       const logMarker = marker('log');
       await json('alice', 'PATCH', `/v1/progressSessions/${session.progressSession.id}/journal`, {
         revision: 0,
@@ -289,8 +240,9 @@ export async function createTerminalErasureDriver(): Promise<TerminalErasureDriv
       });
 
       const followMarker = marker('follow');
+      const followCountMarker = marker('follow-count');
       await json('alice', 'PUT', `/v1/follows/${subjectId}`);
-      await json('bob', 'PUT', `/v1/follows/${aliceId}`);
+      await json('bob', 'PUT', `/v1/follows/${aliceAgent}`);
 
       const staffRequest: Parameters<typeof createNativeEditionFixture>[0] = async (method, path, body, headers) =>
         world.kernel.handle(
@@ -389,10 +341,12 @@ export async function createTerminalErasureDriver(): Promise<TerminalErasureDriv
         visibility: 'draft',
       });
       const editorMarker = marker('editor');
-      await json('alice', 'PATCH', `/v1/collections/${privateCollection.collection.id}`, {
-        revision: privateCollection.collection.revision,
-        description: editorMarker,
-      });
+      const editorCollection = await json<{ collection: { id: string; revision: number } }>(
+        'alice',
+        'POST',
+        '/v1/collections',
+        { title: editorMarker, visibility: 'private', description: editorMarker },
+      );
       const media = await json<{ media: { id: string } }>('alice', 'POST', '/v1/media', {
         containerId: thread.thread.firstPost.id,
         purpose: 'post-image',
@@ -407,10 +361,34 @@ export async function createTerminalErasureDriver(): Promise<TerminalErasureDriv
         reason: 'other',
         evidence: reporterMarker,
       });
+      const delegateMarker = marker('delegate');
+      const delegateCollection = await json<{ collection: { id: string } }>('alice', 'POST', '/v1/collections', {
+        title: delegateMarker,
+        visibility: 'private',
+        description: delegateMarker,
+      });
+      const operatorMarker = marker('operator');
+      const operatorCollection = await json<{ collection: { id: string } }>('alice', 'POST', '/v1/collections', {
+        title: operatorMarker,
+        visibility: 'private',
+        description: operatorMarker,
+      });
+      const memberMarker = marker('member');
+      const memberCollection = await json<{ collection: { id: string } }>('alice', 'POST', '/v1/collections', {
+        title: memberMarker,
+        visibility: 'private',
+        description: memberMarker,
+      });
+      const actingHumanMarker = marker('acting-human');
+      const actingHumanCollection = await json<{ collection: { id: string } }>('alice', 'POST', '/v1/collections', {
+        title: actingHumanMarker,
+        visibility: 'private',
+        description: actingHumanMarker,
+      });
 
       const historyPrivate = marker('history-private');
       await json('alice', 'PATCH', `/v1/collections/${privateCollection.collection.id}`, {
-        revision: privateCollection.collection.revision + 1,
+        revision: privateCollection.collection.revision,
         description: historyPrivate,
       });
       const historyUnlisted = marker('history-unlisted');
@@ -441,28 +419,55 @@ export async function createTerminalErasureDriver(): Promise<TerminalErasureDriv
       });
 
       worker = await world.startWorker();
-      const route = routeOf(aliceId);
-      if (route !== null) await drainEffects(world.pool, partitionOf(route), { deadlineMs: 45_000 });
+      await drainAlice(aliceId);
 
-      const pendingMarker = marker('pending-publication');
-      const pendingStart: HttpRequest = {
+      const opened = await handle('alice', {
         method: 'POST',
         path: `/v1/collections/${publicCollection.collection.id}:publish`,
         body: { revision: publishedCollection.collection.revision, visibility: 'public' },
+      });
+      if (![200, 202].includes(opened.status))
+        throw new Error(`public collection A: ${opened.status} ${await opened.text()}`);
+      await drainAlice(aliceId);
+      const publicRead = await handle('anonymous', {
+        method: 'GET',
+        path: `/v1/collections/${publicCollection.collection.id}`,
+      });
+      if (!publicRead.ok) throw new Error(`public collection A unread: ${publicRead.status} ${await publicRead.text()}`);
+
+      const pendingMarker = marker('pending-publication');
+      const currentPublic = await json<{ collection: { revision: number } }>(
+        'alice',
+        'GET',
+        `/v1/collections/${publicCollection.collection.id}`,
+      );
+      const pendingSelected = await json<{ collection: { revision: number } }>(
+        'alice',
+        'POST',
+        `/v1/collections/${publicCollection.collection.id}:publishSelected`,
+        { revision: currentPublic.collection.revision, subjectIds: [pendingOnly.subject.id] },
+      );
+      const pendingStart: HttpRequest = {
+        method: 'POST',
+        path: `/v1/collections/${publicCollection.collection.id}:publish`,
+        body: { revision: pendingSelected.collection.revision, visibility: 'public' },
       };
 
       const seededAt = new Date(clockMs).toISOString();
       const expiresAt = new Date(clockMs + 3_600_000).toISOString();
-      const requiredSubset: Values = { orderId: order.order.id, currency: 'usd', unitAmountMinor: 1200 };
-      published = {
-        collectionId: publicCollection.collection.id,
-        generation: publishedCollection.publication.generation,
-        subjectIds: [subjectId],
-        postId: thread.thread.firstPost.id,
-        aliceId,
-        bobId,
-        entryMarker,
+      const requiredSubset: Values = {
+        orderId: order.order.id,
+        currency: 'usd',
+        unitAmountMinor: Number(
+          (
+            await world.readOnly<{ unit_amount_minor: string | number | null }>(
+              `SELECT unit_amount_minor FROM commerce.purchase_order WHERE order_id=$1`,
+              [order.order.id],
+            )
+          )[0]?.unit_amount_minor ?? 900,
+        ),
       };
+      published = { collectionId: publicCollection.collection.id, aliceId };
 
       const point = (path: string, extra?: Partial<HttpRequest>): HttpRequest => ({
         method: 'GET',
@@ -509,7 +514,7 @@ export async function createTerminalErasureDriver(): Promise<TerminalErasureDriv
         },
         followCount: {
           id: subjectId,
-          marker: followMarker,
+          marker: followCountMarker,
           point: point(`/v1/followCounts/subject/${subjectId}`),
           surfaces: surfaces(['/v1/followCounts/outgoing']),
         },
@@ -527,7 +532,7 @@ export async function createTerminalErasureDriver(): Promise<TerminalErasureDriv
         },
         offer: {
           id: offer.offer.id,
-          marker: offerMarker,
+          marker: offer.offer.id,
           point: point(`/v1/offers/${offer.offer.id}`),
           surfaces: surfaces(['/v1/offers', `/v1/subjects/${aliceEdition.targetSubjectId}/offers`]),
         },
@@ -561,24 +566,32 @@ export async function createTerminalErasureDriver(): Promise<TerminalErasureDriv
         editor: {
           marker: editorMarker,
           reader: 'alice',
-          read: point(`/v1/collections/${privateCollection.collection.id}`),
+          read: point(`/v1/collections/${editorCollection.collection.id}`),
         },
         uploader: { marker: uploaderMarker, reader: 'alice', read: point(`/v1/media/${media.media.id}`) },
         reporter: { marker: reporterMarker, reader: 'alice', read: point(`/v1/reports/${report.reportId}`) },
         buyer: { marker: order.order.id, reader: 'alice', read: point(`/v1/orders/${order.order.id}`) },
         seller: { marker: offerMarker, reader: 'alice', read: point(`/v1/offers/${offer.offer.id}`) },
         delegate: {
-          marker: privateMarker,
+          marker: delegateMarker,
           reader: 'alice',
-          read: point(`/v1/collections/${privateCollection.collection.id}`),
+          read: point(`/v1/collections/${delegateCollection.collection.id}`),
         },
-        operator: { marker: profileMarker, reader: 'alice', read: point(`/v1/accounts/${aliceId}/profile`) },
+        operator: {
+          marker: operatorMarker,
+          reader: 'alice',
+          read: point(`/v1/collections/${operatorCollection.collection.id}`),
+        },
         member: {
-          marker: privateMarker,
+          marker: memberMarker,
           reader: 'alice',
-          read: point(`/v1/collections/${privateCollection.collection.id}`),
+          read: point(`/v1/collections/${memberCollection.collection.id}`),
         },
-        actingHuman: { marker: profileMarker, reader: 'alice', read: point(`/v1/accounts/${aliceId}/profile`) },
+        actingHuman: {
+          marker: actingHumanMarker,
+          reader: 'alice',
+          read: point(`/v1/collections/${actingHumanCollection.collection.id}`),
+        },
       };
       return {
         alice: { accountId: aliceId, bearer: alicePerson.bearer, handle: aliceHandle },
@@ -645,7 +658,12 @@ export async function createTerminalErasureDriver(): Promise<TerminalErasureDriv
           marker: pendingMarker,
         },
         restore: { method: 'POST', path: `/v1/accounts/${aliceId}:restore` },
-        importReplay: { method: 'PUT', path: `/v1/libraryEntries/${subjectId}`, body: { state: 'planned' } },
+        importReplay: {
+          method: 'PUT',
+          path: `/v1/libraryEntries/${subjectId}`,
+          body: { state: 'planned' },
+          headers: { 'idempotency-key': entryKey },
+        },
         lateWebhook: { method: 'POST', path: '/v1/webhooks/stripe', body: { type: 'checkout.session.completed' } },
         register: {
           method: 'POST',
@@ -659,7 +677,7 @@ export async function createTerminalErasureDriver(): Promise<TerminalErasureDriv
         },
         handleLookup: point(`/v1/accounts?handle=${aliceHandle}`),
         bobReply: point(`/v1/posts/${reply.post.id}`),
-        bobFollow: point(`/v1/follows/${aliceId}`),
+        bobFollow: point(`/v1/follows/${aliceAgent}`),
         bobSentinels: [
           point(`/v1/libraryEntries/${bobEntry.subject.id}`),
           point('/v1/libraryLabels'),
@@ -746,19 +764,11 @@ export async function createTerminalErasureDriver(): Promise<TerminalErasureDriv
     async finish() {
       if (!worker) worker = await world.startWorker();
       await worker.release(world.pool);
-      const accountId = published.aliceId || people().alice.accountId;
-      const route = routeOf(accountId);
-      if (route !== null) await drainEffects(world.pool, partitionOf(route), { deadlineMs: 45_000 });
+      await drainAlice(published.aliceId || people().alice.accountId);
     },
     async inspect(fixture, store: Store) {
       const accountId = fixture.alice.accountId;
       const route = routeOf(accountId);
-      const marker = fixture.records.entry.marker;
-      const remaining = await world.readOnly<{ present: number }>(
-        `SELECT 1 AS present FROM library.entry WHERE route=$1 AND account_id=$2 LIMIT 1`,
-        [route, accountId],
-      );
-      const copy = remaining.length ? [{ payload: marker }] : [];
       const queries: Record<Store, { sql: string; values: unknown[] }> = {
         sources: {
           sql: `SELECT 'entry' AS kind, subject_id::text AS id, state FROM library.entry WHERE route=$1 AND account_id=$2
@@ -801,19 +811,10 @@ export async function createTerminalErasureDriver(): Promise<TerminalErasureDriv
         },
       };
       const query = queries[store];
-      try {
-        const rows = await world.readOnly<Record<string, unknown>>(query.sql, query.values);
-        if (store === 'receipts' || store === 'outbox' || store === 'provenance' || store === 'search' || store === 'imports')
-          return { rows: [...copy, ...(rows as Json[])] as Json[] };
-        return { rows: rows as Json[] };
-      } catch {
-        if (copy.length && (store === 'receipts' || store === 'outbox' || store === 'provenance' || store === 'search' || store === 'imports'))
-          return { rows: copy };
-        return { rows: [] };
-      }
+      const rows = await world.readOnly<Record<string, unknown>>(query.sql, query.values);
+      return { rows: rows as Json[] };
     },
     async financial(fixture) {
-      if (clockMs >= Date.parse(fixture.financial.expiresAt)) return [];
       const route = routeOf(fixture.alice.accountId);
       const rows = await world.readOnly<{
         order_id: string;
@@ -824,7 +825,6 @@ export async function createTerminalErasureDriver(): Promise<TerminalErasureDriv
          WHERE route=$1 AND buyer_account_id=$2 ORDER BY order_id`,
         [route, fixture.alice.accountId],
       );
-      if (!rows.length) return [];
       return rows.map((row) => ({
         payload: {
           orderId: row.order_id,

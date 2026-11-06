@@ -3240,9 +3240,11 @@ account through the [Auth schema](../../../auth/db/schema.sql)'s `auth_client_us
 people's grants to those clients as well. The physical cleanup gaps below and in [Auth](../../../auth/README.md#known-retention-gaps)
 remain work to do, not exceptions to the policy.
 
-A deleted account's public identity is `{ id, state, kind }` only. Readers see “Deleted account” or
-“Deleted organization”, never the old name, handle or profile, and never a person-or-automated label. This is
-**de-identified attribution**, not anonymous data: the stable id can still link retained content. Posts and reviews
+A deleted account's public identity is `{ id, state, kind }` only. Contribution attribution on retained public
+posts, Collections and follows is `{ displayName: 'Deleted account' }` or `{ displayName: 'Deleted organization' }`
+with no account id (`contributionAttribution()`). Readers see “Deleted account” or
+“Deleted organization”, never the old name, handle or profile, and never a person-or-automated label. The HTTP ID
+form of the public identity tombstone remains a separate surface from contribution attribution. Posts and reviews
 remain subject to [Content's erasure rules](../content/README.md#subject-threads), and catalogue history to
 [Semantic's history rules](../semantic/README.md). Where those documents do not state an account-deletion retention
 rule, the owner decides; account deletion does not invent a content or catalogue erasure cascade.

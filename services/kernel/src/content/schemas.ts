@@ -21,6 +21,7 @@ import { AuthorContributionSelectionSchema } from './author-contribution-actions
 import type { BoardView } from './model.ts';
 import type { FeedReviewContext } from './model.ts';
 import { FeedReviewContextSchema } from './feed-context-schema.ts';
+import { ContributionAttributionSchema } from '../access/contribution-attribution.ts';
 import type { ItemView, PostEntry, ThreadView } from './reads.ts';
 import type { ReporterReportView, ReportReadView, ReportView } from './reports.ts';
 import type { ReportInspection } from './report-inspection.ts';
@@ -351,13 +352,17 @@ function item() {
     ...metadata,
     ...references,
     threadId: ContentIdSchema,
-    authorId: ContentIdSchema,
+    authorId: t.Optional(ContentIdSchema),
     parentId: nullableId,
     revisionId: ContentIdSchema,
     sha256: t.String({ pattern: '^[0-9a-f]{64}$' }),
     mediaIds: media,
     voteCitation: t.Union([voteCitation(), t.Null()]),
     revisedAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
+    attribution: t.Optional(ContributionAttributionSchema()),
+    parent: t.Optional(
+      t.Object({ postId: ContentIdSchema, attribution: ContributionAttributionSchema() }, closed),
+    ),
     ...viewerReaction(),
     ...reactions,
   }));

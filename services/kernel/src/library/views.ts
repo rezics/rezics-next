@@ -10,6 +10,7 @@ import type {
   FollowingSpaceDestination,
   FollowingSpaceProjection,
 } from './following-space-contract.ts';
+import { ContributionAttributionSchema } from '../access/contribution-attribution.ts';
 import { readAccount, readPublicAccount } from '../access/account-data.ts';
 import type { KernelClock } from '../clock.ts';
 import { readSpace, spaceReadEligibility } from '../community/space.ts';
@@ -62,7 +63,9 @@ export function logFields() {
   return memoizedValue(logFields, () => ({ ...subjectFields(), account: t.Optional(accountSchema) }));
 }
 export function targetFields() {
-  return memoizedValue(targetFields, () => ({ target: t.Optional(summarySchema()) }));
+  return memoizedValue(targetFields, () => ({
+    target: t.Optional(t.Union([summarySchema(), ContributionAttributionSchema()])),
+  }));
 }
 export function embedded<S extends TProperties, F extends TProperties>(schema: TObject<S>, fields: F) {
   return t.Object({ ...schema.properties, ...fields }, { additionalProperties: false });
