@@ -578,7 +578,8 @@ export async function createLibraryDriver(options: NativeConformanceOptions = {}
             KERNEL_EXECUTOR_ID: 'library-outcomes',
             AUTH_ISSUER: issuer,
             AUTH_AUDIENCE: audience,
-            AUTH_JWKS_URL: `http://127.0.0.1:${authServer!.port}/.well-known/jwks.json`,
+            AUTH_JWKS_URL: `${issuer}/.well-known/jwks.json`,
+            LIBRARY_OUTCOME_AUTH_ORIGIN: `http://127.0.0.1:${authServer!.port}`,
             OPENSEARCH_URL: '',
             [SHELF_TYPE_DIGEST_ENV]: options.workerShelfTypeDigest,
           }),
@@ -1417,6 +1418,16 @@ if (import.meta.main) {
     KERNEL_WORKER_POOL_SIZE: '10',
     KERNEL_EXECUTOR_ID: 'library-outcomes',
   });
+  // Keep the production HTTPS identity configuration. Only the test process's
+  // transport routes that exact JWKS request to the real fixture Auth handler.
+  const nativeFetch = globalThis.fetch;
+  globalThis.fetch = ((input, init) => {
+    const request = new Request(input, init);
+    if (request.url !== workerEnv.AUTH_JWKS_URL) return nativeFetch(input, init);
+    return nativeFetch(
+      new Request(`${process.env.LIBRARY_OUTCOME_AUTH_ORIGIN}/.well-known/jwks.json`, request),
+    );
+  }) as typeof fetch;
   let repairLatch: ReturnType<typeof installStateReferenceRepairLatch> | undefined;
   process.on('message', (message) => repairLatch?.receive(message));
   process.on('disconnect', () => repairLatch?.close());
