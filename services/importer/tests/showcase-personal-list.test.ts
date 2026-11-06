@@ -217,10 +217,11 @@ test('explicit review and confirmation keep original operands across reopen, par
       reviewId,
       targetId,
       state: 'playing',
-      status: 'reviewed',
-      action: 'state',
+      status: 'reviewed' as const,
+      action: 'state' as const,
       replace: false,
       baseline: null,
+      progress: null,
     };
     reply = () => Response.json(acknowledged);
     expect(await review('completed')).toEqual({ state: 'acknowledged', value: acknowledged });
@@ -262,7 +263,18 @@ test('explicit review and confirmation keep original operands across reopen, par
       code: 'sealed-identity-changed',
     });
     expect(calls).toHaveLength(sent);
-    const current = { libraryEntries: [{ subjectId: targetId, state: 'paused', revision: 9 }], next: null };
+    const current = {
+      libraryEntries: [
+        {
+          subjectId: targetId,
+          state: 'paused',
+          revision: 9,
+          createdAt: '2026-11-06T00:00:00.000Z',
+          updatedAt: '2026-11-06T00:00:00.000Z',
+        },
+      ],
+      next: null,
+    };
     reply = () => Response.json(current);
     expect(await readShowcasePersonalLibrary({ client })).toEqual({ state: 'current', value: current });
     expect(calls.at(-1)?.path).toBe('/v1/libraryEntries');

@@ -270,6 +270,7 @@ test('an explicit match refreshes the native target and vote without replacing t
     baseline: null,
     replace: false,
     action: 'state' as const,
+    progress: null,
   };
   const commands: VndbCommand[] = [];
   const { journey, page } = setup([source], {

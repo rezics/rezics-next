@@ -332,6 +332,7 @@ test('refused apply and foreign receipts retain original operands; source replac
       baseline: null,
       replace: false,
       action: 'state' as const,
+      progress: null,
     },
   };
   const journey = createVndbJourney({
