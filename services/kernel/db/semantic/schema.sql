@@ -2824,7 +2824,9 @@ BEGIN
    AND NEW.intent=(OLD.intent-'verificationReceipt')
    AND (to_jsonb(NEW)-ARRAY['intent','receipt','receipt_key'])=(to_jsonb(OLD)-ARRAY['intent','receipt','receipt_key']) THEN RETURN NEW; END IF;
  IF TG_OP='DELETE' THEN RAISE EXCEPTION 'Identity job intent and receipts are immutable' USING ERRCODE='23514'; END IF;
- IF (to_jsonb(NEW)-'state') IS DISTINCT FROM (to_jsonb(OLD)-'state') OR OLD.state='published' THEN
+ IF (to_jsonb(NEW)-ARRAY['state','prearm_phase','prearm_transaction_id','cancellation_transaction_id'])
+    IS DISTINCT FROM (to_jsonb(OLD)-ARRAY['state','prearm_phase','prearm_transaction_id','cancellation_transaction_id'])
+    OR OLD.state='published' THEN
   RAISE EXCEPTION 'Identity job intent and receipts are immutable' USING ERRCODE='23514';
  END IF;
  RETURN NEW;
