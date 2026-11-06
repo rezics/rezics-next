@@ -58,6 +58,9 @@ const search: SearchService = {
   async suggest() {
     return { subjects: [], as_of: asOf };
   },
+  async savedCatalogueMembers() {
+    throw new Error('Unexpected saved catalogue members call');
+  },
   async releaseGroups() {
     throw new Error('Unexpected release groups call');
   },
