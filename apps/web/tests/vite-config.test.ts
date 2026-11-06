@@ -110,10 +110,11 @@ test('Vite serves resolved workspace dependencies while keeping files outside it
   }
 });
 
-test('SSR optimizeDeps keeps the restored Worker include, calendar excludes and ESM polyfill alias', async () => {
+test('SSR optimizeDeps keeps explicit Worker include, noDiscovery, calendar excludes and ESM polyfill alias', async () => {
   // Cloudflare's TypeScript config loader requires Node, as used by the real Vite CLI.
-  // Serve is the Copies/signed-in ready path. Emptying include and pinning noDiscovery printed
-  // no ready line for 150s on host b; Web's restored wrapper include is the composition that starts.
+  // Host-b ready evidence: Worker discovery hung at scanning for 150s; empty include plus
+  // noDiscovery printed no Vite line. Explicit React/TanStack/paraglide include with
+  // noDiscovery is the composition that skips that scan.
   const result = Bun.spawnSync({
     cmd: [
       'node',
@@ -122,6 +123,14 @@ test('SSR optimizeDeps keeps the restored Worker include, calendar excludes and 
       `
         import assert from 'node:assert/strict';
         import { resolveConfig } from 'vite';
+        const workerInclude = [
+          'react',
+          'react/jsx-runtime',
+          'react/jsx-dev-runtime',
+          'react-dom',
+          '@tanstack/react-router > @tanstack/react-store',
+          '@inlang/paraglide-js/urlpattern-polyfill',
+        ];
         for (const command of ['serve', 'build']) {
           const config = await resolveConfig({ logLevel: 'silent' }, command, 'development');
           const targets = [['ssr', config.ssr.optimizeDeps]];
@@ -130,14 +139,11 @@ test('SSR optimizeDeps keeps the restored Worker include, calendar excludes and 
             targets.push([name, environment.optimizeDeps]);
           }
           for (const [name, optimizeDeps] of targets) {
-            assert.equal(
-              optimizeDeps.noDiscovery === true,
-              false,
-              command + ':' + name + ':restored-discovery',
-            );
-            assert.ok(
-              (optimizeDeps.include ?? []).includes('@inlang/paraglide-js/urlpattern-polyfill'),
-              command + ':' + name + ':wrapper-include',
+            assert.equal(optimizeDeps.noDiscovery, true, command + ':' + name + ':no-discovery');
+            assert.deepEqual(
+              optimizeDeps.include ?? [],
+              workerInclude,
+              command + ':' + name + ':explicit-include',
             );
             for (const pkg of ['urlpattern-polyfill', 'react-dom/server', 'react-day-picker', 'date-fns'])
               assert.equal(

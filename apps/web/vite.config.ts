@@ -50,13 +50,22 @@ const calendarOptimizeDeps = ['react-day-picker', 'date-fns', '@date-fns/tz'] as
  * `urlpattern-polyfill`. Workerd export-type inspection resolves with workerd/worker/module/browser,
  * not `import`/`require`. That package's exports then miss and Node `main` loads CJS `index.cjs`.
  * `runInRunnerObject` has no `module`, so evaluating that CJS throws `module is not defined`.
- * Adding `import` to those conditions hung Rolldown before Copies printed ready. Emptying
- * `optimizeDeps.include` and forcing `noDiscovery` produced no Vite output for 150s on host b.
- * Keep Workerd's conditions and Web's restored Worker include of the paraglide wrapper, resolve
- * the nested package to ESM, and shim any remaining CJS. Leave `urlpattern-polyfill` itself off
- * include. Leave `react-dom/server` off include and off exclude so Vite transforms it without the
- * hanging empty-include pin or a CJS exclude.
+ * Adding `import` to those conditions hung Rolldown before Copies printed ready.
+ *
+ * Host-b evidence: Worker discovery printed `(ssr) [optimizer] scanning dependencies...` and then
+ * nothing for 150s. Empty include plus `noDiscovery` printed no Vite line at all. The composition
+ * that skips that scan is `noDiscovery` with an explicit React/TanStack/paraglide-wrapper include.
+ * Leave `urlpattern-polyfill` and `react-dom/server` off include: the nested package is resolved to
+ * ESM, and `react-dom/server` stays on Vite's transform path. Calendar packages stay excluded.
  */
+const workerOptimizeInclude = [
+  'react',
+  'react/jsx-runtime',
+  'react/jsx-dev-runtime',
+  'react-dom',
+  '@tanstack/react-router > @tanstack/react-store',
+  '@inlang/paraglide-js/urlpattern-polyfill',
+] as const;
 const webRequire = createRequire(import.meta.url);
 const paraglideRequire = createRequire(webRequire.resolve('@inlang/paraglide-js'));
 const urlpatternPolyfillCjs = paraglideRequire.resolve('urlpattern-polyfill');
@@ -121,18 +130,24 @@ function workerCjsShim(code: string): string {
   return `const module = { exports: {} }; const exports = module.exports;\n${code}\nexport default module.exports;\n`;
 }
 
-function pinWorkerOptimizeDeps(optimizeDeps: { include?: string[]; exclude?: string[] }): void {
-  // Vite concatenates include arrays across plugins. Keep Web's restored wrapper include so the
-  // Worker optimizer still starts; drop only the nested CJS package and react-dom/server.
-  optimizeDeps.include = (optimizeDeps.include ?? []).filter(
-    (packageName) => packageName !== 'urlpattern-polyfill' && packageName !== 'react-dom/server',
-  );
-  optimizeDeps.exclude = (optimizeDeps.exclude ?? []).filter(
-    (packageName) => packageName !== 'react' && packageName !== 'react-dom' && packageName !== 'react-dom/server',
-  );
-  for (const packageName of calendarOptimizeDeps) {
-    if (!optimizeDeps.exclude.includes(packageName)) optimizeDeps.exclude.push(packageName);
-  }
+function pinWorkerOptimizeDeps(optimizeDeps: {
+  include?: string[];
+  exclude?: string[];
+  noDiscovery?: boolean;
+}): void {
+  // Cloudflare enables discovery on the Worker environment. Replace the merged include list so a
+  // later plugin cannot reintroduce a whole-graph scan or the packages that hang Rolldown.
+  optimizeDeps.noDiscovery = true;
+  optimizeDeps.include = [...workerOptimizeInclude];
+  optimizeDeps.exclude = [
+    ...new Set([
+      ...(optimizeDeps.exclude ?? []).filter(
+        (packageName) =>
+          packageName !== 'react' && packageName !== 'react-dom' && packageName !== 'react-dom/server',
+      ),
+      ...calendarOptimizeDeps,
+    ]),
+  ];
 }
 
 function processExists(pid: number): boolean {
@@ -248,7 +263,8 @@ export default defineConfig((context) => {
     ssr: {
       resolve: { alias: [urlpatternPolyfillAlias] },
       optimizeDeps: {
-        include: ['@inlang/paraglide-js/urlpattern-polyfill'],
+        noDiscovery: true,
+        include: [...workerOptimizeInclude],
         exclude: [...calendarOptimizeDeps],
       },
     },
@@ -317,9 +333,8 @@ export default defineConfig((context) => {
         ...(persistence.directory ? { persistState: { path: persistence.directory } } : {}),
       }),
       {
-        // Cloudflare's Worker environment sets noDiscovery false. Do not pin it true or empty
-        // include: that composition printed no ready line for 150s on host b. configEnvironment
-        // still excludes the calendar packages when the Worker env is built.
+        // Cloudflare's Worker environment re-enables discovery. Pin noDiscovery and the explicit
+        // include after that merge so host-b never resumes a whole-graph scan.
         name: 'ssr-optimize-deps-skip-calendar-packages',
         enforce: 'post',
         configEnvironment(name) {
@@ -327,6 +342,8 @@ export default defineConfig((context) => {
           return {
             resolve: { alias: [urlpatternPolyfillAlias] },
             optimizeDeps: {
+              noDiscovery: true,
+              include: [...workerOptimizeInclude],
               exclude: [...calendarOptimizeDeps],
             },
           };
