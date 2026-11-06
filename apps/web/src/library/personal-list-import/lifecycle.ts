@@ -204,10 +204,9 @@ function visit(): VndbVisit {
 
 const unavailable = async () => ({ kind: 'unavailable' as const, status: 503 });
 
-function vndbLifecycleReviewed(command: { body: { action?: string } }): Extract<
-  Awaited<ReturnType<VndbPort['review']>>,
-  { kind: 'reviewed' }
-> {
+function vndbLifecycleReviewed(command: {
+  body: { action?: string };
+}): Extract<Awaited<ReturnType<VndbPort['review']>>, { kind: 'reviewed' }> {
   return command.body.action === 'score'
     ? {
         kind: 'reviewed',
@@ -328,8 +327,7 @@ export async function vndbLifecycleChangedReimportSnapshot(): Promise<VndbJourne
         kind: 'previewed',
         value: {
           ...VNDB_LIFECYCLE_PREVIEW,
-          uploadId:
-            command.xml === VNDB_LIFECYCLE_CHANGED_XML ? VNDB_LIFECYCLE_CHANGED_UPLOAD : VNDB_LIFECYCLE_UPLOAD,
+          uploadId: command.xml === VNDB_LIFECYCLE_CHANGED_XML ? VNDB_LIFECYCLE_CHANGED_UPLOAD : VNDB_LIFECYCLE_UPLOAD,
           rows: 1,
         },
       }),
@@ -361,19 +359,40 @@ export function vndbLifecycleLibraryPage(): ImportLibraryPage {
         {
           rowKey: '0',
           subjectId: entries[0]!.subjectId,
-          entry: { state: 'present', incarnationId: null, entryState: entries[0]!.state, revision: entries[0]!.revision },
-          vote: { state: 'present', questionId: VNDB_LIFECYCLE_QUESTION.id, questionRevision: 1, units: 0, revision: 4 },
+          entry: {
+            state: 'present',
+            incarnationId: null,
+            entryState: entries[0]!.state,
+            revision: entries[0]!.revision,
+          },
+          vote: {
+            state: 'present',
+            questionId: VNDB_LIFECYCLE_QUESTION.id,
+            questionRevision: 1,
+            units: 0,
+            revision: 4,
+          },
         },
         {
           rowKey: '1',
           subjectId: entries[1]!.subjectId,
-          entry: { state: 'present', incarnationId: null, entryState: entries[1]!.state, revision: entries[1]!.revision },
+          entry: {
+            state: 'present',
+            incarnationId: null,
+            entryState: entries[1]!.state,
+            revision: entries[1]!.revision,
+          },
           vote: { state: 'absent', questionId: VNDB_LIFECYCLE_QUESTION.id, questionRevision: 1 },
         },
         {
           rowKey: '2',
           subjectId: entries[2]!.subjectId,
-          entry: { state: 'present', incarnationId: null, entryState: entries[2]!.state, revision: entries[2]!.revision },
+          entry: {
+            state: 'present',
+            incarnationId: null,
+            entryState: entries[2]!.state,
+            revision: entries[2]!.revision,
+          },
           vote: { state: 'unavailable', reason: 'scope' },
         },
       ],

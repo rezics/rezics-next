@@ -67,13 +67,7 @@ function ReviewStage({ snap }: { snap: VndbJourneySnapshot }) {
   );
 }
 
-function ResultStage({
-  snap,
-  snapshot,
-}: {
-  snap: VndbJourneySnapshot;
-  snapshot: ImportLibrarySnapshot;
-}) {
+function ResultStage({ snap, snapshot }: { snap: VndbJourneySnapshot; snapshot: ImportLibrarySnapshot }) {
   return (
     <ImportShell>
       <VndbResultPage snap={snap} busy={false} onResume={noop} onReview={noop} onDiscard={noop} />
