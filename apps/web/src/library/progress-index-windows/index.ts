@@ -87,6 +87,13 @@ export function stageProgressIndexWindow(
   return { ...state, staged: target };
 }
 
+function withLastMovement(
+  next: Omit<ProgressIndexWindowState, 'staged' | 'lastMovement'>,
+  target: ProgressIndexWindowTarget | undefined,
+): ProgressIndexWindowState {
+  return target?.keyboard && target.kind !== 'refresh' ? { ...next, lastMovement: target.id } : next;
+}
+
 /** Admit only the staged address after the exact current native page succeeded. */
 export function admitProgressIndexWindow(
   state: ProgressIndexWindowState,
@@ -104,38 +111,29 @@ export function admitProgressIndexWindow(
   if (input.restarted) {
     if (state.current === null && state.predecessors.length === 0 && !target) return state;
     if (target && (input.move !== target.id || input.requested !== target.to)) return state;
-    return {
-      identity: input.identity,
-      predecessors: [],
-      current: null,
-      ...(target?.keyboard && target.kind !== 'refresh' ? { lastMovement: target.id } : {}),
-    };
+    return withLastMovement({ identity: input.identity, predecessors: [], current: null }, target);
   }
   if (target) {
     if (state.current === undefined) return state;
     if (input.move !== target.id || input.requested !== target.to) return state;
     if (input.requested !== input.admitted) return state;
-    if (target.kind === 'refresh') return { ...state, staged: undefined, lastMovement: undefined };
+    if (target.kind === 'refresh')
+      return { identity: state.identity, predecessors: state.predecessors, current: state.current };
     if (target.kind === 'first')
-      return {
-        identity: input.identity,
-        predecessors: [],
-        current: null,
-        lastMovement: target.keyboard ? target.id : undefined,
-      };
+      return withLastMovement({ identity: input.identity, predecessors: [], current: null }, target);
     if (target.kind === 'previous')
-      return {
+      return withLastMovement(
+        { identity: input.identity, predecessors: state.predecessors.slice(0, -1), current: input.admitted },
+        target,
+      );
+    return withLastMovement(
+      {
         identity: input.identity,
-        predecessors: state.predecessors.slice(0, -1),
+        predecessors: [...state.predecessors, state.current].slice(-PROGRESS_INDEX_WINDOW_PREDECESSORS),
         current: input.admitted,
-        lastMovement: target.keyboard ? target.id : undefined,
-      };
-    return {
-      identity: input.identity,
-      predecessors: [...state.predecessors, state.current].slice(-PROGRESS_INDEX_WINDOW_PREDECESSORS),
-      current: input.admitted,
-      lastMovement: target.keyboard ? target.id : undefined,
-    };
+      },
+      target,
+    );
   }
   if (state.current === undefined) return { identity: input.identity, predecessors: [], current: input.admitted };
   return state;
