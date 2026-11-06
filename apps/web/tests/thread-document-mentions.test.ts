@@ -78,6 +78,18 @@ test('current mention identities require the exact admitted post, revision, dige
       },
       posts,
     ),
+  ).toEqual({ [mentioned]: { handle: 'first-disclosure' } });
+  expect(
+    receiveThreadDocumentMentions(
+      {
+        ...projection,
+        identities: [
+          { id: mentioned, state: 'concealed' },
+          { id: mentioned, state: 'active', handle: 'later-active' },
+        ],
+      },
+      posts,
+    ),
   ).toEqual({});
   expect(receiveThreadDocumentMentions({ ...projection, state: 'unavailable' }, posts)).toEqual({});
 });

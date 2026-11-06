@@ -63,6 +63,8 @@ the current disclosed subject and each exact published citation through the exis
 readers, preserving source post, source revision, question and vote revision as independent identities. Historical
 question labels and scales remain unavailable; no second history reader or lifetime host is added. Private-page
 redaction removes review context with the posts and current activity.
+Decision: duplicate mention identities keep the first disclosed row; mixed document-media availability keeps available
+images and readable text, and only a failed presentation read marks the page unavailable.
 
 The disclosure uses `browserObservation` and `subscribeCache` with a retiring lease scoped to the mounted page.
 Invalidation or fetching, equal session replacement, remount and an observed away-and-back session transition retire

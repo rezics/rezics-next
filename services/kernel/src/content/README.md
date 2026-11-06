@@ -4193,6 +4193,8 @@ fail closed for retry.
 
 Decision: the thread reading receiver and its public response alias use the emitted mounted reading-page declaration, including the existing native post locator; broader client mirrors remain until the full source publication succeeds.
 
+Decision: duplicate mention identities keep the first disclosed row; mixed document-media availability keeps available images and readable text, and only a failed presentation read marks the page unavailable.
+
 ### Cost: selected current-thread cards
 
 - Touches: let R<=20 be raw selected references, H<=R distinct parent threads, P<=R selected posts, B<=H represented places,

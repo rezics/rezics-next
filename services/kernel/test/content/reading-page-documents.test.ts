@@ -3,6 +3,7 @@ import { fromPlainText } from '@rezics/document';
 import candidates from '../../src/content/media-presentation.sql';
 import {
   READING_PAGE_DOCUMENT_MEDIA_LIMIT,
+  projectReadingPageDocumentMedia,
   selectReadingPageDocumentMedia,
 } from '../../src/content/reading-page-documents.ts';
 import type { PostEntry } from '../../src/content/reads.ts';
@@ -130,4 +131,46 @@ test('the native document image bound stays explicit on overflow', () => {
   if (selection.state !== 'overflow') throw new Error('Expected explicit overflow');
   expect(selection.documents[0]).toMatchObject({ postId: post.id });
   expect(selection.documents[0]?.mediaIds).toHaveLength(READING_PAGE_DOCUMENT_MEDIA_LIMIT + 1);
+});
+
+test('a successful presentation read keeps available images when later rows are missing or duplicated', () => {
+  const threadId = id(1);
+  const availableId = id(10);
+  const missingId = id(11);
+  const selection = {
+    state: 'selected' as const,
+    documents: [
+      {
+        postId: id(2),
+        threadId,
+        revisionId: id(5),
+        sha256: 'a'.repeat(64),
+        mediaIds: [availableId, missingId],
+      },
+    ],
+    mediaIds: [availableId, missingId],
+  };
+  const presentation = {
+    id: availableId,
+    containerId: threadId,
+    digest: 'b'.repeat(64),
+    width: 640,
+    height: 480,
+    variants: [{ format: 'webp' as const, width: 640, height: 480 }],
+    placeholder: null,
+    focalPoint: null,
+    credit: null,
+  };
+  const foreign = { ...presentation, id: missingId, containerId: id(99) };
+  const duplicate = { ...presentation, digest: 'c'.repeat(64) };
+  const projected = projectReadingPageDocumentMedia(selection, [presentation, duplicate, foreign]);
+  expect(projected.state).toBe('available');
+  expect(projected.documents[0]).toMatchObject({
+    postId: id(2),
+    state: 'available',
+    images: [
+      { id: availableId, state: 'available', presentation },
+      { id: missingId, state: 'unavailable' },
+    ],
+  });
 });
