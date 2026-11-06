@@ -202,6 +202,8 @@ export declare function createSearchWriterGuard(options: {
     search: OpenSearch;
     index: string;
     calendarFormat?: 1;
+    /** Matches the immutable physical generation mapping; legacy targets keep the ordinary writer shape. */
+    creditFormat?: 1;
     consumer: string;
     source: SubjectSource;
     listing: SubjectListingSource;

@@ -1,6 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import type { AccessWorkDimensions as WorkDimensions } from './contract/index.ts';
-import type { HistoryRegistry } from '../history/registry.ts';
+import type { HistoryRegistry } from '../history/contract/index.ts';
+import type { IdentitySourceConsumerMaintenanceContext } from '../semantic/access-capabilities.ts';
 import type { WorkClient } from '../work/client.ts';
 import { NativeCollectionWork } from '../library/collection-source-work.ts';
 export { IDENTITY_ORIGINAL_DEADLINE_MS, ORIGINAL_WORK_AXES as ORIGINAL_AXES } from './contract/index.ts';
@@ -100,14 +101,14 @@ export declare function withIdentityOriginalSourceTransfer<T>(deps: HistoryOrigi
 export type PrepaidAgentIdentityHistoryUnit = <T>(deps: HistoryOriginalDependencies & Readonly<{
     env: Readonly<Record<string, string | undefined>>;
     clock: () => Date;
-}>, parent: IdentityOriginalSourceContext, body: (funded: import('../history/agent-identity-retirement.ts').IdentitySourceConsumerMaintenanceContext) => Promise<T>) => Promise<T>;
+}>, parent: IdentityOriginalSourceContext, body: (funded: IdentitySourceConsumerMaintenanceContext) => Promise<T>) => Promise<T>;
 /** Fixed native caller integration only; neither a callback parameter nor a module path
  * from the request can install the missing Source/History producer. Until its actual
  * prepaid caller is installed, only this child dispatch refuses. */
 export declare function withSelectedHistoryOriginalChild<T>(deps: HistoryOriginalDependencies & Readonly<{
     env: Readonly<Record<string, string | undefined>>;
     clock: () => Date;
-}>, token: IdentityOriginalTransfer, jobId: string, body: (funded: import('../history/agent-identity-retirement.ts').IdentitySourceConsumerMaintenanceContext) => Promise<T>): Promise<T>;
+}>, token: IdentityOriginalTransfer, jobId: string, body: (funded: IdentitySourceConsumerMaintenanceContext) => Promise<T>): Promise<T>;
 /** Preserve the actual operational client and its transaction, with per-await liveness.
  * This wrapper deliberately creates no currentCommand/currentCommandResources entry.
  * Failure ROLLBACK remains possible after expiry and is prepaid by the local envelope. */

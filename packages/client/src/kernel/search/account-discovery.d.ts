@@ -2,12 +2,18 @@ import type { Pool, PoolClient } from 'pg';
 import type { Release } from '@rezics/definitions';
 import type { DiscoveryIndexAction, DiscoveryKey, DiscoveryOwnerAdapterSlots, DiscoveryRegistry } from './discovery.ts';
 import type { SubjectListingSource } from './source.ts';
-import type { OpenSearch } from './opensearch.ts';
+import { type OpenSearch } from './opensearch.ts';
 import { type AnyDiscoveryIndexAction, type SecondScopeDiscoveryIndexAction } from './discovery-documents.ts';
 import { type AccountDiscoverySource, type AccountFrontier, type AccountPage, type AccountSnapshot } from './discovery.ts';
 import type { DiscoveryMetadataKind, DiscoveryMetadataProducers, DiscoveryOmittedKind } from './index.ts';
 import type { ReviewDiscoveryRefresh } from '../content/index.ts';
 import type { SubjectSource } from './source.ts';
+/** A creator change selects works citing it; a release activation selects works with any stale release stamp. */
+export type CreditDependentQuery = {
+    creators: readonly string[];
+} | {
+    staleRelease: string;
+};
 /** Admit the whole native chunk before sort preparation or engine I/O; omission means keyed deletion. */
 export declare function validateAccountSnapshot(value: unknown, partition: number, ids: readonly string[], atLeast: bigint): AccountSnapshot;
 /** Native keyset order/exhaustion is retained even when the exact claim produces a null handle. */
@@ -80,6 +86,7 @@ export declare function createDiscoveryProjection(options: {
     metadataProducers?: DiscoveryMetadataProducers;
 }): {
     project: (partition: number, input: readonly DiscoveryKey[], atLeast?: bigint, repair?: boolean) => Promise<void>;
+    creditDependents: (query: CreditDependentQuery) => Promise<DiscoveryKey[]>;
     prepareRepair: (id: string, obligation: bigint, owner?: DiscoveryKey['owner']) => Promise<DiscoveryIndexAction[]>;
     applyRepair: (actions: readonly DiscoveryIndexAction[]) => Promise<Readonly<{
         key: DiscoveryKey;

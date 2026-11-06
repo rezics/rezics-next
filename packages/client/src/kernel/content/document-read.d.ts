@@ -3,10 +3,12 @@ import type { Pool } from 'pg';
 import { type Access } from '../request/access.ts';
 import { type ImportedFieldView } from './imported-fields.ts';
 import type { AnchoredPosition, ReadContext } from './model.ts';
+/** `now` is the wall-clock budget source supplied by the composition; deadlines are compared against it. */
 export type DocumentReadDependencies = Readonly<{
     pool: Pool;
     access: Access;
     routeKey: Uint8Array;
+    now: () => number;
 }>;
 type DocumentMetadata = Readonly<{
     id: string;

@@ -1,5 +1,8 @@
 import { type IdentityTransformSource } from '../identity-core/index.ts';
 export { IdentityEpochStoreError } from '../identity-terminal-closure-errors.ts';
+import { bindSemanticProducerRoles, identityErasureRoles } from '../erasure-producer.ts';
+export { bindSemanticProducerRoles, identityErasureRoles };
+import { admittedAccountMappingSource } from './identity-epoch-binding.ts';
 import { type CommandTransaction } from '../../command/command.ts';
 import { readIdentityMappings, readIdentityRatingReview } from './read.ts';
 import type { IdentityEpochStore, IdentityJobRef, IdentityReceipt, IdentityIntent, IdentityChange } from './identity-epoch-contract.ts';
@@ -57,7 +60,7 @@ export declare function selectIdentityEpochRemainder(tx: CommandTransaction, int
 /** Validate pure captured values before binding or allocating an attempt. */
 export declare function identityEpochRemainderTerminal(intent: IdentityIntent, sources: readonly IdentityTransformSource[]): string | null;
 export { identityEpochChangeTerminal, type IdentityEpochLibraryTransform } from '../identity-core/index.ts';
-export declare const identityEpochLibraryInputsSQL = "SELECT generation,terminal,control_partition FROM semantic.identity_epoch_input WHERE partition_no=$1 AND job_id=$2 ORDER BY terminal LIMIT 3";
+export { identityEpochLibraryInputsSQL } from '../identity-epoch-library-inputs.ts';
 /** Library-only bounded projection of the ordinary pageChanges algorithm, on the caller's RR snapshot.
  * This neither admits a job nor changes the ordinary store API. Every output ID is native UUID width.
  */
@@ -67,6 +70,9 @@ export declare function pageLibraryIdentityEpochChanges(tx: CommandTransaction, 
 }>;
 /** Native source mappings and partition-scoped admission. Participant completion is never inferred. */
 export declare function identityEpochStore(): IdentityEpochStore;
+export { IDENTITY_EPOCH_JOB_READ_DECLARATION, IDENTITY_EPOCH_STEP_RECONCILE_DECLARATION, } from '../identity-epoch-participant-cost.ts';
 export { readIdentityMappings, readIdentityRatingReview };
+export type { IdentityReceivingSelection } from '../identity-receiving-effects-types.ts';
 export type { IdentityRatingControlLocator, IdentityRatingReviewOperand, IdentityRatingReviewResult, IdentityRatingReviewUnavailableReason, } from './read.ts';
 export type * from './identity-epoch-contract.ts';
+export { admittedAccountMappingSource };

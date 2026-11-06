@@ -9,7 +9,7 @@ export type ReactionDependencies = Readonly<{
     pool: Pool;
     access: Access;
     realmParticipation?: RealmParticipationCheck;
-    clock?: () => Date;
+    clock: () => Date;
 }>;
 export type ReactionTarget = Readonly<{
     targetKind: 'thread' | 'post' | 'subject';

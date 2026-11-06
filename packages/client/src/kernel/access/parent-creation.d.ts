@@ -9,6 +9,11 @@ import { type ResourceCreationManifest } from './creation-manifest.ts';
  */
 export type ParentAnchor = Readonly<{
     resource: Readonly<Resource>;
+    /** The parent operand's own resource type. A child action may declare a different
+     * type, so the parent is authorized as its own resource whenever this is supplied;
+     * otherwise the action's declared type decides, as for every point check.
+     */
+    resourceType?: string;
     validate(client: AccessClient, time: AuthoritativeTime): Promise<boolean>;
 }>;
 /** The owning child module proves its unique resource INSERT belongs to this

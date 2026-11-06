@@ -86,7 +86,7 @@ export declare function SHELF_MAINTENANCE_OPERATIONS(): Readonly<{
     }>;
     segment: Readonly<{
         pages: 100;
-        attempts: number;
+        attempts: 8;
         step: typeof runShelfMaintenanceStep;
         enqueue: typeof shelfMaintenanceEnqueuePlan;
     }>;

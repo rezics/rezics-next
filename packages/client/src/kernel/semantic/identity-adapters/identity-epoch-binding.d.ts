@@ -46,6 +46,13 @@ export declare function identityReceiptPartition(receipt: IdentityAdmissionInput
 export declare function identityBindingDigest(input: IdentityAdmissionInput): string;
 /** Only native source reads at the released binding home can attach Accounts custody. */
 export declare function assertIdentityBindingSource(binding: IdentityReceiptBinding, receipt: IdentityAdmissionInput['receipt']): void;
+export type AccountAgentReceipt = Extract<IdentityAdmissionInput['receipt'], {
+    kind: 'account-agent.verify' | 'account-agent.unverify';
+}>;
+/** Admitted mapping custody. The account home re-reads the original Access source for this exact intent and
+ * releases that home before any destination work; a moved, fenced or absent source is retryable unavailability.
+ */
+export declare function admittedAccountMappingSource(pool: Pool, receipt: AccountAgentReceipt, intent: IdentityAdmissionInput['intent']): Promise<void>;
 export declare function readIdentityBinding(tx: CommandTransaction, input: IdentityAdmissionInput): Promise<Readonly<{
     partition: number;
     generation: string;
@@ -116,6 +123,20 @@ export declare function readAccountIdentityUndo(pool: Pool, receipt: Extract<Ide
     };
 }>;
 export declare function identityBindingAccountRoles(binding: IdentityReceiptBinding): readonly import("../erasure-producer.ts").SemanticCopyRole[];
+/** Two released snapshots: retained Source provenance then accepted job/control. */
+export declare function IDENTITY_SOURCE_BINDING_CONSUMER_DECLARATION(): Readonly<{
+    engineRequests: 0;
+    work: Readonly<{
+        candidateKeys: 0;
+        nativeRows: 13;
+        identityMetadataRows: 0;
+        nativePoints: 13;
+        witnessKeys: 0;
+        statements: 10;
+        bytes: number;
+        emptySeeks: 2;
+    }>;
+}>;
 /** Resolve native generations with Source's live maintenance allocation. Each
  * released snapshot prepays its failed point, control and cleanup work. The
  * directory receives planning data and charges the same frame when it dispatches.

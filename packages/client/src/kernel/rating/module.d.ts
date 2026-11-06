@@ -1775,12 +1775,12 @@ export declare function createRatingDefinition(): {
                                     id: import("typebox").TString;
                                     revision: import("typebox").TInteger;
                                     label: import("typebox").TString;
-                                    grain: import("typebox").TUnion<[import("typebox").TLiteral<"work">, import("typebox").TLiteral<"release">, import("typebox").TLiteral<"episode">, import("typebox").TLiteral<"character">]>;
                                     scale: import("typebox").TObject<{
                                         min: import("typebox").TInteger;
                                         max: import("typebox").TInteger;
                                         displayStep: import("typebox").TInteger;
                                     }>;
+                                    grain: import("typebox").TUnion<[import("typebox").TLiteral<"work">, import("typebox").TLiteral<"release">, import("typebox").TLiteral<"episode">, import("typebox").TLiteral<"character">]>;
                                     realmId: import("typebox").TString;
                                     meaning: import("typebox").TString;
                                     canonicalLabel: import("typebox").TString;
@@ -1803,12 +1803,12 @@ export declare function createRatingDefinition(): {
                                     id: import("typebox").TString;
                                     revision: import("typebox").TInteger;
                                     label: import("typebox").TString;
-                                    grain: import("typebox").TUnion<[import("typebox").TLiteral<"work">, import("typebox").TLiteral<"release">, import("typebox").TLiteral<"episode">, import("typebox").TLiteral<"character">]>;
                                     scale: import("typebox").TObject<{
                                         min: import("typebox").TInteger;
                                         max: import("typebox").TInteger;
                                         displayStep: import("typebox").TInteger;
                                     }>;
+                                    grain: import("typebox").TUnion<[import("typebox").TLiteral<"work">, import("typebox").TLiteral<"release">, import("typebox").TLiteral<"episode">, import("typebox").TLiteral<"character">]>;
                                     realmId: import("typebox").TString;
                                     meaning: import("typebox").TString;
                                     canonicalLabel: import("typebox").TString;
@@ -6879,12 +6879,12 @@ export declare function createRatingDefinition(): {
                             id: import("typebox").TString;
                             revision: import("typebox").TInteger;
                             label: import("typebox").TString;
-                            grain: import("typebox").TUnion<[import("typebox").TLiteral<"work">, import("typebox").TLiteral<"release">, import("typebox").TLiteral<"episode">, import("typebox").TLiteral<"character">]>;
                             scale: import("typebox").TObject<{
                                 min: import("typebox").TInteger;
                                 max: import("typebox").TInteger;
                                 displayStep: import("typebox").TInteger;
                             }>;
+                            grain: import("typebox").TUnion<[import("typebox").TLiteral<"work">, import("typebox").TLiteral<"release">, import("typebox").TLiteral<"episode">, import("typebox").TLiteral<"character">]>;
                             realmId: import("typebox").TString;
                             meaning: import("typebox").TString;
                             canonicalLabel: import("typebox").TString;
@@ -6907,12 +6907,12 @@ export declare function createRatingDefinition(): {
                             id: import("typebox").TString;
                             revision: import("typebox").TInteger;
                             label: import("typebox").TString;
-                            grain: import("typebox").TUnion<[import("typebox").TLiteral<"work">, import("typebox").TLiteral<"release">, import("typebox").TLiteral<"episode">, import("typebox").TLiteral<"character">]>;
                             scale: import("typebox").TObject<{
                                 min: import("typebox").TInteger;
                                 max: import("typebox").TInteger;
                                 displayStep: import("typebox").TInteger;
                             }>;
+                            grain: import("typebox").TUnion<[import("typebox").TLiteral<"work">, import("typebox").TLiteral<"release">, import("typebox").TLiteral<"episode">, import("typebox").TLiteral<"character">]>;
                             realmId: import("typebox").TString;
                             meaning: import("typebox").TString;
                             canonicalLabel: import("typebox").TString;
@@ -11110,12 +11110,12 @@ export declare function createRatingModule(options: {
                                         id: import("typebox").TString;
                                         revision: import("typebox").TInteger;
                                         label: import("typebox").TString;
-                                        grain: import("typebox").TUnion<[import("typebox").TLiteral<"work">, import("typebox").TLiteral<"release">, import("typebox").TLiteral<"episode">, import("typebox").TLiteral<"character">]>;
                                         scale: import("typebox").TObject<{
                                             min: import("typebox").TInteger;
                                             max: import("typebox").TInteger;
                                             displayStep: import("typebox").TInteger;
                                         }>;
+                                        grain: import("typebox").TUnion<[import("typebox").TLiteral<"work">, import("typebox").TLiteral<"release">, import("typebox").TLiteral<"episode">, import("typebox").TLiteral<"character">]>;
                                         realmId: import("typebox").TString;
                                         meaning: import("typebox").TString;
                                         canonicalLabel: import("typebox").TString;
@@ -11138,12 +11138,12 @@ export declare function createRatingModule(options: {
                                         id: import("typebox").TString;
                                         revision: import("typebox").TInteger;
                                         label: import("typebox").TString;
-                                        grain: import("typebox").TUnion<[import("typebox").TLiteral<"work">, import("typebox").TLiteral<"release">, import("typebox").TLiteral<"episode">, import("typebox").TLiteral<"character">]>;
                                         scale: import("typebox").TObject<{
                                             min: import("typebox").TInteger;
                                             max: import("typebox").TInteger;
                                             displayStep: import("typebox").TInteger;
                                         }>;
+                                        grain: import("typebox").TUnion<[import("typebox").TLiteral<"work">, import("typebox").TLiteral<"release">, import("typebox").TLiteral<"episode">, import("typebox").TLiteral<"character">]>;
                                         realmId: import("typebox").TString;
                                         meaning: import("typebox").TString;
                                         canonicalLabel: import("typebox").TString;
@@ -16214,12 +16214,12 @@ export declare function createRatingModule(options: {
                                 id: import("typebox").TString;
                                 revision: import("typebox").TInteger;
                                 label: import("typebox").TString;
-                                grain: import("typebox").TUnion<[import("typebox").TLiteral<"work">, import("typebox").TLiteral<"release">, import("typebox").TLiteral<"episode">, import("typebox").TLiteral<"character">]>;
                                 scale: import("typebox").TObject<{
                                     min: import("typebox").TInteger;
                                     max: import("typebox").TInteger;
                                     displayStep: import("typebox").TInteger;
                                 }>;
+                                grain: import("typebox").TUnion<[import("typebox").TLiteral<"work">, import("typebox").TLiteral<"release">, import("typebox").TLiteral<"episode">, import("typebox").TLiteral<"character">]>;
                                 realmId: import("typebox").TString;
                                 meaning: import("typebox").TString;
                                 canonicalLabel: import("typebox").TString;
@@ -16242,12 +16242,12 @@ export declare function createRatingModule(options: {
                                 id: import("typebox").TString;
                                 revision: import("typebox").TInteger;
                                 label: import("typebox").TString;
-                                grain: import("typebox").TUnion<[import("typebox").TLiteral<"work">, import("typebox").TLiteral<"release">, import("typebox").TLiteral<"episode">, import("typebox").TLiteral<"character">]>;
                                 scale: import("typebox").TObject<{
                                     min: import("typebox").TInteger;
                                     max: import("typebox").TInteger;
                                     displayStep: import("typebox").TInteger;
                                 }>;
+                                grain: import("typebox").TUnion<[import("typebox").TLiteral<"work">, import("typebox").TLiteral<"release">, import("typebox").TLiteral<"episode">, import("typebox").TLiteral<"character">]>;
                                 realmId: import("typebox").TString;
                                 meaning: import("typebox").TString;
                                 canonicalLabel: import("typebox").TString;

@@ -4,3 +4,5 @@ export type { IndexedReview, NativeReviewDiscoverySource, ReviewDiscoveryContinu
 export type { ReviewDiscoveryRefresh } from './review-discovery-changes.ts';
 export { createRealmSubjectSearchSource } from './realm-subject-search.ts';
 export type { RealmSubjectSource } from './realm-subject-source.ts';
+/** Explicit local composition only; production servers do not mount this transport. */
+export { developmentMediaHandler } from './media-local-http.ts';

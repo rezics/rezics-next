@@ -62,4 +62,20 @@ export declare function pendingFacts(subject: Pick<IndexedSubject, 'statements'>
  * disclosure; a target that is not visible is dropped without taking a later value's place.
  */
 export declare function projectFacts(source: SubjectSource, subjects: readonly IndexedSubject[], properties: readonly string[], languages: readonly string[] | undefined): Promise<Record<string, Fact[]>[]>;
+export type RevalidatedHit = Readonly<{
+    subject: IndexedSubject;
+    hit: SearchHit;
+}>;
+/**
+ * Final displayed fields after nested facet or label reads. Hidden, taken-down and redirected
+ * subjects drop; withheld statements disappear from the current snapshot.
+ *
+ * Cost
+ * - Touches: one grouped current Source read of accepted hit ids, then the existing fact-target
+ *   disclosure for requested item properties.
+ * - Bound: at most 100 hits and four properties, in 256-key Source batches. No engine read.
+ * - Growth check: `test/search/query-privacy-page.test.ts` covers hydration reduction and nested
+ *   label revalidation.
+ */
+export declare function revalidateProjectedHits(source: SubjectSource, subjects: readonly IndexedSubject[], options: HitOptions): Promise<Map<string, RevalidatedHit>>;
 export {};

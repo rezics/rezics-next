@@ -12,6 +12,7 @@ export declare function ensureAccountAgent(pool: Pool, options: {
     kind: AgentKind;
     name: string | null;
     language?: string;
+    deadline?: number;
 }): Promise<{
     subject: Item;
     created: boolean;

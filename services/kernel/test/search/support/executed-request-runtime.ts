@@ -1,9 +1,13 @@
+import { randomUUID } from 'node:crypto';
 import { bulkLines, documentActions } from '../../../src/search/document.ts';
 import { createSubjectIndex, subjectAlias, subjectGenerations, subjectIndexName } from '../../../src/search/indices.ts';
 import type { OpenSearch } from '../../../src/search/opensearch.ts';
 import { FACET_TEMPLATE, SEARCH_TEMPLATE, SUGGEST_TEMPLATE } from '../../../src/search/query.ts';
+import { newId } from '../../../src/route/route.ts';
+import { createSubject } from '../../../src/semantic/subject.ts';
 import { subjectPartition, type IndexedSubject } from '../../../src/search/source.ts';
 import { createFakeSource } from './fake-source.ts';
+import { digest, release as nativeRelease, type EpochFixture } from '../../semantic/support/identity-epoch.ts';
 
 export function executedRequestSubject(
   n: number,
@@ -23,6 +27,29 @@ export function executedRequestSubject(
     statements: [],
     ...patch,
   };
+}
+
+/** Create the native revision-1 identity row used by canonical Search before indexing the test document. */
+export async function createMappedExecutedRequestSubject(
+  fixture: EpochFixture,
+  n: number,
+  label: string,
+  partition = 10,
+  patch: Partial<IndexedSubject> = {},
+): Promise<IndexedSubject> {
+  const route = partition * 16;
+  const actor = await fixture.actor();
+  const key = randomUUID();
+  const created = await createSubject(fixture.pool, {
+    actor,
+    target: { route, id: newId(route) },
+    idempotencyKey: key,
+    digest: digest(key),
+    item: { type: 'schema:Book', labels: { en: label } },
+    release: nativeRelease,
+    authorization: await fixture.authorization('subject:create'),
+  });
+  return { ...executedRequestSubject(n, label, partition, patch), id: created.subject.id };
 }
 
 export async function publishExecutedGeneration(

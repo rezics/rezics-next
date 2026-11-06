@@ -1,24 +1,31 @@
 import { expect, test } from 'bun:test';
+import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { startWorkerCheck, workerCheckNeedsStack } from '../../../scripts/worker-check.ts';
 import { openDb } from './db.ts';
+import { settle } from './settle.ts';
 import { WorkerStore } from './store.ts';
-import { brief, temporaryDirectory } from './test-support.ts';
+import { brief, harness, temporaryDirectory } from './test-support.ts';
 import type { Attempt, Settings } from './types.ts';
 import { runWorkerCommand } from './worker-commands.ts';
 import type { WorkerTasks } from './tasks.ts';
 import {
   admitWorkerCheckHostRun,
+  readWorkerCheckHostStamp,
   refuseExcessWorkerCheckHostRun,
   settleWorkerCheckHostBudget,
   workerCheckBudgetDirectory,
   workerCheckHostBudgetLimit,
   workerCheckHostCommandReached,
+  workerCheckHostContentTree,
   workerCheckHostRunsUsed,
+  workerCheckHostTypecheckFailed,
+  workerCheckHostTypingSettlement,
   WORKER_CHECK_HOST_BUDGET_REFUSAL,
   WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT,
   WORKER_CHECK_HOST_RUN_LIMIT,
+  WORKER_CHECK_HOST_TYPECHECK_REFUSAL,
 } from './worker-check-budget.ts';
 
 const product = { brief: { goal: 'web', kind: 'implementation' as const } };
@@ -182,6 +189,7 @@ test('the wrapper refuses a third check-host request before it writes a check re
   const directory = temporaryDirectory();
   const previousBudget = process.env.GOAL_WORKER_CHECK_BUDGET;
   const previousDirectory = process.env.GOAL_WORKER_CHECK_BUDGET_DIR;
+  const previousRegistry = process.env.GOAL_CHECK_REGISTRY;
   try {
     mkdirSync(join(directory.path, 'scripts'), { recursive: true });
     writeFileSync(join(directory.path, 'scripts/worker-check.ts'), '');
@@ -193,6 +201,7 @@ test('the wrapper refuses a third check-host request before it writes a check re
     expect(workerCheckNeedsStack(command, directory.path)).toBe(true);
     process.env.GOAL_WORKER_CHECK_BUDGET = '2';
     process.env.GOAL_WORKER_CHECK_BUDGET_DIR = budget;
+    process.env.GOAL_CHECK_REGISTRY = join(directory.path, 'missing-registry');
     expect(() => startWorkerCheck(command, directory.path)).toThrow(WORKER_CHECK_HOST_BUDGET_REFUSAL);
     expect(existsSync(join(directory.path, '.temp/goal/checks'))).toBe(false);
     expect(() => refuseExcessWorkerCheckHostRun({ GOAL_WORKER_CHECK_BUDGET_DIR: budget }, false)).not.toThrow();
@@ -201,6 +210,8 @@ test('the wrapper refuses a third check-host request before it writes a check re
     else process.env.GOAL_WORKER_CHECK_BUDGET = previousBudget;
     if (previousDirectory === undefined) delete process.env.GOAL_WORKER_CHECK_BUDGET_DIR;
     else process.env.GOAL_WORKER_CHECK_BUDGET_DIR = previousDirectory;
+    if (previousRegistry === undefined) delete process.env.GOAL_CHECK_REGISTRY;
+    else process.env.GOAL_CHECK_REGISTRY = previousRegistry;
     directory.close();
   }
 });
@@ -257,3 +268,301 @@ test('runs that reached the check command keep counting, whatever their exit cod
     directory.close();
   }
 });
+
+const combinedArgv = ['sh', '-c', 'bun run --cwd tools/goal typecheck; s=$?; bun test a.test.ts || s=1; exit $s'];
+const typecheckLog =
+  "src.ts(1,1): error TS2322: Type 'string' is not assignable to type 'number'.\nerror: script \"typecheck\" exited with code 1\n";
+const testsOnlyLog = '$ bun run --cwd tools/goal typecheck\n$ bun test a.test.ts\n(fail) a\nerror: bun test failed\n';
+
+function git(path: string, args: string[]): void {
+  const result = spawnSync('git', args, { cwd: path, encoding: 'utf8' });
+  if (result.status !== 0) throw new Error(result.stderr.trim() || `git ${args.join(' ')}`);
+}
+
+function gitWorktree(path: string): void {
+  git(path, ['init', '-b', 'main']);
+  git(path, ['config', 'user.email', 'test@example.invalid']);
+  git(path, ['config', 'user.name', 'Test']);
+  writeFileSync(join(path, '.gitignore'), '.temp/\n');
+  writeFileSync(join(path, 'src.ts'), 'export {}\n');
+  git(path, ['add', '.']);
+  git(path, ['commit', '-m', 'init']);
+}
+
+function countedFailure(env: NodeJS.ProcessEnv, logPath: string, log: string, exitCode = 1): void {
+  writeFileSync(logPath, log);
+  settleWorkerCheckHostBudget(env, exitCode, true, { log: logPath, argv: combinedArgv });
+}
+
+test('after two failed runs, one final verification run is admitted when the worktree changed; a second final or unchanged content is refused as today', () => {
+  const controller = temporaryDirectory();
+  const worktree = temporaryDirectory();
+  try {
+    gitWorktree(worktree.path);
+    const budget = workerCheckBudgetDirectory(controller.path, 'task', 1);
+    const env: NodeJS.ProcessEnv = {
+      GOAL_WORKER_CHECK_BUDGET: '2',
+      GOAL_WORKER_CHECK_BUDGET_DIR: budget,
+    };
+    expect(admitWorkerCheckHostRun({ directory: budget, limit: 2, worktree: worktree.path })).toEqual({
+      ok: true,
+      used: 1,
+      stamp: '1',
+    });
+    env.GOAL_WORKER_CHECK_BUDGET_STAMP = '1';
+    countedFailure(env, join(controller.path, '1.log'), testsOnlyLog);
+    expect(admitWorkerCheckHostRun({ directory: budget, limit: 2, worktree: worktree.path })).toEqual({
+      ok: true,
+      used: 2,
+      stamp: '2',
+    });
+    env.GOAL_WORKER_CHECK_BUDGET_STAMP = '2';
+    countedFailure(env, join(controller.path, '2.log'), testsOnlyLog);
+    expect(admitWorkerCheckHostRun({ directory: budget, limit: 2, worktree: worktree.path })).toEqual({
+      ok: false,
+      used: 2,
+      message: WORKER_CHECK_HOST_BUDGET_REFUSAL,
+    });
+    writeFileSync(join(worktree.path, 'src.ts'), 'export const fixed = 1;\n');
+    expect(admitWorkerCheckHostRun({ directory: budget, limit: 2, worktree: worktree.path })).toEqual({
+      ok: true,
+      used: 3,
+      stamp: '3',
+    });
+    expect(readWorkerCheckHostStamp(budget, '3').final).toBe(true);
+    env.GOAL_WORKER_CHECK_BUDGET_STAMP = '3';
+    countedFailure(env, join(controller.path, '3.log'), testsOnlyLog);
+    writeFileSync(join(worktree.path, 'src.ts'), 'export const again = 2;\n');
+    expect(admitWorkerCheckHostRun({ directory: budget, limit: 2, worktree: worktree.path })).toEqual({
+      ok: false,
+      used: 3,
+      message: WORKER_CHECK_HOST_BUDGET_REFUSAL,
+    });
+  } finally {
+    controller.close();
+    worktree.close();
+  }
+});
+
+test('a final verification typecheck failure keeps its stamp and the next refusal tells the worker to return a blocker naming those type errors, not success', () => {
+  const controller = temporaryDirectory();
+  const worktree = temporaryDirectory();
+  try {
+    gitWorktree(worktree.path);
+    const budget = workerCheckBudgetDirectory(controller.path, 'task', 1);
+    const env: NodeJS.ProcessEnv = {
+      GOAL_WORKER_CHECK_BUDGET: '2',
+      GOAL_WORKER_CHECK_BUDGET_DIR: budget,
+    };
+    expect(workerCheckHostTypecheckFailed(typecheckLog, combinedArgv)).toBe(true);
+    expect(workerCheckHostTypecheckFailed(testsOnlyLog, combinedArgv)).toBe(false);
+    for (const stamp of ['1', '2'] as const) {
+      expect(admitWorkerCheckHostRun({ directory: budget, limit: 2, worktree: worktree.path }).ok).toBe(true);
+      env.GOAL_WORKER_CHECK_BUDGET_STAMP = stamp;
+      countedFailure(env, join(controller.path, `${stamp}.log`), typecheckLog);
+    }
+    writeFileSync(join(worktree.path, 'src.ts'), 'export const fixed = 1;\n');
+    expect(admitWorkerCheckHostRun({ directory: budget, limit: 2, worktree: worktree.path })).toEqual({
+      ok: true,
+      used: 3,
+      stamp: '3',
+    });
+    env.GOAL_WORKER_CHECK_BUDGET_STAMP = '3';
+    countedFailure(env, join(controller.path, '3.log'), typecheckLog);
+    expect(workerCheckHostRunsUsed(budget)).toBe(3);
+    expect(readWorkerCheckHostStamp(budget, '3')).toMatchObject({
+      final: true,
+      exitCode: 1,
+      typecheckFailed: true,
+      includedTypecheck: true,
+    });
+    const refused = admitWorkerCheckHostRun({ directory: budget, limit: 2, worktree: worktree.path });
+    expect(refused).toEqual({
+      ok: false,
+      used: 3,
+      message: WORKER_CHECK_HOST_TYPECHECK_REFUSAL,
+    });
+    expect(refused.ok ? '' : refused.message).toContain('Return a blocker naming those type errors, not success.');
+    expect(refused.ok ? '' : refused.message.split('\n')).toHaveLength(1);
+  } finally {
+    controller.close();
+    worktree.close();
+  }
+});
+
+test('settlement records a typing failure after a failed or stale host typecheck; failing tests alone keep today handling', () => {
+  const controller = temporaryDirectory();
+  const worktree = temporaryDirectory();
+  try {
+    gitWorktree(worktree.path);
+    const budget = workerCheckBudgetDirectory(controller.path, 'task', 1);
+    const env: NodeJS.ProcessEnv = {
+      GOAL_WORKER_CHECK_BUDGET: '2',
+      GOAL_WORKER_CHECK_BUDGET_DIR: budget,
+    };
+    expect(admitWorkerCheckHostRun({ directory: budget, limit: 2, worktree: worktree.path })).toEqual({
+      ok: true,
+      used: 1,
+      stamp: '1',
+    });
+    env.GOAL_WORKER_CHECK_BUDGET_STAMP = '1';
+    countedFailure(env, join(controller.path, 'failed.log'), typecheckLog);
+    const failed = workerCheckHostTypingSettlement({
+      directory: budget,
+      worktree: worktree.path,
+      limit: 2,
+    });
+    expect(failed.ok).toBe(false);
+    if (failed.ok) throw new Error('expected typing failure');
+    expect(failed.result).toContain('Last check-host run failed its typecheck.');
+    expect(failed.result).toContain('error TS2322');
+    expect(
+      workerCheckHostTypingSettlement({
+        directory: budget,
+        worktree: worktree.path,
+        limit: 'off',
+      }),
+    ).toEqual({ ok: true });
+
+    const tests = temporaryDirectory();
+    gitWorktree(tests.path);
+    const testsBudget = workerCheckBudgetDirectory(controller.path, 'tests', 1);
+    const testsEnv: NodeJS.ProcessEnv = {
+      GOAL_WORKER_CHECK_BUDGET: '2',
+      GOAL_WORKER_CHECK_BUDGET_DIR: testsBudget,
+    };
+    expect(admitWorkerCheckHostRun({ directory: testsBudget, limit: 2, worktree: tests.path })).toEqual({
+      ok: true,
+      used: 1,
+      stamp: '1',
+    });
+    testsEnv.GOAL_WORKER_CHECK_BUDGET_STAMP = '1';
+    countedFailure(testsEnv, join(controller.path, 'tests.log'), testsOnlyLog);
+    expect(workerCheckHostTypingSettlement({ directory: testsBudget, worktree: tests.path, limit: 2 })).toEqual({
+      ok: true,
+    });
+
+    const passed = temporaryDirectory();
+    gitWorktree(passed.path);
+    const passedBudget = workerCheckBudgetDirectory(controller.path, 'passed', 1);
+    const passedEnv: NodeJS.ProcessEnv = {
+      GOAL_WORKER_CHECK_BUDGET: '2',
+      GOAL_WORKER_CHECK_BUDGET_DIR: passedBudget,
+    };
+    writeFileSync(join(passed.path, 'extra.ts'), 'export const extra = 1;\n');
+    expect(admitWorkerCheckHostRun({ directory: passedBudget, limit: 2, worktree: passed.path })).toEqual({
+      ok: true,
+      used: 1,
+      stamp: '1',
+    });
+    passedEnv.GOAL_WORKER_CHECK_BUDGET_STAMP = '1';
+    countedFailure(passedEnv, join(controller.path, 'passed.log'), testsOnlyLog, 0);
+    const beforeCommit = workerCheckHostContentTree(passed.path);
+    git(passed.path, ['add', 'extra.ts']);
+    git(passed.path, ['commit', '-m', 'same tree']);
+    expect(workerCheckHostContentTree(passed.path)).toBe(beforeCommit);
+    expect(workerCheckHostTypingSettlement({ directory: passedBudget, worktree: passed.path, limit: 2 })).toEqual({
+      ok: true,
+    });
+    writeFileSync(join(passed.path, 'extra.ts'), 'export const extra = 2;\n');
+    const stale = workerCheckHostTypingSettlement({
+      directory: passedBudget,
+      worktree: passed.path,
+      limit: 2,
+    });
+    expect(stale.ok).toBe(false);
+    if (stale.ok) throw new Error('expected stale typing failure');
+    expect(stale.result).toContain('Worktree content changed after the last check-host typecheck.');
+    tests.close();
+    passed.close();
+  } finally {
+    controller.close();
+    worktree.close();
+  }
+});
+
+test('settlement of a success report after a failed host typecheck retries instead of landing', async () => {
+  const h = harness();
+  try {
+    const failed = await settleSuccessWithHostCheck(h, typecheckLog);
+    expect(failed.landings).toEqual([]);
+    expect(h.store.attempt(failed.ref).failureKind).toBe('tool');
+    expect(h.store.attempt(failed.ref).result).toContain('Last check-host run failed its typecheck.');
+    expect(h.store.attempt(failed.ref).result).toContain('error TS2322');
+    expect(h.store.task(failed.task.id).state).not.toBe('landing');
+  } finally {
+    await h.disposeAsync();
+  }
+}, 15_000);
+
+async function settleSuccessWithHostCheck(h: ReturnType<typeof harness>, log: string) {
+  const task = h.tasks.dispatch(h.briefFile);
+  const startedAt = new Date().toISOString();
+  const attempt = h.store.nextAttempt({ taskId: task.id, attempt: 0 }, (n): Attempt => ({
+    taskId: task.id,
+    attempt: n,
+    state: 'pending',
+    profile: { cli: 'codex', model: 'gpt-6-luna', effort: 'high', poolClass: 'codex' },
+    pool: 'fixture',
+    tableVersion: 'fixture',
+    experiment: null,
+    startedAt,
+    endedAt: null,
+    process: null,
+    driver: null,
+    logPath: join(h.settings.stateDirectory, 'runs', task.id, `${n}.jsonl`),
+    evidencePath: join(h.settings.stateDirectory, 'evidence', task.id, String(n)),
+    auxiliaryProcesses: [],
+    session: null,
+    fixRound: 0,
+    consulted: false,
+    previousFailure: null,
+    failure: null,
+    escalation: null,
+    before: null,
+    after: null,
+    exitCode: null,
+    result: '',
+    blocker: null,
+    approaches: [],
+  }));
+  mkdirSync(join(attempt.logPath, '..'), { recursive: true });
+  writeFileSync(
+    attempt.logPath,
+    [
+      { type: 'thread.started', thread_id: 'typing-session' },
+      {
+        type: 'item.completed',
+        item: { type: 'agent_message', text: 'RESULT: success' },
+      },
+      { type: 'turn.completed', usage: { input_tokens: 1, output_tokens: 1 } },
+    ]
+      .map((event) => JSON.stringify(event))
+      .join('\n') + '\n',
+  );
+  h.store.updateAttempt(attempt, (current) => {
+    current.state = 'running';
+  });
+  h.store.updateTask(attempt, (current) => {
+    current.state = 'running';
+  });
+  const budget = workerCheckBudgetDirectory(h.settings.stateDirectory, task.id, attempt.attempt);
+  const env: NodeJS.ProcessEnv = {
+    GOAL_WORKER_CHECK_BUDGET: '2',
+    GOAL_WORKER_CHECK_BUDGET_DIR: budget,
+  };
+  expect(admitWorkerCheckHostRun({ directory: budget, limit: 2, worktree: task.worktree })).toEqual({
+    ok: true,
+    used: 1,
+    stamp: '1',
+  });
+  env.GOAL_WORKER_CHECK_BUDGET_STAMP = '1';
+  countedFailure(env, join(h.settings.stateDirectory, `${task.id}.log`), log);
+  const landings: unknown[] = [];
+  await settle(
+    h.tasks,
+    { attempt, exited: Promise.resolve({ code: 0, signal: null }) },
+    { enqueue: (request) => landings.push(request) },
+  );
+  return { task, ref: { taskId: task.id, attempt: attempt.attempt }, landings };
+}

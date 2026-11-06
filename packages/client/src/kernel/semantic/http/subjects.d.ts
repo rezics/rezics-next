@@ -3236,6 +3236,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                                                 obligations: string[];
                                             };
                                         } | null;
+                                        redirect?: string;
                                     }>;
                                     type: string;
                                     label: string;
@@ -4779,6 +4780,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                                                 obligations: string[];
                                             };
                                         } | null;
+                                        redirect?: string;
                                     }>;
                                     target: string | null;
                                     external: string | null;

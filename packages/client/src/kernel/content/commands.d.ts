@@ -10,7 +10,7 @@ export type ContentCommandDependencies = Readonly<{
     access: Access;
     routeKey: Uint8Array;
     realmParticipation?: RealmParticipationCheck;
-    clock?: () => Date;
+    clock: () => Date;
 }>;
 export type ThreadTarget = Resource;
 type ThreadCreationInput = ThreadInput & Readonly<{

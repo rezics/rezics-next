@@ -14,6 +14,8 @@ export declare const DISCOVERY_DOCUMENT_FORMAT = 1;
 export declare const MIXED_DISCOVERY_DOCUMENT_FORMAT = 2;
 /** Calendar facts are written only to a physical generation using the matching successor mapping. */
 export declare const MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT = 3;
+/** Calendar and credited-name successor: Subject documents carry complete credit projections. */
+export declare const MIXED_CREDIT_DISCOVERY_DOCUMENT_FORMAT = 4;
 export declare const ACCOUNT_DISCOVERY_BATCH_SIZE = 100;
 export declare const MAX_ACCOUNT_DISCOVERY_BATCH = 100;
 export declare function discoveryPartition(id: string): number;
@@ -100,7 +102,7 @@ export type DiscoverySnapshot = {
     snapshot: AccountSnapshot;
 };
 type DocumentIdentity = {
-    document_format: typeof DISCOVERY_DOCUMENT_FORMAT | typeof MIXED_DISCOVERY_DOCUMENT_FORMAT | typeof MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT;
+    document_format: typeof DISCOVERY_DOCUMENT_FORMAT | typeof MIXED_DISCOVERY_DOCUMENT_FORMAT | typeof MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT | typeof MIXED_CREDIT_DISCOVERY_DOCUMENT_FORMAT;
     identity?: string;
     id: string;
     kind: string;
@@ -137,7 +139,7 @@ export type DiscoveryIndexDefinition = {
     settings: Record<string, unknown>;
     mappings: {
         _meta: {
-            discovery_document_format: typeof DISCOVERY_DOCUMENT_FORMAT | typeof MIXED_DISCOVERY_DOCUMENT_FORMAT | typeof MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT;
+            discovery_document_format: typeof DISCOVERY_DOCUMENT_FORMAT | typeof MIXED_DISCOVERY_DOCUMENT_FORMAT | typeof MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT | typeof MIXED_CREDIT_DISCOVERY_DOCUMENT_FORMAT;
             identity?: string;
             name_sort_format: number;
             document_identity: string;
@@ -155,6 +157,8 @@ export type DiscoveryEngineHit = Readonly<{
     sourceVersion?: string | null;
     matched: readonly string[];
     engineEvidence?: EngineMatchEvidence;
+    /** Engine inner hits of the credited-name query, already structurally validated and unverified. */
+    creditEvidence?: readonly import('./credit-search.ts').CreditSearchWitness[];
     sort: readonly (string | number | null)[];
 }>;
 export type DiscoveryEngineResult = Readonly<{

@@ -5,6 +5,7 @@ import type { Pool, PoolClient } from 'pg';
 import type { KeyRing } from '../tokens/seal.ts';
 import accountRead from './account-read.sql.d.ts';
 import organizationRoleRead from './account-organization-role.sql.d.ts';
+import { type ContributionAttribution } from './contribution-attribution.ts';
 import { type AccessWorkAccounting } from './work.ts';
 type Queryable = Pick<Pool | PoolClient, 'query'>;
 type AccountRow = NonNullable<Awaited<ReturnType<typeof accountRead.run>>>;
@@ -89,6 +90,16 @@ export type PublicHandleIdentity = PublicIdentityFields & {
 export declare function readPublicAccountByHandle(client: Pool, handle: string, at?: Date): Promise<(PublicIdentity | PublicHandleIdentity | PublicAccountProfile)[]>;
 /** Resolve a stored catalogue pointer or native graph link, then confirm current account authority. */
 export declare function readPublicAccountByAgent(client: Pool, subjectId: string): Promise<(PublicIdentity | PublicHandleIdentity | PublicAccountProfile)[]>;
+/** Bounded current attribution for a retained-contribution page, including unavailable owners.
+ * Deduplicate seeks without changing identity: no label/handle search or graph redirect is involved.
+ * Each native batch contains at most 100 Account anchors; errors retain the owner's normal failure semantics.
+ */
+export declare function readContributionAttributions(client: Queryable, accountIds: readonly string[]): Promise<Map<string, ContributionAttribution>>;
+/** Resolve retained attribution through the exact bounded native owner relation.
+ * Public profile absence is not deletion; only the anchored account tombstone is.
+ * This does not compose avatar, biography, graph labels or account-page disclosure.
+ */
+export declare function agentContributionAttribution(client: Queryable, subjectId: string): Promise<ContributionAttribution>;
 /** Internal Access/kernel point read: state, authentication floor and fence share one anchored row.
  * Trusted Auth composition must return unavailable for a fenced account before establishing a session.
  */

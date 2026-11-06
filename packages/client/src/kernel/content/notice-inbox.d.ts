@@ -9,7 +9,7 @@ export type InboxDependencies = Readonly<{
     actor: Actor;
     routeKey: Uint8Array;
     deadline?: number;
-    now?: () => Date;
+    now: () => Date;
 }>;
 export declare const INBOX_SELECTIONS: readonly ['all', 'unread'];
 export type InboxSelection = (typeof INBOX_SELECTIONS)[number];

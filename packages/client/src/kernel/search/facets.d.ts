@@ -28,6 +28,11 @@ export declare function typeFacetLabels(release: FilterRelease, type: string): R
 export declare function validateFacets(request: FacetRequest): Facet[];
 /** Validate the additive scoped wire while leaving semantic conditions to shared Search admission. */
 export declare function validateScopedFacetRequest(request: unknown): ScopedFacetRequest;
+/** Release-bound qualifier validation shared by facet request admission. */
+export declare function admitFacetCreditQualifiers(request: FacetRequest, release: FilterRelease): Readonly<{
+    property: string;
+    value: string;
+}>[] | undefined;
 /** Probe admission with the same immediate type anchors, without spending the query's leaf/depth budget. */
 export declare function admitFacets(facets: readonly Facet[], filter: FilterDocument | undefined, release: FilterRelease): void;
 /** Read each value anchor once, grouping across all facets before applying disclosure. */

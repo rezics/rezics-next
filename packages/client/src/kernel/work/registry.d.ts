@@ -1,13 +1,13 @@
 import type { Pool } from 'pg';
 import { type KernelClock } from '../clock.ts';
-import { type WorkClient } from './client.ts';
-import { type Effect, type NativeEffect } from '../events/effects.ts';
+import type { WorkClient } from './client.ts';
+import { registerEffects, type Effect, type NativeEffect } from '../events/effects.ts';
 import { WORK_QUEUES } from './queues.ts';
-import { HistoryRegistry } from '../history/registry.ts';
+import type { HistoryRegistry } from '../history/contract/index.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { type WorkerAuthorization } from './authorization.ts';
+import type { WorkerAuthorization } from './authorization.ts';
 import type { KindConsentParticipant } from '@rezics/auth-contract';
-import { type SelectedRuntime } from './selected-runtime.ts';
+import type { SelectedRuntime } from './selected-runtime.ts';
 export type WorkService = {
     stop(): Promise<void>;
 };
@@ -35,16 +35,13 @@ export type WorkOptions = {
     pool: Pool;
     client: WorkClient;
     env?: Readonly<Record<string, string | undefined>>;
-    /** Trusted service composition only. */
     clock?: KernelClock;
     receiptKeys?: KeyRing;
 };
-/** Registration owns the process-global SDK once. Pools and clients belong to the caller. */
-export declare function composeWork(modules: readonly WorkModule[], options: WorkOptions): Promise<{
-    effects: {
-        enqueue(envelopes: readonly import("../events/log.ts").Envelope[]): Promise<void>;
-        admit?: (client: import("pg").PoolClient, envelopes: readonly import("../events/log.ts").Envelope[]) => Promise<void>;
-    };
+export type ComposedWork = {
+    effects: ReturnType<typeof registerEffects>;
     launch(): Promise<void>;
     shutdown(): Promise<void>;
-}>;
+};
+/** Registration owns the process-global SDK once. Pools and clients belong to the caller. */
+export declare function composeWork(modules: readonly WorkModule[], options: WorkOptions): Promise<ComposedWork>;

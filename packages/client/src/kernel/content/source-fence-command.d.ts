@@ -7,7 +7,7 @@ export type SourceFenceDependencies = Readonly<{
     pool: Pool;
     access: Access;
     routeKey: Uint8Array;
-    clock?: () => Date;
+    clock: () => Date;
 }>;
 export type SourceFenceTakedownInput = Readonly<{
     source: string;

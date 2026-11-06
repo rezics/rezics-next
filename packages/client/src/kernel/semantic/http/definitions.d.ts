@@ -4,6 +4,7 @@ import type { Pool } from 'pg';
 import type { subjectRoutes } from './subjects.ts';
 import { type Access, type AccessFactory } from '../../request/access.ts';
 import type { Resource } from '../../request/access.ts';
+import { type DefinitionImportRequest, type ImportedPreview } from '../definition-import.ts';
 export declare function definitionRoutes(app: ReturnType<typeof subjectRoutes>, { pool, access, clock, catalogue, tokens, }: {
     pool: Pool;
     access?: Access | AccessFactory;
@@ -3088,6 +3089,7 @@ export declare function definitionRoutes(app: ReturnType<typeof subjectRoutes>, 
                                                 obligations: string[];
                                             };
                                         } | null;
+                                        redirect?: string;
                                     }>;
                                     type: string;
                                     label: string;
@@ -4631,6 +4633,7 @@ export declare function definitionRoutes(app: ReturnType<typeof subjectRoutes>, 
                                                 obligations: string[];
                                             };
                                         } | null;
+                                        redirect?: string;
                                     }>;
                                     target: string | null;
                                     external: string | null;
@@ -6211,6 +6214,93 @@ export declare function definitionRoutes(app: ReturnType<typeof subjectRoutes>, 
 } & {
     v1: {
         definitions: {
+            imports: {
+                post: {
+                    body: DefinitionImportRequest;
+                    params: {};
+                    query: unknown;
+                    headers: unknown;
+                    response: {
+                        200: ImportedPreview;
+                        400: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        401: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        403: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        404: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        422: Response | {
+                            type: 'validation';
+                            code: 'validation';
+                            title: 'Validation Error';
+                            status: 422;
+                            detail?: string;
+                            on: string;
+                            found?: unknown;
+                            property?: string;
+                            expected?: unknown;
+                            errors?: {
+                                message?: string;
+                                [key: string]: unknown;
+                            }[];
+                        };
+                        503: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                    };
+                    error: never;
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        definitions: {
             releases: {
                 post: {
                     body: {
@@ -6731,6 +6821,80 @@ export declare function definitionRoutes(app: ReturnType<typeof subjectRoutes>, 
             };
         };
     };
+} & {
+    v1: {
+        contexts: {
+            ":id": {
+                definitions: {
+                    get: {
+                        body: unknown;
+                        params: {
+                            id: string;
+                        };
+                        query: unknown;
+                        headers: unknown;
+                        response: {
+                            200: {
+                                context: string;
+                                digest: string | null;
+                                head: number;
+                                extension: Record<string, any> | null;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
 }, import("elysia").DefaultEphemeral, {
     derive: {
         readonly admission: import("../../http/admission.ts").Admission;
@@ -6752,17 +6916,21 @@ export declare function definitionRoutes(app: ReturnType<typeof subjectRoutes>, 
     schemas: {};
     response: {};
     error: [];
-}, "get", "/v1/contexts/:id/definitions", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
+}, "get", "/v1/contexts/:id/definitions/extensions/:digest", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
     params: import("typebox").TObject<{
         id: import("typebox").TString;
+        digest: import("typebox").TString;
     }>;
     response: {
         200: import("typebox").TObject<{
-            context: import("typebox").TString;
-            digest: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-            head: import("typebox").TInteger;
-            extension: import("typebox").TUnion<[import("typebox").TRecord<"^.*$", import("typebox").TAny>, import("typebox").TNull]>;
-        }>;
+            digest: import("typebox").TString;
+            extension: import("typebox").TRecord<"^.*$", import("typebox").TAny>;
+        }> & {
+            headers: {
+                readonly etag: import("typebox").TString;
+                readonly 'cache-control': import("typebox").TString;
+            };
+        };
         401: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
@@ -6816,7 +6984,7 @@ export declare function definitionRoutes(app: ReturnType<typeof subjectRoutes>, 
             bearerAuth?: never;
         })[];
     };
-}, {}, "/v1/contexts/:id/definitions">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ params, authorize, admission, job }: {
+}, {}, "/v1/contexts/:id/definitions/extensions/:digest">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ params, authorize, admission, job, set }: {
     server: import("elysia").Server | null;
     redirect: import("elysia").redirect;
     set: {
@@ -6827,10 +6995,8 @@ export declare function definitionRoutes(app: ReturnType<typeof subjectRoutes>, 
     };
     status: import("elysia").SelectiveStatus<{
         200: {
-            context: string;
-            digest: string | null;
-            head: number;
-            extension: Record<string, any> | null;
+            digest: string;
+            extension: Record<string, any>;
         };
         401: {
             type: unknown;
@@ -6868,10 +7034,8 @@ export declare function definitionRoutes(app: ReturnType<typeof subjectRoutes>, 
     }>;
     problem: import("elysia").SelectiveProblem<{
         200: {
-            context: string;
-            digest: string | null;
-            head: number;
-            extension: Record<string, any> | null;
+            digest: string;
+            extension: Record<string, any>;
         };
         401: {
             type: unknown;
@@ -6910,14 +7074,18 @@ export declare function definitionRoutes(app: ReturnType<typeof subjectRoutes>, 
     defer: (fn: import("elysia/types").AfterResponseHandler<NoInfer<import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
         params: import("typebox").TObject<{
             id: import("typebox").TString;
+            digest: import("typebox").TString;
         }>;
         response: {
             200: import("typebox").TObject<{
-                context: import("typebox").TString;
-                digest: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                head: import("typebox").TInteger;
-                extension: import("typebox").TUnion<[import("typebox").TRecord<"^.*$", import("typebox").TAny>, import("typebox").TNull]>;
-            }>;
+                digest: import("typebox").TString;
+                extension: import("typebox").TRecord<"^.*$", import("typebox").TAny>;
+            }> & {
+                headers: {
+                    readonly etag: import("typebox").TString;
+                    readonly 'cache-control': import("typebox").TString;
+                };
+            };
             401: import("typebox").TObject<{
                 type: import("typebox").TSchema;
                 title: import("typebox").TSchema;
@@ -6971,7 +7139,7 @@ export declare function definitionRoutes(app: ReturnType<typeof subjectRoutes>, 
                 bearerAuth?: never;
             })[];
         };
-    }, {}, "/v1/contexts/:id/definitions">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
+    }, {}, "/v1/contexts/:id/definitions/extensions/:digest">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
         derive: {
             readonly admission: import("../../http/admission.ts").Admission;
             readonly job: {
@@ -6998,6 +7166,7 @@ export declare function definitionRoutes(app: ReturnType<typeof subjectRoutes>, 
     query: Record<string, string | undefined>;
     params: {
         id: string;
+        digest: string;
     };
     headers: Record<string, string | undefined>;
     cookie: Record<string, import("elysia").Cookie<unknown>>;
@@ -7016,21 +7185,23 @@ export declare function definitionRoutes(app: ReturnType<typeof subjectRoutes>, 
     readonly authorize: (resource: Resource) => Promise<import("../../request/access.ts").AccessCheck>;
     readonly authorizeCommand: (resource: Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<{
-    context: string;
-    digest: string | null;
-    head: number;
-    extension: Record<string, unknown> | null;
+    digest: string;
+    extension: Record<string, unknown>;
 }>, {
     params: import("typebox").TObject<{
         id: import("typebox").TString;
+        digest: import("typebox").TString;
     }>;
     response: {
         200: import("typebox").TObject<{
-            context: import("typebox").TString;
-            digest: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-            head: import("typebox").TInteger;
-            extension: import("typebox").TUnion<[import("typebox").TRecord<"^.*$", import("typebox").TAny>, import("typebox").TNull]>;
-        }>;
+            digest: import("typebox").TString;
+            extension: import("typebox").TRecord<"^.*$", import("typebox").TAny>;
+        }> & {
+            headers: {
+                readonly etag: import("typebox").TString;
+                readonly 'cache-control': import("typebox").TString;
+            };
+        };
         401: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;

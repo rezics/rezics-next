@@ -79,7 +79,7 @@ export type MediaDependencies = Readonly<{
     pool: Pool;
     access: Access;
     realmParticipation?: RealmParticipationCheck;
-    clock?: () => Date;
+    clock: () => Date;
     /** Trusted per-request host context; never supplied by request JSON. */
     downloadContext?: DownloadContext;
 }>;

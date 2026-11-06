@@ -1,4 +1,5 @@
 import type { KeyRing } from '../tokens/seal.ts';
+import { normalizeBoardQuery } from './core/index.ts';
 export type BoardCursorSort = 'newest' | 'oldest' | 'active' | 'hot';
 export type BoardCursorViewer = {
     kind: 'account';
@@ -39,13 +40,12 @@ export type BoardRankCursorResult = {
     ok: false;
     reason: 'expired' | 'invalid' | 'stale';
 };
-/** Board listing queries strip surrounding whitespace and preserve all remaining authored text. */
-export declare function normalizeBoardQuery(query: string): string;
+export { normalizeBoardQuery };
 /** Encode the last scanned row using the shared signed cursor format and lifetime. */
-export declare function encodeBoardCursor(ring: KeyRing, binding: BoardCursorBinding, epoch: number, after: BoardCursorKey, now?: number): string;
+export declare function encodeBoardCursor(ring: KeyRing, binding: BoardCursorBinding, epoch: number, after: BoardCursorKey, now: number): string;
 /** Decode for the caller's current epoch; malformed tokens and bindings return a typed failure. */
-export declare function decodeBoardCursor(ring: KeyRing, binding: BoardCursorBinding, token: string, expectedEpoch: number, now?: number): BoardCursorResult;
+export declare function decodeBoardCursor(ring: KeyRing, binding: BoardCursorBinding, token: string, expectedEpoch: number, now: number): BoardCursorResult;
 /** Encode a rank position using a cursor binding that includes active or hot sort. */
-export declare function encodeBoardRankCursor(ring: KeyRing, binding: BoardCursorBinding, epoch: number, after: BoardRankCursorKey, now?: number): string;
+export declare function encodeBoardRankCursor(ring: KeyRing, binding: BoardCursorBinding, epoch: number, after: BoardRankCursorKey, now: number): string;
 /** Decode a rank position only for its bound sort, board, query, viewer and epoch. */
-export declare function decodeBoardRankCursor(ring: KeyRing, binding: BoardCursorBinding, token: string, expectedEpoch: number, now?: number): BoardRankCursorResult;
+export declare function decodeBoardRankCursor(ring: KeyRing, binding: BoardCursorBinding, token: string, expectedEpoch: number, now: number): BoardRankCursorResult;

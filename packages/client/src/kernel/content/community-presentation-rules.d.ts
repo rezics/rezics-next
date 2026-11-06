@@ -1,5 +1,5 @@
-import type { Actor } from '../request/access.ts';
-import type { RealmDependencies } from '../community/realm.ts';
+import type { Pool } from 'pg';
+import type { Access, Actor } from '../request/access.ts';
 import type { CommunityPresentation } from './community-presentation-model.ts';
 export type RulesReference = Readonly<{
     postId: string;
@@ -10,6 +10,10 @@ export type PresentedRules = Extract<CommunityPresentation['rules'], {
 }>['value'];
 export declare const rulesKey: (ref: RulesReference, realmId: string) => string;
 /** No injected success proof: the existing Content native read formula owns every source check. */
-export declare function prepareRealmRulesSelection(deps: Pick<RealmDependencies, 'pool' | 'access' | 'clock'>, actor: Actor, realmId: string, reference: RulesReference, context: {
+export declare function prepareRealmRulesSelection(deps: Readonly<{
+    pool: Pool;
+    access: Access;
+    clock: () => Date;
+}>, actor: Actor, realmId: string, reference: RulesReference, context: {
     deadline: number;
 }): Promise<void>;

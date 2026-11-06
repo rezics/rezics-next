@@ -2356,9 +2356,9 @@ function wrapperExecutionArgv(argv: readonly string[]): string[] {
 export function startWorkerCheck(argv: readonly string[], cwd = process.cwd()): string {
   if (argv.length === 0) throw new Error('A check command is required');
   const root = resolve(cwd);
+  refuseExcessWorkerCheckHostRun(process.env, workerCheckNeedsStack(wrapperExecutionArgv(argv), root), root);
   const ownership = ownershipFromEnvironment(process.env);
   registryForStart(process.env, ownership);
-  refuseExcessWorkerCheckHostRun(process.env, workerCheckNeedsStack(wrapperExecutionArgv(argv), root));
   const id = randomUUID();
   const physicalRunId = randomUUID();
   const file = logPath(root, id);
@@ -3394,7 +3394,10 @@ async function runRecordedCheck(id: string, cwd = process.cwd(), physicalArgumen
       current.status = 'finished';
       current.exitCode = exitCode;
       writeRecord(current);
-      settleWorkerCheckHostBudget(process.env, exitCode, workerCheckHostCommandReached(current.physicalRun));
+      settleWorkerCheckHostBudget(process.env, exitCode, workerCheckHostCommandReached(current.physicalRun), {
+        log: join(root, current.log),
+        argv: current.argv,
+      });
     });
   };
   if (initial.waitForPhysicalRunId) {

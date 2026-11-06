@@ -8,6 +8,8 @@ import type { ItemView, PostEntry } from './reads.ts';
 import type { ReportReadView } from './reports.ts';
 import type { Operation } from './operation-contract.ts';
 import type { OwnDraftEntry } from './own-drafts.ts';
+import { RealmPresentationImageSchema } from './realm-presentation-image.ts';
+export { RealmPresentationImageSchema };
 import type { SubjectThreadCardEntry } from './subject-threads-cards.ts';
 import type { SubjectThreadEntry } from './subject-entry.ts';
 type ViewerReactionKind = (typeof REACTION_KINDS)[number];

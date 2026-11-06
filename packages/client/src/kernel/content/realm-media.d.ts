@@ -17,7 +17,7 @@ export declare function claimRealmPresentationMedia(tx: CommandTransaction, inpu
 export declare function readRealmPresentationImages(deps: Readonly<{
     pool: Pool;
     access: Access;
-    clock?: () => Date;
+    clock: () => Date;
 }>, input: Readonly<{
     realmId: string;
     avatarMediaId: string | null;

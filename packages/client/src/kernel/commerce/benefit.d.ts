@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
 import { AccessUnavailableError } from '../access/unavailable.ts';
 import type { ContentEditionSaleAuthority } from '../content/edition-model.ts';
+import { type ContentEditionConsentReader } from '../content/edition-sale.ts';
 import type { ReadContext } from '../content/model.ts';
 import type { Access } from '../request/access.ts';
 import type { CapturedContentEdition, CheckoutDecision } from './model.ts';
@@ -29,10 +30,12 @@ export type NativeEditionAuthorityUnavailable = Readonly<{
     reason: 'content-edition-sale-port-pending';
 }>;
 export declare function nativeEditionAuthorityAvailability(): NativeEditionAuthorityUnavailable;
-type SaleDependencies = Readonly<{
+/** Auth-owned consent is an explicit operand of content sale reads; absent when Auth is unconfigured. */
+export type SaleDependencies = Readonly<{
     pool: Pool;
     access: Access;
-    clock?: () => Date;
+    clock: () => Date;
+    readConsent?: ContentEditionConsentReader;
 }>;
 /** Translate only the closed native facts; this value is immutable terms, not permission. */
 export declare function captureContentEditionSaleAuthority(editionId: string, authority: ContentEditionSaleAuthority | null): CapturedContentEdition;
@@ -68,4 +71,3 @@ export declare function contentEditionTermsView(value: CapturedContentEdition | 
     acquisition: 'one-time-account-bound';
     quantity: 1;
 } | null;
-export {};

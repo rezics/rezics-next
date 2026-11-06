@@ -1,57 +1,13 @@
-import { type IdentityMappingEvidence } from '../identity-core/index.ts';
+import { identityRatingReviewEvidence, type IdentityRatingControlLocator, type IdentityRatingNativeEvidence, type IdentityRatingReviewOperand, type IdentityRatingReviewResult, type IdentityRatingReviewUnavailableReason } from '../identity-core/index.ts';
 import type { Pool, PoolClient } from 'pg';
 import type { IdentityMapping } from './identity-epoch-contract.ts';
-export type IdentityRatingControlLocator = Readonly<{
-    partition: number;
-    group: string;
-}>;
-export type IdentityRatingReviewOperand = Readonly<{
-    version: 1;
-    requestedOriginalId: string;
-    canonicalTerminalId: string;
-    sourceIdentities: readonly string[];
-    sourceHomes: readonly number[];
-    controlLocators: readonly IdentityRatingControlLocator[];
-    /** Canonical JSON for classifier evidence plus exact subject disclosure states. */
-    evidence: string;
-}>;
-export type IdentityRatingReviewUnavailableReason = 'bootstrap' | 'missing-owner' | 'changed-during-read' | 'control-limit' | 'redirect-chain' | 'canonical-mismatch' | 'operand-too-large';
-export type IdentityRatingReviewResult = Readonly<{
-    state: 'reviewed';
-    operand: IdentityRatingReviewOperand;
-}> | Readonly<{
-    state: 'pending';
-    jobId: string;
-    epoch: string;
-}> | Readonly<{
-    state: 'moved';
-    home: number;
-}> | Readonly<{
-    state: 'changed';
-    canonicalTerminalId: string;
-}> | Readonly<{
-    state: 'absent';
-}> | Readonly<{
-    state: 'undisclosed';
-}> | Readonly<{
-    state: 'unavailable';
-    reason: IdentityRatingReviewUnavailableReason;
-}>;
-type SubjectDisclosure = Readonly<{
-    subject_id: string;
-    visibility: string;
-}>;
-export type IdentityRatingNativeEvidence = Readonly<{
-    mapping: IdentityMappingEvidence;
-    subjects: readonly SubjectDisclosure[];
-    controlLocators: readonly IdentityRatingControlLocator[];
-}>;
+export type { IdentityRatingControlLocator, IdentityRatingReviewOperand, IdentityRatingReviewResult, IdentityRatingReviewUnavailableReason, IdentityRatingNativeEvidence, };
 type Queryable = Readonly<{
     query: (text: string, values?: unknown[]) => Promise<{
         rows: Record<string, unknown>[];
     }>;
 }>;
-export declare function identityRatingReviewEvidence(value: IdentityRatingNativeEvidence): string;
+export { identityRatingReviewEvidence };
 /** Bounded exact reviewed mapping evidence; source/control homes are released independently and double-collected. */
 export declare function readIdentityRatingReview(pool: Pool, input: Readonly<{
     requestedOriginalId: string;
@@ -94,4 +50,3 @@ export declare function readIdentityHome(client: PoolClient, partition: number):
 export declare function readIdentityBasis(pool: Pool, options: {
     deadline: number;
 }): Promise<BasisRead>;
-export {};

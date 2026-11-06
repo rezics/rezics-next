@@ -26,7 +26,7 @@ export declare function revalidateNativePublicCollectionOutputHold(tx: CommandTr
 export declare function transferNativePublicCollectionOutputHold(tx: CommandTransaction, selection: PublicOutputDispositionSelection, context: PublicOutputCommandContext): Promise<Readonly<{
     status: 'changed' | 'unavailable';
     dependency?: string;
-    work: import("./contract/work-dimensions.ts").WorkReceipt;
+    work: import("./access-capabilities.ts").WorkReceipt;
 }> | {
     status: 'transferred';
     successorHoldId: string;
@@ -36,13 +36,13 @@ export declare function transferNativePublicCollectionOutputHold(tx: CommandTran
         position: bigint;
         transactionId: string;
     }>;
-    work: import("./contract/work-dimensions.ts").WorkReceipt;
+    work: import("./access-capabilities.ts").WorkReceipt;
     release?: never;
 }>;
 export declare function releaseNativePublicCollectionOutputHold(tx: CommandTransaction, selection: PublicOutputDispositionSelection, context: PublicOutputCommandContext): Promise<Readonly<{
     status: 'changed' | 'unavailable';
     dependency?: string;
-    work: import("./contract/work-dimensions.ts").WorkReceipt;
+    work: import("./access-capabilities.ts").WorkReceipt;
 }> | {
     successorHoldId?: never;
     transfer?: never;
@@ -53,5 +53,5 @@ export declare function releaseNativePublicCollectionOutputHold(tx: CommandTrans
         position: bigint;
         transactionId: string;
     }>;
-    work: import("./contract/work-dimensions.ts").WorkReceipt;
+    work: import("./access-capabilities.ts").WorkReceipt;
 }>;

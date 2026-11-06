@@ -9,7 +9,9 @@ import type { KernelClock } from '../clock.ts';
 import { type PublicSuggestionOperations } from './public-suggestion.ts';
 import type { PublicFilterConsumerCapture, PublicFilterConsumerCaptureInput, PublicFilterConsumerContext, PublicFilterConsumerJob, PublicFilterConsumerOperations, PublicDiscoveryConsumerOperations, PublicFilterQueriedObservation, PublicSuggestionCaptureInput } from './public-filter-consumer-contract.ts';
 import type { OpenSearch } from './opensearch.ts';
+import type { CreditSearchSource } from './credit-search.ts';
 import type { FacetDiscoveryProvider } from './facet-discovery-native.ts';
+import { type QueryPrivacyConsumer } from './query-privacy-consumer.ts';
 export type DefaultPublicFilterRuntimeConfig = Readonly<{
     pool: Pool;
     routeKey: Uint8Array;
@@ -17,6 +19,7 @@ export type DefaultPublicFilterRuntimeConfig = Readonly<{
     search: OpenSearch;
     prefix: string;
     clock: KernelClock;
+    creditSearch?: CreditSearchSource;
 }>;
 export type BoundPublicRequest = Readonly<{
     operations: PublicFilterConsumerOperations;
@@ -38,6 +41,8 @@ export type DefaultPublicFilterRuntime = Readonly<{
         capture: PublicFilterConsumerCapture;
     }>>;
     repair(job: PublicFilterConsumerJob, context: PublicFilterConsumerContext): ReturnType<PublicFilterConsumerOperations['repairStep']>;
+    /** Typed currentness and aggregate proofs over retained capture/query/repair. */
+    privacy(operations: PublicFilterConsumerOperations): QueryPrivacyConsumer;
     /** Trusted native facet composition; omitted generation or meaning stays closed. */
     facetProvider(): Promise<FacetDiscoveryProvider | undefined>;
     close(): Promise<void>;

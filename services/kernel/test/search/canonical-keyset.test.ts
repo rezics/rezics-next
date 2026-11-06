@@ -36,7 +36,7 @@ test('a stale indexed original whose terminal is absent prepares instead of omit
   });
 });
 
-test('pending or unavailable identity prepares, and empty pages stay ready', () => {
+test('only published mappings admit canonical pages; empty pages stay ready', () => {
   const original = subject('66666666-6666-4666-8666-666666666666');
   expect(admitCanonicalKeyset([original], [{ state: 'pending', original: original.id }])).toEqual({
     status: 'preparing',
@@ -44,11 +44,12 @@ test('pending or unavailable identity prepares, and empty pages stay ready', () 
   expect(admitCanonicalKeyset([original], [{ state: 'unavailable', reason: 'bootstrap' }])).toEqual({
     status: 'preparing',
   });
-  const absent = admitCanonicalKeyset([original], [{ state: 'absent' }]);
-  expect(absent.status).toBe('ready');
-  if (absent.status !== 'ready') throw new Error('absent original prepared');
-  expect([...absent.accepted.values()].map((row) => row.id)).toEqual([original.id]);
-  expect(absent.canonicalId(original)).toBe(original.id);
+  expect(admitCanonicalKeyset([original], [{ state: 'absent' }])).toEqual({ status: 'preparing' });
+  const mappedSelf = admitCanonicalKeyset([original], [mapped(original.id, original.id)]);
+  expect(mappedSelf.status).toBe('ready');
+  if (mappedSelf.status !== 'ready') throw new Error('published self mapping prepared');
+  expect([...mappedSelf.accepted.values()].map((row) => row.id)).toEqual([original.id]);
+  expect(mappedSelf.canonicalId(original)).toBe(original.id);
   const empty = admitCanonicalKeyset([], []);
   expect(empty.status).toBe('ready');
 });

@@ -82,4 +82,13 @@ export declare function composeIdentitySourceReachedCosts(terms: readonly Identi
     work: WorkDimensions;
     engineRequests: 0;
 }>;
+/** Add already-classified Source declarations. This never invents an axis or
+ * treats a five-field envelope as an implicit eight-axis child. */
+export declare function sumIdentitySourceWork(parts: readonly Readonly<{
+    work: WorkDimensions;
+    engineRequests: 0;
+}>[]): Readonly<{
+    work: WorkDimensions;
+    engineRequests: 0;
+}>;
 export {};

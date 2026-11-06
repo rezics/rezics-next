@@ -69,6 +69,7 @@ export declare function countFacets(search: OpenSearch, prefix: string, plan: {
     facets: readonly Facet[];
     sample: number;
 }): Promise<{
+    generation?: number;
     total: {
         value: number;
         relation: 'exact' | 'lower_bound';

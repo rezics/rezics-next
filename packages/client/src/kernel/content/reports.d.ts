@@ -58,7 +58,7 @@ export type ReportDependencies = Readonly<{
     pool: Pool;
     access: Access;
     routeKey: Uint8Array;
-    clock?: () => Date;
+    clock: () => Date;
     anonymousVerifier?: TurnstileVerifier;
 }>;
 /** Ephemeral admission credential. Implementations must verify it once and never persist it. */

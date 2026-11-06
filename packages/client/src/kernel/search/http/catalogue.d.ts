@@ -419,5 +419,31 @@ export declare function createCatalogueResponseAdapter({ pool, routeKey }: {
             base: SearchHttpBase;
         })[];
     };
+    renderSelected: (subjects: readonly string[], authorize: (resource: Resource) => Promise<AccessCheck>, languages?: readonly string[], active?: Awaited<ReturnType<typeof activeRelease>> | undefined) => Promise<Omit<Omit<{
+        subjects: {
+            id: string;
+            type: string;
+            labels: Record<string, string>;
+        }[];
+    }, "subjects"> & {
+        subjects: ({
+            id: string;
+            type: string;
+            labels: Record<string, string>;
+        } & {
+            summary: SubjectSummary | null;
+        })[];
+    }, "subjects"> & {
+        subjects: ({
+            id: string;
+            type: string;
+            labels: Record<string, string>;
+        } & {
+            summary: SubjectSummary | null;
+        } & {
+            kind: string;
+            base: SearchHttpBase;
+        })[];
+    }>;
 };
 export {};

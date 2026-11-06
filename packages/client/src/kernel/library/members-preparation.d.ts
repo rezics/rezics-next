@@ -4,13 +4,12 @@ import { type FilterDocument, type FilterRelease } from '@rezics/filter';
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import { type OperationalTransaction } from '../command/operational.ts';
-import { type Access, type Actor } from '../request/access.ts';
+import type { Access, Actor } from '../request/access.ts';
 import type { WorkClient } from '../work/client.ts';
 import type { WorkExecutionOriginal } from '../command/execution-contract.ts';
 import type { NativeSourceIdentity } from './native-source-custody.ts';
 import type { CollectionSourceObservation } from './collection-source.ts';
-import { type OperationalWorkRegistration } from '../history/operational-work.ts';
-import { type OperationalWorkTransfer } from '../history/operational-work-budget.ts';
+import { type OperationalWorkRegistration, type OperationalWorkTransfer } from '../history/contract/index.ts';
 /** Internal admitted meaning, never an HTTP DTO or an execution/disclosure certificate. */
 export type PreparationDefinition = Readonly<{
     filter: FilterDocument;

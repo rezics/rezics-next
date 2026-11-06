@@ -115,10 +115,15 @@ worker's check. For an ordinary
 dev product brief without one, the worker chooses focused validation and reports its exact command and actual result;
 the missing command never counts as a pass.
 A worker attempt may start at most two check-host runs through the wrapper: that one check, and one rerun after it
-failed. The controller keeps the count per attempt in its state directory, not the worktree. A third request in the
-same attempt is refused before any host is reserved, with a one-line message to finish the outcome and return success
-or a blocker. Proof-run, registered-proof and acceptance-requiring briefs keep their declared checks; urgent and
-control-plane tasks are exempt. `status` shows `checksUsed` and `checkBudget` on each running or waiting attempt.
+failed. After those two have failed, one final verification run is admitted when the worktree content differs from the
+last counted run. A second final run, or a final run on unchanged content, is refused before any host is reserved, with
+today's one-line message to finish the outcome and return success or a blocker. When that final run failed its
+typecheck, the next refusal tells the worker to return a blocker naming those type errors, not success. Settlement
+records a typing failure with that run's log, and retries, when the last check-host run failed its typecheck or the
+worktree changed after its last typecheck; failing tests alone keep today's handling. The controller keeps the count
+per attempt in its state directory, not the worktree. Proof-run, registered-proof and acceptance-requiring briefs keep
+their declared checks; urgent and control-plane tasks are exempt. `status` shows `checksUsed` and `checkBudget` on each
+running or waiting attempt.
 A check-host run that ends with infrastructure exit 75 before the check command ran (probe, upload or transport
 failure) gives that stamp back, so it does not count toward the one check and one rerun. The wrapper releases the
 stamp where it records the run's final exit code. A run that reached the check command keeps its stamp, including
@@ -287,9 +292,11 @@ check host runs through the worker-check wrapper; the worker ends the turn with 
 Goal parks the session until the result arrives. Commands that finish locally in under a minute stay in the session.
 Workers must not invent check ids, return `waiting` with no checks, run process/help/status polling loops, duplicate
 commands or interrupt a live wrapper. The controller forwards this policy through its existing prompt seam; it does not
-steer live sessions. The second rerun is where the check-host queue grows, so the wrapper refuses a third request in
-the same attempt before it reserves a host. The refusal decides nothing about correctness; the landing train and the
-dev verifier still check every candidate.
+steer live sessions. The second rerun is where the check-host queue grows, so the wrapper admits one final verification
+run after those two have failed when the worktree changed, and otherwise refuses before it reserves a host. A typecheck
+failure on that final run, or a success report after a failed or stale host typecheck, is a typing failure: settlement
+retries instead of landing. The landing train and the dev verifier still check every candidate.
+Decision: ordinary attempts get one final verification check-host run after the budgeted pair when the worktree changed; settlement refuses success when the last host typecheck failed or the tree changed after it. Tests that pin those edges live in `worker-check-budget.test.ts`.
 Decision: a live worker slot holds a session that is writing code; check-host placement parks on the wrapper the way
 acceptance already does.
 Decision: a check waiting on a full upload host moves after two minutes when another performance host can start it now;
