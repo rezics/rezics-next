@@ -164,8 +164,20 @@ test('a merge redirects the larger id to the smallest with one revision in the r
   const token = key();
   const body = { subjects: [first.id, second.id] };
   const merged = await merge(body, { key: token });
-  expect(merged.response.status).toBe(202);
-  expect(merged.body).toEqual({ operation: { id: expect.any(String) } });
+  // Diagnostic capture: the refusal body and the acceptor's stored grant and account facts.
+  expect({
+    status: merged.response.status,
+    body: merged.body,
+    grants: (
+      await admin.query(
+        'SELECT route, resource_id::text, action, valid::text FROM access.resource_grant WHERE subject_id = $1 ORDER BY action',
+        [accounts.acceptor],
+      )
+    ).rows,
+    account: (
+      await admin.query('SELECT route, state, kind FROM access.account WHERE account_id = $1', [accounts.acceptor])
+    ).rows,
+  }).toEqual({ status: 202, body: { operation: { id: expect.any(String) } }, grants: [], account: [] });
   expect(merged.response.headers.get('location')).toBe(`/v1/subjectIdentityOperations/${merged.body.operation.id}`);
   expect(realAccess.checks.at(-1)).toEqual({
     persona: 'acceptor',
@@ -470,7 +482,7 @@ test('reviewed original Person GET and native merge preserve ordered evidence, s
     });
   const reads = await Promise.all(subjects.map((id, index) => call('GET', `/v1/subjects/${id}?${query(index)}`)));
   for (const [index, read] of reads.entries()) {
-    expect(read.response.status).toBe(200);
+    expect({ status: read.response.status, body: read.body }).toEqual({ status: 200, body: expect.anything() });
     expect(read.response.headers.get('cache-control')).toBe('private, no-store');
     expect(read.body.reviewedIdentity).toEqual({
       subject: subjects[index],
