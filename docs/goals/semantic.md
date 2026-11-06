@@ -41,8 +41,9 @@ delete/restore uses the catalogue mapping client. No Storybook stories.
 Decision: Zone owner mutations keep compiled page authorization; derived Access forwards preparePage.
 Platform inverse records identity_epoch_native_commit or erasure_source_commit, not fabricated write_basis.
 Source-commit validation accepts that native commit. Account-agent tests use the request deadline, not
-authenticate's short identity expiry. Native kernel journeys and two web mapping tests pin lifecycle;
-no Storybook stories or expanded served walks.
+authenticate's short identity expiry. Page coverage rebinds by identity while routes stay in canonical
+order. Native kernel journeys and two web mapping tests pin lifecycle; no Storybook stories or expanded
+served walks.
 
 ## Ownership
 

@@ -162,6 +162,7 @@ test('edits rebind a covered page through reorder and edit, retain superseded an
   const notes = `Notes ${randomUUID()}`;
   body.configuration.pages = [
     { route: '', document: page(`Front ${randomUUID()}`) },
+    { route: 'middle', document: page(`Middle ${randomUUID()}`) },
     { route: 'notes', document: page(notes) },
   ];
   const created = await f.call('owner', 'POST', '/v1/zones', body);
@@ -172,27 +173,30 @@ test('edits rebind a covered page through reorder and edit, retain superseded an
     'operator',
     'POST',
     `${path}:takedown`,
-    { pointers: ['/pages/1/document'] },
+    { pointers: ['/pages/2/document'] },
     f.conditional(created.body.zone.revision),
   );
   expect(taken.status, JSON.stringify(taken.body)).toBe(200);
   const configuration = await f.call('owner', 'GET', `${path}/configuration`);
   expect(configuration.status).toBe(200);
   const current = configuration.body.configuration;
+  const home = current.pages[0];
+  const middle = current.pages[1];
+  const notesPage = current.pages[2];
 
-  // Reordering moves the covered page and its decision together; readers still get no notes page.
+  // Canonical route order is required. Renaming the neighbour moves the covered page and its decision.
   const reordered = await f.call(
     'owner',
     'PUT',
     `${path}/configuration`,
-    { configuration: { ...current, pages: [current.pages[1], current.pages[0]] }, mounts: [] },
+    { configuration: { ...current, pages: [home, notesPage, { ...middle, route: 'zzz' }] }, mounts: [] },
     f.conditional(taken.body.zone.revision),
   );
   expect(reordered.status, JSON.stringify(reordered.body)).toBe(200);
   expect((await f.read(zone, 'anonymous', { route: 'notes' })).status).toBe(404);
   expect((await f.read(zone)).status).toBe(200);
   const moved = await f.raw(zone);
-  expect(Object.keys(moved!.withholding)).toEqual(['/pages/0/document']);
+  expect(Object.keys(moved!.withholding)).toEqual(['/pages/1/document']);
   expect(moved!.withholding.custody).toBeUndefined();
 
   // Delegates get no configuration while a live decision exists.
@@ -208,7 +212,7 @@ test('edits rebind a covered page through reorder and edit, retain superseded an
     {
       configuration: {
         ...current,
-        pages: [{ ...current.pages[1], document: page(replaced) }, current.pages[0]],
+        pages: [home, { ...notesPage, document: page(replaced) }, { ...middle, route: 'zzz' }],
       },
       mounts: [],
     },
@@ -217,9 +221,9 @@ test('edits rebind a covered page through reorder and edit, retain superseded an
   expect(edited.status, JSON.stringify(edited.body)).toBe(200);
   expect((await f.read(zone, 'anonymous', { route: 'notes' })).status).toBe(404);
   const afterEdit = await f.raw(zone);
-  expect(Object.keys(afterEdit!.withholding)).toEqual(['/pages/0/document']);
+  expect(Object.keys(afterEdit!.withholding)).toEqual(['/pages/1/document']);
   expect(afterEdit!.withholding.custody).toEqual([
-    expect.objectContaining({ pointer: '/pages/0/document', version: reordered.body.zone.revision }),
+    expect.objectContaining({ pointer: '/pages/1/document', version: reordered.body.zone.revision }),
   ]);
   expect(JSON.stringify(afterEdit!.withholding.custody)).toContain(notes);
 
@@ -228,20 +232,20 @@ test('edits rebind a covered page through reorder and edit, retain superseded an
     'owner',
     'PUT',
     `${path}/configuration`,
-    { configuration: { ...current, pages: [current.pages[0]] }, mounts: [] },
+    { configuration: { ...current, pages: [home, { ...middle, route: 'zzz' }] }, mounts: [] },
     f.conditional(edited.body.zone.revision),
   );
   expect(removed.status, JSON.stringify(removed.body)).toBe(200);
   const afterRemoval = await f.raw(zone);
   expect(afterRemoval!.withholding.custody).toHaveLength(2);
   expect(afterRemoval!.withholding.custody[1]).toEqual(
-    expect.objectContaining({ pointer: '/pages/0/document', version: edited.body.zone.revision }),
+    expect.objectContaining({ pointer: '/pages/1/document', version: edited.body.zone.revision }),
   );
   expect(JSON.stringify(afterRemoval!.withholding.custody[1])).toContain(replaced);
   expect(Object.keys(afterRemoval!.withholding).filter((key) => key.startsWith('/'))).toEqual([]);
   // Retained originals are never part of any configuration read.
   const owned = await f.call('owner', 'GET', `${path}/configuration`);
-  expect(owned.body.configuration.pages).toHaveLength(1);
+  expect(owned.body.configuration.pages).toHaveLength(2);
   expect(JSON.stringify(owned.body)).not.toContain(replaced);
 
   // Named release addresses live coverage only; the removed page's decision is already gone.
@@ -249,7 +253,7 @@ test('edits rebind a covered page through reorder and edit, retain superseded an
     'operator',
     'POST',
     `${path}:releaseTakedown`,
-    { pointers: ['/pages/0/document'] },
+    { pointers: ['/pages/1/document'] },
     f.conditional(removed.body.zone.revision),
   );
   expect(releasedGone.status).toBe(409);
@@ -259,7 +263,10 @@ test('edits rebind a covered page through reorder and edit, retain superseded an
     'owner',
     'PUT',
     `${path}/configuration`,
-    { configuration: { ...current, pages: [current.pages[0]], labels: { en: `Renamed ${randomUUID()}` } }, mounts: [] },
+    {
+      configuration: { ...current, pages: [home, { ...middle, route: 'zzz' }], labels: { en: `Renamed ${randomUUID()}` } },
+      mounts: [],
+    },
     f.conditional(removed.body.zone.revision),
   );
   expect(unrelated.status, JSON.stringify(unrelated.body)).toBe(200);

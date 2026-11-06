@@ -22,17 +22,14 @@ export async function purgeZonePage(input: ZonePurgePageInput): Promise<{ next: 
     throw new RangeError('Zone purge page limit is 1 through 100');
   if (cursor !== null && cursor !== 'payload' && cursor !== 'grants') return { next: null };
   const deadline = Date.now() + 20_000;
-  const outcome = await runCommand(
+  const outcome = await runCommand<{ next: string | null }>(
     pool,
     {
       partition: partitionOf(route),
       deadline,
       clock,
-      basis: {
-        actorAccountId: '00000000-0000-8000-8000-000000000001',
-        clientId: 'internal-zone-purge',
-        requestedBy: null,
-      },
+      principal: { kind: 'account' as const, id: '00000000-0000-8000-8000-000000000001' },
+      basis: { clientId: 'internal-zone-purge', requestedBy: null },
     },
     async (tx, command) => {
     const row = await lockZoneHead(tx, route, zoneId);
