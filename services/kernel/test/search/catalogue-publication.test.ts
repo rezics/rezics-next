@@ -166,6 +166,51 @@ test('catalogue publication observation settles generation currentness and empty
   expect(empty).toMatchObject({ subjects: [], exhausted: true, observation: observed.observation, engineRequests: 3 });
 });
 
+test('selected catalogue A rereads the same observation after a later working page', async () => {
+  const deadline = Date.now() + 30_000;
+  const selected = await readCataloguePublicationPage({
+    client: catalogueClient({}),
+    prefix: 'rezics-',
+    filter: { type: { in: ['schema:Book'] } },
+    release: bundledRelease,
+    releaseDigest: digest,
+    after: null,
+    limit: 2,
+    deadline,
+    work: allowance(),
+  });
+  expect(selected.subjects).toEqual([first, second]);
+  const working = await readCataloguePublicationPage({
+    client: catalogueClient({}),
+    prefix: 'rezics-',
+    filter: { type: { in: ['schema:Book'] } },
+    release: bundledRelease,
+    releaseDigest: digest,
+    after: second,
+    limit: 1,
+    deadline,
+    work: allowance(),
+    expected: selected.observation,
+  });
+  expect(working.subjects).toEqual([third]);
+  expect(working.observation).toEqual(selected.observation);
+  const reread = await readCataloguePublicationPage({
+    client: catalogueClient({}),
+    prefix: 'rezics-',
+    filter: { type: { in: ['schema:Book'] } },
+    release: bundledRelease,
+    releaseDigest: digest,
+    after: null,
+    limit: 2,
+    deadline,
+    work: allowance(),
+    expected: selected.observation,
+  });
+  expect(reread.subjects).toEqual(selected.subjects);
+  expect(reread.observation).toEqual(selected.observation);
+  expect(reread.work.used.candidateKeys).toBe(3);
+});
+
 test('catalogue publication restarts when the public generation changes', async () => {
   const expected = (
     await observeCataloguePublication({

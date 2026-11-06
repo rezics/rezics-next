@@ -110,7 +110,7 @@ Decision: catalogue Collection publication snapshots public Search population in
 `SearchRequestWork`, reserves limit+1 candidates before dispatch, and fails closed when generation, UUID or
 release currentness change. Library stages, seals and rereads that observation; working membership B stays
 private. Configured TypeList BFF prepares the session on every read and attaches credentials only for a
-selected realm.
+selected realm. TypeList completion, revocation and suspension reuse that same session transport.
 Decision: typecheck repairs keep those assertions; fixtures carry `source` (owner unless catalogue), omit
 undefined `expected`, and FULL members pages pass only cursor, limit and languages. Catalogue publication
 observation uses the stored accepted release digest; it does not hash FilterRelease as Release. HTTP

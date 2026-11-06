@@ -8,7 +8,6 @@ import { ProblemError, problemSchema } from '../src/http/problem.ts';
 import type { SearchService } from '../src/search/service-scope.ts';
 import { testReceiptKeys } from './support/receipt-keys.ts';
 import { Value } from 'typebox/value';
-import { testReceiptKeys } from './support/receipt-keys.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -22,8 +21,11 @@ let authentications = 0;
 const searches: unknown[] = [];
 const suggestions: unknown[] = [];
 const search: SearchService = {
+  async releaseGroups() {
+    throw new Error('Unexpected release groups call');
+  },
   async savedCatalogueMembers() {
-    throw new Error('saved membership is not used by this fixture');
+    throw new Error('Unexpected saved catalogue members call');
   },
   async search(_principal, request) {
     searches.push(request);
@@ -35,12 +37,6 @@ const search: SearchService = {
   async suggest(q, limit) {
     suggestions.push({ q, limit });
     return { subjects: [], as_of: '2026-10-26T00:00:00Z' };
-  },
-  async releaseGroups() {
-    throw new Error('Unexpected release groups call');
-  },
-  async savedCatalogueMembers() {
-    throw new Error('Unexpected saved catalogue members call');
   },
 };
 const schema = t.Object({ integer: t.Integer(), number: t.Number(), boolean: t.Boolean(), string: t.String() });

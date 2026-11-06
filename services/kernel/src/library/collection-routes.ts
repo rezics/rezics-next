@@ -599,15 +599,14 @@ function membersHttpResponse(
         ...('subject' in member && member.subject !== undefined ? { subject: member.subject } : {}),
         ...('facts' in member && member.facts !== undefined ? { facts: member.facts } : {}),
       };
-      return 'kind' in member && member.kind === 'dynamic'
-        ? { kind: 'dynamic' as const, subjectId: member.subjectId, ...extras }
-        : {
-            id: member.id,
-            subjectId: member.subjectId,
-            note: member.note,
-            addedAt: member.addedAt,
-            ...extras,
-          };
+      if ('kind' in member) return { kind: 'dynamic' as const, subjectId: member.subjectId, ...extras };
+      return {
+        id: member.id,
+        subjectId: member.subjectId,
+        note: member.note,
+        addedAt: member.addedAt,
+        ...extras,
+      };
     }),
     next: result.next ?? null,
     ...('viewerFacts' in result && result.viewerFacts !== undefined ? { viewerFacts: result.viewerFacts } : {}),

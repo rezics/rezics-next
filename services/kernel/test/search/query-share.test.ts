@@ -81,9 +81,6 @@ const access: Access = {
   },
 };
 const search: SearchService = {
-  async savedCatalogueMembers() {
-    throw new Error('saved catalogue members is not used by this fixture');
-  },
   async releaseGroups() {
     throw new Error('grouped release search is not used by this fixture');
   },

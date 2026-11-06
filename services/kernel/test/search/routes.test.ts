@@ -87,9 +87,6 @@ process.env.KERNEL_RECEIPT_KEYS = [...testReceiptKeys().keys]
   .join(',');
 let failure: ProblemError | null = null;
 const service: SearchService = {
-  async savedCatalogueMembers() {
-    throw new Error('saved membership is not used by this fixture');
-  },
   async search(principal, request) {
     calls.push(['search', principal, request]);
     if (failure) throw failure;

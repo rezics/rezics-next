@@ -209,8 +209,11 @@ test('createKernel subject:read POST custom search authorizes without a write ch
       },
     },
     search: {
+      async releaseGroups() {
+        throw new Error('unused');
+      },
       async savedCatalogueMembers() {
-        throw new Error('saved membership is not used by this fixture');
+        throw new Error('unused');
       },
       async search(principal, body) {
         searches.push([principal, body]);
@@ -220,12 +223,6 @@ test('createKernel subject:read POST custom search authorizes without a write ch
         throw new Error('unused');
       },
       async facets() {
-        throw new Error('unused');
-      },
-      async releaseGroups() {
-        throw new Error('unused');
-      },
-      async savedCatalogueMembers() {
         throw new Error('unused');
       },
     },
