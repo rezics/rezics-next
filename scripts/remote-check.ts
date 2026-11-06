@@ -1053,7 +1053,7 @@ async function withSshControl<T>(workspace: string, work: () => Promise<T>): Pro
   try {
     return await sshControlContext.run(store, work);
   } finally {
-    for (const lease of store.leases.splice(0)) releaseHostControl(lease);
+    for (const lease of store.leases.splice(0)) await releaseHostControl(lease);
   }
 }
 

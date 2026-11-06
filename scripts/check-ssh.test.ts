@@ -38,8 +38,8 @@ function fixture(): string {
   return directory;
 }
 
-afterEach(() => {
-  resetHostControlLeases();
+afterEach(async () => {
+  await resetHostControlLeases();
   for (const directory of fixtures.splice(0)) rmSync(directory, { recursive: true, force: true });
 });
 
@@ -146,10 +146,10 @@ process.exit(0);
     expect(first.socketPath).toBe(second.socketPath);
     expect(unixListenerFits(first.socketPath)).toBe(true);
     expect(activeHostControlCount(first.directory, 'a')).toBe(2);
-    releaseHostControl(first);
+    await releaseHostControl(first);
     expect(activeHostControlCount(first.directory, 'a')).toBe(1);
     expect(readFileSync(log, 'utf8')).not.toMatch(/-O exit/);
-    releaseHostControl(second);
+    await releaseHostControl(second);
     expect(activeHostControlCount(first.directory, 'a')).toBe(0);
     expect(readFileSync(log, 'utf8')).not.toMatch(/-O exit/);
   } finally {
@@ -198,7 +198,7 @@ process.exit(2);
     expect(lease.host.name).toBe('b');
     expect(readFileSync(log, 'utf8')).toContain('-O exit');
     expect(readFileSync(log, 'utf8')).toContain('REMOTE_CHECK_CONTROL_PROBE');
-    releaseHostControl(lease);
+    await releaseHostControl(lease);
   } finally {
     delete process.env.SSH_STATE;
     delete process.env.SSH_LOG;
@@ -345,7 +345,7 @@ process.exit(2);
     expect(await recoverHungHostMaster(host('a'), lease.directory, Date.now())).toBe(false);
     expect(readFileSync(log, 'utf8')).toContain('-O check');
     expect(readFileSync(log, 'utf8')).not.toMatch(/-O exit/);
-    releaseHostControl(lease);
+    await releaseHostControl(lease);
     expect(hostControlLeaseIsHeld(lease.directory, 'a')).toBe(false);
     expect(await recoverHungHostMaster(host('a'), lease.directory, Date.now())).toBe(true);
     expect(readFileSync(log, 'utf8')).toContain('-O exit');
@@ -390,7 +390,7 @@ process.exit(2);
     writeFileSync(state, 'dead');
     expect(await recoverHungHostMaster(host('a'), lease.directory, Date.now())).toBe(true);
     expect(readFileSync(log, 'utf8')).toContain('-O exit');
-    releaseHostControl(lease);
+    await releaseHostControl(lease);
   } finally {
     delete process.env.SSH_STATE;
     delete process.env.SSH_LOG;

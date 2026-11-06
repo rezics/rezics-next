@@ -522,21 +522,22 @@ export async function acquireHostControl(
 
 /**
  * Release this caller's claim on the host master. The persisted ControlMaster stays for other runs; ControlPersist
- * reaps it after idle. Never `-O exit` here.
+ * reaps it after idle. Never `-O exit` here. Waits until the cross-process lease flock is dropped so a later
+ * recoverHungHostMaster cannot see a released run as still holding the master.
  */
-export function releaseHostControl(lease: HostControlLease): void {
+export async function releaseHostControl(lease: HostControlLease): Promise<void> {
   const key = leaseKey(lease.directory, lease.host.name);
   const held = liveLeases.get(key);
   if (!held) return;
   held.count -= 1;
   if (held.count > 0) return;
   liveLeases.delete(key);
-  void held.unlock();
+  await held.unlock();
 }
 
 /** Test seam: forget in-process lease counts without touching a live OpenSSH master. */
-export function resetHostControlLeases(): void {
+export async function resetHostControlLeases(): Promise<void> {
   const held = [...liveLeases.values()];
   liveLeases.clear();
-  for (const entry of held) void entry.unlock();
+  await Promise.all(held.map((entry) => entry.unlock()));
 }
