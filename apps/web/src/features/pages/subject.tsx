@@ -45,6 +45,14 @@ import { LiteraryProfileEntry } from '../catalogue/literary-profile-entry';
 import { LiteraryReaderEntry } from '../catalogue/literary-reader/entry';
 import { literaryGrain, literaryReaderType } from '../catalogue/literary-reader/model';
 import { literaryAddress } from '../catalogue/literary-reader/navigation';
+import { RecipePublicationEntry } from './recipe-publication';
+import { recipePublicationReading } from './recipe-publication/model';
+import { ReleasePublicationEntry } from './release-publication';
+import { releasePublicationReading } from './release-publication/model';
+import { AgentPublicationEntry } from './agent-publication';
+import { agentPublicationReading } from './agent-publication/model';
+import { GamePublicationEntry, gamePublicationInitial } from './game-publication';
+import { gamePublicationReading } from './game-publication/model';
 import { PeopleProfileEntry } from '../catalogue/people-profile-entry';
 import { PersonOverview } from '../catalogue/person-reader/reader';
 import { CharacterOverview } from './showcase-people/character';
@@ -93,6 +101,7 @@ import type { Related, Subject, Summary } from '../../subject/types';
 import { accountHref, canonicalRedirect, subjectHref } from '../../subject/subject-href';
 import { m } from '../../paraglide/messages.js';
 import { dataComponents, PageData, pageText, SubjectSources, SubjectSourcesLink, type PageMessages } from './data';
+import { statementDocument } from './documents';
 import { publicSubjectReference, serializeJsonLd, subjectJsonLd } from './jsonld';
 import { holderItems } from './overview';
 import { layoutComponents, PageHost, PageRoot, pageDefinitions } from './layout';
@@ -203,6 +212,20 @@ export function subjectAccountRedirect(locale: string, handle: string, view?: Vi
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** Catalogue pages keep the statement-propose viewer; quotation `{ kind }` overlays stay off this envelope. */
+function cataloguePageViewer(
+  viewer: SubjectPageData['viewer'] | { kind: 'anonymous' | 'account'; account?: string } | undefined,
+): SubjectPageData['viewer'] | undefined {
+  return viewer && 'state' in viewer ? viewer : undefined;
+}
+
+/** Quotation action arrays stay off the catalogue envelope; viewer-actions objects remain. */
+function cataloguePageActions(
+  actions: SubjectPageData['actions'] | { action: string; operationId: string; state: string }[] | undefined,
+): SubjectPageData['actions'] | undefined {
+  return actions && !Array.isArray(actions) ? actions : undefined;
 }
 
 /** Whether the template places a node of this type anywhere, including inside slots. */
@@ -341,18 +364,36 @@ export async function loadSubjectPage(
           return { kind: 'redirect', id: profile.handle, target: 'account' };
       }
       // An absent, handleless or foreign profile supplies no admitted public @ address.
-      const { account: _account, ...catalogue } = result.data;
+      const { account: _account, viewer, actions, ...catalogue } = result.data;
       if (catalogue.subject !== id || (options.realm && !catalogue.context))
         throw new PageReadError('dependency_unavailable', 503);
-      return { kind: 'page', page: { ...catalogue, subject: id, requestedRealm: options.realm } };
+      const pageViewer = cataloguePageViewer(viewer);
+      const pageActions = cataloguePageActions(actions);
+      return {
+        kind: 'page',
+        page: {
+          ...catalogue,
+          subject: id,
+          ...(options.realm ? { requestedRealm: options.realm } : {}),
+          ...(pageViewer ? { viewer: pageViewer } : {}),
+          ...(pageActions ? { actions: pageActions } : {}),
+        },
+      };
     }
     const survivor = result.data.subject;
     if (typeof survivor === 'string' && survivor !== id) return { kind: 'redirect', id: survivor };
     if (options.realm && !result.data.context) throw new PageReadError('dependency_unavailable', 503);
-    const { account: _account, ...page } = result.data;
+    const { account: _account, viewer, actions, ...page } = result.data;
+    const pageViewer = cataloguePageViewer(viewer);
+    const pageActions = cataloguePageActions(actions);
     // Read the existing mounted Terms authority resource once, alongside this page reading.
     // An advice outage must never fail or conceal the admitted public page.
-    const currentPage = page as SubjectPageData;
+    const currentPage = {
+      ...page,
+      subject: page.subject ?? null,
+      ...(pageViewer ? { viewer: pageViewer } : {}),
+      ...(pageActions ? { actions: pageActions } : {}),
+    } as SubjectPageData;
     const reading = subjectBody(currentPage);
     const eligible =
       reading &&
@@ -375,7 +416,9 @@ export async function loadSubjectPage(
       page: {
         ...page,
         subject: page.subject ?? null,
-        requestedRealm: options.realm,
+        ...(options.realm ? { requestedRealm: options.realm } : {}),
+        ...(pageViewer ? { viewer: pageViewer } : {}),
+        ...(pageActions ? { actions: pageActions } : {}),
         ...(termsAuthority ? { termsAuthority } : {}),
       },
     };
@@ -447,11 +490,11 @@ export function subjectPageJsonLd(
     subject: {
       ...read.subject,
       statements: Object.fromEntries(
-        Object.entries(read.subject.statements).filter(
-          ([property, statements]) =>
-            !statements.some((statement) => statement.property.data_type === 'document') ||
-            documents?.properties.includes(property),
-        ),
+        Object.entries(read.subject.statements).filter(([property, statements]) => {
+          if (!statements.some((statement) => statement.property.data_type === 'document')) return true;
+          if (documents?.properties.includes(property)) return true;
+          return statements.some((statement) => statementDocument(read.subject.id, statement, read.documents));
+        }),
       ),
     },
     documents: read.documents,
@@ -1002,6 +1045,19 @@ export function SubjectPage({
       return <Link {...props} href={contextHref(href, realm)} />;
     };
   }, [link, locale, literaryReturn, mangaReturn, realm, visitReturn]);
+  const releasedDefinitions = page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined;
+  const gameInitial =
+    read && releasedDefinitions && page.catalogue?.digest
+      ? gamePublicationInitial(
+          read.subject,
+          read.related,
+          read.summary,
+          releasedDefinitions,
+          page.catalogue.digest,
+          locale,
+          reader ?? defaultReader,
+        )
+      : undefined;
   const factsContext = read ? (page.context?.id ?? read.subject.context) : undefined;
   const factsRealm = page.context?.population.kind === 'realm' ? page.context.population.id : undefined;
   const factsOrigin =
@@ -1087,10 +1143,10 @@ export function SubjectPage({
               realm={page.context?.population.kind === 'realm' ? page.context.population.id : undefined}
               definition={page.catalogue?.digest}
               via={storyArcPublicOrigin({
-                currentHref,
                 id: read.subject.id,
                 locale,
-                realm: page.context?.population.kind === 'realm' ? page.context.population.id : undefined,
+                ...(currentHref ? { currentHref } : {}),
+                ...(page.context?.population.kind === 'realm' ? { realm: page.context.population.id } : {}),
               })}
             />
           )}
@@ -1155,9 +1211,9 @@ export function SubjectPage({
               label={subjectPageTitle(page, locale)}
               locale={locale}
               context={page.context?.id ?? read.subject.context}
-              realm={realm}
               type={read.subject.type}
               definition={read.subject.release}
+              {...(realm ? { realm } : {})}
               {...(currentHref ? { source: currentHref } : {})}
             />
           )}
@@ -1364,6 +1420,33 @@ export function SubjectPage({
                 viewer={page.requestedReader ?? null}
               />
             ) : null}
+            {overview &&
+            read &&
+            !page.account &&
+            recipePublicationReading(read.subject, releasedDefinitions, locale, reader ?? defaultReader) ? (
+              <RecipePublicationEntry
+                subject={read.subject}
+                related={read.related}
+                locale={locale}
+                reader={reader ?? defaultReader}
+                link={ContextLink}
+                {...(read.documents !== undefined ? { documents: read.documents } : {})}
+                {...(releasedDefinitions ? { definitions: releasedDefinitions } : {})}
+              />
+            ) : null}
+            {overview &&
+            read &&
+            !page.account &&
+            releasePublicationReading(read.subject, releasedDefinitions, locale, reader ?? defaultReader) ? (
+              <ReleasePublicationEntry
+                subject={read.subject}
+                related={read.related}
+                locale={locale}
+                reader={reader ?? defaultReader}
+                link={ContextLink}
+                {...(releasedDefinitions ? { definitions: releasedDefinitions } : {})}
+              />
+            ) : null}
             {!overview && heading && (
               <header className="min-w-0 space-y-1" data-slot="view-heading">
                 <p className="text-sm break-words">
@@ -1437,7 +1520,7 @@ export function SubjectPage({
                 {...(workRelationsHref ? { relationsHref: workRelationsHref } : {})}
                 readerSpoiler={reader?.spoilerLevel ?? 0}
                 link={ContextLink}
-                onContinue={onWorkContinue}
+                {...(onWorkContinue ? { onContinue: onWorkContinue } : {})}
               />
             ) : null}
             {mangaSubject && (view === 'overview' || view === 'contents' || view === 'editions') ? (
@@ -1536,6 +1619,36 @@ export function SubjectPage({
                 spoiler={reader?.spoilerLevel}
                 {...(returnCheck?.selection ? { returnSelection: returnCheck.selection } : {})}
                 sessionObservation={readingAdmission ?? ''}
+                {...(gameInitial ? { initial: gameInitial } : {})}
+              />
+            ) : null}
+            {overview &&
+            read &&
+            !page.account &&
+            !gameReaderEntry(read.subject.type, read.summary?.types) &&
+            gamePublicationReading(read.subject, releasedDefinitions, locale, reader ?? defaultReader) ? (
+              <GamePublicationEntry
+                subject={read.subject}
+                related={read.related}
+                locale={locale}
+                reader={reader ?? defaultReader}
+                link={ContextLink}
+                {...(releasedDefinitions ? { definitions: releasedDefinitions } : {})}
+              />
+            ) : null}
+            {overview &&
+            read &&
+            !page.account &&
+            read.subject.type !== 'schema:Person' &&
+            read.subject.type !== 'schema:Organization' &&
+            agentPublicationReading(read.subject, releasedDefinitions, locale, reader ?? defaultReader) ? (
+              <AgentPublicationEntry
+                subject={read.subject}
+                related={read.related}
+                locale={locale}
+                reader={reader ?? defaultReader}
+                link={ContextLink}
+                {...(releasedDefinitions ? { definitions: releasedDefinitions } : {})}
               />
             ) : null}
             {overview && read && !page.account && read.subject.type === 'schema:MusicAlbum' ? (

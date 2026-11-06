@@ -85,6 +85,8 @@ Every indexed page sets, per locale:
 
 - a unique `<title>` (subject: title, type and year, then the site name) and a `meta description` from the
   summary in that locale, at most about 160 characters, never a raw identifier;
+  Decision: the title year is the same disclosed Gregorian structured date JSON-LD would publish, not a raw
+  time string, Julian calendar, uncertain bound, timezone offset or unsupported precision;
 - `<link rel="canonical">` to its own canonical URL;
 - `<link rel="alternate" hreflang>` to the same page in every locale, plus `x-default`, reciprocal on every
   alternate;
@@ -158,6 +160,23 @@ Each indexed page embeds one JSON-LD graph from the same data it renders:
 - `aggregateRating` only from the Global population of native votes and only above the display threshold, with
   `ratingCount`, `bestRating` and `worstRating`; imported source statistics never appear in it;
 - a recipe's ingredients and steps as `recipeIngredient` and `recipeInstructions`;
+  Decision: Recipe and software-release overviews publish the current anonymous cook-time, diet, ingredient,
+  instruction, platform, date and language statements; JSON-LD matches that projection, `recipeIngredient` is
+  Schema.org Text, and released work form is `additionalType` rather than an identifier. Book overviews keep
+  the literary reader for author, form, tag and word count. Anonymous Game overviews project admitted work facts
+  from the current page so first HTML matches JSON-LD; edition windows stay a later continuation.
+  SoftwareApplication identity links overlay the generic template. Focused tests pin overlay HTML and JSON-LD
+  and do not replace the composed native publication driver. Locale switches use document navigation through
+  the production rewrite so
+  canonical heads match the URL. Title years use the same disclosed Gregorian structured date JSON-LD would
+  publish. CreativeWork is a released ancestry base, not a bundled type in catalogue page definitions.
+  Decision: route `pages:read` uses the same current catalogue release as subject pages so home TypeList
+  selectors are admitted; an empty catalogue cannot invent public types. Catalogue SubjectPageData keeps the
+  statement-propose viewer from that contract; quotation `{ kind }` overlays stay off the public envelope.
+  Focused overlay HTML/JSON-LD tests pin served facts; the composed native publication driver remains the
+  acceptance suite. Recorded Book pages
+  keep creator return origins in HTML and edition identity in JSON-LD; HTML edition rows stay on the literary
+  stream once native link assertions are present.
 - an agent as `Person` or `Organization` with `sameAs` links the agent published;
 - `BreadcrumbList` for type and parent pages.
 
@@ -206,6 +225,11 @@ one in. A file's `lastmod` in the index is when that file last changed. Neither 
 
 Sitemaps are an inventory as of the last successful export. A page that becomes `noindex`, closed or removed
 answers its new status at once and leaves the sitemaps at the next export, within about a day.
+Decision: the publication fixture inventories 23 eligible public resources of each sitemap kind plus each kind's
+excluded privacy controls from created identities; Realm hosts omit Space addresses so realm URLs stay
+`/realms/{id}` and standalone Spaces occupy `/spaces/{address}`. Collection, Realm and Space lastmod stay omitted
+until those owners supply meaningful public-change times; the verified profile URL is the account's current handle
+after native requestVerification and approval.
 This inventory is not an ACL: an old shard or a failed export never authorizes an old profile, private member,
 withdrawn fact or media response. Retaining immutable historical shards is a separate artifact policy.
 
@@ -326,13 +350,13 @@ live HTML disclosure. This policy does not purge public responses already held b
 
 ## Producer and consumer boundaries
 
-| Join                                      | Owner and remaining boundary                                                                                                                                                                                                                                                                                                                                                                                                             |
-| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Subject publication and eligible families | [Subject pages](subject-pages.md) and the [semantic publication design](../services/kernel/src/semantic/subject-pages-design.md) own positive public evidence, meaningful-change clocks and bounded repair. The canonical reader and family workers own view/profile families, sparse-language agreement and verified agent destinations. Registration or a proposed record is not native delivery.                                      |
-| Collection source and export              | [Collection source](collection-source.md), [dynamic Collections](dynamic-collections.md) and [Collection presentation](collection-presentation.md) own completed source generations, complete current dependency authorization and canonical export readiness. SSR consumes only delivered contracts; a public header or preview does not prove source completeness.                                                                     |
-| Community families                        | Community owns each Realm's `canonicalDestination`: `{kind: 'space', spaceId, address}` for a carried Realm, otherwise `{kind: 'realm', realmId}`. The Realm feed owns carried families; the Space feed contains standalone Spaces only. Consumers retain native source ids, cursors and pages. Current head/newest-board clocks do not cover all shown changes; omit sitemap times until meaningful public-change coverage is supplied. |
-| Metadata projections                      | Subject/profile metadata workers own typed creator, identity, image and edition joins through actual public projections. The current public Subject page adapter and generated placeholder route are source-delivered; optional Subject head integration and native/cost/visual proof remain. Other missing projections retain the static fallback. No native fields or permissions are invented to fill a missing producer.             |
-| Withdrawal and restoration                | Web requires a current public render before mutable HTML/304 reuse; a source-owner fence that could safely skip it remains an outstanding binding. Mutable aliases resolve afresh. The daily offline exporter is discovery infrastructure, never live authorization.                                                                                                                                                                     |
+| Join                                      | Owner and remaining boundary                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Subject publication and eligible families | [Subject pages](subject-pages.md) and the [semantic publication design](../services/kernel/src/semantic/subject-pages-design.md) own positive public evidence, meaningful-change clocks and bounded repair. The canonical reader and family workers own view/profile families, sparse-language agreement and verified agent destinations. Registration or a proposed record is not native delivery.                                                                                                                                                                    |
+| Collection source and export              | [Collection source](collection-source.md), [dynamic Collections](dynamic-collections.md) and [Collection presentation](collection-presentation.md) own completed source generations, complete current dependency authorization and canonical export readiness. SSR consumes only delivered contracts; a public header or preview does not prove source completeness.                                                                                                                                                                                                   |
+| Community families                        | Community owns each Realm's `canonicalDestination`: `{kind: 'space', spaceId, address}` for a carried Realm, otherwise `{kind: 'realm', realmId}`. The Realm feed owns carried families; the Space feed contains standalone Spaces only. Consumers retain native source ids, cursors and pages. Current head/newest-board clocks do not cover all shown changes; omit sitemap times until meaningful public-change coverage is supplied.                                                                                                                               |
+| Metadata projections                      | Subject/profile metadata workers own typed creator, identity, image and edition joins through actual public projections. The current public Subject page adapter and generated placeholder route are source-delivered; optional Subject head integration and native/cost/visual proof remain. Other missing projections retain the static fallback. No native fields or permissions are invented to fill a missing producer. Question-management reads parse generated Client DTOs at a local web contract; Kernel SQL and command modules stay off the browser graph. |
+| Withdrawal and restoration                | Web requires a current public render before mutable HTML/304 reuse; a source-owner fence that could safely skip it remains an outstanding binding. Mutable aliases resolve afresh. The daily offline exporter is discovery infrastructure, never live authorization.                                                                                                                                                                                                                                                                                                   |
 
 Reuse the current keyset exporter, immutable shards and atomic index publication. A native feed that is preparing
 or unavailable fails the export and preserves the previous inventory; it never becomes a successful empty feed.

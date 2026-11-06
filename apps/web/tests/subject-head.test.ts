@@ -1,13 +1,16 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
-import { renderToString } from 'react-dom/server';
+import { renderSubject } from './helpers/subject-render';
 import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
 import platform from '@rezics/composition/profiles/platform.json';
-import { SubjectPage, type SubjectPageData } from '../src/features/pages/subject.tsx';
-import type { PageMessages } from '../src/features/pages/data.tsx';
-import { subjectHead } from '../src/features/pages/subject-head.ts';
-import { subjectPageTitle } from '../src/features/pages/subject.tsx';
 import type { PagePaths } from '../src/shell/head.ts';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { SubjectPage, subjectPageTitle } = await import('../src/features/pages/subject.tsx');
+const { subjectHead } = await import('../src/features/pages/subject-head.ts');
+const { GLOBAL, QUESTION } = await import('../src/features/pages/subject-ratings');
+type SubjectPageData = import('../src/features/pages/subject.tsx').SubjectPageData;
+type PageMessages = import('../src/features/pages/data.tsx').PageMessages;
 
 const id = '01a1740d-7480-71e4-841f-66c04022d7d0';
 const context = '00000000-0000-8000-8000-000000000000';
@@ -111,7 +114,11 @@ test('subject metadata uses the localized label, type and available year, locali
           id: 'date',
           rank: 'normal',
           property: { id: 'schema:datePublished', data_type: 'time' },
-          value: value({ time: '+2021-00-00T00:00:00Z', precision: 9 }),
+          value: value({
+            time: '+2021-00-00T00:00:00Z',
+            precision: 9,
+            calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+          }),
           qualifiers: [],
           references: [],
         },
@@ -197,6 +204,15 @@ test('structured data uses the released type, keeps the fallback mapping, and ad
 test('aggregateRating is present only for the shown Global native average and uses its native scale', () => {
   const page = makePage({ labels: { en: 'The Lamp' } });
   const ratings = {
+    figure: {
+      questionId: QUESTION,
+      populationId: GLOBAL,
+      scale: { min: 0, max: 40, displayStep: 4 },
+      state: 'ready',
+      count: 28,
+      mean: 8.4,
+      score: 8,
+    },
     figures: [
       { population: '00000000-0000-8000-8000-000000000000', count: 28, mean: 8.4, histogram: [1, 2, 3] },
       { population: 'private-realm', count: 90, mean: 9.8 },
@@ -209,17 +225,17 @@ test('aggregateRating is present only for the shown Global native average and us
   expect(json.aggregateRating).toEqual({
     '@type': 'AggregateRating',
     ratingValue: 8.4,
-    bestRating: 20,
+    bestRating: 10,
     worstRating: 0,
     ratingCount: 28,
   });
   expect(JSON.stringify(json)).not.toContain('imported');
   expect(JSON.stringify(json)).not.toContain('private-realm');
-  const noMean = { ...ratings, figures: [{ population: '00000000-0000-8000-8000-000000000000', count: 5 }] };
+  const noMean = { ...ratings, figure: { ...ratings.figure, count: 5, mean: null } };
   expect(JSON.parse(head(page, 'en', { ratings: noMean }).scripts[0]!.children!).aggregateRating).toBeUndefined();
 });
 
-test('thin subjects and later relations pages are noindex, while the page cover is the only high-priority image', () => {
+test('thin subjects and later relations pages are noindex, while the page cover is the only high-priority image', async () => {
   const thin = makePage({ labels: { en: 'The Lamp' } });
   expect(meta(head(thin), 'robots')).toBe('noindex, follow');
   expect(meta(head(thin, 'en', { view: 'relations', page: 1 }), 'robots')).toBe('noindex, follow');
@@ -253,8 +269,9 @@ test('thin subjects and later relations pages are noindex, while the page cover 
       },
     },
   });
-  const rendered = renderToString(
+  const rendered = await renderSubject(
     createElement(SubjectPage, { page, locale: 'en', messages, renderJsonLd: false, typeLabel: 'Book' } as never),
+    paths.en,
   );
   const cover = rendered.match(/<img[^>]*fetch[Pp]riority="high"[^>]*>/g) ?? [];
   expect(cover).toHaveLength(1);

@@ -1,4 +1,3 @@
-import type { CoverRatio } from '@rezics/ui/cover';
 import { contextSubjectAddress } from '../../features/pages/context-subject';
 import { PendingPage } from '../../shell/pending';
 import { subjectReaderPartition, useSubjectReaderRefresh } from '../../features/pages/context-reader';
@@ -39,8 +38,6 @@ import { SubjectCandidateCuration } from '../../features/pages/curate-view';
 import { SubjectViewError } from '../../subject/view-error';
 import { env } from 'cloudflare:workers';
 import { awaitSubjectRoute, readSubjectCanonicalQuery } from '../../features/pages/subject-canonical-lifetime';
-
-type TypeFrame = { label?: string; ratio?: CoverRatio; schemaOrgType?: string };
 
 const viewLabel = {
   overview: () => m.subject_overview(),
@@ -251,9 +248,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
     const type = subjectPageType(loaded.overview);
     const [typeData, relations] = await awaitSubjectRoute(signal, () =>
       Promise.all([
-        type
-          ? context.queryClient.ensureQueryData(subjectFrameQuery(type, getLocale()))
-          : Promise.resolve<TypeFrame>({}),
+        context.queryClient.ensureQueryData(subjectFrameQuery(type ?? '', getLocale())),
         deps.streamProperty
           ? context.queryClient.ensureQueryData(subjectRelationsQuery(pageRelationProperties(loaded.page), getLocale()))
           : Promise.resolve(undefined),

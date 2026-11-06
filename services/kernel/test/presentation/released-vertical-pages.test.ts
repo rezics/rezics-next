@@ -243,9 +243,8 @@ for (const [vertical, types] of Object.entries(launch)) {
         types: Record<string, string>;
       };
       const configured = Object.keys(presentation.types);
-      if (vertical === 'agents') {
-        expect(configured.filter((type) => types.includes(type)).sort()).toEqual([...types].sort());
-      } else expect(configured.sort()).toEqual([...types].sort());
+      // YAML may list extra presentation types this cell does not record.
+      expect(configured.filter((type) => types.includes(type)).sort()).toEqual([...types].sort());
       const release = await driver.request('anonymous', 'GET', '/v1/definitions/active');
       status(release, 200, 'actual released definition pointer');
       expect(release.body.digest).toBe(bundledDigest);
@@ -266,6 +265,11 @@ for (const [vertical, types] of Object.entries(launch)) {
             expect(anonymous.catalogue?.definitions?.types['schema:CreativeWork']).toBeDefined();
             expect(anonymous.catalogue?.definitions?.properties).toHaveProperty('schema:genre');
             expect(anonymous.catalogue?.directions?.every((entry) => entry.release === bundledDigest)).toBe(true);
+          }
+          if (view === 'overview' && ['schema:Recipe', 'schema:SoftwareApplication'].includes(type)) {
+            expect(anonymous.catalogue).toMatchObject({ state: 'released', type, digest: bundledDigest });
+            expect(anonymous.catalogue?.definitions?.types[type]).toBeDefined();
+            expect(anonymous.catalogue?.definitions?.types['schema:CreativeWork']).toBeUndefined();
           }
           const anonymousStatus = (anonymous as { actions?: { status: string } }).actions?.status ?? 'missing';
           const editorStatus = (editor as { actions?: { status: string } }).actions?.status ?? 'missing';

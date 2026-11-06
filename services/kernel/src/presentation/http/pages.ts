@@ -53,6 +53,7 @@ import {
   pageViewerActions,
   quotationPageDocuments,
   quotationTypeAdmitted,
+  recipePageDocuments,
   readQuotationPageAuthority,
   semanticPageView,
   type SemanticPageOverlay,
@@ -456,12 +457,11 @@ function nativePageRoute<App, const Path extends string>(
       let account: PageAccount | null = null;
       let resolved: ResolvedTemplate;
       let views: View[] | null = null;
-      let definitionRelease: Awaited<ReturnType<typeof activeRelease>> | undefined;
+      const definitionRelease = await activeRelease(pool);
       if ('route' in target) {
         resolved = resolveTemplate(active.profile, { route: target.route });
       } else {
-        const release = await activeRelease(pool);
-        definitionRelease = release;
+        const release = definitionRelease;
         let subjectTarget: string | null = null;
         let kind = 'actor';
         let automated = false;
@@ -769,9 +769,16 @@ async function pageAnswer(input: {
   const subjectBody = observation?.status === 200 && isRecord(observation.body) ? observation.body.subject : undefined;
   const properties =
     isRecord(subjectBody) && isRecord(subjectBody.statements) ? Object.keys(subjectBody.statements) : [];
-  const documents = quotationPageDocuments(
-    characterPageDocuments(
-      documentRead(input.resolved.document, input.subject, properties, input.context?.id),
+  const documents = recipePageDocuments(
+    quotationPageDocuments(
+      characterPageDocuments(
+        documentRead(input.resolved.document, input.subject, properties, input.context?.id),
+        input.release,
+        input.subjectType,
+        input.subject,
+        properties,
+        input.context?.id,
+      ),
       input.release,
       input.subjectType,
       input.subject,
