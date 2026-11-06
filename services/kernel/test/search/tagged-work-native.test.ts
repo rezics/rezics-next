@@ -2,7 +2,6 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import {
   createReleasedDiscoveryFixture,
-  discoveryKey,
   discoveryStatement,
   type CreatedSubject,
   type ReleasedDiscoveryFixture,
