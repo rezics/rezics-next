@@ -307,9 +307,10 @@ test('native Auth and mounted platform suspension commit the real terminal state
   expect((await call(target.bearer, pathFor(recipient.accountId), {})).response.status).toBe(401);
   await expect(commands.suspend(cached, cachedInput)).rejects.toThrow();
   await expect(commands.suspend(cached, { accountId: recipient.accountId, key: Bun.randomUUIDv7() })).rejects.toThrow();
-  await grants.create(await context(root.bearer), { ...inputFor(recipient.accountId), key: Bun.randomUUIDv7() });
+  const unaffected = await person('unaffected_actor');
+  await grants.create(await context(root.bearer), { ...inputFor(unaffected.accountId), key: Bun.randomUUIDv7() });
   const unrelated = await person('unrelated_victim');
-  expect((await call(recipient.bearer, pathFor(unrelated.accountId), {})).response.status).toBe(200);
+  expect((await call(unaffected.bearer, pathFor(unrelated.accountId), {})).response.status).toBe(200);
 });
 
 test('the mounted action checks Global Context at the sole clock and independently denies actor, scope and principal ceilings', async () => {
