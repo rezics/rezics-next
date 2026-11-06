@@ -109,7 +109,7 @@ test('withheld targets and absent citations stay explicit, and stale revisions n
   const staleHtml = view(changedContext, [changedPost]);
   expect(staleHtml).not.toContain(`href="/en/posts/${postId}/revisions/${revisionId}"`);
   expect(staleHtml).not.toContain('data-cited-value="0"');
-  expect(staleHtml).toContain('Recorded rating context could not be loaded.');
+  expect(staleHtml).toContain('Some required context could not be loaded. Retry this history page.');
 });
 
 test('a review context from another thread is not displayed on this visit', () => {

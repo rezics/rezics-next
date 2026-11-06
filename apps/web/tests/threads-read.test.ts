@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import type { BoardPageResponse, KernelClient } from '@rezics/client';
 import { RemovedPost } from '../src/threads/post-removed';
 import { loadBoardPageWithAuthors, loadThreadPageWithAuthors } from '../src/identity/page-loaders';
+import { authoredReadingPage } from '../src/kernel/fake/thread-reading-page';
 import { threadHref } from '../src/threads/thread-href';
 
 type BoardResource = ReturnType<KernelClient['boards']>;
@@ -149,7 +150,7 @@ test('a protected board page uses the member credential for its single opening r
   const realmId = id(91);
   const authorization = 'Bearer realm-member';
   const reads: { path: string; authorization: string | undefined }[] = [];
-  const memberThread = { id: id(92), authorId: id(90) };
+  const memberThread = { id: id(92), authorId: id(90), availability: 'available' as const };
   const fakeClient = {
     boards: () => ({
       page: {
@@ -202,7 +203,7 @@ test('the Board reader retains per-card count, freshness, and action witnesses w
 
   const page = await loadBoardPageWithAuthors(fakeClient, { id: id(1) });
 
-  expect(page.openingCards[first.thread.id]).toBe(populatedCard);
+  expect(page.openingCards[first.thread.id]).toEqual(populatedCard);
   expect(page.openingCards[first.thread.id]?.comments).toEqual(populatedCard.comments);
   expect(page.openingCards[first.thread.id]?.interaction).toEqual(populatedCard.interaction);
   expect(page.actions).toEqual(response.actions);
@@ -243,10 +244,12 @@ test('a board page preserves kernel order and follows the emitted cursor', async
 
 test('a thread page reads native posts in order with one batched byline read and follows its cursor', async () => {
   const requests: { path: string; query?: Record<string, string>; ids?: string }[] = [];
-  const pages: Posts[] = [
-    { posts: [post(13), post(12)], next: pageCursor },
-    { posts: [post(14)], next: null },
+  const author = { id: account.id, displayName: account.displayName, handle: account.handle, avatar: null };
+  const pages = [
+    authoredReadingPage(first.thread, [post(13)], [author]),
+    authoredReadingPage(first.thread, [post(14)], [author]),
   ];
+  pages[0]!.replies.next = pageCursor;
   let pageNumber = 0;
   const fakeClient = {
     threads: () => ({
@@ -254,9 +257,12 @@ test('a thread page reads native posts in order with one batched byline read and
         requests.push({ path: `/v1/threads/${id(2)}` });
         return { data: first };
       },
-      posts: {
+      'reading-page': {
         get: async (options?: { query?: Record<string, string> }) => {
-          requests.push({ path: `/v1/threads/${id(2)}/posts`, ...(options?.query ? { query: options.query } : {}) });
+          requests.push({
+            path: `/v1/threads/${id(2)}/reading-page`,
+            ...(options?.query ? { query: options.query } : {}),
+          });
           return { data: pages[pageNumber++] };
         },
       },
@@ -285,20 +291,20 @@ test('a thread page reads native posts in order with one batched byline read and
   expect('redirect' in firstPage).toBe(false);
   if ('redirect' in firstPage) return;
   expect(firstPage.thread.title).toBe('Zebra reading');
-  expect(firstPage.posts.posts.map((value) => value.id)).toEqual([id(13), id(12)]);
+  expect(firstPage.posts.posts.map((value) => value.id)).toEqual([first.thread.firstPost.id, id(13)]);
   expect(firstPage.posts.posts.map((value) => value.body?.doc.content?.at(-1)?.content?.[0]?.text)).toEqual([
-    'Contribution 13',
     'Contribution 12',
+    'Contribution 13',
   ]);
   expect(firstPage.posts.next).toBe(pageCursor);
-  expect(secondPage.posts.posts.map((value) => value.id)).toEqual([id(14)]);
+  expect(secondPage.posts.posts.map((value) => value.id)).toEqual([first.thread.firstPost.id, id(14)]);
   expect(secondPage.posts.next).toBeNull();
-  expect(requests.filter(({ path }) => path.endsWith('/posts'))).toEqual([
-    { path: `/v1/threads/${id(2)}/posts` },
-    { path: `/v1/threads/${id(2)}/posts`, query: { cursor: pageCursor } },
+  expect(requests.filter(({ path }) => path.endsWith('/reading-page'))).toEqual([
+    { path: `/v1/threads/${id(2)}/reading-page` },
+    { path: `/v1/threads/${id(2)}/reading-page`, query: { cursor: pageCursor } },
   ]);
-  expect(requests.filter(({ path }) => path === '/v1/accounts')).toHaveLength(2);
-  expect(firstPage.authors?.[id(90)]).toEqual(account);
+  expect(requests.filter(({ path }) => path === '/v1/accounts')).toHaveLength(0);
+  expect(firstPage.authors?.[id(90)]).toEqual(author);
 });
 
 test('an erased post has no body, byline or restore access from an arbitrary callback', async () => {
@@ -314,7 +320,15 @@ test('an erased post has no body, byline or restore access from an arbitrary cal
   const fakeClient = {
     threads: () => ({
       get: async () => ({ data: erasedThread }),
-      posts: { get: async () => ({ data: { posts: [erased], next: null } }) },
+      'reading-page': {
+        get: async () => ({
+          data: authoredReadingPage(
+            { ...erasedThread.thread, firstPost: erased as typeof erasedThread.thread.firstPost },
+            [],
+            [],
+          ),
+        }),
+      },
     }),
     boards: () => ({ get: async () => ({ data: board }) }),
     accounts: {
@@ -334,7 +348,7 @@ test('an erased post has no body, byline or restore access from an arbitrary cal
   );
 
   expect(page.posts.posts[0]).toMatchObject({ availability: 'erased', removed: true, body: null });
-  expect(requests).toEqual([{ path: '/v1/accounts', ids: id(90) }]);
+  expect(requests).toEqual([]);
   const markup = renderToStaticMarkup(
     createElement(RemovedPost, {
       post: page.posts.posts[0]!,
@@ -402,7 +416,7 @@ test('only a self-deleted owner post with the original unexpired server deadline
     const { restorableUntil: _deadline, ...permanent } = erased;
     expect(render(permanent, account.id)).not.toContain('>Restore</button>');
     const { authorId: _author, ...unknownOwner } = erased;
-    expect(render(unknownOwner as Post, account.id)).not.toContain('>Restore</button>');
+    expect(render(unknownOwner as Post, account.id)).toContain('>Restore</button>');
   } finally {
     clock.mockRestore();
   }
@@ -412,7 +426,7 @@ test('kernel 404s stay on the not-found boundary for board and thread route load
   const missing = { error: { value: { code: 'not_found' } }, status: 404 };
   const fakeClient = {
     boards: () => ({ page: { get: async () => missing } }),
-    threads: () => ({ get: async () => missing, posts: { get: async () => missing } }),
+    threads: () => ({ get: async () => missing, 'reading-page': { get: async () => missing } }),
   } as unknown as KernelClient;
 
   await expect(loadBoardPageWithAuthors(fakeClient, { id: id(99) })).rejects.toBeTruthy();

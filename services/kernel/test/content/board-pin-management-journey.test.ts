@@ -63,6 +63,7 @@ test.serial('selected pin advice uses the admitted Board generation and opens th
   expect(reading.value.thread.firstPost.id).toBe(target.firstPost.id);
   expect(reading.value.documentMedia).toMatchObject({ state: 'available' });
   expect(Object.hasOwn(reading.value, 'mentions')).toBe(true);
+  expect(Object.hasOwn(reading.value, 'reviewContext')).toBe(true);
   expect(Object.hasOwn(reading.value, 'conversationActivity')).toBe(true);
   expect(reading.value.thread.firstPost.body).toBeDefined();
 
