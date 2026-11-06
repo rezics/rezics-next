@@ -28,10 +28,7 @@ export function workerCheckBudgetDirectory(stateDirectory: string, taskId: strin
  * Proof-run, registered-proof and acceptance-requiring briefs keep their declared checks. Urgent and control-plane
  * tasks are exempt. Everyone else is held to one check-host wrapper run plus one rerun after a failure.
  */
-export function workerCheckHostBudgetLimit(
-  task: WorkerCheckBudgetTask,
-  attempt?: number,
-): WorkerCheckHostBudgetLimit {
+export function workerCheckHostBudgetLimit(task: WorkerCheckBudgetTask, attempt?: number): WorkerCheckHostBudgetLimit {
   const brief = task.brief;
   if (brief?.urgent === true || brief?.goal === 'control-plane') return 'off';
   if ((brief?.acceptance?.requires?.length ?? 0) > 0) return 'off';
