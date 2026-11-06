@@ -389,7 +389,8 @@ export function searchRoutes<App>(
           return admission.run('normal', job, async () => {
             set.headers['cache-control'] = 'private, no-store';
             if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('forbidden');
-            if (!search?.releaseGroups) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
+            const releaseGroups = search?.releaseGroups;
+            if (!releaseGroups) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
             if (
               body.population !== undefined ||
               body.kindPage !== undefined ||
@@ -401,7 +402,7 @@ export function searchRoutes<App>(
               });
             const active = await activeRelease(pool);
             const page = await searchHttpExecute(nativeBody, () =>
-              search.releaseGroups(
+              releaseGroups(
                 searchHttpPrincipal(actor),
                 nativeBody as GroupedReleaseSearchRequest,
                 clock().getTime(),

@@ -105,6 +105,8 @@ on Search, suggest, facets and Realm More/Retry/Restart; named stories stay unch
 deferred until stack releases land.
 Decision: Search HTTP omits absent optional problem fields when classifying those families. Leftover History imports
 in Semantic/Zones use the documented contract and application entries so kernel typecheck can complete.
+Decision: four native HTTP cases pin executed-request recovery (ties and the terminal page, lost-generation restart,
+temporary source retry, invalid operands with the rating pair and a replaced reader); seeded browser stays held.
 
 Search rating order and population are one pending native GET pair, applied only by Submit in both hydrated and
 unhydrated visits. A field change never dispatches. Application starts a first traversal, retaining every other

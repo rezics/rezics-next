@@ -44,10 +44,11 @@ test('pending or unavailable identity prepares, and empty pages stay ready', () 
   expect(admitCanonicalKeyset([original], [{ state: 'unavailable', reason: 'bootstrap' }])).toEqual({
     status: 'preparing',
   });
-  expect(admitCanonicalKeyset([original], [{ state: 'absent' }])).toMatchObject({
-    status: 'ready',
-    accepted: new Map(),
-  });
+  const absent = admitCanonicalKeyset([original], [{ state: 'absent' }]);
+  expect(absent.status).toBe('ready');
+  if (absent.status !== 'ready') throw new Error('absent original prepared');
+  expect([...absent.accepted.values()].map((row) => row.id)).toEqual([original.id]);
+  expect(absent.canonicalId(original)).toBe(original.id);
   const empty = admitCanonicalKeyset([], []);
   expect(empty.status).toBe('ready');
 });

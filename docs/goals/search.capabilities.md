@@ -245,6 +245,8 @@ Search binds confidential principal/request/operation/generation/epoch cursors; 
 identity access paths, Commerce supplies occurrence versus canonical read boundaries.
 Focused native HTTP recovery (`canonical-executed-recovery.test.ts`) pins unique traversal, generation restart and
 terminal pages separately from browser and promoted-main proof.
+Decision: those four native HTTP cases are the fewest user-visible recovery pins; an unmapped original on the page is
+its own terminal.
 
 | Stage                                   | Evidence                                                                                         |
 | --------------------------------------- | ------------------------------------------------------------------------------------------------ |

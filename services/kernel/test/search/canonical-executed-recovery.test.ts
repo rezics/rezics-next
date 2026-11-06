@@ -18,6 +18,7 @@ import {
 import { searchHttpFamilyFromStatus } from '../../src/search/http/search.ts';
 import { searchNativeCursorPointer } from '../../src/search/http/native-recovery.ts';
 import { executedRatingPair } from '../../src/search/canonical-keyset-admit.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 const searchUrl = process.env.OPENSEARCH_URL;
@@ -140,6 +141,7 @@ async function deployment(
     routeKey: new Uint8Array(32).fill(13),
     search: service,
     access,
+    receiptKeys: testReceiptKeys(),
   });
   return { prefix, fake, service, kernel };
 }
