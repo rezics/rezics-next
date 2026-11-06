@@ -42,7 +42,7 @@ beforeAll(async () => {
 afterAll(async () => {
   restoreExpiryObservation?.();
   // A setup that outlived its hook still owns a started host; close it once it settles, never leave it running.
-  await (await setup?.catch(() => undefined))?.close();
+  await (f ?? (await setup?.catch(() => undefined)))?.close();
 }, 120_000);
 
 test('a legitimate deleted creator keeps a pending registration secret-free until the real source expiry; a distinct living organization holds responsibility', async () => {

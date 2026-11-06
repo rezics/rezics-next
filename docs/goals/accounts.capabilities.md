@@ -43,11 +43,13 @@ native checks still do not qualify the controller-held seeded/browser deployment
 A prior supported run passed native same-database concurrent registrations across three close/relaunch
 cycles. The latest combined run passed installed login receiving, startup client locking, persisted deployment
 bindings, website consent renewal and the mounted website-scope/media configuration cases. Auth Pages, Auth
-service and Kernel workspace typechecks passed. The fresh-stack browser case could not launch because neither
-supported task executable was installed. Native erasure setup timed out, and subsequent workflow setup found
-an existing process-wide DBOS owner, so that run did not repeat the registration lifecycle coverage.
-Historical separate-system-store registration failures remain unqualified; these results do not establish
-an integrated registration-to-Home completion.
+service and Kernel workspace typechecks passed. Native composition now releases DBOS on failed start, waits
+for that release before a later host launches, copies a once-migrated kernel template under the Auth check,
+installs Kernel History composition in native Auth fixtures after Reylo registers SQL modules, binds staged
+provisioning receipts to the locked reservation, terminals expired registration before erase-auth-owner, and
+runs the Taskfile's Bun commands when neither `go-task` nor `task` is present. Focused receiving of
+registration close/relaunch, native consumer startup/cleanup and the official dev-stack invocation remains
+the execution evidence; these source repairs do not establish an integrated registration-to-Home completion.
 The subsequent internal service-factory move passed the architecture check against its landing base. Two
 supported remote submissions lost their connection during Auth service typing. Only Auth Pages typing
 completed on that revision; service typing and focused native tests have no completed result after the move.
@@ -73,9 +75,10 @@ prove current-session replacement across Auth and Web, or supply desktop/phone e
 Deployment uses the same native catalogue for Security/session/client/consent bounds and the website ceiling;
 installed password, passkey, session and consent command identities retain their existing native/page owners.
 The latest supported run passed suspension, suspended sign-in, defensive bearer, consent and ordinary website
-consent renewal cases. Session and credential capability fixtures stopped at `KERNEL_RECEIPT_KEYS is required`;
-they do not establish Security
-review/readback or credential effects. Seeded browser and promoted desktop/phone evidence remain open.
+consent renewal cases. Session and credential capability fixtures bind the supported test receipt ring on the
+command pool and supply `KERNEL_RECEIPT_KEYS` from worker composition when the environment has none. Focused
+receiving of those suites is the execution evidence; they do not establish Security review/readback, current-session
+replacement across Auth and Web, or desktop/phone qualification. Seeded browser and promoted evidence remain open.
 
 ## permission-formula
 

@@ -1133,6 +1133,32 @@ or a failed-start release. Failed-start cleanup cannot replace the first causal
 error. Late cleanup of a previous generation cannot clear or shut down a
 successor.
 
+Native fixtures bind dedicated receipt keys on the kernel pool they pass to Access
+commands, using the same supported test ring as kernel worker composition. Those keys
+are independent of Auth staging keys and of Access reference-seal keys.
+They also install Kernel's native History composition before importing Access, the
+same binding Kernel tests preload; Auth's check has no Kernel bunfig. Reylo registers
+first so History adapters can load compiled `.sql` modules. A staged
+provisioning receipt copies reservation identity from the locked registration row
+when Access did not supply a receipt, matching the party-guard binding.
+The dump CLI copies `scripts/database.ts` away from the kernel tree and therefore
+loads kernel migrate only when a kernel template is actually migrated.
+Workflow-host, native-consumer and database tests run through
+`bun run --cwd services/auth check <file>` so each file receives a lane copy of the
+once-migrated kernel template and releases its host. Focused receiving is the five
+named suites plus failed-start relaunch and first-actual-failure cause; no extra stories.
+
+A registration whose workflow stopped reports the durable failure, and this process's
+first actual step failure rides along as its `cause`. Durable steps journal only the
+generic step message; the retained failure is bounded to 64 workflows and is never
+persisted or exposed outside the host. Expired registration terminals the stage and
+records handle release before `erase-auth-owner`, which is how the owner producer
+recognizes pending-registration cleanup. Mock workflow hosts that exercise native
+operations supply creation context, actor roles and approval bindings; they do not
+reconstruct those from an unprotected callback. The official dev-stack copy omits
+check-host `.last-test-file` artifacts so a concurrent check receipt cannot break
+the isolated checkout.
+
 Before resolving, `host.start()` also registers the first-party client
 `rezics-auth-account-operations` through trusted `registerClient` in
 `create-or-match` mode. `@rezics/auth-contract` exports its nonsecret

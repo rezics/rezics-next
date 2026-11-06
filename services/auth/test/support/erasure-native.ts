@@ -4,6 +4,8 @@ import { createRequire } from 'node:module';
 import { Pool, type PoolClient } from 'pg';
 import { exportJWK, generateKeyPair } from 'jose';
 import { kernelTestDatabase, testDatabase } from '../../scripts/database.ts';
+import { configureTestReceiptKeys } from '../../../kernel/test/support/receipt-keys.ts';
+import { workerTestEnv } from '../../../kernel/test/support/worker-env.ts';
 import { bindAuthDeletionHandleRead, createAuthHost, type AccountOperationAccess } from '../../src/index.ts';
 import { createNativeWorkflowProofPorts } from '../../src/native-workflow-proofs.ts';
 import { createProvisioningEvidenceVerifier } from '../../src/provisioning-evidence.ts';
@@ -52,12 +54,19 @@ export async function nativeFixture(options: { openPool?: (url: string) => Promi
   const fixture = testDatabase();
   const kernelFixture = kernelTestDatabase();
   const kernel = new Pool({ connectionString: kernelFixture.url });
+  // Dedicated receipt material, independent of this fixture's Access reference keys.
+  process.env.KERNEL_RECEIPT_KEYS ??= workerTestEnv().KERNEL_RECEIPT_KEYS!;
+  configureTestReceiptKeys(kernel);
   const pool = options.openPool ? await options.openPool(fixture.url) : new Pool({ connectionString: fixture.url });
   const previous = process.env.DATABASE_URL;
   process.env.DATABASE_URL = kernelFixture.url;
   let modules;
   try {
+    // Reylo must compile Kernel .sql modules before History adapters or Access load. A static History import
+    // evaluates those adapters first and fails with a missing `sql` export.
     await import(createRequire(new URL('../../../kernel/package.json', import.meta.url)).resolve('reylo/register'));
+    const { installNativeHistoryPreload } = await import('../../../kernel/src/composition/preload.ts');
+    installNativeHistoryPreload();
     modules = {
       ...(await import('../../../kernel/src/access/index.ts')),
       ...(await import('../../../kernel/src/access/native-account-bindings.ts')),

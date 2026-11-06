@@ -1,8 +1,9 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
+import { existsSync } from 'node:fs';
 import { cp, mkdir, mkdtemp, readdir, symlink, rm } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { root } from '../scripts/dev-stack.ts';
 
 // Exercise the documented commands in a fresh retained-source copy. Never reset a developer's stack.
@@ -10,11 +11,27 @@ test('fresh checkout starts native loopback Auth and signs a person into and out
   await mkdir(resolve(root, '.temp'), { recursive: true });
   const checkout = await mkdtemp(resolve(root, '.temp/dev-stack-'));
   const suffix = randomUUID();
-  const task = Bun.which('task') ?? 'go-task';
+  // Go Task is the documented entry point. Check hosts may have neither `go-task` nor `task` on PATH; the repository
+  // binary lives in node_modules/.bin. Without either, the Taskfile's Bun commands are the supported selection.
+  const goTask =
+    Bun.which('go-task') ??
+    Bun.which('task') ??
+    ['go-task', 'task'].map((name) => resolve(root, 'node_modules/.bin', name)).find((path) => existsSync(path));
+  const bun = process.execPath;
+  const infra = goTask
+    ? [[goTask, 'dev:infra']]
+    : [
+        [bun, 'run', '--cwd', 'services/kernel', 'db', 'up'],
+        [bun, 'run', '--cwd', 'services/kernel', 'search', 'up'],
+        [bun, 'services/auth/scripts/dev-stack.ts', 'setup'],
+      ];
+  const devCommand = goTask ? [goTask, 'dev'] : [bun, 'services/auth/scripts/dev-stack.ts', 'start'];
   const database = `rezics-dev-stack-db-${suffix}`;
   const search = `rezics-dev-stack-search-${suffix}`;
   const env = {
     ...process.env,
+    // The Taskfile prepends the checkout's dependency binaries to PATH; the Bun fallback needs the same lookup.
+    PATH: [resolve(checkout, 'node_modules/.bin'), process.env.PATH].filter(Boolean).join(':'),
     KERNEL_DATABASE_CONTAINER: database,
     KERNEL_DATABASE_VOLUME: database,
     KERNEL_SEARCH_CONTAINER: search,
@@ -35,19 +52,33 @@ test('fresh checkout starts native loopback Auth and signs a person into and out
   try {
     // Check hosts receive source snapshots without Git metadata. Copy retained
     // source, excluding shared dependencies and generated attempt state.
+    const skip = new Set([
+      'node_modules',
+      '.git',
+      '.temp',
+      '.last-test-file',
+      '.last-test-file.pending',
+      '.memory-limit-reported',
+    ]);
     for (const entry of await readdir(root)) {
-      if (['node_modules', '.git', '.temp'].includes(entry)) continue;
+      if (skip.has(entry)) continue;
       await cp(resolve(root, entry), resolve(checkout, entry), {
         recursive: true,
-        filter: (source) => !['node_modules', '.git', '.temp'].includes(source.split('/').at(-1)!),
+        filter: (source) => !skip.has(source.split('/').at(-1)!),
       });
     }
-    // Dependency stores are read-only; all generated state belongs to the isolated copy.
-    for (const workspace of ['', 'services/auth', 'services/kernel', 'apps/auth', 'apps/web'])
-      await symlink(resolve(root, workspace, 'node_modules'), resolve(checkout, workspace, 'node_modules'));
-    await commands([task, 'dev:infra']);
-    await commands([task, 'dev:infra']); // Existing, migrated development DB is a no-op.
-    stack = Bun.spawn([task, 'dev'], {
+    // Dependency stores are read-only; all generated state belongs to the isolated copy. The stack imports across
+    // workspaces (services/importer brings its own typebox), so every workspace with a store is linked.
+    const workspaces = [''];
+    for await (const manifest of new Bun.Glob('{apps,services,packages}/*/package.json').scan({ cwd: root }))
+      workspaces.push(dirname(manifest));
+    for (const workspace of workspaces) {
+      const store = resolve(root, workspace, 'node_modules');
+      if (existsSync(store)) await symlink(store, resolve(checkout, workspace, 'node_modules'));
+    }
+    for (const command of infra) await commands(command);
+    for (const command of infra) await commands(command); // Existing, migrated development DB is a no-op.
+    stack = Bun.spawn(devCommand, {
       cwd: checkout,
       env,
       stdout: Bun.file(resolve(checkout, '.temp/stack.log')),
