@@ -195,7 +195,8 @@ export async function openProviderCli(source: Exclude<SourceId, 'vndb'>, convert
           const claims = decodeJwt(bearer.slice(7));
           expect(claims.sub).toBe(runtime.identity.bulk.accountId);
           expect(claims.client_id).toBe(runtime.identity.client.clientId);
-          expect(String(claims.scope).split(' ').sort()).toEqual([...IMPORTER_SCOPES].sort());
+          const tokenScopes = source === 'bangumi' ? [...IMPORTER_SCOPES, 'subject:read'] : [...IMPORTER_SCOPES];
+          expect(String(claims.scope).split(' ').sort()).toEqual([...tokenScopes].sort());
           const bytes = request.method === 'GET' ? '' : await request.clone().text();
           if (url.pathname === '/v1/subjects:batchWrite') {
             expect(Buffer.byteLength(bytes!)).toBeLessThanOrEqual(65536);

@@ -258,10 +258,10 @@ export async function openApiRuntime(
     );
     ownedIdentity = identity;
     // Auth already quiesced its process-wide executor. Launch the isolated
-    // worker against the settled application database, overlapping only the
-    // remaining credential and kernel composition work.
+    // worker against the settled application database and wait until it prints
+    // MEDIA_READY so later CLI work does not overlap a stalled child.
     workerStart = time('media worker start', () => boundary!.start());
-    void workerStart.catch(() => {});
+    await workerStart;
     // Request the registered client's complete import scopes through the native account-key flow.
     let bulk = await time('importer account-key sign-in', () =>
       identitySupport(identity).issue(identity.bulk.accountId, identity.client.scopes),

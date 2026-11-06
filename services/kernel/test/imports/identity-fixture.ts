@@ -292,16 +292,27 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
   let ending: Promise<void> | undefined;
   const close = () =>
     (ending ??= (async () => {
+      const releaseCloseAuth = await beginIdentityAuthTurn();
       try {
-        await host?.stop();
+        try {
+          await host?.stop();
+        } finally {
+          // Drop this host's executor before another identity in the same
+          // process can register against its own Auth database.
+          await DBOS.shutdown({ deregister: true }).catch(() => {});
+        }
       } finally {
         try {
           await authDatabase?.close();
         } finally {
-          await namespace?.close();
-          if (namespace) {
-            owned.delete(`host:${namespace.name}`);
-            owned.delete(`pool:${namespace.name}`);
+          try {
+            await namespace?.close();
+            if (namespace) {
+              owned.delete(`host:${namespace.name}`);
+              owned.delete(`pool:${namespace.name}`);
+            }
+          } finally {
+            releaseCloseAuth();
           }
         }
       }
@@ -440,6 +451,7 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
           ...IMPORT_ACTIONS,
           'statement:propose',
           'media:read_reservation',
+          'subject:read',
           ...statisticScopes,
         ],
       };
@@ -1019,7 +1031,8 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
         },
       });
       // DBOS is a process singleton. Quiesce its workflows after finite setup so
-      // two live fixture services can coexist with their separate Auth pools.
+      // the isolated media worker can launch. Close later takes its own turn so
+      // the next identity relaunches against a settled executor.
       await host.workflows.close();
       return result;
     } finally {
