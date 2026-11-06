@@ -184,6 +184,8 @@ export class TrainQueue<TConfiguration> {
         throw error;
       }
       acquired = true;
+      // Each lease is a train start or a sweep: a resolution abandoned by a stopped train is selectable again here.
+      o.queue.releaseAbandonedResolutions();
       const roundHead = this.integrationHead();
       const deferred = new Set<number>();
       const pendingDevResolutions: DevResolutionHandoff[] = [];
