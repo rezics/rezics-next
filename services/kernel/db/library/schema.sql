@@ -4740,6 +4740,58 @@ CREATE TABLE library.follow_count_total (
 
 
 --
+-- Name: identity_epoch_participant_handoff; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.identity_epoch_participant_handoff (
+    partition_no integer NOT NULL,
+    job_id uuid NOT NULL,
+    job_epoch bigint NOT NULL,
+    effect_key text NOT NULL,
+    owner_id uuid NOT NULL,
+    owner_partition integer NOT NULL,
+    role text NOT NULL,
+    reason text NOT NULL,
+    locator jsonb NOT NULL,
+    resolved boolean DEFAULT false NOT NULL,
+    CONSTRAINT identity_epoch_participant_handoff_check CHECK ((partition_no = (((get_byte(uuid_send(job_id), 10) * 256) + get_byte(uuid_send(job_id), 11)) >> 4))),
+    CONSTRAINT identity_epoch_participant_handoff_check1 CHECK ((owner_partition = (((get_byte(uuid_send(owner_id), 10) * 256) + get_byte(uuid_send(owner_id), 11)) >> 4))),
+    CONSTRAINT identity_epoch_participant_handoff_effect_key_check CHECK (((octet_length(effect_key) >= 1) AND (octet_length(effect_key) <= 256))),
+    CONSTRAINT identity_epoch_participant_handoff_job_epoch_check CHECK ((job_epoch > 0)),
+    CONSTRAINT identity_epoch_participant_handoff_locator_check CHECK ((octet_length((locator)::text) <= 2048)),
+    CONSTRAINT identity_epoch_participant_handoff_owner_partition_check CHECK (((owner_partition >= 0) AND (owner_partition <= 4095))),
+    CONSTRAINT identity_epoch_participant_handoff_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT identity_epoch_participant_handoff_reason_check CHECK ((reason = ANY (ARRAY['foreign-owner'::text, 'frozen-output'::text, 'public-output'::text, 'owner-unready'::text]))),
+    CONSTRAINT identity_epoch_participant_handoff_role_check CHECK ((role = ANY (ARRAY['member'::text, 'entry'::text, 'label'::text, 'session'::text, 'copy'::text, 'output'::text, 'follow'::text])))
+);
+
+
+--
+-- Name: identity_epoch_participant_scope; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.identity_epoch_participant_scope (
+    partition_no integer NOT NULL,
+    job_id uuid NOT NULL,
+    job_epoch bigint NOT NULL,
+    source_route integer NOT NULL,
+    source_id uuid NOT NULL,
+    owner_id uuid NOT NULL,
+    plan_key text NOT NULL,
+    after_effect_key text DEFAULT ''::text NOT NULL,
+    after_disposition text DEFAULT ''::text NOT NULL,
+    exhausted boolean DEFAULT false NOT NULL,
+    CONSTRAINT identity_epoch_participant_scope_check CHECK ((partition_no = (((get_byte(uuid_send(job_id), 10) * 256) + get_byte(uuid_send(job_id), 11)) >> 4))),
+    CONSTRAINT identity_epoch_participant_scope_check1 CHECK ((source_route = ((get_byte(uuid_send(source_id), 10) * 256) + get_byte(uuid_send(source_id), 11)))),
+    CONSTRAINT identity_epoch_participant_scope_check2 CHECK ((partition_no = (((get_byte(uuid_send(owner_id), 10) * 256) + get_byte(uuid_send(owner_id), 11)) >> 4))),
+    CONSTRAINT identity_epoch_participant_scope_job_epoch_check CHECK ((job_epoch > 0)),
+    CONSTRAINT identity_epoch_participant_scope_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT identity_epoch_participant_scope_plan_key_check CHECK ((octet_length(plan_key) = 64)),
+    CONSTRAINT identity_epoch_participant_scope_source_route_check CHECK (((source_route >= 0) AND (source_route <= 65535)))
+);
+
+
+--
 -- Name: identity_epoch_participant_work; Type: TABLE; Schema: library; Owner: -
 --
 
@@ -4756,15 +4808,24 @@ CREATE TABLE library.identity_epoch_participant_work (
     receiving_position bigint NOT NULL,
     receiving_transaction_id uuid CONSTRAINT identity_epoch_participant_wo_receiving_transaction_id_not_null NOT NULL,
     custodied boolean DEFAULT false NOT NULL,
+    follow_after uuid,
+    follow_partition integer,
+    follow_complete boolean DEFAULT true NOT NULL,
+    source_route integer,
+    source_id uuid,
+    plan_key text,
+    disposition text,
+    handed_off boolean DEFAULT false NOT NULL,
     CONSTRAINT identity_epoch_participant_work_check CHECK ((partition_no = (((get_byte(uuid_send(owner_id), 10) * 256) + get_byte(uuid_send(owner_id), 11)) >> 4))),
     CONSTRAINT identity_epoch_participant_work_check1 CHECK ((receiving_partition = partition_no)),
     CONSTRAINT identity_epoch_participant_work_effect_key_check CHECK (((octet_length(effect_key) >= 1) AND (octet_length(effect_key) <= 256))),
+    CONSTRAINT identity_epoch_participant_work_follow_partition_check CHECK (((follow_partition >= 0) AND (follow_partition <= 4095))),
     CONSTRAINT identity_epoch_participant_work_job_epoch_check CHECK ((job_epoch > 0)),
     CONSTRAINT identity_epoch_participant_work_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
     CONSTRAINT identity_epoch_participant_work_receiving_epoch_check CHECK ((receiving_epoch > 0)),
     CONSTRAINT identity_epoch_participant_work_receiving_partition_check CHECK (((receiving_partition >= 0) AND (receiving_partition <= 4095))),
     CONSTRAINT identity_epoch_participant_work_receiving_position_check CHECK ((receiving_position > 0)),
-    CONSTRAINT identity_epoch_participant_work_role_check CHECK ((role = ANY (ARRAY['member'::text, 'entry'::text, 'label'::text, 'session'::text, 'copy'::text, 'output'::text])))
+    CONSTRAINT identity_epoch_participant_work_role_check CHECK ((role = ANY (ARRAY['member'::text, 'entry'::text, 'label'::text, 'session'::text, 'copy'::text, 'output'::text, 'follow'::text])))
 );
 
 
@@ -5433,6 +5494,44 @@ CREATE TABLE library.native_source_receipt (
     "position" bigint NOT NULL,
     native_xid xid8 DEFAULT pg_current_xact_id() NOT NULL,
     CONSTRAINT native_source_receipt_position_check CHECK (("position" > 0))
+);
+
+
+--
+-- Name: owner_identity_candidate; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.owner_identity_candidate (
+    partition_no integer NOT NULL,
+    owner_id uuid NOT NULL,
+    canonical_id uuid NOT NULL,
+    original_id uuid NOT NULL,
+    support bigint NOT NULL,
+    CONSTRAINT owner_identity_candidate_check CHECK ((partition_no = (((get_byte(uuid_send(owner_id), 10) * 256) + get_byte(uuid_send(owner_id), 11)) >> 4))),
+    CONSTRAINT owner_identity_candidate_check1 CHECK ((partition_no = (((get_byte(uuid_send(canonical_id), 10) * 256) + get_byte(uuid_send(canonical_id), 11)) >> 4))),
+    CONSTRAINT owner_identity_candidate_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT owner_identity_candidate_support_check2 CHECK ((support > 0))
+);
+
+
+--
+-- Name: owner_identity_candidate_support; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.owner_identity_candidate_support (
+    partition_no integer NOT NULL,
+    owner_id uuid NOT NULL,
+    canonical_id uuid NOT NULL,
+    original_id uuid NOT NULL,
+    source_id uuid NOT NULL,
+    incarnation text NOT NULL,
+    role text NOT NULL,
+    fact_id uuid NOT NULL,
+    CONSTRAINT owner_identity_candidate_support_check CHECK ((partition_no = (((get_byte(uuid_send(owner_id), 10) * 256) + get_byte(uuid_send(owner_id), 11)) >> 4))),
+    CONSTRAINT owner_identity_candidate_support_check1 CHECK ((partition_no = (((get_byte(uuid_send(canonical_id), 10) * 256) + get_byte(uuid_send(canonical_id), 11)) >> 4))),
+    CONSTRAINT owner_identity_candidate_support_incarnation_check CHECK (((octet_length(incarnation) >= 1) AND (octet_length(incarnation) <= 128))),
+    CONSTRAINT owner_identity_candidate_support_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT owner_identity_candidate_support_role_check CHECK ((role = ANY (ARRAY['member'::text, 'entry'::text, 'label'::text, 'session'::text, 'copy'::text, 'output'::text])))
 );
 
 
@@ -7621,6 +7720,22 @@ ALTER TABLE ONLY library.follow
 
 
 --
+-- Name: identity_epoch_participant_handoff identity_epoch_participant_handoff_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.identity_epoch_participant_handoff
+    ADD CONSTRAINT identity_epoch_participant_handoff_pkey PRIMARY KEY (partition_no, job_id, job_epoch, effect_key, owner_id, role, reason);
+
+
+--
+-- Name: identity_epoch_participant_scope identity_epoch_participant_scope_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.identity_epoch_participant_scope
+    ADD CONSTRAINT identity_epoch_participant_scope_pkey PRIMARY KEY (partition_no, job_id, job_epoch, source_route, source_id, plan_key);
+
+
+--
 -- Name: identity_epoch_participant_work identity_epoch_participant_work_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -7874,6 +7989,22 @@ ALTER TABLE ONLY library.native_source_hold
 
 ALTER TABLE ONLY library.native_source_receipt
     ADD CONSTRAINT native_source_receipt_pkey PRIMARY KEY (route, capture_id);
+
+
+--
+-- Name: owner_identity_candidate owner_identity_candidate_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.owner_identity_candidate
+    ADD CONSTRAINT owner_identity_candidate_pkey PRIMARY KEY (partition_no, owner_id, canonical_id, original_id);
+
+
+--
+-- Name: owner_identity_candidate_support owner_identity_candidate_support_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.owner_identity_candidate_support
+    ADD CONSTRAINT owner_identity_candidate_support_pkey PRIMARY KEY (partition_no, owner_id, canonical_id, original_id, source_id, incarnation, role, fact_id);
 
 
 --
@@ -9253,6 +9384,13 @@ CREATE INDEX follow_count_partition_pending ON library.follow_count_source USING
 
 
 --
+-- Name: follow_count_source_identity; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX follow_count_source_identity ON library.follow_count_source USING btree (target_id, partition_no, account_id) WHERE (target_type = 'subject'::text);
+
+
+--
 -- Name: follow_count_source_original_page; Type: INDEX; Schema: library; Owner: -
 --
 
@@ -9274,6 +9412,13 @@ CREATE INDEX follow_count_terminal_source_pending ON library.follow_count_termin
 
 
 --
+-- Name: identity_epoch_participant_handoff_pending; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX identity_epoch_participant_handoff_pending ON library.identity_epoch_participant_handoff USING btree (partition_no, job_id, job_epoch, effect_key) WHERE (NOT resolved);
+
+
+--
 -- Name: identity_epoch_participant_owner; Type: INDEX; Schema: library; Owner: -
 --
 
@@ -9285,6 +9430,20 @@ CREATE INDEX identity_epoch_participant_owner ON library.identity_epoch_particip
 --
 
 CREATE INDEX identity_epoch_participant_pending ON library.identity_epoch_participant_work USING btree (partition_no, job_id, job_epoch, effect_key) WHERE (NOT custodied);
+
+
+--
+-- Name: identity_epoch_participant_scope_owner; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX identity_epoch_participant_scope_owner ON library.identity_epoch_participant_scope USING btree (partition_no, owner_id, job_id, job_epoch);
+
+
+--
+-- Name: identity_epoch_participant_scope_pending; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX identity_epoch_participant_scope_pending ON library.identity_epoch_participant_scope USING btree (partition_no, job_id, job_epoch, source_route, source_id, plan_key) WHERE (NOT exhausted);
 
 
 --
@@ -9558,6 +9717,20 @@ CREATE INDEX native_source_member_raw ON library.collection_member USING btree (
 --
 
 CREATE INDEX native_source_output_raw ON library.published_log USING btree (route, account_id, log_id);
+
+
+--
+-- Name: owner_identity_candidate_order; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX owner_identity_candidate_order ON library.owner_identity_candidate USING btree (partition_no, owner_id, canonical_id, original_id);
+
+
+--
+-- Name: owner_identity_candidate_support_original; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX owner_identity_candidate_support_original ON library.owner_identity_candidate_support USING btree (partition_no, owner_id, original_id, canonical_id, source_id, role, fact_id);
 
 
 --

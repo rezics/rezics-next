@@ -9,6 +9,7 @@ import {
   readIdentityEpochCutover,
 } from '../../src/semantic/identity-epoch-bootstrap.ts';
 import { createLibraryIdentityNativePlanner } from '../../src/library/module.ts';
+import { identitySourceConsumerLibraryWork } from '../../src/semantic/identity-source-consumer-maintenance.ts';
 import { libraryIdentityCommand } from '../../src/library/identity-native-planner.ts';
 import {
   bindLibraryIdentityDeadline,
@@ -66,7 +67,10 @@ function charged(work: WorkReceipt) {
 beforeAll(async () => {
   native = await createProfileEntryFixture();
   semantic = await epochFixture(undefined, { pool: native.pool });
-  planner = createLibraryIdentityNativePlanner({ pool: native.pool });
+  planner = createLibraryIdentityNativePlanner({
+    pool: native.pool,
+    frame: { libraryWork: identitySourceConsumerLibraryWork },
+  });
   expect((await native.send('steward', 'POST', '/v1/platform/exposure/collections:open')).status).toBe(200);
   expect((await native.send('steward', 'POST', '/v1/platform/exposure/personal_library:open')).status).toBe(200);
   original = (await semantic.create('Original native scope', route)).id;

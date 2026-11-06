@@ -1300,7 +1300,8 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
           set.status = 202;
           set.headers['retry-after'] = '1';
         }
-        return result;
+        // Saved catalogue pages carry readonly dynamic members; the response schema owns mutable arrays.
+        return 'members' in result ? { ...result, members: [...result.members] } : result;
       },
     )
     .post(

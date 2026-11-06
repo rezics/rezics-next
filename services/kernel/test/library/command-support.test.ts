@@ -18,8 +18,10 @@ import {
   requireRoute,
   sameAccountRoute,
 } from '../../src/library/command-support.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
+const originalReceiptKeys = process.env.KERNEL_RECEIPT_KEYS;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(databaseUrl);
 const route = 0x5234;
@@ -81,6 +83,9 @@ async function position(): Promise<bigint> {
 }
 
 beforeAll(async () => {
+  process.env.KERNEL_RECEIPT_KEYS = [...testReceiptKeys().keys]
+    .map(([version, key]) => `${version}:${Buffer.from(key).toString('base64url')}`)
+    .join(',');
   for (const [name, accountId] of Object.entries(accountIds)) {
     await pool.query(
       `INSERT INTO access.account(route, account_id, kind, state, transaction_id, authn_fenced, minimum_authn_epoch)
@@ -92,6 +97,8 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  if (originalReceiptKeys === undefined) delete process.env.KERNEL_RECEIPT_KEYS;
+  else process.env.KERNEL_RECEIPT_KEYS = originalReceiptKeys;
   await pool.query('DELETE FROM library.follow WHERE route=$1 AND account_id = ANY($2::uuid[])', [
     route,
     Object.values(accountIds),

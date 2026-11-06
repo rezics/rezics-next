@@ -276,6 +276,30 @@ Source/History and Library, and transfer-control terms before first I/O. It pres
 position, Pool, WorkClient, SDK, registry, deadline and live callback. If any reached term is unavailable, refuse
 before child I/O; never substitute zero or a replacement foreign producer.
 
+## Fixed Library identity receiver
+
+Decision: Semantic's existing Source maintenance frame drives Library through
+`createLibraryIdentityEpochReceiver({pool})`. `advanceScope(key,after,context)` advances one sealed effect page
+with `limit=1`; `step(job,context)` applies at most one retained receiving work locator. Both keep the exact live
+prepaid `NativeCollectionWork`, Source deadline and current async frame. A copied context or ledger is not funding.
+
+The page path reaches the sealed native plan/current check, one expected-effect page, exact manifest-operation
+reread, Source `finishCapture`/hold and the receiving plan/acceptance path. The receiver path reaches one local
+account/source gate, source-basis invalidation, structural owner candidate support update, native receiving
+frontier commit, released receiving/control reconciliation and exact participant-work custody. Owner candidate
+readback is bounded to 100 originals and recomputes each current original through `readOwnerOriginalTruth` and
+`currentOwnerState`; follow source discovery is bounded to 100 owner locators and includes negative source rows.
+The existing follow owner remains responsible for raw account rereads, pair revision, support/total delta,
+outgoing destination and terminal fence meaning.
+
+These are operation ceilings, not a complete prepaid price. Semantic's installed
+`IDENTITY_SOURCE_ORIGINAL_SCHEDULE.library` currently permits zero discovery and planner calls, one effect page,
+one current verification, one exhaustion recheck and zero final fences. That schedule cannot fund complete
+six-driver planning, all effect pages, owner/follow controls or retained copies. Semantic must add every reached
+call and the transitive Source/receiving/control declarations before using this binding for an ALL-Library receipt.
+Until then the fixed step reports pending proof; an empty page, local work exhaustion or owner handoff is never
+completion. No aggregate nine-axis cost for the whole receiver is claimed by this Library declaration.
+
 ## Subject Collection pair seek
 
 Decision: bind Subject continuation to its exact BASIC/FULL view and public page limit at the HTTP/service

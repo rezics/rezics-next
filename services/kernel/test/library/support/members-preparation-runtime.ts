@@ -213,6 +213,7 @@ export function definition(ordinal = 0): PreparationDefinition {
   return {
     filter: admitFilter(parseFilter({ type: { in: selected } }), bundledRelease),
     sort: 'id',
+    source: { kind: 'catalogue' },
     release: { digest: bundledDigest, value: bundledRelease },
   };
 }

@@ -7,16 +7,23 @@ import { customMethod } from '../src/http/custom-method.ts';
 import { ProblemError, problemSchema } from '../src/http/problem.ts';
 import type { SearchService } from '../src/search/service-scope.ts';
 import { Value } from 'typebox/value';
+import { testReceiptKeys } from './support/receipt-keys.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(databaseUrl);
 afterAll(() => pool.end());
 
+process.env.KERNEL_RECEIPT_KEYS = [...testReceiptKeys().keys]
+  .map(([version, key]) => `${version}:${Buffer.from(key).toString('base64url')}`)
+  .join(',');
 let authentications = 0;
 const searches: unknown[] = [];
 const suggestions: unknown[] = [];
 const search: SearchService = {
+  async savedCatalogueMembers() {
+    throw new Error('saved membership is not used by this fixture');
+  },
   async search(_principal, request) {
     searches.push(request);
     return { subjects: [], next: null, as_of: '2026-10-26T00:00:00Z' };
