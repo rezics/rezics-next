@@ -1,12 +1,20 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { readPublicAccountCanonicalTargets } from '../../src/access/account-canonical-targets.ts';
-import { completeAgentVerification, writeAgentVerificationPage } from '../../src/access/agent-verification.ts';
+import {
+  completeAgentVerification,
+  createAgentVerificationCommands,
+  readAgentVerificationWorkflowRequest,
+  recordPendingAgentVerification,
+  writeAgentVerificationPage,
+} from '../../src/access/agent-verification.ts';
+import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { AccessUnavailableError } from '../../src/access/unavailable.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { ensureAccountAgent, verifyAccountAgent } from '../../src/semantic/account-agents.ts';
 import { accountAgentId } from '../../src/semantic/agents.ts';
 import type { SummaryReaderDependencies } from '../../src/semantic/summaries.ts';
+import { createRealAccess } from '../semantic/real-access.ts';
 import { epochFixture, type EpochFixture } from '../semantic/support/identity-epoch.ts';
 
 let f: EpochFixture;
@@ -27,18 +35,29 @@ function deps(): SummaryReaderDependencies {
   };
 }
 
-/** Existing native creation/verification and Account completion primitives. No
- * mapping, readiness, participant ACK or publication record is manufactured.
+/** Native request, approval and pending commands create the only verification receipt. Account completion
+ * follows. No pending column, mapping, readiness, participant ACK or publication record is manufactured.
  */
 async function linked(handle: string | null) {
   const accountId = newId(0x5c30);
+  const reviewerId = newId(0x5c31);
   const subjectId = (await f.create('Canonical account target')).subject.id;
-  const receiptId = newId(0);
+  const actions = ['account:update', 'account:verify_agent'];
+  const real = await createRealAccess(f.admin, { owner: accountId, reviewer: reviewerId }, actions);
+  const access = real.access({ actions: new Map(actions.map((action) => [action, { anonymous: false }])) });
+  await real.grant({ route: routeOf(accountId)!, id: accountId }, 'owner', 'account:update');
+  await real.grant(PLATFORM_RESOURCE, 'reviewer', 'account:verify_agent');
+  const context = async (persona: 'owner' | 'reviewer') => {
+    const deadline = Date.now() + 5000;
+    return {
+      pool: f.pool,
+      deadline,
+      actor: await access.authenticate(real.bearer(persona), { pool: f.pool, deadline }),
+    };
+  };
   await f.pool.query(
-    `INSERT INTO access.account(route, account_id, kind, state, handle, display_name, transaction_id,
-       pending_agent_subject_id, pending_agent_receipt_id)
-     VALUES($1,$2,'actor','active',$3,'Canonical account',$2,$4,$5)`,
-    [routeOf(accountId), accountId, handle, subjectId, receiptId],
+    `UPDATE access.account SET handle=$3, display_name='Canonical account' WHERE route=$1 AND account_id=$2`,
+    [routeOf(accountId), accountId, handle],
   );
   if (handle)
     await f.pool.query(
@@ -47,12 +66,24 @@ async function linked(handle: string | null) {
       [claimRoute(handle), handle, accountId],
     );
   await ensureAccountAgent(f.pool, { account: accountId, kind: 'person', name: 'Canonical account' });
+  const commands = createAgentVerificationCommands({ pool: f.pool, access, clock: () => new Date() });
+  const request = await commands.request(await context('owner'), {
+    accountId,
+    subject: subjectId,
+    statement: 'This is my canonical account',
+    links: [],
+    key: randomUUID(),
+  });
+  const decision = await commands.approve(await context('reviewer'), { requestId: request.value.id, key: randomUUID() });
+  const receiptId = decision.value.decisionReceiptId!;
+  const workflow = { ...(await readAgentVerificationWorkflowRequest(f.pool, request.value.id))!, receiptId };
+  await recordPendingAgentVerification(f.pool, workflow, () => new Date());
   await verifyAccountAgent(f.pool, { account: accountId, catalogue: subjectId, receipt: receiptId });
   const input = {
     id: newId(0),
     accountId,
     accountKind: 'actor' as const,
-    requestedBy: f.accounts.editor,
+    requestedBy: accountId,
     catalogueSubjectId: subjectId,
     state: 'approving' as const,
     decisionReceiptId: receiptId,
