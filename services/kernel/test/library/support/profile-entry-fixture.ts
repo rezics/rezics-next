@@ -253,7 +253,6 @@ export async function createProfileEntryFixture(
     const steward = await identity([
       'access:grant',
       'subject:batch_write',
-      'subject:merge',
       'offer:create',
       'subject:create',
       'statement:propose',
@@ -266,7 +265,6 @@ export async function createProfileEntryFixture(
       'exposure:open',
       'exposure:close',
       'gate:any',
-      'gate:personal_library',
     ]);
     const owner = await identity([...entryScopes, ...(options.ownerScopes ?? [])]);
     const other = await identity(entryScopes);
@@ -276,13 +274,6 @@ export async function createProfileEntryFixture(
       access,
       managementAction: 'access:grant',
       ...(options.clock === undefined ? {} : { clock: options.clock }),
-    });
-    const stewardClaims = () => ({
-      accountId: steward.actor.accountId,
-      clientId: steward.actor.clientId,
-      scopes: steward.actor.scopes,
-      authnEpoch: steward.actor.authnEpoch,
-      requestedBy: steward.actor.requestedBy,
     });
     const grant = (resource: Resource, subject: string, actions: string[]) =>
       grants.create(context(steward.actor), {
@@ -302,15 +293,35 @@ export async function createProfileEntryFixture(
       valid: '(,)',
       key: entryKey(),
     });
-    // Later extra grants re-authenticate the steward onto this command deadline with the
-    // original consented scopes. Narrowing those scopes drops platform.governance coverage.
+    // Extra grants reuse the original steward actor when those actions are already
+    // on the token or covered by gate:any. Actions in platform.governance that the
+    // identity did not consent (subject:merge) are added only on that command's
+    // freshly authenticated actor. Scopes outside the role, including
+    // gate:personal_library, stay off the grantor token.
     async function grantAccount(
       subject: { kind: 'account'; id: string },
       actions: readonly string[],
       revoke = false,
     ) {
+      const extra = [...new Set(actions)].filter(
+        (action) => !steward.actor.scopes.includes(action) && !/^gate:[a-z][a-z_]{0,62}$/.test(action),
+      );
       const deadline = deadlineFor(30_000);
-      const actor = await authenticateAccount(access, { pool, deadline }, stewardClaims());
+      const actor =
+        extra.length === 0
+          ? steward.actor
+          : await authenticateAccount(
+              access,
+              { pool, deadline },
+              {
+                accountId: steward.actor.accountId,
+                clientId: steward.actor.clientId,
+                scopes: [...steward.actor.scopes, ...extra],
+                authnEpoch: steward.actor.authnEpoch,
+                requestedBy: steward.actor.requestedBy,
+              },
+            );
+      const command = extra.length === 0 ? context(steward.actor) : { pool, actor, deadline };
       const input = {
         resource: global,
         subject,
@@ -318,8 +329,8 @@ export async function createProfileEntryFixture(
         valid: '(,)',
         key: entryKey(),
       };
-      if (revoke) await grants.revoke({ pool, actor, deadline }, input);
-      else await grants.create({ pool, actor, deadline }, input);
+      if (revoke) await grants.revoke(command, input);
+      else await grants.create(command, input);
     }
 
     async function sendWithHeaders(
