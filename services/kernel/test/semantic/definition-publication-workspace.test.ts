@@ -10,6 +10,7 @@ import { newId, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { openGrowthDatabase } from '../support/growth.ts';
 import { VERTICAL_LOCALES, verticalManifests } from '../support/manifests.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { createRealAccess } from './real-access.ts';
 
 const global = { route: 0, id: GLOBAL_CONTEXT };
@@ -45,6 +46,7 @@ beforeAll(async () => {
     access: real.access,
     clock: () => new Date(),
     routeKey: new Uint8Array(32).fill(62),
+    receiptKeys: testReceiptKeys(),
     writeRate: createWriteRateLimiter({
       secret: 'definition-publication-workspace-write-rate',
       overrides: '{"new-account":{"write":{"maximum":10000,"seconds":60}}}',
