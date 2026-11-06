@@ -245,6 +245,14 @@ acceptance remain deferred to integration; this consumer check does not establis
 
 **Native acceptance:** `bun run --cwd services/kernel check test/access/notification-preferences.test.ts test/content/notification-outcomes.test.ts`.
 
+**Implementation choice:** Native fixtures establish parent creation rows on the Global Context through the shared trusted installer (`services/kernel/test/support/trusted-grants.ts`), the rows the other native fixtures use; they never substitute SQL-created Spaces or Realms. Whether Access admits Space and Realm creation on that parent is an Access producer decision that this base denies; it is carried by `.temp/continuation/access-parent-creation.md`.
+
+**Native evidence:** landing-command files on `eddee3c801` (check `9ac9f3f3`): `test/access/preferences-erasure.test.ts` 4 pass; `test/access/preferences.test.ts` 12 pass; `test/access/notification-preference-page.test.ts` 3 pass; `test/access/notification-preferences.test.ts` 10 pass and 1 fail (the client-declaration test, blocked by Library type errors on base). Acceptance `test/content/notification-outcomes.test.ts` 0 of 10 pass: every scenario stops at `POST /v1/spaces`, denied by Access on base. `test/content/notice-finalization.test.ts` 0 of 2 and `test/content/publication-driver.test.ts` fail for the same two reasons; `test/content/account-erasure-notices.test.ts` 1 of 3 passes. Failures are named in the continuation.
+
+**Mounted evidence:** local `bun test` over nine preference and Settings web files (`settings-notification-native-form`, `notification-preference-state`, `settings-notification-form-recovery`, `notice-preference-recovery`, `reading-preferences-journey`, `reading-preferences`, `shelf-preferences-advice`, `settings-reading-navigation`, `notifications-inbox`): 83 pass, 3 fail on base, none caused by this branch. Desktop and phone Settings browser journeys (`tests/settings-notifications.test.ts`, Playwright) were not run here.
+
+**Promotion evidence:** none recorded; controller-owned after integration.
+
 ## terminal-erasure
 
 **User job:** An account confirms deletion with fresh authentication and a typed confirmation, immediately loses credential authority, and has its private graph erased by each owner while eligible public contributions survive de-identified.
