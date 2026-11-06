@@ -18,10 +18,11 @@ import {
   runCrossMediaSeedCli,
   type CrossMediaTables,
 } from '../../../importer/src/cross-media-seed.ts';
-import { seedShowcaseVndbReleases } from '../../../importer/src/showcase-vndb-releases.ts';
+
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { identitySupport } from './identity-fixture.ts';
 import { openApiRuntime } from './api-runtime.ts';
+import { seedShowcaseVndbReleases } from '../../../importer/src/selected-import.ts';
 
 const globalContext = GLOBAL_CONTEXT;
 

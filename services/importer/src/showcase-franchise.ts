@@ -1,7 +1,15 @@
-import type { CrossMediaPlan, CrossMediaReading, CrossMediaSelection } from './cross-media-seed.ts';
+import {
+  type CrossMediaPlan,
+  type CrossMediaReading,
+  type CrossMediaSelection,
+} from './showcase-contract.ts';
 import { graphEdgeKey, type GraphEdgeEvidence } from './cross-media-bindings.ts';
-import type { ShowcaseAcknowledgement, ShowcaseAssertion, ShowcaseOmission } from './showcase-manifest.ts';
-import { sourceDigest } from '../../../packages/conversion/src/support.ts';
+import {
+  type ShowcaseAcknowledgement,
+  type ShowcaseAssertion,
+  type ShowcaseOmission,
+} from './showcase-contract.ts';
+import { sourceDigest } from '@rezics/conversion/support';
 import { bangumiVocabularyRevision } from '@rezics/conversion/bangumi-vocabulary';
 import type { ShowcaseReviewPort } from './showcase-publication.ts';
 

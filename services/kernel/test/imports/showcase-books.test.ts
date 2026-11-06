@@ -12,7 +12,6 @@ import {
   ShowcaseJournal,
 } from '../../../importer/src/showcase-publication.ts';
 import {
-  importShowcaseBooks,
   showcaseBookFamily,
   showcaseBooksToCrossMediaPlan,
 } from '../../../importer/src/showcase-books.ts';
@@ -20,6 +19,7 @@ import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
 import { fixtureFetch } from './type-helpers.ts';
 import pinned from './showcase-books-source.json';
+import { importShowcaseBooks } from '../../../importer/src/selected-import.ts';
 
 const globalContext = '00000000-0000-8000-8000-000000000000';
 const origin = 'https://kernel.import.test';

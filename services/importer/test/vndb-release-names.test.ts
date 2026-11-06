@@ -9,7 +9,8 @@ import { convertCrossMediaEntity } from '@rezics/conversion/cross-media-entities
 import { VNDB_DUMP_TABLES } from '../../../scripts/datasets/fetch-dumps.ts';
 import { collectSelectedReleaseTitles, CrossMediaDumpFiles, type CrossMediaPort } from '../src/cross-media-seed.ts';
 import { sourceRecordMetadataFixture } from '../tests/transport-driver.ts';
-import { importVndbReleaseFidelity, planVndbReleaseFidelity } from '../src/vndb-release-fidelity.ts';
+import { planVndbReleaseFidelity } from '../src/vndb-release-fidelity.ts';
+import { importVndbReleaseFidelity } from '../src/selected-import.ts';
 
 /** Authored COPY tables. These are not observed public dump evidence. */
 async function authoredCopy(

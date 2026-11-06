@@ -9,7 +9,7 @@ import {
 import type { SourceVocabularyBindings } from '@rezics/conversion';
 import { vndbRecordUrl } from '@rezics/conversion/cross-media-entities';
 import { vndbAppearanceRoleCodes } from '@rezics/conversion/vndb-vocabulary';
-import { commandKey, sourceDigest, sourceEnvelope } from '../../../packages/conversion/src/support.ts';
+import { commandKey, sourceDigest, sourceEnvelope } from '@rezics/conversion/support';
 import {
   appearanceRoleConceptUri,
   appearanceRoleSchemeUri,
@@ -21,13 +21,17 @@ import {
   readVndbCharacterVocabularyBindings,
   type VndbCharacterTraitPlan,
 } from './vndb-character-traits.ts';
-import type { CrossMediaPlan, CrossMediaPort, CrossMediaTables } from './cross-media-seed.ts';
+import {
+  type CrossMediaPlan,
+  type CrossMediaPort,
+  type CrossMediaTables,
+} from './showcase-contract.ts';
 import {
   showcaseDigest,
   showcaseLimits,
   showcaseVocabularyExternalId,
   type ShowcaseVocabularyRequirement,
-} from './showcase-manifest.ts';
+} from './showcase-contract.ts';
 import type { ShowcaseJournal } from './showcase-publication.ts';
 import { VNDB_CHARACTER_TRAIT_DICTIONARY_COLUMNS, VNDB_CHARACTER_TRAIT_PARENT_COLUMNS } from './vndb-tables.ts';
 

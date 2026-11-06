@@ -8,7 +8,7 @@ import {
   reviewedReferenceKey,
   sourceDigest,
   sourceEnvelope,
-} from '../../../packages/conversion/src/support.ts';
+} from '@rezics/conversion/support';
 import { checkBatch } from './accepted-checks.ts';
 import {
   createImportTransport,

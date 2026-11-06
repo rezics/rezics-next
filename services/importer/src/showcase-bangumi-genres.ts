@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
-import { bangumiPublicTagScheme, reviewedReferenceKey } from '../../../packages/conversion/src/support.ts';
+import { bangumiPublicTagScheme, reviewedReferenceKey } from '@rezics/conversion/support';
 import type { BatchCommand } from '@rezics/definitions/bulk';
 import { createReviewedCatalogueLookup, inspectReviewedBangumiBinding } from './reviewed-catalogue.ts';
 import type { ReviewedCataloguePort } from './reviewed-catalogue.ts';
@@ -8,8 +8,14 @@ import type { RecordBindings } from './record-bindings.ts';
 import type { ImportIdentifierLookup, ImportIdentifierResolution } from './importer.ts';
 import { ImportTransportError, type ReviewedCandidatePage } from './import-client.ts';
 import { createSelectedFamilySourceRegistration } from './source-registry.ts';
-import type { ShowcaseAcknowledgement, ShowcaseAssertion, ShowcaseVocabularyRecord } from './showcase-manifest.ts';
-import { showcaseDigest } from './showcase-manifest.ts';
+import {
+  type ShowcaseAcknowledgement,
+  type ShowcaseAssertion,
+  type ShowcaseVocabularyRecord,
+} from './showcase-contract.ts';
+import {
+  showcaseDigest,
+} from './showcase-contract.ts';
 
 const HAREM_EDITOR_TAG = '后宫';
 const globalContext = '00000000-0000-8000-8000-000000000000';

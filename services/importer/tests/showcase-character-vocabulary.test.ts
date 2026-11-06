@@ -21,12 +21,12 @@ import {
   profileFromCharacterVocabularyBindings,
   readShowcaseCharacterVocabulary,
 } from '../src/showcase-character-vocabulary.ts';
+import { importVndbCharacterTraits } from '../src/selected-import.ts';
 import {
   appearanceRoleTaxonomy,
   appearanceRoleSchemeUri,
   characterTraitConceptUri,
   characterTraitSchemeUri,
-  importVndbCharacterTraits,
 } from '../src/vndb-character-traits.ts';
 
 async function selectedTables(directory: string, extraParents: string[] = []) {

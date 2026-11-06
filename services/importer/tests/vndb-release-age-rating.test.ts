@@ -11,11 +11,11 @@ import { createSourceRegistration } from '../src/source-registry.ts';
 import { Importer } from '../src/importer.ts';
 import type { ImportTransport, SourceRegistration } from '../src/import-contract.ts';
 import {
-  importVndbReleaseFidelity,
   planVndbReleaseFidelity,
   readVndbReleaseBindings,
 } from '../src/vndb-release-fidelity.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
+import { importVndbReleaseFidelity } from '../src/selected-import.ts';
 
 async function authoredCopy(directory: string, age = '15') {
   const db = join(directory, 'db');

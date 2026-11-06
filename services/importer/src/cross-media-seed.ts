@@ -25,7 +25,7 @@ import {
 } from '@rezics/conversion/cross-media-entities';
 import type { SourceVocabularyBindings } from '@rezics/conversion/source-vocabulary';
 import { subjectSlug } from '@rezics/definitions/slug';
-import { sourceDigest, sourceWebsiteUrl } from '../../../packages/conversion/src/support.ts';
+import { sourceDigest, sourceWebsiteUrl } from '@rezics/conversion/support';
 import {
   observePersonIdentity,
   personIdentityForSource,
@@ -105,9 +105,10 @@ import { createMediaResolver } from './media-resolver.ts';
 import type { BangumiCoverSource, BangumiPersonCareerSource, CrossMediaMediaOutcome } from './showcase-media.ts';
 import { acquireBangumiCoverSources } from './showcase-media.ts';
 import { acquireBangumiPersonCareerSources, bangumiPersonCareerAdmission } from './showcase-bangumi-careers.ts';
+import { selectedFamilyAdmission } from './registration-contract.ts';
 import {
+  bindSourceRegistration,
   createSelectedFamilySourceRegistration,
-  createSourceRegistration,
   crossMediaBangumiRevision,
 } from './source-registry.ts';
 import {
@@ -151,7 +152,11 @@ import {
   type BangumiCreditRoleBinding,
   type BangumiCreditVocabularyResolution,
 } from './showcase-bangumi-credits.ts';
-import { showcaseLimits, type ShowcaseAcknowledgement, type ShowcaseManifest } from './showcase-manifest.ts';
+import {
+  showcaseLimits,
+  type ShowcaseAcknowledgement,
+  type ShowcaseManifest,
+} from './showcase-contract.ts';
 
 type Provider = 'bangumi' | 'vndb';
 type Row = Record<string, unknown>;
@@ -1976,7 +1981,7 @@ export async function planCrossMediaSeed(
     row.payload = { ...(row.payload as object), ...vndbReleasePlatformPayload(row.key, facts) };
   }
   for (const provider of ['bangumi', 'vndb'] as const) {
-    const registration = createSourceRegistration(provider, {
+    const registration = bindSourceRegistration(selectedFamilyAdmission(provider), {
       source: crossMediaAliases[provider],
       converterRevision: provider === 'bangumi' ? crossMediaBangumiRevision : entityRevision,
     });
@@ -2617,7 +2622,7 @@ export async function seedCrossMedia(
             (row) => row.key === source.externalId,
           );
           ensure(sourceRecord, 'Bangumi cover source record is missing');
-          const conversion = createSourceRegistration('bangumi', {
+          const conversion = bindSourceRegistration(selectedFamilyAdmission('bangumi'), {
             source: source.sourceAlias,
             converterRevision: crossMediaBangumiRevision,
           }).convert(
@@ -2749,7 +2754,7 @@ export async function seedCrossMedia(
     };
     for (const provider of providers) {
       if (!plan.records[provider].length && !plan.entities[provider].length) continue;
-      const registration = createSourceRegistration(provider, {
+      const registration = bindSourceRegistration(selectedFamilyAdmission(provider), {
         source: crossMediaAliases[provider],
         converterRevision: provider === 'bangumi' ? crossMediaBangumiRevision : entityRevision,
         ...(provider === 'vndb' && extras?.sourceSnapshotAsOf !== undefined
@@ -3215,7 +3220,7 @@ export async function seedCrossMedia(
           (candidate) => candidate.key === source.externalId,
         );
         if (row) {
-          const converted = createSourceRegistration('bangumi', {
+          const converted = bindSourceRegistration(selectedFamilyAdmission('bangumi'), {
             source: source.sourceAlias,
             converterRevision: crossMediaBangumiRevision,
           }).convert(
@@ -3746,6 +3751,7 @@ export async function runCrossMediaSeedCli(
     });
     let publicationPlan = structuredClone(plan);
     let result = await seedShowcaseVndbReleases({
+      seed: seedCrossMedia,
       tables: input,
       plan: publicationPlan,
       path: statePath,
@@ -3814,6 +3820,7 @@ export async function runCrossMediaSeedCli(
         });
         publicationPlan = structuredClone(plan);
         result = await seedShowcaseVndbReleases({
+          seed: seedCrossMedia,
           tables: input,
           plan: publicationPlan,
           path: statePath,
@@ -3897,6 +3904,7 @@ export async function runCrossMediaSeedCli(
         );
       }
       publicTags = await importShowcaseTags({
+        seed: seedCrossMedia,
         tables: input,
         selectedVids,
         path: statePath,
@@ -4111,6 +4119,7 @@ export async function runCrossMediaSeedCli(
       publicationPlan = structuredClone(plan);
       const releaseContext = selectedReleaseContext!;
       result = await seedShowcaseVndbReleases({
+        seed: seedCrossMedia,
         tables: input,
         plan: publicationPlan,
         path: statePath,
@@ -4285,6 +4294,7 @@ export async function runCrossMediaSeedCli(
         characterVocabulary.requirements,
       );
       characterResult = await importVndbCharacterTraits({
+        seed: seedCrossMedia,
         tables: input,
         path: statePath,
         port,
@@ -4366,6 +4376,7 @@ export async function runCrossMediaSeedCli(
       options.selection && !options.includeBooks
         ? undefined
         : await importShowcaseBooks({
+            seed: seedCrossMedia,
             tables: input,
             path: statePath,
             port,

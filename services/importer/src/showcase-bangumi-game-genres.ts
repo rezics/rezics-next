@@ -4,7 +4,7 @@ import {
   bangumiGameSourceGenreReference,
   bangumiGameSourceGenreScheme,
   bangumiGameSourceGenres,
-} from '../../../packages/conversion/src/bangumi-game-source-genres.ts';
+} from '@rezics/conversion/bangumi';
 import type { RecordBindings } from './record-bindings.ts';
 import { ImportTransportError, type ReviewedCandidatePage, type ReviewedSubjectRead } from './import-client.ts';
 import {
@@ -13,8 +13,12 @@ import {
   type ImportIdentifierResolution,
 } from './importer.ts';
 import { createSelectedFamilySourceRegistration } from './source-registry.ts';
-import type { ShowcaseAcknowledgement } from './showcase-manifest.ts';
-import { showcaseDigest } from './showcase-manifest.ts';
+import {
+  type ShowcaseAcknowledgement,
+} from './showcase-contract.ts';
+import {
+  showcaseDigest,
+} from './showcase-contract.ts';
 import type { ReviewedCataloguePort } from './reviewed-catalogue.ts';
 
 const globalContext = '00000000-0000-8000-8000-000000000000';

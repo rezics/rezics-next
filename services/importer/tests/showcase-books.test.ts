@@ -18,12 +18,12 @@ import {
 } from '../src/showcase-publication.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import {
-  importShowcaseBooks,
   planShowcaseBooks,
   showcaseBookFamily,
   showcaseBooksToCrossMediaPlan,
 } from '../src/showcase-books.ts';
 import pinned from '../../kernel/test/imports/showcase-books-source.json';
+import { importShowcaseBooks } from '../src/selected-import.ts';
 
 const globalContext = '00000000-0000-8000-8000-000000000000';
 const series = {

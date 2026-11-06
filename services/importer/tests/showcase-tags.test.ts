@@ -16,7 +16,7 @@ import {
   sourceEnvelope,
   vndbPublicTagConceptUri,
   vndbPublicTagScheme,
-} from '../../../packages/conversion/src/support.ts';
+} from '@rezics/conversion/support';
 import { showcaseVocabularyExternalId } from '../src/showcase-manifest.ts';
 import type { CrossMediaPort } from '../src/cross-media-seed.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
@@ -25,8 +25,8 @@ import { VNDB_PUBLIC_TAG_COLUMNS, vndbPublicTagLimits } from '../src/vndb-tables
 import { captureShowcaseCommands, ShowcaseJournal } from '../src/showcase-publication.ts';
 import type { ReviewedSubjectRead } from '../src/import-client.ts';
 import type { VndbTagRatingFetch } from '../src/showcase-vndb-tag-ratings.ts';
+import { importShowcaseTags } from '../src/selected-import.ts';
 import {
-  importShowcaseTags,
   knownShowcaseTagBindings,
   parseShowcaseTagKnownBindings,
   planShowcaseTags,

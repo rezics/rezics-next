@@ -9,12 +9,12 @@ import { converter_revision } from '@rezics/conversion/cross-media-entities';
 import type { CrossMediaPort } from '../src/cross-media-seed.ts';
 import { CrossMediaDumpFiles } from '../src/cross-media-seed.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
+import { importVndbCharacterTraits } from '../src/selected-import.ts';
 import {
   appearanceRoleConceptUri,
   appearanceRoleSchemeUri,
   characterTraitConceptUri,
   characterTraitSchemeUri,
-  importVndbCharacterTraits,
   planVndbCharacterTraits,
   readVndbCharacterVocabularyBindings,
   VNDB_CHARACTER_APPEARANCE_COLUMNS,

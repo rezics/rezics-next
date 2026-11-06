@@ -10,15 +10,15 @@ import {
   vndbReleaseMediumTaxonomy,
   vndbReleasePlatformSchemeUri,
   vndbReleasePlatformTaxonomy,
-} from '../../../packages/conversion/src/support.ts';
+} from '@rezics/conversion/support';
 import { CrossMediaDumpFiles, type CrossMediaPort } from '../src/cross-media-seed.ts';
 import {
-  importVndbReleaseFidelity,
   planVndbReleaseFidelity,
   readVndbReleaseBindings,
   type VndbReleaseBindingGroup,
 } from '../src/vndb-release-fidelity.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
+import { importVndbReleaseFidelity } from '../src/selected-import.ts';
 
 /** Authored COPY rows; they are not observations of a provider record. */
 async function authoredTables(

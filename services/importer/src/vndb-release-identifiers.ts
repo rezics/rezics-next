@@ -9,8 +9,13 @@ import {
   planVndbReleaseFidelity,
   type VndbReleaseFidelityResult,
 } from './vndb-release-fidelity.ts';
-import type { CrossMediaPlan, CrossMediaPort, CrossMediaTables } from './cross-media-seed.ts';
+import {
+  type CrossMediaPlan,
+  type CrossMediaPort,
+  type CrossMediaTables,
+} from './showcase-contract.ts';
 import type { SourceVocabularyBindings } from '@rezics/conversion';
+import type { seedCrossMedia } from './cross-media-seed.ts';
 
 export { decodeVndbReleaseGtin, retainVndbReleaseGtin, vndbReleaseGtinUnknown, entityRevision };
 
@@ -23,6 +28,7 @@ export async function planVndbReleaseIdentifiers(
 
 /** Production operator: propose an admitted source barcode through the existing seed/importer caller. */
 export async function importVndbReleaseIdentifiers(input: {
+  seed: typeof seedCrossMedia;
   tables: CrossMediaTables;
   path: string;
   port: CrossMediaPort;
