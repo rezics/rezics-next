@@ -22,7 +22,7 @@ import {
 } from './remote-check.ts';
 import { runWorkerCheck } from './worker-check.ts';
 import { checkClass, recordPeak } from './check-memory.ts';
-import { walkStackLimit, walkStackNames } from './walk-stack.ts';
+import { walkHttpAnswers, walkStackLimit, walkStackNames } from './walk-stack.ts';
 
 const repository = resolve(import.meta.dir, '..');
 const stackRun = join(repository, 'scripts/stack-run.ts');
@@ -1290,6 +1290,23 @@ test('six walk stacks run by default, a seventh start waits behind them, and the
     'REZICS_WALK_STACKS must be an integer from 1 to 1000',
   );
 }, 90_000);
+
+test('a walk ready probe gives up when a listener never writes a response', async () => {
+  const hanging = Bun.serve({
+    hostname: '127.0.0.1',
+    port: 0,
+    fetch() {
+      return new Promise(() => {});
+    },
+  });
+  try {
+    const started = Date.now();
+    expect(await walkHttpAnswers(`http://127.0.0.1:${hanging.port}/`, 200)).toBe(false);
+    expect(Date.now() - started).toBeLessThan(2_000);
+  } finally {
+    hanging.stop(true);
+  }
+});
 
 test('a local stack container needs a worker whose brief lists native or browser and a slot lock its launch holds', async () => {
   const dir = join(root, `walk-gate-${counter++}`);

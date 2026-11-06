@@ -248,7 +248,8 @@ bun services/auth/scripts/dev-stack.ts walk -- <command...>
 3. Runs `db up`, `search up` and `setup`, starts the processes `dev` starts, and waits until Web and the Auth pages
    answer, for at most ten minutes. Its output goes to `.temp/walk/<task>/stack.log`.
 4. Runs `<command>` in the caller's directory with the stack's names, ports and origins. Persona and seed steps belong
-   inside `<command>`, for example `dev-stack.ts persona` followed by `task seed:dev`.
+   inside `<command>`, for example `bun services/auth/scripts/dev-stack.ts persona` followed by
+   `bun scripts/datasets/cross-media-seed.ts --dev`; see [Seeded journey walks](#seeded-journey-walks).
 5. Stops the processes, removes the stack's containers and volumes, and releases the slot when the command ends or the
    attempt receives SIGHUP, SIGINT or SIGTERM. A stack left by a killed attempt is removed when the same task next
    starts.
@@ -262,7 +263,10 @@ brief lists native or browser acceptance. Local stack-lease tests set `KERNEL_CH
 before spawn so they exercise the local lease rather than falling back to shared check hosts. Isolated-stack compiler
 and Kernel databases attach with `container:<id>` and an independent TCP-to-Unix forwarder; walk stacks keep published
 loopback ports. Management walk setup idle-in-transaction is received through that database lifetime; Content retains
-launcher, stack and cleanup. Original walks remain open.
+launcher, stack and cleanup. Original walks remain open. A slot is usable only when this process can bind its loopback
+ports, so Docker's later bind cannot discover an allocation `ss` missed. Ready waits give up on a listener that never
+writes; a hung first request cannot skip the ten-minute deadline. One failed database bring-up retires this task's
+containers and retries once.
 
 Decision: keep one causal binding regression and the existing launcher assertions. Kernel setup persists the selected
 loopback Auth issuer, audience, JWKS URL, Kernel host and API port in `services/kernel/.env`; start applies the same

@@ -21,3 +21,10 @@ not become current again.
 
 Native readers, permission checks, media reservation, upload completion, derivative summaries and server commands
 remain the authorities for visibility and persisted appearance.
+
+Decision: the caller mints one reservation key per selected file and retains it with the file. The site forwards that
+key unchanged to the mounted Realm media route and mints one only when the caller supplies none. A retry of an
+uncertain reservation repeats the same key and file, so the kernel returns the reservation it already created instead
+of a second object. A retry with a known media id resumes that reservation; a new selection mints a new key.
+Focused checks pin that forwarding at the media handler and the appearance retry; the storybook site walk stays with
+the complete Auth06 and Community07 acceptance.

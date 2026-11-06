@@ -1,6 +1,7 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import * as v from 'valibot';
+import * as start from '../.storybook/react-start';
 import realm from '../src/kernel/recorded/realm.json';
 import {
   createRealmAppearance,
@@ -16,6 +17,10 @@ import {
   changeRealmAppearance,
   reserveRealmMedia,
 } from '../src/community/realm-presentation-native';
+
+mock.module('@tanstack/react-start', () => start);
+mock.module('@tanstack/react-start/server', () => start);
+mock.module('cloudflare:workers', () => ({ env: {} }));
 
 const realmId = realm.realm.realmId;
 const id = '01a1a000-0000-7000-8000-000000000011';
@@ -171,7 +176,8 @@ test('draft selections, uploaded references and original requests survive manual
   await control.save();
   expect(commands[1]).toEqual(commands[0]);
   expect(commands[1]?.head).toBe(current.head);
-  expect(keys).toBe(1);
+  // The file selection mints its reservation key; the uncertain save retry reuses the save key and mints none.
+  expect(keys).toBe(2);
   await control.refresh();
   expect(control.getSnapshot().draft?.presentation.avatarMediaId).toBe(id);
   control.reviewConflict();
@@ -179,7 +185,8 @@ test('draft selections, uploaded references and original requests survive manual
   await control.save();
   expect(commands[2]?.head).toBe(revisionId);
   expect(commands[2]?.presentation).toEqual(commands[0]?.presentation);
-  expect(keys).toBe(2);
+  // The conflict review's attempt mints its own key, as before; the file selection adds one more.
+  expect(keys).toBe(3);
   expect(control.getSnapshot().phase).toBe('saved');
   expect(control.getSnapshot().read.kind).toBe('ready');
   const hidden = createRealmAppearance(realmId, { kind: 'ready', snapshot: { ...current, state: 'removed' } }, adapter);
@@ -690,7 +697,6 @@ test('Realm appearance cache, drafts and uploads are scoped to the current signe
 });
 
 test('The default admitted community management journey resolves a same-site image or exact rules revision link through native selection and saves the exact reviewed reference while stale selections and uncertain original writes stay isolated', async () => {
-  const { mock } = await import('bun:test');
   const { createRequire } = await import('node:module');
   const require = createRequire(import.meta.url);
   const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
@@ -714,7 +720,6 @@ test('The default admitted community management journey resolves a same-site ima
     cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
     matchMedia: window.matchMedia.bind(window),
     scrollTo: window.scrollTo.bind(window),
-    IS_REACT_ACT_ENVIRONMENT: true,
   };
   const saved = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(globals))
@@ -738,8 +743,11 @@ test('The default admitted community management journey resolves a same-site ima
       selections.push(structuredClone(data));
       const held = holdNext;
       holdNext = false;
-      const candidate = await selectRealmAppearance(data, native.client, 'Bearer manager');
-      return held ? new Promise((resolve) => releases.push(() => resolve(candidate))) : candidate;
+      const pending = selectRealmAppearance(data, native.client, 'Bearer manager');
+      if (!held) return pending;
+      return new Promise((resolve) => {
+        releases.push(async () => resolve(await pending));
+      });
     },
     changeRealmAppearanceSettings: async ({
       data,
@@ -757,6 +765,7 @@ test('The default admitted community management journey resolves a same-site ima
     readRealmBans: async () => ({ state: 'forbidden' }),
     readContainerLifecycle: async () => ({ kind: 'refused', status: 403, code: 'forbidden' }),
     readRealmClaimState: async () => ({ kind: 'unavailable' }),
+    readRealmRulesAuthoring: async () => ({ kind: 'unavailable' }),
   }));
   const { act, createElement: h } = await import('react');
   const { createRoot } = await import('react-dom/client');
@@ -768,7 +777,6 @@ test('The default admitted community management journey resolves a same-site ima
   const { createStoryRecordedKernelFetch } = await import('../src/kernel/fake');
   const { m } = await import('../src/paraglide/messages.js');
   const { setLocale, localizeUrl } = await import('../src/paraglide/runtime.js');
-  const { within, userEvent, waitFor } = await import('storybook/test');
   setLocale('en', { reload: false });
   const recorded = createKernelClient('https://kernel.test', { fetch: createStoryRecordedKernelFetch() });
   const page = await loadSpacePage(
@@ -779,7 +787,9 @@ test('The default admitted community management journey resolves a same-site ima
     'anonymous',
   );
   expect(page.realm?.id).toBe(realmId);
-  const queries = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+  const queries = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: Infinity, refetchOnWindowFocus: false } },
+  });
   queries.setQueryData(sessionQuery.queryKey, {
     state: 'signed-in',
     subject: realm.realm.creator,
@@ -795,34 +805,82 @@ test('The default admitted community management journey resolves a same-site ima
   const host = window.document.createElement('main') as unknown as HTMLElement;
   window.document.body.append(host);
   const root = createRoot(host);
-  const user = userEvent.setup({ document: window.document as unknown as Document });
-  const view = within(host);
-  const click = async (name: string) => act(async () => user.click(view.getByRole('button', { name })));
+  const pageText = () => host.textContent ?? '';
+  const concealed = (node: Element) => node.closest('[hidden], [aria-hidden="true"]') !== null;
+  const hasAlert = () =>
+    [...host.querySelectorAll('p')].some((node) => node.getAttribute('role') === 'alert' && !concealed(node));
+  const imageBySrc = (src: string) => [...host.querySelectorAll('img')].find((node) => node.getAttribute('src') === src);
+  const labelled = (tag: string, name: string) =>
+    [...host.querySelectorAll(tag)].find((node) => (node.textContent ?? '').trim() === name);
+  const button = (name: string) => {
+    const node = labelled('button', name);
+    if (!node) throw new Error(`missing button ${name}`);
+    return node as HTMLButtonElement;
+  };
+  const buttons = (name: string) =>
+    [...host.querySelectorAll('button')].filter((node) => (node.textContent ?? '').trim() === name) as HTMLButtonElement[];
+  const link = (name: string) => {
+    const node = labelled('a', name);
+    if (!node) throw new Error(`missing link ${name}`);
+    return node as HTMLAnchorElement;
+  };
+  const textbox = (name: string) => {
+    const field = [...host.querySelectorAll('label')].find((node) => (node.textContent ?? '').trim() === name);
+    const node = field?.htmlFor ? host.ownerDocument.getElementById(field.htmlFor) : null;
+    if (!node) throw new Error(`missing textbox ${name}`);
+    return node as HTMLInputElement;
+  };
+  const appearanceConcealed = () => {
+    const heading = [...host.querySelectorAll('h2')].find(
+      (node) => (node.textContent ?? '').trim() === m.realm_appearance_heading(),
+    );
+    return !heading || heading.closest('[hidden]') !== null;
+  };
+  const { setTimeout: delay } = await import('node:timers/promises');
+  async function eventually(check: () => void) {
+    const deadline = Date.now() + 2000;
+    let last: unknown;
+    for (;;) {
+      try {
+        check();
+        return;
+      } catch (error) {
+        last = error;
+        if (Date.now() >= deadline) throw last;
+        await delay(10);
+      }
+    }
+  }
+  const click = async (name: string) => {
+    button(name).click();
+    await delay(0);
+  };
   const imageLink = `/media/${id}/webp-320`;
   const rulesLink = `/posts/${id}/revisions/${revisionId}`;
   const edit = async (label: string, value: string) => {
-    const input = view.getByRole('textbox', { name: label });
-    await act(async () => {
-      await user.clear(input);
-      await user.click(input);
-      await user.paste(value);
-    });
+    const input = textbox(label);
+    input.focus();
+    const write = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+    write?.call(input, value);
+    input.dispatchEvent(new window.InputEvent('input', { bubbles: true, data: value, inputType: 'insertFromPaste' }));
+    await delay(0);
   };
   const preview = async (cost: number) => {
     const before = native.requests.length;
     await click(m.realm_appearance_preview());
-    await waitFor(() => expect(native.requests).toHaveLength(before + cost));
+    await eventually(() => expect(native.requests).toHaveLength(before + cost));
   };
   try {
     await act(async () => root.render(h(QueryClientProvider, { client: queries }, h(RouterProvider, { router }))));
-    await view.findByRole('button', { name: m.community_manage() });
+    expect(button(m.community_manage())).toBeDefined();
     expect(selections).toHaveLength(0);
     expect(commands).toHaveLength(0);
     expect(native.requests).toHaveLength(4);
-    expect(view.queryByRole('region', { name: m.realm_appearance_heading() })).toBeNull();
+    expect(appearanceConcealed()).toBe(true);
     await click(m.community_manage());
-    await view.findByRole('region', { name: m.realm_appearance_heading() });
-    await act(async () => user.click(view.getAllByRole('button', { name: m.realm_appearance_choose() })[0]!));
+    await eventually(() => expect(appearanceConcealed()).toBe(false));
+    buttons(m.realm_appearance_choose())[0]!.click();
+    await delay(0);
     for (const invalid of [
       id,
       `/media/${id}/original`,
@@ -840,12 +898,10 @@ test('The default admitted community management journey resolves a same-site ima
       `${imageLink}#save`,
     ]) {
       await edit(m.realm_appearance_image_link(), invalid);
-      expect(view.queryByRole('alert')).toBeNull();
+      expect(pageText()).not.toContain(m.realm_appearance_invalid_image_link());
       await click(m.realm_appearance_preview());
-      await view.findByText(m.realm_appearance_invalid_image_link());
-      expect(view.getByRole('button', { name: m.realm_appearance_use_selection() }).hasAttribute('disabled')).toBe(
-        true,
-      );
+      await eventually(() => expect(pageText()).toContain(m.realm_appearance_invalid_image_link()));
+      expect(button(m.realm_appearance_use_selection()).disabled).toBe(true);
     }
     expect(selections).toHaveLength(0);
     expect(native.requests).toHaveLength(4);
@@ -854,52 +910,58 @@ test('The default admitted community management journey resolves a same-site ima
     await edit(m.realm_appearance_image_link(), `https://site.test${imageLink}`);
     holdNext = true;
     await preview(6);
-    await waitFor(() => expect(releases).toHaveLength(1));
-    expect(view.getByRole('button', { name: m.editor_cancel() }).hasAttribute('disabled')).toBe(false);
+    await eventually(() => expect(releases).toHaveLength(1));
+    expect(button(m.editor_cancel()).disabled).toBe(false);
     await edit(m.realm_appearance_image_link(), 'changed link');
-    await act(async () => releases.shift()!());
-    expect(view.queryByText(m.realm_appearance_reference_pending())).toBeNull();
-    expect(view.queryByRole('alert')).toBeNull();
+    await releases.shift()!();
+    await delay(0);
+    expect(pageText()).not.toContain(m.realm_appearance_reference_pending());
+    expect(hasAlert()).toBe(false);
     await edit(m.realm_appearance_image_link(), imageLink);
     await preview(6);
-    await view.findByText(m.realm_appearance_reference_pending());
+    await eventually(() => expect(pageText()).toContain(m.realm_appearance_reference_pending()));
     expect(selections[1]).toEqual({ kind: 'image', realmId, mediaId: id, purpose: 'realm-icon' });
-    expect(view.getByRole('link', { name: m.realm_appearance_source_link() }).getAttribute('href')).toBe(imageLink);
-    expect(host.querySelector(`img[src="${imageLink}"]`)).toBeNull();
+    expect(link(m.realm_appearance_source_link()).getAttribute('href')).toBe(imageLink);
+    expect(imageBySrc(imageLink)).toBeUndefined();
     await click(m.realm_appearance_use_selection());
     expect(commands).toHaveLength(0);
-    expect(view.getByText(m.realm_appearance_reference_pending())).toBeDefined();
-    expect(
-      view.getByText(m.realm_appearance_selection_for({ slot: m.realm_appearance_icon(), realm: current.title })),
-    ).toBeDefined();
+    expect(pageText()).toContain(m.realm_appearance_reference_pending());
+    expect(pageText()).toContain(
+      m.realm_appearance_selection_for({ slot: m.realm_appearance_icon(), realm: current.title }),
+    );
 
     await click(m.realm_appearance_select_rules());
     await edit(m.realm_appearance_rules_link(), `/posts/${id}`);
     await click(m.realm_appearance_preview());
-    await view.findByText(m.realm_appearance_invalid_rules_link());
+    await eventually(() => expect(pageText()).toContain(m.realm_appearance_invalid_rules_link()));
     expect(selections).toHaveLength(2);
     await edit(m.realm_appearance_rules_link(), rulesLink);
     holdNext = true;
     await preview(8);
-    await waitFor(() => expect(releases).toHaveLength(1));
+    await eventually(() => expect(releases).toHaveLength(1));
     // The actual panel receives a fresh source at the same head. The old read must not cross it or a reopened selection.
-    await act(async () => {
-      for (const entry of queries.getQueryCache().findAll({ queryKey: ['realm-appearance', realmId] }))
-        queries.setQueryData(entry.queryKey, {
-          kind: 'ready',
-          snapshot: { ...current, title: 'Refreshed reading room' },
-        });
+    for (const entry of queries.getQueryCache().findAll({ queryKey: ['realm-appearance', realmId] }))
+      queries.setQueryData(entry.queryKey, {
+        kind: 'ready',
+        snapshot: { ...current, title: 'Refreshed reading room' },
+      });
+    await delay(0);
+    await eventually(() => {
+      const field = [...host.querySelectorAll('label')].find(
+        (node) => (node.textContent ?? '').trim() === m.realm_appearance_rules_link(),
+      );
+      expect(field).toBeUndefined();
     });
-    await waitFor(() => expect(view.queryByRole('textbox', { name: m.realm_appearance_rules_link() })).toBeNull());
     await click(m.realm_appearance_select_rules());
-    await act(async () => releases.shift()!());
-    expect(view.queryByText('Reading room rules')).toBeNull();
-    expect(view.queryByRole('alert')).toBeNull();
+    await releases.shift()!();
+    await delay(0);
+    expect(pageText()).not.toContain('Reading room rules');
+    expect(hasAlert()).toBe(false);
     await edit(m.realm_appearance_rules_link(), `https://site.test/zh-Hant${rulesLink}`);
     await preview(8);
-    await view.findByText('Reading room rules');
-    expect(view.getByText('Discuss the work and respect other readers.')).toBeDefined();
-    expect(view.getByRole('link', { name: m.realm_appearance_open_revision() }).getAttribute('href')).toBe(
+    await eventually(() => expect(pageText()).toContain('Reading room rules'));
+    expect(pageText()).toContain('Discuss the work and respect other readers.');
+    expect(link(m.realm_appearance_open_revision()).getAttribute('href')).toBe(
       localizeUrl(new URL(rulesLink, window.location.origin)).pathname,
     );
     expect(selections[3]).toEqual({ kind: 'rules', realmId, postId: id, revisionId });
@@ -907,7 +969,7 @@ test('The default admitted community management journey resolves a same-site ima
     expect(commands).toHaveLength(0);
     native.fail('lost');
     await click(m.realm_appearance_save());
-    await view.findByText(m.realm_appearance_uncertain());
+    await eventually(() => expect(pageText()).toContain(m.realm_appearance_uncertain()));
     expect(commands).toHaveLength(1);
     const original = structuredClone(commands[0]!);
     expect(original).toEqual({
@@ -917,20 +979,16 @@ test('The default admitted community management journey resolves a same-site ima
       presentation: { avatarMediaId: id, bannerMediaId: null, rules: { postId: id, revisionId } },
     });
     expect(v.safeParse(v.pipe(v.string(), v.uuid()), original.key).success).toBe(true);
-    expect(view.getByRole('button', { name: m.realm_appearance_select_rules() }).hasAttribute('disabled')).toBe(true);
-    expect(
-      view
-        .getAllByRole('button', { name: m.realm_appearance_choose() })
-        .every((button) => button.hasAttribute('disabled')),
-    ).toBe(true);
+    expect(button(m.realm_appearance_select_rules()).disabled).toBe(true);
+    expect(buttons(m.realm_appearance_choose()).every((node) => node.disabled)).toBe(true);
     const beforeRetry = native.requests.length;
     await click(m.community_manage_close());
     await click(m.community_manage());
-    expect(view.getByText(m.realm_appearance_uncertain())).toBeDefined();
+    expect(pageText()).toContain(m.realm_appearance_uncertain());
     expect(native.requests).toHaveLength(beforeRetry);
     native.fail(null);
     await click(m.realm_appearance_retry());
-    await view.findByText(m.realm_appearance_saved());
+    await eventually(() => expect(pageText()).toContain(m.realm_appearance_saved()));
     expect(commands).toEqual([original, original]);
     expect(native.requests).toHaveLength(beforeRetry + 5);
     const patches = native.requests.filter((request) => request.method === 'PATCH');
@@ -939,9 +997,9 @@ test('The default admitted community management journey resolves a same-site ima
       expect(patch.headers.get('idempotency-key')).toBe(JSON.stringify(original.key));
       expect(patch.headers.get('if-match')).toBe(JSON.stringify(original.head));
     }
-    expect(host.querySelector(`img[src="${imageLink}"]`)).not.toBeNull();
-    expect(view.queryByText(m.realm_appearance_reference_pending())).toBeNull();
-    expect(view.getByText('Reading room rules')).toBeDefined();
+    expect(imageBySrc(imageLink)).toBeDefined();
+    expect(pageText()).not.toContain(m.realm_appearance_reference_pending());
+    expect(pageText()).toContain('Reading room rules');
     expect(selections).toHaveLength(4);
   } finally {
     await act(async () => root.unmount());

@@ -1328,7 +1328,10 @@ claim.
 
 The native DBOS system schema is `auth_dbos` in the **same Auth database**.
 `systemDatabaseUrl` defaults to the product pool URL; an override or injected
-system pool must name that same database. The SDK creates and migrates its schema;
+system pool must name that same database. An absolute Unix-socket `host` query is
+part of that identity, so the product, DBOS and system pools must name the same
+admitted socket. Another socket, or a TCP `host` query, names a different or
+invalid database and is refused before launch. The SDK creates and migrates its schema;
 Auth's schema dump excludes only `auth_dbos`, retaining native credential tables.
 Configuration errors have the name `AuthHostConfigurationError` and nonsecret
 codes. Set `executorId` uniquely for each replica and retain that identity when

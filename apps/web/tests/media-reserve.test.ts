@@ -27,6 +27,7 @@ type Reservation = {
   uploaderId: string;
   key: string;
   reservationRequestId: string;
+  purpose?: string;
 };
 const grants = new Map<string, Grant>();
 const tokens = new Map<string, string>();
@@ -99,7 +100,8 @@ const fake = Bun.serve({
     }
     if (!url.pathname.startsWith('/v1/')) return failure(404, 'not_found');
     // Unknown /v1 routes, including the anonymous home pages:read, answer 404. A bearer is required only for media.
-    const creating = request.method === 'POST' && url.pathname === '/v1/media';
+    const realmRoute = request.method === 'POST' ? /^\/v1\/realms\/([^/]+)\/media$/.exec(url.pathname) : null;
+    const creating = (request.method === 'POST' && url.pathname === '/v1/media') || realmRoute !== null;
     const advising = request.method === 'GET' && url.pathname === '/v1/media/avatar-upload-advice';
     const match = /^\/v1\/media\/([^/:]+)(:complete)?$/.exec(url.pathname);
     const reading = request.method === 'GET' && match !== null && match[2] === undefined && !advising;
@@ -148,8 +150,9 @@ const fake = Bun.serve({
       const media: Reservation = {
         id,
         state: 'reserved',
-        containerId:
-          typeof input.containerId === 'string'
+        containerId: realmRoute
+          ? realmRoute[1]!
+          : typeof input.containerId === 'string'
             ? input.containerId
             : `0192f3a0-6c1e-7b2a-9d4e-${(future?.idempotencyKey ?? id).replace(/-/g, '').slice(0, 12)}`,
         mediaType: input.mediaType as string,
@@ -158,6 +161,7 @@ const fake = Bun.serve({
         uploaderId: sub,
         key: `private/${id}/original`,
         reservationRequestId: parsed,
+        ...(realmRoute ? { purpose: input.purpose as string } : {}),
       };
       reservations.set(id, media);
       return Response.json({ media }, { status: 201, headers: { location: `/v1/media/${id}` } });
@@ -526,6 +530,40 @@ test(
     });
     expect(hostile.status).toBe(400);
     expect(reservations.size).toBe(before + 1);
+  },
+  timeout,
+);
+
+test(
+  'a Realm appearance reservation forwards the caller key so a repeated command finds the same reservation',
+  async () => {
+    const accountId = '0192f3a0-6c1e-7b2a-9d4e-0000000000ab';
+    const realmId = '0192f3a0-6c1e-7b2a-9d4e-0000000000ac';
+    const alice = await signIn(accountId);
+    const key = randomUUID();
+    const posted = JSON.stringify({ realmId, purpose: 'realm-banner', mediaType: 'image/png', byteCount: 4 });
+    const headers = {
+      ...alice.headers,
+      'content-type': 'application/json',
+      'idempotency-key': JSON.stringify(key),
+    };
+    const before = reservations.size;
+    const first = await fetch(`${alice.origin}/media`, { method: 'POST', headers, body: posted });
+    expect(first.status, await first.clone().text()).toBe(201);
+    privateResponse(first);
+    const reserved = (await first.json()) as { media: { id: string; containerId: string } };
+    expect(reserved.media.containerId).toBe(realmId);
+    const replay = await fetch(`${alice.origin}/media`, { method: 'POST', headers, body: posted });
+    expect(replay.status, await replay.clone().text()).toBe(201);
+    expect(await replay.json()).toEqual(reserved);
+    expect(reservations.size).toBe(before + 1);
+    expect([...reservations.values()].at(-1)).toMatchObject({
+      id: reserved.media.id,
+      reservationRequestId: key,
+      purpose: 'realm-banner',
+      uploaderId: accountId,
+    });
+    expect(calls.filter((call) => call.path === `/v1/realms/${realmId}/media`)).toHaveLength(2);
   },
   timeout,
 );
