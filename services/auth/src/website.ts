@@ -30,7 +30,7 @@ function deny(code: RefusalCode): never {
   throw new ProtocolRefused(code);
 }
 async function jsonRecord(response: Response): Promise<Record<string, unknown> | undefined> {
-  const value = await response.json();
+  const value = await response.clone().json();
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }
 const authorizationParameters = new Set([

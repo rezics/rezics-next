@@ -101,7 +101,8 @@ covered merely by linking a kernel test.
   community markup keeps native cards and current-context identity; write `subject=` board destinations stay absent
   without native advice. Preview empty CollectionList renders no list slot; the page artwork host may wrap that
   absence. Pin these in focused Subject community, CollectionList, Copies session and Person Location tests;
-  native/served/browser acceptance stay deferred.
+  native/served/browser acceptance stay deferred. The focused runner admits repo-relative, app-relative and
+  absolute test-file selectors for the child `apps/web` cwd; verification owns that selector contract.
   Land the retained recovery with main's published client types, typed repairs and closed notification-kind decoder;
   finish diagnostic work at the normal changed-workspace check, with strict settlement and server-boundary tests.
 - **Single producers**: question-management page and label-history admission uses the published `@rezics/client` runtime schemas, and the subject page envelope filters viewer and actions once in `cataloguePageBody`; the web keeps no parallel contract copy.

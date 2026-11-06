@@ -52,6 +52,13 @@ Decision: private follow native/browser/growth capability stays open until the i
 Auth-persona walk pass after integration; typed transport, FULL withhold, frozen command frame and list-frontier
 return land under ordinary clean-workspace typing.
 
+Decision: Web's focused runner (`apps/web/scripts/focused.ts`) canonicalizes explicit test-file selectors to the child
+`apps/web` working directory before isolated per-file execution. Repository-relative (`apps/web/tests/foo.test.ts`),
+application-relative (`tests/foo.test.ts`) and absolute paths that resolve inside that directory all run the same
+child file. Option operands and their values stay unchanged. Each named file still gets a fresh runtime. A zero-match
+log is not execution evidence. Pin current-reader recovery in the existing Subject community, CollectionList, Copies
+session and Person Location tests; Auth metadata uses the existing protocol cases plus a consumed-body fallback.
+
 Acceptance names the narrowest command that proves the change. Managers name a full web or kernel check only for a
 workspace-wide change; the train and promotion own whole-workspace checks.
 
