@@ -253,7 +253,6 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
     const { created } = seeded;
     competingDate = seeded.proposeCompetingDate;
 
-
     const urlFor = (key: string, locale = 'en') => {
       const subject = created.get(key);
       if (!subject) throw new Error(`Fixture subject ${key} was not created`);

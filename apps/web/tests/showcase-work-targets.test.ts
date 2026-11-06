@@ -103,21 +103,19 @@ test('the local family preview keeps twenty work targets and twenty credit targe
   const workIds = Array.from({ length: 25 }, (_, i) => id(200 + i));
   const creditIds = Array.from({ length: 25 }, (_, i) => id(300 + i));
   const statements: Subject['statements'] = {
-    'rezics:crossMediaCounterpart': workIds.map((target, i) => assertion('rezics:crossMediaCounterpart', target, 400 + i)),
+    'rezics:crossMediaCounterpart': workIds.map((target, i) =>
+      assertion('rezics:crossMediaCounterpart', target, 400 + i),
+    ),
     'schema:actor': creditIds.map((target, i) => assertion('schema:actor', target, 500 + i)),
   };
   const related = Object.fromEntries([
     ...workIds.map((target) => [target, { id: target, type: 'schema:TVSeries', labels: { und: target } }]),
     ...creditIds.map((target) => [target, { id: target, type: 'schema:Person', labels: { und: target } }]),
   ]) as unknown as Related;
-  const destinations = workDestinations(
-    { id: anime, statements } as unknown as Subject,
-    related,
-    {
-      'rezics:crossMediaCounterpart': familyDefinitions['rezics:crossMediaCounterpart']!,
-      'schema:actor': { label: 'performer', forwardLabel: 'voice', group: 'association', symmetric: false },
-    },
-  );
+  const destinations = workDestinations({ id: anime, statements } as unknown as Subject, related, {
+    'rezics:crossMediaCounterpart': familyDefinitions['rezics:crossMediaCounterpart']!,
+    'schema:actor': { label: 'performer', forwardLabel: 'voice', group: 'association', symmetric: false },
+  });
   expect(destinations).toHaveLength(40);
   expect(destinations.slice(0, 20).map(({ kind, id: target }) => ({ kind, id: target }))).toEqual(
     workIds.slice(0, 20).map((target) => ({ kind: 'screen' as const, id: target })),

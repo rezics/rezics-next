@@ -24,7 +24,7 @@ covered merely by linking a kernel test.
   distinct release; three agent kinds; 105 reverse-created, explicitly ordered targets per full view, withheld
   targets, qualified credits, competing dates and two attributed sources. Imported facts retain provider provenance.
   The Subject binding now authors actual native relation facts and moderates linked hidden controls; editions use
-  released dates, contents use native names and credits carry released position qualifiers.   Focused native projection
+  released dates, contents use native names and credits carry released position qualifiers. Focused native projection
   and rendering tests are separate from deferred served/browser acceptance. Competing candidate comparison and
   private correction resumption require a current admitted signed-in reading; static public HTML is not that evidence.
   Merged Character appearances keep the original assertion only when related.redirect names the surviving selected

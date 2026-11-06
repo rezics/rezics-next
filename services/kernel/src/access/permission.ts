@@ -396,7 +396,8 @@ async function checkPreparedPermission(
     };
     if (!stillValid()) return { allowed: false, explicit: false };
     const ids = page?.ids ?? [resource.id];
-    const policyResourceType = page?.resourceType ?? inferredPolicyResourceType(facts.policyCatalogue, action, resource);
+    const policyResourceType =
+      page?.resourceType ?? inferredPolicyResourceType(facts.policyCatalogue, action, resource);
     const policyCore =
       policyResourceType !== undefined && hasNativePolicyProfile(facts.policyCatalogue, action, policyResourceType);
     const formula = preparedFormula(facts, actor, action, resource, at, floor, policyCore, page, includeExplicit);
