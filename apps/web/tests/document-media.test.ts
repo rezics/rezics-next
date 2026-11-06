@@ -6,7 +6,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { loadDocumentMedia, type DocumentImagePresentation } from '../src/threads/document-media';
-import { documentImageForPost, readThreadDocumentMedia } from '../src/threads/document-media-read';
+import { documentImageForPost, receiveThreadDocumentMedia } from '../src/threads/document-media-read';
 import { loadThreadPage, type ThreadPost } from '../src/threads/thread-page';
 import type { ThreadReadingPage } from '../src/threads/thread-reading';
 import { m } from '../src/paraglide/messages.js';
@@ -151,7 +151,7 @@ describe('Sole document image adapter and native media in ordinary thread bodies
     ).toEqual({ kind: 'unavailable' });
   });
 
-  test('available current bodies alone select original declared references, with an explicit whole-page overflow', async () => {
+  test('available current bodies alone select original declared references, with an explicit whole-page overflow', () => {
     const opening = postWithImages([image.id, image.id]);
     // A declared attachment without a document reference and a document image without a declaration stay out.
     const post = {
@@ -176,31 +176,40 @@ describe('Sole document image adapter and native media in ordinary thread bodies
       sha256: null,
     };
     const withheld: ThreadPost = { ...erased, id: id(5), availability: 'withheld' };
-    const calls: Request[] = [];
-    const kernel = client((request) => {
-      calls.push(request);
-      return Response.json({ images: [image] });
-    });
-    const result = await readThreadDocumentMedia(kernel, [post, erased, withheld], 'Bearer reader');
-    expect(await calls[0]!.json()).toEqual({ ids: [image.id] });
+    const document = {
+      postId: post.id,
+      threadId: post.threadId,
+      revisionId: post.revisionId,
+      sha256: post.sha256,
+      state: 'available' as const,
+      images: [{ id: image.id, state: 'available' as const, presentation: image }],
+    };
+    const result = receiveThreadDocumentMedia({ state: 'available', documents: [document] }, [post, erased, withheld]);
     expect(documentImageForPost(result, post, image.id)).toEqual(image);
     expect(documentImageForPost(result, post, id(2))).toBeNull();
     expect(documentImageForPost(result, { ...post, revisionId: id(9) }, image.id)).toBeNull();
     expect(documentImageForPost(result, { ...post, sha256: 'b'.repeat(64) }, image.id)).toBeNull();
     expect(documentImageForPost(result, erased, image.id)).toBeNull();
     expect(documentImageForPost(result, { ...post, id: id(8) }, image.id)).toBeNull();
-    const wrongContainer = await readThreadDocumentMedia(
-      client(() => Response.json({ images: [{ ...image, containerId: id(8) }] })),
+    const wrongContainer = receiveThreadDocumentMedia(
+      {
+        state: 'available',
+        documents: [
+          {
+            ...document,
+            images: [{ id: image.id, state: 'available', presentation: { ...image, containerId: id(8) } }],
+          },
+        ],
+      },
       [post],
     );
     expect(documentImageForPost(wrongContainer, post, image.id)).toBeNull();
     expect(
-      await readThreadDocumentMedia(kernel, [
+      receiveThreadDocumentMedia({ state: 'overflow', documents: [] }, [
         postWithImages(Array.from({ length: 32 }, (_, index) => id(index + 1))),
         { ...postWithImages([id(33)]), id: id(100) },
       ]),
     ).toEqual({ kind: 'unavailable', reason: 'overflow' });
-    expect(calls).toHaveLength(1);
   });
 
   test('the ordinary authorized thread read renders its actual image callback without rendering-time reads or body grants', async () => {

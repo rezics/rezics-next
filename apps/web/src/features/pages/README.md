@@ -56,7 +56,8 @@ The default composition consumes the installed `card.state`, `authors`, `present
 author, document language and spoiler gate. Their media container is the exact opening post, not the thread;
 images must also be declared and referenced by that opening document. Public comment coverage keeps its exact or
 lower-bound count, including zero with a null activity time. Missing coverage displays no guessed count or date.
-No native card starts author enrichment. The shared author batch remains available for ordinary rows.
+No native card starts author enrichment. The shared author batch remains available for ordinary rows; a native-card
+page therefore makes zero `/v1/accounts` calls, and one ordinary-row region still makes exactly one.
 
 The installed card does not supply historical scale/lifecycle/original-target provenance. Its reviewContext remains
 current; a review's recorded citation therefore stays explicitly unavailable unless the separate historical extension
