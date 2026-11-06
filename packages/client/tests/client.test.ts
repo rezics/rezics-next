@@ -2,6 +2,8 @@ import { expect, expectTypeOf, test } from 'bun:test';
 import {
   createKernelClient,
   reviewedPersonRequests,
+  identityOperationLocation,
+  identityOperationId,
   isReviewedPersonEndpoint,
   isReviewedPersonSource,
   reviewedPersonMergeInput,
@@ -311,7 +313,7 @@ test('reviewed Person requests use native evidence query and preserve ordered de
   };
   const remote = kernel([
     () => json(200, { subject, reviewedIdentity: endpoint }),
-    () => json(202, { operation: { id: ID } }),
+    () => json(202, { operation: { id: ID } }, { Location: `/v1/subjectIdentityOperations/${ID}` }),
     () => json(200, { operation: { id: ID, done: false } }),
   ]);
   const client = createKernelClient(ORIGIN, { fetch: remote.fetch });
@@ -324,9 +326,12 @@ test('reviewed Person requests use native evidence query and preserve ordered de
   const admitted = await reviewed.merge(body, { headers: { 'idempotency-key': '"review"' } });
   expect(admitted.status).toBe(202);
   expect(admitted.data?.operation.id).toBe(ID);
-  const pending = await reviewed.operation(ID);
+  expect(identityOperationLocation(admitted.response.headers, ID)).toBe(`/v1/subjectIdentityOperations/${ID}`);
+  const pending = await reviewed.operationAt(`/v1/subjectIdentityOperations/${ID}`);
   expect(pending.data?.operation).toEqual({ id: ID, done: false });
   expect(remote.sent[2]!.url).toBe(`${ORIGIN}/v1/subjectIdentityOperations/${ID}`);
+  expect(identityOperationId(`/v1/subjectIdentityOperations/${ID}`)).toBe(ID);
+  expect(() => identityOperationLocation(new Headers(), ID)).toThrow('Invalid native identity admission');
   expect(JSON.parse(remote.sent[1]!.body!)).toEqual(body);
   expect(isReviewedPersonEndpoint(endpoint)).toBe(true);
   expect(isReviewedPersonEndpoint({ ...endpoint, privateClaim: ID })).toBe(false);

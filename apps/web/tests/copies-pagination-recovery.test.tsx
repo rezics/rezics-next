@@ -38,9 +38,15 @@ mock.module('@tanstack/react-start/server', () => start);
 const Part = ({ children }: { children: ReactNode }) => <div>{children}</div>;
 mock.module('@rezics/ui/shadcn/dialog', () => ({
   Dialog: ({ children }: { children: ReactNode }) => <div role="dialog">{children}</div>,
+  DialogClose: Part,
   DialogContent: Part,
+  DialogDescription: Part,
+  DialogFooter: Part,
   DialogHeader: Part,
+  DialogOverlay: Part,
+  DialogPortal: Part,
   DialogTitle: Part,
+  DialogTrigger: Part,
 }));
 mock.module('@rezics/ui/bottom-sheet', () => ({
   BottomSheet: ({ children }: { children: ReactNode }) => <div role="dialog">{children}</div>,
@@ -241,6 +247,11 @@ async function mount(search: Search, page: Partial<CopiesPageData> = {}) {
           subject ? { state: 'signed-in', subject, csrfToken } : { state: 'signed-out', csrfToken: null },
         ),
       );
+      await show();
+      await flush();
+    },
+    async observe(state: 'unknown' | 'unavailable') {
+      await act(async () => client.setQueryData(['session'], { state, subject: null, csrfToken: null }));
       await show();
       await flush();
     },
@@ -445,6 +456,26 @@ test('refresh preserves the original uncertain command; recovery cannot discard 
     await h.session(null);
     expect(h.host.textContent).not.toContain('Private note B');
     expect(h.link(m.library_collections_first_page())).toBeUndefined();
+  } finally {
+    await h.close();
+  }
+});
+
+test('indeterminate copies sessions show unavailable sign-in and do not start the private list loader', async () => {
+  const h = await mount({ subjectId: edition });
+  try {
+    await h.firstPage();
+    expect(h.host.textContent).toContain('Private note A');
+    const lists = h.lists.length;
+    for (const state of ['unknown', 'unavailable'] as const) {
+      await h.observe(state);
+      expect(h.host.querySelector('[data-route-state="unavailable"]')).toBeTruthy();
+      expect(h.host.querySelector('a[href^="/auth/sign-in"]')?.getAttribute('href')).toBe(
+        '/auth/sign-in?return_to=%2Fen%2Flibrary%2Fcopies',
+      );
+      expect(h.host.textContent).not.toContain('Private note A');
+      expect(h.lists).toHaveLength(lists);
+    }
   } finally {
     await h.close();
   }

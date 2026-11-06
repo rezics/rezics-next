@@ -6,6 +6,7 @@ import { fromPlainText } from '@rezics/document';
 import { readSubjectCommunity, withSubjectCommunity } from '../src/features/pages/subject-community';
 import { SubjectCommunityRegion } from '../src/features/pages/subject-community-view';
 import { loadSubjectPage, SubjectPage, type SubjectPageData } from '../src/features/pages/subject';
+import { DefaultReaderProvider } from '../src/shell/current-reading';
 import { subjectTabs } from '../src/features/pages/views';
 import { subjectPageMessages } from '../src/features/pages/route-support';
 import { GLOBAL } from '../src/features/pages/subject-ratings';
@@ -39,7 +40,11 @@ const isCommunity = (request: Request) =>
   new URL(request.url).pathname === `/v1/subjects/${communitySubject.id}/threads`;
 function pageHtml(page: SubjectPageData) {
   return renderToStaticMarkup(
-    createElement(SubjectPage, { page, locale: 'en', messages: subjectPageMessages(), renderJsonLd: false }),
+    createElement(
+      DefaultReaderProvider,
+      null,
+      createElement(SubjectPage, { page, locale: 'en', messages: subjectPageMessages(), renderJsonLd: false }),
+    ),
   );
 }
 
@@ -55,7 +60,7 @@ test('Subject lists expose readable native cards and keep writes unavailable wit
   expect(html).toContain(`data-context-subject-id="${communitySubject.id}"`);
   expect(html).toContain(`data-context-place-id="${GLOBAL}"`);
   expect(html).toContain(threadLocation('en', communityThread('review')));
-  expect(html).toContain(`subject=${communitySubject.id}`);
+  expect(html).not.toContain(`new?subject=${communitySubject.id}`);
   expect(html).not.toContain('data-slot="create-thread"');
   expect(subjectTabs(loaded.page).map((tab) => tab.view)).toEqual(expect.arrayContaining(['reviews', 'discussion']));
   const reads = threadReads(requests);

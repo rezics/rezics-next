@@ -1,7 +1,6 @@
 import type { MemberPageTarget } from './member-list-query';
 import type { DocumentNode, DocumentSnapshot } from '@rezics/document';
 import { PAGE_GLOBAL_CONTEXT, type SelectedContext } from '@rezics/composition';
-import { useOperation } from '../../kernel/exposure';
 import { PageReadState } from './page-read-state';
 import { RatingsSection } from './subject-ratings-view';
 import { SubjectCommunityRegion, useSubjectCommunity } from './subject-community-view';
@@ -953,7 +952,6 @@ export function Credits(props: Record<string, unknown>) {
 }
 
 export function CollectionList(props: Record<string, unknown>) {
-  const readable = useOperation('collection.get');
   const state = useOverview(props.id);
   if (!state) return null;
   const { value, section } = state;
@@ -965,8 +963,27 @@ export function CollectionList(props: Record<string, unknown>) {
     return <Failed slot="collection-list" id={id} title={heading} titleLang={title.lang} locale={value.locale} />;
   const allCollections = page.collections;
   const collections = props.paged === true ? allCollections : allCollections.slice(0, limitOf(props));
-  if (collections.length === 0) return null;
   const count = countFromLinks(page.count, collections.length);
+  if (collections.length === 0) {
+    if (props.paged !== true) return null;
+    const options = { locale: value.locale as never };
+    const next = typeof page.next === 'string' ? page.next : undefined;
+    return (
+      <Preview
+        slot="collection-list"
+        id={id}
+        title={heading}
+        titleLang={title.lang}
+        count={count}
+        more={false}
+        href={viewHref(value, 'lists')}
+        locale={value.locale}
+      >
+        <p role="status">{next ? m.public_read_sparse({}, options) : m.public_read_empty({}, options)}</p>
+        {next ? <StreamLink value={value} view="lists" node={id} cursor={next} title={heading} /> : null}
+      </Preview>
+    );
+  }
   const more =
     typeof page.next === 'string' || allCollections.length > collections.length || hasMore(count, collections.length);
   const Link = value.link;
@@ -993,22 +1010,18 @@ export function CollectionList(props: Record<string, unknown>) {
               : null;
           return (
             <li key={collection.id}>
-              <ContentItemFrame as="div" className={`min-w-0 py-3 sm:py-4${readable ? '' : ' before:hidden'}`}>
+              <ContentItemFrame as="div" className="min-w-0 py-3 sm:py-4">
                 <ContentItemHeading
                   level={3}
                   className="min-w-0 text-[17px] leading-snug font-semibold [overflow-wrap:anywhere] sm:text-lg md:text-xl"
                 >
-                  {readable ? (
-                    <ContentItemTitleLink
-                      as={Link}
-                      className={`block min-h-11 content-center rounded-sm ${linkClass} ${linkColor} focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`}
-                      href={`/${encodeURIComponent(value.locale)}/collections/${encodeURIComponent(collection.id)}`}
-                    >
-                      {collectionTitle}
-                    </ContentItemTitleLink>
-                  ) : (
-                    collectionTitle
-                  )}
+                  <ContentItemTitleLink
+                    as={Link}
+                    className={`block min-h-11 content-center rounded-sm ${linkClass} ${linkColor} focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`}
+                    href={`/${encodeURIComponent(value.locale)}/collections/${encodeURIComponent(collection.id)}`}
+                  >
+                    {collectionTitle}
+                  </ContentItemTitleLink>
                 </ContentItemHeading>
                 {(name !== '' || multiplicity !== null) && (
                   <div

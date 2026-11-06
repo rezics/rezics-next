@@ -249,7 +249,11 @@ export function ProviderPersonReview({
               held.current = true;
               setBusy(true);
               try {
-                const next = await transport.publication({ command: intent, operation: result.admission.operation.id });
+                const next = await transport.publication({
+                  command: intent,
+                  operation: result.admission.operation.id,
+                  location: result.location,
+                });
                 if (visit.live()) setPublication(next);
               } finally {
                 held.current = false;

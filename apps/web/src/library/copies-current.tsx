@@ -1,6 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { CancelledError, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSession } from '../session/query';
+import { sessionRecoverySignInHref } from '../session/unavailable';
+import { DependencyUnavailablePage } from '../shell/dependency-recovery/page';
 import { useLibraryWorkspaceAdmission } from './library-workspace-admission';
 import { personalRead } from '../kernel/query';
 import { m } from '../paraglide/messages.js';
@@ -60,14 +62,15 @@ export function CopiesCurrent({
   const session = useSession();
   const { value } = useLibraryWorkspaceAdmission(operations);
   const subject = hydrated ? value.subject : initial.sessionSubject;
-  const allowed = !hydrated || value.allowed[0] === true;
+  const sessionReady = session.state === 'signed-in' && !!session.subject;
+  const allowed = !hydrated || (value.allowed[0] === true && sessionReady);
   const address = useMemo(() => copiesAddress(search, locale), [search, locale]);
   const origin = useManagementCurrentOrigin(subject, JSON.stringify(address), 'copy.list', hydrated, operations);
   const windows = useCopiesWindows({
     address,
     reader: origin.id,
     viewer: value.viewer,
-    active: hydrated && allowed && !address.issue && origin.isCurrent(),
+    active: hydrated && allowed && sessionReady && !address.issue && origin.isCurrent(),
   });
   const [scope, setScope] = useState({ id: origin.id, seed: true, hydrated });
   if (scope.id !== origin.id)
@@ -75,6 +78,8 @@ export function CopiesCurrent({
   else if (scope.hydrated !== hydrated) setScope({ ...scope, hydrated });
   const shown = useRef<string | null>(null);
   if (allowed) shown.current = origin.id;
+  if (hydrated && (session.state === 'unknown' || session.state === 'unavailable'))
+    return <DependencyUnavailablePage signInHref={sessionRecoverySignInHref(`/${locale}/library/copies`)} />;
   if (!subject || (!allowed && shown.current !== origin.id))
     return (
       <p role="status">

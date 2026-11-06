@@ -93,6 +93,15 @@ covered merely by linking a kernel test.
   Native identity recovery admits only HTTP 202, polls its supplied Location under the current session until
   `done:true`, and then follows the supplied canonical return. Keep native producers and reader ownership;
   integrated typing closes the diagnostic sweep, while native, served-persona and promoted acceptance remain separate.
+  Decision: the default reader supplies QueryClient when the router has not; isolated Subject markup reuses that
+  composition without a RouterProvider, and tag return uses the visit currentHref or the subject fallback. Public
+  CollectionList destinations stay linked; collection.get does not hide public Collection addresses. Copies
+  unknown/unavailable sessions show unavailable with safe sign-in and do not start private reads.
+  Preview CollectionList still hides empty; a paged empty/sparse page keeps native continuation. Isolated Subject
+  community markup keeps native cards and current-context identity; write `subject=` board destinations stay absent
+  without native advice. Preview empty CollectionList renders no list slot; the page artwork host may wrap that
+  absence. Pin these in focused Subject community, CollectionList, Copies session and Person Location tests;
+  native/served/browser acceptance stay deferred.
   Land the retained recovery with main's published client types, typed repairs and closed notification-kind decoder;
   finish diagnostic work at the normal changed-workspace check, with strict settlement and server-boundary tests.
 - **Single producers**: question-management page and label-history admission uses the published `@rezics/client` runtime schemas, and the subject page envelope filters viewer and actions once in `cataloguePageBody`; the web keeps no parallel contract copy.

@@ -3,8 +3,8 @@ import { getRequest } from '@tanstack/react-start/server';
 import { requestNonce } from './security/nonce.ts';
 import { BuyerHistoryVisit } from './checkout/buyer-history-visit';
 import { createRouter } from '@tanstack/react-router';
-import { QueryClient } from '@tanstack/react-query';
 import { anonymousReadMode } from './kernel/credential';
+import { createDefaultReaderQueryClient } from './shell/default-reader';
 import { setupRouterSsrQueryIntegration } from '@tanstack/react-router-ssr-query';
 import { ClosedErrorPage } from './shell/closed';
 import { NotFoundPage } from './shell/shell';
@@ -117,7 +117,7 @@ function stringifySearch(search: Record<string, unknown>): string {
 export function getRouter() {
   applyDependencyErrorComponents(routeTree as unknown as DependencyRouteNode);
   const cspNonce = nonce();
-  const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 60_000 } } });
+  const queryClient = createDefaultReaderQueryClient();
   const router = createRouter({
     context: { queryClient, credentialMode: anonymousReadMode, buyerHistory: new BuyerHistoryVisit(queryClient) },
     defaultPreload: 'intent',
