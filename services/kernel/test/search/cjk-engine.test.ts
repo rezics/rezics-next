@@ -142,7 +142,9 @@ test('released names go through the ordinary writer into the physical index and 
   expect(kana.ids).toEqual([RELEASED_NAME_ID]);
   expect(kana.evidence).toMatchObject({
     state: 'current',
-    reasons: [expect.objectContaining({ field: 'alias', language: 'und', text: 'シュタインズ・ゲート' })],
+    reasons: expect.arrayContaining([
+      expect.objectContaining({ field: 'alias', language: 'und', text: 'シュタインズ・ゲート' }),
+    ]),
   });
   const romanization = await evidence('Mingyun Shi zhi Men');
   expect(romanization.ids).toEqual([RELEASED_NAME_ID]);

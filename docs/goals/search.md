@@ -8,7 +8,7 @@ publish safe page compositions without adding a page implementation for each ver
 ## Done when
 
 - A documented development OpenSearch setup supplies the required analyzer and regression cases.
-  Decision: that setup is the workspace `search up` image (OpenSearch 3.9.0 with `analysis-icu`), production `cjk_bigram_v2` offsets, and native regressions in `cjk-engine.test.ts` plus the retained analyzer token cases. Fewest native pins are those analyzer tokens and one source-to-query/evidence case (simplified/traditional Chinese, Kana, romanization, aliases, duplicates, locale switch, retired evidence); isolated matcher tests stay local; seeded browser remains a separate cell.
+  Decision: that setup is the workspace `search up` image (OpenSearch 3.9.0 with `analysis-icu`), production `cjk_bigram_v2` offsets, and native regressions in `cjk-engine.test.ts` plus the retained analyzer token cases. Fewest native pins are those analyzer tokens and one source-to-query/evidence case (simplified/traditional Chinese, Kana, romanization, aliases, duplicates, locale switch, retired evidence); CJK ngram overlap may highlight additional current aliases, so evidence pins the queried original-language name rather than exclusive reason lists; isolated matcher tests stay local; seeded browser remains a separate cell.
 - Real relays index semantic public projections, publish observable checkpoints and recover/rebuild into a new
   generation with reconciled coverage before switching it into use.
 - Search, facets, typeahead, ordering and cursors have typed invalid, preparing, unavailable and restart outcomes.
