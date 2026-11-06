@@ -1,6 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
 import { type AccountDiscoveryReductionHead } from './account-discovery-reduction.ts';
-import type { AccountDiscoverySource, AccountDiscoverySummary } from '../search/discovery.ts';
+import type { AccountDiscoverySource, AccountDiscoverySummary } from '../search/index.ts';
 import { type SummaryReaderDependencies } from '../semantic/summaries.ts';
 /** Native source only; neither routing text keys nor caller policy belong in this factory. */
 export declare function accountDiscoverySource(pool: Pool): AccountDiscoverySource;
@@ -49,4 +49,5 @@ export declare function readAccountDiscoveryRepairObservation(pool: Pool, id: st
 /** Current owner hydration; linked Subject disclosure is exclusively Semantic's. */
 export declare function readAccountDiscoverySummaries(deps: SummaryReaderDependencies, ids: readonly string[], options?: {
     languages?: readonly string[];
+    context?: boolean;
 }): Promise<Map<string, AccountDiscoverySummary | null>>;

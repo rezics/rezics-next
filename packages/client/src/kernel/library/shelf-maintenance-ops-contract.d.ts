@@ -17,16 +17,7 @@ export interface InitialShelfInputs {
 export declare function initialShelfReadiness(inputs: InitialShelfInputs): 'ready' | 'backfill';
 /** Incomplete history cannot support even a negative delta. This does not grant writer admission. */
 export declare function counterWriteMode(ready: boolean): 'active' | 'defer';
-export declare const SHELF_MAINTENANCE_LIMITS: Readonly<{
-    page: 100;
-    segment: 100;
-    commandDeadlineMs: 5000;
-    cursorScalars: 8;
-    cursorBytes: 2048;
-    workflowBytes: 4096;
-    edgeBytes: 256;
-    stagingBytes: 25600;
-}>;
+export { SHELF_MAINTENANCE_LIMITS } from './shelf-maintenance-bounds.ts';
 export declare const EMPTY_SHELF_GENERATION = "00000000-0000-0000-0000-000000000000";
 export declare const SHELF_BACKFILL_PHASES: readonly ['drain', 'session-changes', 'sessions', 'head-inputs', 'heads', 'entries', 'types', 'count-entries', 'count-collections', 'validate', 'publish', 'retire-counts', 'retire-reservations', 'complete'];
 export declare const SHELF_COUNTER_PHASES: readonly ['drain', 'count-entries', 'count-collections', 'validate', 'publish', 'retire-counts', 'retire-reservations', 'complete'];

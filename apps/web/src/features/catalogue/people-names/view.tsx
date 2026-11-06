@@ -16,7 +16,8 @@ import {
 } from './model';
 
 const control =
-  'inline-flex min-h-11 min-w-11 items-center rounded-sm text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm py-2 text-primary underline underline-offset-4 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const wrapTarget = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2';
 const live = () => true;
 
 export function PeopleNamesView({
@@ -117,6 +118,7 @@ export function PeopleNamesView({
                     maxLength={PEOPLE_NAME_FILTER_LENGTH}
                     aria-describedby={`${id}-scope`}
                     type="search"
+                    className="h-auto min-h-11 min-w-11 w-full"
                     onChange={(event) => {
                       setQuery(event.target.value.slice(0, PEOPLE_NAME_FILTER_LENGTH));
                       setPage(0);
@@ -125,6 +127,7 @@ export function PeopleNamesView({
                   {query && (
                     <Button
                       variant="outline"
+                      className={wrapTarget}
                       onClick={() => {
                         setQuery('');
                         setPage(0);
@@ -167,6 +170,7 @@ export function PeopleNamesView({
                       {page > 0 && (
                         <Button
                           variant="outline"
+                          className={wrapTarget}
                           onClick={() => {
                             setPage((value) => value - 1);
                             summary.current?.focus();
@@ -178,6 +182,7 @@ export function PeopleNamesView({
                       {offset + PEOPLE_NAME_GROUP_WINDOW < groups.length && (
                         <Button
                           variant="outline"
+                          className={wrapTarget}
                           onClick={() => {
                             setPage((value) => value + 1);
                             summary.current?.focus();
@@ -209,7 +214,7 @@ export function PeopleNamesView({
           </p>
           <div className="flex flex-wrap gap-3">
             {advice === 'unavailable' && retryAdvice && (
-              <Button variant="outline" onClick={retryAdvice}>
+              <Button variant="outline" className={wrapTarget} onClick={retryAdvice}>
                 {m.people_names_retry({}, o)}
               </Button>
             )}
@@ -310,6 +315,7 @@ function NameGroup({
           {page > 0 && (
             <Button
               variant="outline"
+              className={wrapTarget}
               onClick={() => {
                 setPage((value) => value - 1);
                 summary.current?.focus();
@@ -321,6 +327,7 @@ function NameGroup({
           {offset + PEOPLE_NAME_ROW_WINDOW < group.names.length && (
             <Button
               variant="outline"
+              className={wrapTarget}
               onClick={() => {
                 setPage((value) => value + 1);
                 summary.current?.focus();
@@ -358,8 +365,8 @@ function CopyName({
           control.current = element;
           return focusTarget?.(element);
         }}
-        size="sm"
         variant="outline"
+        className={wrapTarget}
         aria-describedby={id}
         aria-busy={status === 'pending'}
         onClick={async () => {

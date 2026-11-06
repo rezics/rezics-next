@@ -14,6 +14,8 @@ export type BoardPageInput = {
 export type BoardOpeningPageInput = Omit<BoardPageInput, 'limit'>;
 export type BoardThreadPage = Page<ThreadView> & {
     pinnedThreads: readonly ThreadView[];
+    /** The native generation observed with this page's candidates and confirmed after disclosure. */
+    pinRevision: string;
     anchors: readonly AnchoredPosition[];
     /** The oldest returned active-rank row's materialization time, or null when no active row was returned. */
     rankRefreshedAt: string | null;
@@ -44,3 +46,13 @@ export declare function listBoardThreads(dependencies: ContentBoardDependencies,
 /** One native opening cohort: at most twenty ordinary candidates are disclosed,
  * while one raw lookahead only determines whether the same source can continue. */
 export declare function listBoardOpeningThreads(dependencies: ContentBoardDependencies, boardId: string, context: ReadContext, input?: BoardOpeningPageInput): Promise<BoardThreadPage>;
+export declare const BOARD_RECENT_THREAD_LIMIT = 3;
+/** A small original newest prefix, using the Board opening's native ordered
+ * candidate source and exact disclosure. No pins, refills, rank or history reads.
+ * Retain private source witnesses through the containing page's foreign work.
+ */
+export declare function observeBoardRecentThreads(dependencies: ContentBoardDependencies, boardId: string, context: ReadContext): Promise<{
+    threads: ThreadView[];
+    complete: boolean;
+    current(): Promise<boolean>;
+}>;

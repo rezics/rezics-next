@@ -1027,7 +1027,19 @@
       "owner": "web",
       "paths": ["packages/client/src/**"],
       "publicEntries": ["@rezics/client"],
-      "allowedDependencies": ["auth-contract", "composition", "definitions", "document", "filter"],
+      "allowedDependencies": [
+        "access-policy",
+        "auth-contract",
+        "bounds",
+        "composition",
+        "definitions",
+        "document",
+        "filter",
+        "money",
+        "operations",
+        "progress",
+        "search-text"
+      ],
       "capabilities": ["typed-client"]
     },
     {

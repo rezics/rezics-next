@@ -19,3 +19,7 @@ export type PersonalScoreCurrentness = (client: Pick<PoolClient, 'query'>, owner
     reason: string;
 }>;
 export declare const unavailablePersonalScoreCurrentness: PersonalScoreCurrentness;
+/** Content's owner-wide fence: identity repair work plus voter standing in this RR snapshot.
+ * Active repair is pending; ineligible standing is unavailable. The version is not inferred from vote rows.
+ */
+export declare const readPersonalScoreCurrentness: PersonalScoreCurrentness;

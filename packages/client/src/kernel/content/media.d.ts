@@ -124,9 +124,28 @@ export declare class InvalidMediaClaimError extends Error {
 export declare class MediaUnavailableError extends Error {
     constructor();
 }
+export declare const AVATAR_UPLOAD_MEDIA_TYPES: ['image/avif', 'image/gif', 'image/jpeg', 'image/png', 'image/webp'];
+export declare const AVATAR_UPLOAD_MAX_BYTES = 20971520;
+export type AvatarUploadAdvice = {
+    viewerState: 'signed_in';
+    viewer: {
+        accountId: string;
+    };
+    target: {
+        containerId: string;
+        purpose: 'avatar';
+    };
+    constraints: {
+        mediaTypes: typeof AVATAR_UPLOAD_MEDIA_TYPES;
+        maxByteCount: 20_971_520;
+    };
+    allowedActions: ['upload'] | [];
+};
 export declare function reserveMedia(dependencies: MediaDependencies, actor: Actor, input: MediaReservationInput, context: RequestContext, newThreadTarget?: NewThreadMediaTarget): Promise<CommandOutcome<Readonly<{
     mediaId: MediaId;
 }>>>;
+/** Observe current self-avatar upload admission. This is not a creation grant or receipt. */
+export declare function readAvatarUploadAdvice(dependencies: MediaDependencies, actor: Actor, deadline: number): Promise<AvatarUploadAdvice>;
 export declare function completeMedia(dependencies: MediaDependencies, actor: Actor, mediaId: MediaId, input: MediaCompletionInput, context: RequestContext): Promise<CommandOutcome<Readonly<{
     mediaId: MediaId;
     state: 'uploaded';

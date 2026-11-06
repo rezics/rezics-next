@@ -59,7 +59,7 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
     schemas: {};
     response: {};
     error: [];
-}, "post", "/v1/pages/$read", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
+}, "post", "/v1/pages/$previewDraft", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
     body: import("typebox").TAny;
     query: import("typebox").TObject<{
         target: import("typebox").TOptional<import("typebox").TString>;
@@ -89,11 +89,77 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             }>;
             document: import("typebox").TAny;
             views: import("typebox").TOptional<import("typebox").TArray<import("typebox").TString>>;
+            catalogue: import("typebox").TOptional<import("typebox").TObject<{
+                state: import("typebox").TUnion<[import("typebox").TLiteral<"released">, import("typebox").TLiteral<"unsupported">, import("typebox").TLiteral<"unavailable">]>;
+                type: import("typebox").TString;
+                digest: import("typebox").TOptional<import("typebox").TString>;
+                definitions: import("typebox").TOptional<import("typebox").TObject<{
+                    types: import("typebox").TRecord<"^.*$", import("typebox").TAny>;
+                    properties: import("typebox").TRecord<"^.*$", import("typebox").TAny>;
+                }>>;
+                directions: import("typebox").TOptional<import("typebox").TArray<import("typebox").TUnion<[import("typebox").TObject<{
+                    state: import("typebox").TLiteral<"admitted">;
+                    property: import("typebox").TString;
+                    direction: import("typebox").TUnion<[import("typebox").TLiteral<"forward">, import("typebox").TLiteral<"inverse">]>;
+                    inverse: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                    sourceTypes: import("typebox").TArray<import("typebox").TString>;
+                    targetTypes: import("typebox").TArray<import("typebox").TString>;
+                    viaQualifier: import("typebox").TOptional<import("typebox").TString>;
+                    release: import("typebox").TString;
+                    qualifiers: import("typebox").TArray<import("typebox").TObject<{
+                        id: import("typebox").TString;
+                        datatype: import("typebox").TString;
+                        labels: import("typebox").TRecord<"^.*$", import("typebox").TString>;
+                    }>>;
+                }>, import("typebox").TObject<{
+                    state: import("typebox").TUnion<[import("typebox").TLiteral<"unsupported">, import("typebox").TLiteral<"unavailable">]>;
+                    property: import("typebox").TString;
+                    direction: import("typebox").TUnion<[import("typebox").TLiteral<"forward">, import("typebox").TLiteral<"inverse">]>;
+                    release: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                    reason: import("typebox").TUnion<[import("typebox").TLiteral<"missing-release-pin">, import("typebox").TLiteral<"stale-release">, import("typebox").TLiteral<"missing-property">, import("typebox").TLiteral<"missing-inverse">, import("typebox").TLiteral<"ambiguous-inverse">, import("typebox").TLiteral<"inapplicable-type">, import("typebox").TLiteral<"stale-descriptor">]>;
+                }>]>>>;
+            }>>;
+            viewer: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                state: import("typebox").TUnion<[import("typebox").TLiteral<"anonymous">, import("typebox").TLiteral<"account">]>;
+                account: import("typebox").TOptional<import("typebox").TString>;
+                context: import("typebox").TString;
+                actions: import("typebox").TObject<{
+                    statementPropose: import("typebox").TUnion<[import("typebox").TLiteral<"allowed">, import("typebox").TLiteral<"denied">, import("typebox").TLiteral<"unavailable">]>;
+                }>;
+            }>, import("typebox").TObject<{
+                kind: import("typebox").TUnion<[import("typebox").TLiteral<"anonymous">, import("typebox").TLiteral<"account">]>;
+                account: import("typebox").TOptional<import("typebox").TString>;
+            }>]>>;
             reads: import("typebox").TRecord<"^.*$", import("typebox").TObject<{
                 status: import("typebox").TInteger;
                 body: import("typebox").TAny;
                 headers: import("typebox").TOptional<import("typebox").TRecord<"^.*$", import("typebox").TString>>;
             }>>;
+            meanings: import("typebox").TOptional<import("typebox").TRecord<"^.*$", import("typebox").TObject<{
+                text: import("typebox").TString;
+                lang: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+            }>>>;
+            unavailable: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                id: import("typebox").TString;
+                admitted: import("typebox").TLiteral<false>;
+            }>>>;
+            actions: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TArray<import("typebox").TObject<{
+                action: import("typebox").TString;
+                operationId: import("typebox").TString;
+                state: import("typebox").TUnion<[import("typebox").TLiteral<"allowed">, import("typebox").TLiteral<"denied">, import("typebox").TLiteral<"unavailable">, import("typebox").TLiteral<"unsupported">, import("typebox").TLiteral<"absent">, import("typebox").TLiteral<"withheld">]>;
+            }>>, import("typebox").TObject<{
+                status: import("typebox").TLiteral<"ready">;
+                viewerActions: import("typebox").TArray<import("typebox").TObject<{
+                    action: import("typebox").TString;
+                    operations: import("typebox").TArray<import("typebox").TString>;
+                }>>;
+            }>, import("typebox").TObject<{
+                status: import("typebox").TLiteral<"withheld">;
+            }>, import("typebox").TObject<{
+                status: import("typebox").TLiteral<"unavailable">;
+            }>, import("typebox").TObject<{
+                status: import("typebox").TLiteral<"denied">;
+            }>]>>;
         }> & {
             headers: {
                 readonly 'cache-control': import("typebox").TString;
@@ -120,7 +186,7 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         401: import("typebox").TObject<{
@@ -134,7 +200,21 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
+            }>>>;
+        }>;
+        403: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         404: import("typebox").TObject<{
@@ -148,7 +228,7 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         503: import("typebox").TObject<{
@@ -162,7 +242,7 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
     };
@@ -176,7 +256,7 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             bearerAuth?: never;
         })[];
     };
-}, {}, "/v1/pages/$read">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ body, request, authorize, admission, job, actor, session: requestSession, set }: {
+}, {}, "/v1/pages/$previewDraft">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ body: envelope, request: callerRequest, authorize, admission, job, actor: caller, session: requestSession, set, }: {
     server: import("elysia").Server | null;
     redirect: import("elysia").redirect;
     set: {
@@ -210,11 +290,77 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             };
             document: any;
             views?: string[];
+            catalogue?: {
+                state: "released" | "unavailable" | "unsupported";
+                type: string;
+                digest?: string;
+                definitions?: {
+                    types: Record<string, any>;
+                    properties: Record<string, any>;
+                };
+                directions?: ({
+                    state: "admitted";
+                    property: string;
+                    direction: "forward" | "inverse";
+                    inverse: string | null;
+                    sourceTypes: string[];
+                    targetTypes: string[];
+                    viaQualifier?: string;
+                    release: string;
+                    qualifiers: {
+                        id: string;
+                        datatype: string;
+                        labels: Record<string, string>;
+                    }[];
+                } | {
+                    state: "unavailable" | "unsupported";
+                    property: string;
+                    direction: "forward" | "inverse";
+                    release: string | null;
+                    reason: "ambiguous-inverse" | "inapplicable-type" | "missing-inverse" | "missing-property" | "missing-release-pin" | "stale-descriptor" | "stale-release";
+                })[];
+            };
+            viewer?: {
+                state: "account" | "anonymous";
+                account?: string;
+                context: string;
+                actions: {
+                    statementPropose: "allowed" | "denied" | "unavailable";
+                };
+            } | {
+                kind: "account" | "anonymous";
+                account?: string;
+            };
             reads: Record<string, {
                 status: number;
                 body: any;
                 headers?: Record<string, string>;
             }>;
+            meanings?: Record<string, {
+                text: string;
+                lang: string | null;
+            }>;
+            unavailable?: {
+                id: string;
+                admitted: false;
+            }[];
+            actions?: {
+                action: string;
+                operationId: string;
+                state: "absent" | "allowed" | "denied" | "unavailable" | "unsupported" | "withheld";
+            }[] | {
+                status: "ready";
+                viewerActions: {
+                    action: string;
+                    operations: string[];
+                }[];
+            } | {
+                status: "withheld";
+            } | {
+                status: "unavailable";
+            } | {
+                status: "denied";
+            };
         };
         308: {
             redirect: {
@@ -234,6 +380,17 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             errors: unknown;
         };
         401: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail: unknown;
+            errors: unknown;
+        };
+        403: {
             type: unknown;
             title: unknown;
             status: number;
@@ -292,11 +449,77 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             };
             document: any;
             views?: string[];
+            catalogue?: {
+                state: "released" | "unavailable" | "unsupported";
+                type: string;
+                digest?: string;
+                definitions?: {
+                    types: Record<string, any>;
+                    properties: Record<string, any>;
+                };
+                directions?: ({
+                    state: "admitted";
+                    property: string;
+                    direction: "forward" | "inverse";
+                    inverse: string | null;
+                    sourceTypes: string[];
+                    targetTypes: string[];
+                    viaQualifier?: string;
+                    release: string;
+                    qualifiers: {
+                        id: string;
+                        datatype: string;
+                        labels: Record<string, string>;
+                    }[];
+                } | {
+                    state: "unavailable" | "unsupported";
+                    property: string;
+                    direction: "forward" | "inverse";
+                    release: string | null;
+                    reason: "ambiguous-inverse" | "inapplicable-type" | "missing-inverse" | "missing-property" | "missing-release-pin" | "stale-descriptor" | "stale-release";
+                })[];
+            };
+            viewer?: {
+                state: "account" | "anonymous";
+                account?: string;
+                context: string;
+                actions: {
+                    statementPropose: "allowed" | "denied" | "unavailable";
+                };
+            } | {
+                kind: "account" | "anonymous";
+                account?: string;
+            };
             reads: Record<string, {
                 status: number;
                 body: any;
                 headers?: Record<string, string>;
             }>;
+            meanings?: Record<string, {
+                text: string;
+                lang: string | null;
+            }>;
+            unavailable?: {
+                id: string;
+                admitted: false;
+            }[];
+            actions?: {
+                action: string;
+                operationId: string;
+                state: "absent" | "allowed" | "denied" | "unavailable" | "unsupported" | "withheld";
+            }[] | {
+                status: "ready";
+                viewerActions: {
+                    action: string;
+                    operations: string[];
+                }[];
+            } | {
+                status: "withheld";
+            } | {
+                status: "unavailable";
+            } | {
+                status: "denied";
+            };
         };
         308: {
             redirect: {
@@ -316,6 +539,17 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             errors: unknown;
         };
         401: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail: unknown;
+            errors: unknown;
+        };
+        403: {
             type: unknown;
             title: unknown;
             status: number;
@@ -379,11 +613,77 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
                 }>;
                 document: import("typebox").TAny;
                 views: import("typebox").TOptional<import("typebox").TArray<import("typebox").TString>>;
+                catalogue: import("typebox").TOptional<import("typebox").TObject<{
+                    state: import("typebox").TUnion<[import("typebox").TLiteral<"released">, import("typebox").TLiteral<"unsupported">, import("typebox").TLiteral<"unavailable">]>;
+                    type: import("typebox").TString;
+                    digest: import("typebox").TOptional<import("typebox").TString>;
+                    definitions: import("typebox").TOptional<import("typebox").TObject<{
+                        types: import("typebox").TRecord<"^.*$", import("typebox").TAny>;
+                        properties: import("typebox").TRecord<"^.*$", import("typebox").TAny>;
+                    }>>;
+                    directions: import("typebox").TOptional<import("typebox").TArray<import("typebox").TUnion<[import("typebox").TObject<{
+                        state: import("typebox").TLiteral<"admitted">;
+                        property: import("typebox").TString;
+                        direction: import("typebox").TUnion<[import("typebox").TLiteral<"forward">, import("typebox").TLiteral<"inverse">]>;
+                        inverse: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                        sourceTypes: import("typebox").TArray<import("typebox").TString>;
+                        targetTypes: import("typebox").TArray<import("typebox").TString>;
+                        viaQualifier: import("typebox").TOptional<import("typebox").TString>;
+                        release: import("typebox").TString;
+                        qualifiers: import("typebox").TArray<import("typebox").TObject<{
+                            id: import("typebox").TString;
+                            datatype: import("typebox").TString;
+                            labels: import("typebox").TRecord<"^.*$", import("typebox").TString>;
+                        }>>;
+                    }>, import("typebox").TObject<{
+                        state: import("typebox").TUnion<[import("typebox").TLiteral<"unsupported">, import("typebox").TLiteral<"unavailable">]>;
+                        property: import("typebox").TString;
+                        direction: import("typebox").TUnion<[import("typebox").TLiteral<"forward">, import("typebox").TLiteral<"inverse">]>;
+                        release: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                        reason: import("typebox").TUnion<[import("typebox").TLiteral<"missing-release-pin">, import("typebox").TLiteral<"stale-release">, import("typebox").TLiteral<"missing-property">, import("typebox").TLiteral<"missing-inverse">, import("typebox").TLiteral<"ambiguous-inverse">, import("typebox").TLiteral<"inapplicable-type">, import("typebox").TLiteral<"stale-descriptor">]>;
+                    }>]>>>;
+                }>>;
+                viewer: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                    state: import("typebox").TUnion<[import("typebox").TLiteral<"anonymous">, import("typebox").TLiteral<"account">]>;
+                    account: import("typebox").TOptional<import("typebox").TString>;
+                    context: import("typebox").TString;
+                    actions: import("typebox").TObject<{
+                        statementPropose: import("typebox").TUnion<[import("typebox").TLiteral<"allowed">, import("typebox").TLiteral<"denied">, import("typebox").TLiteral<"unavailable">]>;
+                    }>;
+                }>, import("typebox").TObject<{
+                    kind: import("typebox").TUnion<[import("typebox").TLiteral<"anonymous">, import("typebox").TLiteral<"account">]>;
+                    account: import("typebox").TOptional<import("typebox").TString>;
+                }>]>>;
                 reads: import("typebox").TRecord<"^.*$", import("typebox").TObject<{
                     status: import("typebox").TInteger;
                     body: import("typebox").TAny;
                     headers: import("typebox").TOptional<import("typebox").TRecord<"^.*$", import("typebox").TString>>;
                 }>>;
+                meanings: import("typebox").TOptional<import("typebox").TRecord<"^.*$", import("typebox").TObject<{
+                    text: import("typebox").TString;
+                    lang: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                }>>>;
+                unavailable: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                    id: import("typebox").TString;
+                    admitted: import("typebox").TLiteral<false>;
+                }>>>;
+                actions: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TArray<import("typebox").TObject<{
+                    action: import("typebox").TString;
+                    operationId: import("typebox").TString;
+                    state: import("typebox").TUnion<[import("typebox").TLiteral<"allowed">, import("typebox").TLiteral<"denied">, import("typebox").TLiteral<"unavailable">, import("typebox").TLiteral<"unsupported">, import("typebox").TLiteral<"absent">, import("typebox").TLiteral<"withheld">]>;
+                }>>, import("typebox").TObject<{
+                    status: import("typebox").TLiteral<"ready">;
+                    viewerActions: import("typebox").TArray<import("typebox").TObject<{
+                        action: import("typebox").TString;
+                        operations: import("typebox").TArray<import("typebox").TString>;
+                    }>>;
+                }>, import("typebox").TObject<{
+                    status: import("typebox").TLiteral<"withheld">;
+                }>, import("typebox").TObject<{
+                    status: import("typebox").TLiteral<"unavailable">;
+                }>, import("typebox").TObject<{
+                    status: import("typebox").TLiteral<"denied">;
+                }>]>>;
             }> & {
                 headers: {
                     readonly 'cache-control': import("typebox").TString;
@@ -410,7 +710,7 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
             401: import("typebox").TObject<{
@@ -424,7 +724,21 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
+                }>>>;
+            }>;
+            403: import("typebox").TObject<{
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
+                status: import("typebox").TLiteral<number>;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                request_id: import("typebox").TString;
+                detail?: import("typebox").TOptional<import("typebox").TString>;
+                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                    pointer: import("typebox").TString;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
             404: import("typebox").TObject<{
@@ -438,7 +752,7 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
             503: import("typebox").TObject<{
@@ -452,7 +766,1021 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
+                }>>>;
+            }>;
+        };
+        detail: {
+            operationId: string;
+            'x-exposure': string;
+            'x-action': string;
+            security: ({
+                bearerAuth: never[];
+            } | {
+                bearerAuth?: never;
+            })[];
+        };
+    }, {}, "/v1/pages/$previewDraft">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
+        derive: {
+            readonly admission: import("../../http/admission.ts").Admission;
+            readonly job: {
+                deadline: number;
+                signal: AbortSignal;
+            };
+            readonly actor: import("../../request/access.ts").AccountActor | {
+                kind: 'anonymous';
+            };
+            readonly session: {
+                readonly components: import("../../tokens/session.ts").SessionComponent[];
+                record(component: import("../../tokens/session.ts").SessionComponent): void;
+            };
+            readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<import("../../request/access.ts").AccessCheck>;
+            readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
+        };
+    }>>) => import("elysia/types").MaybePromise<void>;
+    readonly path: string;
+    route?: string;
+    rid?: string;
+    request: Request;
+    store: {};
+    body: unknown;
+    query: {
+        target?: string;
+    };
+    params: {};
+    headers: Record<string, string | undefined>;
+    cookie: Record<string, import("elysia").Cookie<unknown>>;
+    readonly admission: import("../../http/admission.ts").Admission;
+    readonly job: {
+        deadline: number;
+        signal: AbortSignal;
+    };
+    readonly actor: import("../../request/access.ts").AccountActor | {
+        kind: 'anonymous';
+    };
+    readonly session: {
+        readonly components: import("../../tokens/session.ts").SessionComponent[];
+        record(component: import("../../tokens/session.ts").SessionComponent): void;
+    };
+    readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<import("../../request/access.ts").AccessCheck>;
+    readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
+}) => Promise<Response>, {
+    body: import("typebox").TAny;
+    query: import("typebox").TObject<{
+        target: import("typebox").TOptional<import("typebox").TString>;
+    }>;
+    response: {
+        200: import("typebox").TObject<{
+            subject: import("typebox").TOptional<import("typebox").TString>;
+            account: import("typebox").TOptional<import("typebox").TString>;
+            context: import("typebox").TOptional<import("typebox").TObject<{
+                id: import("typebox").TString;
+                population: import("typebox").TUnion<[import("typebox").TObject<{
+                    kind: import("typebox").TLiteral<"global">;
+                }>, import("typebox").TObject<{
+                    kind: import("typebox").TLiteral<"realm">;
+                    id: import("typebox").TString;
+                    title: import("typebox").TString;
+                }>]>;
+            }>>;
+            continuation: import("typebox").TOptional<import("typebox").TObject<{
+                node: import("typebox").TString;
+                cursor: import("typebox").TString;
+            }>>;
+            profile: import("typebox").TString;
+            template: import("typebox").TObject<{
+                scope: import("typebox").TUnion<[import("typebox").TLiteral<"route">, import("typebox").TLiteral<"type">, import("typebox").TLiteral<"base">, import("typebox").TLiteral<"generic">]>;
+                key: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+            }>;
+            document: import("typebox").TAny;
+            views: import("typebox").TOptional<import("typebox").TArray<import("typebox").TString>>;
+            catalogue: import("typebox").TOptional<import("typebox").TObject<{
+                state: import("typebox").TUnion<[import("typebox").TLiteral<"released">, import("typebox").TLiteral<"unsupported">, import("typebox").TLiteral<"unavailable">]>;
+                type: import("typebox").TString;
+                digest: import("typebox").TOptional<import("typebox").TString>;
+                definitions: import("typebox").TOptional<import("typebox").TObject<{
+                    types: import("typebox").TRecord<"^.*$", import("typebox").TAny>;
+                    properties: import("typebox").TRecord<"^.*$", import("typebox").TAny>;
+                }>>;
+                directions: import("typebox").TOptional<import("typebox").TArray<import("typebox").TUnion<[import("typebox").TObject<{
+                    state: import("typebox").TLiteral<"admitted">;
+                    property: import("typebox").TString;
+                    direction: import("typebox").TUnion<[import("typebox").TLiteral<"forward">, import("typebox").TLiteral<"inverse">]>;
+                    inverse: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                    sourceTypes: import("typebox").TArray<import("typebox").TString>;
+                    targetTypes: import("typebox").TArray<import("typebox").TString>;
+                    viaQualifier: import("typebox").TOptional<import("typebox").TString>;
+                    release: import("typebox").TString;
+                    qualifiers: import("typebox").TArray<import("typebox").TObject<{
+                        id: import("typebox").TString;
+                        datatype: import("typebox").TString;
+                        labels: import("typebox").TRecord<"^.*$", import("typebox").TString>;
+                    }>>;
+                }>, import("typebox").TObject<{
+                    state: import("typebox").TUnion<[import("typebox").TLiteral<"unsupported">, import("typebox").TLiteral<"unavailable">]>;
+                    property: import("typebox").TString;
+                    direction: import("typebox").TUnion<[import("typebox").TLiteral<"forward">, import("typebox").TLiteral<"inverse">]>;
+                    release: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                    reason: import("typebox").TUnion<[import("typebox").TLiteral<"missing-release-pin">, import("typebox").TLiteral<"stale-release">, import("typebox").TLiteral<"missing-property">, import("typebox").TLiteral<"missing-inverse">, import("typebox").TLiteral<"ambiguous-inverse">, import("typebox").TLiteral<"inapplicable-type">, import("typebox").TLiteral<"stale-descriptor">]>;
+                }>]>>>;
+            }>>;
+            viewer: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                state: import("typebox").TUnion<[import("typebox").TLiteral<"anonymous">, import("typebox").TLiteral<"account">]>;
+                account: import("typebox").TOptional<import("typebox").TString>;
+                context: import("typebox").TString;
+                actions: import("typebox").TObject<{
+                    statementPropose: import("typebox").TUnion<[import("typebox").TLiteral<"allowed">, import("typebox").TLiteral<"denied">, import("typebox").TLiteral<"unavailable">]>;
+                }>;
+            }>, import("typebox").TObject<{
+                kind: import("typebox").TUnion<[import("typebox").TLiteral<"anonymous">, import("typebox").TLiteral<"account">]>;
+                account: import("typebox").TOptional<import("typebox").TString>;
+            }>]>>;
+            reads: import("typebox").TRecord<"^.*$", import("typebox").TObject<{
+                status: import("typebox").TInteger;
+                body: import("typebox").TAny;
+                headers: import("typebox").TOptional<import("typebox").TRecord<"^.*$", import("typebox").TString>>;
+            }>>;
+            meanings: import("typebox").TOptional<import("typebox").TRecord<"^.*$", import("typebox").TObject<{
+                text: import("typebox").TString;
+                lang: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+            }>>>;
+            unavailable: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                id: import("typebox").TString;
+                admitted: import("typebox").TLiteral<false>;
+            }>>>;
+            actions: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TArray<import("typebox").TObject<{
+                action: import("typebox").TString;
+                operationId: import("typebox").TString;
+                state: import("typebox").TUnion<[import("typebox").TLiteral<"allowed">, import("typebox").TLiteral<"denied">, import("typebox").TLiteral<"unavailable">, import("typebox").TLiteral<"unsupported">, import("typebox").TLiteral<"absent">, import("typebox").TLiteral<"withheld">]>;
+            }>>, import("typebox").TObject<{
+                status: import("typebox").TLiteral<"ready">;
+                viewerActions: import("typebox").TArray<import("typebox").TObject<{
+                    action: import("typebox").TString;
+                    operations: import("typebox").TArray<import("typebox").TString>;
+                }>>;
+            }>, import("typebox").TObject<{
+                status: import("typebox").TLiteral<"withheld">;
+            }>, import("typebox").TObject<{
+                status: import("typebox").TLiteral<"unavailable">;
+            }>, import("typebox").TObject<{
+                status: import("typebox").TLiteral<"denied">;
+            }>]>>;
+        }> & {
+            headers: {
+                readonly 'cache-control': import("typebox").TString;
+            };
+        };
+        308: import("typebox").TObject<{
+            redirect: import("typebox").TObject<{
+                from: import("typebox").TString;
+                to: import("typebox").TString;
+            }>;
+        }> & {
+            headers: {
+                readonly location: import("typebox").TString;
+            };
+        };
+        400: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
+            }>>>;
+        }>;
+        401: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
+            }>>>;
+        }>;
+        403: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
+            }>>>;
+        }>;
+        404: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
+            }>>>;
+        }>;
+        503: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
+            }>>>;
+        }>;
+    };
+    detail: {
+        operationId: string;
+        'x-exposure': string;
+        'x-action': string;
+        security: ({
+            bearerAuth: never[];
+        } | {
+            bearerAuth?: never;
+        })[];
+    };
+}> & import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
+    typebox: {};
+    error: [{
+        error: Error;
+        response: {};
+        passes: false;
+        '~return': Response;
+        '~catchAll': true;
+    }];
+}, {
+    schema: {};
+    schemas: {};
+    macro: {};
+    macroFn: {};
+    parser: {};
+    response: {};
+}, {
+    health: {
+        get: {
+            body: unknown;
+            params: {};
+            query: unknown;
+            headers: unknown;
+            response: {
+                200: {
+                    status: 'ok';
+                };
+            };
+            error: never;
+        };
+    };
+}, import("elysia").DefaultEphemeral, {
+    derive: {
+        readonly admission: import("../../http/admission.ts").Admission;
+        readonly job: {
+            deadline: number;
+            signal: AbortSignal;
+        };
+        readonly actor: import("../../request/access.ts").AccountActor | {
+            kind: 'anonymous';
+        };
+        readonly session: {
+            readonly components: import("../../tokens/session.ts").SessionComponent[];
+            record(component: import("../../tokens/session.ts").SessionComponent): void;
+        };
+        readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<import("../../request/access.ts").AccessCheck>;
+        readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
+    };
+    schema: {};
+    schemas: {};
+    response: {};
+    error: [];
+}, "post", "/v1/pages/$read", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
+    body: import("typebox").TAny;
+    query: import("typebox").TObject<{
+        target: import("typebox").TOptional<import("typebox").TString>;
+    }>;
+    response: {
+        200: import("typebox").TObject<{
+            subject: import("typebox").TOptional<import("typebox").TString>;
+            account: import("typebox").TOptional<import("typebox").TString>;
+            context: import("typebox").TOptional<import("typebox").TObject<{
+                id: import("typebox").TString;
+                population: import("typebox").TUnion<[import("typebox").TObject<{
+                    kind: import("typebox").TLiteral<"global">;
+                }>, import("typebox").TObject<{
+                    kind: import("typebox").TLiteral<"realm">;
+                    id: import("typebox").TString;
+                    title: import("typebox").TString;
+                }>]>;
+            }>>;
+            continuation: import("typebox").TOptional<import("typebox").TObject<{
+                node: import("typebox").TString;
+                cursor: import("typebox").TString;
+            }>>;
+            profile: import("typebox").TString;
+            template: import("typebox").TObject<{
+                scope: import("typebox").TUnion<[import("typebox").TLiteral<"route">, import("typebox").TLiteral<"type">, import("typebox").TLiteral<"base">, import("typebox").TLiteral<"generic">]>;
+                key: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+            }>;
+            document: import("typebox").TAny;
+            views: import("typebox").TOptional<import("typebox").TArray<import("typebox").TString>>;
+            catalogue: import("typebox").TOptional<import("typebox").TObject<{
+                state: import("typebox").TUnion<[import("typebox").TLiteral<"released">, import("typebox").TLiteral<"unsupported">, import("typebox").TLiteral<"unavailable">]>;
+                type: import("typebox").TString;
+                digest: import("typebox").TOptional<import("typebox").TString>;
+                definitions: import("typebox").TOptional<import("typebox").TObject<{
+                    types: import("typebox").TRecord<"^.*$", import("typebox").TAny>;
+                    properties: import("typebox").TRecord<"^.*$", import("typebox").TAny>;
+                }>>;
+                directions: import("typebox").TOptional<import("typebox").TArray<import("typebox").TUnion<[import("typebox").TObject<{
+                    state: import("typebox").TLiteral<"admitted">;
+                    property: import("typebox").TString;
+                    direction: import("typebox").TUnion<[import("typebox").TLiteral<"forward">, import("typebox").TLiteral<"inverse">]>;
+                    inverse: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                    sourceTypes: import("typebox").TArray<import("typebox").TString>;
+                    targetTypes: import("typebox").TArray<import("typebox").TString>;
+                    viaQualifier: import("typebox").TOptional<import("typebox").TString>;
+                    release: import("typebox").TString;
+                    qualifiers: import("typebox").TArray<import("typebox").TObject<{
+                        id: import("typebox").TString;
+                        datatype: import("typebox").TString;
+                        labels: import("typebox").TRecord<"^.*$", import("typebox").TString>;
+                    }>>;
+                }>, import("typebox").TObject<{
+                    state: import("typebox").TUnion<[import("typebox").TLiteral<"unsupported">, import("typebox").TLiteral<"unavailable">]>;
+                    property: import("typebox").TString;
+                    direction: import("typebox").TUnion<[import("typebox").TLiteral<"forward">, import("typebox").TLiteral<"inverse">]>;
+                    release: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                    reason: import("typebox").TUnion<[import("typebox").TLiteral<"missing-release-pin">, import("typebox").TLiteral<"stale-release">, import("typebox").TLiteral<"missing-property">, import("typebox").TLiteral<"missing-inverse">, import("typebox").TLiteral<"ambiguous-inverse">, import("typebox").TLiteral<"inapplicable-type">, import("typebox").TLiteral<"stale-descriptor">]>;
+                }>]>>>;
+            }>>;
+            viewer: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                state: import("typebox").TUnion<[import("typebox").TLiteral<"anonymous">, import("typebox").TLiteral<"account">]>;
+                account: import("typebox").TOptional<import("typebox").TString>;
+                context: import("typebox").TString;
+                actions: import("typebox").TObject<{
+                    statementPropose: import("typebox").TUnion<[import("typebox").TLiteral<"allowed">, import("typebox").TLiteral<"denied">, import("typebox").TLiteral<"unavailable">]>;
+                }>;
+            }>, import("typebox").TObject<{
+                kind: import("typebox").TUnion<[import("typebox").TLiteral<"anonymous">, import("typebox").TLiteral<"account">]>;
+                account: import("typebox").TOptional<import("typebox").TString>;
+            }>]>>;
+            reads: import("typebox").TRecord<"^.*$", import("typebox").TObject<{
+                status: import("typebox").TInteger;
+                body: import("typebox").TAny;
+                headers: import("typebox").TOptional<import("typebox").TRecord<"^.*$", import("typebox").TString>>;
+            }>>;
+            meanings: import("typebox").TOptional<import("typebox").TRecord<"^.*$", import("typebox").TObject<{
+                text: import("typebox").TString;
+                lang: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+            }>>>;
+            unavailable: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                id: import("typebox").TString;
+                admitted: import("typebox").TLiteral<false>;
+            }>>>;
+            actions: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TArray<import("typebox").TObject<{
+                action: import("typebox").TString;
+                operationId: import("typebox").TString;
+                state: import("typebox").TUnion<[import("typebox").TLiteral<"allowed">, import("typebox").TLiteral<"denied">, import("typebox").TLiteral<"unavailable">, import("typebox").TLiteral<"unsupported">, import("typebox").TLiteral<"absent">, import("typebox").TLiteral<"withheld">]>;
+            }>>, import("typebox").TObject<{
+                status: import("typebox").TLiteral<"ready">;
+                viewerActions: import("typebox").TArray<import("typebox").TObject<{
+                    action: import("typebox").TString;
+                    operations: import("typebox").TArray<import("typebox").TString>;
+                }>>;
+            }>, import("typebox").TObject<{
+                status: import("typebox").TLiteral<"withheld">;
+            }>, import("typebox").TObject<{
+                status: import("typebox").TLiteral<"unavailable">;
+            }>, import("typebox").TObject<{
+                status: import("typebox").TLiteral<"denied">;
+            }>]>>;
+        }> & {
+            headers: {
+                readonly 'cache-control': import("typebox").TString;
+            };
+        };
+        308: import("typebox").TObject<{
+            redirect: import("typebox").TObject<{
+                from: import("typebox").TString;
+                to: import("typebox").TString;
+            }>;
+        }> & {
+            headers: {
+                readonly location: import("typebox").TString;
+            };
+        };
+        400: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
+            }>>>;
+        }>;
+        401: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
+            }>>>;
+        }>;
+        403: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
+            }>>>;
+        }>;
+        404: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
+            }>>>;
+        }>;
+        503: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
+            }>>>;
+        }>;
+    };
+    detail: {
+        operationId: string;
+        'x-exposure': string;
+        'x-action': string;
+        security: ({
+            bearerAuth: never[];
+        } | {
+            bearerAuth?: never;
+        })[];
+    };
+}, {}, "/v1/pages/$read">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ body: envelope, request: callerRequest, authorize, admission, job, actor: caller, session: requestSession, set, }: {
+    server: import("elysia").Server | null;
+    redirect: import("elysia").redirect;
+    set: {
+        headers: import("elysia").HTTPHeaders;
+        status?: number | keyof import("elysia").StatusMap;
+        cookie?: Record<string, import("elysia").BaseCookie>;
+        redirect?: never;
+    };
+    status: import("elysia").SelectiveStatus<{
+        200: {
+            subject?: string;
+            account?: string;
+            context?: {
+                id: string;
+                population: {
+                    kind: "global";
+                } | {
+                    kind: "realm";
+                    id: string;
+                    title: string;
+                };
+            };
+            continuation?: {
+                node: string;
+                cursor: string;
+            };
+            profile: string;
+            template: {
+                scope: "base" | "generic" | "route" | "type";
+                key: string | null;
+            };
+            document: any;
+            views?: string[];
+            catalogue?: {
+                state: "released" | "unavailable" | "unsupported";
+                type: string;
+                digest?: string;
+                definitions?: {
+                    types: Record<string, any>;
+                    properties: Record<string, any>;
+                };
+                directions?: ({
+                    state: "admitted";
+                    property: string;
+                    direction: "forward" | "inverse";
+                    inverse: string | null;
+                    sourceTypes: string[];
+                    targetTypes: string[];
+                    viaQualifier?: string;
+                    release: string;
+                    qualifiers: {
+                        id: string;
+                        datatype: string;
+                        labels: Record<string, string>;
+                    }[];
+                } | {
+                    state: "unavailable" | "unsupported";
+                    property: string;
+                    direction: "forward" | "inverse";
+                    release: string | null;
+                    reason: "ambiguous-inverse" | "inapplicable-type" | "missing-inverse" | "missing-property" | "missing-release-pin" | "stale-descriptor" | "stale-release";
+                })[];
+            };
+            viewer?: {
+                state: "account" | "anonymous";
+                account?: string;
+                context: string;
+                actions: {
+                    statementPropose: "allowed" | "denied" | "unavailable";
+                };
+            } | {
+                kind: "account" | "anonymous";
+                account?: string;
+            };
+            reads: Record<string, {
+                status: number;
+                body: any;
+                headers?: Record<string, string>;
+            }>;
+            meanings?: Record<string, {
+                text: string;
+                lang: string | null;
+            }>;
+            unavailable?: {
+                id: string;
+                admitted: false;
+            }[];
+            actions?: {
+                action: string;
+                operationId: string;
+                state: "absent" | "allowed" | "denied" | "unavailable" | "unsupported" | "withheld";
+            }[] | {
+                status: "ready";
+                viewerActions: {
+                    action: string;
+                    operations: string[];
+                }[];
+            } | {
+                status: "withheld";
+            } | {
+                status: "unavailable";
+            } | {
+                status: "denied";
+            };
+        };
+        308: {
+            redirect: {
+                from: string;
+                to: string;
+            };
+        };
+        400: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail: unknown;
+            errors: unknown;
+        };
+        401: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail: unknown;
+            errors: unknown;
+        };
+        403: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail: unknown;
+            errors: unknown;
+        };
+        404: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail: unknown;
+            errors: unknown;
+        };
+        503: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail: unknown;
+            errors: unknown;
+        };
+    }>;
+    problem: import("elysia").SelectiveProblem<{
+        200: {
+            subject?: string;
+            account?: string;
+            context?: {
+                id: string;
+                population: {
+                    kind: "global";
+                } | {
+                    kind: "realm";
+                    id: string;
+                    title: string;
+                };
+            };
+            continuation?: {
+                node: string;
+                cursor: string;
+            };
+            profile: string;
+            template: {
+                scope: "base" | "generic" | "route" | "type";
+                key: string | null;
+            };
+            document: any;
+            views?: string[];
+            catalogue?: {
+                state: "released" | "unavailable" | "unsupported";
+                type: string;
+                digest?: string;
+                definitions?: {
+                    types: Record<string, any>;
+                    properties: Record<string, any>;
+                };
+                directions?: ({
+                    state: "admitted";
+                    property: string;
+                    direction: "forward" | "inverse";
+                    inverse: string | null;
+                    sourceTypes: string[];
+                    targetTypes: string[];
+                    viaQualifier?: string;
+                    release: string;
+                    qualifiers: {
+                        id: string;
+                        datatype: string;
+                        labels: Record<string, string>;
+                    }[];
+                } | {
+                    state: "unavailable" | "unsupported";
+                    property: string;
+                    direction: "forward" | "inverse";
+                    release: string | null;
+                    reason: "ambiguous-inverse" | "inapplicable-type" | "missing-inverse" | "missing-property" | "missing-release-pin" | "stale-descriptor" | "stale-release";
+                })[];
+            };
+            viewer?: {
+                state: "account" | "anonymous";
+                account?: string;
+                context: string;
+                actions: {
+                    statementPropose: "allowed" | "denied" | "unavailable";
+                };
+            } | {
+                kind: "account" | "anonymous";
+                account?: string;
+            };
+            reads: Record<string, {
+                status: number;
+                body: any;
+                headers?: Record<string, string>;
+            }>;
+            meanings?: Record<string, {
+                text: string;
+                lang: string | null;
+            }>;
+            unavailable?: {
+                id: string;
+                admitted: false;
+            }[];
+            actions?: {
+                action: string;
+                operationId: string;
+                state: "absent" | "allowed" | "denied" | "unavailable" | "unsupported" | "withheld";
+            }[] | {
+                status: "ready";
+                viewerActions: {
+                    action: string;
+                    operations: string[];
+                }[];
+            } | {
+                status: "withheld";
+            } | {
+                status: "unavailable";
+            } | {
+                status: "denied";
+            };
+        };
+        308: {
+            redirect: {
+                from: string;
+                to: string;
+            };
+        };
+        400: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail: unknown;
+            errors: unknown;
+        };
+        401: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail: unknown;
+            errors: unknown;
+        };
+        403: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail: unknown;
+            errors: unknown;
+        };
+        404: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail: unknown;
+            errors: unknown;
+        };
+        503: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail: unknown;
+            errors: unknown;
+        };
+    }>;
+    defer: (fn: import("elysia/types").AfterResponseHandler<NoInfer<import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
+        body: import("typebox").TAny;
+        query: import("typebox").TObject<{
+            target: import("typebox").TOptional<import("typebox").TString>;
+        }>;
+        response: {
+            200: import("typebox").TObject<{
+                subject: import("typebox").TOptional<import("typebox").TString>;
+                account: import("typebox").TOptional<import("typebox").TString>;
+                context: import("typebox").TOptional<import("typebox").TObject<{
+                    id: import("typebox").TString;
+                    population: import("typebox").TUnion<[import("typebox").TObject<{
+                        kind: import("typebox").TLiteral<"global">;
+                    }>, import("typebox").TObject<{
+                        kind: import("typebox").TLiteral<"realm">;
+                        id: import("typebox").TString;
+                        title: import("typebox").TString;
+                    }>]>;
+                }>>;
+                continuation: import("typebox").TOptional<import("typebox").TObject<{
+                    node: import("typebox").TString;
+                    cursor: import("typebox").TString;
+                }>>;
+                profile: import("typebox").TString;
+                template: import("typebox").TObject<{
+                    scope: import("typebox").TUnion<[import("typebox").TLiteral<"route">, import("typebox").TLiteral<"type">, import("typebox").TLiteral<"base">, import("typebox").TLiteral<"generic">]>;
+                    key: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                }>;
+                document: import("typebox").TAny;
+                views: import("typebox").TOptional<import("typebox").TArray<import("typebox").TString>>;
+                catalogue: import("typebox").TOptional<import("typebox").TObject<{
+                    state: import("typebox").TUnion<[import("typebox").TLiteral<"released">, import("typebox").TLiteral<"unsupported">, import("typebox").TLiteral<"unavailable">]>;
+                    type: import("typebox").TString;
+                    digest: import("typebox").TOptional<import("typebox").TString>;
+                    definitions: import("typebox").TOptional<import("typebox").TObject<{
+                        types: import("typebox").TRecord<"^.*$", import("typebox").TAny>;
+                        properties: import("typebox").TRecord<"^.*$", import("typebox").TAny>;
+                    }>>;
+                    directions: import("typebox").TOptional<import("typebox").TArray<import("typebox").TUnion<[import("typebox").TObject<{
+                        state: import("typebox").TLiteral<"admitted">;
+                        property: import("typebox").TString;
+                        direction: import("typebox").TUnion<[import("typebox").TLiteral<"forward">, import("typebox").TLiteral<"inverse">]>;
+                        inverse: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                        sourceTypes: import("typebox").TArray<import("typebox").TString>;
+                        targetTypes: import("typebox").TArray<import("typebox").TString>;
+                        viaQualifier: import("typebox").TOptional<import("typebox").TString>;
+                        release: import("typebox").TString;
+                        qualifiers: import("typebox").TArray<import("typebox").TObject<{
+                            id: import("typebox").TString;
+                            datatype: import("typebox").TString;
+                            labels: import("typebox").TRecord<"^.*$", import("typebox").TString>;
+                        }>>;
+                    }>, import("typebox").TObject<{
+                        state: import("typebox").TUnion<[import("typebox").TLiteral<"unsupported">, import("typebox").TLiteral<"unavailable">]>;
+                        property: import("typebox").TString;
+                        direction: import("typebox").TUnion<[import("typebox").TLiteral<"forward">, import("typebox").TLiteral<"inverse">]>;
+                        release: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                        reason: import("typebox").TUnion<[import("typebox").TLiteral<"missing-release-pin">, import("typebox").TLiteral<"stale-release">, import("typebox").TLiteral<"missing-property">, import("typebox").TLiteral<"missing-inverse">, import("typebox").TLiteral<"ambiguous-inverse">, import("typebox").TLiteral<"inapplicable-type">, import("typebox").TLiteral<"stale-descriptor">]>;
+                    }>]>>>;
+                }>>;
+                viewer: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                    state: import("typebox").TUnion<[import("typebox").TLiteral<"anonymous">, import("typebox").TLiteral<"account">]>;
+                    account: import("typebox").TOptional<import("typebox").TString>;
+                    context: import("typebox").TString;
+                    actions: import("typebox").TObject<{
+                        statementPropose: import("typebox").TUnion<[import("typebox").TLiteral<"allowed">, import("typebox").TLiteral<"denied">, import("typebox").TLiteral<"unavailable">]>;
+                    }>;
+                }>, import("typebox").TObject<{
+                    kind: import("typebox").TUnion<[import("typebox").TLiteral<"anonymous">, import("typebox").TLiteral<"account">]>;
+                    account: import("typebox").TOptional<import("typebox").TString>;
+                }>]>>;
+                reads: import("typebox").TRecord<"^.*$", import("typebox").TObject<{
+                    status: import("typebox").TInteger;
+                    body: import("typebox").TAny;
+                    headers: import("typebox").TOptional<import("typebox").TRecord<"^.*$", import("typebox").TString>>;
+                }>>;
+                meanings: import("typebox").TOptional<import("typebox").TRecord<"^.*$", import("typebox").TObject<{
+                    text: import("typebox").TString;
+                    lang: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                }>>>;
+                unavailable: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                    id: import("typebox").TString;
+                    admitted: import("typebox").TLiteral<false>;
+                }>>>;
+                actions: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TArray<import("typebox").TObject<{
+                    action: import("typebox").TString;
+                    operationId: import("typebox").TString;
+                    state: import("typebox").TUnion<[import("typebox").TLiteral<"allowed">, import("typebox").TLiteral<"denied">, import("typebox").TLiteral<"unavailable">, import("typebox").TLiteral<"unsupported">, import("typebox").TLiteral<"absent">, import("typebox").TLiteral<"withheld">]>;
+                }>>, import("typebox").TObject<{
+                    status: import("typebox").TLiteral<"ready">;
+                    viewerActions: import("typebox").TArray<import("typebox").TObject<{
+                        action: import("typebox").TString;
+                        operations: import("typebox").TArray<import("typebox").TString>;
+                    }>>;
+                }>, import("typebox").TObject<{
+                    status: import("typebox").TLiteral<"withheld">;
+                }>, import("typebox").TObject<{
+                    status: import("typebox").TLiteral<"unavailable">;
+                }>, import("typebox").TObject<{
+                    status: import("typebox").TLiteral<"denied">;
+                }>]>>;
+            }> & {
+                headers: {
+                    readonly 'cache-control': import("typebox").TString;
+                };
+            };
+            308: import("typebox").TObject<{
+                redirect: import("typebox").TObject<{
+                    from: import("typebox").TString;
+                    to: import("typebox").TString;
+                }>;
+            }> & {
+                headers: {
+                    readonly location: import("typebox").TString;
+                };
+            };
+            400: import("typebox").TObject<{
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
+                status: import("typebox").TLiteral<number>;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                request_id: import("typebox").TString;
+                detail?: import("typebox").TOptional<import("typebox").TString>;
+                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                    pointer: import("typebox").TString;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
+                }>>>;
+            }>;
+            401: import("typebox").TObject<{
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
+                status: import("typebox").TLiteral<number>;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                request_id: import("typebox").TString;
+                detail?: import("typebox").TOptional<import("typebox").TString>;
+                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                    pointer: import("typebox").TString;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
+                }>>>;
+            }>;
+            403: import("typebox").TObject<{
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
+                status: import("typebox").TLiteral<number>;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                request_id: import("typebox").TString;
+                detail?: import("typebox").TOptional<import("typebox").TString>;
+                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                    pointer: import("typebox").TString;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
+                }>>>;
+            }>;
+            404: import("typebox").TObject<{
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
+                status: import("typebox").TLiteral<number>;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                request_id: import("typebox").TString;
+                detail?: import("typebox").TOptional<import("typebox").TString>;
+                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                    pointer: import("typebox").TString;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
+                }>>>;
+            }>;
+            503: import("typebox").TObject<{
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
+                status: import("typebox").TLiteral<number>;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                request_id: import("typebox").TString;
+                detail?: import("typebox").TOptional<import("typebox").TString>;
+                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                    pointer: import("typebox").TString;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
         };
@@ -540,11 +1868,77 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             }>;
             document: import("typebox").TAny;
             views: import("typebox").TOptional<import("typebox").TArray<import("typebox").TString>>;
+            catalogue: import("typebox").TOptional<import("typebox").TObject<{
+                state: import("typebox").TUnion<[import("typebox").TLiteral<"released">, import("typebox").TLiteral<"unsupported">, import("typebox").TLiteral<"unavailable">]>;
+                type: import("typebox").TString;
+                digest: import("typebox").TOptional<import("typebox").TString>;
+                definitions: import("typebox").TOptional<import("typebox").TObject<{
+                    types: import("typebox").TRecord<"^.*$", import("typebox").TAny>;
+                    properties: import("typebox").TRecord<"^.*$", import("typebox").TAny>;
+                }>>;
+                directions: import("typebox").TOptional<import("typebox").TArray<import("typebox").TUnion<[import("typebox").TObject<{
+                    state: import("typebox").TLiteral<"admitted">;
+                    property: import("typebox").TString;
+                    direction: import("typebox").TUnion<[import("typebox").TLiteral<"forward">, import("typebox").TLiteral<"inverse">]>;
+                    inverse: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                    sourceTypes: import("typebox").TArray<import("typebox").TString>;
+                    targetTypes: import("typebox").TArray<import("typebox").TString>;
+                    viaQualifier: import("typebox").TOptional<import("typebox").TString>;
+                    release: import("typebox").TString;
+                    qualifiers: import("typebox").TArray<import("typebox").TObject<{
+                        id: import("typebox").TString;
+                        datatype: import("typebox").TString;
+                        labels: import("typebox").TRecord<"^.*$", import("typebox").TString>;
+                    }>>;
+                }>, import("typebox").TObject<{
+                    state: import("typebox").TUnion<[import("typebox").TLiteral<"unsupported">, import("typebox").TLiteral<"unavailable">]>;
+                    property: import("typebox").TString;
+                    direction: import("typebox").TUnion<[import("typebox").TLiteral<"forward">, import("typebox").TLiteral<"inverse">]>;
+                    release: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                    reason: import("typebox").TUnion<[import("typebox").TLiteral<"missing-release-pin">, import("typebox").TLiteral<"stale-release">, import("typebox").TLiteral<"missing-property">, import("typebox").TLiteral<"missing-inverse">, import("typebox").TLiteral<"ambiguous-inverse">, import("typebox").TLiteral<"inapplicable-type">, import("typebox").TLiteral<"stale-descriptor">]>;
+                }>]>>>;
+            }>>;
+            viewer: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                state: import("typebox").TUnion<[import("typebox").TLiteral<"anonymous">, import("typebox").TLiteral<"account">]>;
+                account: import("typebox").TOptional<import("typebox").TString>;
+                context: import("typebox").TString;
+                actions: import("typebox").TObject<{
+                    statementPropose: import("typebox").TUnion<[import("typebox").TLiteral<"allowed">, import("typebox").TLiteral<"denied">, import("typebox").TLiteral<"unavailable">]>;
+                }>;
+            }>, import("typebox").TObject<{
+                kind: import("typebox").TUnion<[import("typebox").TLiteral<"anonymous">, import("typebox").TLiteral<"account">]>;
+                account: import("typebox").TOptional<import("typebox").TString>;
+            }>]>>;
             reads: import("typebox").TRecord<"^.*$", import("typebox").TObject<{
                 status: import("typebox").TInteger;
                 body: import("typebox").TAny;
                 headers: import("typebox").TOptional<import("typebox").TRecord<"^.*$", import("typebox").TString>>;
             }>>;
+            meanings: import("typebox").TOptional<import("typebox").TRecord<"^.*$", import("typebox").TObject<{
+                text: import("typebox").TString;
+                lang: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+            }>>>;
+            unavailable: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                id: import("typebox").TString;
+                admitted: import("typebox").TLiteral<false>;
+            }>>>;
+            actions: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TArray<import("typebox").TObject<{
+                action: import("typebox").TString;
+                operationId: import("typebox").TString;
+                state: import("typebox").TUnion<[import("typebox").TLiteral<"allowed">, import("typebox").TLiteral<"denied">, import("typebox").TLiteral<"unavailable">, import("typebox").TLiteral<"unsupported">, import("typebox").TLiteral<"absent">, import("typebox").TLiteral<"withheld">]>;
+            }>>, import("typebox").TObject<{
+                status: import("typebox").TLiteral<"ready">;
+                viewerActions: import("typebox").TArray<import("typebox").TObject<{
+                    action: import("typebox").TString;
+                    operations: import("typebox").TArray<import("typebox").TString>;
+                }>>;
+            }>, import("typebox").TObject<{
+                status: import("typebox").TLiteral<"withheld">;
+            }>, import("typebox").TObject<{
+                status: import("typebox").TLiteral<"unavailable">;
+            }>, import("typebox").TObject<{
+                status: import("typebox").TLiteral<"denied">;
+            }>]>>;
         }> & {
             headers: {
                 readonly 'cache-control': import("typebox").TString;
@@ -571,7 +1965,7 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         401: import("typebox").TObject<{
@@ -585,7 +1979,21 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
+            }>>>;
+        }>;
+        403: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         404: import("typebox").TObject<{
@@ -599,7 +2007,7 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         503: import("typebox").TObject<{
@@ -613,7 +2021,7 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
     };
@@ -927,6 +2335,27 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
                 post: {
                     body: {
                         subjects: string[];
+                        expectedIdentity?: {
+                            endpoints: [{
+                                subject: string;
+                                revision: number;
+                                securityRevision: string;
+                                source: "bangumi" | "bangumi_cross_media" | "vndb" | "vndb_cross_media";
+                                externalId: string;
+                                claimTransactionId: string;
+                                property: "wdt:P3180" | "wdt:P6298";
+                                value: string;
+                            }, {
+                                subject: string;
+                                revision: number;
+                                securityRevision: string;
+                                source: "bangumi" | "bangumi_cross_media" | "vndb" | "vndb_cross_media";
+                                externalId: string;
+                                claimTransactionId: string;
+                                property: "wdt:P3180" | "wdt:P6298";
+                                value: string;
+                            }];
+                        };
                     };
                     params: {};
                     query: unknown;
@@ -935,9 +2364,14 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
                     };
                     response: {
                         200: {
-                            survivor: string;
-                            redirected: string;
-                            revision: number;
+                            operation: {
+                                id: string;
+                            };
+                        };
+                        202: {
+                            operation: {
+                                id: string;
+                            };
                         };
                         400: Response | {
                             type: unknown;
@@ -1024,6 +2458,86 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
     };
 } & {
     v1: {
+        subjectIdentityOperations: {
+            ":id": {
+                get: {
+                    body: unknown;
+                    params: {
+                        id: string;
+                    };
+                    query: unknown;
+                    headers: unknown;
+                    response: {
+                        200: {
+                            operation: {
+                                id: string;
+                                done: false;
+                            } | {
+                                id: string;
+                                done: true;
+                                result: {
+                                    survivor: string;
+                                    redirected: string;
+                                    revision: number;
+                                };
+                            };
+                        };
+                        401: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        404: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        422: Response | {
+                            type: 'validation';
+                            code: 'validation';
+                            title: 'Validation Error';
+                            status: 422;
+                            detail?: string;
+                            on: string;
+                            found?: unknown;
+                            property?: string;
+                            expected?: unknown;
+                            errors?: {
+                                message?: string;
+                                [key: string]: unknown;
+                            }[];
+                        };
+                        503: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                    };
+                    error: never;
+                };
+            };
+        };
+    };
+} & {
+    v1: {
         subjects: {
             ":id": {
                 get: {
@@ -1034,6 +2548,11 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
                     query: {
                         context?: string;
                         language?: string;
+                        includeViewerActions?: boolean;
+                        includeDocuments?: boolean;
+                        selectedSynopsis?: string;
+                        reviewIdentitySource?: "bangumi" | "bangumi_cross_media" | "vndb" | "vndb_cross_media";
+                        reviewIdentityExternalId?: string;
                     };
                     headers: unknown;
                     response: {
@@ -1110,6 +2629,76 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
                                     attribution?: string;
                                 }[];
                             };
+                            selectedSynopsis?: {
+                                kind: "matched";
+                                fact: {
+                                    id: string;
+                                    rank: "deprecated" | "normal" | "preferred";
+                                    property: {
+                                        id: string;
+                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                    };
+                                    value: {
+                                        type: "value";
+                                        content: any;
+                                    } | {
+                                        type: "somevalue";
+                                    } | {
+                                        type: "novalue";
+                                    };
+                                    qualifiers: {
+                                        property: {
+                                            id: string;
+                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                        };
+                                        value: {
+                                            type: "value";
+                                            content: any;
+                                        } | {
+                                            type: "somevalue";
+                                        } | {
+                                            type: "novalue";
+                                        };
+                                    }[];
+                                    references: {
+                                        parts: {
+                                            property: {
+                                                id: string;
+                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                            };
+                                            value: {
+                                                type: "value";
+                                                content: any;
+                                            } | {
+                                                type: "somevalue";
+                                            } | {
+                                                type: "novalue";
+                                            };
+                                        }[];
+                                        hash: string;
+                                    }[];
+                                };
+                                context: string;
+                                release: string;
+                            } | {
+                                kind: "changed";
+                            } | {
+                                kind: "missing";
+                            } | {
+                                kind: "unsupported";
+                            } | {
+                                kind: "unavailable";
+                            };
+                            reviewedIdentity?: {
+                                subject: string;
+                                revision: number;
+                                securityRevision: string;
+                                source: "bangumi" | "bangumi_cross_media" | "vndb" | "vndb_cross_media";
+                                externalId: string;
+                                claimTransactionId: string;
+                                property: "wdt:P3180" | "wdt:P6298";
+                                value: string;
+                            } | null;
                             account: {
                                 id: string;
                             } | null;
@@ -1181,12 +2770,33 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
                                     };
                                 } | null;
                             }>;
+                            documents?: Record<string, import("../../content/document-public.ts").PublicDocumentView>;
+                            viewerActions?: {
+                                state: "available";
+                                actions: {
+                                    action: string;
+                                    operations: string[];
+                                }[];
+                            } | {
+                                state: "unavailable";
+                            };
                         };
                         308: {
                             redirect: {
                                 from: string;
                                 to: string;
                             };
+                        };
+                        400: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
                         };
                         401: Response | {
                             type: unknown;
@@ -1199,7 +2809,29 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
                             detail: unknown;
                             errors: unknown;
                         };
+                        403: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
                         404: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        409: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -1657,6 +3289,106 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
                             };
                         };
                         error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        subjects: {
+            ":id": {
+                candidates: {
+                    ":candidate": {
+                        lifecycle: {
+                            get: {
+                                body: unknown;
+                                params: {
+                                    id: string;
+                                    candidate: string;
+                                };
+                                query: {
+                                    property: string;
+                                };
+                                headers: unknown;
+                                response: {
+                                    200: {
+                                        subject: string;
+                                        candidate: string;
+                                        property: string;
+                                        viewer: "account" | "anonymous";
+                                        state: "available" | "deleted";
+                                        selected: boolean;
+                                        actions: {
+                                            state: "available";
+                                            operations: ("delete" | "restore")[];
+                                        } | {
+                                            state: "unavailable";
+                                        };
+                                    };
+                                    400: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    401: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    404: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    422: Response | {
+                                        type: 'validation';
+                                        code: 'validation';
+                                        title: 'Validation Error';
+                                        status: 422;
+                                        detail?: string;
+                                        on: string;
+                                        found?: unknown;
+                                        property?: string;
+                                        expected?: unknown;
+                                        errors?: {
+                                            message?: string;
+                                            [key: string]: unknown;
+                                        }[];
+                                    };
+                                    503: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                };
+                                error: never;
+                            };
+                        };
                     };
                 };
             };
@@ -3279,6 +5011,7 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
                             context?: string;
                             property?: string;
                             filter?: string;
+                            qualifier?: string;
                             type?: string;
                             language?: string;
                         };
@@ -3339,6 +5072,11 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
                                             release: string;
                                             revision: number;
                                         };
+                                    };
+                                    creditSlot?: {
+                                        property: string;
+                                        target: string;
+                                        key?: string;
                                     };
                                     related?: Record<string, {
                                         id: string;
@@ -3415,6 +5153,1316 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
                                         } | null;
                                     };
                                 }[];
+                                workReleaseCards?: {
+                                    state: "unavailable";
+                                } | {
+                                    state: "available";
+                                    cards: {
+                                        subject: string;
+                                        type: string;
+                                        summary: {
+                                            id: string;
+                                            type: string;
+                                            types: string[];
+                                            label: {
+                                                value: string;
+                                                language: string;
+                                            } | null;
+                                            creativeWork: boolean;
+                                            cover: {
+                                                media: string;
+                                                width: number;
+                                                height: number;
+                                                placeholder: {
+                                                    thumbhash: string;
+                                                    color: string;
+                                                };
+                                                variants: {
+                                                    format: "avif" | "webp";
+                                                    width: number;
+                                                }[];
+                                                focalPoint: {
+                                                    x: number;
+                                                    y: number;
+                                                } | null;
+                                                credit: {
+                                                    rightsHolder: string;
+                                                    via: {
+                                                        name: string;
+                                                        url: string;
+                                                    };
+                                                    license: string;
+                                                    obligations: string[];
+                                                };
+                                            } | null;
+                                        };
+                                        membership: {
+                                            id: string;
+                                            rank: "deprecated" | "normal" | "preferred";
+                                            property: {
+                                                id: string;
+                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                            };
+                                            value: {
+                                                type: "value";
+                                                content: any;
+                                            } | {
+                                                type: "somevalue";
+                                            } | {
+                                                type: "novalue";
+                                            };
+                                            qualifiers: {
+                                                property: {
+                                                    id: string;
+                                                    data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                };
+                                                value: {
+                                                    type: "value";
+                                                    content: any;
+                                                } | {
+                                                    type: "somevalue";
+                                                } | {
+                                                    type: "novalue";
+                                                };
+                                            }[];
+                                            references: {
+                                                parts: {
+                                                    property: {
+                                                        id: string;
+                                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                    };
+                                                    value: {
+                                                        type: "value";
+                                                        content: any;
+                                                    } | {
+                                                        type: "somevalue";
+                                                    } | {
+                                                        type: "novalue";
+                                                    };
+                                                }[];
+                                                hash: string;
+                                            }[];
+                                            rezics: {
+                                                release: string;
+                                                revision: number;
+                                            };
+                                        };
+                                        related: Record<string, {
+                                            id: string;
+                                            type: string;
+                                            types: string[];
+                                            label: {
+                                                value: string;
+                                                language: string;
+                                            } | null;
+                                            creativeWork: boolean;
+                                            cover: {
+                                                media: string;
+                                                width: number;
+                                                height: number;
+                                                placeholder: {
+                                                    thumbhash: string;
+                                                    color: string;
+                                                };
+                                                variants: {
+                                                    format: "avif" | "webp";
+                                                    width: number;
+                                                }[];
+                                                focalPoint: {
+                                                    x: number;
+                                                    y: number;
+                                                } | null;
+                                                credit: {
+                                                    rightsHolder: string;
+                                                    via: {
+                                                        name: string;
+                                                        url: string;
+                                                    };
+                                                    license: string;
+                                                    obligations: string[];
+                                                };
+                                            } | null;
+                                        }>;
+                                        fields: {
+                                            'schema:gamePlatform': {
+                                                state: "unsupported";
+                                            } | {
+                                                state: "withheld";
+                                            } | {
+                                                state: "missing";
+                                            } | {
+                                                state: "unavailable";
+                                            } | {
+                                                state: "available";
+                                                statements: {
+                                                    id: string;
+                                                    rank: "deprecated" | "normal" | "preferred";
+                                                    property: {
+                                                        id: string;
+                                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                    };
+                                                    value: {
+                                                        type: "value";
+                                                        content: any;
+                                                    } | {
+                                                        type: "somevalue";
+                                                    } | {
+                                                        type: "novalue";
+                                                    };
+                                                    qualifiers: {
+                                                        property: {
+                                                            id: string;
+                                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                        };
+                                                        value: {
+                                                            type: "value";
+                                                            content: any;
+                                                        } | {
+                                                            type: "somevalue";
+                                                        } | {
+                                                            type: "novalue";
+                                                        };
+                                                    }[];
+                                                    references: {
+                                                        parts: {
+                                                            property: {
+                                                                id: string;
+                                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                            };
+                                                            value: {
+                                                                type: "value";
+                                                                content: any;
+                                                            } | {
+                                                                type: "somevalue";
+                                                            } | {
+                                                                type: "novalue";
+                                                            };
+                                                        }[];
+                                                        hash: string;
+                                                    }[];
+                                                    rezics: {
+                                                        release: string;
+                                                        revision: number;
+                                                    };
+                                                }[];
+                                                related: Record<string, {
+                                                    id: string;
+                                                    type: string;
+                                                    types: string[];
+                                                    label: {
+                                                        value: string;
+                                                        language: string;
+                                                    } | null;
+                                                    creativeWork: boolean;
+                                                    cover: {
+                                                        media: string;
+                                                        width: number;
+                                                        height: number;
+                                                        placeholder: {
+                                                            thumbhash: string;
+                                                            color: string;
+                                                        };
+                                                        variants: {
+                                                            format: "avif" | "webp";
+                                                            width: number;
+                                                        }[];
+                                                        focalPoint: {
+                                                            x: number;
+                                                            y: number;
+                                                        } | null;
+                                                        credit: {
+                                                            rightsHolder: string;
+                                                            via: {
+                                                                name: string;
+                                                                url: string;
+                                                            };
+                                                            license: string;
+                                                            obligations: string[];
+                                                        };
+                                                    } | null;
+                                                }>;
+                                            };
+                                            'schema:inLanguage': {
+                                                state: "unsupported";
+                                            } | {
+                                                state: "withheld";
+                                            } | {
+                                                state: "missing";
+                                            } | {
+                                                state: "unavailable";
+                                            } | {
+                                                state: "available";
+                                                statements: {
+                                                    id: string;
+                                                    rank: "deprecated" | "normal" | "preferred";
+                                                    property: {
+                                                        id: string;
+                                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                    };
+                                                    value: {
+                                                        type: "value";
+                                                        content: any;
+                                                    } | {
+                                                        type: "somevalue";
+                                                    } | {
+                                                        type: "novalue";
+                                                    };
+                                                    qualifiers: {
+                                                        property: {
+                                                            id: string;
+                                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                        };
+                                                        value: {
+                                                            type: "value";
+                                                            content: any;
+                                                        } | {
+                                                            type: "somevalue";
+                                                        } | {
+                                                            type: "novalue";
+                                                        };
+                                                    }[];
+                                                    references: {
+                                                        parts: {
+                                                            property: {
+                                                                id: string;
+                                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                            };
+                                                            value: {
+                                                                type: "value";
+                                                                content: any;
+                                                            } | {
+                                                                type: "somevalue";
+                                                            } | {
+                                                                type: "novalue";
+                                                            };
+                                                        }[];
+                                                        hash: string;
+                                                    }[];
+                                                    rezics: {
+                                                        release: string;
+                                                        revision: number;
+                                                    };
+                                                }[];
+                                                related: Record<string, {
+                                                    id: string;
+                                                    type: string;
+                                                    types: string[];
+                                                    label: {
+                                                        value: string;
+                                                        language: string;
+                                                    } | null;
+                                                    creativeWork: boolean;
+                                                    cover: {
+                                                        media: string;
+                                                        width: number;
+                                                        height: number;
+                                                        placeholder: {
+                                                            thumbhash: string;
+                                                            color: string;
+                                                        };
+                                                        variants: {
+                                                            format: "avif" | "webp";
+                                                            width: number;
+                                                        }[];
+                                                        focalPoint: {
+                                                            x: number;
+                                                            y: number;
+                                                        } | null;
+                                                        credit: {
+                                                            rightsHolder: string;
+                                                            via: {
+                                                                name: string;
+                                                                url: string;
+                                                            };
+                                                            license: string;
+                                                            obligations: string[];
+                                                        };
+                                                    } | null;
+                                                }>;
+                                            };
+                                            'schema:datePublished': {
+                                                state: "unsupported";
+                                            } | {
+                                                state: "withheld";
+                                            } | {
+                                                state: "missing";
+                                            } | {
+                                                state: "unavailable";
+                                            } | {
+                                                state: "available";
+                                                statements: {
+                                                    id: string;
+                                                    rank: "deprecated" | "normal" | "preferred";
+                                                    property: {
+                                                        id: string;
+                                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                    };
+                                                    value: {
+                                                        type: "value";
+                                                        content: any;
+                                                    } | {
+                                                        type: "somevalue";
+                                                    } | {
+                                                        type: "novalue";
+                                                    };
+                                                    qualifiers: {
+                                                        property: {
+                                                            id: string;
+                                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                        };
+                                                        value: {
+                                                            type: "value";
+                                                            content: any;
+                                                        } | {
+                                                            type: "somevalue";
+                                                        } | {
+                                                            type: "novalue";
+                                                        };
+                                                    }[];
+                                                    references: {
+                                                        parts: {
+                                                            property: {
+                                                                id: string;
+                                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                            };
+                                                            value: {
+                                                                type: "value";
+                                                                content: any;
+                                                            } | {
+                                                                type: "somevalue";
+                                                            } | {
+                                                                type: "novalue";
+                                                            };
+                                                        }[];
+                                                        hash: string;
+                                                    }[];
+                                                    rezics: {
+                                                        release: string;
+                                                        revision: number;
+                                                    };
+                                                }[];
+                                                related: Record<string, {
+                                                    id: string;
+                                                    type: string;
+                                                    types: string[];
+                                                    label: {
+                                                        value: string;
+                                                        language: string;
+                                                    } | null;
+                                                    creativeWork: boolean;
+                                                    cover: {
+                                                        media: string;
+                                                        width: number;
+                                                        height: number;
+                                                        placeholder: {
+                                                            thumbhash: string;
+                                                            color: string;
+                                                        };
+                                                        variants: {
+                                                            format: "avif" | "webp";
+                                                            width: number;
+                                                        }[];
+                                                        focalPoint: {
+                                                            x: number;
+                                                            y: number;
+                                                        } | null;
+                                                        credit: {
+                                                            rightsHolder: string;
+                                                            via: {
+                                                                name: string;
+                                                                url: string;
+                                                            };
+                                                            license: string;
+                                                            obligations: string[];
+                                                        };
+                                                    } | null;
+                                                }>;
+                                            };
+                                            'schema:creativeWorkStatus': {
+                                                state: "unsupported";
+                                            } | {
+                                                state: "withheld";
+                                            } | {
+                                                state: "missing";
+                                            } | {
+                                                state: "unavailable";
+                                            } | {
+                                                state: "available";
+                                                statements: {
+                                                    id: string;
+                                                    rank: "deprecated" | "normal" | "preferred";
+                                                    property: {
+                                                        id: string;
+                                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                    };
+                                                    value: {
+                                                        type: "value";
+                                                        content: any;
+                                                    } | {
+                                                        type: "somevalue";
+                                                    } | {
+                                                        type: "novalue";
+                                                    };
+                                                    qualifiers: {
+                                                        property: {
+                                                            id: string;
+                                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                        };
+                                                        value: {
+                                                            type: "value";
+                                                            content: any;
+                                                        } | {
+                                                            type: "somevalue";
+                                                        } | {
+                                                            type: "novalue";
+                                                        };
+                                                    }[];
+                                                    references: {
+                                                        parts: {
+                                                            property: {
+                                                                id: string;
+                                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                            };
+                                                            value: {
+                                                                type: "value";
+                                                                content: any;
+                                                            } | {
+                                                                type: "somevalue";
+                                                            } | {
+                                                                type: "novalue";
+                                                            };
+                                                        }[];
+                                                        hash: string;
+                                                    }[];
+                                                    rezics: {
+                                                        release: string;
+                                                        revision: number;
+                                                    };
+                                                }[];
+                                                related: Record<string, {
+                                                    id: string;
+                                                    type: string;
+                                                    types: string[];
+                                                    label: {
+                                                        value: string;
+                                                        language: string;
+                                                    } | null;
+                                                    creativeWork: boolean;
+                                                    cover: {
+                                                        media: string;
+                                                        width: number;
+                                                        height: number;
+                                                        placeholder: {
+                                                            thumbhash: string;
+                                                            color: string;
+                                                        };
+                                                        variants: {
+                                                            format: "avif" | "webp";
+                                                            width: number;
+                                                        }[];
+                                                        focalPoint: {
+                                                            x: number;
+                                                            y: number;
+                                                        } | null;
+                                                        credit: {
+                                                            rightsHolder: string;
+                                                            via: {
+                                                                name: string;
+                                                                url: string;
+                                                            };
+                                                            license: string;
+                                                            obligations: string[];
+                                                        };
+                                                    } | null;
+                                                }>;
+                                            };
+                                            'wdt:P5804': {
+                                                state: "unsupported";
+                                            } | {
+                                                state: "withheld";
+                                            } | {
+                                                state: "missing";
+                                            } | {
+                                                state: "unavailable";
+                                            } | {
+                                                state: "available";
+                                                statements: {
+                                                    id: string;
+                                                    rank: "deprecated" | "normal" | "preferred";
+                                                    property: {
+                                                        id: string;
+                                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                    };
+                                                    value: {
+                                                        type: "value";
+                                                        content: any;
+                                                    } | {
+                                                        type: "somevalue";
+                                                    } | {
+                                                        type: "novalue";
+                                                    };
+                                                    qualifiers: {
+                                                        property: {
+                                                            id: string;
+                                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                        };
+                                                        value: {
+                                                            type: "value";
+                                                            content: any;
+                                                        } | {
+                                                            type: "somevalue";
+                                                        } | {
+                                                            type: "novalue";
+                                                        };
+                                                    }[];
+                                                    references: {
+                                                        parts: {
+                                                            property: {
+                                                                id: string;
+                                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                            };
+                                                            value: {
+                                                                type: "value";
+                                                                content: any;
+                                                            } | {
+                                                                type: "somevalue";
+                                                            } | {
+                                                                type: "novalue";
+                                                            };
+                                                        }[];
+                                                        hash: string;
+                                                    }[];
+                                                    rezics: {
+                                                        release: string;
+                                                        revision: number;
+                                                    };
+                                                }[];
+                                                related: Record<string, {
+                                                    id: string;
+                                                    type: string;
+                                                    types: string[];
+                                                    label: {
+                                                        value: string;
+                                                        language: string;
+                                                    } | null;
+                                                    creativeWork: boolean;
+                                                    cover: {
+                                                        media: string;
+                                                        width: number;
+                                                        height: number;
+                                                        placeholder: {
+                                                            thumbhash: string;
+                                                            color: string;
+                                                        };
+                                                        variants: {
+                                                            format: "avif" | "webp";
+                                                            width: number;
+                                                        }[];
+                                                        focalPoint: {
+                                                            x: number;
+                                                            y: number;
+                                                        } | null;
+                                                        credit: {
+                                                            rightsHolder: string;
+                                                            via: {
+                                                                name: string;
+                                                                url: string;
+                                                            };
+                                                            license: string;
+                                                            obligations: string[];
+                                                        };
+                                                    } | null;
+                                                }>;
+                                            };
+                                            'rezics:releaseStatus': {
+                                                state: "unsupported";
+                                            } | {
+                                                state: "withheld";
+                                            } | {
+                                                state: "missing";
+                                            } | {
+                                                state: "unavailable";
+                                            } | {
+                                                state: "available";
+                                                statements: {
+                                                    id: string;
+                                                    rank: "deprecated" | "normal" | "preferred";
+                                                    property: {
+                                                        id: string;
+                                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                    };
+                                                    value: {
+                                                        type: "value";
+                                                        content: any;
+                                                    } | {
+                                                        type: "somevalue";
+                                                    } | {
+                                                        type: "novalue";
+                                                    };
+                                                    qualifiers: {
+                                                        property: {
+                                                            id: string;
+                                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                        };
+                                                        value: {
+                                                            type: "value";
+                                                            content: any;
+                                                        } | {
+                                                            type: "somevalue";
+                                                        } | {
+                                                            type: "novalue";
+                                                        };
+                                                    }[];
+                                                    references: {
+                                                        parts: {
+                                                            property: {
+                                                                id: string;
+                                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                            };
+                                                            value: {
+                                                                type: "value";
+                                                                content: any;
+                                                            } | {
+                                                                type: "somevalue";
+                                                            } | {
+                                                                type: "novalue";
+                                                            };
+                                                        }[];
+                                                        hash: string;
+                                                    }[];
+                                                    rezics: {
+                                                        release: string;
+                                                        revision: number;
+                                                    };
+                                                }[];
+                                                related: Record<string, {
+                                                    id: string;
+                                                    type: string;
+                                                    types: string[];
+                                                    label: {
+                                                        value: string;
+                                                        language: string;
+                                                    } | null;
+                                                    creativeWork: boolean;
+                                                    cover: {
+                                                        media: string;
+                                                        width: number;
+                                                        height: number;
+                                                        placeholder: {
+                                                            thumbhash: string;
+                                                            color: string;
+                                                        };
+                                                        variants: {
+                                                            format: "avif" | "webp";
+                                                            width: number;
+                                                        }[];
+                                                        focalPoint: {
+                                                            x: number;
+                                                            y: number;
+                                                        } | null;
+                                                        credit: {
+                                                            rightsHolder: string;
+                                                            via: {
+                                                                name: string;
+                                                                url: string;
+                                                            };
+                                                            license: string;
+                                                            obligations: string[];
+                                                        };
+                                                    } | null;
+                                                }>;
+                                            };
+                                            'schema:contentRating': {
+                                                state: "unsupported";
+                                            } | {
+                                                state: "withheld";
+                                            } | {
+                                                state: "missing";
+                                            } | {
+                                                state: "unavailable";
+                                            } | {
+                                                state: "available";
+                                                statements: {
+                                                    id: string;
+                                                    rank: "deprecated" | "normal" | "preferred";
+                                                    property: {
+                                                        id: string;
+                                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                    };
+                                                    value: {
+                                                        type: "value";
+                                                        content: any;
+                                                    } | {
+                                                        type: "somevalue";
+                                                    } | {
+                                                        type: "novalue";
+                                                    };
+                                                    qualifiers: {
+                                                        property: {
+                                                            id: string;
+                                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                        };
+                                                        value: {
+                                                            type: "value";
+                                                            content: any;
+                                                        } | {
+                                                            type: "somevalue";
+                                                        } | {
+                                                            type: "novalue";
+                                                        };
+                                                    }[];
+                                                    references: {
+                                                        parts: {
+                                                            property: {
+                                                                id: string;
+                                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                            };
+                                                            value: {
+                                                                type: "value";
+                                                                content: any;
+                                                            } | {
+                                                                type: "somevalue";
+                                                            } | {
+                                                                type: "novalue";
+                                                            };
+                                                        }[];
+                                                        hash: string;
+                                                    }[];
+                                                    rezics: {
+                                                        release: string;
+                                                        revision: number;
+                                                    };
+                                                }[];
+                                                related: Record<string, {
+                                                    id: string;
+                                                    type: string;
+                                                    types: string[];
+                                                    label: {
+                                                        value: string;
+                                                        language: string;
+                                                    } | null;
+                                                    creativeWork: boolean;
+                                                    cover: {
+                                                        media: string;
+                                                        width: number;
+                                                        height: number;
+                                                        placeholder: {
+                                                            thumbhash: string;
+                                                            color: string;
+                                                        };
+                                                        variants: {
+                                                            format: "avif" | "webp";
+                                                            width: number;
+                                                        }[];
+                                                        focalPoint: {
+                                                            x: number;
+                                                            y: number;
+                                                        } | null;
+                                                        credit: {
+                                                            rightsHolder: string;
+                                                            via: {
+                                                                name: string;
+                                                                url: string;
+                                                            };
+                                                            license: string;
+                                                            obligations: string[];
+                                                        };
+                                                    } | null;
+                                                }>;
+                                            };
+                                            'schema:publisher': {
+                                                state: "unsupported";
+                                            } | {
+                                                state: "withheld";
+                                            } | {
+                                                state: "missing";
+                                            } | {
+                                                state: "unavailable";
+                                            } | {
+                                                state: "available";
+                                                statements: {
+                                                    id: string;
+                                                    rank: "deprecated" | "normal" | "preferred";
+                                                    property: {
+                                                        id: string;
+                                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                    };
+                                                    value: {
+                                                        type: "value";
+                                                        content: any;
+                                                    } | {
+                                                        type: "somevalue";
+                                                    } | {
+                                                        type: "novalue";
+                                                    };
+                                                    qualifiers: {
+                                                        property: {
+                                                            id: string;
+                                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                        };
+                                                        value: {
+                                                            type: "value";
+                                                            content: any;
+                                                        } | {
+                                                            type: "somevalue";
+                                                        } | {
+                                                            type: "novalue";
+                                                        };
+                                                    }[];
+                                                    references: {
+                                                        parts: {
+                                                            property: {
+                                                                id: string;
+                                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                            };
+                                                            value: {
+                                                                type: "value";
+                                                                content: any;
+                                                            } | {
+                                                                type: "somevalue";
+                                                            } | {
+                                                                type: "novalue";
+                                                            };
+                                                        }[];
+                                                        hash: string;
+                                                    }[];
+                                                    rezics: {
+                                                        release: string;
+                                                        revision: number;
+                                                    };
+                                                }[];
+                                                related: Record<string, {
+                                                    id: string;
+                                                    type: string;
+                                                    types: string[];
+                                                    label: {
+                                                        value: string;
+                                                        language: string;
+                                                    } | null;
+                                                    creativeWork: boolean;
+                                                    cover: {
+                                                        media: string;
+                                                        width: number;
+                                                        height: number;
+                                                        placeholder: {
+                                                            thumbhash: string;
+                                                            color: string;
+                                                        };
+                                                        variants: {
+                                                            format: "avif" | "webp";
+                                                            width: number;
+                                                        }[];
+                                                        focalPoint: {
+                                                            x: number;
+                                                            y: number;
+                                                        } | null;
+                                                        credit: {
+                                                            rightsHolder: string;
+                                                            via: {
+                                                                name: string;
+                                                                url: string;
+                                                            };
+                                                            license: string;
+                                                            obligations: string[];
+                                                        };
+                                                    } | null;
+                                                }>;
+                                            };
+                                            'schema:producer': {
+                                                state: "unsupported";
+                                            } | {
+                                                state: "withheld";
+                                            } | {
+                                                state: "missing";
+                                            } | {
+                                                state: "unavailable";
+                                            } | {
+                                                state: "available";
+                                                statements: {
+                                                    id: string;
+                                                    rank: "deprecated" | "normal" | "preferred";
+                                                    property: {
+                                                        id: string;
+                                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                    };
+                                                    value: {
+                                                        type: "value";
+                                                        content: any;
+                                                    } | {
+                                                        type: "somevalue";
+                                                    } | {
+                                                        type: "novalue";
+                                                    };
+                                                    qualifiers: {
+                                                        property: {
+                                                            id: string;
+                                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                        };
+                                                        value: {
+                                                            type: "value";
+                                                            content: any;
+                                                        } | {
+                                                            type: "somevalue";
+                                                        } | {
+                                                            type: "novalue";
+                                                        };
+                                                    }[];
+                                                    references: {
+                                                        parts: {
+                                                            property: {
+                                                                id: string;
+                                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                            };
+                                                            value: {
+                                                                type: "value";
+                                                                content: any;
+                                                            } | {
+                                                                type: "somevalue";
+                                                            } | {
+                                                                type: "novalue";
+                                                            };
+                                                        }[];
+                                                        hash: string;
+                                                    }[];
+                                                    rezics: {
+                                                        release: string;
+                                                        revision: number;
+                                                    };
+                                                }[];
+                                                related: Record<string, {
+                                                    id: string;
+                                                    type: string;
+                                                    types: string[];
+                                                    label: {
+                                                        value: string;
+                                                        language: string;
+                                                    } | null;
+                                                    creativeWork: boolean;
+                                                    cover: {
+                                                        media: string;
+                                                        width: number;
+                                                        height: number;
+                                                        placeholder: {
+                                                            thumbhash: string;
+                                                            color: string;
+                                                        };
+                                                        variants: {
+                                                            format: "avif" | "webp";
+                                                            width: number;
+                                                        }[];
+                                                        focalPoint: {
+                                                            x: number;
+                                                            y: number;
+                                                        } | null;
+                                                        credit: {
+                                                            rightsHolder: string;
+                                                            via: {
+                                                                name: string;
+                                                                url: string;
+                                                            };
+                                                            license: string;
+                                                            obligations: string[];
+                                                        };
+                                                    } | null;
+                                                }>;
+                                            };
+                                            'wdt:P178': {
+                                                state: "unsupported";
+                                            } | {
+                                                state: "withheld";
+                                            } | {
+                                                state: "missing";
+                                            } | {
+                                                state: "unavailable";
+                                            } | {
+                                                state: "available";
+                                                statements: {
+                                                    id: string;
+                                                    rank: "deprecated" | "normal" | "preferred";
+                                                    property: {
+                                                        id: string;
+                                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                    };
+                                                    value: {
+                                                        type: "value";
+                                                        content: any;
+                                                    } | {
+                                                        type: "somevalue";
+                                                    } | {
+                                                        type: "novalue";
+                                                    };
+                                                    qualifiers: {
+                                                        property: {
+                                                            id: string;
+                                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                        };
+                                                        value: {
+                                                            type: "value";
+                                                            content: any;
+                                                        } | {
+                                                            type: "somevalue";
+                                                        } | {
+                                                            type: "novalue";
+                                                        };
+                                                    }[];
+                                                    references: {
+                                                        parts: {
+                                                            property: {
+                                                                id: string;
+                                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                            };
+                                                            value: {
+                                                                type: "value";
+                                                                content: any;
+                                                            } | {
+                                                                type: "somevalue";
+                                                            } | {
+                                                                type: "novalue";
+                                                            };
+                                                        }[];
+                                                        hash: string;
+                                                    }[];
+                                                    rezics: {
+                                                        release: string;
+                                                        revision: number;
+                                                    };
+                                                }[];
+                                                related: Record<string, {
+                                                    id: string;
+                                                    type: string;
+                                                    types: string[];
+                                                    label: {
+                                                        value: string;
+                                                        language: string;
+                                                    } | null;
+                                                    creativeWork: boolean;
+                                                    cover: {
+                                                        media: string;
+                                                        width: number;
+                                                        height: number;
+                                                        placeholder: {
+                                                            thumbhash: string;
+                                                            color: string;
+                                                        };
+                                                        variants: {
+                                                            format: "avif" | "webp";
+                                                            width: number;
+                                                        }[];
+                                                        focalPoint: {
+                                                            x: number;
+                                                            y: number;
+                                                        } | null;
+                                                        credit: {
+                                                            rightsHolder: string;
+                                                            via: {
+                                                                name: string;
+                                                                url: string;
+                                                            };
+                                                            license: string;
+                                                            obligations: string[];
+                                                        };
+                                                    } | null;
+                                                }>;
+                                            };
+                                            'wdt:P162': {
+                                                state: "unsupported";
+                                            } | {
+                                                state: "withheld";
+                                            } | {
+                                                state: "missing";
+                                            } | {
+                                                state: "unavailable";
+                                            } | {
+                                                state: "available";
+                                                statements: {
+                                                    id: string;
+                                                    rank: "deprecated" | "normal" | "preferred";
+                                                    property: {
+                                                        id: string;
+                                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                    };
+                                                    value: {
+                                                        type: "value";
+                                                        content: any;
+                                                    } | {
+                                                        type: "somevalue";
+                                                    } | {
+                                                        type: "novalue";
+                                                    };
+                                                    qualifiers: {
+                                                        property: {
+                                                            id: string;
+                                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                        };
+                                                        value: {
+                                                            type: "value";
+                                                            content: any;
+                                                        } | {
+                                                            type: "somevalue";
+                                                        } | {
+                                                            type: "novalue";
+                                                        };
+                                                    }[];
+                                                    references: {
+                                                        parts: {
+                                                            property: {
+                                                                id: string;
+                                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                            };
+                                                            value: {
+                                                                type: "value";
+                                                                content: any;
+                                                            } | {
+                                                                type: "somevalue";
+                                                            } | {
+                                                                type: "novalue";
+                                                            };
+                                                        }[];
+                                                        hash: string;
+                                                    }[];
+                                                    rezics: {
+                                                        release: string;
+                                                        revision: number;
+                                                    };
+                                                }[];
+                                                related: Record<string, {
+                                                    id: string;
+                                                    type: string;
+                                                    types: string[];
+                                                    label: {
+                                                        value: string;
+                                                        language: string;
+                                                    } | null;
+                                                    creativeWork: boolean;
+                                                    cover: {
+                                                        media: string;
+                                                        width: number;
+                                                        height: number;
+                                                        placeholder: {
+                                                            thumbhash: string;
+                                                            color: string;
+                                                        };
+                                                        variants: {
+                                                            format: "avif" | "webp";
+                                                            width: number;
+                                                        }[];
+                                                        focalPoint: {
+                                                            x: number;
+                                                            y: number;
+                                                        } | null;
+                                                        credit: {
+                                                            rightsHolder: string;
+                                                            via: {
+                                                                name: string;
+                                                                url: string;
+                                                            };
+                                                            license: string;
+                                                            obligations: string[];
+                                                        };
+                                                    } | null;
+                                                }>;
+                                            };
+                                            'wdt:P2899': {
+                                                state: "unsupported";
+                                            } | {
+                                                state: "withheld";
+                                            } | {
+                                                state: "missing";
+                                            } | {
+                                                state: "unavailable";
+                                            } | {
+                                                state: "available";
+                                                statements: {
+                                                    id: string;
+                                                    rank: "deprecated" | "normal" | "preferred";
+                                                    property: {
+                                                        id: string;
+                                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                    };
+                                                    value: {
+                                                        type: "value";
+                                                        content: any;
+                                                    } | {
+                                                        type: "somevalue";
+                                                    } | {
+                                                        type: "novalue";
+                                                    };
+                                                    qualifiers: {
+                                                        property: {
+                                                            id: string;
+                                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                        };
+                                                        value: {
+                                                            type: "value";
+                                                            content: any;
+                                                        } | {
+                                                            type: "somevalue";
+                                                        } | {
+                                                            type: "novalue";
+                                                        };
+                                                    }[];
+                                                    references: {
+                                                        parts: {
+                                                            property: {
+                                                                id: string;
+                                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                            };
+                                                            value: {
+                                                                type: "value";
+                                                                content: any;
+                                                            } | {
+                                                                type: "somevalue";
+                                                            } | {
+                                                                type: "novalue";
+                                                            };
+                                                        }[];
+                                                        hash: string;
+                                                    }[];
+                                                    rezics: {
+                                                        release: string;
+                                                        revision: number;
+                                                    };
+                                                }[];
+                                                related: Record<string, {
+                                                    id: string;
+                                                    type: string;
+                                                    types: string[];
+                                                    label: {
+                                                        value: string;
+                                                        language: string;
+                                                    } | null;
+                                                    creativeWork: boolean;
+                                                    cover: {
+                                                        media: string;
+                                                        width: number;
+                                                        height: number;
+                                                        placeholder: {
+                                                            thumbhash: string;
+                                                            color: string;
+                                                        };
+                                                        variants: {
+                                                            format: "avif" | "webp";
+                                                            width: number;
+                                                        }[];
+                                                        focalPoint: {
+                                                            x: number;
+                                                            y: number;
+                                                        } | null;
+                                                        credit: {
+                                                            rightsHolder: string;
+                                                            via: {
+                                                                name: string;
+                                                                url: string;
+                                                            };
+                                                            license: string;
+                                                            obligations: string[];
+                                                        };
+                                                    } | null;
+                                                }>;
+                                            };
+                                        };
+                                    }[];
+                                };
                                 count?: {
                                     value: number;
                                     exact: boolean;
@@ -3424,6 +6472,7 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
                                     target_seconds: 10;
                                     caught_up: boolean;
                                 };
+                                partial?: boolean;
                                 next: string | null;
                             };
                             308: {
@@ -5987,6 +9036,79 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             };
         };
     };
+} & {
+    v1: {
+        presentation: {
+            curation: {
+                get: {
+                    body: unknown;
+                    params: {};
+                    query: unknown;
+                    headers: unknown;
+                    response: {
+                        200: {
+                            state: "missing";
+                        } | {
+                            state: "active";
+                            viewer: "account" | "anonymous";
+                            digest: string;
+                            head: number;
+                            profile: Record<string, any>;
+                            advice: {
+                                publish: "allowed" | "denied" | "unavailable";
+                                activate: "allowed" | "denied" | "unavailable";
+                            };
+                        };
+                        401: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        404: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        409: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        503: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                    };
+                    error: never;
+                };
+            };
+        };
+    };
 }, import("elysia").DefaultEphemeral, {
     derive: {
         readonly admission: import("../../http/admission.ts").Admission;
@@ -6038,7 +9160,7 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         401: import("typebox").TObject<{
@@ -6052,7 +9174,7 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         403: import("typebox").TObject<{
@@ -6066,7 +9188,7 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         404: import("typebox").TObject<{
@@ -6080,7 +9202,7 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         409: import("typebox").TObject<{
@@ -6094,7 +9216,7 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         422: import("typebox").TObject<{
@@ -6108,7 +9230,7 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         503: import("typebox").TObject<{
@@ -6122,7 +9244,7 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
     };
@@ -6130,6 +9252,8 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
         operationId: string;
         'x-exposure': string;
         'x-action': string;
+        'x-authority-resource-types': string[];
+        'x-authority-resource-id': string;
         'x-rate-limit': Readonly<import("../../http/rate-limit.ts").RateLimitDeclaration>;
         security: {
             bearerAuth: never[];
@@ -6340,7 +9464,7 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
             401: import("typebox").TObject<{
@@ -6354,7 +9478,7 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
             403: import("typebox").TObject<{
@@ -6368,7 +9492,7 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
             404: import("typebox").TObject<{
@@ -6382,7 +9506,7 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
             409: import("typebox").TObject<{
@@ -6396,7 +9520,7 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
             422: import("typebox").TObject<{
@@ -6410,7 +9534,7 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
             503: import("typebox").TObject<{
@@ -6424,7 +9548,7 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
         };
@@ -6432,6 +9556,8 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             operationId: string;
             'x-exposure': string;
             'x-action': string;
+            'x-authority-resource-types': string[];
+            'x-authority-resource-id': string;
             'x-rate-limit': Readonly<import("../../http/rate-limit.ts").RateLimitDeclaration>;
             security: {
                 bearerAuth: never[];
@@ -6518,7 +9644,7 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         401: import("typebox").TObject<{
@@ -6532,7 +9658,7 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         403: import("typebox").TObject<{
@@ -6546,7 +9672,7 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         404: import("typebox").TObject<{
@@ -6560,7 +9686,7 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         409: import("typebox").TObject<{
@@ -6574,7 +9700,7 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         422: import("typebox").TObject<{
@@ -6588,7 +9714,7 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         503: import("typebox").TObject<{
@@ -6602,7 +9728,7 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
     };
@@ -6610,6 +9736,8 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
         operationId: string;
         'x-exposure': string;
         'x-action': string;
+        'x-authority-resource-types': string[];
+        'x-authority-resource-id': string;
         'x-rate-limit': Readonly<import("../../http/rate-limit.ts").RateLimitDeclaration>;
         security: {
             bearerAuth: never[];

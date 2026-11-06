@@ -5,7 +5,7 @@ import type { KeyRing } from '../tokens/seal.ts';
 import { Admission } from './admission.ts';
 import { type WriteRateLimiter } from '../access/write-rate.ts';
 import { type WriteRateStageOptions } from '../access/write-rate-stage.ts';
-export declare const REQUEST_DEADLINE_MS = 2000;
+export declare function REQUEST_DEADLINE_MS(): number;
 export declare function createApp({ pool, requestDeadlineMs, admission, access, tokens, writeRate, rateAttribution, ratePeer, clock, }: {
     pool: Pool;
     requestDeadlineMs?: number;

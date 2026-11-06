@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import { type PublicFilterSourceBinding } from '../semantic/public-filter-source-binding.ts';
 import { type AccountDiscoveryRepairObservation } from '../access/account-discovery-source.ts';
 import type { PublicFilterConsumer, PublicFilterCost } from '../semantic/public-filter-source-contract.ts';
 import type { PublicFilterConsumerContext, PublicFilterConsumerUnavailable } from './public-filter-consumer-contract.ts';
@@ -186,6 +187,7 @@ export type SearchWriterPublicationGuard = SearchWriterGuard & Readonly<{
         cost: PublicFilterCost;
     } | PublicFilterConsumerUnavailable>;
 }>;
+export declare function bindSearchWriterPublicationSource(guard: SearchWriterPublicationGuard, binding: PublicFilterSourceBinding): void;
 /** Read current native projection bodies with the external versions actually settled by this writer.
  * A later writer-custody command advances the home head without changing those external versions.
  * Missing/uncertain custody returns null and cannot certify a generation.

@@ -1,3 +1,4 @@
+import './support/ensure-document.ts';
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement as h } from 'react';
@@ -23,15 +24,22 @@ test('current Person credit returns from work, Character and Sources with exact 
     ...Object.fromEntries(
       [
         'HTMLElement',
+        'HTMLButtonElement',
         'HTMLInputElement',
         'Element',
         'Node',
         'Text',
         'NodeFilter',
+        'Document',
         'DocumentFragment',
         'MutationObserver',
         'ResizeObserver',
         'DOMRect',
+        'Event',
+        'FocusEvent',
+        'MouseEvent',
+        'PointerEvent',
+        'KeyboardEvent',
       ].map((key) => [key, Reflect.get(window, key)]),
     ),
     getComputedStyle: window.getComputedStyle.bind(window),
@@ -139,15 +147,18 @@ test('current Person credit returns from work, Character and Sources with exact 
     });
   try {
     await render();
+    const inspect = [...window.document.querySelectorAll('button')].find(
+      (button) => button.textContent === m.credit_inspect(),
+    )!;
+    expect(inspect.className).toContain('min-w-11');
     await click(m.credit_inspect());
-    await act(async () => {
-      await import('../src/features/catalogue/credit-inspection/session');
-    });
     const dialog = window.document.querySelector('[role="dialog"]');
     expect(dialog).not.toBeNull();
+    expect(dialog!.querySelector('nav a')?.className).toContain('min-w-11');
     expect(dialog!.textContent).toContain(labels['wdt:P1932']);
     expect(dialog!.textContent).toContain('Original credit');
     expect(dialog!.textContent).toContain('The traveler');
+    expect(dialog!.textContent).toContain(m.relation_sign_in());
     expect(dialog!.textContent).not.toContain('The narrator');
     const targets = [...dialog!.querySelectorAll('a')].filter((a) => a.pathname.includes('/subjects/'));
     expect(targets.length).toBeGreaterThanOrEqual(4);
@@ -163,7 +174,12 @@ test('current Person credit returns from work, Character and Sources with exact 
       expect(new URL(target.href).searchParams.get('realm')).toBe(visit.realm!);
       expect(target.target).toBe('_blank');
     }
-    await click(m.credit_close());
+    await act(async () => {
+      window.document.activeElement?.dispatchEvent(
+        new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+      );
+    });
+    expect(window.document.querySelector('[role="dialog"]')).toBeNull();
     await act(async () => {
       (host.querySelectorAll('button[data-credit-statement]')[1] as HTMLButtonElement).click();
     });

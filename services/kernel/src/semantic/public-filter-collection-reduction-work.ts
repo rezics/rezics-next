@@ -24,7 +24,8 @@ const time = '9999-12-31T23:59:59.999999Z';
 const dependency = { kind: 'dependency', locator: { kind: 'collection', route: 65535, collection: uuid } };
 const affected = [{ kind: 'collection', route: 65535, collection: uuid }];
 const jsonKeys = ['["scope","unresolved"]'];
-function statements(): Readonly<Record<string, Statement>> {
+type StatementId = 'owner' | 'ensure' | 'lock' | 'advance' | 'append' | 'coverage';
+function statements(): Readonly<Record<StatementId, Statement>> {
   return memoizedValue(statements, () =>
     Object.freeze({
       owner: {
@@ -111,10 +112,13 @@ function bound(statement: Statement, input: Readonly<Record<string, unknown>>): 
   return declareBound({ ...zero(), ...statement.work, statements: 1, bytes: request + result });
 }
 
-function statementBounds() {
+function statementBounds(): Readonly<Record<StatementId, Bound>> {
   return memoizedValue(statementBounds, () =>
     Object.freeze(
-      Object.fromEntries(Object.entries(statements()).map(([id, item]) => [id, bound(item, item.maximum)])),
+      Object.fromEntries(Object.entries(statements()).map(([id, item]) => [id, bound(item, item.maximum)])) as Record<
+        StatementId,
+        Bound
+      >,
     ),
   );
 }

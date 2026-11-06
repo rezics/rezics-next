@@ -7,11 +7,11 @@ import type { ViewerActionResources } from '../access/viewer-actions.ts';
 export declare const READING_PAGE_REPLY_LIMIT = 20;
 export declare const READING_PAGE_REQUEST_BYTES: number;
 export declare const READING_CARD_REFERENCE_LIMIT = 20;
-export declare const READING_PAGE_RESPONSE_BYTES: number;
+export declare function READING_PAGE_RESPONSE_BYTES(): number;
 export declare const ReadingPageQuerySchema: import("typebox").TObject<{
     cursor: import("typebox").TOptional<import("typebox").TString>;
 }>;
-export declare const ReadingPageResponseSchema: import("typebox").TObject<{
+export declare function ReadingPageResponseSchema(): import("typebox").TObject<{
     target: import("typebox").TObject<{
         threadId: import("typebox").TString;
         boardId: import("typebox").TString;
@@ -58,6 +58,24 @@ export declare const ReadingPageResponseSchema: import("typebox").TObject<{
     } & Readonly<{
         reviewContext?: import("./model.ts").FeedReviewContext;
     }>>;
+    conversationActivity: import("typebox").TUnion<[import("typebox").TObject<{
+        state: import("typebox").TLiteral<"current">;
+        cohort: import("typebox").TLiteral<"public">;
+        count: import("typebox").TObject<{
+            kind: import("typebox").TUnion<[import("typebox").TLiteral<"exact">, import("typebox").TLiteral<"lower-bound">]>;
+            value: import("typebox").TInteger;
+        }>;
+        lastActivityAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+    }>, import("typebox").TObject<{
+        state: import("typebox").TLiteral<"withheld">;
+    }>, import("typebox").TObject<{
+        state: import("typebox").TLiteral<"unavailable">;
+        retryable: import("typebox").TLiteral<true>;
+    }>]>;
+    documentMedia: import("typebox").TUnsafe<Readonly<{
+        state: 'available' | 'unavailable' | 'overflow';
+        documents: readonly import("./reading-page-documents.ts").ReadingPageDocument[];
+    }>>;
     replies: import("typebox").TObject<{
         items: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TUnsafe<import("./reads.ts").ItemView & {
             readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
@@ -96,30 +114,33 @@ export declare const ReadingPageResponseSchema: import("typebox").TObject<{
     authors: import("typebox").TObject<{
         state: import("typebox").TUnion<[import("typebox").TLiteral<"current">, import("typebox").TLiteral<"unavailable">]>;
         retryable: import("typebox").TBoolean;
-        items: import("typebox").TArray<import("typebox").TObject<{
-            id: import("typebox").TString;
-            displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-            handle: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-            avatar: import("typebox").TUnion<[import("typebox").TObject<{
-                media: import("typebox").TString;
-                width: import("typebox").TInteger;
-                height: import("typebox").TInteger;
-                placeholder: import("typebox").TObject<{
-                    thumbhash: import("typebox").TString;
-                    color: import("typebox").TString;
-                }>;
-                variants: import("typebox").TArray<import("typebox").TObject<{
-                    format: import("typebox").TUnion<[import("typebox").TLiteral<"avif">, import("typebox").TLiteral<"webp">]>;
-                    width: import("typebox").TInteger;
-                }>>;
-                focalPoint: import("typebox").TUnion<[import("typebox").TObject<{
-                    x: import("typebox").TNumber;
-                    y: import("typebox").TNumber;
-                }>, import("typebox").TNull]>;
-                credit: import("typebox").TNull;
-            }>, import("typebox").TNull]>;
-        }>>;
+        items: import("typebox").TArray<import("typebox").TUnsafe<AuthorView>>;
     }>;
+    mentions: import("typebox").TOptional<import("typebox").TObject<{
+        state: import("typebox").TUnion<[import("typebox").TLiteral<"current">, import("typebox").TLiteral<"unavailable">]>;
+        retryable: import("typebox").TBoolean;
+        overflow: import("typebox").TBoolean;
+        sources: import("typebox").TArray<import("typebox").TObject<{
+            postId: import("typebox").TString;
+            threadId: import("typebox").TString;
+            revisionId: import("typebox").TString;
+            sha256: import("typebox").TString;
+            pageIndex: import("typebox").TInteger;
+            references: import("typebox").TArray<import("typebox").TString>;
+            overflow: import("typebox").TBoolean;
+        }>>;
+        identities: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TObject<{
+            id: import("typebox").TString;
+            state: import("typebox").TLiteral<"active">;
+            handle: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+        }>, import("typebox").TObject<{
+            id: import("typebox").TString;
+            state: import("typebox").TLiteral<"concealed">;
+        }>, import("typebox").TObject<{
+            id: import("typebox").TString;
+            state: import("typebox").TLiteral<"erased">;
+        }>]>>;
+    }>>;
     actions: import("typebox").TObject<{
         state: import("typebox").TUnion<[import("typebox").TLiteral<"current">, import("typebox").TLiteral<"unavailable">]>;
         retryable: import("typebox").TBoolean;
@@ -173,6 +194,46 @@ export declare const ReadingPageResponseSchema: import("typebox").TObject<{
         epoch: import("typebox").TInteger;
         position: import("typebox").TString;
     }>, import("typebox").TNull]>;
+    reviewContext: import("typebox").TOptional<import("typebox").TObject<{
+        source: import("typebox").TObject<{
+            threadId: import("typebox").TString;
+            postId: import("typebox").TString;
+            revisionId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+        }>;
+        target: import("typebox").TUnion<[import("typebox").TUnion<[import("typebox").TObject<{
+            state: import("typebox").TLiteral<"available">;
+            subject: import("typebox").TObject<{
+                id: import("typebox").TString;
+                kind: import("typebox").TString;
+                label: import("typebox").TUnion<[import("typebox").TObject<{
+                    value: import("typebox").TString;
+                    language: import("typebox").TString;
+                }>, import("typebox").TNull]>;
+            }>;
+        }>, import("typebox").TObject<{
+            state: import("typebox").TUnion<[import("typebox").TLiteral<"absent">, import("typebox").TLiteral<"withheld">]>;
+        }>]>, import("typebox").TObject<{
+            state: import("typebox").TLiteral<"unavailable">;
+        }>]>;
+        citations: import("typebox").TObject<{
+            state: import("typebox").TLiteral<"current">;
+            items: import("typebox").TArray<import("typebox").TObject<{
+                postId: import("typebox").TString;
+                sourceRevisionId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                citation: import("typebox").TUnion<[import("typebox").TObject<{
+                    state: import("typebox").TLiteral<"available">;
+                    questionId: import("typebox").TString;
+                    units: import("typebox").TInteger;
+                    voteRevision: import("typebox").TInteger;
+                    metadata: import("typebox").TObject<{
+                        state: import("typebox").TLiteral<"unavailable">;
+                    }>;
+                }>, import("typebox").TObject<{
+                    state: import("typebox").TUnion<[import("typebox").TLiteral<"absent">, import("typebox").TLiteral<"withheld">]>;
+                }>]>;
+            }>>;
+        }>;
+    }>>;
     authorErasure: import("typebox").TOptional<import("typebox").TObject<{
         authorId: import("typebox").TString;
         mayErase: import("typebox").TBoolean;
@@ -275,19 +336,16 @@ export type ContentReadingCardBatch = Readonly<{
     selected: readonly SelectedReadingCardReference[];
     finish(): Promise<SelectedReadingCardBatchResult>;
 }>;
-type EntryWithReaction = PostEntry & {
-    readonly viewerReaction?: string | null;
-    readonly reactions?: Readonly<Record<string, number>>;
-};
 type AccountSummaryMap = Awaited<ReturnType<typeof readAccountDiscoverySummaries>>;
 type AccountSummaryValue = AccountSummaryMap extends ReadonlyMap<string, infer Value> ? Value : never;
 type AccountSummary = NonNullable<AccountSummaryValue>;
 type AuthorView = Pick<AccountSummary, 'id' | 'displayName' | 'handle' | 'avatar'>;
 type ControlState = 'available' | 'sign_in_required' | 'denied' | 'withheld' | 'unavailable' | 'not_applicable';
+type OperationState = Exclude<ControlState, 'withheld'>;
 type ReadingOperation = {
     action: string;
     operationId: string;
-    state: ControlState;
+    state: OperationState;
 };
 type ReadingReference = {
     type: 'content.thread' | 'content.post';
@@ -296,6 +354,7 @@ type ReadingReference = {
     state: 'current' | 'withheld';
     operations: ReadingOperation[];
 };
+export declare function readingPageEntryWitness(entry: PostEntry): string;
 export declare function readingPageOperationState(actor: Actor, operationId: string, allowed: ReadonlySet<string>, guestSecurity: ReadonlyMap<string, 'anonymous' | 'authenticated' | 'unknown'>, watch: {
     state: 'current';
     watching: boolean;
@@ -304,7 +363,7 @@ export declare function readingPageOperationState(actor: Actor, operationId: str
 } | {
     state: 'unavailable';
     retryable: true;
-}): ControlState;
+}): OperationState;
 /** Validate the raw selection before any native reads; exact duplicates collapse in first-seen order. */
 export declare function normalizeSelectedReadingCardReferences(selected: readonly SelectedReadingCardReference[]): readonly SelectedReadingCardReference[];
 /** A missing native total row is unknown coverage, not an exact zero. */
@@ -325,17 +384,16 @@ export declare function readContentReadingPage(dependencies: ReadingPageDependen
             boardSecurityRevision: string;
         };
         viewer: {
-            kind: 'account';
-            id: string;
+            kind: "anonymous";
         } | {
-            id?: never;
-            kind: 'anonymous';
+            kind: "account";
+            id: string;
         };
         query: {
             cursor: string | null;
-            limit: typeof READING_PAGE_REPLY_LIMIT;
+            limit: 20;
         };
-        thread: {
+        thread: Omit<Readonly<{
             id: import("./model.ts").ThreadId;
             route: import("./model.ts").Route;
             authorId: import("./model.ts").ContentId;
@@ -348,19 +406,75 @@ export declare function readContentReadingPage(dependencies: ReadingPageDependen
             securityRevision: import("./model.ts").SecurityRevision;
             availability: import("./model.ts").Availability;
             createdAt: string;
-            firstPost: EntryWithReaction;
+            firstPost: import("./model.ts").PostEntry;
+        }>, "firstPost"> & Readonly<{
+            firstPost: PostEntry;
+        }> & {
+            readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
+        } & {
+            readonly reactions?: {
+                readonly downvote?: number;
+                readonly insightful?: number;
+                readonly laugh?: number;
+                readonly like?: number;
+                readonly love?: number;
+                readonly sad?: number;
+                readonly upvote?: number;
+            };
+        } & Readonly<{
+            reviewContext?: import("./model.ts").FeedReviewContext;
+        }>;
+        conversationActivity: {
+            state: "current";
+            cohort: "public";
+            count: {
+                kind: "exact" | "lower-bound";
+                value: number;
+            };
+            lastActivityAt: string | null;
+        } | {
+            state: "withheld";
+        } | {
+            state: "unavailable";
+            retryable: true;
         };
+        documentMedia: Readonly<{
+            state: 'available' | 'unavailable' | 'overflow';
+            documents: readonly import("./reading-page-documents.ts").ReadingPageDocument[];
+        }>;
         replies: {
-            items: (Readonly<{
+            items: ({
                 id: string;
                 threadId: string;
                 route: number;
                 parentId: string | null;
                 removed: true;
-                availability: 'withheld';
+                availability: "withheld";
                 body: null;
                 sha256: null;
-            }> | EntryWithReaction)[];
+            } | {
+                id: string;
+                threadId: string;
+                route: number;
+                parentId: string | null;
+                removed: true;
+                availability: "erased";
+                restorableUntil?: string;
+                body: null;
+                sha256: null;
+            } | (import("./reads.ts").ItemView & {
+                readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
+            } & {
+                readonly reactions?: {
+                    readonly downvote?: number;
+                    readonly insightful?: number;
+                    readonly laugh?: number;
+                    readonly like?: number;
+                    readonly love?: number;
+                    readonly sad?: number;
+                    readonly upvote?: number;
+                };
+            }))[];
             next: string | null;
         };
         authors: {
@@ -368,50 +482,124 @@ export declare function readContentReadingPage(dependencies: ReadingPageDependen
             retryable: boolean;
             items: AuthorView[];
         };
+        mentions?: {
+            state: "current" | "unavailable";
+            retryable: boolean;
+            overflow: boolean;
+            sources: {
+                postId: string;
+                threadId: string;
+                revisionId: string;
+                sha256: string;
+                pageIndex: number;
+                references: string[];
+                overflow: boolean;
+            }[];
+            identities: ({
+                id: string;
+                state: "active";
+                handle: string | null;
+            } | {
+                id: string;
+                state: "concealed";
+            } | {
+                id: string;
+                state: "erased";
+            })[];
+        };
         actions: {
             state: "current" | "unavailable";
             retryable: boolean;
-            references: ReadingReference[];
+            references: {
+                type: "content.post" | "content.thread";
+                id: string;
+                sourceRevisionId?: string;
+                state: "current" | "withheld";
+                operations: {
+                    action: string;
+                    operationId: string;
+                    state: "available" | "denied" | "not_applicable" | "sign_in_required" | "unavailable" | "withheld";
+                }[];
+            }[];
             reply: {
-                state: "unavailable" | "withheld";
+                state: "available" | "denied" | "sign_in_required" | "unavailable" | "withheld";
             };
         };
         watch: {
-            state: 'current';
+            state: "current";
             watching: boolean;
         } | {
-            state: 'sign_in_required';
+            state: "sign_in_required";
         } | {
-            state: 'unavailable';
+            state: "unavailable";
             retryable: true;
         };
         slowMode: {
-            state: 'unavailable';
-            retryable: true;
-        } | ({
-            state: 'current';
-        } & Readonly<{
+            state: "current";
             intervalSeconds: number;
             retryAt: string | null;
             nextEligibleAt: string | null;
             canChange: boolean;
             exempt: boolean;
-            admissionState: 'ready' | 'interval' | 'pending';
+            admissionState: "interval" | "pending" | "ready";
             retryAfterSeconds: number;
-        }>);
+        } | {
+            state: "unavailable";
+            retryable: true;
+        };
         currentness: {
-            source: 'current';
-            place: 'current';
+            source: "current";
+            place: "current";
             reactions: "current" | "unavailable";
             authors: "current" | "unavailable";
             actions: "current" | "unavailable";
             watch: "current" | "sign_in_required" | "unavailable";
             slowMode: "current" | "unavailable";
         };
-        reactionsAsOf: Readonly<{
+        reactionsAsOf: {
             epoch: number;
             position: string;
-        }> | null;
+        } | null;
+        reviewContext?: {
+            source: {
+                threadId: string;
+                postId: string;
+                revisionId: string | null;
+            };
+            target: {
+                state: "available";
+                subject: {
+                    id: string;
+                    kind: string;
+                    label: {
+                        value: string;
+                        language: string;
+                    } | null;
+                };
+            } | {
+                state: "absent" | "withheld";
+            } | {
+                state: "unavailable";
+            };
+            citations: {
+                state: "current";
+                items: {
+                    postId: string;
+                    sourceRevisionId: string | null;
+                    citation: {
+                        state: "available";
+                        questionId: string;
+                        units: number;
+                        voteRevision: number;
+                        metadata: {
+                            state: "unavailable";
+                        };
+                    } | {
+                        state: "absent" | "withheld";
+                    };
+                }[];
+            };
+        };
         authorErasure?: {
             authorId: string;
             mayErase: boolean;

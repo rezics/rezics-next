@@ -1,5 +1,5 @@
 import type { DocumentSnapshot } from '@rezics/document';
-import { type RealmPresentationImage, type RealmPresentationOptional } from './realm-media.ts';
+import { type RealmPresentationImage, type RealmPresentationOptional } from './realm-presentation-image.ts';
 export type CommunityPresentation = Readonly<{
     realmId: string;
     spaceId: string;
@@ -29,7 +29,7 @@ export type CommunityPresentation = Readonly<{
         action: 'join' | 'leave' | 'sign-in' | null;
     }>;
 }>;
-export declare const CommunityPresentationSchema: import("typebox").TObject<{
+export declare function CommunityPresentationSchema(): import("typebox").TObject<{
     realmId: import("typebox").TString;
     spaceId: import("typebox").TString;
     contextId: import("typebox").TString;
@@ -133,4 +133,4 @@ export declare const CommunityPresentationSchema: import("typebox").TObject<{
     }>;
 }>;
 /** Materialize readonly derivative collections for the HTTP schema's JSON DTO. */
-export declare function communityPresentationResponse(value: CommunityPresentation): import('typebox').Static<typeof CommunityPresentationSchema>;
+export declare function communityPresentationResponse(value: CommunityPresentation): import('typebox').Static<ReturnType<typeof CommunityPresentationSchema>>;

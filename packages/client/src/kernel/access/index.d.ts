@@ -40,7 +40,7 @@ export declare function createAccess(config: AccessConfig): Access;
 /** Evaluate exact gate actions on the Global Context, borrowing the mounted operation's scope operand. */
 export declare function authorizePlatformGate(access: Access, actor: Actor, actions: readonly string[], clientAction: string, resource: Resource, context: AccessContext, at: string, client?: AccessClient): Promise<boolean>;
 /** Standalone instance denies authorization until an app supplies its own catalogue. */
-export declare const access: Access;
+export declare function access(): Access;
 export { visibleOperations, type VisibleOperation } from './gates/visibility.ts';
 export { ACTIVE_ACCOUNTS, type GrantSubject } from './grant-subject.ts';
 export { captureDurableInitiator, durableInitiatorCommitment, DurableInitiatorCaptureUnavailableError, } from './durable-initiator-capture.ts';
@@ -49,7 +49,7 @@ export { resourceAuthorization, resourceAuthorizationPage, type AuthorizationAnc
 export { creationDeclares, parentCreationAuthorization, type ParentAnchor, type ParentCreationContext, type ResourceCreationPort, } from './parent-creation.ts';
 export { initializeResourceGrants } from './resource-initialization.ts';
 export { resourceRoleHeld } from './resource-role-held.ts';
-export { readRealmOwnershipRoles, assertRealmOwnerMayLeave, RealmLastOwnerError, createRealmOwnershipCommands, readAppliedRealmErasureSuccession, type AppliedRealmErasureSuccession, type RealmErasureSuccessionInput, type RealmErasureSuccessionSource, type PreparedRealmErasureSuccession, type RealmErasureSuccessionResult, type RealmErasureSuccessionAuthorization, } from './realm-ownership.ts';
+export { readRealmOwnershipRoles, readRealmOwnerLeaveObservation, assertRealmOwnerMayLeave, RealmLastOwnerError, createRealmOwnershipCommands, readAppliedRealmErasureSuccession, type AppliedRealmErasureSuccession, type RealmOwnerLeaveObservation, type RealmErasureSuccessionInput, type RealmErasureSuccessionSource, type PreparedRealmErasureSuccession, type RealmErasureSuccessionResult, type RealmErasureSuccessionAuthorization, } from './realm-ownership.ts';
 export { approveRealmClaim, type ApproveRealmClaimInput, type ApproveRealmClaimContext, type RealmClaimApproval, } from './realm-claim.ts';
 export { endResourceDenial, recordResourceDenial } from './resource-denials.ts';
 export { grantGroupRole } from './resource-group-grant.ts';
@@ -58,4 +58,4 @@ export type { ResourceRoleCatalogue } from './resource-roles.ts';
 export { createWorkflowApprovals, sweepWorkflowApprovals, workflowApprovalBinding, MAX_WORKFLOW_APPROVAL_LIFETIME_MS, WorkflowApprovalUnavailableError, type WorkflowApproval, type WorkflowApprovalConfig, type WorkflowApprovalRequest, type WorkflowApprovalBinding, } from './workflow-approvals.ts';
 export { createCredentialCapability, type CredentialCapability, type CredentialCapabilityConfig, type CredentialOpeningLocator, } from './auth-credential-capability.ts';
 export { createCommittedContinuations, deletionAllowlist, COMMITTED_CONTINUATION_ACTIONS, COMMITTED_CONTINUATION_PURPOSE, COMMITTED_CONTINUATION_TTL_MS, ContinuationDeniedError, type CommittedContinuations, type ContinuationBinding, type ContinuationEntry, type ContinuationView, } from './committed-continuations.ts';
-export { createPreferenceCommands, readAccountPreferences, notificationAllowed, DEFAULT_ACCOUNT_PREFERENCES, type AccountPreferences, type PreferenceChange, } from './preferences.ts';
+export { createPreferenceCommands, readAccountPreferences, notificationAllowed, projectPreferencePage, projectReadingAdvice, projectShelfAdvice, withPreferencePage, withReadingPreferencePage, DEFAULT_ACCOUNT_PREFERENCES, type AccountPreferences, type PreferenceChange, type PreferencePage, type PreferencePageAction, type PreferencePageKind, type PreferenceActionAdvice, type PreferenceReadingAdvice, type PreferenceShelfAdvice, type PreferencePageObservation, } from './preferences.ts';

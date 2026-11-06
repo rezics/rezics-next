@@ -100,7 +100,7 @@ test('a concealed lookahead and raw item preserve current head and bounded conti
   await fence('102');
   const observationStart = observer.records.length;
   const first = await page(id);
-  expect(first.head.digest).toBe(latest);
+  expect(first.head.digest).toBe(latest!);
   expect(first.history!.items.map((item) => item.digest)).toEqual([latest!]);
   expect(first.history!.nextCursor).toBeString();
   const withheld = await page(id, first.history!.nextCursor!);
@@ -117,7 +117,7 @@ test('a concealed lookahead and raw item preserve current head and bounded conti
   expect(JSON.stringify(fetched.map((row) => row.parameters))).not.toContain(middle!);
   await json(await inspect(id, `?digest=${middle}`), 404);
   const exact = await json(await inspect(id, `?digest=${old}`));
-  expect(exact.head.digest).toBe(latest);
+  expect(exact.head.digest).toBe(latest!);
   expect(exact.selectedObservation.digest).toBe(old);
   await json(await inspect(id, `?digest=${'0'.repeat(64)}`), 404);
   await json(await fixture.request('GET', `${path(id)}/observations`, { actor: null }), 401);
@@ -173,7 +173,7 @@ test('history continuation keeps its original native ceiling when a new head arr
   const added = await json(await write(id, newest));
   const continued = await page(id, cursor);
   expect(continued.head.digest).toBe(added.observation.digest);
-  expect(continued.history!.items.map((item) => item.digest)).toEqual([digests[1]]);
+  expect(continued.history!.items.map((item) => item.digest)).toEqual([digests[1]!]);
 });
 
 test('history fences each provider identity in its own home and keeps the cursor on the Subject home', async () => {
@@ -312,7 +312,7 @@ test('caller revocation and Subject identity changes during hydration withhold t
   }
   await json(await pending, 403);
   await fixture.grantImporter(fixture.actors.importer);
-  expect((await page(id, cursor)).history!.items.map((item) => item.digest)).toEqual([digests[1]]);
+  expect((await page(id, cursor)).history!.items.map((item) => item.digest)).toEqual([digests[1]!]);
 
   const identity = await history(['231', '232', '233']);
   const identityPage = await page(identity.id);

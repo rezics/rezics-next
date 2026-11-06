@@ -1,6 +1,7 @@
 WITH args AS (
   SELECT :account_id::uuid AS account_id,
-         :target_type::nullable(text) AS target_type,
+         :target_type::text AS target_type,
+         :has_target_type::boolean AS has_target_type,
          :after_updated_at::timestamptz AS after_updated_at,
          :after_target_id::uuid AS after_target_id,
          :has_cursor::boolean AS has_cursor,
@@ -19,7 +20,7 @@ scoped AS NOT MATERIALIZED (
   FROM library.follow AS follow
   CROSS JOIN args
   WHERE follow.route = :route::integer
-    AND (args.target_type IS NULL OR follow.target_type = args.target_type)
+    AND (NOT args.has_target_type OR follow.target_type = args.target_type)
 ),
 candidates AS (
 (

@@ -51,6 +51,7 @@ type ProvenanceRow = {
     route: number;
     subject_id: string;
     candidate_id: string;
+    slot_id?: string;
 };
 /** Point probes for the proposing source of each shown candidate, then the recording revision of a compact fact. */
 export declare function candidateSources(client: Pick<PoolClient, 'query'>, entries: readonly ProvenanceRow[]): Promise<Map<string, CandidateSource | null>>;

@@ -5,8 +5,8 @@ import type { SubjectListingSource } from './source.ts';
 import type { OpenSearch } from './opensearch.ts';
 import { type AnyDiscoveryIndexAction, type SecondScopeDiscoveryIndexAction } from './discovery-documents.ts';
 import { type AccountDiscoverySource, type AccountFrontier, type AccountPage, type AccountSnapshot } from './discovery.ts';
-import { type DiscoveryMetadataKind, type DiscoveryMetadataProducers } from './generations.ts';
-import type { ReviewDiscoveryRefresh } from '../content/review-discovery-changes.ts';
+import type { DiscoveryMetadataKind, DiscoveryMetadataProducers, DiscoveryOmittedKind } from './index.ts';
+import type { ReviewDiscoveryRefresh } from '../content/index.ts';
 import type { SubjectSource } from './source.ts';
 /** Admit the whole native chunk before sort preparation or engine I/O; omission means keyed deletion. */
 export declare function validateAccountSnapshot(value: unknown, partition: number, ids: readonly string[], atLeast: bigint): AccountSnapshot;
@@ -35,6 +35,8 @@ export declare function nativeDiscoveryRegistry(pool: Pool, routeKey: Uint8Array
     release?: Release;
     languages?: readonly string[];
     ownerAdapters?: DiscoveryOwnerAdapterSlots;
+    accounts?: AccountDiscoverySource;
+    omittedKinds?: readonly DiscoveryOmittedKind[];
 }): Promise<DiscoveryRegistry & import("./discovery.ts").DiscoveryOwnerRegistry>;
 export type DiscoveryTarget = {
     prefix: string;
@@ -118,7 +120,14 @@ export declare function createDiscoveryProjection(options: {
     prepareOwnerActions: (kind: DiscoveryMetadataKind, partition: number, ids: readonly string[]) => Promise<{
         position: bigint;
         keys: any[];
-        records: readonly import("./discovery-documents.ts").SecondScopeDiscoveryRecord[];
+        records: readonly Readonly<{
+            key: import("./discovery-api.ts").DiscoveryOwnerKey;
+            revision: bigint;
+            sourceVersion: string | null;
+            names: readonly string[];
+            descriptions: readonly string[];
+            nameSort: string | null;
+        }>[];
         actions: SecondScopeDiscoveryIndexAction[];
     }>;
     projectOwner: (kind: DiscoveryMetadataKind, partition: number, ids: readonly string[]) => Promise<Readonly<{
@@ -134,7 +143,7 @@ export declare function createDiscoveryProjection(options: {
         }>;
     }>[] | undefined>;
     ownerPosition: (kind: DiscoveryMetadataKind, partition: number) => Promise<bigint>;
-    metadataProducers: Readonly<Partial<Record<"collection" | "review" | "space", Readonly<{
+    metadataProducers: Readonly<Partial<Record<import("./discovery-api.ts").DiscoveryOwnerKind, Readonly<{
         kind: DiscoveryMetadataKind;
         owner: 'commerce' | 'content';
         readiness(): Promise<'ready' | 'preparing' | 'unavailable' | import("../community/space-discovery-dependencies.ts").SpaceDiscoveryDependencyReadiness>;
@@ -149,14 +158,14 @@ export declare function createDiscoveryProjection(options: {
                 id: string;
             }> | null;
             continuation: string | null;
-            keys: readonly import("./discovery-documents.ts").SecondScopeDiscoveryKey[];
-            records: readonly import("./discovery-documents.ts").SecondScopeDiscoveryRecord[];
+            keys: readonly import("./discovery-api.ts").DiscoveryOwnerKey[];
+            records: readonly import("./discovery-api.ts").DiscoveryMetadataRecord[];
         }>>;
         read(partition: number, ids: readonly string[]): Promise<Readonly<{
             position: bigint;
             epoch?: number;
-            keys: readonly import("./discovery-documents.ts").SecondScopeDiscoveryKey[];
-            records: readonly import("./discovery-documents.ts").SecondScopeDiscoveryRecord[];
+            keys: readonly import("./discovery-api.ts").DiscoveryOwnerKey[];
+            records: readonly import("./discovery-api.ts").DiscoveryMetadataRecord[];
         }>>;
         position(partition: number): Promise<bigint>;
     }>>>>;

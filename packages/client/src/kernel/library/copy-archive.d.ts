@@ -18,7 +18,7 @@ export type CopyArchiveDependencies = {
     routeKey: Uint8Array;
     clock?: KernelClock;
 };
-export declare const copyArchiveAuthorityTypes: string[];
+export declare function copyArchiveAuthorityTypes(): string[];
 export type CopyArchiveProgressMeasureMapping = {
     sourceUnit: string;
     unit: string;

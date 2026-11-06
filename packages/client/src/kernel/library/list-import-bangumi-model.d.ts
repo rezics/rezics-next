@@ -30,6 +30,16 @@ export type BangumiGuard = {
     subjectId: string;
     releaseDigest: string;
     identityEpoch: string;
+    claim: {
+        route: number;
+        externalId: string;
+        subjectId: string | null;
+    } | null;
+    upload: {
+        uploadId: string;
+        ordinal: number;
+        reviewToken: string;
+    };
 };
 export type BangumiScoreSource = {
     state: 'score' | 'unrated' | 'absent' | 'unsupported';
@@ -80,7 +90,10 @@ export type BangumiScoreReview = {
         selection: BangumiScoreSelection;
         admission: {
             status: 'unavailable';
-            reason: 'native_vote_scope_required' | 'target_not_selected' | 'question_unavailable' | 'question_revision_unsupported' | 'question_scale_unsupported' | 'conditional_admission_unavailable';
+            reason: 'native_vote_scope_required' | 'target_not_selected' | 'question_unavailable' | 'question_revision_unsupported' | 'question_scale_unsupported' | 'conditional_admission_unavailable' | 'question_observation_unavailable' | 'identity_pending' | 'identity_observation_unavailable' | 'own_vote_observation_unavailable' | 'atomic_guard_unavailable';
+        } | {
+            status: 'reviewed';
+            reason: 'native_review_observed';
         };
     };
 };

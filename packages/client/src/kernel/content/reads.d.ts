@@ -119,6 +119,8 @@ type Row = {
     decision_id: string | null;
     matches?: boolean | null;
 };
+export declare function contentSourceWitness(value: PostEntry | ThreadView): string | undefined;
+export declare function threadPostSelectionWitness(page: Page<PostEntry>): string | undefined;
 export declare class ContentNotFoundError extends Error {
     constructor();
 }
@@ -255,9 +257,28 @@ export declare function listPostRevisions(dependencies: ContentReadDependencies,
 export declare function discloseThreads(dependencies: ContentReadDependencies, threadIds: readonly ThreadId[], context: ReadContext): Promise<readonly Anchored<ThreadView | null>[]>;
 /** Exact native rules reader. It shares the ordinary row, ancestry and Access
  * formula; the immutable requested revision never becomes the current head. */
+export type ExactPublishedRulesAuthoringObservation = Readonly<{
+    state: 'available';
+    rules: import('./community-presentation-rules.ts').PresentedRules;
+    title: string | null;
+    authorId: string;
+    threadId: string;
+    boardId: string;
+    boardTitle: string | null;
+    mediaIds: readonly string[];
+    currentRevision: boolean;
+    revisionAction: 'allowed' | 'denied' | 'unavailable';
+}> | Readonly<{
+    state: 'erased' | 'concealed';
+}>;
 export declare function readExactPublishedRules(dependencies: Pick<ContentReadDependencies, 'pool' | 'access' | 'clock'>, references: readonly (import('./community-presentation-rules.ts').RulesReference & {
     realmId: string;
 })[], context: ReadContext): Promise<ReadonlyMap<string, import('./community-presentation-rules.ts').PresentedRules>>;
+/** Authoring adds only current native header and body state to the existing exact reader.
+ * Erasure is disclosed only when the same native post/thread read authority admits it. */
+export declare function readExactPublishedRulesForAuthoring(dependencies: Pick<ContentReadDependencies, 'pool' | 'access' | 'clock'>, references: readonly (import('./community-presentation-rules.ts').RulesReference & {
+    realmId: string;
+})[], context: ReadContext): Promise<ReadonlyMap<string, ExactPublishedRulesAuthoringObservation>>;
 export type NoticePostReference = Readonly<{
     threadId: string;
     postId: string | null;

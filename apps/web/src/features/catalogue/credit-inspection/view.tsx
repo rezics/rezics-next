@@ -22,6 +22,10 @@ import {
   type CreditVisit,
 } from './model';
 
+const wrapTarget = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2';
+const wrapLink =
+  'inline-flex min-h-11 min-w-11 max-w-full items-center py-2 underline whitespace-normal [overflow-wrap:anywhere]';
+
 /** Independent destinations keep the bounded original credit window mounted in its original tab. */
 function DisclosedTarget({ children, ...props }: LinkProps) {
   return (
@@ -154,13 +158,13 @@ export function CreditInspection({
           <p>{m.credit_inverse({}, o)}</p>
           <nav aria-label={m.credit_original({}, o)} className="flex flex-wrap gap-4">
             <DisclosedTarget
-              className="inline-flex min-h-11 items-center underline"
+              className={wrapLink}
               href={destination(subjectViewHref({ id: credit.holder, label: title }, locale, 'overview'))}
             >
               {title}
             </DisclosedTarget>
             <DisclosedTarget
-              className="inline-flex min-h-11 items-center underline"
+              className={wrapLink}
               href={destination(subjectViewHref({ id: credit.holder, label: title }, locale, 'sources'))}
             >
               {m.subject_sources({}, o)}
@@ -188,7 +192,9 @@ export function CreditInspection({
           <section aria-label={m.credit_revision({}, o)} className="space-y-2">
             <h3 className="font-medium">{m.credit_revision({}, o)}</h3>
             <details className="min-w-0">
-              <summary className="min-h-11 cursor-pointer py-2">{m.credit_technical({}, o)}</summary>
+              <summary className="min-h-11 min-w-11 max-w-full cursor-pointer py-2 whitespace-normal [overflow-wrap:anywhere]">
+                {m.credit_technical({}, o)}
+              </summary>
               <p>{statement.property.id}</p>
               <p>
                 {[...statement.qualifiers, ...statement.references.flatMap((reference) => reference.parts)]
@@ -203,7 +209,12 @@ export function CreditInspection({
               </p>
             </details>
             <p className="text-muted-foreground">{m.credit_metadata_meaning({}, o)}</p>
-            <Button variant="outline" disabled={readingMetadata || editing} onClick={() => void inspectRevision()}>
+            <Button
+              variant="outline"
+              className={wrapTarget}
+              disabled={readingMetadata || editing}
+              onClick={() => void inspectRevision()}
+            >
               {readingMetadata
                 ? m.candidate_loading({}, o)
                 : failedDetail
@@ -249,6 +260,7 @@ export function CreditInspection({
                 </p>
                 {correction?.state === 'ready' && (
                   <Button
+                    className={wrapTarget}
                     disabled={readingMetadata}
                     onClick={() => {
                       if (current()) setEditing(true);
@@ -259,7 +271,7 @@ export function CreditInspection({
                 )}
                 {correction?.state === 'stale' && (
                   <a
-                    className="underline"
+                    className={wrapLink}
                     href={creditWindowHref(visit, locale, credit)}
                     target="_blank"
                     rel="noopener noreferrer"
@@ -270,6 +282,7 @@ export function CreditInspection({
                 {correction?.state === 'unavailable' && (
                   <Button
                     variant="outline"
+                    className={wrapTarget}
                     onClick={() => {
                       if (current()) setAttempt((value) => value + 1);
                     }}
@@ -284,6 +297,7 @@ export function CreditInspection({
         {!editing && (
           <Button
             variant="outline"
+            className={wrapTarget}
             onClick={() => {
               if (current()) onClose();
             }}

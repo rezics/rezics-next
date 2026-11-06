@@ -4,9 +4,22 @@ import type { ContentEditionSaleAuthority } from '../content/edition-model.ts';
 import type { ReadContext } from '../content/model.ts';
 import type { Access } from '../request/access.ts';
 import type { CapturedContentEdition, CheckoutDecision } from './model.ts';
-export declare class ContentEditionUnavailableError extends AccessUnavailableError {
-    constructor(cause?: AccessUnavailableError);
-}
+export declare function ContentEditionUnavailableError(): {
+    new (cause?: AccessUnavailableError): {
+        cause?: unknown;
+        name: string;
+        message: string;
+        stack?: string;
+        readonly reason: 'deadline' | 'overloaded' | 'contention';
+    };
+    isError(error: unknown): error is Error;
+    isError(value: unknown): value is Error;
+    captureStackTrace(targetObject: object, constructorOpt?: Function): void;
+    captureStackTrace(targetObject: object, constructorOpt?: Function): void;
+    prepareStackTrace(err: Error, stackTraces: NodeJS.CallSite[]): any;
+    stackTraceLimit: number;
+};
+export type ContentEditionUnavailableError = InstanceType<ReturnType<typeof ContentEditionUnavailableError>>;
 export declare const MAX_CAPTURED_EDITION_BYTES = 4096;
 /** Compatibility diagnostic for callers with no configured native dependencies.
  * Runtime admission uses the actual Content entrypoints below, never this diagnostic.

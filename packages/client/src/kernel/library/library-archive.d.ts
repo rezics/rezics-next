@@ -1,6 +1,6 @@
 import { type LibraryArchiveManifest, type LibraryExportSection } from './library-export-format.ts';
 /** Consumer bounds, fixed before parsing. No upload, permission or effect is admitted here. */
-export declare const LIBRARY_ARCHIVE_LIMITS: {
+export declare function LIBRARY_ARCHIVE_LIMITS(): {
     readonly records: 100000;
     readonly recordBytes: number;
     readonly maxRecordBytes: 65536;
@@ -20,7 +20,7 @@ export declare const LIBRARY_ARCHIVE_RECOVERY_LIMITS: {
     readonly applyCommands: 25;
     readonly cleanupRows: 100;
 };
-export declare const archiveMergeSections: readonly ['entries', 'labels', 'assignments', 'annotations', 'journals'];
+export declare const archiveMergeSections: readonly ['entries', 'labels', 'assignments', 'annotations', 'journals', 'provenance'];
 type ObjectValue = Record<string, unknown>;
 export type ArchiveRecord = ObjectValue & {
     section: LibraryExportSection;

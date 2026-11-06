@@ -5,6 +5,11 @@ import { t } from 'elysia';
 import { createSearchService } from '../service.ts';
 import { searchHit, createCatalogueResponseAdapter } from './catalogue.ts';
 const object = { additionalProperties: false } as const;
+function releaseSearchHit() {
+  return memoizedValue(releaseSearchHit, () =>
+    t.Object({ ...searchHit().properties, matchEvidence: t.Optional(searchHit().properties.matchEvidence) }, object),
+  );
+}
 function releaseSearchGroup() {
   return memoizedValue(releaseSearchGroup, () =>
     t.Union([
@@ -12,8 +17,8 @@ function releaseSearchGroup() {
         {
           kind: t.Literal('work'),
           id: t.String({ format: 'uuid' }),
-          work: searchHit(),
-          releases: t.Array(searchHit(), { minItems: 1, maxItems: 3 }),
+          work: releaseSearchHit(),
+          releases: t.Array(releaseSearchHit(), { minItems: 1, maxItems: 3 }),
           next: t.Union([t.String(), t.Null()]),
         },
         object,
@@ -22,7 +27,7 @@ function releaseSearchGroup() {
         {
           kind: t.Literal('release'),
           id: t.String({ format: 'uuid' }),
-          release: searchHit(),
+          release: releaseSearchHit(),
           workLink: t.Union([
             t.Literal('missing'),
             t.Literal('unknown'),
@@ -54,7 +59,7 @@ export function releaseChildrenResponse() {
     t.Object(
       {
         status: t.Union([t.Literal('ready'), t.Literal('preparing')]),
-        children: t.Array(searchHit(), { maxItems: 20 }),
+        children: t.Array(releaseSearchHit(), { maxItems: 20 }),
         next: t.Union([t.String(), t.Null()]),
         as_of: t.String({ format: 'date-time' }),
       },

@@ -1,6 +1,6 @@
 import { Type, type Static } from 'typebox';
 export declare const REACTION_KINDS: readonly ['upvote', 'downvote', 'like', 'love', 'laugh', 'insightful', 'sad'];
-export declare const CONTENT_EVENTS: {
+export declare function CONTENT_EVENTS(): {
     readonly "com.rezics.content.review-discovery.opened.v1": Type.TObject<{
         route: Type.TInteger;
         id: Type.TString;
@@ -289,5 +289,5 @@ export declare const CONTENT_EVENTS: {
         sourcePosition: Type.TString;
     }>;
 };
-export type ContentEventType = keyof typeof CONTENT_EVENTS;
-export type ContentEventData<T extends ContentEventType> = Static<(typeof CONTENT_EVENTS)[T]>;
+export type ContentEventType = keyof ReturnType<typeof CONTENT_EVENTS>;
+export type ContentEventData<T extends ContentEventType> = Static<ReturnType<typeof CONTENT_EVENTS>[T]>;

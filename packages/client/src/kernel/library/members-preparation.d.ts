@@ -6,10 +6,11 @@ import type { KernelClock } from '../clock.ts';
 import { type OperationalTransaction } from '../command/operational.ts';
 import { type Access, type Actor } from '../request/access.ts';
 import type { WorkClient } from '../work/client.ts';
+import type { WorkExecutionOriginal } from '../command/execution-contract.ts';
 import type { NativeSourceIdentity } from './native-source-custody.ts';
 import type { CollectionSourceObservation } from './collection-source.ts';
 import { type OperationalWorkRegistration } from '../history/operational-work.ts';
-import type { OperationalWorkOriginal, OperationalWorkTransfer } from '../history/operational-work-budget.ts';
+import { type OperationalWorkTransfer } from '../history/operational-work-budget.ts';
 /** Internal admitted meaning, never an HTTP DTO or an execution/disclosure certificate. */
 export type PreparationDefinition = Readonly<{
     filter: FilterDocument;
@@ -72,7 +73,11 @@ export interface MembersPreparation {
     /** One Collection's distinct definitions, bounded by the common-page read authority. */
     reserve(actor: Actor, collectionId: string, definitions: readonly PreparationDefinition[], options?: {
         deadline?: number;
-        history?: OperationalWorkOriginal;
+        history?: never;
+        runtime?: boolean;
+    } | {
+        deadline: number;
+        history: WorkExecutionOriginal;
         runtime?: boolean;
     }): Promise<Readonly<{
         episodes: readonly PreparingEpisode[];
@@ -135,7 +140,7 @@ export declare function readPreparationSource(tx: OperationalTransaction, locato
     }>;
 } | null>;
 export declare function readPreparationOwnerFence(tx: OperationalTransaction, locator: PreparationLocator, definition: PreparationDefinition): Promise<string | null>;
-/** Native association/currentness inside a genuine selected apply, never the expired request handoff. */
+/** Native source/currentness inside a genuine selected apply, never the expired request handoff. */
 export declare function checkMembersPreparationCompletion(tx: OperationalTransaction, locator: PreparationLocator): Promise<Readonly<{
     status: 'obsolete';
 }> | Readonly<{

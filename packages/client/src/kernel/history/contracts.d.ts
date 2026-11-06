@@ -48,6 +48,41 @@ export declare function historyArtifact(type: string, minimizerVersion?: number)
     skeletonFields: readonly string[];
     roles: readonly ("acting-human" | "actor" | "appellant" | "author" | "buyer" | "creator" | "delegate" | "durable-initiator" | "member" | "operator" | "owner" | "principal" | "related-party" | "reporter" | "reviewer" | "subject" | "uploader" | "voter")[];
 }>;
+/** Current native Zone serializers. Keep this finite so a new or former wire producer stays a
+ * visible family gap until its body and consumer disposition are adopted. */
+export declare const ZONE_HISTORY_RECEIPT_KINDS: readonly ["zone.create", "zone.configure", "zone.publish", "zone.delete", "zone.restore"];
+export declare const ZONE_HISTORY_EVENT_TYPES: readonly ["com.rezics.zone.created.v1", "com.rezics.zone.configured.v1", "com.rezics.zone.published.v1", "com.rezics.zone.deleted.v1", "com.rezics.zone.restored.v1"];
+export type ZoneHistoryReceiptKind = (typeof ZONE_HISTORY_RECEIPT_KINDS)[number];
+export type ZoneHistoryEventType = (typeof ZONE_HISTORY_EVENT_TYPES)[number];
+/** Terminal-account Zone cleanup context carried from the sole Zone lifecycle owner.
+ * It is provenance for History's existing copy/consumer work, not a RecordPurgeAuthority
+ * and not a new admission or acknowledgement. The owner holds and revalidates its branch
+ * locks while consuming the returned per-copy observation. */
+export type ZoneHistoryCleanupBinding = Readonly<{
+    kind: 'terminal_account';
+    accountId: string;
+    accountRoute: number;
+    barrierVersion: number;
+    barrierAt: string;
+    zoneId: string;
+    zoneRoute: number;
+    originalHome: number;
+    originalEpoch: number;
+    ownerId: string;
+    ownerTransactionId: string;
+    zoneRevision: string;
+    lifecycleRevision: string;
+    deletionGeneration: string;
+    protectionRevision: string;
+}>;
+/** Existing account erasure remains the default. A Zone branch must be explicitly carried
+ * through the History receiving calls so it cannot be mistaken for ordinary record purge. */
+export type HistoryReceivingDiscriminant = Readonly<{
+    kind: 'account-erasure';
+}> | Readonly<{
+    kind: 'zone-cleanup';
+    binding: ZoneHistoryCleanupBinding;
+}>;
 export type EventClassification = Readonly<{
     kind: 'account-bearing';
     roles: readonly AccountRole[];
@@ -384,6 +419,22 @@ export declare const EVENT_CLASSIFICATIONS: Readonly<{
         roles: readonly [];
     }>;
     'com.rezics.semantic.links.visibility-changed.v1': EventClassification;
+    'com.rezics.semantic.subject_page.dependencies_changed.v1': Readonly<{
+        kind: 'non-personal';
+        roles: readonly [];
+    }>;
+    'com.rezics.semantic.subject_page.repair_queued.v1': Readonly<{
+        kind: 'non-personal';
+        roles: readonly [];
+    }>;
+    'com.rezics.semantic.subject_page.repair_requested.v1': Readonly<{
+        kind: 'non-personal';
+        roles: readonly [];
+    }>;
+    'com.rezics.semantic.subject_page.work_committed.v1': Readonly<{
+        kind: 'non-personal';
+        roles: readonly [];
+    }>;
     'com.rezics.statement.accepted.v1': Readonly<{
         kind: 'non-personal';
         roles: readonly [];

@@ -241,12 +241,14 @@ test('Account, credential, CSRF, source, route, locale, admission, expiry and up
     replace(binding);
     expect(visit.state).toBeNull();
   }
-  const { visit, replace } = fixture();
-  const pending = visit.startPage();
-  replace({ ...binding, admission: 'admission-b' });
-  replace({ ...binding, admission: 'admission-a-after-b' });
-  expect(visit.admitPage(pending, page([]))).toBe(false);
-  expect(visit.state).toBeNull();
+  {
+    const { visit, replace } = fixture();
+    const pending = visit.startPage();
+    replace({ ...binding, admission: 'admission-b' });
+    replace({ ...binding, admission: 'admission-a-after-b' });
+    expect(visit.admitPage(pending, page([]))).toBe(false);
+    expect(visit.state).toBeNull();
+  }
   const { visit, expire } = fixture();
   const pending = visit.startPage();
   const replacement = visit.startUpload();
@@ -351,5 +353,21 @@ test('Supplied native results expose only selected supported outcomes and checkp
     expect(Object.isFrozen(accepted.rows[0])).toBe(true);
     native.results[0]!.section = 'sessions';
     expect(selectedArchiveRecoveryResults(native, selected).rows).toEqual([]);
+  }
+});
+
+test('Completed recovery results retain the exact confirmed choice after later selection changes', () => {
+  const { visit } = fixture();
+  try {
+    const choice: Choice = { action: 'update', stateId: 'confirmed-state', labelIds: ['confirmed-label'] };
+    visit.choose(7, 'entries', choice);
+    visit.admitReview(visit.startReview(), { identity: 'review-7', operands: [{ ordinal: 7, revision: 4 }] });
+    const apply = visit.startApply();
+    visit.settleApply(apply.request, 'complete', page([{ ordinal: 7, status: 'applied' }]));
+    visit.choose(7, 'entries', { action: 'preserve' });
+    expect(visit.state?.resultSelection).toEqual([{ ordinal: 7, section: 'entries', choice }]);
+    expect(Object.isFrozen(visit.state?.resultSelection[0]?.choice)).toBe(true);
+  } finally {
+    visit.retire();
   }
 });

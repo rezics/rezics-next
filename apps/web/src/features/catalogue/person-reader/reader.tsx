@@ -64,7 +64,7 @@ function Value({ part, reading }: { part: PersonStatement | PersonStatement['qua
     const summary = read.related[id];
     if (!summary || !('labels' in summary)) return unavailable;
     const label = pickText(summary.labels ?? {}, locale);
-    if (part.property.id === 'wdt:P106' && !peopleOccupationConcept(definition, summary.type))
+    if (part.property.id === 'wdt:P106' && !peopleOccupationConcept(definition, summary.type ?? ''))
       return (
         <span lang={label.lang ?? undefined}>{label.text || m.subject_value_unlabelled({}, options(locale))}</span>
       );
@@ -182,7 +182,7 @@ export function PersonReader(reading: Reading) {
   const groups = personGroups(reading.release, reading.public, reading.locale);
   const fields = [
     ...personScalarFields(reading.release, reading.public),
-    ...groups.flatMap((group) => group.fields.map((field) => field.id)),
+    ...groups.flatMap((group) => group.fields.filter((field) => field.admitted).map((field) => field.id)),
   ];
   return (
     <PeopleFacts reading={reading} fields={fields}>
@@ -222,9 +222,16 @@ function PersonFacts(reading: Reading) {
         <section key={group.kind} className="min-w-0 space-y-3" data-slot={`person-reader-${group.kind}`}>
           <h3 className="text-xl font-semibold">{title(group.kind, locale)}</h3>
           {!group.fields.length && <p role="status">{m.people_biography_unsupported({}, o)}</p>}
-          {group.fields.map((field) => (
-            <PeopleFactField key={field.id} field={field} reading={reading} />
-          ))}
+          {group.fields.map((field) =>
+            field.admitted ? (
+              <PeopleFactField key={field.id} field={field} reading={reading} />
+            ) : (
+              <section key={field.id} className="min-w-0 space-y-3" data-slot="people-fact-field">
+                <h4 className="font-medium">{field.label.text || m.subject_value_unlabelled({}, o)}</h4>
+                <p role="status">{m.people_biography_unsupported({}, o)}</p>
+              </section>
+            ),
+          )}
           {group.more && (
             <Link className={control} href={`${href}/details`}>
               {m.person_reader_more({}, o)}

@@ -140,6 +140,11 @@ export declare const PROBLEMS: {
         readonly title: 'Conflict';
         readonly retryable: false;
     };
+    readonly identity_group_overflow: {
+        readonly status: 409;
+        readonly title: 'Identity Group Overflow';
+        readonly retryable: false;
+    };
     readonly realm_last_owner: {
         readonly status: 409;
         readonly title: 'Realm Ownership Transfer Required';

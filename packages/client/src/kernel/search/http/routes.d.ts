@@ -1,5 +1,6 @@
+export { FactSchema } from './catalogue.ts';
 import type { DiscoverySearch } from '../discovery-service.ts';
-import type { Resource, AccessCheck } from '../../request/access.ts';
+import type { AccessCheck } from '../../request/access.ts';
 import type { Pool } from 'pg';
 import type { Access, AccessFactory } from '../../request/access.ts';
 import { createSearchService } from '../service.ts';
@@ -8,59 +9,6 @@ type SearchServiceImplementation = ReturnType<typeof createSearchService>;
 export type SearchService = Omit<SearchServiceImplementation, 'releaseGroups'> & {
     releaseGroups?: SearchServiceImplementation['releaseGroups'];
 };
-export type EmptyRecoveryAction =
-    | { kind: "edit-query" }
-    | { kind: "remove-type" }
-    | { kind: "remove-kind"; value: string }
-    | { kind: "remove-facet"; property: string; value: string }
-    | { kind: "remove-range"; property: string };
-export type EmptyRecovery = {
-    status: "ready" | "preparing" | "unavailable";
-    alternatives: { query: string; label: string }[];
-    actions: EmptyRecoveryAction[];
-};
-
-type SuggestionContextLabelSchema = import("typebox").TObject<{ value: import("typebox").TString; language: import("typebox").TString }>;
-type SuggestionContextDateSchema = import("typebox").TUnion<[
-    import("typebox").TObject<{ state: import("typebox").TLiteral<"value">; property: import("typebox").TString; value: import("typebox").TString; precision: import("typebox").TLiteral<"year"> }>,
-    import("typebox").TObject<{ state: import("typebox").TLiteral<"value">; property: import("typebox").TString; value: import("typebox").TString; precision: import("typebox").TLiteral<"month"> }>,
-    import("typebox").TObject<{ state: import("typebox").TLiteral<"value">; property: import("typebox").TString; value: import("typebox").TString; precision: import("typebox").TLiteral<"day"> }>,
-    import("typebox").TObject<{ state: import("typebox").TUnion<[import("typebox").TLiteral<"unknown">, import("typebox").TLiteral<"no_value">, import("typebox").TLiteral<"withheld">, import("typebox").TLiteral<"unavailable">, import("typebox").TLiteral<"not_applicable">]>; property: import("typebox").TString }>
-]>;
-type SuggestionWorkContextSchema = import("typebox").TUnion<[
-    import("typebox").TObject<{
-        subjectId: import("typebox").TString;
-        status: import("typebox").TLiteral<"available">;
-        creator: import("typebox").TObject<{ id: import("typebox").TString; label: SuggestionContextLabelSchema; property: import("typebox").TString; role: SuggestionContextLabelSchema }>;
-        relation: import("typebox").TOptional<import("typebox").TObject<{ kind: import("typebox").TUnion<[import("typebox").TLiteral<"work">, import("typebox").TLiteral<"release">]>; id: import("typebox").TString; label: SuggestionContextLabelSchema; date: import("typebox").TOptional<SuggestionContextDateSchema> }>>;
-        overflow: import("typebox").TOptional<import("typebox").TBoolean>;
-    }>,
-    import("typebox").TObject<{ subjectId: import("typebox").TString; status: import("typebox").TUnion<[import("typebox").TLiteral<"absent">, import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"empty">, import("typebox").TLiteral<"withheld">, import("typebox").TLiteral<"unavailable">]> }>
-]>;
-type SuggestionContextLabel = { value: string; language: string };
-type SuggestionContextDate =
-    | { state: "value"; property: string; value: string; precision: "year" | "month" | "day" }
-    | { state: "unknown" | "no_value" | "withheld" | "unavailable" | "not_applicable"; property: string };
-type SuggestionWorkContext =
-    | { subjectId: string; status: "available"; creator: { id: string; label: SuggestionContextLabel; property: string; role: SuggestionContextLabel }; relation?: { kind: "work" | "release"; id: string; label: SuggestionContextLabel; date?: SuggestionContextDate }; overflow?: boolean }
-    | { subjectId: string; status: "absent" | "not_applicable" | "empty" | "withheld" | "unavailable" };
-export declare const FactSchema: import("typebox").TUnion<[import("typebox").TObject<{
-    kind: import("typebox").TLiteral<"item">;
-    id: import("typebox").TString;
-    labels: import("typebox").TRecord<"^.*$", import("typebox").TString>;
-}>, import("typebox").TObject<{
-    kind: import("typebox").TLiteral<"time">;
-    year: import("typebox").TInteger;
-    month: import("typebox").TOptional<import("typebox").TInteger>;
-    day: import("typebox").TOptional<import("typebox").TInteger>;
-}>, import("typebox").TObject<{
-    kind: import("typebox").TLiteral<"quantity">;
-    amount: import("typebox").TNumber;
-    unit: import("typebox").TString;
-}>, import("typebox").TObject<{
-    kind: import("typebox").TLiteral<"code">;
-    value: import("typebox").TString;
-}>]>;
 export declare function searchRoutes<App>(app: App, { pool, routeKey, search, discovery, access, gateAccess, clock, }: {
     pool: Pool;
     routeKey: Uint8Array;
@@ -210,6 +158,12 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                             cursor?: string;
                         };
                         kindCountLeaf?: number;
+                        collectionDirectory?: {
+                            presentationKind?: string;
+                            curator?: string;
+                            subject?: string;
+                            order: "popular" | "recent";
+                        };
                         text?: string;
                         filter?: any;
                         population?: {
@@ -225,484 +179,27 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                         descriptions?: boolean;
                         languages?: string[];
                         properties?: string[];
-                        emptyRecoveryActions?: EmptyRecoveryAction[];
+                        emptyRecoveryActions?: ({
+                            kind: "edit-query";
+                        } | {
+                            kind: "remove-type";
+                        } | {
+                            kind: "remove-kind";
+                            value: string;
+                        } | {
+                            kind: "remove-facet";
+                            property: string;
+                            value: string;
+                        } | {
+                            kind: "remove-range";
+                            property: string;
+                        })[];
                     };
                     params: {};
                     query: unknown;
                     headers: unknown;
                     response: {
                         200: {
-                            hits: ({
-                                key: {
-                                    owner: "semantic";
-                                    kind: string;
-                                    route: number;
-                                    id: string;
-                                };
-                                summary: {
-                                    kind: "subject";
-                                    value: {
-                                        id: string;
-                                        type: string;
-                                        types: string[];
-                                        label: {
-                                            value: string;
-                                            language: string;
-                                        } | null;
-                                        creativeWork: boolean;
-                                        cover: {
-                                            media: string;
-                                            width: number;
-                                            height: number;
-                                            placeholder: {
-                                                thumbhash: string;
-                                                color: string;
-                                            };
-                                            variants: {
-                                                format: "avif" | "webp";
-                                                width: number;
-                                            }[];
-                                            focalPoint: {
-                                                x: number;
-                                                y: number;
-                                            } | null;
-                                            credit: {
-                                                rightsHolder: string;
-                                                via: {
-                                                    name: string;
-                                                    url: string;
-                                                };
-                                                license: string;
-                                                obligations: string[];
-                                            };
-                                        } | null;
-                                    };
-                                };
-                                matchEvidence: {
-                                    state: "absent";
-                                } | {
-                                    state: "unsupported";
-                                } | {
-                                    state: "unavailable";
-                                } | {
-                                    state: "current";
-                                    source: {
-                                        id: string;
-                                        revision: number;
-                                    };
-                                    query: string;
-                                    reasons: {
-                                        field: "alias" | "description" | "title";
-                                        language: string;
-                                        text: string;
-                                        spans: {
-                                            start: number;
-                                            end: number;
-                                        }[];
-                                    }[];
-                                };
-                                labels?: Record<string, string>;
-                                aliases?: Record<string, string[]>;
-                                descriptions?: Record<string, string>;
-                                facts?: Record<string, ({
-                                    kind: "item";
-                                    id: string;
-                                    labels: Record<string, string>;
-                                } | {
-                                    kind: "time";
-                                    year: number;
-                                    month?: number;
-                                    day?: number;
-                                } | {
-                                    kind: "quantity";
-                                    amount: number;
-                                    unit: string;
-                                } | {
-                                    kind: "code";
-                                    value: string;
-                                })[]>;
-                                figure?: {
-                                    questionId: string;
-                                    populationId: string;
-                                    scale: {
-                                        min: number;
-                                        max: number;
-                                        displayStep: number;
-                                    };
-                                    count: number;
-                                    state: "insufficient_data" | "ready" | "updating";
-                                    mean: number | null;
-                                    score: number | null;
-                                };
-                                listPresentation?: {
-                                    imageAspect: "landscape" | "portrait" | "square";
-                                    keyFacts: string[];
-                                };
-                                contexts?: {
-                                    credits: {
-                                        items: {
-                                            id: string;
-                                            labels: Record<string, string>;
-                                            aliases?: Record<string, string[]>;
-                                        }[];
-                                        next: boolean;
-                                    };
-                                    appearances: {
-                                        items: {
-                                            id: string;
-                                            labels: Record<string, string>;
-                                            aliases?: Record<string, string[]>;
-                                        }[];
-                                        next: boolean;
-                                    };
-                                };
-                            } | {
-                                key: {
-                                    owner: "accounts";
-                                    kind: string;
-                                    route: number;
-                                    id: string;
-                                };
-                                summary: {
-                                    kind: "account";
-                                    value: {
-                                        id: string;
-                                        accountKind: "actor" | "organization";
-                                        handle: string | null;
-                                        displayName: string | null;
-                                        automated: boolean;
-                                        operatorId: string | null;
-                                        avatar: {
-                                            media: string;
-                                            width: number;
-                                            height: number;
-                                            placeholder: {
-                                                thumbhash: string;
-                                                color: string;
-                                            };
-                                            variants: {
-                                                format: "avif" | "webp";
-                                                width: number;
-                                            }[];
-                                            focalPoint: {
-                                                x: number;
-                                                y: number;
-                                            } | null;
-                                            credit: null;
-                                        } | null;
-                                        verifiedAgent: {
-                                            id: string;
-                                            label: string;
-                                            type: string;
-                                        } | null;
-                                    };
-                                };
-                                matchEvidence: {
-                                    state: "absent";
-                                } | {
-                                    state: "unsupported";
-                                } | {
-                                    state: "unavailable";
-                                } | {
-                                    state: "current";
-                                    source: {
-                                        id: string;
-                                        revision: number;
-                                    };
-                                    query: string;
-                                    reasons: {
-                                        field: "alias" | "description" | "title";
-                                        language: string;
-                                        text: string;
-                                        spans: {
-                                            start: number;
-                                            end: number;
-                                        }[];
-                                    }[];
-                                };
-                            } | {
-                                key: {
-                                    owner: "library";
-                                    kind: "collection";
-                                    route: number;
-                                    id: string;
-                                };
-                                summary: {
-                                    kind: "collection";
-                                    value: {
-                                        id: string;
-                                        title: string;
-                                        description: string | null;
-                                        card: {
-                                            kind: "collection";
-                                            id: string;
-                                            destination: string;
-                                            title: string;
-                                            description: string | null;
-                                            visibility: "public";
-                                            revision: number;
-                                            presentationKind: string | null;
-                                            presentationKindSource: "mixed" | "owner";
-                                            cover: {
-                                                media: string;
-                                                width: number;
-                                                height: number;
-                                                placeholder: {
-                                                    thumbhash: string;
-                                                    color: string;
-                                                };
-                                                variants: {
-                                                    format: "avif" | "webp";
-                                                    width: number;
-                                                }[];
-                                                focalPoint: {
-                                                    x: number;
-                                                    y: number;
-                                                } | null;
-                                                credit: {
-                                                    rightsHolder: string;
-                                                    via: {
-                                                        name: string;
-                                                        url: string;
-                                                    };
-                                                    license: string;
-                                                    obligations: string[];
-                                                };
-                                            } | null;
-                                            coverSource: "member" | "none" | "owner" | "pending";
-                                            membershipKind: "curated";
-                                            memberCount: number;
-                                            orderEpoch: number;
-                                            createdAt: string;
-                                            updatedAt: string;
-                                        } | {
-                                            kind: "collection";
-                                            id: string;
-                                            destination: string;
-                                            title: string;
-                                            description: string | null;
-                                            visibility: "public";
-                                            revision: number;
-                                            presentationKind: string | null;
-                                            presentationKindSource: "mixed" | "owner";
-                                            cover: {
-                                                media: string;
-                                                width: number;
-                                                height: number;
-                                                placeholder: {
-                                                    thumbhash: string;
-                                                    color: string;
-                                                };
-                                                variants: {
-                                                    format: "avif" | "webp";
-                                                    width: number;
-                                                }[];
-                                                focalPoint: {
-                                                    x: number;
-                                                    y: number;
-                                                } | null;
-                                                credit: {
-                                                    rightsHolder: string;
-                                                    via: {
-                                                        name: string;
-                                                        url: string;
-                                                    };
-                                                    license: string;
-                                                    obligations: string[];
-                                                };
-                                            } | null;
-                                            coverSource: "member" | "none" | "owner" | "pending";
-                                            membershipKind: "dynamic";
-                                            outputGeneration: string;
-                                        };
-                                    };
-                                };
-                                matchEvidence: {
-                                    state: "absent";
-                                } | {
-                                    state: "unsupported";
-                                } | {
-                                    state: "unavailable";
-                                } | {
-                                    state: "current";
-                                    source: {
-                                        id: string;
-                                        revision: number;
-                                    };
-                                    query: string;
-                                    reasons: {
-                                        field: "alias" | "description" | "title";
-                                        language: string;
-                                        text: string;
-                                        spans: {
-                                            start: number;
-                                            end: number;
-                                        }[];
-                                    }[];
-                                };
-                            } | {
-                                key: {
-                                    owner: "content";
-                                    kind: "review";
-                                    route: number;
-                                    id: string;
-                                };
-                                summary: {
-                                    kind: "review";
-                                    value: {
-                                        id: string;
-                                        kind: "review";
-                                        title: string | null;
-                                        author?: {
-                                            displayName: string | null;
-                                            handle: string | null;
-                                        };
-                                        excerpt?: string;
-                                        subject?: {
-                                            id: string;
-                                            title: string | null;
-                                        } | null;
-                                    };
-                                };
-                                matchEvidence: {
-                                    state: "absent";
-                                } | {
-                                    state: "unsupported";
-                                } | {
-                                    state: "unavailable";
-                                } | {
-                                    state: "current";
-                                    source: {
-                                        id: string;
-                                        revision: number;
-                                    };
-                                    query: string;
-                                    reasons: {
-                                        field: "alias" | "description" | "title";
-                                        language: string;
-                                        text: string;
-                                        spans: {
-                                            start: number;
-                                            end: number;
-                                        }[];
-                                    }[];
-                                };
-                            } | {
-                                key: {
-                                    owner: "community";
-                                    kind: "space";
-                                    route: number;
-                                    id: string;
-                                };
-                                summary: {
-                                    kind: "space";
-                                    value: {
-                                        id: string;
-                                        title: string;
-                                        address: string;
-                                        summary?: string;
-                                        realm?: {
-                                            id: string;
-                                            title: string | null;
-                                        } | null;
-                                    };
-                                };
-                                matchEvidence: {
-                                    state: "absent";
-                                } | {
-                                    state: "unsupported";
-                                } | {
-                                    state: "unavailable";
-                                } | {
-                                    state: "current";
-                                    source: {
-                                        id: string;
-                                        revision: number;
-                                    };
-                                    query: string;
-                                    reasons: {
-                                        field: "alias" | "description" | "title";
-                                        language: string;
-                                        text: string;
-                                        spans: {
-                                            start: number;
-                                            end: number;
-                                        }[];
-                                    }[];
-                                };
-                            })[];
-                            kinds: {
-                                values: {
-                                    id: string;
-                                    labels: Record<string, string>;
-                                    icon: string;
-                                    count?: {
-                                        kind: string;
-                                        value: number;
-                                        exact: true;
-                                    } | {
-                                        kind: string;
-                                        value: number;
-                                        exact: false;
-                                    } | {
-                                        kind: string;
-                                        unavailable: true;
-                                    };
-                                }[];
-                                next: string | null;
-                            };
-                            next: string | null;
-                            as_of: string;
-                            emptyRecovery?: EmptyRecovery;
-                            viewerFacts?: {
-                                state: "unavailable";
-                                reason: "currentness" | "identity" | "response_limit";
-                                retryable: boolean;
-                            } | {
-                                state: "current";
-                                question: {
-                                    id: string;
-                                    revision: number;
-                                    grain: string;
-                                    scale: {
-                                        min: number;
-                                        max: number;
-                                        displayStep: number;
-                                    };
-                                    meaning: string;
-                                } | null;
-                                rows: {
-                                    rowKey: string;
-                                    subjectId: string;
-                                    entry: {
-                                        state: "present";
-                                        incarnationId: string | null;
-                                        entryState: string | null;
-                                        revision: number;
-                                    } | {
-                                        state: "absent";
-                                    } | {
-                                        state: "unavailable";
-                                        reason: "scope";
-                                    };
-                                    vote: {
-                                        state: "present";
-                                        questionId: string;
-                                        questionRevision: number;
-                                        units: number;
-                                        revision: number;
-                                    } | {
-                                        state: "absent";
-                                        questionId: string;
-                                        questionRevision: number;
-                                    } | {
-                                        state: "unavailable";
-                                        reason: "question" | "scope";
-                                    };
-                                    resolvedSubjectId?: string;
-                                }[];
-                            } | null;
-                        } | {
                             subjects: {
                                 id: string;
                                 type: string;
@@ -865,8 +362,32 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                             };
                             next: string | null;
                             as_of: string;
-                            emptyRecovery?: EmptyRecovery;
-                        } | import("../query-share.ts").QueryShare | {
+                            freshness?: {
+                                state: "catching-up" | "current" | "unavailable";
+                            };
+                            emptyRecovery?: {
+                                status: "preparing" | "ready" | "unavailable";
+                                alternatives: {
+                                    query: string;
+                                    label: string;
+                                }[];
+                                actions: ({
+                                    kind: "edit-query";
+                                } | {
+                                    kind: "remove-type";
+                                } | {
+                                    kind: "remove-kind";
+                                    value: string;
+                                } | {
+                                    kind: "remove-facet";
+                                    property: string;
+                                    value: string;
+                                } | {
+                                    kind: "remove-range";
+                                    property: string;
+                                })[];
+                            };
+                        } | {
                             status: "preparing" | "ready";
                             groups: ({
                                 kind: "work";
@@ -961,29 +482,6 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                                             };
                                         } | null;
                                     } | null;
-                                    matchEvidence: {
-                                        state: "absent";
-                                    } | {
-                                        state: "unsupported";
-                                    } | {
-                                        state: "unavailable";
-                                    } | {
-                                        state: "current";
-                                        source: {
-                                            id: string;
-                                            revision: number;
-                                        };
-                                        query: string;
-                                        reasons: {
-                                            field: "alias" | "description" | "title";
-                                            language: string;
-                                            text: string;
-                                            spans: {
-                                                start: number;
-                                                end: number;
-                                            }[];
-                                        }[];
-                                    };
                                     descriptions?: Record<string, string>;
                                     facts?: Record<string, ({
                                         kind: "item";
@@ -1014,6 +512,29 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                                         state: "insufficient_data" | "ready" | "updating";
                                         mean: number | null;
                                         score: number | null;
+                                    };
+                                    matchEvidence?: {
+                                        state: "absent";
+                                    } | {
+                                        state: "unsupported";
+                                    } | {
+                                        state: "unavailable";
+                                    } | {
+                                        state: "current";
+                                        source: {
+                                            id: string;
+                                            revision: number;
+                                        };
+                                        query: string;
+                                        reasons: {
+                                            field: "alias" | "description" | "title";
+                                            language: string;
+                                            text: string;
+                                            spans: {
+                                                start: number;
+                                                end: number;
+                                            }[];
+                                        }[];
                                     };
                                 };
                                 releases: {
@@ -1106,29 +627,6 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                                             };
                                         } | null;
                                     } | null;
-                                    matchEvidence: {
-                                        state: "absent";
-                                    } | {
-                                        state: "unsupported";
-                                    } | {
-                                        state: "unavailable";
-                                    } | {
-                                        state: "current";
-                                        source: {
-                                            id: string;
-                                            revision: number;
-                                        };
-                                        query: string;
-                                        reasons: {
-                                            field: "alias" | "description" | "title";
-                                            language: string;
-                                            text: string;
-                                            spans: {
-                                                start: number;
-                                                end: number;
-                                            }[];
-                                        }[];
-                                    };
                                     descriptions?: Record<string, string>;
                                     facts?: Record<string, ({
                                         kind: "item";
@@ -1159,6 +657,29 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                                         state: "insufficient_data" | "ready" | "updating";
                                         mean: number | null;
                                         score: number | null;
+                                    };
+                                    matchEvidence?: {
+                                        state: "absent";
+                                    } | {
+                                        state: "unsupported";
+                                    } | {
+                                        state: "unavailable";
+                                    } | {
+                                        state: "current";
+                                        source: {
+                                            id: string;
+                                            revision: number;
+                                        };
+                                        query: string;
+                                        reasons: {
+                                            field: "alias" | "description" | "title";
+                                            language: string;
+                                            text: string;
+                                            spans: {
+                                                start: number;
+                                                end: number;
+                                            }[];
+                                        }[];
                                     };
                                 }[];
                                 next: string | null;
@@ -1255,29 +776,6 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                                             };
                                         } | null;
                                     } | null;
-                                    matchEvidence: {
-                                        state: "absent";
-                                    } | {
-                                        state: "unsupported";
-                                    } | {
-                                        state: "unavailable";
-                                    } | {
-                                        state: "current";
-                                        source: {
-                                            id: string;
-                                            revision: number;
-                                        };
-                                        query: string;
-                                        reasons: {
-                                            field: "alias" | "description" | "title";
-                                            language: string;
-                                            text: string;
-                                            spans: {
-                                                start: number;
-                                                end: number;
-                                            }[];
-                                        }[];
-                                    };
                                     descriptions?: Record<string, string>;
                                     facts?: Record<string, ({
                                         kind: "item";
@@ -1308,6 +806,29 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                                         state: "insufficient_data" | "ready" | "updating";
                                         mean: number | null;
                                         score: number | null;
+                                    };
+                                    matchEvidence?: {
+                                        state: "absent";
+                                    } | {
+                                        state: "unsupported";
+                                    } | {
+                                        state: "unavailable";
+                                    } | {
+                                        state: "current";
+                                        source: {
+                                            id: string;
+                                            revision: number;
+                                        };
+                                        query: string;
+                                        reasons: {
+                                            field: "alias" | "description" | "title";
+                                            language: string;
+                                            text: string;
+                                            spans: {
+                                                start: number;
+                                                end: number;
+                                            }[];
+                                        }[];
                                     };
                                 };
                                 workLink: "conflicting" | "missing" | "unavailable" | "unknown" | "unproven";
@@ -1406,29 +927,6 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                                         };
                                     } | null;
                                 } | null;
-                                matchEvidence: {
-                                    state: "absent";
-                                } | {
-                                    state: "unsupported";
-                                } | {
-                                    state: "unavailable";
-                                } | {
-                                    state: "current";
-                                    source: {
-                                        id: string;
-                                        revision: number;
-                                    };
-                                    query: string;
-                                    reasons: {
-                                        field: "alias" | "description" | "title";
-                                        language: string;
-                                        text: string;
-                                        spans: {
-                                            start: number;
-                                            end: number;
-                                        }[];
-                                    }[];
-                                };
                                 descriptions?: Record<string, string>;
                                 facts?: Record<string, ({
                                     kind: "item";
@@ -1460,10 +958,1060 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                                     mean: number | null;
                                     score: number | null;
                                 };
+                                matchEvidence?: {
+                                    state: "absent";
+                                } | {
+                                    state: "unsupported";
+                                } | {
+                                    state: "unavailable";
+                                } | {
+                                    state: "current";
+                                    source: {
+                                        id: string;
+                                        revision: number;
+                                    };
+                                    query: string;
+                                    reasons: {
+                                        field: "alias" | "description" | "title";
+                                        language: string;
+                                        text: string;
+                                        spans: {
+                                            start: number;
+                                            end: number;
+                                        }[];
+                                    }[];
+                                };
                             }[];
                             next: string | null;
                             as_of: string;
-                        };                        400: Response | {
+                        } | {
+                            viewer: "anonymous" | "signed-in";
+                            action: "allowed" | "disabled" | "unavailable";
+                            reason: "oversized" | "private_context" | "ready" | "unavailable" | "unsupported";
+                            document: {
+                                text: string;
+                                filter: string | null;
+                                languages: string[];
+                                sort: string | null;
+                            } | null;
+                            parameters: string | null;
+                            selections: {
+                                value: string;
+                                language: string;
+                            }[];
+                        } | {
+                            spaceEntries?: {
+                                reader: string | null;
+                                rows: {
+                                    id: string;
+                                    destination: {
+                                        kind: "space";
+                                        spaceId: string;
+                                        address: string;
+                                    } | {
+                                        kind: "realm";
+                                        realmId: string;
+                                    } | {
+                                        kind: "unavailable";
+                                    };
+                                    entry: "allowed" | "disabled" | "sign-in" | "unavailable";
+                                    admission: "allowed" | "disabled" | "sign-in" | "unavailable";
+                                    follow: {
+                                        state: "current";
+                                        following: boolean;
+                                        action: "allowed" | "disabled" | "sign-in" | "unavailable";
+                                    } | {
+                                        state: "sign-in" | "unavailable";
+                                    };
+                                }[];
+                            };
+                            hits: ({
+                                key: {
+                                    owner: "semantic";
+                                    kind: string;
+                                    route: number;
+                                    id: string;
+                                };
+                                summary: {
+                                    kind: "subject";
+                                    value: {
+                                        id: string;
+                                        type: string;
+                                        types: string[];
+                                        label: {
+                                            value: string;
+                                            language: string;
+                                        } | null;
+                                        creativeWork: boolean;
+                                        cover: {
+                                            media: string;
+                                            width: number;
+                                            height: number;
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            };
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                            }[];
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: {
+                                                rightsHolder: string;
+                                                via: {
+                                                    name: string;
+                                                    url: string;
+                                                };
+                                                license: string;
+                                                obligations: string[];
+                                            };
+                                        } | null;
+                                    };
+                                };
+                                matchEvidence: {
+                                    state: "absent";
+                                } | {
+                                    state: "unsupported";
+                                } | {
+                                    state: "unavailable";
+                                } | {
+                                    state: "current";
+                                    source: {
+                                        id: string;
+                                        revision: number;
+                                    };
+                                    query: string;
+                                    reasons: {
+                                        field: "alias" | "description" | "title";
+                                        language: string;
+                                        text: string;
+                                        spans: {
+                                            start: number;
+                                            end: number;
+                                        }[];
+                                    }[];
+                                };
+                                labels?: Record<string, string>;
+                                aliases?: Record<string, string[]>;
+                                descriptions?: Record<string, string>;
+                                facts?: Record<string, ({
+                                    kind: "item";
+                                    id: string;
+                                    labels: Record<string, string>;
+                                } | {
+                                    kind: "time";
+                                    year: number;
+                                    month?: number;
+                                    day?: number;
+                                } | {
+                                    kind: "quantity";
+                                    amount: number;
+                                    unit: string;
+                                } | {
+                                    kind: "code";
+                                    value: string;
+                                })[]>;
+                                figure?: {
+                                    questionId: string;
+                                    populationId: string;
+                                    scale: {
+                                        min: number;
+                                        max: number;
+                                        displayStep: number;
+                                    };
+                                    count: number;
+                                    state: "insufficient_data" | "ready" | "updating";
+                                    mean: number | null;
+                                    score: number | null;
+                                };
+                                listPresentation?: {
+                                    imageAspect: "landscape" | "portrait" | "square";
+                                    keyFacts: string[];
+                                };
+                                contexts?: {
+                                    credits: {
+                                        items: {
+                                            id: string;
+                                            labels: Record<string, string>;
+                                            aliases?: Record<string, string[]>;
+                                        }[];
+                                        next: boolean;
+                                    };
+                                    appearances: {
+                                        items: {
+                                            id: string;
+                                            labels: Record<string, string>;
+                                            aliases?: Record<string, string[]>;
+                                        }[];
+                                        next: boolean;
+                                    };
+                                };
+                                workContext?: {
+                                    state: "unavailable";
+                                    reason: "limit" | "native" | "response_limit";
+                                } | {
+                                    state: "current";
+                                    subjectId: string;
+                                    type: {
+                                        id: string;
+                                        labels: Record<string, string>;
+                                    };
+                                    kind: "recording" | "release" | "work";
+                                    creators: {
+                                        state: "unavailable";
+                                        reason: "limit" | "native" | "response_limit";
+                                    } | {
+                                        state: "empty";
+                                    } | {
+                                        state: "withheld";
+                                    } | {
+                                        state: "unsupported";
+                                    } | {
+                                        state: "current";
+                                        items: {
+                                            statementId: string;
+                                            sourceId: string;
+                                            direction: "outgoing";
+                                            property: {
+                                                id: string;
+                                                labels: Record<string, string>;
+                                            };
+                                            revision: number;
+                                            release: string;
+                                            rank: "normal" | "preferred";
+                                            value: {
+                                                state: "somevalue";
+                                            } | {
+                                                state: "novalue";
+                                            } | {
+                                                state: "unsupported";
+                                            } | {
+                                                state: "value";
+                                                kind: "item";
+                                                id: string;
+                                                originalId: string;
+                                                type: {
+                                                    id: string;
+                                                    labels: Record<string, string>;
+                                                };
+                                                labels: Record<string, string>;
+                                            } | {
+                                                state: "value";
+                                                kind: "text";
+                                                text: string;
+                                            } | {
+                                                state: "value";
+                                                kind: "quantity";
+                                                amount: string;
+                                                unit: string;
+                                            } | {
+                                                state: "value";
+                                                kind: "time";
+                                                calendar: "gregorian";
+                                                year: number;
+                                                month?: number;
+                                                day?: number;
+                                            };
+                                            qualifiers: {
+                                                state: "unavailable";
+                                                reason: "limit" | "native" | "response_limit";
+                                            } | {
+                                                state: "empty";
+                                            } | {
+                                                state: "withheld";
+                                            } | {
+                                                state: "unsupported";
+                                            } | {
+                                                state: "current";
+                                                items: {
+                                                    property: {
+                                                        id: string;
+                                                        labels: Record<string, string>;
+                                                    };
+                                                    value: {
+                                                        state: "somevalue";
+                                                    } | {
+                                                        state: "novalue";
+                                                    } | {
+                                                        state: "unsupported";
+                                                    } | {
+                                                        state: "value";
+                                                        kind: "item";
+                                                        id: string;
+                                                        originalId: string;
+                                                        type: {
+                                                            id: string;
+                                                            labels: Record<string, string>;
+                                                        };
+                                                        labels: Record<string, string>;
+                                                    } | {
+                                                        state: "value";
+                                                        kind: "text";
+                                                        text: string;
+                                                    } | {
+                                                        state: "value";
+                                                        kind: "quantity";
+                                                        amount: string;
+                                                        unit: string;
+                                                    } | {
+                                                        state: "value";
+                                                        kind: "time";
+                                                        calendar: "gregorian";
+                                                        year: number;
+                                                        month?: number;
+                                                        day?: number;
+                                                    };
+                                                }[];
+                                            };
+                                        }[];
+                                        overflow: boolean;
+                                    };
+                                    relations: {
+                                        state: "unavailable";
+                                        reason: "limit" | "native" | "response_limit";
+                                    } | {
+                                        state: "empty";
+                                    } | {
+                                        state: "withheld";
+                                    } | {
+                                        state: "unsupported";
+                                    } | {
+                                        state: "current";
+                                        items: {
+                                            statementId: string;
+                                            sourceId: string;
+                                            direction: "outgoing";
+                                            property: {
+                                                id: string;
+                                                labels: Record<string, string>;
+                                            };
+                                            revision: number;
+                                            release: string;
+                                            rank: "normal" | "preferred";
+                                            value: {
+                                                state: "somevalue";
+                                            } | {
+                                                state: "novalue";
+                                            } | {
+                                                state: "unsupported";
+                                            } | {
+                                                state: "value";
+                                                kind: "item";
+                                                id: string;
+                                                originalId: string;
+                                                type: {
+                                                    id: string;
+                                                    labels: Record<string, string>;
+                                                };
+                                                labels: Record<string, string>;
+                                            } | {
+                                                state: "value";
+                                                kind: "text";
+                                                text: string;
+                                            } | {
+                                                state: "value";
+                                                kind: "quantity";
+                                                amount: string;
+                                                unit: string;
+                                            } | {
+                                                state: "value";
+                                                kind: "time";
+                                                calendar: "gregorian";
+                                                year: number;
+                                                month?: number;
+                                                day?: number;
+                                            };
+                                            qualifiers: {
+                                                state: "unavailable";
+                                                reason: "limit" | "native" | "response_limit";
+                                            } | {
+                                                state: "empty";
+                                            } | {
+                                                state: "withheld";
+                                            } | {
+                                                state: "unsupported";
+                                            } | {
+                                                state: "current";
+                                                items: {
+                                                    property: {
+                                                        id: string;
+                                                        labels: Record<string, string>;
+                                                    };
+                                                    value: {
+                                                        state: "somevalue";
+                                                    } | {
+                                                        state: "novalue";
+                                                    } | {
+                                                        state: "unsupported";
+                                                    } | {
+                                                        state: "value";
+                                                        kind: "item";
+                                                        id: string;
+                                                        originalId: string;
+                                                        type: {
+                                                            id: string;
+                                                            labels: Record<string, string>;
+                                                        };
+                                                        labels: Record<string, string>;
+                                                    } | {
+                                                        state: "value";
+                                                        kind: "text";
+                                                        text: string;
+                                                    } | {
+                                                        state: "value";
+                                                        kind: "quantity";
+                                                        amount: string;
+                                                        unit: string;
+                                                    } | {
+                                                        state: "value";
+                                                        kind: "time";
+                                                        calendar: "gregorian";
+                                                        year: number;
+                                                        month?: number;
+                                                        day?: number;
+                                                    };
+                                                }[];
+                                            };
+                                        }[];
+                                        overflow: boolean;
+                                    };
+                                    dates: {
+                                        state: "unavailable";
+                                        reason: "limit" | "native" | "response_limit";
+                                    } | {
+                                        state: "empty";
+                                    } | {
+                                        state: "withheld";
+                                    } | {
+                                        state: "unsupported";
+                                    } | {
+                                        state: "current";
+                                        items: {
+                                            statementId: string;
+                                            sourceId: string;
+                                            direction: "outgoing";
+                                            property: {
+                                                id: string;
+                                                labels: Record<string, string>;
+                                            };
+                                            revision: number;
+                                            release: string;
+                                            rank: "normal" | "preferred";
+                                            value: {
+                                                state: "somevalue";
+                                            } | {
+                                                state: "novalue";
+                                            } | {
+                                                state: "unsupported";
+                                            } | {
+                                                state: "value";
+                                                kind: "item";
+                                                id: string;
+                                                originalId: string;
+                                                type: {
+                                                    id: string;
+                                                    labels: Record<string, string>;
+                                                };
+                                                labels: Record<string, string>;
+                                            } | {
+                                                state: "value";
+                                                kind: "text";
+                                                text: string;
+                                            } | {
+                                                state: "value";
+                                                kind: "quantity";
+                                                amount: string;
+                                                unit: string;
+                                            } | {
+                                                state: "value";
+                                                kind: "time";
+                                                calendar: "gregorian";
+                                                year: number;
+                                                month?: number;
+                                                day?: number;
+                                            };
+                                            qualifiers: {
+                                                state: "unavailable";
+                                                reason: "limit" | "native" | "response_limit";
+                                            } | {
+                                                state: "empty";
+                                            } | {
+                                                state: "withheld";
+                                            } | {
+                                                state: "unsupported";
+                                            } | {
+                                                state: "current";
+                                                items: {
+                                                    property: {
+                                                        id: string;
+                                                        labels: Record<string, string>;
+                                                    };
+                                                    value: {
+                                                        state: "somevalue";
+                                                    } | {
+                                                        state: "novalue";
+                                                    } | {
+                                                        state: "unsupported";
+                                                    } | {
+                                                        state: "value";
+                                                        kind: "item";
+                                                        id: string;
+                                                        originalId: string;
+                                                        type: {
+                                                            id: string;
+                                                            labels: Record<string, string>;
+                                                        };
+                                                        labels: Record<string, string>;
+                                                    } | {
+                                                        state: "value";
+                                                        kind: "text";
+                                                        text: string;
+                                                    } | {
+                                                        state: "value";
+                                                        kind: "quantity";
+                                                        amount: string;
+                                                        unit: string;
+                                                    } | {
+                                                        state: "value";
+                                                        kind: "time";
+                                                        calendar: "gregorian";
+                                                        year: number;
+                                                        month?: number;
+                                                        day?: number;
+                                                    };
+                                                }[];
+                                            };
+                                        }[];
+                                        overflow: boolean;
+                                    };
+                                };
+                            } | {
+                                key: {
+                                    owner: "accounts";
+                                    kind: string;
+                                    route: number;
+                                    id: string;
+                                };
+                                summary: {
+                                    kind: "account";
+                                    value: {
+                                        context?: {
+                                            biography: {
+                                                state: "available";
+                                                text: string;
+                                                truncated: boolean;
+                                            };
+                                            followTarget: {
+                                                state: "unavailable";
+                                            } | {
+                                                state: "available";
+                                                id: string;
+                                                label: string;
+                                                type: string;
+                                                source: string;
+                                            };
+                                        };
+                                        id: string;
+                                        accountKind: "actor" | "organization";
+                                        handle: string | null;
+                                        displayName: string | null;
+                                        automated: boolean;
+                                        operatorId: string | null;
+                                        avatar: {
+                                            media: string;
+                                            width: number;
+                                            height: number;
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            };
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                            }[];
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: null;
+                                        } | null;
+                                        verifiedAgent: {
+                                            id: string;
+                                            label: string;
+                                            type: string;
+                                        } | null;
+                                    };
+                                };
+                                matchEvidence: {
+                                    state: "absent";
+                                } | {
+                                    state: "unsupported";
+                                } | {
+                                    state: "unavailable";
+                                } | {
+                                    state: "current";
+                                    source: {
+                                        id: string;
+                                        revision: number;
+                                    };
+                                    query: string;
+                                    reasons: {
+                                        field: "alias" | "description" | "title";
+                                        language: string;
+                                        text: string;
+                                        spans: {
+                                            start: number;
+                                            end: number;
+                                        }[];
+                                    }[];
+                                };
+                            } | {
+                                key: {
+                                    owner: "library";
+                                    kind: "collection";
+                                    route: number;
+                                    id: string;
+                                };
+                                summary: {
+                                    kind: "collection";
+                                    value: {
+                                        id: string;
+                                        title: string;
+                                        description: string | null;
+                                        card: {
+                                            kind: "collection";
+                                            id: string;
+                                            destination: string;
+                                            title: string;
+                                            description: string | null;
+                                            visibility: "public";
+                                            revision: number;
+                                            sourceGeneration: string;
+                                            presentationKind: string | null;
+                                            presentationKindSource: "mixed" | "owner";
+                                            cover: {
+                                                media: string;
+                                                width: number;
+                                                height: number;
+                                                placeholder: {
+                                                    thumbhash: string;
+                                                    color: string;
+                                                };
+                                                variants: {
+                                                    format: "avif" | "webp";
+                                                    width: number;
+                                                }[];
+                                                focalPoint: {
+                                                    x: number;
+                                                    y: number;
+                                                } | null;
+                                                credit: {
+                                                    rightsHolder: string;
+                                                    via: {
+                                                        name: string;
+                                                        url: string;
+                                                    };
+                                                    license: string;
+                                                    obligations: string[];
+                                                };
+                                            } | null;
+                                            coverSource: "member" | "none" | "owner" | "pending";
+                                            curator: {
+                                                state: "available";
+                                                id: string;
+                                                label: string | null;
+                                                destination: string | null;
+                                            } | {
+                                                state: "unavailable";
+                                                reason: "deidentified" | "native_projection" | "withheld";
+                                            };
+                                            preview: {
+                                                state: "available";
+                                                members: {
+                                                    id: string;
+                                                    subject: {
+                                                        id: string;
+                                                        type: string;
+                                                        types: string[];
+                                                        label: {
+                                                            value: string;
+                                                            language: string;
+                                                        } | null;
+                                                    };
+                                                }[];
+                                                partial: boolean;
+                                                truncated: boolean;
+                                            } | {
+                                                state: "empty";
+                                            } | {
+                                                state: "withheld";
+                                            } | {
+                                                state: "unavailable";
+                                            };
+                                            membershipKind: "curated";
+                                            memberCount: number;
+                                            orderEpoch: number;
+                                            createdAt: string;
+                                            updatedAt: string;
+                                        } | {
+                                            kind: "collection";
+                                            id: string;
+                                            destination: string;
+                                            title: string;
+                                            description: string | null;
+                                            visibility: "public";
+                                            revision: number;
+                                            sourceGeneration: string;
+                                            presentationKind: string | null;
+                                            presentationKindSource: "mixed" | "owner";
+                                            cover: {
+                                                media: string;
+                                                width: number;
+                                                height: number;
+                                                placeholder: {
+                                                    thumbhash: string;
+                                                    color: string;
+                                                };
+                                                variants: {
+                                                    format: "avif" | "webp";
+                                                    width: number;
+                                                }[];
+                                                focalPoint: {
+                                                    x: number;
+                                                    y: number;
+                                                } | null;
+                                                credit: {
+                                                    rightsHolder: string;
+                                                    via: {
+                                                        name: string;
+                                                        url: string;
+                                                    };
+                                                    license: string;
+                                                    obligations: string[];
+                                                };
+                                            } | null;
+                                            coverSource: "member" | "none" | "owner" | "pending";
+                                            curator: {
+                                                state: "available";
+                                                id: string;
+                                                label: string | null;
+                                                destination: string | null;
+                                            } | {
+                                                state: "unavailable";
+                                                reason: "deidentified" | "native_projection" | "withheld";
+                                            };
+                                            preview: {
+                                                state: "available";
+                                                members: {
+                                                    id: string;
+                                                    subject: {
+                                                        id: string;
+                                                        type: string;
+                                                        types: string[];
+                                                        label: {
+                                                            value: string;
+                                                            language: string;
+                                                        } | null;
+                                                    };
+                                                }[];
+                                                partial: boolean;
+                                                truncated: boolean;
+                                            } | {
+                                                state: "empty";
+                                            } | {
+                                                state: "withheld";
+                                            } | {
+                                                state: "unavailable";
+                                            };
+                                            membershipKind: "dynamic";
+                                            outputGeneration: string;
+                                        };
+                                    };
+                                };
+                                matchEvidence: {
+                                    state: "absent";
+                                } | {
+                                    state: "unsupported";
+                                } | {
+                                    state: "unavailable";
+                                } | {
+                                    state: "current";
+                                    source: {
+                                        id: string;
+                                        revision: number;
+                                    };
+                                    query: string;
+                                    reasons: {
+                                        field: "alias" | "description" | "title";
+                                        language: string;
+                                        text: string;
+                                        spans: {
+                                            start: number;
+                                            end: number;
+                                        }[];
+                                    }[];
+                                };
+                            } | {
+                                key: {
+                                    owner: "content";
+                                    kind: "review";
+                                    route: number;
+                                    id: string;
+                                };
+                                summary: {
+                                    kind: "review";
+                                    value: {
+                                        id: string;
+                                        kind: "review";
+                                        title: string | null;
+                                        author?: {
+                                            displayName: string | null;
+                                            handle: string | null;
+                                        };
+                                        excerpt?: string;
+                                        subject?: {
+                                            id: string;
+                                            title: string | null;
+                                        } | null;
+                                        source?: {
+                                            openingRevisionId: string;
+                                            sourceVersion: string;
+                                        };
+                                        searchContext?: import("../review-context.ts").SearchReviewContext;
+                                    };
+                                };
+                                matchEvidence: {
+                                    state: "absent";
+                                } | {
+                                    state: "unsupported";
+                                } | {
+                                    state: "unavailable";
+                                } | {
+                                    state: "current";
+                                    source: {
+                                        id: string;
+                                        revision: number;
+                                    };
+                                    query: string;
+                                    reasons: {
+                                        field: "alias" | "description" | "title";
+                                        language: string;
+                                        text: string;
+                                        spans: {
+                                            start: number;
+                                            end: number;
+                                        }[];
+                                    }[];
+                                };
+                            } | {
+                                key: {
+                                    owner: "community";
+                                    kind: "space";
+                                    route: number;
+                                    id: string;
+                                };
+                                summary: {
+                                    kind: "space";
+                                    value: {
+                                        presentation?: {
+                                            identity: {
+                                                kind: "realm" | "space";
+                                                id: string;
+                                                name: string;
+                                            };
+                                            avatar: {
+                                                state: "available";
+                                                mediaId: string;
+                                                realmId: string;
+                                                format: "avif" | "webp";
+                                                width: number;
+                                            } | {
+                                                state: "none" | "unavailable" | "withheld";
+                                            };
+                                        };
+                                        id: string;
+                                        title: string;
+                                        address: string;
+                                        summary?: string;
+                                        realm?: {
+                                            id: string;
+                                            title: string | null;
+                                        } | null;
+                                    };
+                                };
+                                matchEvidence: {
+                                    state: "absent";
+                                } | {
+                                    state: "unsupported";
+                                } | {
+                                    state: "unavailable";
+                                } | {
+                                    state: "current";
+                                    source: {
+                                        id: string;
+                                        revision: number;
+                                    };
+                                    query: string;
+                                    reasons: {
+                                        field: "alias" | "description" | "title";
+                                        language: string;
+                                        text: string;
+                                        spans: {
+                                            start: number;
+                                            end: number;
+                                        }[];
+                                    }[];
+                                };
+                            })[];
+                            kinds: {
+                                values: {
+                                    id: string;
+                                    labels: Record<string, string>;
+                                    icon: string;
+                                    count?: {
+                                        kind: string;
+                                        value: number;
+                                        exact: true;
+                                    } | {
+                                        kind: string;
+                                        value: number;
+                                        exact: false;
+                                    } | {
+                                        kind: string;
+                                        unavailable: true;
+                                    };
+                                }[];
+                                omitted?: {
+                                    id: string;
+                                    labels: Record<string, string>;
+                                    state: "preparing" | "unavailable";
+                                }[];
+                                next: string | null;
+                            };
+                            applicability?: {
+                                type: "all" | "none" | "partial" | "unknown";
+                                statement: "all" | "none" | "partial" | "unknown";
+                            };
+                            next: string | null;
+                            as_of: string;
+                            freshness?: {
+                                state: "catching-up" | "current" | "unavailable";
+                            };
+                            viewerFacts?: {
+                                state: "unavailable";
+                                reason: "currentness" | "identity" | "response_limit";
+                                retryable: boolean;
+                            } | {
+                                state: "current";
+                                question: {
+                                    id: string;
+                                    revision: number;
+                                    grain: string;
+                                    scale: {
+                                        min: number;
+                                        max: number;
+                                        displayStep: number;
+                                    };
+                                    meaning: string;
+                                } | null;
+                                rows: {
+                                    rowKey: string;
+                                    subjectId: string;
+                                    entry: {
+                                        state: "present";
+                                        incarnationId: string | null;
+                                        entryState: string | null;
+                                        revision: number;
+                                    } | {
+                                        state: "absent";
+                                    } | {
+                                        state: "unavailable";
+                                        reason: "scope";
+                                    };
+                                    vote: {
+                                        state: "present";
+                                        questionId: string;
+                                        questionRevision: number;
+                                        units: number;
+                                        revision: number;
+                                    } | {
+                                        state: "absent";
+                                        questionId: string;
+                                        questionRevision: number;
+                                    } | {
+                                        state: "unavailable";
+                                        reason: "question" | "scope";
+                                    };
+                                    resolvedSubjectId?: string;
+                                }[];
+                            } | null;
+                            collectionFollows?: {
+                                state: "signed-out";
+                            } | {
+                                state: "unavailable";
+                                reason: "changed" | "identity" | "native";
+                            } | {
+                                state: "current";
+                                accountId: string;
+                                partition: number;
+                                rows: {
+                                    targetId: string;
+                                    targetType: "collection" | "space" | "subject";
+                                    source: string;
+                                    following: boolean;
+                                    actions: {
+                                        follow: boolean;
+                                        unfollow: boolean;
+                                    };
+                                }[];
+                            };
+                            accountFollows?: {
+                                state: "signed-out";
+                            } | {
+                                state: "unavailable";
+                                reason: "changed" | "identity" | "native";
+                            } | {
+                                state: "current";
+                                accountId: string;
+                                partition: number;
+                                rows: {
+                                    targetId: string;
+                                    targetType: "collection" | "space" | "subject";
+                                    source: string;
+                                    following: boolean;
+                                    actions: {
+                                        follow: boolean;
+                                        unfollow: boolean;
+                                    };
+                                }[];
+                            };
+                            emptyRecovery?: {
+                                status: "preparing" | "ready" | "unavailable";
+                                alternatives: {
+                                    query: string;
+                                    label: string;
+                                }[];
+                                actions: ({
+                                    kind: "edit-query";
+                                } | {
+                                    kind: "remove-type";
+                                } | {
+                                    kind: "remove-kind";
+                                    value: string;
+                                } | {
+                                    kind: "remove-facet";
+                                    property: string;
+                                    value: string;
+                                } | {
+                                    kind: "remove-range";
+                                    property: string;
+                                })[];
+                            };
+                        };
+                        400: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -1517,6 +2065,15 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
+                            readonly textDiagnostic?: {
+                                reason: "byte_limit" | "depth_limit" | "empty_phrase" | "expected_operand" | "leaf_limit" | "negated_operand" | "phrase_token_limit" | "unclosed_group" | "unclosed_phrase" | "unexpected_close" | "unsupported_escape";
+                                unit: "utf16";
+                                start: number;
+                                end: number;
+                                codePointStart: number;
+                                codePointEnd: number;
+                                byteOffset: number;
+                            };
                         };
                         503: Response | {
                             type: unknown;
@@ -1529,7 +2086,6 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                             detail: unknown;
                             errors: unknown;
                         };
-                        default: {} | undefined;
                     };
                     error: never;
                 };
@@ -1626,6 +2182,15 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
+                            readonly textDiagnostic?: {
+                                reason: "byte_limit" | "depth_limit" | "empty_phrase" | "expected_operand" | "leaf_limit" | "negated_operand" | "phrase_token_limit" | "unclosed_group" | "unclosed_phrase" | "unexpected_close" | "unsupported_escape";
+                                unit: "utf16";
+                                start: number;
+                                end: number;
+                                codePointStart: number;
+                                codePointEnd: number;
+                                byteOffset: number;
+                            };
                         };
                         503: Response | {
                             type: unknown;
@@ -1658,8 +2223,8 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             readonly components: import("../../tokens/session.ts").SessionComponent[];
             record(component: import("../../tokens/session.ts").SessionComponent): void;
         };
-        readonly authorize: (resource: Resource) => Promise<AccessCheck>;
-        readonly authorizeCommand: (resource: Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
+        readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<AccessCheck>;
+        readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
     };
     schema: {};
     schemas: {};
@@ -1714,7 +2279,53 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                         }>;
                     }>, import("typebox").TNull]>;
                 }>, import("typebox").TNull]>;
-                workContext: import("typebox").TOptional<SuggestionWorkContextSchema>;
+                workContext: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                    subjectId: import("typebox").TString;
+                    status: import("typebox").TLiteral<"available">;
+                    creator: import("typebox").TObject<{
+                        id: import("typebox").TString;
+                        label: import("typebox").TObject<{
+                            value: import("typebox").TString;
+                            language: import("typebox").TString;
+                        }>;
+                        property: import("typebox").TString;
+                        role: import("typebox").TObject<{
+                            value: import("typebox").TString;
+                            language: import("typebox").TString;
+                        }>;
+                    }>;
+                    relation: import("typebox").TOptional<import("typebox").TObject<{
+                        kind: import("typebox").TUnion<[import("typebox").TLiteral<"work">, import("typebox").TLiteral<"release">]>;
+                        id: import("typebox").TString;
+                        label: import("typebox").TObject<{
+                            value: import("typebox").TString;
+                            language: import("typebox").TString;
+                        }>;
+                        date: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"value">;
+                            property: import("typebox").TString;
+                            value: import("typebox").TString;
+                            precision: import("typebox").TLiteral<"year">;
+                        }>, import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"value">;
+                            property: import("typebox").TString;
+                            value: import("typebox").TString;
+                            precision: import("typebox").TLiteral<"month">;
+                        }>, import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"value">;
+                            property: import("typebox").TString;
+                            value: import("typebox").TString;
+                            precision: import("typebox").TLiteral<"day">;
+                        }>, import("typebox").TObject<{
+                            state: import("typebox").TUnion<[import("typebox").TLiteral<"unknown">, import("typebox").TLiteral<"no_value">, import("typebox").TLiteral<"withheld">, import("typebox").TLiteral<"unavailable">, import("typebox").TLiteral<"not_applicable">]>;
+                            property: import("typebox").TString;
+                        }>]>>;
+                    }>>;
+                    overflow: import("typebox").TOptional<import("typebox").TBoolean>;
+                }>, import("typebox").TObject<{
+                    subjectId: import("typebox").TString;
+                    status: import("typebox").TUnion<[import("typebox").TLiteral<"absent">, import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"empty">, import("typebox").TLiteral<"withheld">, import("typebox").TLiteral<"unavailable">]>;
+                }>]>>;
             }>>;
             as_of: import("typebox").TString;
         }>;
@@ -1729,7 +2340,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         401: import("typebox").TObject<{
@@ -1743,7 +2354,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         403: import("typebox").TObject<{
@@ -1757,7 +2368,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         409: import("typebox").TObject<{
@@ -1771,7 +2382,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         422: import("typebox").TObject<{
@@ -1785,9 +2396,19 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
-        }>;
+        } & Omit<{
+            readonly textDiagnostic: import("typebox").TOptional<import("typebox").TObject<{
+                reason: import("typebox").TEnum<["expected_operand", "unexpected_close", "unclosed_group", "unclosed_phrase", "unsupported_escape", "empty_phrase", "negated_operand", "byte_limit", "depth_limit", "leaf_limit", "phrase_token_limit"]>;
+                unit: import("typebox").TLiteral<"utf16">;
+                start: import("typebox").TInteger;
+                end: import("typebox").TInteger;
+                codePointStart: import("typebox").TInteger;
+                codePointEnd: import("typebox").TInteger;
+                byteOffset: import("typebox").TInteger;
+            }>>;
+        }, "code" | "detail" | "effect_status" | "errors" | "instance" | "request_id" | "retryable" | "status" | "title" | "type">>;
         503: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
@@ -1799,7 +2420,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
     };
@@ -1879,7 +2500,53 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                         };
                     } | null;
                 } | null;
-                workContext?: SuggestionWorkContext;
+                workContext?: {
+                    subjectId: string;
+                    status: "available";
+                    creator: {
+                        id: string;
+                        label: {
+                            value: string;
+                            language: string;
+                        };
+                        property: string;
+                        role: {
+                            value: string;
+                            language: string;
+                        };
+                    };
+                    relation?: {
+                        kind: "release" | "work";
+                        id: string;
+                        label: {
+                            value: string;
+                            language: string;
+                        };
+                        date?: {
+                            state: "value";
+                            property: string;
+                            value: string;
+                            precision: "year";
+                        } | {
+                            state: "value";
+                            property: string;
+                            value: string;
+                            precision: "month";
+                        } | {
+                            state: "value";
+                            property: string;
+                            value: string;
+                            precision: "day";
+                        } | {
+                            state: "no_value" | "not_applicable" | "unavailable" | "unknown" | "withheld";
+                            property: string;
+                        };
+                    };
+                    overflow?: boolean;
+                } | {
+                    subjectId: string;
+                    status: "absent" | "empty" | "not_applicable" | "unavailable" | "withheld";
+                };
             }[];
             as_of: string;
         };
@@ -1937,6 +2604,15 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             request_id: string;
             detail: unknown;
             errors: unknown;
+            readonly textDiagnostic?: {
+                reason: "byte_limit" | "depth_limit" | "empty_phrase" | "expected_operand" | "leaf_limit" | "negated_operand" | "phrase_token_limit" | "unclosed_group" | "unclosed_phrase" | "unexpected_close" | "unsupported_escape";
+                unit: "utf16";
+                start: number;
+                end: number;
+                codePointStart: number;
+                codePointEnd: number;
+                byteOffset: number;
+            };
         };
         503: {
             type: unknown;
@@ -1992,7 +2668,53 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                         };
                     } | null;
                 } | null;
-                workContext?: SuggestionWorkContext;
+                workContext?: {
+                    subjectId: string;
+                    status: "available";
+                    creator: {
+                        id: string;
+                        label: {
+                            value: string;
+                            language: string;
+                        };
+                        property: string;
+                        role: {
+                            value: string;
+                            language: string;
+                        };
+                    };
+                    relation?: {
+                        kind: "release" | "work";
+                        id: string;
+                        label: {
+                            value: string;
+                            language: string;
+                        };
+                        date?: {
+                            state: "value";
+                            property: string;
+                            value: string;
+                            precision: "year";
+                        } | {
+                            state: "value";
+                            property: string;
+                            value: string;
+                            precision: "month";
+                        } | {
+                            state: "value";
+                            property: string;
+                            value: string;
+                            precision: "day";
+                        } | {
+                            state: "no_value" | "not_applicable" | "unavailable" | "unknown" | "withheld";
+                            property: string;
+                        };
+                    };
+                    overflow?: boolean;
+                } | {
+                    subjectId: string;
+                    status: "absent" | "empty" | "not_applicable" | "unavailable" | "withheld";
+                };
             }[];
             as_of: string;
         };
@@ -2050,6 +2772,15 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             request_id: string;
             detail: unknown;
             errors: unknown;
+            readonly textDiagnostic?: {
+                reason: "byte_limit" | "depth_limit" | "empty_phrase" | "expected_operand" | "leaf_limit" | "negated_operand" | "phrase_token_limit" | "unclosed_group" | "unclosed_phrase" | "unexpected_close" | "unsupported_escape";
+                unit: "utf16";
+                start: number;
+                end: number;
+                codePointStart: number;
+                codePointEnd: number;
+                byteOffset: number;
+            };
         };
         503: {
             type: unknown;
@@ -2112,7 +2843,53 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                             }>;
                         }>, import("typebox").TNull]>;
                     }>, import("typebox").TNull]>;
-                workContext: import("typebox").TOptional<SuggestionWorkContextSchema>;
+                    workContext: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                        subjectId: import("typebox").TString;
+                        status: import("typebox").TLiteral<"available">;
+                        creator: import("typebox").TObject<{
+                            id: import("typebox").TString;
+                            label: import("typebox").TObject<{
+                                value: import("typebox").TString;
+                                language: import("typebox").TString;
+                            }>;
+                            property: import("typebox").TString;
+                            role: import("typebox").TObject<{
+                                value: import("typebox").TString;
+                                language: import("typebox").TString;
+                            }>;
+                        }>;
+                        relation: import("typebox").TOptional<import("typebox").TObject<{
+                            kind: import("typebox").TUnion<[import("typebox").TLiteral<"work">, import("typebox").TLiteral<"release">]>;
+                            id: import("typebox").TString;
+                            label: import("typebox").TObject<{
+                                value: import("typebox").TString;
+                                language: import("typebox").TString;
+                            }>;
+                            date: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"value">;
+                                property: import("typebox").TString;
+                                value: import("typebox").TString;
+                                precision: import("typebox").TLiteral<"year">;
+                            }>, import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"value">;
+                                property: import("typebox").TString;
+                                value: import("typebox").TString;
+                                precision: import("typebox").TLiteral<"month">;
+                            }>, import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"value">;
+                                property: import("typebox").TString;
+                                value: import("typebox").TString;
+                                precision: import("typebox").TLiteral<"day">;
+                            }>, import("typebox").TObject<{
+                                state: import("typebox").TUnion<[import("typebox").TLiteral<"unknown">, import("typebox").TLiteral<"no_value">, import("typebox").TLiteral<"withheld">, import("typebox").TLiteral<"unavailable">, import("typebox").TLiteral<"not_applicable">]>;
+                                property: import("typebox").TString;
+                            }>]>>;
+                        }>>;
+                        overflow: import("typebox").TOptional<import("typebox").TBoolean>;
+                    }>, import("typebox").TObject<{
+                        subjectId: import("typebox").TString;
+                        status: import("typebox").TUnion<[import("typebox").TLiteral<"absent">, import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"empty">, import("typebox").TLiteral<"withheld">, import("typebox").TLiteral<"unavailable">]>;
+                    }>]>>;
                 }>>;
                 as_of: import("typebox").TString;
             }>;
@@ -2127,7 +2904,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
             401: import("typebox").TObject<{
@@ -2141,7 +2918,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
             403: import("typebox").TObject<{
@@ -2155,7 +2932,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
             409: import("typebox").TObject<{
@@ -2169,7 +2946,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
             422: import("typebox").TObject<{
@@ -2183,9 +2960,19 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
-            }>;
+            } & Omit<{
+                readonly textDiagnostic: import("typebox").TOptional<import("typebox").TObject<{
+                    reason: import("typebox").TEnum<["expected_operand", "unexpected_close", "unclosed_group", "unclosed_phrase", "unsupported_escape", "empty_phrase", "negated_operand", "byte_limit", "depth_limit", "leaf_limit", "phrase_token_limit"]>;
+                    unit: import("typebox").TLiteral<"utf16">;
+                    start: import("typebox").TInteger;
+                    end: import("typebox").TInteger;
+                    codePointStart: import("typebox").TInteger;
+                    codePointEnd: import("typebox").TInteger;
+                    byteOffset: import("typebox").TInteger;
+                }>>;
+            }, "code" | "detail" | "effect_status" | "errors" | "instance" | "request_id" | "retryable" | "status" | "title" | "type">>;
             503: import("typebox").TObject<{
                 type: import("typebox").TSchema;
                 title: import("typebox").TSchema;
@@ -2197,7 +2984,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
         };
@@ -2240,8 +3027,8 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                 readonly components: import("../../tokens/session.ts").SessionComponent[];
                 record(component: import("../../tokens/session.ts").SessionComponent): void;
             };
-            readonly authorize: (resource: Resource) => Promise<AccessCheck>;
-            readonly authorizeCommand: (resource: Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
+            readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<AccessCheck>;
+            readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
         };
     }>>) => import("elysia/types").MaybePromise<void>;
     readonly path: string;
@@ -2271,8 +3058,8 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
         readonly components: import("../../tokens/session.ts").SessionComponent[];
         record(component: import("../../tokens/session.ts").SessionComponent): void;
     };
-    readonly authorize: (resource: Resource) => Promise<AccessCheck>;
-    readonly authorizeCommand: (resource: Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
+    readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<AccessCheck>;
+    readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<{
     subjects: {
         id: string;
@@ -2314,7 +3101,53 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                 };
             } | null;
         } | null;
-        workContext?: SuggestionWorkContext;
+        workContext?: {
+            subjectId: string;
+            status: "available";
+            creator: {
+                id: string;
+                label: {
+                    value: string;
+                    language: string;
+                };
+                property: string;
+                role: {
+                    value: string;
+                    language: string;
+                };
+            };
+            relation?: {
+                kind: "release" | "work";
+                id: string;
+                label: {
+                    value: string;
+                    language: string;
+                };
+                date?: {
+                    state: "value";
+                    property: string;
+                    value: string;
+                    precision: "year";
+                } | {
+                    state: "value";
+                    property: string;
+                    value: string;
+                    precision: "month";
+                } | {
+                    state: "value";
+                    property: string;
+                    value: string;
+                    precision: "day";
+                } | {
+                    state: "no_value" | "not_applicable" | "unavailable" | "unknown" | "withheld";
+                    property: string;
+                };
+            };
+            overflow?: boolean;
+        } | {
+            subjectId: string;
+            status: "absent" | "empty" | "not_applicable" | "unavailable" | "withheld";
+        };
     }[];
     as_of: string;
 }>, {
@@ -2366,7 +3199,53 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                         }>;
                     }>, import("typebox").TNull]>;
                 }>, import("typebox").TNull]>;
-                workContext: import("typebox").TOptional<SuggestionWorkContextSchema>;
+                workContext: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                    subjectId: import("typebox").TString;
+                    status: import("typebox").TLiteral<"available">;
+                    creator: import("typebox").TObject<{
+                        id: import("typebox").TString;
+                        label: import("typebox").TObject<{
+                            value: import("typebox").TString;
+                            language: import("typebox").TString;
+                        }>;
+                        property: import("typebox").TString;
+                        role: import("typebox").TObject<{
+                            value: import("typebox").TString;
+                            language: import("typebox").TString;
+                        }>;
+                    }>;
+                    relation: import("typebox").TOptional<import("typebox").TObject<{
+                        kind: import("typebox").TUnion<[import("typebox").TLiteral<"work">, import("typebox").TLiteral<"release">]>;
+                        id: import("typebox").TString;
+                        label: import("typebox").TObject<{
+                            value: import("typebox").TString;
+                            language: import("typebox").TString;
+                        }>;
+                        date: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"value">;
+                            property: import("typebox").TString;
+                            value: import("typebox").TString;
+                            precision: import("typebox").TLiteral<"year">;
+                        }>, import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"value">;
+                            property: import("typebox").TString;
+                            value: import("typebox").TString;
+                            precision: import("typebox").TLiteral<"month">;
+                        }>, import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"value">;
+                            property: import("typebox").TString;
+                            value: import("typebox").TString;
+                            precision: import("typebox").TLiteral<"day">;
+                        }>, import("typebox").TObject<{
+                            state: import("typebox").TUnion<[import("typebox").TLiteral<"unknown">, import("typebox").TLiteral<"no_value">, import("typebox").TLiteral<"withheld">, import("typebox").TLiteral<"unavailable">, import("typebox").TLiteral<"not_applicable">]>;
+                            property: import("typebox").TString;
+                        }>]>>;
+                    }>>;
+                    overflow: import("typebox").TOptional<import("typebox").TBoolean>;
+                }>, import("typebox").TObject<{
+                    subjectId: import("typebox").TString;
+                    status: import("typebox").TUnion<[import("typebox").TLiteral<"absent">, import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"empty">, import("typebox").TLiteral<"withheld">, import("typebox").TLiteral<"unavailable">]>;
+                }>]>>;
             }>>;
             as_of: import("typebox").TString;
         }>;
@@ -2381,7 +3260,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         401: import("typebox").TObject<{
@@ -2395,7 +3274,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         403: import("typebox").TObject<{
@@ -2409,7 +3288,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         409: import("typebox").TObject<{
@@ -2423,7 +3302,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         422: import("typebox").TObject<{
@@ -2437,9 +3316,19 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
-        }>;
+        } & Omit<{
+            readonly textDiagnostic: import("typebox").TOptional<import("typebox").TObject<{
+                reason: import("typebox").TEnum<["expected_operand", "unexpected_close", "unclosed_group", "unclosed_phrase", "unsupported_escape", "empty_phrase", "negated_operand", "byte_limit", "depth_limit", "leaf_limit", "phrase_token_limit"]>;
+                unit: import("typebox").TLiteral<"utf16">;
+                start: import("typebox").TInteger;
+                end: import("typebox").TInteger;
+                codePointStart: import("typebox").TInteger;
+                codePointEnd: import("typebox").TInteger;
+                byteOffset: import("typebox").TInteger;
+            }>>;
+        }, "code" | "detail" | "effect_status" | "errors" | "instance" | "request_id" | "retryable" | "status" | "title" | "type">>;
         503: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
@@ -2451,7 +3340,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
     };
@@ -2467,4 +3356,3 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
         })[];
     };
 }> & App;
-export {};

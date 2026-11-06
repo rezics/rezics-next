@@ -1,3 +1,4 @@
+import { fixtureFetch } from './native-observations.ts';
 import { expect } from 'bun:test';
 import { Database } from 'bun:sqlite';
 import { randomUUID } from 'node:crypto';
@@ -175,7 +176,7 @@ export async function runOpenLibraryEditionMediaJourney() {
               };
             },
           },
-          fetch: (async (input: Request | string | URL, init?: RequestInit) => {
+          fetch: fixtureFetch(async (input: Request | string | URL, init?: RequestInit) => {
             const request = input instanceof Request ? input : new Request(input, init);
             const url = new URL(request.url);
             if (url.origin === auth) return support.host.service.handler(request);
@@ -220,7 +221,7 @@ export async function runOpenLibraryEditionMediaJourney() {
               throw new TypeError('Connection closed after the committed response was lost');
             }
             return response;
-          }) as typeof fetch,
+          }),
         },
       );
       if (options.onLost) expect(result.code, JSON.stringify(result)).not.toBe(0);

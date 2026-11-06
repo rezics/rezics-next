@@ -1,4 +1,3 @@
-import { LifecycleDeniedError } from './lifecycle-20261025094010-command.ts';
 export { LifecycleDeniedError } from './lifecycle-20261025094010-command.ts';
 import type { Pool } from 'pg';
 import { type CommandAttempt } from '../command/command.ts';
@@ -10,16 +9,28 @@ import { type ContinuationBinding } from './committed-continuations.ts';
  * Neither clock nor timestamps come from JSON. Coordination holds have NO
  * expiry: only a durable workflow may resolve them.
  */
-export declare class OrganizationCloseBlockedError extends LifecycleDeniedError {
-    readonly blocker: {
+export declare function OrganizationCloseBlockedError(): {
+    new (blocker: {
         purpose: string;
         relatedAccountId: string;
+    }): {
+        readonly blocker: {
+            purpose: string;
+            relatedAccountId: string;
+        };
+        name: string;
+        message: string;
+        stack?: string;
+        cause?: unknown;
     };
-    constructor(blocker: {
-        purpose: string;
-        relatedAccountId: string;
-    });
-}
+    isError(error: unknown): error is Error;
+    isError(value: unknown): value is Error;
+    captureStackTrace(targetObject: object, constructorOpt?: Function): void;
+    captureStackTrace(targetObject: object, constructorOpt?: Function): void;
+    prepareStackTrace(err: Error, stackTraces: NodeJS.CallSite[]): any;
+    stackTraceLimit: number;
+};
+export type OrganizationCloseBlockedError = InstanceType<ReturnType<typeof OrganizationCloseBlockedError>>;
 export declare const REGISTRATION_TTL_MS: number;
 export declare const HANDLE_REDIRECT_TTL_MS: number;
 export declare const HANDLE_CHANGE_LIMIT = 5;

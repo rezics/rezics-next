@@ -1,3 +1,4 @@
+import { type ReviewedPersonExpectation } from './reviewed-person-identity.ts';
 import type { Pool } from 'pg';
 import { type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
 import type { AccountActor } from '../request/access.ts';
@@ -8,44 +9,6 @@ export declare class SubjectRedirectError extends Error {
     constructor(from: string, to: string);
 }
 export declare function redirectOf(client: CommandTransaction, id: string): Promise<string | null>;
-type ReviewedPersonExpectation = {
-    endpoints: [{
-        subject: string;
-        revision: number;
-        securityRevision: string;
-        source: 'bangumi' | 'vndb' | 'bangumi_cross_media' | 'vndb_cross_media';
-        externalId: string;
-        claimTransactionId: string;
-        property: 'wdt:P6298' | 'wdt:P3180';
-        value: string;
-    }, {
-        subject: string;
-        revision: number;
-        securityRevision: string;
-        source: 'bangumi' | 'vndb' | 'bangumi_cross_media' | 'vndb_cross_media';
-        externalId: string;
-        claimTransactionId: string;
-        property: 'wdt:P6298' | 'wdt:P3180';
-        value: string;
-    }];
-};
-export type SubjectMergeAdmission = {
-    operation: {
-        id: string;
-    };
-};
-export type SubjectIdentityOperation = {
-    id: string;
-    done: false;
-} | {
-    id: string;
-    done: true;
-    result: {
-        survivor: string;
-        redirected: string;
-        revision: number;
-    };
-};
 export declare function mergeSubjects(pool: Pool, options: {
     subjects: string[];
     survivor?: string;
@@ -75,6 +38,11 @@ export declare function mergeSubjects(pool: Pool, options: {
     redirected: string;
     revision: number;
 }>;
+export type SubjectMergeAdmission = {
+    operation: {
+        id: string;
+    };
+};
 /** Ordinary HTTP admission. Completes the catalogue redirect in the persist command;
  * callers observe publication through GET /v1/subjectIdentityOperations/{id}. */
 export declare function admitMergeSubjects(pool: Pool, options: {
@@ -98,15 +66,27 @@ export declare function admitMergeSubjects(pool: Pool, options: {
     expectedIdentity?: undefined;
     routeKey?: Uint8Array;
 })): Promise<{
+    operation: {
+        id: string;
+    };
     component: {
         partition: number;
         epoch: number;
         position: bigint;
     };
-    operation: {
-        id: string;
-    };
 }>;
+export type SubjectIdentityOperation = {
+    id: string;
+    done: false;
+} | {
+    id: string;
+    done: true;
+    result: {
+        survivor: string;
+        redirected: string;
+        revision: number;
+    };
+};
 /** Effects-free observation of one ordinary merge job. Caller already authorized merge and disclosure. */
 export declare function observeSubjectIdentityOperation(tx: CommandTransaction, id: string): Promise<{
     operation: SubjectIdentityOperation;
