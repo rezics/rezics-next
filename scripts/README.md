@@ -728,7 +728,9 @@ The run and its containers therefore share accounting and the parent slice's res
 
 Worker processes also put the worktree's `scripts/check-host` wrapper first on `PATH` when it exists. It places worker
 containers in `rezics-check.slice` and labels them `rezics.worker.attempt=<task>/<attempt>`; settlement removes only
-containers with that attempt label. Remote runs do not receive worker identity and retain their run label and cleanup.
+containers with that attempt label. A walk stack sets `REZICS_WALK_STACK_SLOT`, so the wrapper keeps those labels and
+omits `--cgroup-parent`; those containers run on the host's ordinary slice. Remote runs do not receive worker identity
+and retain their run label and cleanup.
 
 A worker check reruns once under the same admission when every reported test failure is HTTP 503 `deadline_exceeded` or
 `overloaded`, retrying only attributed failing files or the whole command when attribution is unavailable.

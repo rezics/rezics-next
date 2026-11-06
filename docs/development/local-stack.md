@@ -25,6 +25,16 @@ infrastructure running. A child startup failure ends the other children.
 | PostgreSQL                   | 127.0.0.1:54329        |
 | OpenSearch                   | http://127.0.0.1:59200 |
 
+OpenSearch uses the pinned image in `services/kernel/db/search/opensearch/Dockerfile`, including `analysis-icu`.
+The `cjk_bigram_v2` analyzer requires ICU normalization and Traditional/Simplified Chinese and kana transforms;
+the upstream image alone does not supply them. Inspect the configured node's `/_cat/plugins?format=json`, then run
+`bun run --cwd services/kernel check test/search/index-definition.test.ts` for native analyzer regressions.
+That isolated check does not establish publication or page acceptance on the development stack.
+
+When reusing retained services, their owning checkout's Kernel configuration selects the actual node. Preserve its
+OpenSearch volume and native generations; an unrelated test node with ICU does not establish readiness there.
+Workers whose setup refuses local container startup hand the exact error to the stack owner for recovery.
+
 Open Web and choose Sign in. Auth offers password sign-in, passkeys and sign-up. Sign-up works without an email
 provider or Cloudflare account. The development widget completes locally; it and its verifier exist only in the
 explicit local host. Use `127.0.0.1` throughout, including callbacks. Cookies are host-bound. The API token audience
@@ -222,13 +232,19 @@ bun services/auth/scripts/dev-stack.ts walk -- <command...>
 1. Waits for a walk slot. At most `REZICS_WALK_STACKS` stacks (default 6; an integer from 1 to 1000) run on the host
    at once, counted across worktrees under the main checkout's `.temp/walk-stacks`. A further start waits in arrival
    order and prints its position, `walk <task> waiting (<held>/<limit> held, <n> ahead)`. It is never refused.
-2. Names the stack's containers and volumes `rezics-walk-<task>-database` and `rezics-walk-<task>-search`, and gives
-   it its slot's loopback ports: `20000 + 10 × slot` plus 0 for Web, 1 for the Auth pages, 2 for native Auth, 3 for
-   Kernel, 4 for PostgreSQL and 5 for search.
+2. Names the stack's containers and volumes `rezics-walk-<task>-<slot>-database` and
+   `rezics-walk-<task>-<slot>-search`, and gives it its slot's loopback ports: `20000 + 10 × slot` plus 0 for Web, 1
+   for the Auth pages, 2 for native Auth, 3 for Kernel, 4 for PostgreSQL and 5 for search. A stuck container from an
+   earlier slot cannot occupy a later slot's names.
    Admission skips slots whose ports still have listeners, including containers surviving an interrupted launcher.
    Those listeners remain untouched; when all slots are occupied, the launch keeps its queue position.
-3. Runs `db up`, `search up` and `setup`, starts the processes `dev` starts, and waits until Web and the Auth pages
-   answer, for at most ten minutes. Its output goes to `.temp/walk/<task>/stack.log`.
+3. Runs `db up`, `search up` and `setup`, starts the processes `dev` starts, and waits until Web, the Auth pages and
+   Kernel answer, for at most twenty minutes. Readiness first checks that the port accepts TCP, then allows two minutes
+   for Web's first compile; aborting that request too early prevents Vite from ever listening. `db up` and `search up`
+   retry once. The walk `start` process stays up until SIGTERM or SIGINT and restarts a child that exits, so a native
+   host registration timeout or worker database blip does not tear down a ready Web. Teardown SIGKILLs a stack process
+   that ignores SIGTERM, then docker-kills and `docker rm -f -v` this task's containers with a bounded wait. Its output
+   goes to `.temp/walk/<task>/stack.log`.
 4. Runs `<command>` in the caller's directory with the stack's names, ports and origins. Persona and seed steps belong
    inside `<command>`, for example `dev-stack.ts persona` followed by `task seed:dev`.
 5. Stops the processes, removes the stack's containers and volumes, and releases the slot when the command ends or the
@@ -241,6 +257,15 @@ hosts a and b.
 
 Decision: walk stacks are a bounded, queued replacement for the local-container refusal, granted only to workers whose
 brief lists native or browser acceptance.
+Admission skips slots whose application or infrastructure ports are already listening, including containers left by
+another interrupted task after its lease was released. It leaves those processes and containers running and queues
+when no slot has free ports; port collisions do not authorize stopping another task's stack.
+Walk stacks do not inherit check-host cgroup placement; the worktree docker wrapper keeps worker attempt labels and
+omits `--cgroup-parent` when `REZICS_WALK_STACK_SLOT` is set, so OpenSearch and database run on the host's ordinary
+container slice. Worker checks still run on hosts a and b.
+Decision: walk readiness keeps a TCP listen check, a two-minute first-compile fetch, SIGKILL after ignored SIGTERM,
+and bounded docker kill then removal so a Vite SSR abort loop, a stuck worker, or a Dead OpenSearch container cannot
+replace a seeded product walk. Walk `start` waits for the walk signal rather than the first child exit.
 
 Decision: keep one causal binding regression and the existing launcher assertions. Kernel setup persists the selected
 loopback Auth issuer, audience, JWKS URL, Kernel host and API port in `services/kernel/.env`; start applies the same

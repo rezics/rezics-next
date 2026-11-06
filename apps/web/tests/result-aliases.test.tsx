@@ -53,6 +53,22 @@ test('search aliases follow shared language fallback across insertion order, scr
     language: 'ja',
     aliases: ['こころ'],
   });
+  expect(
+    pickResultAliases(
+      byLanguage([
+        ['und', ['シュタインズ・ゲート', 'シュタゲ', 'Shutage']],
+        ['zh-Hans', ['石头门']],
+      ]),
+      'zh-Hant',
+    ),
+  ).toEqual({
+    language: 'zh-Hans',
+    aliases: ['石头门'],
+  });
+  expect(pickResultAliases(byLanguage([['und', ['シュタインズ・ゲート', 'シュタゲ']]]), 'zh-Hant')).toEqual({
+    language: 'und',
+    aliases: ['シュタインズ・ゲート', 'シュタゲ'],
+  });
 });
 
 test('the chosen alias language keeps native order, the three-name cap and lang/dir', () => {

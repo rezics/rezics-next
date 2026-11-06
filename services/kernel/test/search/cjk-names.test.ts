@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { normalizeSourceStatement } from '../../src/semantic/scope-leaf-selection.ts';
+import { publicAliases } from '../../src/search/document-names.ts';
 import { documentActions } from '../../src/search/document.ts';
 import { projectHit } from '../../src/search/hits.ts';
 import { compileMatchEvidence, projectMatchEvidence } from '../../src/search/match-evidence.ts';
@@ -64,4 +65,36 @@ test('adopted names beyond display terms reach shared documents and current evid
       plan,
     ),
   ).toEqual({ state: 'unavailable' });
+});
+
+test('displayed aliases keep every stored language in native order independently of the reader locale', () => {
+  const subject: IndexedSubject = {
+    id: '018f0000-0000-7000-8000-00a000000002',
+    type: 'schema:VideoGame',
+    visibility: 'visible',
+    redirect: null,
+    securityRevision: 1,
+    labels: [
+      { language: 'en', value: 'Steins;Gate' },
+      { language: 'zh-Hant', value: '命運石之門' },
+      { language: 'ja', value: 'STEINS;GATE' },
+    ],
+    aliases: [
+      { language: 'und', value: 'シュタインズ・ゲート' },
+      { language: 'und', value: 'シュタゲ' },
+      { language: 'und', value: 'Shutage' },
+      { language: 'zh-Hans', value: '石头门' },
+      { language: 'und', value: 'シュタインズ・ゲート' },
+    ],
+    descriptions: [],
+    statements: [],
+  };
+  expect(publicAliases(subject)).toEqual({
+    und: ['シュタインズ・ゲート', 'シュタゲ', 'Shutage'],
+    'zh-Hans': ['石头门'],
+  });
+  expect(projectHit(subject, { descriptions: false, languages: ['zh-Hant'] }).labels).toEqual({
+    'zh-Hant': '命運石之門',
+  });
+  expect(projectHit(subject, { descriptions: false, languages: ['ja'] }).labels).toEqual({ ja: 'STEINS;GATE' });
 });

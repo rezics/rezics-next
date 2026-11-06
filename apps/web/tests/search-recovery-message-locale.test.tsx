@@ -1,7 +1,7 @@
 import { afterAll, afterEach, expect, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement, type ComponentProps } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderToStaticMarkup, renderToString } from 'react-dom/server';
 import { m } from '../src/paraglide/messages.js';
 import { getLocale, setLocale } from '../src/paraglide/runtime.js';
 import { SearchRecovery } from '../src/search/search-recovery-view';
@@ -98,7 +98,7 @@ const previousGlobals = new Map(
 for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 
-const { createRoot } = await import('react-dom/client');
+const { createRoot, hydrateRoot } = await import('react-dom/client');
 const { DiscoveryKinds } = await import('../src/search/discovery-kinds');
 type Props = ComponentProps<typeof DiscoveryKinds>;
 const host = document.createElement('main');
@@ -123,6 +123,29 @@ afterAll(() => {
   for (const [key, descriptor] of previousGlobals) {
     if (descriptor) Object.defineProperty(globalThis, key, descriptor);
     else Reflect.deleteProperty(globalThis, key);
+  }
+});
+
+test('a Retry-After deadline expiring in transit hydrates without replacing the recovery and enables manual retry', async () => {
+  const clock = Date.now;
+  let now = 1000;
+  Date.now = () => now;
+  const errors: unknown[] = [];
+  const props = {
+    state: { status: 'index-not-ready' as const, retryAt: 2000 }, retryHref, restartHref, onRetry() {},
+  };
+  try {
+    host.innerHTML = renderToString(createElement(SearchRecovery, props));
+    now = 3000;
+    await act(async () => {
+      root = hydrateRoot(host, createElement(SearchRecovery, props), {
+        onRecoverableError: (error) => errors.push(error),
+      });
+    });
+    expect(errors).toEqual([]);
+    expect(host.querySelector('button')!.disabled).toBe(false);
+  } finally {
+    Date.now = clock;
   }
 });
 

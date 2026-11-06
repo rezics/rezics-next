@@ -16,9 +16,16 @@ import type { StackSlot } from '../../../scripts/stack-lease.ts';
 import { walkStackRequired } from '../../../scripts/stack-run.ts';
 import {
   admitWalkStack,
-  walkStackEnvironment,
+  walkProcessEnvironment,
+  walkReadyUrls,
   walkStackNames,
   walkStackPorts,
+  WALK_DOCKER_REMOVE_MS,
+  WALK_READY_DEADLINE_MS,
+  WALK_READY_FETCH_MS,
+  WALK_READY_POLL_MS,
+  stopSpawned,
+  walkOriginListening,
   type WalkNames,
 } from '../../../scripts/walk-stack.ts';
 
@@ -740,60 +747,114 @@ async function start() {
     ...(await kernelEnvironment()),
     ...developmentKernelBindings(),
   };
-  const children = [
+  const commands = [
     ['bun', 'services/auth/scripts/dev-stack.ts', 'host'],
     ['bun', 'services/auth/scripts/dev-stack.ts', 'pages'],
     ['bun', 'services/auth/scripts/dev-stack.ts', 'web'],
     ['bun', 'run', '--cwd', 'services/kernel', 'dev'],
     ['bun', 'run', '--cwd', 'services/kernel', 'worker'],
-  ].map((command) => Bun.spawn(command, { cwd: root, env, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' }));
+  ];
+  const spawnChild = (command: string[]) =>
+    Bun.spawn(command, { cwd: root, env, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' });
+  const children = commands.map(spawnChild);
   let stopping = false;
-  const stop = () => {
-    stopping = true;
-    for (const child of children) child.kill('SIGTERM');
+  const supervise = (index: number) => {
+    void (async () => {
+      for (;;) {
+        await children[index]!.exited;
+        if (stopping) return;
+        await Bun.sleep(1_000);
+        if (stopping) return;
+        console.error(`walk: ${commands[index]!.slice(-2).join(' ')} exited; restarting`);
+        const child = spawnChild(commands[index]!);
+        children[index] = child;
+        if (stopping) {
+          await stopSpawned(child);
+          return;
+        }
+      }
+    })();
   };
-  process.once('SIGINT', stop);
-  process.once('SIGTERM', stop);
-  try {
-    const first = await Promise.race(children.map(async (child) => await child.exited));
-    const interrupted = stopping;
-    stop();
-    await Promise.all(children.map((child) => child.exited));
-    process.exitCode = interrupted ? 0 : first || 1;
-  } finally {
-    process.off('SIGINT', stop);
-    process.off('SIGTERM', stop);
-  }
+  for (const index of commands.keys()) supervise(index);
+  await new Promise<void>((resolve) => {
+    const onStop = () => {
+      stopping = true;
+      resolve();
+    };
+    process.once('SIGINT', onStop);
+    process.once('SIGTERM', onStop);
+  });
+  process.exitCode = 0;
+  await Promise.all(children.map((child) => stopSpawned(child)));
 }
 const SIGNAL_NUMBERS = { SIGHUP: 1, SIGINT: 2, SIGTERM: 15 } as const;
 
-function dockerOutput(args: string[]): string {
-  const result = spawnSync('docker', args, { encoding: 'utf8' });
-  if (result.status !== 0) throw new Error(`docker ${args.join(' ')} failed: ${result.stderr.trim()}`);
+function dockerOutput(args: string[], timeoutMs?: number): string {
+  const result = spawnSync('docker', args, {
+    encoding: 'utf8',
+    ...(timeoutMs === undefined ? {} : { timeout: timeoutMs, killSignal: 'SIGKILL' }),
+  });
+  if (result.error) throw result.error;
+  if (result.status !== 0)
+    throw new Error(`docker ${args.join(' ')} failed: ${(result.stderr || result.stdout).trim()}`);
   return result.stdout.trim();
 }
 
 /** Removes the task's containers and volumes that exist, so a partial start tears down completely. */
 function removeWalkStack(names: WalkNames): void {
-  for (const container of [names.database, names.search])
-    if (dockerOutput(['ps', '-aq', '--filter', `name=^${container}$`])) dockerOutput(['rm', '-f', '-v', container]);
-  for (const volume of [names.database, names.search])
-    if (dockerOutput(['volume', 'ls', '-q', '--filter', `name=^${volume}$`])) dockerOutput(['volume', 'rm', volume]);
+  for (const container of [names.database, names.search]) {
+    if (!dockerOutput(['ps', '-aq', '--filter', `name=^${container}$`])) continue;
+    try {
+      dockerOutput(['kill', container], 15_000);
+    } catch {
+      // Already stopped, Created, or removing.
+    }
+    try {
+      dockerOutput(['rm', '-f', '-v', container], WALK_DOCKER_REMOVE_MS);
+    } catch (error) {
+      console.error(`walk: docker rm ${container} failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  for (const volume of [names.database, names.search]) {
+    if (!dockerOutput(['volume', 'ls', '-q', '--filter', `name=^${volume}$`])) continue;
+    try {
+      dockerOutput(['volume', 'rm', volume], WALK_DOCKER_REMOVE_MS);
+    } catch (error) {
+      console.error(
+        `walk: docker volume rm ${volume} failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
 }
 
-/** Resolves when every URL answers; fails when the stack exits first or takes longer than ten minutes. */
+/** Resolves when every URL answers; fails when the stack exits first or the compile window elapses. */
 async function untilReady(urls: string[], starting: ReturnType<typeof Bun.spawn>): Promise<void> {
-  const answers = (url: string) =>
-    fetch(url, { signal: AbortSignal.timeout(2_000) }).then(
-      (response) => response.status < 500,
-      () => false,
-    );
-  const deadline = Date.now() + 600_000;
-  while (!(await Promise.all(urls.map(answers))).every(Boolean)) {
+  const answers = async (url: string) => {
+    if (!(await walkOriginListening(url))) return false;
+    try {
+      const response = await fetch(url, { signal: AbortSignal.timeout(WALK_READY_FETCH_MS) });
+      return response.status < 500;
+    } catch {
+      return false;
+    }
+  };
+  const deadline = Date.now() + WALK_READY_DEADLINE_MS;
+  let lastReport = 0;
+  for (;;) {
+    const ready = await Promise.all(urls.map(async (url) => [url, await answers(url)] as const));
+    if (ready.every(([, ok]) => ok)) return;
     if (starting.exitCode !== null || starting.signalCode !== null)
       throw new Error(`walk: the local stack exited (${starting.exitCode ?? starting.signalCode}) before it was ready`);
-    if (Date.now() > deadline) throw new Error('walk: the local stack was not ready after ten minutes');
-    await Bun.sleep(500);
+    if (Date.now() > deadline) {
+      const waiting = ready.filter(([, ok]) => !ok).map(([url]) => url);
+      throw new Error(`walk: the local stack was not ready after ${WALK_READY_DEADLINE_MS} ms (${waiting.join(', ')})`);
+    }
+    if (Date.now() - lastReport >= 30_000) {
+      const waiting = ready.filter(([, ok]) => !ok).map(([url]) => url);
+      console.error(`walk: waiting for ${waiting.join(', ')}`);
+      lastReport = Date.now();
+    }
+    await Bun.sleep(WALK_READY_POLL_MS);
   }
 }
 
@@ -806,7 +867,6 @@ async function walk(command: string[]): Promise<number> {
   if (!task || !walkStackRequired(process.env))
     throw new Error('walk stacks are for a worker whose brief lists acceptance.requires native or browser');
   if (command.length === 0) throw new Error('Usage: bun services/auth/scripts/dev-stack.ts walk -- <command...>');
-  const names = walkStackNames(task);
   const controller = new AbortController();
   let current: ReturnType<typeof Bun.spawn> | undefined;
   let interrupted: keyof typeof SIGNAL_NUMBERS | undefined;
@@ -823,27 +883,33 @@ async function walk(command: string[]): Promise<number> {
   let code = 0;
   try {
     slot = await admitWalkStack(task, process.env, root, controller.signal);
-    const env = { ...process.env, ...walkStackEnvironment(task, slot.index!) } as Record<string, string>;
+    const names = walkStackNames(task, slot.index!);
+    const env = walkProcessEnvironment(task, slot.index!);
     const ports = walkStackPorts(slot.index!);
     let starting: ReturnType<typeof Bun.spawn> | undefined;
     try {
-      removeWalkStack(names); // an interrupted attempt of this task may have left its stack behind
+      removeWalkStack(names); // an interrupted attempt of this slot may have left its stack behind
       for (const script of [
         ['services/kernel/scripts/database.ts', 'up'],
         ['services/kernel/scripts/search.ts', 'up'],
         ['services/auth/scripts/dev-stack.ts', 'setup'],
       ]) {
-        current = Bun.spawn([process.execPath, ...script], {
-          cwd: root,
-          env,
-          stdin: 'ignore',
-          stdout: 'inherit',
-          stderr: 'inherit',
-        });
-        if ((await current.exited) !== 0) throw new Error(`walk: ${script.join(' ')} failed`);
+        let code = 1;
+        for (let attempt = 0; attempt < 2 && code !== 0; attempt++) {
+          current = Bun.spawn([process.execPath, ...script], {
+            cwd: root,
+            env,
+            stdin: 'ignore',
+            stdout: 'inherit',
+            stderr: 'inherit',
+          });
+          code = await current.exited;
+        }
+        if (code !== 0) throw new Error(`walk: ${script.join(' ')} failed`);
       }
       const log = join(root, '.temp', 'walk', task, 'stack.log');
       await mkdir(dirname(log), { recursive: true });
+      await writeFile(log, '');
       starting = current = Bun.spawn([process.execPath, 'services/auth/scripts/dev-stack.ts', 'start'], {
         cwd: root,
         env,
@@ -851,14 +917,11 @@ async function walk(command: string[]): Promise<number> {
         stdout: Bun.file(log),
         stderr: Bun.file(log),
       });
-      await untilReady([`http://127.0.0.1:${ports.web}/`, `http://127.0.0.1:${ports.issuer}/`], starting);
+      await untilReady(walkReadyUrls(ports), starting);
       current = Bun.spawn(command, { env, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' });
       code = await current.exited;
     } finally {
-      if (starting && starting.exitCode === null) {
-        starting.kill('SIGTERM');
-        await starting.exited;
-      }
+      if (starting) await stopSpawned(starting);
       removeWalkStack(names);
     }
   } catch (error) {

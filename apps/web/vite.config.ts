@@ -50,18 +50,22 @@ export default defineConfig((context) => {
       // Shared dependency stores can resolve package files outside the checkout's lexical node_modules path.
       fs: { allow: [workspaceRoot, dependencyRoot, ...fontDependencyRoots] },
     },
+    ...(process.env.REZICS_WALK_STACK_SLOT
+      ? { cacheDir: resolve(workspaceRoot, '.temp/web-vite', process.env.REZICS_WALK_STACK_SLOT) }
+      : {}),
     html: { cspNonce: viteNonceMarker },
     // Fonts must stay on the site origin; the page policy does not allow data: fonts.
     build: { assetsInlineLimit: 0 },
     optimizeDeps: {
       // Scan the complete route graph up front so a local Worker browser check never discovers a route dependency
       // after the first page has loaded.
-      entries: ['src/routes/**/*.tsx'],
+      entries: ['src/routes/**/*.tsx', 'src/server.ts', 'src/session/routes.ts', 'src/session/website-scopes.ts'],
       holdUntilCrawlEnd: true,
     },
     ssr: {
       optimizeDeps: {
         include: ['@inlang/paraglide-js/urlpattern-polyfill'],
+        entries: ['src/server.ts', 'src/session/routes.ts', 'src/session/website-scopes.ts'],
       },
     },
     plugins: [

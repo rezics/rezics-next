@@ -1311,7 +1311,7 @@ test('a local stack container needs a worker whose brief lists native or browser
   );
   await release();
   expect(await workerLocalContainerError({ REZICS_WALK_STACK_DIR: dir }, repository)).toBeNull();
-  expect(() => walkStackNames('not a name')).toThrow('GOAL_TASK_ID cannot name a walk stack');
+  expect(() => walkStackNames('not a name', 1)).toThrow('GOAL_TASK_ID cannot name a walk stack');
 });
 
 test("a walk worker's own checks still place on a check host, as any other worker's do", async () => {
