@@ -171,6 +171,10 @@ export type SearchErasurePort = {
         observed: boolean;
     }>>;
 };
+/** Native Access cleanup has finished; the coordinator still tracks shared-history custody separately. */
+export type NativeErasureCoordinatorPort = {
+    acknowledgeCompletion(pool: AccessPool, accountId: string): Promise<unknown>;
+};
 export type ResourceAuthorizationFacts = {
     readonly actor: AccessActor;
     readonly action: string;
@@ -212,6 +216,7 @@ export type AccessApplicationPorts = {
     readonly kindAudience: KindAudienceLibraryPort;
     readonly originalWork: OriginalWorkPort;
     readonly searchErasure?: SearchErasurePort;
+    readonly nativeErasure: NativeErasureCoordinatorPort;
     readonly resourceAuthorization?: ResourceAuthorizationPort;
     readonly clock?: () => Date;
 };
