@@ -2202,10 +2202,12 @@ Decision: credited-name coverage is all-or-readiness per work; an incomplete cre
 publishes no searchable names. Ordinary names/descriptions keep their installed meaning.
 
 [The bounded consumer](credit-search.ts) supplies `CreditSearchSource`, a minimal native adapter contract, and
-an additive successor [mapping](credit-search-mapping.ts). These are not yet mounted in the native projection,
-query, transport or Web controls. An absent adapter returns `unavailable`. The existing three-entry work-context
-preview cannot implement this complete-input seam. Semantic's released `listWorkPlan` credit-property selection
-is the shared meaning; this consumer interprets no generic statements or fixed author-role roster.
+an additive successor [mapping](credit-search-mapping.ts). The installed native producer is
+`createCreditSearchSource` from `semantic/credit-search.ts`, composed as `createKernelCreditSearchSource` and
+attached by `createRatedSubjectSource`. Writer, default-worker, prepared, facet, currentness and page integration
+remain Search-owned and are not yet mounted. An absent adapter returns `unavailable`. The existing three-entry
+work-context preview cannot implement this complete-input seam. Semantic's released `listWorkPlan` credit-property
+selection is the shared meaning; this consumer interprets no generic statements or fixed author-role roster.
 
 The adapter must seek complete selected outgoing credits and public creator labels/aliases, preserve each
 statement's exact target and qualifiers, and bind its observation to the work and every creator dependency.

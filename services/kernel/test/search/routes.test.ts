@@ -128,9 +128,6 @@ const service: SearchService = {
     await read?.complete(page);
     return page;
   },
-  async savedCatalogueMembers() {
-    throw new Error('Unexpected saved catalogue members call');
-  },
   async releaseGroups(principal, request) {
     calls.push(['releaseGroups', principal, request]);
     if (failure) throw failure;
