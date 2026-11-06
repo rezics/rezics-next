@@ -1003,10 +1003,11 @@ tokens use the ordinary client and omit `media:complete`. A second Access on the
 current-role seam. `grant.create` authenticates the governance bearer on that Access so command admission sees the
 same actor snapshot; a Content-issued actor object is not reused. Seller Global grants are
 `board:create` and `offer:create` only, because Content already installed `subject:create`. The composed worker is
-the production module list under `workerTestEnv`; readiness waits for the effects consumer to observe and catch up
-and uses the existing 5ms queue poll. Tombstone drain waits for that account's tombstone envelope, not a moving
-partition head, with the 120s ceiling other native erasure suites use. The board-read current-role projection stays
-with Accounts.
+startWorker's live default composition (`undefined` modules) under `workerTestEnv`; `KERNEL_WORK_MODULES` pins
+registration names only. Financial outcome-driver children use the same live composition. Readiness waits for the
+effects consumer to observe and catch up and uses the existing 5ms queue poll. Tombstone drain waits for that
+account's tombstone envelope, not a moving partition head, with the 120s ceiling other native erasure suites use.
+The board-read current-role projection stays with Accounts.
 
 The [financial lifecycle and cost review](../../../../docs/research/commerce-cost-lifecycle-quality.md)
 retains its recorded source bindings and unavailable measurements. Local emptiness cannot prove absence of
