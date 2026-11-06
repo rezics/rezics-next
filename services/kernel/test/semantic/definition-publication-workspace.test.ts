@@ -1,23 +1,93 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { bundledSources } from '@rezics/definitions/bundled';
+import { bundledRelease, bundledSources } from '@rezics/definitions/bundled';
 import { compileCatalogue } from '@rezics/definitions/compile';
 import { EXTENSION_FORMAT, extensionDigest, termPrefix, type Extension } from '@rezics/definitions/extension';
 import { releaseDigest } from '@rezics/definitions';
+import { createKernel } from '../../src/http/kernel.ts';
+import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
+import { newId, routeOf } from '../../src/route/route.ts';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { openGrowthDatabase } from '../support/growth.ts';
 import { VERTICAL_LOCALES, verticalManifests } from '../support/manifests.ts';
-import { createSemanticDriver } from './outcome-binding.ts';
-import type { SemanticOutcomeDriver } from './outcome-driver.ts';
+import { createRealAccess } from './real-access.ts';
 
-let driver: SemanticOutcomeDriver;
-const key = () => ({ 'Idempotency-Key': JSON.stringify(randomUUID()) });
+const global = { route: 0, id: GLOBAL_CONTEXT };
+const accounts = {
+  operator: newId(0x7311),
+  editor: newId(0x7312),
+  rival: newId(0x7313),
+  reader: newId(0x7314),
+  suspended: newId(0x7315),
+};
+const actions = [
+  'access:grant',
+  'gate:any',
+  'definitions:publish',
+  'definitions:activate',
+  'definitions:read',
+  'subject:create',
+  'subject:read',
+  'context:create',
+  'context:read',
+  'openapi:read',
+];
+let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
+let real: Awaited<ReturnType<typeof createRealAccess<typeof accounts>>>;
+let app: ReturnType<typeof createKernel>;
 
 beforeAll(async () => {
-  driver = await createSemanticDriver();
-  await driver.projection('paused');
-}, 180_000);
+  db = await openGrowthDatabase();
+  real = await createRealAccess(db.admin, accounts, actions);
+  await db.admin.query("UPDATE access.account SET state = 'suspended' WHERE account_id = $1", [accounts.suspended]);
+  app = createKernel({
+    pool: db.pool,
+    access: real.access,
+    clock: () => new Date(),
+    routeKey: new Uint8Array(32).fill(62),
+    writeRate: createWriteRateLimiter({
+      secret: 'definition-publication-workspace-write-rate',
+      overrides: '{"new-account":{"write":{"maximum":10000,"seconds":60}}}',
+    }),
+  });
+  await bootstrapRelease(db.pool, bundledRelease);
+  for (const action of ['access:grant', 'gate:any']) await real.grant(global, 'operator', action);
+  for (const action of [
+    'definitions:publish',
+    'definitions:activate',
+    'gate:definition_publication',
+    'subject:create',
+    'context:create',
+  ]) {
+    await real.grant(global, 'editor', action);
+    await real.grant(global, 'rival', action);
+  }
+}, 120_000);
 afterAll(async () => {
-  await driver?.close();
+  await db?.close();
 });
+
+async function call(
+  who: keyof typeof accounts | 'anonymous',
+  method: string,
+  path: string,
+  body?: unknown,
+  headers: Record<string, string> = {},
+) {
+  const response = await app.handle(
+    new Request(`http://kernel.test${path}`, {
+      method,
+      headers: {
+        ...(who === 'anonymous' ? {} : { authorization: `Bearer ${real.bearer(who)}` }),
+        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+        'idempotency-key': JSON.stringify(randomUUID()),
+        ...headers,
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    }),
+  );
+  return { status: response.status, headers: response.headers, body: (await response.json()) as Record<string, any> };
+}
 
 function sourcesFor(count: number) {
   const bundled = bundledSources();
@@ -36,36 +106,18 @@ function sourcesFor(count: number) {
 }
 
 test('platform and Context editors publish, resume, activate and use a compiled fixture vertical with independent pinned reads', async () => {
-  const send = driver.fixtures.send;
-  const editor = await driver.fixtures.person('publication-workspace-editor');
-  const rival = await driver.fixtures.person('publication-workspace-rival');
-  const ungranted = await driver.fixtures.person('publication-workspace-ungranted');
-  await driver.fixtures.grantAccount(editor, [
-    'definitions:publish',
-    'definitions:activate',
-    'gate:definition_publication',
-    'subject:create',
-    'context:create',
-  ]);
-  await driver.fixtures.grantAccount(rival, [
-    'definitions:publish',
-    'definitions:activate',
-    'gate:definition_publication',
-  ]);
-
-  const anonymous = await send(null, 'POST', '/v1/definitions/imports', { document: { types: {} } });
+  const anonymous = await call('anonymous', 'POST', '/v1/definitions/imports', { document: { types: {} } });
   expect(anonymous.status, JSON.stringify(anonymous.body)).toBe(401);
-  const closed = await send(ungranted, 'POST', '/v1/definitions/imports', { document: { types: {} } });
+  const closed = await call('reader', 'POST', '/v1/definitions/imports', { document: { types: {} } });
   expect(closed.status, JSON.stringify(closed.body)).toBe(403);
-  expect((closed.body as { code?: string }).code).toBe('platform_closed');
-  const suspended = await driver.request('suspended', 'POST', '/v1/definitions/imports', { document: { types: {} } });
+  expect(closed.body.code).toBe('platform_closed');
+  const suspended = await call('suspended', 'POST', '/v1/definitions/imports', { document: { types: {} } });
   expect(suspended.status).toBe(401);
 
-  const invalid = await send(editor, 'POST', '/v1/definitions/imports', { document: { format: 'nope' } });
+  const invalid = await call('editor', 'POST', '/v1/definitions/imports', { document: { format: 'nope' } });
   expect(invalid.status, JSON.stringify(invalid.body)).toBe(200);
-  const invalidBody = invalid.body as { kind: string; diagnostics: { pointer: string; code: string }[] };
-  expect(invalidBody.kind).toBe('invalid');
-  expect(invalidBody.diagnostics[0]?.pointer).toBe('/document');
+  expect(invalid.body.kind).toBe('invalid');
+  expect(invalid.body.diagnostics[0]?.pointer).toBe('/document');
 
   const classes: Record<string, object> = {};
   const labels: Record<string, string> = {};
@@ -91,103 +143,86 @@ test('platform and Context editors publish, resume, activate and use a compiled 
   };
   const compiledTen = await compileCatalogue(ten);
   expect(Object.keys(compiledTen.types)).toHaveLength(10);
-  const measured = await send(editor, 'POST', '/v1/definitions/imports', { document: ten });
+  const measured = await call('editor', 'POST', '/v1/definitions/imports', { document: ten });
   expect(measured.status, JSON.stringify(measured.body)).toBe(200);
-  expect((measured.body as { identity: { digest: string } }).identity.digest).toBe(releaseDigest(compiledTen));
+  expect(measured.body.identity.digest).toBe(releaseDigest(compiledTen));
 
   const vertical = sourcesFor(1);
   const compiled = await compileCatalogue(vertical);
-  const preview = await send(editor, 'POST', '/v1/definitions/imports', { document: vertical });
+  const preview = await call('editor', 'POST', '/v1/definitions/imports', { document: vertical });
   expect(preview.status, JSON.stringify(preview.body)).toBe(200);
-  const previewBody = preview.body as {
-    kind: string;
-    identity: { digest: string; version: string };
-    diagnostics: unknown[];
-    comparison: { addedTypes: string[] };
-    operations: { grant: string; admitted: boolean; publish: boolean };
-    current: { digest: string; head: number };
-    document: { types?: Record<string, unknown> } | null;
-  };
-  expect(previewBody.kind).toBe('sources');
-  expect(previewBody.diagnostics).toEqual([]);
-  expect(previewBody.identity.digest).toBe(releaseDigest(compiled));
-  expect(previewBody.document?.types && Object.keys(previewBody.document.types).length).toBeGreaterThan(0);
-  expect(previewBody.operations).toMatchObject({ grant: 'definition_publication', admitted: true, publish: true });
-  expect(previewBody.comparison.addedTypes.some((id) => id.startsWith('ex:V0'))).toBe(true);
-  const previousHead = previewBody.current.head;
-  const previousDigest = previewBody.current.digest;
+  expect(preview.body.kind).toBe('sources');
+  expect(preview.body.diagnostics).toEqual([]);
+  expect(preview.body.identity.digest).toBe(releaseDigest(compiled));
+  expect(preview.body.document?.types && Object.keys(preview.body.document.types).length).toBeGreaterThan(0);
+  expect(preview.body.operations).toMatchObject({ grant: 'definition_publication', admitted: true, publish: true });
+  expect(preview.body.comparison.addedTypes.some((id: string) => id.startsWith('ex:V0'))).toBe(true);
+  const previousHead = preview.body.current.head as number;
+  const previousDigest = preview.body.current.digest as string;
+  const digest = preview.body.identity.digest as string;
+  const publishKey = { 'idempotency-key': JSON.stringify(randomUUID()) };
 
-  const publishHeaders = key();
-  const first = await send(editor, 'POST', '/v1/definitions/releases', { release: compiled }, publishHeaders);
+  const first = await call('editor', 'POST', '/v1/definitions/releases', { release: compiled }, publishKey);
   expect(first.status, JSON.stringify(first.body)).toBe(201);
-  expect(first.body).toEqual({ digest: previewBody.identity.digest });
-  const replay = await send(editor, 'POST', '/v1/definitions/releases', { release: compiled }, publishHeaders);
+  expect(first.body).toEqual({ digest });
+  const replay = await call('editor', 'POST', '/v1/definitions/releases', { release: compiled }, publishKey);
   expect(replay.status).toBe(201);
   expect(replay.body).toEqual(first.body);
 
-  const independent = await send(null, 'GET', `/v1/definitions/releases/${previewBody.identity.digest}`);
+  const independent = await call('anonymous', 'GET', `/v1/definitions/releases/${digest}`);
   expect(independent.status).toBe(200);
-  expect((independent.body as { digest: string }).digest).toBe(previewBody.identity.digest);
+  expect(independent.body.digest).toBe(digest);
 
-  const stale = await send(
-    editor,
-    'POST',
-    `/v1/definitions/releases/${previewBody.identity.digest}:activate`,
-    { expected_head: previousHead === 0 ? 1 : previousHead - 1 },
-    key(),
-  );
+  const stale = await call('editor', 'POST', `/v1/definitions/releases/${digest}:activate`, {
+    expected_head: previousHead === 0 ? 1 : previousHead - 1,
+  });
   expect(stale.status, JSON.stringify(stale.body)).toBe(409);
-  const refreshed = await send(editor, 'GET', '/v1/definitions/active');
-  expect((refreshed.body as { head: number }).head).toBe(previousHead);
-  const activated = await send(
-    editor,
-    'POST',
-    `/v1/definitions/releases/${previewBody.identity.digest}:activate`,
-    { expected_head: previousHead },
-    key(),
-  );
+  const refreshed = await call('editor', 'GET', '/v1/definitions/active');
+  expect(refreshed.body.head).toBe(previousHead);
+  const activated = await call('editor', 'POST', `/v1/definitions/releases/${digest}:activate`, {
+    expected_head: previousHead,
+  });
   expect(activated.status, JSON.stringify(activated.body)).toBe(200);
-  const competing = await send(
-    rival,
-    'POST',
-    `/v1/definitions/releases/${previousDigest}:activate`,
-    { expected_head: previousHead },
-    key(),
-  );
+  const competing = await call('rival', 'POST', `/v1/definitions/releases/${previousDigest}:activate`, {
+    expected_head: previousHead,
+  });
   expect(competing.status, JSON.stringify(competing.body)).toBe(409);
 
-  const pinnedOld = await send(null, 'GET', `/v1/definitions/releases/${previousDigest}`);
-  const pinnedNew = await send(null, 'GET', `/v1/definitions/releases/${previewBody.identity.digest}`);
-  const active = await send(null, 'GET', '/v1/definitions/active');
+  const pinnedOld = await call('anonymous', 'GET', `/v1/definitions/releases/${previousDigest}`);
+  const pinnedNew = await call('anonymous', 'GET', `/v1/definitions/releases/${digest}`);
+  const active = await call('anonymous', 'GET', '/v1/definitions/active');
   expect(pinnedOld.status).toBe(200);
-  expect((pinnedOld.body as { digest: string }).digest).toBe(previousDigest);
-  expect((pinnedNew.body as { digest: string }).digest).toBe(previewBody.identity.digest);
-  expect((active.body as { digest: string }).digest).toBe(previewBody.identity.digest);
+  expect(pinnedOld.body.digest).toBe(previousDigest);
+  expect(pinnedNew.body.digest).toBe(digest);
+  expect(active.body.digest).toBe(digest);
 
   const typeId =
-    previewBody.comparison.addedTypes.find((id) => id.endsWith('Work')) ?? previewBody.comparison.addedTypes[0]!;
-  const created = await send(
-    editor,
-    'POST',
-    '/v1/subjects',
-    { type: typeId, labels: { en: 'Fixture vertical work' } },
-    key(),
-  );
+    (preview.body.comparison.addedTypes as string[]).find((id) => id.endsWith('Work')) ??
+    preview.body.comparison.addedTypes[0]!;
+  const created = await call('editor', 'POST', '/v1/subjects', {
+    type: typeId,
+    labels: { en: 'Fixture vertical work' },
+  });
   expect(created.status, JSON.stringify(created.body)).toBe(201);
-  const subjectId = (created.body as { subject: { id: string } }).subject.id;
-  const read = await send(null, 'GET', `/v1/subjects/${subjectId}`);
+  const subjectId = created.body.subject.id as string;
+  const read = await call('anonymous', 'GET', `/v1/subjects/${subjectId}`);
   expect(read.status).toBe(200);
-  expect((read.body as { subject: { type: string } }).subject.type).toBe(typeId);
+  expect(read.body.subject.type).toBe(typeId);
   for (const locale of VERTICAL_LOCALES) {
-    const descriptor = await send(null, 'GET', `/v1/definitionTypes/${encodeURIComponent(typeId)}?locale=${locale}`);
+    const descriptor = await call(
+      'anonymous',
+      'GET',
+      `/v1/definitionTypes/${encodeURIComponent(typeId)}?locale=${locale}`,
+    );
     expect(descriptor.status, `${locale} ${JSON.stringify(descriptor.body)}`).toBe(200);
-    expect((descriptor.body as { label: string }).label.length).toBeGreaterThan(0);
+    expect((descriptor.body.label as string).length).toBeGreaterThan(0);
   }
 
-  const contextResult = await send(editor, 'POST', '/v1/contexts', { labels: { en: 'Publication extension' } }, key());
+  const contextResult = await call('editor', 'POST', '/v1/contexts', { labels: { en: 'Publication extension' } });
   expect(contextResult.status, JSON.stringify(contextResult.body)).toBe(201);
-  const context = (contextResult.body as { context: { id: string } }).context.id;
-  await driver.fixtures.grantAccount(editor, ['definitions:publish', 'definitions:activate'], context);
+  const context = contextResult.body.context.id as string;
+  const resource = { route: routeOf(context)!, id: context };
+  for (const action of ['definitions:publish', 'definitions:activate']) await real.grant(resource, 'editor', action);
   const extension: Extension = {
     format: EXTENSION_FORMAT,
     context,
@@ -204,37 +239,37 @@ test('platform and Context editors publish, resume, activate and use a compiled 
       },
     },
   };
-  const extensionPreview = await send(editor, 'POST', '/v1/definitions/imports', { document: extension, context });
+  const extensionPreview = await call('editor', 'POST', '/v1/definitions/imports', { document: extension, context });
   expect(extensionPreview.status, JSON.stringify(extensionPreview.body)).toBe(200);
-  expect((extensionPreview.body as { identity: { digest: string } }).identity.digest).toBe(extensionDigest(extension));
-  const publishedExtension = await send(
-    editor,
-    'POST',
-    `/v1/contexts/${context}/definitions/extensions`,
-    { extension },
-    key(),
-  );
+  expect(extensionPreview.body.identity.digest).toBe(extensionDigest(extension));
+  const publishedExtension = await call('editor', 'POST', `/v1/contexts/${context}/definitions/extensions`, {
+    extension,
+  });
   expect(publishedExtension.status, JSON.stringify(publishedExtension.body)).toBe(201);
-  const extensionDigestValue = (publishedExtension.body as { digest: string }).digest;
-  const extensionRead = await send(
-    null,
+  const extensionDigestValue = publishedExtension.body.digest as string;
+  const extensionRead = await call(
+    'anonymous',
     'GET',
     `/v1/contexts/${context}/definitions/extensions/${extensionDigestValue}`,
   );
   expect(extensionRead.status, JSON.stringify(extensionRead.body)).toBe(200);
-  expect((extensionRead.body as { digest: string }).digest).toBe(extensionDigestValue);
-  const currentExtension = await send(editor, 'GET', `/v1/contexts/${context}/definitions`);
-  const extensionHead = (currentExtension.body as { head: number }).head;
-  const activatedExtension = await send(
-    editor,
+  expect(extensionRead.body.digest).toBe(extensionDigestValue);
+  const currentExtension = await call('editor', 'GET', `/v1/contexts/${context}/definitions`);
+  const extensionHead = currentExtension.body.head as number;
+  const activatedExtension = await call(
+    'editor',
     'POST',
     `/v1/contexts/${context}/definitions/extensions/${extensionDigestValue}:activate`,
     { expected_head: extensionHead === 0 ? null : extensionHead },
-    key(),
   );
   expect(activatedExtension.status, JSON.stringify(activatedExtension.body)).toBe(200);
 
-  await driver.fixtures.grantAccount(ungranted, ['definitions:publish']);
-  const revokedGate = await send(ungranted, 'POST', '/v1/definitions/imports', { document: vertical });
+  await real.grant(global, 'reader', 'definitions:publish');
+  const revokedGate = await call('reader', 'POST', '/v1/definitions/imports', { document: vertical });
   expect(revokedGate.status).toBe(403);
+  await real.grant(global, 'editor', 'gate:definition_publication');
+  await real.revoke(global, 'editor', 'gate:definition_publication');
+  const revoked = await call('editor', 'POST', '/v1/definitions/imports', { document: vertical });
+  expect(revoked.status).toBe(403);
+  expect(revoked.body.code).toBe('platform_closed');
 }, 180_000);
