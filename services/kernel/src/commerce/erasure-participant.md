@@ -11,7 +11,8 @@ the next cursor/phase commit in the same platform command. Progress contains onl
 cursor, phase, a fixed blocker and explicit retention metadata; it never copies a source payload. It survives
 DBOS history expiry and is not a second coordinator. Replay cannot reopen a terminal phase or coordinator outcome.
 The participant acknowledges an actual local outcome only after its owned pages commit. The unused-actor `none` path
-still requires real shared-history and foreign-role coverage; local absence never attests whole-account no-data. A
+still requires real shared-history and foreign-role coverage; local absence never attests whole-account no-data. The
+native unused-account fixture therefore asserts `pending` with an explicit history gap until that coverage exists. A
 data-bearing buyer can acknowledge a configured finite local Checkout exception while shared, foreign and provider
 custody remains independently pending.
 
@@ -172,6 +173,6 @@ the same owned database and loopback Stripe endpoint. Readiness is the ready lin
 an effects consumer that has ticked with no pending envelopes; the parent reaps the child with SIGKILL because
 retention coordinators sleep. Seller Global grants are `board:create` and `offer:create` only: Content's native
 identities already install `subject:create`. Positive purchase targets are real subjects created through the native
-API from released metadata. Business assertions, including unused-actor `none`, replay, private concealment and late
-paid/refund money outcomes, remain required. The independent terminal-benefit cases remain unchanged. Neither
-topology correction nor local pure settlement tests prove the missing custody outcome.
+API from released metadata. Business assertions, including unused-actor History-coverage `pending`, replay, private
+concealment and late paid/refund money outcomes, remain required. The independent terminal-benefit cases remain
+unchanged. Neither topology correction nor local pure settlement tests prove the missing custody outcome.

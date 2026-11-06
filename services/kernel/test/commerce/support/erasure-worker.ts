@@ -2,10 +2,12 @@ import type { Pool } from 'pg';
 import { withConnection } from '../../../src/database/pool.ts';
 import { readConsumerLag } from '../../../src/events/consumer-lag.ts';
 import { EFFECTS_CONSUMER } from '../../../src/events/effects.ts';
+import { partitionOf, routeOf } from '../../../src/route/route.ts';
 import type { WorkClient } from '../../../src/work/client.ts';
 import { workerTestEnv } from '../../support/worker-env.ts';
 
 const READY = 'Commerce erasure worker ready';
+const TOMBSTONE = 'com.rezics.access.account-tombstoned.v1';
 
 async function waitUntil<T>(read: () => Promise<T>, accept: (value: T) => boolean, ms: number): Promise<T> {
   const deadline = Date.now() + ms;
@@ -27,6 +29,39 @@ export async function awaitEffectsCaughtUp(pool: Pool, ms = 90_000): Promise<voi
 }
 
 /**
+ * Wait until the effects relay has consumed this account's tombstone envelope.
+ * Later walker traffic on the same partition must not move the goal.
+ */
+export async function drainTombstone(
+  pool: Pool,
+  accountId: string,
+  { deadlineMs = 120_000 }: { deadlineMs?: number } = {},
+): Promise<void> {
+  const route = routeOf(accountId);
+  if (route === null) throw new Error('Invalid commerce tombstone account');
+  const partition = partitionOf(route);
+  await waitUntil(
+    async () => {
+      const result = await pool.query<{ pos: string | null; checkpoint: string | null }>(
+        `SELECT o.position::text AS pos, c.position::text AS checkpoint
+           FROM core.outbox o
+           LEFT JOIN core.consumer_checkpoint c
+             ON c.partition_no = o.partition_no AND c.consumer = 'effects'
+          WHERE o.partition_no = $1
+            AND o.type = $2
+            AND o.data->>'accountId' = $3
+          ORDER BY o.position DESC, o.event_seq DESC
+          LIMIT 1`,
+        [partition, TOMBSTONE, accountId],
+      );
+      return result.rows[0] ?? { pos: null, checkpoint: null, partition };
+    },
+    (row) => row.pos !== null && row.checkpoint !== null && BigInt(row.checkpoint) >= BigInt(row.pos),
+    deadlineMs,
+  );
+}
+
+/**
  * Spawn the default kernel worker against this suite's database. Readiness is the
  * ready line, 5ms queue poll, and an effects consumer that has caught up.
  */
@@ -34,7 +69,7 @@ export async function startCommerceErasureWorker(pool: Pool, client: WorkClient,
   let output = '';
   let errors = '';
   const running = Bun.spawn([process.execPath, new URL('./erasure-participant-runtime.ts', import.meta.url).pathname], {
-    env: { ...process.env, ...workerTestEnv(env) },
+    env: workerTestEnv({ ...process.env, ...env }),
     stdout: 'pipe',
     stderr: 'pipe',
   });
