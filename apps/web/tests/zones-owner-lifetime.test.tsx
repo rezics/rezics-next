@@ -2,7 +2,16 @@
 import { afterAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, StrictMode } from 'react';
-import type { Loaded, Mutation, Preview, Result, Transport, ZoneOwned } from '../src/features/zones/editor/model';
+import type {
+  LifecycleMutation,
+  LifecycleReading,
+  Loaded,
+  Mutation,
+  Preview,
+  Result,
+  Transport,
+  ZoneOwned,
+} from '../src/features/zones/editor/model';
 import type { OwnerReadObservation } from '../src/features/zones/editor/owner-lifetime';
 import type { CommandOutcome, ListOutcome } from '../src/features/zones/manage/model';
 
@@ -47,16 +56,24 @@ type ReadData = { id: string; locale: string; expectedReader?: string; admission
 type ReadChoicesData = { locale: string; cursor: string; expectedReader?: string; admission?: string };
 type PreviewData = ReadData & { route: string };
 type WriteData = Mutation & { locale: string; expectedReader?: string; admission?: string };
+type LifecycleData = Omit<LifecycleMutation, 'csrf'> & {
+  locale: string;
+  expectedReader?: string;
+  admission?: string;
+};
 type OwnedReadArgs<T> = { data: T; headers?: Record<string, string> };
 
 let backendViewer: Viewer = { state: 'signed-in', subject: 'A', csrfToken: null };
 let nextEditorRead: ReturnType<typeof deferred<Loaded>> | undefined;
 let nextEditorWrite: 'unavailable' | undefined;
 let heldEditorWrite: ReturnType<typeof deferred<Result<ZoneOwned>>> | undefined;
+let nextEditorLifecycle: 'unavailable' | undefined;
+let heldEditorLifecycle: ReturnType<typeof deferred<Result<LifecycleReading>>> | undefined;
 let delayedPreview: ReturnType<typeof deferred<Preview>> | undefined;
 let delayedChoices: ReturnType<typeof deferred<Loaded['options']['collections']>> | undefined;
 const editorReads: ReadData[] = [];
 const editorWrites: { data: WriteData; csrf: string | undefined }[] = [];
+const editorLifecycles: { data: LifecycleData; csrf: string | undefined }[] = [];
 const editorPreviews: PreviewData[] = [];
 const editorChoices: ReadChoicesData[] = [];
 const editorFixtureModule = await import('../src/features/zones/editor/fixture');
@@ -141,6 +158,45 @@ const editorServer = {
       };
     } else editorLoaded = { ...editorLoaded, resource: { kind: 'ready', value: { ...saved, zone } } };
     return { kind: 'ready', value: zone, ownerObservation: observation };
+  },
+  writeLifecycle: async ({ data, headers }: OwnedReadArgs<LifecycleData>): Promise<Result<LifecycleReading>> => {
+    editorLifecycles.push({ data, csrf: headers?.['X-CSRF-Token'] });
+    const observation = responseObservation(data);
+    if (
+      !observation ||
+      !backendViewer.csrfToken ||
+      headers?.['X-CSRF-Token'] !== backendViewer.csrfToken ||
+      !/^[A-Za-z0-9_-]{22}$/.test(headers?.['X-CSRF-Token'] ?? '')
+    )
+      return { kind: 'failure', status: 403, code: 'forbidden' };
+    if (heldEditorLifecycle) {
+      const pending = heldEditorLifecycle;
+      heldEditorLifecycle = undefined;
+      return pending.promise;
+    }
+    if (nextEditorLifecycle === 'unavailable') {
+      nextEditorLifecycle = undefined;
+      return { kind: 'failure', status: 503, code: 'dependency_unavailable', ownerObservation: observation };
+    }
+    if (editorLoaded.resource.kind !== 'ready') return { kind: 'failure', status: 404, code: 'not_found' };
+    const saved = editorLoaded.resource.value;
+    if (data.revision !== saved.zone.revision)
+      return { kind: 'failure', status: 412, code: 'precondition_failed', ownerObservation: observation };
+    const revision = (BigInt(saved.zone.revision) + 1n).toString();
+    const deleted = data.operation === 'delete';
+    const zone: ZoneOwned = {
+      ...saved.zone,
+      id: data.id,
+      revision,
+      deletedAt: deleted ? '2026-11-06T00:00:00.000Z' : null,
+      restoreUntil: deleted ? '2026-12-06T00:00:00.000Z' : null,
+    };
+    editorLoaded = { ...editorLoaded, resource: { kind: 'ready', value: { ...saved, zone } } };
+    return {
+      kind: 'ready',
+      value: { revision: zone.revision, deletedAt: zone.deletedAt, restoreUntil: zone.restoreUntil },
+      ownerObservation: observation,
+    };
   },
   readSavedPreview: async ({ data }: OwnedReadArgs<PreviewData>): Promise<Preview> => {
     editorPreviews.push(data);
@@ -602,6 +658,7 @@ test('ZoneEditorSession ignores delayed results after error, removal, replacemen
             return loading.promise;
           },
           mutate: () => writing.promise,
+          lifecycle: async () => ({ kind: 'failure', status: 503, code: 'dependency_unavailable' }),
           preview: () => previewing.promise,
           collections: () => choosing.promise,
         };
@@ -671,6 +728,7 @@ test('ZoneEditorSession ignores delayed results after error, removal, replacemen
         const freshTransport: Transport = {
           load: async () => freshRead,
           mutate: async () => ({ kind: 'failure', status: 503, code: 'dependency_unavailable' }),
+          lifecycle: async () => ({ kind: 'failure', status: 503, code: 'dependency_unavailable' }),
           preview: async () => ({ kind: 'failure', status: 503, code: 'dependency_unavailable' }),
           collections: async () => ({ kind: 'failure', status: 503, code: 'dependency_unavailable' }),
         };
@@ -722,6 +780,40 @@ test('ZoneEditorSession ignores delayed results after error, removal, replacemen
         client.clear();
       }
     }
+  }
+});
+
+test('mounted editor lifecycle stays on its captured owner visit after replacement', async () => {
+  const visit = await mountedVisit(`/my/zones/${fixtureZoneId}/edit`);
+  try {
+    if (editorLoaded.resource.kind === 'ready') {
+      editorLoaded.resource.value.zone.revision = '1';
+      editorLoaded.resource.value.zone.deletedAt = null;
+    }
+    await settle(() => visit.router.invalidate());
+    await until(() => !!visit.host.querySelector('#zone-label-en') && !!button(visit.host, 'Delete zone'));
+    const pending = deferred<Result<LifecycleReading>>();
+    heldEditorLifecycle = pending;
+    const before = editorLifecycles.length;
+    await settle(() => button(visit.host, 'Delete zone').click());
+    await until(() => editorLifecycles.length === before + 1);
+    backendViewer = signedIn('B', csrfB);
+    await settle(() => visit.client.setQueryData(sessionQuery.queryKey, backendViewer));
+    await settle(() => visit.router.invalidate());
+    await until(() => !!visit.host.querySelector('#zone-label-en'));
+    pending.resolve({
+      kind: 'ready',
+      value: { revision: '2', deletedAt: '2026-11-06T00:00:00.000Z', restoreUntil: '2026-12-06T00:00:00.000Z' },
+      ownerObservation: {
+        reader: editorLifecycles[before]!.data.expectedReader!,
+        admission: editorLifecycles[before]!.data.admission!,
+      },
+    });
+    await flush();
+    expect(button(visit.host, 'Delete zone')).toBeTruthy();
+    expect(visit.host.textContent).not.toContain('Restore zone');
+  } finally {
+    await visit.close();
   }
 });
 

@@ -6,7 +6,7 @@ import type {
   ZonePageResponse,
   ZonePublishInput,
 } from '../../../zones/appearance';
-import type { OwnerReadObservation } from './owner-lifetime';
+import { hasValidOwnerCsrfToken, type OwnerReadObservation } from './owner-lifetime';
 
 export type { ZoneConfigurationResponse, ZoneConfigureInput, ZoneOwned, ZonePageResponse };
 export type Visibility = ZonePublishInput['visibility'];
@@ -35,12 +35,21 @@ export type Mutation = {
   revision: string;
   key: string;
 } & ({ operation: 'save'; body: ZoneConfigureInput } | { operation: 'publish'; body: ZonePublishInput });
+export type LifecycleReading = Pick<ZoneOwned, 'revision' | 'deletedAt' | 'restoreUntil'>;
+export type LifecycleMutation = {
+  id: string;
+  revision: string;
+  key: string;
+  csrf: string;
+  operation: 'delete' | 'restore';
+};
 export type Preview =
   | Result<ZonePageResponse>
   | { kind: 'preparing'; retryAfter: string; ownerObservation?: OwnerReadObservation };
 export type Transport = {
   load(): Promise<Loaded>;
   mutate(input: Mutation): Promise<Result<ZoneOwned>>;
+  lifecycle(input: LifecycleMutation): Promise<Result<LifecycleReading>>;
   preview(route: string): Promise<Preview>;
   collections(cursor: string): Promise<Options['collections']>;
 };
@@ -80,20 +89,28 @@ export type EditorState = {
 export class ZoneEditorSession {
   private state: EditorState;
   private listeners = new Set<() => void>();
-  private attempt: { signature: string; input: Mutation } | undefined;
+  private attempt: { signature: string; input: Mutation | LifecycleMutation } | undefined;
   private readonly ownerCurrent: () => boolean;
   private readonly ownerObservation: OwnerReadObservation | undefined;
   private readonly ownerCanWrite: () => boolean;
+  private readonly ownerCsrf: () => string;
   private readonly retireOwner: (() => void) | undefined;
   constructor(
     private readonly transport: Transport,
     loaded: Loaded,
     private key = () => crypto.randomUUID(),
-    owner?: { isCurrent(): boolean; observation: OwnerReadObservation; retire(): void; canWrite?(): boolean },
+    owner?: {
+      isCurrent(): boolean;
+      observation: OwnerReadObservation;
+      retire(): void;
+      canWrite?(): boolean;
+      csrf?(): string | null;
+    },
   ) {
     this.ownerCurrent = owner ? owner.isCurrent : () => true;
     this.ownerObservation = owner?.observation;
     this.ownerCanWrite = owner?.canWrite ?? (() => true);
+    this.ownerCsrf = () => owner?.csrf?.() ?? '';
     this.retireOwner = owner?.retire;
     const saved = loaded.resource.kind === 'ready' ? loaded.resource.value : undefined;
     this.state = {
@@ -213,12 +230,24 @@ export class ZoneEditorSession {
   async publish(visibility: Visibility) {
     await this.write('publish', visibility);
   }
-  private async write(operation: 'save' | 'publish', visibility?: Visibility) {
+  async changeLifecycle(operation: 'delete' | 'restore') {
+    await this.write(operation);
+  }
+  private lifecycleCommand(operation: string): operation is LifecycleMutation['operation'] {
+    return operation === 'delete' || operation === 'restore';
+  }
+  private async write(operation: Mutation['operation'] | LifecycleMutation['operation'], visibility?: Visibility) {
     if (!this.current() || !this.ownerCanWrite()) return;
     const { saved, draft, loaded, busy, conflict } = this.state;
-    if (!saved || !draft || busy || conflict || !loaded.permissions[operation === 'save' ? 'configure' : 'publish'])
-      return;
+    if (!saved || !draft || busy || conflict) return;
+    const lifecycle = this.lifecycleCommand(operation);
+    if (lifecycle) {
+      if (operation === 'delete' && this.dirty()) return;
+      const csrf = this.ownerCsrf();
+      if (this.ownerObservation && !hasValidOwnerCsrfToken(csrf)) return;
+    } else if (!loaded.permissions[operation === 'save' ? 'configure' : 'publish']) return;
     if (operation === 'publish' && this.dirty()) return;
+    if (this.attempt && this.lifecycleCommand(this.attempt.input.operation) !== lifecycle) return;
     if (operation === 'save') {
       // Existing unavailable saved IDs can be retained; new choices come only from the actual release.
       const filters = new Set([
@@ -235,8 +264,10 @@ export class ZoneEditorSession {
       this.update({ failure: { kind: 'failure', status: 400, code: 'invalid_revision' } });
       return;
     }
-    const request =
-      operation === 'save'
+    const csrf = this.ownerCsrf();
+    const request = lifecycle
+      ? ({ operation, csrf } as const)
+      : operation === 'save'
         ? ({ operation, body: structuredClone(draft) } as const)
         : ({ operation, body: { visibility: visibility! } } as const);
     const signature = JSON.stringify([saved.zone.id, saved.zone.revision, request]);
@@ -246,11 +277,13 @@ export class ZoneEditorSession {
         input: { ...request, id: saved.zone.id, revision: saved.zone.revision, key: this.key() },
       };
     this.update({ busy: true, failure: undefined, preview: undefined, notice: undefined, violations: [] });
-    let result: Result<ZoneOwned>;
+    let result: Result<ZoneOwned | LifecycleReading>;
     let received = true;
     try {
       if (!this.current() || !this.ownerCanWrite()) return;
-      result = await this.transport.mutate(structuredClone(this.attempt.input));
+      result = lifecycle
+        ? await this.transport.lifecycle(structuredClone(this.attempt.input as LifecycleMutation))
+        : await this.transport.mutate(structuredClone(this.attempt.input as Mutation));
     } catch {
       result = this.localFailure();
       received = false;
@@ -258,12 +291,20 @@ export class ZoneEditorSession {
     if (!this.current() || (received && !this.matchesOwner(result))) return;
     if (result.kind === 'ready') {
       this.attempt = undefined;
-      const next = { ...structuredClone(draft), zone: result.value };
+      const zone = lifecycle
+        ? {
+            ...saved.zone,
+            revision: result.value.revision,
+            deletedAt: operation === 'restore' ? null : (result.value.deletedAt ?? saved.zone.deletedAt),
+            restoreUntil: operation === 'restore' ? null : (result.value.restoreUntil ?? saved.zone.restoreUntil),
+          }
+        : (result.value as ZoneOwned);
+      const next = { ...(lifecycle ? structuredClone(saved) : structuredClone(draft)), zone };
       this.update({
         saved: next,
         loaded: { ...loaded, resource: { kind: 'ready', value: next } },
         busy: false,
-        notice: operation === 'save' ? 'saved' : 'published',
+        notice: operation === 'save' ? 'saved' : operation === 'publish' ? 'published' : undefined,
       });
     } else {
       // An uncertain network result may already have committed. Read before offering a retry.

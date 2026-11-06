@@ -1,5 +1,8 @@
 type Headers = { authorization: string; 'idempotency-key': string; 'if-match': string };
-type ZoneEnvelope = { status: number; data?: { zone: { revision: string } } | null };
+type ZoneEnvelope = {
+  status: number;
+  data?: { zone: { revision: string; deletedAt?: string | null; restoreUntil?: string | null } } | null;
+};
 
 type ZoneCommands = {
   delete: (body: undefined, options: { headers: Headers }) => Promise<ZoneEnvelope>;
@@ -19,7 +22,13 @@ export type ZoneLifecycleFailure = {
 };
 export type ZoneLifecycleResult =
   | ZoneLifecycleFailure
-  | { ok: true; operation: 'delete' | 'restore' | 'takedown' | 'release'; revision: string };
+  | {
+      ok: true;
+      operation: 'delete' | 'restore' | 'takedown' | 'release';
+      revision: string;
+      deletedAt: string | null;
+      restoreUntil: string | null;
+    };
 
 function headers(authorization: string, key: string, revision: string): Headers {
   return { authorization, 'idempotency-key': key, 'if-match': `"${revision}"` };
@@ -44,7 +53,13 @@ export async function changeZoneLifecycle(
   const result =
     command.operation === 'delete' ? await zone.delete(undefined, options) : await zone.$restore.post({}, options);
   if (result.status !== 200 || !result.data) return failure(result.status);
-  return { ok: true, operation: command.operation, revision: result.data.zone.revision };
+  return {
+    ok: true,
+    operation: command.operation,
+    revision: result.data.zone.revision,
+    deletedAt: result.data.zone.deletedAt ?? null,
+    restoreUntil: result.data.zone.restoreUntil ?? null,
+  };
 }
 
 export async function changeZoneTakedown(
@@ -60,5 +75,11 @@ export async function changeZoneTakedown(
     { headers: headers(authorization, command.key, command.revision) },
   );
   if (result.status !== 200 || !result.data) return failure(result.status);
-  return { ok: true, operation: command.operation, revision: result.data.zone.revision };
+  return {
+    ok: true,
+    operation: command.operation,
+    revision: result.data.zone.revision,
+    deletedAt: result.data.zone.deletedAt ?? null,
+    restoreUntil: result.data.zone.restoreUntil ?? null,
+  };
 }
