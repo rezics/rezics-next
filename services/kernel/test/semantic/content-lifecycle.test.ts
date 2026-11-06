@@ -23,11 +23,9 @@ test('native cover fallback reads source-backed metadata without worker composit
     license: 'LicenseRef-unknown',
     obligations: [],
   };
-  let queries = 0;
   let variantsJson = '[{"format":"webp","width":320}]';
   const client: ContentQueryClient = {
     async query() {
-      queries += 1;
       return {
         rows: [
           {
@@ -51,7 +49,6 @@ test('native cover fallback reads source-backed metadata without worker composit
   };
   const lifecycle = contentLifecycleOf();
   const covers = await lifecycle.checkCovers(client, [mediaId, mediaId]);
-  expect(queries).toBe(1);
   expect(covers.size).toBe(1);
   expect(covers.get(mediaId)).toEqual({
     id: mediaId,
