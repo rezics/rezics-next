@@ -313,8 +313,7 @@ test('unchanged work-link reopen replays the sealed proposal and does not retrac
     const graph = new CrossMediaGraph(db);
     graph.remember([draft]);
     const sends: BatchCommand[][] = [];
-    const native = (key: string) =>
-      `00000000-0000-4000-8000-${key.replace(/\D/g, '').padStart(12, '0')}`;
+    const native = (key: string) => `00000000-0000-4000-8000-${key.replace(/\D/g, '').padStart(12, '0')}`;
     const snapshot = {
       provider: 'vndb' as const,
       table: 'extlinks',
