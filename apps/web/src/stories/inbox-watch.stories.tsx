@@ -56,35 +56,37 @@ function withheldItems(): ResolvedInboxPage['items'] {
   ];
 }
 
+async function mixedWatchPlay({ canvasElement }: { canvasElement: HTMLElement }) {
+  const view = within(canvasElement);
+  const list = await view.findByRole('list', { name: m.inbox_heading() });
+  const rows = within(list).getAllByRole('listitem');
+  await expect(rows).toHaveLength(4);
+  await expect(within(list).getByText(m.inbox_kind_thread_activity())).toBeVisible();
+  await expect(within(list).getByText(m.inbox_kind_board_activity())).toBeVisible();
+  await expect(within(list).getByText(m.inbox_actor_unknown())).toBeVisible();
+  await expect(within(list).getByText(m.inbox_actor_moderation())).toBeVisible();
+  await expect(within(list).getByRole('link', { name: 'A new post on a thread you watch' })).toHaveAttribute(
+    'href',
+    watchHref,
+  );
+  await expect(view.getByRole('link', { name: m.inbox_notification_preferences() })).toHaveAttribute(
+    'href',
+    `/${getLocale()}/settings#notifications`,
+  );
+}
+
 export const MixedWatch: Story = {
   name: 'Installed thread watch notice',
   globals: { viewport: { value: 'desktop1280', isRotated: false } },
   render: () => <InboxStory fixture="thread-watch" />,
-  play: async ({ canvasElement }) => {
-    const view = within(canvasElement);
-    const list = await view.findByRole('list', { name: m.inbox_heading() });
-    const rows = within(list).getAllByRole('listitem');
-    await expect(rows).toHaveLength(4);
-    await expect(within(list).getByText(m.inbox_kind_thread_activity())).toBeVisible();
-    await expect(within(list).getByText(m.inbox_kind_board_activity())).toBeVisible();
-    await expect(within(list).getByText(m.inbox_actor_unknown())).toBeVisible();
-    await expect(within(list).getByText(m.inbox_actor_moderation())).toBeVisible();
-    await expect(within(list).getByRole('link', { name: 'A new post on a thread you watch' })).toHaveAttribute(
-      'href',
-      watchHref,
-    );
-    await expect(view.getByRole('link', { name: m.inbox_notification_preferences() })).toHaveAttribute(
-      'href',
-      `/${getLocale()}/settings#notifications`,
-    );
-  },
+  play: mixedWatchPlay,
 };
 
 export const MixedWatchPhone: Story = {
   name: 'Installed thread watch notice on phone',
   globals: { viewport: { value: 'phone390', isRotated: false } },
   render: () => <InboxStory fixture="thread-watch" />,
-  play: MixedWatch.play,
+  play: mixedWatchPlay,
 };
 
 function Example({ state }: { state: 'inaccessible' | 'failed' }) {

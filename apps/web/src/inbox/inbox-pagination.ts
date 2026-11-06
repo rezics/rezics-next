@@ -142,7 +142,7 @@ export function inboxPaginationWork(
   return composeInboxWork({
     listRequests: input.listRequests,
     countRequests: input.countRequests,
-    commandRequests: input.commandRequests,
+    commandRequests: input.commandRequests ?? 0,
     hydrationRequests: 0,
     retainedRows: page?.items.length ?? 0,
     priorAddresses: state.history.length,
