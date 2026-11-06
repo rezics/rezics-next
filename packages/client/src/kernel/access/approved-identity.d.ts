@@ -1,7 +1,7 @@
 import { type IdentityExpiry } from './identity-expiry.ts';
 import { type Access, type AccessContext, type AccountActor } from '../request/access.ts';
 import { type KeyRing } from '../tokens/seal.ts';
-import approvalRead from './workflow-approvals-read.sql';
+import approvalRead from './workflow-approvals-read.sql.d.ts';
 export declare class ApprovalIdentityDeniedError extends Error {
     readonly status = 403;
     constructor();

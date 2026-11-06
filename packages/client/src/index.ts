@@ -55,6 +55,7 @@ export type {
   PersonalEntryTimestamp,
   PersonalEntryTimestampInput,
 } from './kernel/library/entry-personal-model';
+export type { DiaryOccurrence, DiaryPage } from './kernel/library/diary-model';
 export type {
   EntryAnnotationCorrectionItem,
   EntryAnnotationOperation as EntryAnnotationCorrectionOperation,

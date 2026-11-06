@@ -4,7 +4,13 @@ import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { expect, expectTypeOf, test } from 'bun:test';
 import type { KernelClient } from '@rezics/client';
-import { clientDeclarationCacheDirectory, clientDeclarations, runtimeClosure } from './client.ts';
+import {
+  clientDeclarationCacheDirectory,
+  clientDeclarations,
+  committedDeclarations,
+  rewriteSqlDeclarationSpecifiers,
+  runtimeClosure,
+} from './client.ts';
 
 const repository = resolve(import.meta.dir, '../../..');
 
@@ -189,6 +195,20 @@ test('KernelClient accepts order reconciliation headers and types the queued res
   >;
   const response: QueuedResponse = { orderId: 'order-id', reconciliation: 'queued' };
   expect(response.reconciliation).toBe('queued');
+});
+
+test('installed declarations point SQL imports at .sql.d.ts so a consumer mapper cannot load Kernel SQL', () => {
+  expect(rewriteSqlDeclarationSpecifiers("import read from './account-read.sql';\n")).toBe(
+    "import read from './account-read.sql.d.ts';\n",
+  );
+  expect(rewriteSqlDeclarationSpecifiers("import read from './account-read.sql.d.ts';\n")).toBe(
+    "import read from './account-read.sql.d.ts';\n",
+  );
+  expect(
+    [...committedDeclarations()]
+      .filter(([, content]) => /from ['"][^'"]+\.sql['"]/.test(content))
+      .map(([file]) => file),
+  ).toEqual([]);
 });
 
 test('the installed package ships the question-management schemas as byte copies of their Kernel source', () => {

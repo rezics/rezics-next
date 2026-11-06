@@ -4,7 +4,7 @@ import { ContentItem } from '@rezics/ui/content-item';
 import { formatJournalAssessment, formatJournalDate } from '@rezics/progress';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
-import type { DiaryOccurrence, DiaryPage } from '../../../../../services/kernel/src/library/diary-model.ts';
+import type { DiaryOccurrence, DiaryPage } from '@rezics/client';
 import { diaryReturnContext, type DiaryAddress } from './address';
 
 type ReportedDate = Extract<DiaryOccurrence['reportedDates'], { availability: 'available' }>['startDate'];

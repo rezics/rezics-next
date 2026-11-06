@@ -25,6 +25,8 @@ Client emit stays before the workspace compiler so tests see source-checked decl
 Decision: `CLIENT_RUNTIME_ENTRIES` copies the Realm question-management and caption-history schema closure as
 installed package source, byte for byte, beside the generated declarations. Only `elysia` may be imported from
 outside that closure. Web receiving uses those published schemas and the mounted callable response types.
+Installed declaration SQL specifiers are rewritten to `.sql.d.ts` so a consumer content mapper cannot follow them
+into Kernel SQL sources.
 
 Reylo analyses are cached in immutable snapshots under the host's typecheck cache directory, and `reylo-cache.ts` owns that cache for every consumer. The snapshot key includes the Bun, TypeScript, Reylo and Postgres engine inputs plus the digest of the migrated schema dump, so a migration that changes the schema selects a new snapshot, while a data-only migration with an unchanged dump reuses it. Each command gets a private `.reylo/` copy, and the cache manifest records each source SQL file's content digest. A changed SQL file is regenerated on its own. Reylo names each entry by statement and by server, host and port included, and every throwaway database has a new port, so the copy is first renamed to that server's name: an unchanged statement keeps its entry and only changed statements are written.
 

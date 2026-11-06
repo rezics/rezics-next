@@ -77,6 +77,17 @@ export function assertNoServiceImports(declarations: Map<string, string>, root =
   }
 }
 
+/**
+ * Installed consumers resolve SQL through `.sql.d.ts`. A `.sql` specifier would invoke the consumer's Reylo mapper
+ * and look for Kernel SQL sources that are not in the package.
+ */
+export function rewriteSqlDeclarationSpecifiers(content: string): string {
+  return content.replace(
+    /(['"])(\.\.?\/[^'"]+)\.sql\1/g,
+    (_match, quote: string, stem: string) => `${quote}${stem}.sql.d.ts${quote}`,
+  );
+}
+
 /** TypeScript 7 writes a content-mapped `.sql` module as `name.d.sql.ts`. Resolution also accepts `name.sql.d.ts`, which is the name this closure walks. */
 function publishSqlDeclarations(directory: string): void {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -193,7 +204,7 @@ export function clientDeclarations(
     const key = pending.pop()!;
     if (declarations.has(key)) continue;
     const sourcePath = resolve(sourceRoot, key);
-    const content = readFileSync(sourcePath, 'utf8');
+    const content = rewriteSqlDeclarationSpecifiers(readFileSync(sourcePath, 'utf8'));
     declarations.set(key, content);
     for (const specifier of declarationSpecifiers(content).filter((value) => /^\.{1,2}\//.test(value))) {
       const target = declarationPath(sourcePath, specifier);
