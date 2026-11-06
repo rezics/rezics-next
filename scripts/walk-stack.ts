@@ -85,6 +85,9 @@ export function walkStackEnvironment(task: string, index: number): Record<string
     REZICS_LOCAL_STACK_NATIVE_ORIGIN: origin(ports.native),
     REZICS_LOCAL_STACK_KERNEL_ORIGIN: origin(ports.kernel),
     REZICS_WALK_STACK_SLOT: String(index),
+    // Seeded indexes stay on niofs so Lucene mmap does not consume the host run MemoryMax.
+    OPENSEARCH_JAVA_OPTS: '-Xms256m -Xmx256m',
+    KERNEL_SEARCH_ALLOW_MMAP: '0',
   };
 }
 

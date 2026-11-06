@@ -3,7 +3,20 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { acquireStackSlot } from './stack-lease.ts';
-import { walkStackPortsAvailable } from './walk-stack.ts';
+import { walkStackEnvironment, walkStackPortsAvailable } from './walk-stack.ts';
+import { searchRunArgs } from '../services/kernel/scripts/search.ts';
+
+test('walk stacks cap OpenSearch heap and disable mmap inside the host run slice', () => {
+  const env = walkStackEnvironment('24256f23-7a74-4949-881c-7dbaea6b0207', 1);
+  expect(env).toMatchObject({
+    OPENSEARCH_JAVA_OPTS: '-Xms256m -Xmx256m',
+    KERNEL_SEARCH_ALLOW_MMAP: '0',
+  });
+  const args = searchRunArgs('native-policy-test-image', env);
+  const environment = args.flatMap((arg, i) => (arg === '-e' ? [args[i + 1]] : []));
+  expect(environment).toContain('OPENSEARCH_JAVA_OPTS=-Xms256m -Xmx256m');
+  expect(environment).toContain('node.store.allow_mmap=false');
+});
 
 test('walk admission preserves an occupied slot and reuses it after its listener closes', async () => {
   const directory = await mkdtemp(join(import.meta.dir, '../.temp/walk-admission-'));

@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { chromium, type Page } from 'playwright';
+import { chromium, type Browser, type Page } from 'playwright';
 import { expect } from 'playwright/test';
 import { createKernelClient } from '@rezics/client';
 import type { CrossMediaSeedResult } from '../../../services/importer/src/cross-media-seed.ts';
@@ -95,8 +95,43 @@ async function capture(page: Page, name: string): Promise<void> {
   assert((await page.title()).trim().length > 0, 'Page has no identity');
   await expect(page.locator('main')).toBeVisible();
   await expect(page.locator('vite-error-overlay')).toHaveCount(0);
-  await page.screenshot({ path: resolve(evidence, `${name}.png`) });
+  await page.screenshot({ path: resolve(evidence, `${name}.png`), scale: 'css' });
   await writeFile(resolve(evidence, `${name}.txt`), await page.locator('main').innerText(), { mode: 0o600 });
+}
+
+async function launchBrowser(): Promise<Browser> {
+  await mkdir('/tmp/rw', { recursive: true, mode: 0o700 });
+  return chromium.launch({
+    headless: true,
+    env: { ...process.env, TMPDIR: '/tmp/rw' },
+    args: [
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--disable-software-rasterizer',
+      '--renderer-process-limit=1',
+      '--js-flags=--max-old-space-size=256',
+      '--mute-audio',
+      '--no-first-run',
+    ],
+  });
+}
+
+async function openPage(
+  browser: Browser,
+  options: { width: number; theme: 'light' | 'dark'; blockMedia?: boolean },
+) {
+  const context = await browser.newContext({
+    viewport: { width: options.width, height: options.width <= 390 ? 844 : 900 },
+    deviceScaleFactor: 1,
+    reducedMotion: 'reduce',
+    colorScheme: options.theme,
+  });
+  const page = await context.newPage();
+  page.setDefaultTimeout(60_000);
+  page.setDefaultNavigationTimeout(90_000);
+  if (options.blockMedia)
+    await page.route(/\.(?:png|jpe?g|webp|gif|avif|svg|mp4|webm)(?:\?|$)/i, (route) => route.abort());
+  return { context, page };
 }
 
 assert(
@@ -146,32 +181,31 @@ try {
   assert.equal(unselected.entry.state, 'not_selected');
   report.phases.push('actual-publication-and-native-entry');
 
-  browser = await chromium.launch({
-    headless: true,
-    args: ['--disable-dev-shm-usage', '--disable-gpu', '--renderer-process-limit=2'],
-  });
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  page.setDefaultTimeout(60_000);
-  page.setDefaultNavigationTimeout(90_000);
-  const errors: string[] = [];
-  page.on('pageerror', (error) => errors.push(error.message));
+  const launched = await launchBrowser();
+  browser = launched;
   for (const locale of locales) {
     for (const [width, theme] of [
       [390, 'light'],
       [1440, 'dark'],
     ] as const) {
-      await page.setViewportSize({ width, height: 900 });
-      await page.emulateMedia({ colorScheme: theme });
-      const response = await page.goto(`${stack.web}${workPath.replace('/en/', `/${locale}/`)}`, {
-        waitUntil: 'domcontentloaded',
-      });
-      assert.equal(response?.status(), 200);
-      await expect(page.locator('[data-slot="community-entry"][data-state="sign-in"]').first()).toBeVisible();
-      await capture(page, `anonymous-${locale}-${width}-${theme}`);
-      report.visits.push({ url: page.url(), locale, width, theme });
+      const visit = await openPage(launched, { width, theme, blockMedia: true });
+      try {
+        const response = await visit.page.goto(`${stack.web}${workPath.replace('/en/', `/${locale}/`)}`, {
+          waitUntil: 'domcontentloaded',
+        });
+        assert.equal(response?.status(), 200);
+        await expect(visit.page.locator('[data-slot="community-entry"][data-state="sign-in"]').first()).toBeVisible();
+        await capture(visit.page, `anonymous-${locale}-${width}-${theme}`);
+        report.visits.push({ url: visit.page.url(), locale, width, theme });
+      } finally {
+        await visit.context.close();
+      }
     }
   }
+  const session = await openPage(launched, { width: 1440, theme: 'light' });
+  const page = session.page;
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
   await page.goto(`${stack.web}${workPath}`, { waitUntil: 'domcontentloaded' });
   const signin = page.locator('[data-slot="community-entry"] a[href^="/auth/sign-in"]').first();
   const signinHref = await signin.getAttribute('href');
@@ -287,7 +321,7 @@ try {
   await capture(page, 'exact-profile-occurrence-return');
   assert.deepEqual(errors, [], 'Browser runtime errors');
   report.phases.push('profile-watch-reaction-set-clear-report-reply-durable-readbacks-and-return');
-  await context.close();
+  await session.context.close();
 } catch (error) {
   report.error = error instanceof Error ? error.message : String(error);
   throw error;

@@ -74,17 +74,18 @@ export async function waitForSearch(url: string, containerName: string, timeoutM
 }
 
 /** A check running on a development host keeps its containers inside its run's slice. */
-export function cgroupArgs(): string[] {
-  return process.env.KERNEL_CHECK_ON_REMOTE
-    ? [`--cgroup-parent=${process.env.REZICS_CHECK_SLICE || 'rezics-check.slice'}`]
+export function cgroupArgs(env: NodeJS.ProcessEnv = process.env): string[] {
+  return env.KERNEL_CHECK_ON_REMOTE
+    ? [`--cgroup-parent=${env.REZICS_CHECK_SLICE || 'rezics-check.slice'}`]
     : [];
 }
 
-export function searchRunArgs(image: string): string[] {
+/** Walk stacks set a smaller heap; mmap of seeded indexes is what blows the 6 GiB run slice. */
+export function searchRunArgs(image: string, env: NodeJS.ProcessEnv = process.env): string[] {
   return [
     'run',
     '-d',
-    ...cgroupArgs(),
+    ...cgroupArgs(env),
     '--name',
     container,
     '-p',
@@ -100,7 +101,10 @@ export function searchRunArgs(image: string): string[] {
     '-e',
     'DISABLE_INSTALL_DEMO_CONFIG=true',
     '-e',
-    'OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m',
+    'DISABLE_PERFORMANCE_ANALYZER_AGENT_CLI=true',
+    '-e',
+    `OPENSEARCH_JAVA_OPTS=${env.OPENSEARCH_JAVA_OPTS?.trim() || '-Xms512m -Xmx512m'}`,
+    ...(env.KERNEL_SEARCH_ALLOW_MMAP === '0' ? ['-e', 'node.store.allow_mmap=false'] : []),
     image,
   ];
 }

@@ -241,7 +241,8 @@ hosts a and b.
 
 Decision: walk stacks are a bounded, queued replacement for the local-container refusal, granted only to workers whose
 brief lists native or browser acceptance. Remote placement forwards the original launcher `GOAL_TASK_ID`,
-`GOAL_ATTEMPT` and `GOAL_ACCEPTANCE_REQUIRES` into the walk command without rewriting recorded argv.
+`GOAL_ATTEMPT` and `GOAL_ACCEPTANCE_REQUIRES` into the walk command without rewriting recorded argv. Walk search
+nodes use a 256m heap without mmap so seeded indexes do not consume the host run MemoryMax.
 
 Decision: keep one causal binding regression and the existing launcher assertions. Kernel setup persists the selected
 loopback Auth issuer, audience, JWKS URL, Kernel host and API port in `services/kernel/.env`; start applies the same
