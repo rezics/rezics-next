@@ -2259,11 +2259,13 @@ function currentPersonIdentityReadFailure(error: unknown): 'missing' | 'refused'
   return 'unavailable';
 }
 
-function currentReleaseEndpoint(
+/** A VNDB-native endpoint is current only while its own wdt:P3180 identity still names this exact source key. */
+function currentVndbIdentityEndpoint(
   read: ReviewedSubjectRead | null,
   externalId: string,
   nativeSubjectId: string,
   expectedType: string | undefined,
+  nativeType: string,
   failure?: unknown,
 ): ReleaseEndpointCurrentness {
   if (!read) return failure === undefined ? 'unavailable' : currentReleaseReadFailure(failure);
@@ -2277,7 +2279,7 @@ function currentReleaseEndpoint(
     }
   ).subject;
   if (!subject) return 'unknown';
-  if (typeof expectedType !== 'string' || expectedType !== 'wd:Q20631656') return 'wrong_type';
+  if (expectedType !== nativeType) return 'wrong_type';
   if (subject.id !== nativeSubjectId) return 'identity_mismatch';
   if (subject.type !== expectedType) return 'wrong_type';
   const identities = subject.statements?.['wdt:P3180'];
@@ -2285,6 +2287,32 @@ function currentReleaseEndpoint(
   return identities.some((statement) => statement.value?.type === 'value' && statement.value.content === externalId)
     ? 'current'
     : 'identity_mismatch';
+}
+
+function currentReleaseEndpoint(
+  read: ReviewedSubjectRead | null,
+  externalId: string,
+  nativeSubjectId: string,
+  expectedType: string | undefined,
+  failure?: unknown,
+): ReleaseEndpointCurrentness {
+  return currentVndbIdentityEndpoint(read, externalId, nativeSubjectId, expectedType, 'wd:Q20631656', failure);
+}
+
+/**
+ * Current endpoint for a selected typed work relation. VNDB work endpoints are native visual novels whose
+ * identity is wdt:P3180; Bangumi endpoints keep their own subject, character and person identities.
+ */
+export function currentWorkRelationEndpoint(
+  read: ReviewedSubjectRead | null,
+  externalId: string,
+  nativeSubjectId: string,
+  expectedType: string | undefined,
+  failure?: unknown,
+): RelationEndpointCurrentness {
+  return /^v[1-9][0-9]*$/u.test(externalId)
+    ? currentVndbIdentityEndpoint(read, externalId, nativeSubjectId, expectedType, 'wd:Q689445', failure)
+    : currentBangumiRelationEndpoint(read, externalId, nativeSubjectId, expectedType, failure);
 }
 
 function currentBangumiRelationEndpoint(
@@ -2784,7 +2812,7 @@ export async function seedCrossMedia(
       },
       async currentRelationEndpoint(externalId, nativeSubjectId, expectedType) {
         const read = await readCurrent(nativeSubjectId);
-        return currentBangumiRelationEndpoint(
+        return currentWorkRelationEndpoint(
           read,
           externalId,
           nativeSubjectId,

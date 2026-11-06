@@ -8,6 +8,7 @@ import { CrossMediaGraph, graphEdgeCommandKey, graphEdgeKey, graphEdgeSource } f
 import {
   planCrossMediaSeed,
   crossMediaAliases,
+  currentWorkRelationEndpoint,
   type CrossMediaReading,
   type CrossMediaTables,
 } from '../src/cross-media-seed.ts';
@@ -260,6 +261,123 @@ test('current graph results gate publication on exact reopen, changed source and
     expect(compose(changed).targets.size).toBe(3);
   } finally {
     db.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+function readWith(subject: string, type: string, statements: Record<string, string>): ReviewedSubjectRead {
+  return {
+    subject: {
+      id: subject,
+      type,
+      statements: Object.fromEntries(
+        Object.entries(statements).map(([property, content]) => [property, [{ value: { type: 'value', content } }]]),
+      ),
+    },
+  } as unknown as ReviewedSubjectRead;
+}
+
+test('work-relation endpoints certify VNDB work and Bangumi identities separately before delivery', async () => {
+  // Production relation reads must accept a visual novel by its wdt:P3180 identity, not a Bangumi property.
+  expect(
+    currentWorkRelationEndpoint(
+      readWith(id(2002), 'wd:Q689445', { 'wdt:P3180': 'v2002' }),
+      'v2002',
+      id(2002),
+      'wd:Q689445',
+    ),
+  ).toBe('current');
+  expect(
+    currentWorkRelationEndpoint(
+      readWith(id(2002), 'wd:Q689445', { 'wdt:P3180': 'v3' }),
+      'v2002',
+      id(2002),
+      'wd:Q689445',
+    ),
+  ).toBe('identity_mismatch');
+  expect(
+    currentWorkRelationEndpoint(
+      readWith(id(2002), 'wd:Q689445', { 'wdt:P3180': 'v2002' }),
+      'v2002',
+      id(2002),
+      'wd:Q20631656',
+    ),
+  ).toBe('wrong_type');
+  expect(currentWorkRelationEndpoint(null, 'v2002', id(2002), 'wd:Q689445')).toBe('unavailable');
+  expect(
+    currentWorkRelationEndpoint(
+      readWith(id(3154), 'schema:VideoGame', { 'wdt:P5732': '3154' }),
+      '3154',
+      id(3154),
+      'schema:VideoGame',
+    ),
+  ).toBe('current');
+  expect(
+    currentWorkRelationEndpoint(
+      readWith(id(3154), 'schema:VideoGame', { 'wdt:P5732': '999' }),
+      '3154',
+      id(3154),
+      'schema:VideoGame',
+    ),
+  ).toBe('identity_mismatch');
+  // A VNDB visual-novel identity is never a Bangumi subject identity, even when the Bangumi key is numeric.
+  expect(
+    currentWorkRelationEndpoint(
+      readWith(id(3154), 'schema:VideoGame', { 'wdt:P3180': '3154' }),
+      '3154',
+      id(3154),
+      'schema:VideoGame',
+    ),
+  ).toBe('unknown');
+});
+
+test('a VNDB side edge is proposed only while both work endpoints still name their own identities', async () => {
+  const temporary = join(process.cwd(), '.temp');
+  await mkdir(temporary, { recursive: true });
+  const directory = await mkdtemp(join(temporary, 'showcase-franchise-vndb-'));
+  const uuids: Record<string, string> = { v2002: id(2002), v17102: id(17102) };
+  try {
+    const plan = await planCrossMediaSeed(tables(), { selection: showcaseFranchiseSelection(roots) });
+    const sides = plan.edges.filter((edge) => edge.vndbRelation);
+    expect(sides).toHaveLength(1);
+    const deliver = (path: string, endpoints: Record<string, string>) => {
+      const db = new Database(path);
+      const graph = new CrossMediaGraph(db);
+      graph.remember(sides);
+      const reads = new Map(
+        Object.entries(uuids).map(([externalId, uuid]) => [
+          uuid,
+          readWith(uuid, 'wd:Q689445', { 'wdt:P3180': endpoints[externalId] ?? externalId }),
+        ]),
+      );
+      return graph
+        .deliver({
+          claim: ({ external_id }) => ({ state: 'bound', subject: uuids[external_id]! }),
+          nativeType: () => 'wd:Q689445',
+          currentRelationEndpoint: async (externalId, nativeSubjectId, expectedType) =>
+            currentWorkRelationEndpoint(reads.get(nativeSubjectId) ?? null, externalId, nativeSubjectId, expectedType),
+          fence: async () => ({ fenced: false, securityRevision: null }),
+          batch: async ({ commands }) => ({
+            results: commands.map((command, index) => ({
+              key: command.key,
+              status: 201 as const,
+              value: { candidate: id(700000 + index), revision: 1 },
+            })),
+          }),
+        })
+        .finally(() => db.close());
+    };
+    const current = await deliver(join(directory, 'current.sqlite'), {});
+    expect(current.unresolved).toEqual([]);
+    expect(current.proposed).toEqual([
+      expect.objectContaining({ holder: 'v2002', target: 'v17102', property: 'wdt:P144', subject: uuids.v2002 }),
+    ]);
+    const stale = await deliver(join(directory, 'stale.sqlite'), { v17102: 'v17103' });
+    expect(stale.proposed).toEqual([]);
+    expect(stale.unresolved).toEqual([
+      expect.objectContaining({ reason: 'current_relation_endpoint_identity_mismatch:v17102' }),
+    ]);
+  } finally {
     await rm(directory, { recursive: true, force: true });
   }
 });
