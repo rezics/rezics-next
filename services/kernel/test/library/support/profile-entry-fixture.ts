@@ -207,10 +207,73 @@ export async function createProfileEntryFixture(
       }
       throw new Error('Native Semantic link projection did not drain');
     }
+    function isIdentityPrearmHold(error: unknown) {
+      return (
+        error instanceof Error &&
+        error.message.includes('identity_epoch_unavailable') &&
+        'code' in error &&
+        (error as { code?: unknown }).code === 'P0001'
+      );
+    }
+    async function identityDirty(home: number, original?: string) {
+      return original
+        ? (
+            await pool.query(
+              `SELECT 1 FROM semantic.identity_epoch_dirty
+                WHERE route=$1 AND original=$2 AND revision>captured_revision LIMIT 1`,
+              [routeOf(original), original],
+            )
+          ).rowCount
+        : (
+            await pool.query(
+              `SELECT 1 FROM semantic.identity_epoch_dirty
+                WHERE route BETWEEN $1 AND $2 AND revision>captured_revision LIMIT 1`,
+              [home * 16, home * 16 + 15],
+            )
+          ).rowCount;
+    }
+    async function heldPrearmJobs(home: number): Promise<IdentityJobRef[]> {
+      return (
+        await pool.query<{ job_id: string; job_epoch: string }>(
+          `SELECT DISTINCT job_id::text AS job_id, job_epoch::text AS job_epoch FROM (
+             SELECT job_id, job_epoch FROM semantic.identity_epoch_prearm_bridge
+              WHERE partition_no=$1 AND job_id IS NOT NULL
+             UNION ALL
+             SELECT pending_job, pending_epoch FROM semantic.identity_epoch_group
+              WHERE partition_no=$1 AND pending_job IS NOT NULL
+           ) held(job_id, job_epoch)
+           WHERE job_id IS NOT NULL AND job_epoch IS NOT NULL`,
+          [home],
+        )
+      ).rows.map((row) => ({ jobId: row.job_id, epoch: BigInt(row.job_epoch) }));
+    }
     async function catchUpIdentity(home: number) {
+      const drained = new Set<string>();
+      const keyOf = (job: IdentityJobRef) => `${job.jobId}:${job.epoch.toString()}`;
       for (let n = 0; n < 1000; n++) {
-        const progress = await stepIdentityEpochBootstrap(pool, home);
-        if (progress.state === 'caught-up') return;
+        const held = (await heldPrearmJobs(home)).filter((job) => !drained.has(keyOf(job)));
+        if (held.length) {
+          for (const job of held) {
+            await drainIdentityJob(job);
+            drained.add(keyOf(job));
+          }
+          continue;
+        }
+        try {
+          const progress = await stepIdentityEpochBootstrap(pool, home);
+          if (progress.state === 'caught-up' && !(await identityDirty(home))) return;
+        } catch (error) {
+          if (!isIdentityPrearmHold(error)) throw error;
+          const retry = (await heldPrearmJobs(home)).filter((job) => !drained.has(keyOf(job)));
+          if (!retry.length) {
+            if (!(await identityDirty(home))) return;
+            throw error;
+          }
+          for (const job of retry) {
+            await drainIdentityJob(job);
+            drained.add(keyOf(job));
+          }
+        }
       }
       throw new Error('Native identity bootstrap did not finish');
     }
@@ -478,11 +541,23 @@ export async function createProfileEntryFixture(
         expect(progress.state).toBe('preparing');
       }
       expect(admitted).toBe(true);
+      let mapped = false;
       for (let attempt = 0; attempt < 512; attempt++) {
         const progress = await stepIdentityEpochMapping(pool, job);
-        if (progress.state === 'complete') return;
+        if (progress.state === 'complete') {
+          mapped = true;
+          break;
+        }
       }
-      throw new Error('Native identity mapping did not finish');
+      if (!mapped) throw new Error('Native identity mapping did not finish');
+      // Mapping already installed this job's epoch. Search/Library ACK is unavailable, so
+      // drop only the group pin so later bootstrap, Progress and Rating can recapture dirty.
+      await pool.query(
+        `UPDATE semantic.identity_epoch_prearm_bridge
+            SET job_id=NULL, job_epoch=NULL, scope_digest=NULL, bridge_version=bridge_version+1
+          WHERE job_id=$1 AND job_epoch=$2`,
+        [job.jobId, job.epoch.toString()],
+      );
     }
     async function drainIdentityMerge(jobId: string) {
       const found = (
@@ -497,14 +572,14 @@ export async function createProfileEntryFixture(
     async function awaitCurrentIdentity(subjectId: string) {
       const home = partitionOf(routeOf(subjectId)!);
       partitions.add(home);
-      for (let attempt = 0; attempt < 1000; attempt++) {
+      for (let attempt = 0; attempt < 32; attempt++) {
+        await catchUpIdentity(home);
         const mapping = await identityEpochStore.readMapping(pool, subjectId);
-        if (mapping.state === 'mapped') return;
+        if (mapping.state === 'mapped' && !(await identityDirty(home, subjectId))) return;
         if (mapping.state === 'pending') {
-          await drainIdentityMerge(mapping.job.jobId);
+          await drainIdentityJob(mapping.job);
           continue;
         }
-        await stepIdentityEpochBootstrap(pool, home);
       }
       throw new Error('Native identity mapping did not become current');
     }

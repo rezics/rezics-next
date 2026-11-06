@@ -55,8 +55,10 @@ identity bootstrap on that partition before Rating review or merge. Native impor
 metadata actors occupy partition 0 with those Subjects so Global merge authorization and Rating's same-home
 guarded path apply. Partition 0 identity bootstrap waits until the first Library-selected Subject exists on
 that home so the first scan includes it; sealing the empty question/control home first leaves later creations
-past the cursor. Native import tests stop identity catch-up when that Subject is mapped; extra dirty or closure
-pages after that freeze later Progress, Rating and merge writes. A preparing identity job may change `prearm_phase`, `prearm_transaction_id` and
+past the cursor. Native import tests recapture identity dirty after each Subject write and drain held prearm
+after mapping completes; unpublished Search/Library acknowledgements do not pin the group against later
+Progress, Rating or merge. Mapping-complete pending jobs are current once that job's epoch is installed.
+Apply commits selected scores before independent state so Entry writes cannot dirty the vote target. A preparing identity job may change `prearm_phase`, `prearm_transaction_id` and
 `cancellation_transaction_id`; intent and receipts stay immutable. Later Subject writes recapture identity dirty
 before Rating, Progress or merge resolve the mapping. Guarded Rating apply uses the same `rating:vote`
 token-scope check as HTTP PUT; it does not require an Access account grant. HTTP merge on an active identity terminal
@@ -67,7 +69,8 @@ the existing `deadline_live` operand as `deadlineLive`; without that fact the po
 role as unknown and denies grant administration.
 
 Decision: compose Rating's complete native review observation and exact guarded command for the selected
-same-logical-home target in the existing AniList row; foreign-home support remains deferred. Confirmation
+same-logical-home target in the existing AniList row; foreign-home support remains deferred. Apply commits
+selected scores before independent state so Entry writes cannot dirty the vote target. Confirmation
 calls `preparePutVote(actor, input, key, admission?)` once with the captured actor, frozen observation and
 source-row admission, then `putVoteOutcome` with those operands; an uncertain retry first uses
 `reconcilePutVote(actor, receipt)`. A Rating redirect of the Library-selected Subject stores no vote guard

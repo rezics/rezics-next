@@ -716,6 +716,10 @@ export const identityEpochStore: IdentityEpochStore = {
         group.generation !== effect.controlGroup.generation
       )
         throw stale();
+      // Mapping and closure rewrite generation/version/observed_count under this
+      // job's acquired prearm. The group gate admits that rewrite only when the
+      // session names this job; follow-count effects do not rewrite those columns.
+      await tx.query("SELECT set_config('semantic.identity_prearm_effect_job',$1,true)", [effect.job.jobId]);
       return;
     }
     const destination = effect.kind === 'follow-count' ? effect.terminal : (effect.destination ?? effect.original);

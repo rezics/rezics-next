@@ -12,7 +12,7 @@ import {
 import type { Pool } from 'pg';
 import { partitionOf, routeOf } from '../../route/route.ts';
 import { withReadTransaction } from '../read.ts';
-import type { IdentityMapping } from './identity-epoch-contract.ts';
+import type { IdentityJobRef, IdentityMapping } from './identity-epoch-contract.ts';
 import owners from '../identity-epoch-read-owners.sql';
 import sources from '../identity-epoch-read-sources.sql';
 import pending from '../identity-epoch-read-pending.sql';
@@ -23,6 +23,15 @@ import { identitySourceSupportJob } from '../identity-source-support-scope.ts';
 const MAX_REVIEW_KEYS = 2;
 const MAX_REVIEW_CONTROL_LOCATORS = 2;
 const MAX_REVIEW_OPERAND_BYTES = 16_384;
+
+/** Mapping-complete pending jobs already installed this epoch; classify them as mapped for current reads. */
+function installedMappingJob(evidence: IdentityMappingEvidence): IdentityJobRef | null {
+  const support = identitySourceSupportJob();
+  if (support) return support;
+  const pending = evidence.pendingRows.find((row) => row.pending_job !== null && row.pending_epoch !== null);
+  if (!pending?.pending_job || pending.pending_epoch === null) return null;
+  return { jobId: pending.pending_job, epoch: BigInt(pending.pending_epoch) };
+}
 
 export type IdentityRatingControlLocator = Readonly<{ partition: number; group: string }>;
 export type IdentityRatingReviewOperand = Readonly<{
@@ -236,6 +245,7 @@ function identityReviewFromEvidence(
       sourceIdentities.map((id) => routeOf(id)!),
     ),
     evidence.mapping,
+    installedMappingJob(evidence.mapping),
   );
   const pendingMapping = mapped.find(
     (row): row is Extract<IdentityMapping, { state: 'pending' }> => row.state === 'pending',
@@ -463,6 +473,6 @@ export async function readIdentityMappings(pool: Pool, originals: readonly strin
   return classifyIdentityMappings(
     originals.map((original, index) => ({ original, sourceHome: partitionOf(routes[index]!) })),
     last,
-    identitySourceSupportJob(),
+    installedMappingJob(last),
   );
 }

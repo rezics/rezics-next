@@ -1417,43 +1417,7 @@ export function createBangumiImport(deps: Dependencies) {
         applied: [],
         retained: r.evidence.fields.map((f) => f.field),
       };
-      if (r.outcome) {
-        // Retry only the frozen score command; an acknowledged independent state effect stays settled.
-      } else if (application.cancelled && startedBefore) {
-        // A cancelled upload may settle a started receipt, but it admits no new Library effect.
-      } else if (application.cancelled) {
-        break;
-      } else if (choice.skip) outcome.status = 'skipped';
-      else if (choice.state === 'omit' || (v.current && choice.state === 'preserve')) outcome.status = 'skipped';
-      else if (v.proposedState && v.guard && v.target) {
-        try {
-          await entries.putEntry(
-            actor,
-            v.target,
-            {
-              state: v.proposedState,
-              ...(v.current
-                ? {
-                    revision: v.current.revision,
-                    ...(v.current.incarnationId ? { incarnationId: v.current.incarnationId } : {}),
-                  }
-                : {}),
-            },
-            `bangumi:${id}:${ordinal}:${choice.reviewToken}`,
-            v.guard,
-          );
-          outcome.status = 'applied';
-          outcome.applied = ['type'];
-        } catch (error) {
-          if (error instanceof GrantDeniedError) throw error;
-          outcome.status =
-            error instanceof LibraryConflictError ||
-            error instanceof LibraryNotFoundError ||
-            (error instanceof ProblemError && error.code === 'unsupported_library_profile')
-              ? 'stale'
-              : 'failed';
-        }
-      }
+      if (!r.outcome && application.cancelled && !startedBefore) break;
       const plan = r.choice!.scorePlan;
       if (scoreChoice.action === 'preserve') {
         outcome.score = { action: 'preserve', status: 'skipped', reason: 'existing_native_vote_preserved' };
@@ -1542,6 +1506,42 @@ export function createBangumiImport(deps: Dependencies) {
         if (applied) {
           outcome.score = await appliedScoreReadback(actor, plan.action, plan.command.receipt);
           if (!outcome.applied.includes('rate')) outcome.applied.push('rate');
+        }
+      }
+      if (r.outcome) {
+        // Retry only the frozen score command; an acknowledged independent state effect stays settled.
+      } else if (application.cancelled) {
+        // A cancelled upload may settle a started receipt, but it admits no new Library effect.
+      } else if (choice.skip) outcome.status = 'skipped';
+      else if (choice.state === 'omit' || (v.current && choice.state === 'preserve')) {
+        if (outcome.status === 'unsupported') outcome.status = 'skipped';
+      } else if (v.proposedState && v.guard && v.target) {
+        try {
+          await entries.putEntry(
+            actor,
+            v.target,
+            {
+              state: v.proposedState,
+              ...(v.current
+                ? {
+                    revision: v.current.revision,
+                    ...(v.current.incarnationId ? { incarnationId: v.current.incarnationId } : {}),
+                  }
+                : {}),
+            },
+            `bangumi:${id}:${ordinal}:${choice.reviewToken}`,
+            v.guard,
+          );
+          if (!outcome.applied.includes('type')) outcome.applied.push('type');
+          if (outcome.status !== 'stale' && outcome.status !== 'failed') outcome.status = 'applied';
+        } catch (error) {
+          if (error instanceof GrantDeniedError) throw error;
+          outcome.status =
+            error instanceof LibraryConflictError ||
+            error instanceof LibraryNotFoundError ||
+            (error instanceof ProblemError && error.code === 'unsupported_library_profile')
+              ? 'stale'
+              : 'failed';
         }
       }
       if (outcome.status !== 'failed') {

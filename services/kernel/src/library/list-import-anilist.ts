@@ -1298,60 +1298,6 @@ export function createAniListImport(deps: Dependencies) {
       let status: AniListOutcome['status'] = 'unsupported';
       if (hash(stored.source) !== reviewed.sourceFingerprint) status = 'stale';
       else if (reviewed.input.skip) status = 'skipped';
-      else if (reviewed.input.fields.includes('status') && reviewed.observation?.proposedState) {
-        const observed = reviewed.observation;
-        const current = await observe(actor, observed.subjectId),
-          matching = await match(actor, stored.source);
-        if (
-          !current ||
-          current.subjectId !== observed.subjectId ||
-          current.epoch !== observed.epoch ||
-          hash(current.pin) !== hash(observed.pin) ||
-          matching.fingerprint !== reviewed.match.fingerprint
-        )
-          status = 'stale';
-        else if (observed.current && !reviewed.input.replace) status = 'skipped';
-        else {
-          if (signal?.aborted || Date.now() >= deadline) break;
-          const admitted = await save(
-            actor,
-            id,
-            confirmation.ordinal,
-            'start',
-            reviewed.commandKey,
-            { reviewId: reviewed.id },
-            (row) => {
-              if (row.review?.id !== reviewed.id) throw new LibraryConflictError();
-              return { ...row, started: true };
-            },
-          );
-          if (admitted.value.reviewId === null) break;
-          try {
-            // Native receipt identity and every operand survive crashes, lost replies and repeat pages.
-            await entries.putEntry(
-              actor,
-              observed.subjectId,
-              {
-                state: observed.proposedState,
-                ...(observed.current
-                  ? {
-                      revision: observed.current.revision,
-                      ...(observed.current.incarnationId ? { incarnationId: observed.current.incarnationId } : {}),
-                    }
-                  : {}),
-              },
-              reviewed.commandKey,
-              { subjectId: observed.subjectId, pin: observed.pin, epoch: observed.epoch },
-            );
-            status = 'applied';
-          } catch (e) {
-            if (e instanceof GrantDeniedError) throw e;
-            status = e instanceof LibraryConflictError ? 'stale' : 'failed';
-          }
-        }
-      }
-      if (status !== 'applied' && !retained.includes('status') && Object.hasOwn(stored.source.evidence, 'status'))
-        retained.push('status');
       let scoreOutcome: AniListScoreOutcome | undefined;
       if (reviewed.score) {
         if (scoreCurrent === 'stale') {
@@ -1451,6 +1397,67 @@ export function createAniListImport(deps: Dependencies) {
         }
         if (scoreOutcome!.status === 'applied') retained = retained.filter((field) => field !== 'score');
       }
+      if (
+        status !== 'stale' &&
+        status !== 'failed' &&
+        !reviewed.input.skip &&
+        reviewed.input.fields.includes('status') &&
+        reviewed.observation?.proposedState
+      ) {
+        const observed = reviewed.observation;
+        const current = await observe(actor, observed.subjectId),
+          matching = await match(actor, stored.source);
+        if (
+          !current ||
+          current.subjectId !== observed.subjectId ||
+          current.epoch !== observed.epoch ||
+          hash(current.pin) !== hash(observed.pin) ||
+          matching.fingerprint !== reviewed.match.fingerprint
+        )
+          status = 'stale';
+        else if (observed.current && !reviewed.input.replace) {
+          if (status === 'unsupported') status = 'skipped';
+        } else {
+          if (signal?.aborted || Date.now() >= deadline) break;
+          const admitted = await save(
+            actor,
+            id,
+            confirmation.ordinal,
+            'start',
+            reviewed.commandKey,
+            { reviewId: reviewed.id },
+            (row) => {
+              if (row.review?.id !== reviewed.id) throw new LibraryConflictError();
+              return { ...row, started: true };
+            },
+          );
+          if (admitted.value.reviewId === null) break;
+          try {
+            // Native receipt identity and every operand survive crashes, lost replies and repeat pages.
+            await entries.putEntry(
+              actor,
+              observed.subjectId,
+              {
+                state: observed.proposedState,
+                ...(observed.current
+                  ? {
+                      revision: observed.current.revision,
+                      ...(observed.current.incarnationId ? { incarnationId: observed.current.incarnationId } : {}),
+                    }
+                  : {}),
+              },
+              reviewed.commandKey,
+              { subjectId: observed.subjectId, pin: observed.pin, epoch: observed.epoch },
+            );
+            if (status !== 'stale' && status !== 'failed' && status !== 'unavailable') status = 'applied';
+          } catch (e) {
+            if (e instanceof GrantDeniedError) throw e;
+            status = e instanceof LibraryConflictError ? 'stale' : 'failed';
+          }
+        }
+      }
+      if (status !== 'applied' && !retained.includes('status') && Object.hasOwn(stored.source.evidence, 'status'))
+        retained.push('status');
       const outcome: AniListOutcome = {
         ordinal: confirmation.ordinal,
         status,
