@@ -13,6 +13,9 @@ import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions
 import { linkProjection } from '../../src/semantic/links.ts';
 import { createSubject } from '../../src/semantic/subject.ts';
 import { bootstrapProfile } from '../../src/presentation/profiles.ts';
+import { registerIdentityEpochCoordinator } from '../../src/semantic/identity-epoch-coordinator.ts';
+import { createWorkClient, type WorkClient } from '../../src/work/client.ts';
+import { composeWork } from '../../src/work/registry.ts';
 import type { Resource } from '../../src/request/access.ts';
 import {
   completeAgentVerification,
@@ -50,6 +53,8 @@ let access: ReturnType<typeof admittedAccess>;
 let kernel: ReturnType<typeof createKernel>;
 let staff: Seeded;
 let manager: Seeded;
+let workClient: WorkClient;
+let work: Awaited<ReturnType<typeof composeWork>>;
 const node = (type: string, id: string) => ({ type, props: { id } });
 const document = {
   root: { props: {} },
@@ -282,6 +287,14 @@ beforeAll(async () => {
       },
     },
   });
+  workClient = await createWorkClient(db.url, pool);
+  work = await composeWork([{ name: 'identity-epoch', register: registerIdentityEpochCoordinator }], {
+    databaseUrl: db.url,
+    pool,
+    client: workClient,
+    env: { ...process.env, KERNEL_ROUTE_KEY: Buffer.from(routeKey).toString('base64url') },
+  });
+  await work.launch();
   staff = await seedAccount('page_staff');
   manager = await seedAccount('page_manager');
   await bootstrapGovernance(pool, staff.id);
@@ -295,6 +308,8 @@ beforeAll(async () => {
 }, 60_000);
 
 afterAll(async () => {
+  await work?.shutdown();
+  await workClient?.close();
   await db?.close();
 });
 
