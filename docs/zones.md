@@ -59,6 +59,9 @@ continue to come from the admitted Zone page.
 Decision: Routed Zone lists project native `readPage` slots onto the common TypeList/Members renderer, continue on
 the Zone URL, and keep Search TypeList on Global configured pages. Canonical Subject readers carry a bounded Zone
 visit return. Session, upload and download use the existing personal BFF driver on each request.
+Decision: Zone session/media binding prepares the current personal session on every served Zone BFF request and
+reuses the existing `/media` driver for upload intent, completion and download authorization; SessionMedia keeps
+those handlers, and PageStates keeps shared TypeList composition.
 Configured routes are decoded once, relative, case-sensitive and canonical: no leading/trailing slash,
 empty segment, dot segment, query, fragment, encoded slash, backslash or URL. The empty string means home.
 Reserve the entire first segment `subjects`, including `subjects` itself, before page lookup. A configured

@@ -1,11 +1,14 @@
 import type { KernelRecording } from '../fake.ts';
 import type { FakeRoute } from '../fake-modules.ts';
 import {
+  composedZoneAlicePrivateFake as composedAlice,
   composedZoneCollectionFake as composedCollection,
+  composedZoneEditorFake as composedEditor,
   composedZoneEmptyFake as composedEmpty,
   composedZoneMembersFake as composedMembers,
   composedZonePrivateMountFake as composedPrivate,
   composedZoneSparseFake as composedSparse,
+  composedZoneWithheldFake as composedWithheld,
   staticZoneGuideFake as staticGuide,
   staticZoneHomeFake as staticHome,
   staticZoneOwnerFake as staticOwnerHome,
@@ -29,6 +32,9 @@ const composedPrivateZoneId = composedPrivate.zone.id;
 const composedSparseZoneId = composedSparse.zone.id;
 const composedEmptyZoneId = composedEmpty.zone.id;
 const composedCollectionZoneId = composedCollection.zone.id;
+const composedWithheldZoneId = composedWithheld.zone.id;
+const composedAliceZoneId = composedAlice.zone.id;
+const composedEditorZoneId = composedEditor.zone.id;
 const recoveringReads = new Map<string, number>();
 
 type ZoneTarget = { route: string };
@@ -137,6 +143,20 @@ async function response(request: Request, match: RegExpExecArray | null): Promis
   const target = isRecord(body) ? body.target : undefined;
   if (!isRecord(target)) return { status: 400, code: 'invalid_request' };
   if (typeof target.route !== 'string') return problem(404, { 'cache-control': 'no-store' });
+  const actor = request.headers.get('authorization');
+  if (actor === 'Bearer suspended')
+    return {
+      status: 401,
+      type: 'https://rezics.com/problems/invalid_credentials',
+      title: 'Unauthorized',
+      code: 'invalid_credentials',
+      headers: { 'www-authenticate': 'Bearer error="invalid_token"', 'cache-control': 'no-store' },
+    };
+  if (
+    actor === 'Bearer banned' &&
+    (id === composedPrivateZoneId || id === composedAliceZoneId || id === staticOwnerZoneId)
+  )
+    return problem(404, { 'cache-control': 'no-store' });
   if (id === staticOwnerZoneId)
     return request.headers.has('authorization') && target.route === ''
       ? { status: 200, ...staticOwnerHome }
@@ -151,9 +171,19 @@ async function response(request: Request, match: RegExpExecArray | null): Promis
     return { status: 200, ...composedMembers };
   }
   if (id === composedPrivateZoneId)
-    return request.headers.get('authorization') === 'Bearer owner' && target.route === ''
+    return (actor === 'Bearer owner' || actor === 'Bearer alice') && target.route === ''
       ? { status: 200, ...composedPrivate }
       : problem(404, { 'cache-control': 'no-store' });
+  if (id === composedAliceZoneId)
+    return actor === 'Bearer alice' && target.route === ''
+      ? { status: 200, ...composedAlice }
+      : problem(404, { 'cache-control': 'no-store' });
+  if (id === composedEditorZoneId)
+    return (actor === 'Bearer editor' || actor === 'Bearer alice' || actor === null) && target.route === ''
+      ? { status: 200, ...composedEditor }
+      : problem(404, { 'cache-control': 'no-store' });
+  if (id === composedWithheldZoneId)
+    return target.route === '' ? { status: 200, ...composedWithheld } : problem(404, { 'cache-control': 'no-store' });
   if (id === composedSparseZoneId)
     return target.route === '' ? { status: 200, ...composedSparse } : problem(404, { 'cache-control': 'no-store' });
   if (id === composedEmptyZoneId)

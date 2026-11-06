@@ -12,7 +12,8 @@ import { loadSubjectPage, type SubjectPageData } from '../features/pages/subject
 import { loadViewPages } from '../features/pages/subject-frame';
 import { locales } from '../paraglide/runtime.js';
 import { isolatePublicZonePage, receiveZonePage } from './receive.ts';
-import { bindZoneSession, nextKernelSession, zoneKernelHeaders } from './session.ts';
+import { nextKernelSession, zoneKernelHeaders } from './session.ts';
+import { applyZoneTransport, zoneRequestTransport, zoneTransportHeaders } from './transport.ts';
 import { validZoneCursor } from './visit.ts';
 
 type ZoneRouteClient = {
@@ -153,7 +154,7 @@ export async function readZonePage(
       return { kind: 'error' };
     }
     kernelSession = nextKernelSession(result.response, kernelSession);
-    if (result.status === 404) return { kind: 'missing' };
+    if (result.status === 404 || result.status === 401) return { kind: 'missing' };
     if (result.status === 409 && cursor && !restarted) {
       cursor = undefined;
       restarted = true;
@@ -163,7 +164,13 @@ export async function readZonePage(
     if (result.status === 200 && result.data) {
       const received = receiveZonePage(result.data);
       if (!received) return { kind: 'error' };
-      return { kind: 'page', page: isolatePublicZonePage(received, options.session === true) as ZonePageResponse };
+      return {
+        kind: 'page',
+        page: isolatePublicZonePage(
+          received,
+          options.session === true && options.authorization !== undefined,
+        ) as ZonePageResponse,
+      };
     }
     if (result.status === 503) return { kind: 'unavailable', retryAfter: retryAfter(result.response) };
     if (result.status !== 202 || !result.data || !validCursor((result.data as ZonePageReadProgress).next))
@@ -229,12 +236,14 @@ function setReadResponse(outcome: ZonePageRouteOutcome, serverRender: boolean): 
 async function readForRequest(input: ZonePageInput, followContinuations: boolean): Promise<ZonePageRouteOutcome> {
   const { kernelClient } = await import('../kernel/client');
   const request = getRequest();
-  const binding = await bindZoneSession(request, env as Partial<SessionEnv>, input.credentialMode);
-  setResponseHeader('cache-control', 'private, no-store');
+  const transport = applyZoneTransport(
+    await zoneRequestTransport(request, env as Partial<SessionEnv>, input.credentialMode),
+  );
+  const headers = zoneTransportHeaders(transport);
   let outcome = await readZonePageForRoute(kernelClient(input.locale), input, {
     followContinuations,
-    ...(binding.authorization === undefined ? {} : { authorization: binding.authorization }),
-    ...(binding.kernelSession === undefined ? {} : { kernelSession: binding.kernelSession }),
+    ...(headers?.authorization === undefined ? {} : { authorization: headers.authorization }),
+    ...(transport.kernelSession === undefined ? {} : { kernelSession: transport.kernelSession }),
   });
   if (outcome.kind === 'page' && outcome.common) {
     const { page, overview, view } = outcome.common;

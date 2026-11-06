@@ -191,14 +191,38 @@ export function receiveSlotContinuation(body: unknown): SlotContinuation | undef
   return { next: body.next };
 }
 
-/** Anonymous SSR keeps the public shell; session reads may add admitted private-mount rows. */
+function leaksPrivateFacts(body: unknown): boolean {
+  return isRecord(body) && Object.keys(body).some((name) => privateKeys.has(name));
+}
+
+/**
+ * Anonymous and revoked SSR keep the public shell. A live session may keep admitted private-mount
+ * rows. Owner, mount and source names never ship in the public body.
+ *
+ * Guard: a session-mode reread without a current credential (revoked/suspended) used to keep leaked
+ * `ownerId`/`mounts` because isolation keyed off credential mode rather than an actual bearer.
+ * Input: `{ credentialMode: 'session' }` with no Authorization and a 200 body `{ ownerId, mounts }`.
+ */
 export function isolatePublicZonePage(page: ReceivedZonePage, session: boolean): ReceivedZonePage {
-  if (session) return page;
+  if (session) {
+    const reads: Record<string, ReceivedRead> = {};
+    for (const [key, read] of Object.entries(page.reads)) {
+      if (read.status === 200 && leaksPrivateFacts(read.body)) return isolatePublicZonePage(page, false);
+      reads[key] = read;
+    }
+    return { ...page, reads };
+  }
   const reads: Record<string, ReceivedRead> = {};
   for (const [key, read] of Object.entries(page.reads)) {
-    if (read.status === 200 && isRecord(read.body) && Object.keys(read.body).some((name) => privateKeys.has(name)))
-      continue;
+    if (read.status === 200 && leaksPrivateFacts(read.body)) continue;
+    if (read.status === 401 || read.status === 403) continue;
     reads[key] = read;
   }
   return { ...page, reads };
+}
+
+/** Withheld native summaries stay null; the row is not filled from another source. */
+export function withheldSlotRow(row: unknown): boolean {
+  if (!isRecord(row)) return true;
+  return Object.hasOwn(row, 'summary') && row.summary === null;
 }

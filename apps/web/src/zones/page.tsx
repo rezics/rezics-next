@@ -36,13 +36,16 @@ export function ZoneComposedPage({
   link?: PageLink;
 }) {
   const slots = projectZoneSlots(page, visit);
-  const returnTo = slots.currentHref;
+  const returnTo = zoneReturnTo(visit);
   const memberLink: PageLink = (props) => {
     const href = props.href.startsWith(`/${visit.locale}/subjects/`)
       ? withSubjectVisitReturn(props.href, returnTo, visit.locale)
       : props.href;
     return <ZoneMemberLink {...props} href={href} />;
   };
+  const memberHref = (subject: { id: string; label: string }) => slots.memberHref(subject);
+  const listHref =
+    visit.target.kind === 'route' ? (node: string, cursor?: string) => slots.listHref(node, cursor) : undefined;
   const route = visit.target.kind === 'route' ? visit.target.route : '';
   const document = page.document as CompositionDocument;
   return (
@@ -56,8 +59,8 @@ export function ZoneComposedPage({
             messages={subjectPageMessages(visit.locale)}
             link={link ?? memberLink}
             currentHref={slots.currentHref}
-            listHref={visit.target.kind === 'route' ? slots.listHref : undefined}
-            memberHref={slots.memberHref}
+            {...(listHref ? { listHref } : {})}
+            memberHref={memberHref}
             renderJsonLd={false}
             {...(nonce !== undefined ? { nonce } : {})}
           />

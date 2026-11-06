@@ -42,8 +42,8 @@ export function nextKernelSession(response: Response, previous?: string): string
 }
 
 /**
- * Media download, upload intent and completion stay on the existing personal driver. Each later BFF
- * request calls `prepareSession` again, so revocation and suspension take effect immediately.
+ * Media download, upload intent and completion stay on the existing personal `/media` driver. Each
+ * later BFF request calls `prepareSession` again, so revocation and suspension take effect immediately.
  */
 export function zoneMediaCredential(request: Request): string | null {
   return viewerCredential(request);

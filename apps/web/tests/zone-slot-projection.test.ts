@@ -5,11 +5,14 @@ import { createKernelClient } from '@rezics/client';
 import { createFakeKernelFetch } from '../src/kernel/fake.ts';
 import fixtures from '../src/kernel/fixtures.json';
 import {
+  composedZoneAlicePrivateFake,
   composedZoneCollectionFake,
+  composedZoneEditorFake,
   composedZoneEmptyFake,
   composedZoneMembersFake,
   composedZonePrivateMountFake,
   composedZoneSparseFake,
+  composedZoneWithheldFake,
 } from '../src/zones/static-fakes';
 import { isolatePublicZonePage, receiveZonePage } from '../src/zones/receive';
 import { projectZoneSlots, zoneTypeListTarget } from '../src/zones/slots';
@@ -170,10 +173,93 @@ test('anonymous isolation drops leaked owner mount facts', () => {
     },
   };
   expect(isolatePublicZonePage(leaked, false).reads.owner).toBeUndefined();
-  expect(isolatePublicZonePage(leaked, true).reads.owner?.body).toEqual({
-    ownerId: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e12',
-    mounts: [],
+  expect(isolatePublicZonePage(leaked, true).reads.owner).toBeUndefined();
+});
+
+test('Alice admits a private mount that Bob, banned and anonymous readers cannot see', async () => {
+  const client = createKernelClient('https://kernel.example.test', {
+    fetch: createFakeKernelFetch(fixtures) as typeof fetch,
   });
+  const aliceId = composedZoneAlicePrivateFake.zone.id;
+  expect(await readZonePage(client as never, aliceId, { target: { route: '' } })).toEqual({ kind: 'missing' });
+  expect(
+    await readZonePage(client as never, aliceId, { target: { route: '' } }, { authorization: 'Bearer bob' }),
+  ).toEqual({ kind: 'missing' });
+  expect(
+    await readZonePage(client as never, aliceId, { target: { route: '' } }, { authorization: 'Bearer banned' }),
+  ).toEqual({ kind: 'missing' });
+  const alice = await readZonePage(
+    client as never,
+    aliceId,
+    { target: { route: '' } },
+    { authorization: 'Bearer alice', session: true },
+  );
+  expect(alice.kind).toBe('page');
+  if (alice.kind !== 'page') throw new Error('expected Alice private page');
+  expect(alice.page.zone.id).toBe(aliceId);
+});
+
+test('a suspended credential conceals the current Zone read', async () => {
+  const client = createKernelClient('https://kernel.example.test', {
+    fetch: createFakeKernelFetch(fixtures) as typeof fetch,
+  });
+  expect(
+    await readZonePage(
+      client as never,
+      composedZoneMembersFake.zone.id,
+      { target: { route: '' } },
+      { authorization: 'Bearer suspended' },
+    ),
+  ).toEqual({ kind: 'missing' });
+});
+
+test('an editor and anonymous visitor share the public ordered Zone list', async () => {
+  const client = createKernelClient('https://kernel.example.test', {
+    fetch: createFakeKernelFetch(fixtures) as typeof fetch,
+  });
+  const editorId = composedZoneEditorFake.zone.id;
+  const anonymous = await readZonePage(client as never, editorId, { target: { route: '' } });
+  const editor = await readZonePage(
+    client as never,
+    editorId,
+    { target: { route: '' } },
+    { authorization: 'Bearer editor', session: true },
+  );
+  expect(anonymous.kind).toBe('page');
+  expect(editor.kind).toBe('page');
+  if (anonymous.kind !== 'page' || editor.kind !== 'page') throw new Error('expected public editor list');
+  const anonymousSlots = projectZoneSlots(receiveZonePage(anonymous.page)!, {
+    locale: 'en',
+    zoneId: editorId,
+    target: { kind: 'route', route: '' },
+  });
+  const editorSlots = projectZoneSlots(receiveZonePage(editor.page)!, {
+    locale: 'en',
+    zoneId: editorId,
+    target: { kind: 'route', route: '' },
+  });
+  expect((anonymousSlots.reads.r0?.body as { subjects: { id: string }[] }).subjects.map((row) => row.id)).toEqual(
+    (editorSlots.reads.r0?.body as { subjects: { id: string }[] }).subjects.map((row) => row.id),
+  );
+});
+
+test('withheld Zone members keep their locators and do not invent summaries', async () => {
+  const client = createKernelClient('https://kernel.example.test', {
+    fetch: createFakeKernelFetch(fixtures) as typeof fetch,
+  });
+  const withheldId = composedZoneWithheldFake.zone.id;
+  const outcome = await readZonePage(client as never, withheldId, { target: { route: '' } });
+  expect(outcome.kind).toBe('page');
+  if (outcome.kind !== 'page') throw new Error('expected withheld page');
+  const slots = projectZoneSlots(receiveZonePage(outcome.page)!, {
+    locale: 'en',
+    zoneId: withheldId,
+    target: { kind: 'route', route: '' },
+  });
+  const body = slots.reads.r0?.body as { subjects: { id: string; summary: unknown }[] };
+  expect(body.subjects).toHaveLength(2);
+  expect(body.subjects[1]?.summary).toBeNull();
+  expect(body.subjects[0]?.summary).not.toBeNull();
 });
 
 test('an unusable source-replacement cursor restarts the current Zone read', async () => {

@@ -124,7 +124,8 @@ export function admitObservedSearchPage(read: PageRead, body: unknown): Observed
       !nativeType(row.type) ||
       !nativeLabels(row.labels) ||
       !Object.hasOwn(row, 'summary') ||
-      !(row.summary === null || nativeSummary(row.summary, row.id, row.type))
+      !(row.summary === null || nativeSummary(row.summary, row.id, row.type)) ||
+      Object.keys(row).some((key) => key === 'ownerId' || key === 'mounts' || key === 'sources')
     )
       return;
     seen.add(row.id.toLowerCase());
@@ -154,7 +155,8 @@ export function admitObservedMembersPage(read: PageRead, body: unknown): Observe
       seen.has(row.subjectId.toLowerCase()) ||
       (row.kind !== undefined && row.kind !== 'dynamic') ||
       !Object.hasOwn(row, 'summary') ||
-      !(row.summary === null || nativeSummary(row.summary, row.subjectId))
+      !(row.summary === null || nativeSummary(row.summary, row.subjectId)) ||
+      Object.keys(row).some((key) => key === 'ownerId' || key === 'mounts' || key === 'sources')
     )
       return;
     seen.add(row.subjectId.toLowerCase());

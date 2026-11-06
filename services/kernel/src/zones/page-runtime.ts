@@ -9,7 +9,8 @@ import { createBuiltinRuntime } from '../library/builtin-runtime.ts';
 import { activeProfile } from '../presentation/profiles.ts';
 import { semanticPageView } from '../presentation/semantic-page.ts';
 import { PageReadBudget, preparePageRead, readPage } from '../presentation/reads.ts';
-import { admitObservedMembersPage, admitObservedSearchPage, uniqueCanonicalRows } from '../presentation/slot-bodies.ts';
+import { observeComposedSlot } from '../presentation/http/slot-observed.ts';
+import { uniqueCanonicalRows } from '../presentation/slot-bodies.ts';
 import type { Actor } from '../request/access.ts';
 import { validateHitOptions } from '../search/hits.ts';
 import { activeRelease } from '../semantic/definitions.ts';
@@ -321,15 +322,12 @@ async function composeZonePage(
             ),
             next,
           };
-    const admitted =
-      descriptor.kind === 'search'
-        ? admitObservedSearchPage(descriptor, body)
-        : admitObservedMembersPage(descriptor, body);
+    const admitted = observeComposedSlot(descriptor, { status: 200, body });
     if (!admitted) return zoneUnavailable();
     const prepared = preparePageRead(descriptor, languages);
     observed.set(prepared.canonical, {
       status: 200,
-      body: admitted,
+      body: admitted.body,
     });
   }
   const properties = subject

@@ -2,7 +2,7 @@ import type { CompositionDocument } from '@rezics/composition';
 import { planReads, platformRegistry } from '@rezics/composition';
 import type { TypeListTarget } from '../features/pages/type-list-model';
 import type { ReceivedRead, ReceivedZonePage } from './receive.ts';
-import { receiveSlotContinuation } from './receive.ts';
+import { receiveSlotContinuation, withheldSlotRow } from './receive.ts';
 import { zoneCanonicalSubjectHref, zoneListHref, zoneMemberHref, zoneVisitHref, type ZoneVisit } from './visit.ts';
 
 export type ZoneSlotProjection = {
@@ -29,7 +29,11 @@ function uniqueSlotBody(body: unknown): unknown {
       seen.add(key);
       return true;
     });
-    return { ...body, subjects, next: continuation.next };
+    return {
+      ...body,
+      subjects: subjects.map((row) => (withheldSlotRow(row) && isRecord(row) ? { ...row, summary: null } : row)),
+      next: continuation.next,
+    };
   }
   if (Array.isArray(body.members)) {
     const seen = new Set<string>();
@@ -40,7 +44,11 @@ function uniqueSlotBody(body: unknown): unknown {
       seen.add(key);
       return true;
     });
-    return { ...body, members, next: continuation.next };
+    return {
+      ...body,
+      members: members.map((row) => (withheldSlotRow(row) && isRecord(row) ? { ...row, summary: null } : row)),
+      next: continuation.next,
+    };
   }
   return body;
 }

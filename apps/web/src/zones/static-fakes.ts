@@ -256,3 +256,43 @@ export const staticZoneOwnerFake = {
     content: [{ type: 'Text', props: { id: 'private-copy', text: 'PRIVATE-ZONE-STATIC-CONTENT' } }],
   },
 } satisfies ZonePageResponse;
+
+const withheldId = '01a17a3b-0884-721b-91ef-d7ffd7bb58e5';
+
+/** Native membership with a withheld summary: the locator stays, facts are not invented. */
+export const composedZoneWithheldFake = {
+  ...composedZoneMembersFake,
+  zone: { ...composedZoneMembersFake.zone, id: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e19', revision: '9' },
+  reads: {
+    r0: {
+      status: 200,
+      body: {
+        subjects: [
+          {
+            id: subject.subject.id,
+            type: 'schema:Book',
+            labels: subject.subject.labels,
+            summary: bookSummary,
+          },
+          {
+            id: withheldId,
+            type: 'schema:Book',
+            labels: { en: 'Withheld work' },
+            summary: null,
+          },
+        ],
+        next: null,
+      },
+    },
+  },
+} satisfies ZonePageResponse;
+
+export const composedZoneAlicePrivateFake = {
+  ...composedZonePrivateMountFake,
+  zone: { ...composedZonePrivateMountFake.zone, id: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e1a', revision: '10' },
+} satisfies ZonePageResponse;
+
+export const composedZoneEditorFake = {
+  ...composedZoneMembersFake,
+  zone: { ...composedZoneMembersFake.zone, id: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e1b', revision: '11' },
+} satisfies ZonePageResponse;

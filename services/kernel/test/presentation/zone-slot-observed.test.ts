@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import canonicalize from 'canonicalize';
 import { preparePageRead, readPage } from '../../src/presentation/reads.ts';
+import { observeComposedSlot } from '../../src/presentation/http/slot-observed.ts';
 import {
   admitObservedMembersPage,
   admitObservedSearchPage,
@@ -77,4 +78,32 @@ test('observed Zone Members slots unique aliases and admit an empty continuation
     subjects: [],
     next: 'next_sparse-2',
   });
+});
+
+test('observed Zone slots keep withheld summaries and refuse leaked owner facts', () => {
+  const withheld = {
+    subjects: [{ id: book, type: 'schema:Book', labels: { en: 'Kokoro' }, summary: null }],
+    next: null,
+  };
+  expect(observeComposedSlot(search, { status: 200, body: withheld })?.body).toEqual(withheld);
+  expect(
+    observeComposedSlot(search, {
+      status: 200,
+      body: {
+        subjects: [{ id: book, type: 'schema:Book', labels: { en: 'Kokoro' }, summary, ownerId: book }],
+        next: null,
+      },
+    }),
+  ).toBeUndefined();
+  expect(
+    admitObservedMembersPage(
+      {
+        kind: 'members',
+        source: { kind: 'collection', id: book },
+        sort: 'id',
+        limit: 12,
+      },
+      { members: [{ kind: 'dynamic', subjectId: book, summary: null, mounts: [] }], next: null },
+    ),
+  ).toBeUndefined();
 });
