@@ -82,7 +82,9 @@ ControlMaster per configured host under a short owned `$XDG_RUNTIME_DIR/rezics-s
 unix_listener would overflow); throwaway PostgreSQL `--rm` plus owner-pid cleanup; `container:<id>` isolated-stack
 attachment with an independent TCP-to-Unix forwarder; migrations wait for in-container `pg_isready` and a protocol
 reply, not a TCP accept that EOFs; empty-directory manifests hash `directory\0`; page-data boot keeps the first
-substantive error after Task `$ ` echoes.
+substantive error after Task `$ ` echoes. After output-tree restore, candidate fingerprints ignore the published
+kernel-client root. Inherited Library `@rezics/bounds` imports and the two ClassDeclaration `extends` reads stay with
+kernel-library and kernel zones.
 Decision: Management walk setup idle-in-transaction and Access-deadline termination is received through that same
 throwaway/isolated-stack database lifetime. Content keeps the launcher, stack and cleanup. Original walks remain
 open. Driver main versus canonical publication is a control-plane owner item.

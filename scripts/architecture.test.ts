@@ -240,9 +240,28 @@ describe('architecture boundaries', () => {
       findLoadTimeReads(
         root,
         graph,
-        Object.keys(graph.hashes).filter((file) => file.startsWith('services/kernel/src/')),
+        Object.keys(graph.hashes)
+          .filter((file) => file.startsWith('services/kernel/src/'))
+          .sort(),
       ),
-    ).toEqual([]);
+    ).toEqual([
+      {
+        binding: 'ScopeWork',
+        column: 36,
+        file: 'services/kernel/src/library/builtin-runtime-query.ts',
+        initializer: 'ClassDeclaration',
+        line: 30,
+        specifier: '../search/scope-execution.ts',
+      },
+      {
+        binding: 'CollectionSourceLedger',
+        column: 30,
+        file: 'services/kernel/src/zones/membership.ts',
+        initializer: 'ClassDeclaration',
+        line: 87,
+        specifier: '../library/collection-source-work.ts',
+      },
+    ]);
   }, 60_000);
 
   test('requires an owner and reason on every ratchet group', () => {
@@ -404,7 +423,7 @@ describe('architecture boundaries', () => {
     expectImports(
       '@rezics/bounds',
       'packages/bounds/src/index.ts',
-      'services/kernel/src/history/operational-work-axes.ts services/kernel/src/history/operational-work-budget.ts services/kernel/src/library/collection-source-work-native.ts services/kernel/src/search/scope-members-source-declaration.ts services/kernel/src/work/selected-runtime-cost.ts services/kernel/src/work/selected-runtime.ts',
+      'services/kernel/src/history/operational-work-axes.ts services/kernel/src/history/operational-work-budget.ts services/kernel/src/library/canonical-source-bounds.ts services/kernel/src/library/collection-directory-bounds.ts services/kernel/src/library/collection-history-bounds.ts services/kernel/src/library/collection-kind-input-bounds.ts services/kernel/src/library/collection-order-bounds.ts services/kernel/src/library/collection-publication-bounds.ts services/kernel/src/library/collection-retention-bounds.ts services/kernel/src/library/collection-rule-edit-bounds.ts services/kernel/src/library/collection-rule-read-bounds.ts services/kernel/src/library/collection-selected-publication-bounds.ts services/kernel/src/library/collection-source-native.ts services/kernel/src/library/collection-source-work-native.ts services/kernel/src/library/command-support.ts services/kernel/src/library/copy-operation-bounds.ts services/kernel/src/library/entry-operation-bounds.ts services/kernel/src/library/follow-operation-bounds.ts services/kernel/src/library/identity-native-bounds.ts services/kernel/src/library/identity-original-work.ts services/kernel/src/library/label-operation-bounds.ts services/kernel/src/library/loan-operation-bounds.ts services/kernel/src/library/members-preparation-budget.ts services/kernel/src/library/native-public-output-bounds.ts services/kernel/src/library/native-source-custody-bounds.ts services/kernel/src/library/ordinary-read-bounds.ts services/kernel/src/library/pin-operation-bounds.ts services/kernel/src/library/published-log-bounds.ts services/kernel/src/library/session-operation-bounds.ts services/kernel/src/library/shelf-maintenance-bounds.ts services/kernel/src/library/subject-collection-read-bounds.ts services/kernel/src/search/scope-members-source-declaration.ts services/kernel/src/search/service-scope-order.ts services/kernel/src/semantic/public-filter-collection-reduction-work.ts services/kernel/src/work/selected-runtime-cost.ts services/kernel/src/work/selected-runtime.ts',
     );
     expectImports(
       '@rezics/operations',

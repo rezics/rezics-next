@@ -3031,9 +3031,12 @@ def clean_run_resources(run):
     call(['systemctl', 'stop', scope])
     containers = call(['docker', 'ps', '-aq', '--filter', 'label=rezics.check.run=' + run])
     for container in containers.stdout.split():
-        if not re.fullmatch(r'[a-f0-9]{12,64}', container):
+        token = container.strip().lower()
+        if not token:
+            continue
+        if not re.fullmatch(r'[a-f0-9]{12,64}', token):
             raise RuntimeError('invalid owned container identity')
-        call(['docker', 'rm', '-f', '-v', container])
+        call(['docker', 'rm', '-f', '-v', token])
     call(['systemctl', 'stop', slice_name])
     group = call(['systemctl', 'show', '--property=ControlGroup', '--value', slice_name]).stdout.strip()
     if group:
