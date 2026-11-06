@@ -5,7 +5,7 @@ import type {
   ZoneOwned,
   ZonePageResponse,
   ZonePublishInput,
-} from '../../../../../../services/kernel/src/zones/contract';
+} from '../../../zones/appearance';
 import type { OwnerReadObservation } from './owner-lifetime';
 
 export type { ZoneConfigurationResponse, ZoneConfigureInput, ZoneOwned, ZonePageResponse };

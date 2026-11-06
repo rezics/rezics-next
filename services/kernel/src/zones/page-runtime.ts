@@ -14,11 +14,12 @@ import { ProblemError, PROBLEMS } from '../http/problem.ts';
 import { createBuiltinRuntime } from '../library/builtin-runtime.ts';
 import { activeProfile } from '../presentation/profiles.ts';
 import { semanticPageView } from '../presentation/semantic-page.ts';
-import { PageReadBudget, readPage, type PageRead } from '../presentation/reads.ts';
+import { PageReadBudget, preparePageRead, readPage, type PageRead } from '../presentation/reads.ts';
+import { observeComposedSlot, uniqueCanonicalRows } from '../search/index.ts';
 import type { Actor } from '../request/access.ts';
-import { validateHitOptions, validateSearchLimit } from '../search/hits.ts';
+import { validateHitOptions } from '../search/hits.ts';
 import { activeRelease } from '../semantic/definitions.ts';
-import { readSubjectSummaries, readSubjectSummaryObservation } from '../semantic/summaries.ts';
+import { readSubjectSummaries, readSubjectSummaryObservation, type SubjectSummary } from '../semantic/summaries.ts';
 import { decodeSession, type SessionComponent } from '../tokens/session.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { ZonePageRequest, ZonePageResponse, ZoneSubjectListItem, ZoneSubjectListResponse } from './contract.ts';
@@ -37,16 +38,7 @@ import { zonePageWork, type ZonePagePosition } from './page-work.ts';
 
 /** Match `readPage`'s search canonical form so Zone-restricted results cannot leak into a global TypeList dispatch. */
 export function zoneObservedReadKey(descriptor: PageRead, languages?: readonly string[]): string {
-  if (descriptor.kind !== 'search') return canonicalize(descriptor)!;
-  return canonicalize({
-    ...descriptor,
-    kind: 'search',
-    body: {
-      ...descriptor.body,
-      limit: validateSearchLimit((descriptor.body as { limit?: unknown }).limit),
-      ...(languages === undefined ? {} : { languages: [...languages] }),
-    },
-  })!;
+  return preparePageRead(descriptor, languages).canonical;
 }
 
 /** TypeList and Members descriptors inherit the Zone's admitted source union and native order. */
@@ -340,23 +332,33 @@ async function composeZonePage(
       }
       return zoneUnavailable();
     }
-    const rows = read.position.rows.map((row) => {
+    const mapped: { id: string; type: string; labels: Record<string, string>; summary: SubjectSummary }[] = [];
+    for (const row of read.position.rows) {
       const summary = summaries.get(row.id);
       if (!summary) return zoneUnavailable();
-      return {
+      mapped.push({
         id: row.id,
         type: summary.type,
         labels: summary.label ? { [summary.label.language]: summary.label.value } : {},
         summary,
-      };
-    });
+      });
+    }
+    const rows = uniqueCanonicalRows(mapped);
     const next = null;
+    const body =
+      read.kind === 'search'
+        ? { subjects: rows, next }
+        : {
+            members: uniqueCanonicalRows(
+              rows.map((row) => ({ kind: 'dynamic' as const, subjectId: row.id, summary: row.summary })),
+            ),
+            next,
+          };
+    const admitted = observeComposedSlot(descriptor, { status: 200, body });
+    if (!admitted) return zoneUnavailable();
     observed.set(zoneObservedReadKey(descriptor, languages), {
       status: 200,
-      body:
-        read.kind === 'search'
-          ? { subjects: rows, next }
-          : { members: rows.map((row) => ({ kind: 'dynamic', subjectId: row.id, summary: row.summary })), next },
+      body: admitted.body,
     });
   }
   const properties = subject

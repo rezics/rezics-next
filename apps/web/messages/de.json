@@ -2014,6 +2014,7 @@
   "zone_unavailable_heading": "Diese Bereichsseite ist vorübergehend nicht verfügbar",
   "zone_unavailable_message": "Diese Bereichsseite konnte nicht geladen werden. Versuchen Sie es gleich noch einmal.",
   "zone_subject_return": "Zurück zu {name}",
+  "zone_return": "Zurück zu diesem Bereich",
   "inbox_heading": "Posteingang",
   "inbox_sign_in": "Melde dich an, um deinen Posteingang zu sehen.",
   "inbox_loading": "Posteingang wird geladen …",
