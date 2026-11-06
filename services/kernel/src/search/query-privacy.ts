@@ -140,7 +140,9 @@ export function trustedStaleObservation(decision: QueryPrivacyDecision): boolean
   return decision.status === 'current' && decision.stale;
 }
 
-export function queryPrivacyPreparing(decision: QueryPrivacyDecision): boolean {
+export function queryPrivacyPreparing(
+  decision: QueryPrivacyDecision,
+): decision is Extract<QueryPrivacyDecision, { status: 'preparing' }> {
   return decision.status === 'preparing';
 }
 

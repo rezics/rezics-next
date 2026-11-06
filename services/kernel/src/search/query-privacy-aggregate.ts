@@ -58,7 +58,7 @@ export function queryPrivacyTotal(input: {
   if (input.currentness.status !== 'current') return { withheld: true };
   if (input.continuation || !Number.isSafeInteger(input.witnesses) || input.witnesses < 0) return { withheld: true };
   const proof: KindCountProof = {
-    continuation: input.continuation === true,
+    continuation: false,
     exhausted: input.exhausted,
     aggregateProof: input.aggregateProof,
     witnesses: new Map([['total', input.witnesses]]),

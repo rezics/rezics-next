@@ -156,8 +156,9 @@ test('anonymous, editor and suspended readers share current public hits while hi
 
 test('taken-down and withheld facts stay out of the disclosed page and cannot certify a kind total', async () => {
   const subjects = [book(1, { visibility: 'taken_down', securityRevision: 4 }), book(2, { statements: [] })];
-  const current = await disclose(subjects, [hit(1, '4'), hit(2)]);
-  const page = selectCurrentPredicatePage([hit(1, '4'), hit(2)], current, { limit: 2, exhausted: false });
+  const candidates = [hit(1, '4'), hit(2)];
+  const current = await disclose(subjects, candidates);
+  const page = selectCurrentPredicatePage(candidates, current, { limit: 2, exhausted: false });
   expect(page.hits.map((row) => row.key.id)).toEqual([id(2)]);
   expect(page.hits[0]).not.toHaveProperty('facts');
   expect(
@@ -195,7 +196,7 @@ test('a public-to-private change during paused indexing drops the stale engine h
     selectCurrentPredicatePage(candidates, before, { limit: 3, exhausted: true }).hits.map((row) => row.key.id),
   ).toEqual([id(1), id(2), id(3)]);
   subjects[1] = book(2, { visibility: 'hidden', securityRevision: 8 });
-  const after = await disclose(subjects, [hit(1), hit(2, '8'), hit(3)]);
+  const after = await disclose(subjects, candidates);
   const page = selectCurrentPredicatePage(candidates, after, { limit: 3, exhausted: true });
   expect(page.hits.map((row) => row.key.id)).toEqual([id(1), id(3)]);
   expect(page.dropped).toBe(1);

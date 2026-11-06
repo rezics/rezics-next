@@ -49,7 +49,9 @@ export function queryPrivacyHeadsFromConsumer(status: PublicFilterConsumerStatus
   return headsFromConsumer(status);
 }
 
-export function sourceObservationIsDisclosable(observed: PrivacyReductionObservation): boolean {
+export function sourceObservationIsDisclosable(
+  observed: PrivacyReductionObservation,
+): observed is QueryPrivacyObservedStatus {
   const heads = queryPrivacyHeadsFromSource(observed);
   return heads !== null && observationIsDisclosable(heads);
 }
