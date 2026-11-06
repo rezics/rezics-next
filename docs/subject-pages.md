@@ -861,11 +861,13 @@ The overview's Sources entry also opens `/subjects/{id}/{slug}/sources`, a compa
 Composition view template. It uses the ordinary anonymous `GET /v1/subjects/{id}` with the existing language chain,
 current disclosure and one-hop merge handling. Stale identities redirect to the current subject and retain the
 query and fragment. Missing and hidden subjects use the same concealed not-found state. Denied, invalid, changed
-selection and unavailable responses remain failures; retry reads the same address again.
+selection and unavailable responses remain failures; retry reads the same address again. Unsupported and concealed-missing
+responses offer no Retry.
 Only an explicit keyboard Sources retry from the focused Retry button keeps focus on that surviving control or
 moves it to the current Sources heading when the control disappears; pointer retry performs the same read quietly.
 Decision: use the focused Retry click's zero detail to admit keyboard intent; moving away and back, Tab, window blur,
-navigation, locale or Context-reader changes retire that intent, and pending retries issue only one read.
+a later pointer press, navigation, locale or Context-reader changes retire that intent, and pending retries issue only
+one read.
 
 The page groups the currently disclosed selected facts by field, using emitted property labels and released Type
 labels with the existing locale fallback. It follows the overview's selected rank, summary-language and safe spoiler

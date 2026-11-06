@@ -9,7 +9,13 @@ import { explainSubjectSources, readSubjectSources, type SourcesResult } from '.
 
 export const loadSubjectSources = createServerFn({ method: 'GET', strict: false })
   .validator(
-    (input: { id: string; locale: string; realm?: string | undefined; via?: string; reader?: string | null }) => {
+    (input: {
+      id: string;
+      locale: string;
+      realm?: string | undefined;
+      via?: string | undefined;
+      reader?: string | null;
+    }) => {
       if (
         !input ||
         typeof input.id !== 'string' ||
@@ -72,7 +78,7 @@ export const loadSubjectSources = createServerFn({ method: 'GET', strict: false 
 
 /** Hydrated private reading; the loader never serializes a viewer's action envelope into SSR. */
 export const readCurrentSubjectSources = createServerFn({ method: 'POST', strict: false })
-  .validator((input: { id: string; locale: string; expectedReader: string | null; via?: string }) => {
+  .validator((input: { id: string; locale: string; expectedReader: string | null; via?: string | undefined }) => {
     if (
       !input ||
       !/^[0-9a-f-]{36}$/i.test(input.id) ||
