@@ -338,8 +338,7 @@ test('anonymous explorer reads current work membership and keeps unavailable inv
               status: 200,
               data: { links: [], next: null, freshness: { caught_up: true }, count: { value: 0, exact: true } },
             };
-          if (query.property === 'schema:keywords')
-            return { status: 503, data: { code: 'dependency_unavailable' } };
+          if (query.property === 'schema:keywords') return { status: 503, data: { code: 'dependency_unavailable' } };
           return {
             status: 200,
             data: {

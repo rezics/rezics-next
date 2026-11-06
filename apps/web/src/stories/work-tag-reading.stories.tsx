@@ -119,7 +119,9 @@ export const WeightScaleBounds: Story = {
   args: {
     model: {
       ...model,
-      rows: model.rows.filter((row) => row.statement.qualifiers.some((part) => part.property.id === 'rezics:sourceTagWeight')),
+      rows: model.rows.filter((row) =>
+        row.statement.qualifiers.some((part) => part.property.id === 'rezics:sourceTagWeight'),
+      ),
     },
   },
 };

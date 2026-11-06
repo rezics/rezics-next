@@ -24,9 +24,7 @@ function kernelRequest(path: string, body: unknown, bearer: string | undefined, 
     method: body === undefined ? 'GET' : 'POST',
     headers: {
       ...(bearer ? { authorization: `Bearer ${bearer}` } : {}),
-      ...(body === undefined
-        ? {}
-        : { 'content-type': 'application/json', 'idempotency-key': JSON.stringify(key) }),
+      ...(body === undefined ? {} : { 'content-type': 'application/json', 'idempotency-key': JSON.stringify(key) }),
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });

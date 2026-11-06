@@ -106,7 +106,13 @@ export function ConceptMembershipReading({
       {membership.rows.length ? (
         <ul className="list-disc space-y-1 pl-5">
           {membership.rows.map((row) => (
-            <WorkLink key={`${row.property}:${row.id}`} row={row} locale={locale} returnTo={returnTo} hrefFor={hrefFor} />
+            <WorkLink
+              key={`${row.property}:${row.id}`}
+              row={row}
+              locale={locale}
+              returnTo={returnTo}
+              hrefFor={hrefFor}
+            />
           ))}
         </ul>
       ) : null}

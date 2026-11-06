@@ -80,7 +80,8 @@ export async function readConceptMembership(
   input: { session?: string | undefined },
 ): Promise<{ membership: ConceptMembership; session?: string; oversized?: true; failure?: number }> {
   const admitted = membershipProperties.filter((property) => membershipInverse(release, property));
-  if (!admitted.length) return { membership: emptyMembership('unsupported'), ...(input.session ? { session: input.session } : {}) };
+  if (!admitted.length)
+    return { membership: emptyMembership('unsupported'), ...(input.session ? { session: input.session } : {}) };
 
   let session = input.session;
   const rows: ConceptMembershipRow[] = [];
@@ -153,7 +154,13 @@ export async function readConceptMembership(
         ? 'available'
         : 'lagging';
   return {
-    membership: { state, rows, next, exactEmpty: state === 'available' && exactEmpty && !rows.length && !next, withheld },
+    membership: {
+      state,
+      rows,
+      next,
+      exactEmpty: state === 'available' && exactEmpty && !rows.length && !next,
+      withheld,
+    },
     ...(session ? { session } : {}),
   };
 }
