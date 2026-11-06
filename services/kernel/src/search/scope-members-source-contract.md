@@ -138,3 +138,16 @@ current Source and Scope again and restarts if the retained state, observation o
 The implementation does not reconstruct an Actor, copy a capability, reuse a closed client, cast Command to
 Operational, synthesize Source identity, add a writer, or expand permissions. Accounts retirement/erasure gates and
 the permanent writer gates stay in force.
+
+Native Members fixtures execute `collection:read` the same way GET members does: current grants, private-collection
+eligibility (public floor false) through the directory row plan and Access work bounds, the kernel request deadline,
+and a repeatable-read snapshot. Authorize on that client without minting a second T that prepare did not capture.
+Owner and catalogue pages remain distinct admission episodes. Search reuses the constructor runtime (pool, client,
+prefix, source, current release, authenticated context) through `createSearchScopeForService`; public capture uses
+`compilePublicFilterConsumerCapture` with the binder's inverse admission and the original accepted meaning. Compiled
+capture retains the admitted tree; engine DSL is optional equality evidence. Initial kind chips reuse every distinct
+current admitted-page identity as an inexact witness; disclosed page hits still read each current partition once.
+Each fixture releases owned pools and
+runtime after the original
+context, including after a failing assertion. Native subject writes load History's Semantic source-set owner from
+the adapters directory as a filesystem path.

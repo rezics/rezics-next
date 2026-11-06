@@ -51,6 +51,7 @@ import { ProblemError } from '../http/problem.ts';
 import type { LeafOptions, LeafProgress, LeafWork } from '../semantic/scope-leaf-evidence.ts';
 import { packScopeLeafProgress, type ScopeLeafPosition } from './scope-progress.ts';
 import { compileFilter } from './filter.ts';
+import { compilePublicFilterConsumerCapture } from './public-filter-consumer.ts';
 import type { OpenSearch, SearchRequestWork } from './opensearch.ts';
 import type { CataloguePublicationObservation } from './catalogue-publication.ts';
 import { isOrdinalKey } from '../library/ordinal.ts';
@@ -430,6 +431,46 @@ export function createSearchScopeSource({
     if (currentOwner.status !== 'current' || !sameScopeObservation(currentOwner.observation, bound.binding.scope))
       unavailable();
     return { admission, binding: bound.binding, source: collection.source };
+  }
+  async function resolvePublicFilterCapture(
+    meaning: Parameters<typeof compilePublicFilterConsumerCapture>[1],
+    input: {
+      filterDocument: FilterDocument;
+      sort: NonNullable<ScopePrepareOptions['nativeOrder']> | 'id';
+      pageSize?: number;
+      generation: number;
+    },
+    reader: LeafOptions,
+    work: ScopeWork,
+  ) {
+    let compiled: ReturnType<typeof compilePublicFilterConsumerCapture>;
+    try {
+      compiled = compilePublicFilterConsumerCapture(
+        {
+          sort: input.sort,
+          ...(input.pageSize === undefined ? {} : { pageSize: input.pageSize }),
+          filterDocument: input.filterDocument,
+          text: undefined,
+          generation: input.generation,
+          size: 100,
+        },
+        meaning,
+      );
+    } catch (error) {
+      if (error instanceof TypeError || error instanceof RangeError) unavailable();
+      throw error;
+    }
+    const resolved = await createPublicFilterSourceBinding(pool, reader.routeKey, reader.access).resolve(
+      {
+        source: publicFilterSource({ pool, routeKey: reader.routeKey, access: reader.access, clock }),
+        meaning: compiled.meaning,
+        capture: compiled.capture,
+      },
+      { deadline: reader.deadline },
+    );
+    work.public(resolved.cost);
+    if (resolved.status !== 'resolved') unavailable();
+    return resolved;
   }
   const realm = createRealmScopeSource({
     pool,
@@ -969,31 +1010,17 @@ export function createSearchScopeSource({
           release: nativeRelease,
           type,
         };
-        const binding = createPublicFilterSourceBinding(pool, reader.routeKey, reader.access);
-        const native = publicFilterSource({
-          pool,
-          routeKey: reader.routeKey,
-          access: reader.access,
-          clock,
-        });
-        const resolved = await binding.resolve(
+        const resolved = await resolvePublicFilterCapture(
+          meaning,
           {
-            source: native,
-            meaning,
-            capture: {
-              sort: options?.nativeOrder ?? 'id',
-              ...(options?.nativeOrder ? { pageSize: options.pageSize } : {}),
-              filter: compiled.query,
-              filterDocument: admitted,
-              text: undefined,
-              generation: indexed!.generation,
-              size: 100,
-            },
+            filterDocument: admitted,
+            sort: options?.nativeOrder ?? 'id',
+            ...(options?.nativeOrder ? { pageSize: options.pageSize } : {}),
+            generation: indexed!.generation,
           },
-          { deadline: reader.deadline },
+          reader,
+          work,
         );
-        work.public(resolved.cost);
-        if (resolved.status !== 'resolved') unavailable();
         orderedPublicDefinition = resolved.definition;
         profile = digest([resolved.definition.readDefinition, resolved.definition.meaning.digest, type]);
         const { release: _body, ...meaningReference } = resolved.definition.meaning;
@@ -1037,26 +1064,17 @@ export function createSearchScopeSource({
           : catalogueLeaves.length
             ? { or: [{ type: { in: [type] } }, ...catalogueLeaves] }
             : { type: { in: [type] } };
-        const publicQuery = compileFilter(publicFilter, { prefix: 'f', relationOverflow: true });
-        const binding = createPublicFilterSourceBinding(pool, reader.routeKey, reader.access);
-        const resolved = await binding.resolve(
+        const resolved = await resolvePublicFilterCapture(
+          { digest: selected.digest, release: nativeRelease, type },
           {
-            source: publicFilterSource({ pool, routeKey: reader.routeKey, access: reader.access, clock }),
-            meaning: { digest: selected.digest, release: nativeRelease, type },
-            capture: {
-              sort: options?.nativeOrder ?? 'id',
-              ...(options?.nativeOrder ? { pageSize: options.pageSize } : {}),
-              filter: publicQuery.query,
-              filterDocument: publicFilter,
-              text: undefined,
-              generation: indexed.generation,
-              size: 100,
-            },
+            filterDocument: publicFilter,
+            sort: options?.nativeOrder ?? 'id',
+            ...(options?.nativeOrder ? { pageSize: options.pageSize } : {}),
+            generation: indexed.generation,
           },
-          { deadline: reader.deadline },
+          reader,
+          work,
         );
-        work.public(resolved.cost);
-        if (resolved.status !== 'resolved') unavailable();
         const { release: _body, ...meaningReference } = resolved.definition.meaning;
         orderedPublicDefinition = resolved.definition;
         const publicDefinition: ScopeCaptureDefinition = {

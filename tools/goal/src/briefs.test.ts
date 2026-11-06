@@ -2,12 +2,16 @@ import { expect, test } from 'bun:test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  assertEnvironmentWalkAdmission,
   briefPathCloseness,
   controlPlaneReleaseBrief,
   classifyRiskAreas,
   devProductBrief,
+  ENVIRONMENT_WALK_DOC,
+  ENVIRONMENT_WALK_STATES,
   matchesPath,
   MAX_BRIEF_BYTES,
+  occupyingEnvironmentWalk,
   parseBrief,
   pathsOverlap,
   productBriefSizeReturnReason,
@@ -354,4 +358,91 @@ test('product brief size returns use policy floors and exempt urgent research me
   expect(briefPathCloseness(['tools/goal/src/backlog.ts'], ['tools/goal/src/briefs.ts'])).toBeGreaterThan(
     briefPathCloseness(['tools/goal/src/backlog.ts'], ['apps/web/src/page.ts']),
   );
+});
+
+test('a native or browser walk occupies its Goal until it leaves ready, running, held or landing', () => {
+  const walk = { goal: 'web', kind: 'implementation', acceptance: { requires: ['native'] } };
+  const occupant = { id: 'walk-1', state: 'ready', brief: walk };
+  expect(occupyingEnvironmentWalk(walk, [])).toBeUndefined();
+  expect(occupyingEnvironmentWalk(walk, [occupant])?.id).toBe('walk-1');
+  expect(occupyingEnvironmentWalk(walk, [occupant], 'walk-1')).toBeUndefined();
+  expect(() => assertEnvironmentWalkAdmission(walk, [occupant])).toThrow(`environment walk ${occupant.id}`);
+  expect(() => assertEnvironmentWalkAdmission(walk, [occupant])).toThrow(ENVIRONMENT_WALK_DOC);
+  for (const state of ENVIRONMENT_WALK_STATES)
+    expect(occupyingEnvironmentWalk(walk, [{ ...occupant, state }])?.id).toBe('walk-1');
+  for (const state of ['stopped', 'cancelled', 'integrated', 'merged', 'verified'])
+    expect(occupyingEnvironmentWalk(walk, [{ ...occupant, state }])).toBeUndefined();
+  expect(occupyingEnvironmentWalk(walk, [{ ...occupant, brief: { ...walk, goal: 'other' } }])).toBeUndefined();
+  expect(occupyingEnvironmentWalk({ ...walk, kind: 'verification' }, [occupant])).toBeUndefined();
+  expect(
+    occupyingEnvironmentWalk({ ...walk, goal: 'control-plane' }, [
+      { ...occupant, brief: { ...walk, goal: 'control-plane' } },
+    ]),
+  ).toBeUndefined();
+  expect(
+    occupyingEnvironmentWalk(walk, [{ id: 'proof', state: 'running', brief: { ...walk, kind: 'verification' } }]),
+  ).toBeUndefined();
+  expect(occupyingEnvironmentWalk({ ...walk, acceptance: { requires: ['root'] } }, [occupant])).toBeUndefined();
+  expect(
+    occupyingEnvironmentWalk({ ...walk, acceptance: { requires: ['browser'] } }, [
+      { ...occupant, brief: { ...walk, acceptance: { requires: ['browser'] } } },
+    ])?.id,
+  ).toBe('walk-1');
+});
+
+test('dispatching or reshaping a native or browser walk is one per Goal', () => {
+  const h = harness();
+  try {
+    const withRequires = (source: string, requires: string, extra = '') =>
+      source
+        .replace('  failing: true\n', `  failing: true\n  requires: [${requires}]\n`)
+        .replace('waiting: []\n', `waiting: []\n${extra}`);
+    const file = (name: string, text: string) => {
+      const path = join(h.root, `.temp/goal/${name}.md`);
+      writeFileSync(path, text);
+      return path;
+    };
+
+    const dependency = h.tasks.dispatch(h.briefFile);
+    const walk = withRequires(markdown, 'native', `after: [${dependency.id}]\n`);
+    const first = h.tasks.dispatch(file('walk.md', walk));
+    expect(first.state).toBe('held');
+
+    const second = file(
+      'second.md',
+      withRequires(markdown, 'browser').replace('paths: [result.txt]', 'paths: [other.txt]'),
+    );
+    expect(() => h.tasks.dispatch(second)).toThrow(first.id);
+    expect(() => h.tasks.dispatch(second)).toThrow(ENVIRONMENT_WALK_DOC);
+
+    expect(
+      h.tasks.dispatch(
+        file('other-goal.md', withRequires(markdown, 'native').replace('goal: fixture', 'goal: elsewhere')),
+      ).state,
+    ).toBe('ready');
+
+    const controlPlaneWalk = withRequires(markdown, 'native')
+      .replace('goal: fixture', 'goal: control-plane')
+      .replace('paths: [result.txt]', 'paths: [tools/goal/src/briefs.ts]');
+    expect(h.tasks.dispatch(file('cp-1.md', controlPlaneWalk)).state).toBe('ready');
+    expect(
+      h.tasks.dispatch(
+        file('cp-2.md', controlPlaneWalk.replace('paths: [tools/goal/src/briefs.ts]', 'paths: [tools/goal/README.md]')),
+      ).state,
+    ).toBe('ready');
+
+    const reshaped = file(
+      'reshaped.md',
+      withRequires(markdown, 'native', `after: [${dependency.id}]\n`).replace(
+        'paths: [result.txt]',
+        'paths: [result.txt, extra.txt]',
+      ),
+    );
+    h.tasks.queueRetry(first.id, { brief: reshaped });
+    expect(h.store.task(first.id).brief.paths).toEqual(['result.txt', 'extra.txt']);
+    expect(h.store.task(first.id).state).toBe('held');
+    expect(() => h.tasks.queueRetry(dependency.id, { brief: second })).toThrow(first.id);
+  } finally {
+    h.dispose();
+  }
 });

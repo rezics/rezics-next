@@ -1,7 +1,14 @@
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import { readFileSync } from 'node:fs';
 import { isAbsolute, win32 } from 'node:path';
-import type { AcceptancePlacement, AcceptanceRequirement, Brief, BriefContinuation, TaskKind } from './types.ts';
+import type {
+  AcceptancePlacement,
+  AcceptanceRequirement,
+  Brief,
+  BriefContinuation,
+  TaskKind,
+  TaskState,
+} from './types.ts';
 import { parseBunTestCommand, parseEnvironmentPrefix } from './command-shape.ts';
 import { parseProofMetadata } from './verification.ts';
 
@@ -51,6 +58,63 @@ export function acceptanceRequirements(
   const required = new Set<AcceptanceRequirement>(brief.acceptance?.requires ?? []);
   if (brief.kind === 'interface' || (brief.paths ?? []).some(pathImpliesStories)) required.add('browser');
   return [...required];
+}
+
+export const ENVIRONMENT_WALK_REQUIREMENTS = ['native', 'browser'] as const;
+export const ENVIRONMENT_WALK_STATES = ['ready', 'running', 'held', 'landing'] as const satisfies readonly TaskState[];
+export const ENVIRONMENT_WALK_DOC = 'docs/development/verification.md#check-selection-and-failures';
+
+export type EnvironmentWalkBrief = {
+  goal?: string;
+  kind?: string;
+  acceptance?: { requires?: readonly string[] };
+};
+
+export type EnvironmentWalkOccupant = {
+  id: string;
+  state: string;
+  brief: EnvironmentWalkBrief;
+};
+
+export function environmentWalkRequires(brief: EnvironmentWalkBrief): boolean {
+  const requires = brief.acceptance?.requires ?? [];
+  return ENVIRONMENT_WALK_REQUIREMENTS.some((item) => requires.includes(item));
+}
+
+/** Verification, proof-run (kind verification) and control-plane briefs sit outside the one-walk gate. */
+export function environmentWalkGateApplies(brief: EnvironmentWalkBrief): boolean {
+  return brief.kind !== 'verification' && brief.goal !== 'control-plane' && environmentWalkRequires(brief);
+}
+
+export function occupyingEnvironmentWalk(
+  brief: EnvironmentWalkBrief & { goal: string },
+  tasks: readonly EnvironmentWalkOccupant[],
+  excludingTaskId?: string,
+): EnvironmentWalkOccupant | undefined {
+  if (!environmentWalkGateApplies(brief)) return undefined;
+  return tasks.find(
+    (task) =>
+      task.id !== excludingTaskId &&
+      task.brief.goal === brief.goal &&
+      (ENVIRONMENT_WALK_STATES as readonly string[]).includes(task.state) &&
+      environmentWalkGateApplies(task.brief),
+  );
+}
+
+export function environmentWalkAdmissionError(occupant: EnvironmentWalkOccupant): string {
+  return (
+    `Goal already has environment walk ${occupant.id} (${occupant.state}); ` +
+    `keep at most one native or browser walk-and-repair task per Goal. See ${ENVIRONMENT_WALK_DOC}.`
+  );
+}
+
+export function assertEnvironmentWalkAdmission(
+  brief: EnvironmentWalkBrief & { goal: string },
+  tasks: readonly EnvironmentWalkOccupant[],
+  excludingTaskId?: string,
+): void {
+  const occupant = occupyingEnvironmentWalk(brief, tasks, excludingTaskId);
+  if (occupant) throw new Error(environmentWalkAdmissionError(occupant));
 }
 /** Visited (i, j) cells; wildcard products larger than this stall dispatch. */
 type BriefPolicy = ControlPolicy['brief'];

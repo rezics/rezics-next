@@ -1373,6 +1373,12 @@ original matching behavior. Every intersected production risk area must be decla
 product modules. A `control-plane` brief may declare only `tools/goal/` paths; dispatch refuses outside paths and asks
 that they be split into a dev task.
 
+Decision: dispatch and retry refuse a brief whose `acceptance.requires` lists `native` or `browser` when another task of
+the same Goal with those requires is ready, running, held or landing. The error names that task and links
+[check selection](../../docs/development/verification.md#check-selection-and-failures). Verification, proof-run and
+control-plane briefs are exempt; reshaping the occupying walk itself is allowed. Two tests pin occupancy states and
+controller admission.
+
 Routing records the table version on each attempt. Open experiments weight work toward cheaper models: implementation, interface and bulk text rotate Grok 4.7, Grok 4.7, Luna `max`; claims rotate Luna `max`, Grok 4.7, Sol `high`
 by durable task sequence, starting with `high`; retries retain the original profile and version. Research is read-only.
 Bulk text prompts prohibit translation services, scripts and character mappings. Workers return a structured result

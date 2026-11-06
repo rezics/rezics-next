@@ -10,8 +10,8 @@ import { validateKindCountEvidence } from './discovery-registry.ts';
  * Cost
  * - Touches: the current disclosed identities already selected by one executed predicate,
  *   plus the caller's exhaustion and final-observation bits. No engine, Source or census read.
- * - Bound: one pass over the visible kind directory (at most eight rows) and the witness map
- *   for those kinds. Work is independent of corpus size.
+ * - Bound: one pass over those admitted-page identities, the visible kind directory (at most
+ *   eight rows) and the witness map for those kinds. Work is independent of corpus size.
  * - Growth check: `test/search/kind-count-proof.test.ts` covers continuation, incomplete
  *   samples, exact exhausted populations and refused exact-zero inference.
  */
