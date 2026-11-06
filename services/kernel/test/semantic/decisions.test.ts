@@ -46,6 +46,7 @@ beforeAll(async () => {
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'acceptor', 'context:accept');
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'acceptor', 'context:adopt');
   expect(await bootstrapRelease(pool, bundledRelease)).toBe(bundledDigest);
+  await call('GET', `/v1/subjects/${newId(0x51ff)}`);
 });
 const kernel = createKernel({
   pool,
@@ -219,6 +220,11 @@ async function community(near: string, granted = true): Promise<string> {
     const route = routeOf(id);
     if (route === null) throw new Error('Community Context id must carry its route');
     for (const action of ['context:accept', 'context:adopt']) await realAccess.grant({ route, id }, 'acceptor', action);
+    await admin.query(
+      `INSERT INTO access.resource_role_grant(route,resource_id,subject_kind,subject_id,subject_role,grant_role,valid,transaction_id)
+VALUES ($1,$2,'identity',$3,'','semantic.context.owner','(,)',$3)`,
+      [route, id, accounts.acceptor],
+    );
   }
   return id;
 }

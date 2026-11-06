@@ -79,20 +79,27 @@ export async function createRealAccess<const Personas extends Readonly<Record<st
   const readChecks: RealAccessCheck[] = [];
   const access = (config: AccessConfig): Access => {
     const real = createAccess({ ...config, auth });
+    const record = (actor: { kind: string; accountId?: string }, action: string, route: number, id: string) => {
+      const check = {
+        persona: actor.kind === 'account' ? (accountById.get(actor.accountId as string) ?? 'unknown') : 'anonymous',
+        action,
+        resource: { route, id },
+      };
+      if (action.endsWith(':read')) readChecks.push(check);
+      else checks.push(check);
+    };
     return deriveAccess(real, {
       async authenticate(reference, context) {
         configureTestReceiptKeys(context.pool);
         return real.authenticate(reference, context);
       },
       async authorize(client, actor, action, resource, evidence, time) {
-        const check = {
-          persona: actor.kind === 'account' ? (accountById.get(actor.accountId) ?? 'unknown') : 'anonymous',
-          action,
-          resource: { route: resource.route, id: resource.id },
-        };
-        if (action.endsWith(':read')) readChecks.push(check);
-        else checks.push(check);
+        record(actor, action, resource.route, resource.id);
         return real.authorize(client, actor, action, resource, evidence, time);
+      },
+      async authorizePage(client, actor, action, page, evidence, time) {
+        record(actor, action, page.route, page.ids[0]!);
+        return real.authorizePage!(client, actor, action, page, evidence, time);
       },
     });
   };

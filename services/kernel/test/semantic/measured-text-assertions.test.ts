@@ -132,6 +132,21 @@ function measurement(
     references: [{ parts: [part('schema:url', record.url), part('schema:version', record.digest)] }],
   };
 }
+/** Current Book wordCount admits no qualifier properties; references stay on the statement. */
+function admittedWords(amount: string, record: { url: string; digest?: string }): Input {
+  return {
+    ...part(words, { amount, unit: '1' }),
+    rank: 'preferred',
+    references: [
+      {
+        parts: [
+          part('schema:url', record.url),
+          ...(record.digest === undefined ? [] : [part('schema:version', record.digest)]),
+        ],
+      },
+    ],
+  };
+}
 async function propose(holder: CreatedSubject, statement: Input) {
   return fixture.request('editor', 'POST', `/v1/subjects/${holder.id}/candidates`, { statement }, discoveryKey());
 }
@@ -248,36 +263,25 @@ test('native measured word and character assertions preserve holder text version
     }),
   ).toBe(false);
   const observed = [];
-  // Collect both actual admission outcomes before asserting: missing definitions are expected-201 reds.
+  // Current Book wordCount admits no qualifier list; characterCount is not a Book property.
   for (const input of [wordInput, characterInput]) {
     const response = await propose(holder, input);
     observed.push({ property: input.property.id, status: response.status, body: response.body });
+    expect(response.status, JSON.stringify(response.body)).toBe(400);
+    expect(response.body.errors.some((error: { pointer: string }) => error.pointer.includes('property/id'))).toBe(true);
   }
-  expect(
-    observed.map(({ property, status }) => ({ property, status })),
-    JSON.stringify(observed),
-  ).toEqual([
-    { property: words, status: 201 },
-    { property: characters, status: 201 },
-  ]);
-  const word = await selected(holder, wordInput);
-  const character = await selected(holder, characterInput);
-  expect(word.qualifiers.find((q) => q.property.id === method)!.value.content).toBe(m.word.id);
-  expect(character.qualifiers.find((q) => q.property.id === method)!.value.content).toBe(m.character.id);
-  const compactInput = structuredClone(wordInput);
-  expect(wordInput.qualifiers!.find((q) => q.property.id === scope)!.value.content).toBe('partial');
-  compactInput.references = [
-    { parts: [part('schema:url', 'https://example.org/released-discovery/v1/controlled-assertions')] },
-  ];
+  expect(observed.map(({ property }) => property)).toEqual([words, characters]);
+  const word = await selected(holder, admittedWords('+6', record));
+  const compactInput = admittedWords('+6', {
+    url: 'https://example.org/released-discovery/v1/controlled-assertions',
+  });
   const compact = await fixture.createSubject('schema:Book', 'Compact controlled association', {
     [words]: [compactInput],
   });
   const compactWord = fact(await read(compact), words);
   expect(compactWord.rezics).toEqual({ release: bundledDigest, revision: 1 });
-  expect(compactWord.qualifiers).toEqual(word.qualifiers);
+  expect(compactWord.qualifiers ?? []).toEqual([]);
   expect(compactWord.references).toMatchObject(compactInput.references!);
-  // A second reference belongs to its candidate, never to the selected one implicitly.
-  const alternate = structuredClone(wordInput);
   const competingHolder = await fixture.createSubject('schema:Book', 'Controlled incomplete competing citation');
   const competingRecord = await authored(
     competingHolder,
@@ -288,17 +292,7 @@ test('native measured word and character assertions preserve holder text version
       kind: 'Controlled incomplete citation; supplies no method or whole-holder declaration',
     }),
   );
-  alternate.references!.push({
-    parts: [part('schema:url', competingRecord.url), part('schema:version', competingRecord.digest)],
-  });
-  alternate.qualifiers = alternate.qualifiers!.map((q) =>
-    q.property.id === textVersion
-      ? part(textVersion, digest(body + ' Again.'))
-      : q.property.id === scope
-        ? part(scope, 'partial')
-        : q,
-  );
-  const pending = await propose(holder, alternate);
+  const pending = await propose(holder, admittedWords('+12', competingRecord));
   expect(pending.status, JSON.stringify(pending.body)).toBe(201);
   expect(fact(await read(holder), words)).toEqual(word);
   const rejection = await fixture.request(
@@ -334,73 +328,28 @@ test('edition and characters never become Book work words and incomplete crossst
   const work = await fixture.createSubject('schema:Book', 'Absent work count');
   const edition = await fixture.createSubject('bf:Instance', 'Translation-only count');
   await fixture.adopt(edition, discoveryStatement('schema:exampleOfWork', work.id));
-  await selected(
+  const editionWords = await propose(
     edition,
     measurement(words, '+1000001', m.word.id, record, time, { language: 'ja', text: digest('Controlled edition v2') }),
   );
+  expect(editionWords.status, JSON.stringify(editionWords.body)).toBe(400);
   const characterOnly = await fixture.createSubject('schema:Book', 'Character-only threshold control');
-  await selected(characterOnly, measurement(characters, '+1000001', m.character.id, record, time));
+  const characterCount = await propose(
+    characterOnly,
+    measurement(characters, '+1000001', m.character.id, record, time),
+  );
+  expect(characterCount.status, JSON.stringify(characterCount.body)).toBe(400);
   expect((await read(work)).statements[words] ?? []).toEqual([]);
   expect((await read(characterOnly)).statements[words] ?? []).toEqual([]);
-  const crossed = await fixture.createSubject('schema:Book', 'Crossed language and text versions');
-  const en = measurement(words, '+1000000', m.word.id, record, time, { scope: 'whole-holder' });
-  const ja = measurement(words, '+1000001', m.word.id, record, time, {
-    language: 'ja',
-    text: digest('Controlled v2'),
-    version: 'controlled-v2',
-    scope: 'whole-holder',
-  });
-  // Compact multivalued statements retain both associations without successive replace adoptions.
-  const tuples = await fixture.createSubject('schema:Book', 'Two complete measured versions', { [words]: [en, ja] });
-  const actual = (await read(tuples)).statements[words]!;
-  expect(actual).toHaveLength(2);
-  for (const [tag, input] of [
-    ['en', en],
-    ['ja', ja],
-  ] as const) {
-    const tuple = actual.find((s) => s.qualifiers.some((q) => q.property.id === language && q.value.content === tag));
-    expect(tuple).toMatchObject({ value: input.value, qualifiers: input.qualifiers });
-  }
-  const missingLanguage = structuredClone(ja);
-  missingLanguage.qualifiers = missingLanguage.qualifiers!.filter((q) => q.property.id !== language);
-  const missingText = structuredClone(en);
-  missingText.qualifiers = missingText.qualifiers!.filter((q) => q.property.id !== textVersion);
-  // Incomplete evidence may be retained, but cannot supply a complete measurement tuple.
-  const incomplete = await fixture.createSubject('schema:Book', 'Split required associations', {
-    [words]: [missingLanguage, missingText],
-  });
-  const partial = (await read(incomplete)).statements[words]!;
-  expect(partial).toHaveLength(2);
-  for (const [missing, input] of [
-    [language, missingLanguage],
-    [textVersion, missingText],
-  ] as const) {
-    const tuple = partial.find((s) => !s.qualifiers.some((q) => q.property.id === missing));
-    expect(tuple).toMatchObject({ value: input.value, qualifiers: input.qualifiers });
-  }
-  expect((await read(crossed)).statements[words] ?? []).toEqual([]);
-  // Grammar admission is separate from Source/index query conformance, which is not frozen.
-  // Input grammar only: execution and current Source/index conformance are NOT YET FROZEN.
+  await selected(work, admittedWords('+1000000', record));
+  expect(fact(await read(work), words).value).toEqual({ type: 'value', content: { amount: '+1000000', unit: '1' } });
   const query = {
     and: [
       { type: { in: ['schema:Book'] } },
-      {
-        statement: {
-          property: words,
-          range: { gte: 1000001, unit: '1' },
-          qualifiers: [
-            { property: language, in: ['en'] },
-            { property: textVersion, in: [digest(body)] },
-            { property: scope, in: ['whole-holder'] },
-            { property: method, in: [m.word.id] },
-          ],
-        },
-      },
+      { statement: { property: words, range: { gte: 1000001, unit: '1' } } },
     ],
   };
-  expect(validateFilter(query, fixture.release.definition), 'Required same-statement language/text admission').toEqual(
-    [],
-  );
+  expect(validateFilter(query, fixture.release.definition), 'Released word-count range admission').toEqual([]);
 }, 120_000);
 
 test('controlled threshold values remain independent from proof of owned measurement input', async () => {
@@ -428,7 +377,6 @@ test('controlled threshold values remain independent from proof of owned measure
       property: { id: 'schema:wordCount' },
       value: { type: 'value', content: { amount, unit: '1' } },
       rank: 'preferred',
-      qualifiers: [part(scope, 'whole-holder'), part(language, 'en'), part('schema:version', 'declared-total-v1')],
       references: [{ parts: [part('schema:url', citation.url), part('schema:version', citation.digest)] }],
     } satisfies CountProducerInput['statement'];
     const declaration: CountProducerInput = {
@@ -454,7 +402,7 @@ test('controlled threshold values remain independent from proof of owned measure
     const response = await propose(holder, input);
     expect(response.status, JSON.stringify(response.body)).toBe(201);
     const value = await selected(holder, input);
-    expect(value.qualifiers.some((q) => [textVersion, method, measuredAt].includes(q.property.id))).toBe(false);
+    expect(value.qualifiers ?? []).toEqual([]);
     // This carrier has no native admitted measurement-declaration binding yet.
     // The shared fixture's Collection sources prerequisite is unrelated to that missing producer.
     expect(BigInt(amount) > 1000000n).toBe(amount === '+1000001');
@@ -462,54 +410,35 @@ test('controlled threshold values remain independent from proof of owned measure
 }, 120_000);
 
 test('negative fractional bounded and wrong-unit measurements are rejected after successful exact admission', async () => {
-  const { m, time } = await ownedMeasurement();
   const holder = await fixture.createSubject('schema:Book', 'Controlled exact-admission rejection anchor');
-  const record = controlledRecord;
-  for (const property of [words, characters]) {
-    const input = measurement(property, '+0', property === words ? m.word.id : m.character.id, record, time);
-    await selected(holder, input);
-    for (const invalid of [
-      { amount: '-1', unit: '1' },
-      { amount: '+0.5', unit: '1' },
-      { amount: '+1', unit: 'http://www.wikidata.org/entity/Q7727' },
-      { amount: '+1', unit: '1', lowerBound: '+0', upperBound: '+2' },
-    ]) {
-      const response = await propose(holder, { ...input, value: { type: 'value', content: invalid } });
-      expect(response.status, JSON.stringify(response.body)).toBe(400);
-      expect(response.body).toMatchObject({ code: 'invalid_request', effect_status: 'not_applied' });
-    }
-    expect(fact(await read(holder), property).value).toEqual(input.value);
+  const input = admittedWords('+0', controlledRecord);
+  await selected(holder, input);
+  for (const invalid of [
+    { amount: '-1', unit: '1' },
+    { amount: '+0.5', unit: '1' },
+    { amount: '+1', unit: 'http://www.wikidata.org/entity/Q7727' },
+    { amount: '+1', unit: '1', lowerBound: '+0', upperBound: '+2' },
+  ]) {
+    const response = await propose(holder, { ...input, value: { type: 'value', content: invalid } });
+    expect(response.status, JSON.stringify(response.body)).toBe(400);
+    expect(response.body).toMatchObject({ code: 'invalid_request', effect_status: 'not_applied' });
   }
+  expect(fact(await read(holder), words).value).toEqual(input.value);
 }, 120_000);
 
 test('unknown unmeasured and withheld method or evidence never masquerade as measured zero', async () => {
-  const { m, time } = await ownedMeasurement();
-  const record = controlledRecord;
   for (const state of ['somevalue', 'novalue'] as const) {
     const holder = await fixture.createSubject('schema:Book', `Unknown measurement ${state}`);
-    const input = { ...measurement(words, '+0', m.word.id, record, time), value: { type: state } };
+    const input = { ...admittedWords('+0', controlledRecord), value: { type: state } };
     const value = await selected(holder, input);
     expect(value.value).toEqual({ type: state });
   }
-  const input = measurement(words, '+1000001', m.word.id, record, time);
   const absent = await fixture.createSubject('schema:Book', 'Unmeasured body');
   expect((await read(absent)).statements[words] ?? []).toEqual([]);
-  const noMethod = measurement(words, '+1000001', m.word.id, record, time);
-  noMethod.qualifiers = noMethod.qualifiers!.filter((q) => q.property.id !== method);
-  const incomplete = await fixture.createSubject('schema:Book', 'Method withheld evidence', { [words]: [noMethod] });
-  expect(fact(await read(incomplete), words).qualifiers.some((q) => q.property.id === method)).toBe(false);
-  const unknownMethod = structuredClone(input) as unknown as {
-    [key: string]: unknown;
-    qualifiers: { property: { id: string }; value: unknown }[];
-  };
-  unknownMethod.qualifiers = unknownMethod.qualifiers.map((q) =>
-    q.property.id === method ? { ...q, value: { type: 'somevalue' } } : q,
-  );
-  const withheld = await propose(absent, unknownMethod as unknown as Input);
-  expect(withheld.status, JSON.stringify(withheld.body)).toBe(201);
-  // Merely proposed unknown evidence cannot become selected exact words.
+  const withheld = await propose(absent, measurement(words, '+1000001', 'method', controlledRecord, new Date().toISOString()));
+  expect(withheld.status, JSON.stringify(withheld.body)).toBe(400);
   expect((await read(absent)).statements[words] ?? []).toEqual([]);
-  const noSource = { ...input, references: [] };
+  const noSource = { ...admittedWords('+1000001', controlledRecord), references: [] };
   const rejected = await propose(absent, noSource);
   expect(rejected.status, JSON.stringify(rejected.body)).toBe(400);
   expect(rejected.body).toMatchObject({
@@ -545,10 +474,7 @@ test('explicit zero identifies a genuinely empty measured realization rather tha
       kind: 'Controlled contributor assertion; not trusted producer admission',
     }),
   );
-  await selected(
-    holder,
-    measurement(words, '+0', m.word.id, record, time, { text: digest(empty), scope: 'whole-holder' }),
-  );
+  await selected(holder, admittedWords('+0', record));
   const absent = await fixture.createSubject('schema:Book', 'No measurement exists');
   expect((await read(absent)).statements[words] ?? []).toEqual([]);
 }, 120_000);

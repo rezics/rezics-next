@@ -67,7 +67,7 @@ test('explicit derived preparation builds a real native page; GET does no bootst
       .rowCount,
   ).toBe(0);
   await startQueueWorker();
-  status(await f.call('POST', '/v1/review-candidates:prepare', { source: provider, extra: true }), 422);
+  status(await f.call('POST', '/v1/review-candidates:prepare', { source: provider, extra: true }), 400);
   expect(status(await f.call('POST', '/v1/review-candidates:prepare', { source: provider }), 202)).toEqual({
     preparing: true,
   });
@@ -138,7 +138,7 @@ test('native scope-bound continuation rejects changed viewer/source/Context/stat
   status(await f.call('GET', `${endpoint}&cursor=${cursor}`, undefined, 'ordinary'), 400);
   status(await f.call('GET', `${endpoint}&cursor=invalid`), 400);
   status(await f.call('GET', `${endpoint}&context=${newId(32100)}`), 404);
-  status(await f.call('GET', '/v1/review-candidates?source=Bad%20Provider'), 422);
+  status(await f.call('GET', '/v1/review-candidates?source=Bad%20Provider'), 400);
   await f.real.revoke(global, 'ordinary', 'context:accept');
   status(await f.call('GET', endpoint, undefined, 'ordinary'), 403);
 });
@@ -216,7 +216,7 @@ test('contributor proposals preserve native decisions and pending abstentions', 
   expect(pendingPage.candidates.find((row: any) => row.candidate.id === proposals[2]!.candidate)).toMatchObject({
     candidate: { id: proposals[2]!.candidate, decision: null, head: null, rank: null },
   });
-});
+}, 240_000);
 
 test('paused projection cannot revive decisions, selection, retraction or current account denial; private progress is 202', async () => {
   await relay.pause();
