@@ -99,6 +99,10 @@ provides the evidence.
 
 ## Operating discipline
 
+- Every hour the supermanager checks that each manager session is running and its inbox is read, and renews a paused
+  one. Control-plane work goes out as briefs the supermanager dispatches; no manager inbox stands in for that.
+- Alarms to managers go at most once per Goal per hour, and only when a Goal wrote nothing. Each one costs a manager
+  turn.
 Codex runs on the Standard tier (`serviceTier: "default"`). Fast requires the maintainer's explicit permission.
 Keep allowance balances, account selection and operating ceilings in private configuration.
 
