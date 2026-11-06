@@ -98,6 +98,7 @@ export function realmSearchRequest(params: SearchLoaderDeps, languages: string[]
     emptyRecoveryActions: _emptyRecoveryActions,
     ...request
   } = discoveryRequest(params, languages);
+  request.limit = 20;
   if (!params.kinds?.length || request.filter === undefined) return request;
   return { ...request, filter: nativeKindFilter(request.filter, params.kinds) as typeof request.filter };
 }

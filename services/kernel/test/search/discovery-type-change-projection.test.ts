@@ -173,7 +173,14 @@ test('replay of a Subject changing between released Types deletes its old kind a
     return body.hits.hits.find((row) => row._id === documentId);
   }
   try {
-    const baseline = await append([{ type: 'com.rezics.fixture.created.v1', data: {} }]);
+    const nativeAccount = await admin.query<{ revision: string }>(
+      `INSERT INTO access.account(route,account_id,kind,state,transaction_id,membership_inverse_complete,display_name)
+       VALUES ($1,$2,'actor','active',$2,true,$3)
+       RETURNING discovery_revision::text AS revision`,
+      [route, id, account.displayName],
+    );
+    account.revision = BigInt(nativeAccount.rows[0]!.revision);
+    const baseline = await append([{ type: 'com.rezics.fixture.created.v1', subject: 'walk-b-374d19', data: {} }]);
     expect(await relay.run(partition)).toMatchObject({ status: 'read', envelopes: 1, position: baseline });
     await projection.project(partition, [personKey]);
     const personId = discoveryDocumentId(registry, personKey);
@@ -184,7 +191,7 @@ test('replay of a Subject changing between released Types deletes its old kind a
     subject.type = 'schema:Book';
     await admin.query(
       `INSERT INTO search.discovery_copy(route,source_id,prefix,generation,kind)
-       VALUES ($1,$2,$3,$4,'schema:Book') ON CONFLICT DO NOTHING`,
+       VALUES ($1,$2,$3,$4,'schema:Book'),($1,$2,$3,$4,'account') ON CONFLICT DO NOTHING`,
       [route, id, prefix, target.generation],
     );
     failWrite = true;
@@ -232,6 +239,7 @@ test('replay of a Subject changing between released Types deletes its old kind a
     await admin.query('DELETE FROM search.discovery_copy WHERE prefix=$1', [prefix]);
     await admin.query('DELETE FROM search.discovery_population WHERE prefix=$1', [prefix]);
     await admin.query('DELETE FROM search.discovery_generation WHERE prefix=$1', [prefix]);
+    await admin.query('DELETE FROM access.account WHERE route=$1 AND account_id=$2', [route, id]);
     await admin.query('DELETE FROM core.consumer_checkpoint WHERE consumer=$1', [consumer]);
     for (const value of positions)
       await admin.query('DELETE FROM core.outbox WHERE partition_no=$1 AND position=$2', [partition, String(value)]);

@@ -46,7 +46,6 @@ export function RealmCatalogueCurrent({
       admitted,
       locale,
       location.pathname,
-      location.searchStr,
       lifetime,
       session.state,
       session.subject,

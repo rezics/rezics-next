@@ -58,24 +58,14 @@ export type SearchResultsRegionProps = {
   retryFocus?: Pick<ReturnType<typeof useSearchRetryFocus>, 'regionRef' | 'retryRef' | 'captureRetryFocus'>;
   currentSearchHref?: string | undefined;
   windowNavigation?: SearchWindowNavigation | undefined;
+  hrefForState?: ((state: SearchLoaderDeps) => string) | undefined;
+  formAction?: string | undefined;
   personal?: Pick<ReturnType<typeof useDiscoveryPersonalResults>, 'regionRef' | 'renderPersonal' | 'recoveryView'>;
 };
 const linkClass = cn(buttonVariants({ variant: 'link' }), 'h-auto justify-start p-0');
 function messageOptions(locale: string) {
   return { locale: locales.find((value) => value === locale) ?? 'en' };
 }
-function searchHref(
-  locale: string,
-  query: string,
-  type: string | undefined,
-  facets: Record<string, string[]>,
-  cursor?: string,
-  sort?: 'rating',
-  state?: SearchLoaderDeps,
-): string {
-  return discoverySearchHref(locale, { ...state, query, type, facets, cursor, sort });
-}
-
 /** Presentation consumes the host's executed page and retired reader-owned actions. */
 export function SearchResultsRegion({
   query,
@@ -94,9 +84,12 @@ export function SearchResultsRegion({
   currentSearchHref,
   personal,
   windowNavigation,
+  hrefForState,
+  formAction,
 }: SearchResultsRegionProps) {
   if (!result && !data?.discovery && !data?.recovery) return null;
   const options = messageOptions(locale);
+  const hrefFor = (state: SearchLoaderDeps) => hrefForState?.(state) ?? discoverySearchHref(locale, state);
   const executedState = retryState ?? data?.queryState;
   const savedQuery = searchSavedQuerySelection(executedState);
   const retryWithoutWaiting = onRetry
@@ -131,6 +124,7 @@ export function SearchResultsRegion({
               ratingPopulation={retryState?.ratingPopulation}
               ratingReadiness={data?.ratingReadiness}
               disabled={invalid}
+              formAction={formAction}
             />
           </div>
         </div>
@@ -151,7 +145,7 @@ export function SearchResultsRegion({
             data={data}
             observation={data.discovery?.status === 'ready' ? data.discovery.page : result!}
             locale={locale}
-            refreshHref={discoverySearchHref(locale, { ...(retryState ?? data.queryState), cursor: undefined })}
+            refreshHref={hrefFor({ ...(retryState ?? data.queryState), cursor: undefined })}
             onRefresh={retryWithoutWaiting}
             onFocus={retryFocus?.captureRetryFocus}
           />
@@ -168,15 +162,14 @@ export function SearchResultsRegion({
             : m.search_reader_facets_unavailable({}, options)}{' '}
           <a
             className={linkClass}
-            href={searchHref(
-              locale,
+            href={hrefFor({
+              ...data.queryState,
               query,
               type,
-              selectedFacets,
-              undefined,
-              data.sort === 'rating' ? 'rating' : undefined,
-              data.queryState,
-            )}
+              facets: selectedFacets,
+              cursor: undefined,
+              sort: data.sort === 'rating' ? 'rating' : undefined,
+            })}
           >
             {m.search_facet_retry({}, options)}
           </a>
@@ -215,8 +208,8 @@ export function SearchResultsRegion({
         ) ? (
           <SearchRecovery
             state={data.recovery}
-            retryHref={discoverySearchHref(locale, retryState ?? data.queryState)}
-            restartHref={discoverySearchHref(locale, { ...data.queryState, cursor: undefined })}
+            retryHref={hrefFor(retryState ?? data.queryState)}
+            restartHref={hrefFor({ ...data.queryState, cursor: undefined })}
             onRetry={retryWithoutWaiting}
             locale={locale}
             {...(retryFocus ? { retryRef: retryFocus.retryRef, onRetryFocus: retryFocus.captureRetryFocus } : {})}
@@ -226,8 +219,8 @@ export function SearchResultsRegion({
             {data.recovery && data.recovery.status !== 'ready' ? (
               <SearchRecovery
                 state={data.recovery}
-                retryHref={discoverySearchHref(locale, retryState ?? data.queryState!)}
-                restartHref={discoverySearchHref(locale, { ...data.queryState!, cursor: undefined })}
+                retryHref={hrefFor(retryState ?? data.queryState!)}
+                restartHref={hrefFor({ ...data.queryState!, cursor: undefined })}
                 onRetry={retryWithoutWaiting}
                 locale={locale}
                 {...(retryFocus ? { retryRef: retryFocus.retryRef, onRetryFocus: retryFocus.captureRetryFocus } : {})}
@@ -240,9 +233,7 @@ export function SearchResultsRegion({
               yearProperties={data.yearProperties}
               factDefinitions={data.conditionMetadata?.properties}
               subjectHrefFor={subjectHrefFor}
-              restartHref={
-                data.queryState ? discoverySearchHref(locale, { ...data.queryState, cursor: undefined }) : undefined
-              }
+              restartHref={data.queryState ? hrefFor({ ...data.queryState, cursor: undefined }) : undefined}
             />
             {data.recovery?.status === 'ready' &&
             executedState &&
