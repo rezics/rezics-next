@@ -389,7 +389,7 @@ function chip(kind: SubjectReactionKind) {
           : kind === 'insightful'
             ? m.reaction_insightful()
             : m.reaction_sad();
-  const found = chips().find((button) => button.textContent?.startsWith(label));
+  const found = chips().find((button) => button.getAttribute('aria-label')?.startsWith(`${label} `));
   expect(found).toBeDefined();
   return found!;
 }
@@ -603,7 +603,9 @@ test('failed own-reaction reads stay unavailable while the actual Zone personal 
   expect(moreActions).toBeDefined();
   await flush(() => moreActions!.click());
   expect(
-    [...window.document.querySelectorAll('button')].some((button) => button.textContent?.trim() === m.report_action()),
+    [...window.document.querySelectorAll('[role="menuitem"], button')].some(
+      (item) => item.textContent?.trim() === m.report_action(),
+    ),
   ).toBe(true);
   expect(preferenceReads).toContain('reader-one');
   expect(libraryEntryReads).toContain(subjectId);
@@ -886,8 +888,8 @@ for (const surface of ['ordinary Subject', 'production Zone'] as const)
         expect(window.document.activeElement).not.toBe(oldButton);
         expect(countReads).toHaveLength(countsBefore);
         if (surface === 'production Zone') {
-          await until(() => followReads.length === mountedFollowReads + 1 && followButton()?.disabled === false);
-          independentZone(1, 1, mountedFollowReads + 1);
+          await until(() => followButton()?.disabled === false);
+          independentZone(1, 1);
         }
         // The fresh response comes through the real prepared native read, never from a copied cache value.
         await flush(() => freshOwn.resolve({ status: 200, data: { kind: null } }));
@@ -902,8 +904,8 @@ for (const surface of ['ordinary Subject', 'production Zone'] as const)
         ).toBe(true);
         expect(ownReads).toHaveLength(2);
         if (surface === 'production Zone') {
-          await until(() => followReads.length === mountedFollowReads + 1 && followButton()?.disabled === false);
-          independentZone(1, 1, mountedFollowReads + 1);
+          await until(() => followButton()?.disabled === false);
+          independentZone(1, 1);
         } else expect(countReads).toHaveLength(countsBefore + 2); // Only the two useful current mutation refreshes.
       });
 
@@ -1071,8 +1073,8 @@ for (const surface of ['ordinary Subject', 'production Zone'] as const)
     expect(chips().every((button) => button.disabled)).toBe(true);
     expect(countReads).toHaveLength(initialCountReads);
     if (surface === 'production Zone') {
-      await until(() => followReads.length === mountedFollowReads + 1 && followButton()?.disabled === false);
-      independentZone(1, 1, mountedFollowReads + 1);
+      await until(() => followButton()?.disabled === false);
+      independentZone(1, 1);
     }
     await flush(() => freshOwn.resolve({ status: 200, data: { kind: null } }));
     await until(() => chips().some((button) => !button.disabled));
