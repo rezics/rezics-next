@@ -3,6 +3,7 @@ import { createCurrentConsentReader } from '@rezics/auth/current-consent';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { createGrantCommands, GrantDeniedError } from '../../src/access/grant-commands.ts';
+import { resourceRoleCatalogue } from '../../src/access/resource-roles.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { readErasureStatus, resolveRetention } from '../../src/access/erasure.ts';
 import { createCommerceCommands } from '../../src/commerce/commands.ts';
@@ -18,6 +19,7 @@ import {
 import { createCommerceWork } from '../../src/commerce/enqueue.ts';
 import { createStripePort } from '../../src/commerce/stripe.ts';
 import { readBoard } from '../../src/content/reads.ts';
+import { readResource } from '../../src/content/reads.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { accessCheck } from '../../src/request/access.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
@@ -259,6 +261,47 @@ beforeAll(async () => {
             deadline: Date.now() + 30_000,
           })
         : null;
+      const boardRow = row
+        ? {
+            kind: 'board' as const,
+            id: row.board_id,
+            thread_id: null,
+            board_id: null,
+            parent_id: null,
+            author_id: null,
+            head_id: null,
+            first_post_id: null,
+            title: row.title,
+            visibility: row.visibility,
+            security_revision: row.security_revision,
+            availability: 'available' as const,
+            created_at: row.created_at,
+            revised_at: null,
+            licence: null,
+            subject_ids: null,
+            media_ids: null,
+            body: null,
+            sha256: null,
+            thread_kind: null,
+            board_purpose: row.purpose,
+            vote_citation: null,
+            realm_id: row.realm_id,
+            deleted_at: null,
+            restorable: false,
+            decision_id: null,
+          }
+        : null;
+      const boardAllowed = boardRow
+        ? await (
+            await accessCheck(
+              kernel.testAccess,
+              actor,
+              'board:read',
+              readResource(boardRow as unknown as Parameters<typeof readResource>[0], boardRow),
+              { pool, deadline: Date.now() + 30_000 },
+            )
+          )(pool)
+        : null;
       console.error(
         'Native board visibility diagnostic',
         JSON.stringify({
@@ -268,6 +311,8 @@ beforeAll(async () => {
           boardReadScope: actor.kind === 'account' && actor.scopes.includes('board:read'),
           subjectAllowed,
           row,
+          ownerActions: resourceRoleCatalogue(kernel.testAccess)?.roles.get('content.board.owner'),
+          boardAllowed,
           boardRead: board?.value ?? null,
         }),
       );
