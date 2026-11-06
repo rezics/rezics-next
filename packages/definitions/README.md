@@ -54,7 +54,7 @@ The published inventory in `catalogue/` gives every Type a portrait 5:7 cover fr
 including generic Types through Thing, book/edition/manga, anime/film/series/episode, game, album, recipe, quotation, person and
 character. Current `coverRatio` annotations agree with that list aspect. Explicit landscape/square configuration and
 any valid ratio remain supported by the schema. The compiled release version comes from `catalogue/rezics.yaml` and
-is immutable: 1.0.9 is current, while release 1.0.0 through 1.0.8 bytes and their digests remain loadable for existing pins. Book
+is immutable: 1.0.10 is current, while release 1.0.0 through 1.0.9 bytes and their digests remain loadable for existing pins. Book
 selects author/datePublished/wordCount; Movie selects director/datePublished/duration; Recipe selects
 cookTime/suitableForDiet; MusicAlbum selects datePublished/genre; MusicRelease selects datePublished/distribution format;
 MusicRecording selects duration/datePublished. These ordered factual hints, media dimensions,
@@ -663,6 +663,14 @@ Series membership is an adopted `wdt:P179` statement on the member creative work
 with its ordinal in `schema:position`. It is never a list membership. The shared
 catalogue adds a fixed set of terms; releases remain cached by digest, with no
 runtime path changes.
+
+A `schema:BookSeries` carries its own sourced identifier, publication date and summary,
+beside its name, alternate names, publisher, start and end dates, part count and link:
+`wdt:P5732` is the exact Bangumi subject identifier; `schema:datePublished` is the series'
+own publication or first-release date at the precision the source states, as for works;
+and `schema:abstract` is its summary, a Content-owned document with a language tag, whose
+body keeps Content's custody and disclosure rules. These statements describe the series
+itself. They add no series-only term, and a member's facts never stand in for them.
 
 The following list cites the vocabulary terms and Wikidata mappings used here.
 SKOS and FOAF terms cite their publishing vocabularies. New terms have labels in

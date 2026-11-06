@@ -74,8 +74,10 @@ test('series are catalogue profiles that members join by an ordered statement', 
   for (const type of ['schema:Book', 'bf:Instance']) expect(types[type]!.properties).toContain('wdt:P179');
   expect(bookSeries!.properties).toEqual(
     expect.arrayContaining([
+      'schema:abstract',
       'schema:alternateName',
       'schema:contributor',
+      'schema:datePublished',
       'schema:endDate',
       'schema:genre',
       'schema:keywords',
@@ -84,6 +86,7 @@ test('series are catalogue profiles that members join by an ordered statement', 
       'schema:startDate',
       'wdt:P1433',
       'wdt:P2635',
+      'wdt:P5732',
       'wdt:P973',
     ]),
   );
@@ -98,6 +101,30 @@ test('series are catalogue profiles that members join by an ordered statement', 
   expect(properties['schema:endDate']).toMatchObject({ datatype: 'time', mappings: ['wd:P582'] });
   expect(properties['wdt:P1433']).toMatchObject({ datatype: 'wikibase-item', mappings: ['wd:P1433'] });
   expect(properties['wdt:P973']).toMatchObject({ datatype: 'url', mappings: ['wd:P973'] });
+});
+
+test('a series carries its own Bangumi identifier, source-precision date and summary as shared terms', () => {
+  const { properties, types } = bundledRelease;
+  for (const term of ['wdt:P5732', 'schema:datePublished', 'schema:abstract']) {
+    expect(types['schema:BookSeries']!.properties).toContain(term);
+    expect(types['schema:Book']!.properties).toContain(term);
+  }
+  expect(properties['wdt:P5732']).toMatchObject({
+    datatype: 'external-id',
+    mappings: ['wd:P5732'],
+    multivalued: false,
+    value: { pattern: '^[1-9][0-9]*$' },
+  });
+  expect(properties['schema:datePublished']).toMatchObject({
+    datatype: 'time',
+    mappings: ['wd:P577'],
+    value: { properties: { precision: { enum: [9, 10, 11] } } },
+  });
+  expect(properties['schema:abstract']).toMatchObject({
+    datatype: 'document',
+    multivalued: true,
+    value: { required: ['language', 'document'] },
+  });
 });
 
 test('VNDB and Bangumi series fields are bundled or omitted with a reason', () => {
@@ -152,6 +179,9 @@ test('series terms carry labels in all eight UI locales', () => {
     'schema:endDate',
     'wdt:P2635',
     'wdt:P1433',
+    'wdt:P5732',
+    'schema:datePublished',
+    'schema:abstract',
     'wdt:P973',
   ]) {
     const term = bundledRelease.types[key] ?? bundledRelease.properties[key];
