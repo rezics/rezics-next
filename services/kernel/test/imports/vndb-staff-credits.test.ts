@@ -7,7 +7,6 @@ import { bundledDigest } from '@rezics/definitions/bundled';
 import {
   creditTypeConceptUri,
   creditTypeSchemeUri,
-  importVndbStaffCredits,
   readCreditTypeBindings,
 } from '../../../importer/src/vndb-staff-credits.ts';
 import { crossMediaAliases } from '../../../importer/src/cross-media-seed.ts';
@@ -15,6 +14,7 @@ import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { identitySupport } from './identity-fixture.ts';
 import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
+import { importVndbStaffCredits } from '../../../importer/src/selected-import.ts';
 
 const globalContext = GLOBAL_CONTEXT;
 

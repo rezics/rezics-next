@@ -1,5 +1,5 @@
 import { bundledDigest } from '@rezics/definitions/bundled';
-import { sourceDigest } from '../../../packages/conversion/src/support.ts';
+import { sourceDigest } from '@rezics/conversion/support';
 import type { SourceRecord } from '@rezics/conversion';
 import type {
   NativeIdentity,
@@ -12,14 +12,16 @@ import { vndbRecordUrl } from '@rezics/conversion/cross-media-entities';
 import type { Owner } from './record-bindings.ts';
 import {
   emptyCrossMediaPlan,
-  seedCrossMedia,
   type CrossMediaGap,
   type CrossMediaMember,
   type CrossMediaPlan,
   type CrossMediaPort,
   type CrossMediaReading,
-  type CrossMediaSeedResult,
   type CrossMediaTables,
+} from './showcase-contract.ts';
+import type {
+  seedCrossMedia,
+  CrossMediaSeedResult,
 } from './cross-media-seed.ts';
 import type { ImporterOptions } from './importer.ts';
 
@@ -453,6 +455,8 @@ export type VndbStaffCreditsResult = CrossMediaSeedResult & {
 
 /** Production operator: import admitted staff aliases and exact roles through the existing seed/importer caller. */
 export async function importVndbStaffCredits(input: {
+  seed: typeof seedCrossMedia;
+
   tables: CrossMediaTables;
   path: string;
   port: CrossMediaPort;
@@ -460,7 +464,7 @@ export async function importVndbStaffCredits(input: {
   destination?: { origin: string };
 }): Promise<VndbStaffCreditsResult> {
   const plan = await planVndbStaffCredits(input.tables);
-  const result = await seedCrossMedia(plan, input.path, input.port, input.destination, {
+  const result = await input.seed(plan, input.path, input.port, input.destination, {
     entitiesFirst: true,
     recordConcurrency: 1,
     vocabularyAdmission: staffCreditVocabularyAdmission(input.bindings, plan.staffCredits),

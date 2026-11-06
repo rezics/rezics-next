@@ -73,3 +73,27 @@ export class ConversionError extends Error {
     this.pointer = pointer;
   }
 }
+
+export type { ConversionContext } from './support.ts';
+export {
+  bangumiPublicTagScheme,
+  checkCoverIntent,
+  commandKey,
+  rememberAccepted,
+  reviewedReferenceKey,
+  safeSourceUrl,
+  sourceDigest,
+  sourceEnvelope,
+  sourceWebsiteUrl,
+  vndbPublicTagConceptUri,
+  vndbPublicTagScheme,
+  vndbPublicTagTaxonomy,
+  vndbReleaseMediumCodes,
+  vndbReleaseMediumConceptUri,
+  vndbReleaseMediumSchemeUri,
+  vndbReleaseMediumTaxonomy,
+  vndbReleasePlatformConceptUri,
+  vndbReleasePlatformSchemeUri,
+  vndbReleasePlatformTaxonomy,
+  type VndbPublicTagCategory,
+} from './support.ts';

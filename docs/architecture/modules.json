@@ -1134,6 +1134,7 @@
       "paths": ["packages/conversion/src/**"],
       "publicEntries": [
         "@rezics/conversion",
+        "@rezics/conversion/support",
         "@rezics/conversion/bangumi",
         "@rezics/conversion/bangumi-vocabulary",
         "@rezics/conversion/vndb",

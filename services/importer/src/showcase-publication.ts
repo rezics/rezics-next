@@ -7,24 +7,22 @@ import { showcaseTagParentSourceFence } from './showcase-cross-provider-tags.ts'
 import type { BatchCommand, BatchWriteRequest, BatchWriteResult, BatchStatement } from '@rezics/definitions/bulk';
 import { bundledDigest } from '@rezics/definitions/bundled';
 import type { ReviewedSubjectRead } from './import-client.ts';
-import { createImportTransport } from './import-client.ts';
 import type {
-  CrossMediaPlan,
-  CrossMediaPort,
   CrossMediaSeedResult,
   VndbWorkRelationOutcome,
 } from './cross-media-seed.ts';
 import {
-  buildShowcaseManifest,
   showcaseDigest,
   showcaseLimits,
   showcaseSourceMatches,
-  showcaseStatementMatches,
   showcaseVocabularyExternalId,
+  type CrossMediaPlan,
+  type CrossMediaPort,
   type ShowcaseAcknowledgement,
   type ShowcaseAssertion,
   type ShowcaseManifest,
   type ShowcaseRecord,
+  type ShowcaseReviewPort,
   type ShowcaseTagAssociation,
   type ShowcaseTagAssociationWithdrawal,
   type ShowcaseTagParentBinding,
@@ -32,6 +30,10 @@ import {
   type ShowcaseTagParentRefresh,
   type ShowcaseVocabularyRecord,
   type ShowcaseVocabularyRequirement,
+} from './showcase-contract.ts';
+import {
+  buildShowcaseManifest,
+  showcaseStatementMatches,
   showcaseMediaContext,
 } from './showcase-manifest.ts';
 import type { PublicBulkClient } from './public-bulk-client.ts';
@@ -45,7 +47,7 @@ import {
 } from '@rezics/conversion/cross-media-entities';
 import { createSelectedFamilySourceRegistration } from './source-registry.ts';
 import { subjectSlug } from '@rezics/definitions/slug';
-import { safeSourceUrl } from '../../../packages/conversion/src/support.ts';
+import { safeSourceUrl } from '@rezics/conversion/support';
 import type {
   BangumiCoverSource,
   BangumiCoverSourceJournal,
@@ -54,7 +56,7 @@ import type {
 } from './showcase-media.ts';
 import type { BangumiPersonSourceJournal } from './showcase-bangumi-people.ts';
 import { validAvailableCover } from './showcase-media.ts';
-import { vndbPublicTagConceptUri, vndbPublicTagScheme } from '../../../packages/conversion/src/support.ts';
+import { vndbPublicTagConceptUri, vndbPublicTagScheme } from '@rezics/conversion/support';
 import { vndbTagsRatingMetric, vndbPublicTagParentRevision } from '@rezics/conversion/vndb-vocabulary';
 import type {
   VndbTagRatingBinding,
@@ -62,12 +64,7 @@ import type {
   VndbTagRatingSnapshot,
 } from './showcase-vndb-tag-ratings.ts';
 
-type ImportTransport = ReturnType<typeof createImportTransport>;
-export type ShowcaseReviewPort = Pick<
-  ImportTransport,
-  'readReviewedSubject' | 'reviewedCandidates' | 'acceptReviewedCandidate' | 'adoptReviewedCandidates'
-> &
-  Partial<Pick<ImportTransport, 'fence'>>;
+export type { ShowcaseReviewPort };
 
 type JournalCommandRow = {
   command_key: string;

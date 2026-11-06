@@ -11,7 +11,7 @@ import {
   vndbReleaseMediumTaxonomy,
   vndbReleasePlatformSchemeUri,
   vndbReleasePlatformTaxonomy,
-} from '../../../packages/conversion/src/support.ts';
+} from '@rezics/conversion/support';
 import { planCrossMediaSeed, type CrossMediaPort, type CrossMediaTables } from '../src/cross-media-seed.ts';
 import {
   developmentStatusConceptUri,
@@ -24,11 +24,11 @@ import {
   groupsFromVndbReleaseBindings,
   prepareShowcaseVndbReleaseClassifications,
   sameShowcaseVndbReleaseClassifications,
-  seedShowcaseVndbReleases,
 } from '../src/showcase-vndb-releases.ts';
 import { captureShowcaseCommands, ShowcaseJournal } from '../src/showcase-publication.ts';
 import { planVndbReleasePlatforms } from '../src/vndb-release-platforms.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
+import { seedShowcaseVndbReleases } from '../src/selected-import.ts';
 
 type Row = Record<string, unknown>;
 

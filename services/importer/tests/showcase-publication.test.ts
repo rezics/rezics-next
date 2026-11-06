@@ -14,7 +14,7 @@ import {
 } from '../src/cross-media-seed.ts';
 import { createPublicBulkClient } from '../src/public-bulk-client.ts';
 import { buildShowcaseManifest, showcaseDigest } from '../src/showcase-manifest.ts';
-import { vndbPublicTagConceptUri, vndbPublicTagScheme } from '../../../packages/conversion/src/support.ts';
+import { vndbPublicTagConceptUri, vndbPublicTagScheme } from '@rezics/conversion/support';
 import {
   captureShowcaseCommands,
   publishShowcase,
@@ -22,8 +22,9 @@ import {
   type ShowcaseReviewPort,
 } from '../src/showcase-publication.ts';
 import { prepareShowcaseTags } from '../src/showcase-tags.ts';
-import { seedShowcaseVndbReleases } from '../src/showcase-vndb-releases.ts';
+
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
+import { seedShowcaseVndbReleases } from '../src/selected-import.ts';
 
 const globalContext = '00000000-0000-8000-8000-000000000000';
 

@@ -1,6 +1,6 @@
 import type { SourceRecord } from '@rezics/conversion';
 import { vndbLimits } from '@rezics/conversion/vndb';
-import { sourceDigest } from '../../../packages/conversion/src/support.ts';
+import { sourceDigest } from '@rezics/conversion/support';
 import { citedProviderBinding, type GraphEdgeDraft } from './cross-media-bindings.ts';
 
 type Row = Record<string, unknown>;

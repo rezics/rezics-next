@@ -16,12 +16,12 @@ import {
   type CrossMediaTables,
 } from '../src/cross-media-seed.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
+import { importVndbReleaseFidelity } from '../src/selected-import.ts';
 import {
   decodeVndbReleased,
   developmentStatusConceptUri,
   developmentStatusSchemeUri,
   developmentStatusTaxonomy,
-  importVndbReleaseFidelity,
   planVndbReleaseFidelity,
   readVndbReleaseBindings,
 } from '../src/vndb-release-fidelity.ts';

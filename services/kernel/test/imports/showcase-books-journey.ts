@@ -9,13 +9,14 @@ import { createAccountTokenProvider, IMPORTER_SCOPES } from '../../../importer/s
 import { createImportTransport } from '../../../importer/src/import-client.ts';
 import { createPublicBulkClient } from '../../../importer/src/public-bulk-client.ts';
 import { crossMediaAliases, type CrossMediaTables } from '../../../importer/src/cross-media-seed.ts';
-import { importShowcaseBooks, showcaseBooksToCrossMediaPlan } from '../../../importer/src/showcase-books.ts';
+import { showcaseBooksToCrossMediaPlan } from '../../../importer/src/showcase-books.ts';
 import {
   captureShowcaseCommands,
   publishShowcase,
   ShowcaseJournal,
 } from '../../../importer/src/showcase-publication.ts';
 import source from './showcase-books-source.json';
+import { importShowcaseBooks } from '../../../importer/src/selected-import.ts';
 
 const root = resolve(import.meta.dir, '../../../..');
 // Playwright is installed with the web app; only the calls this journey makes are typed here.

@@ -14,14 +14,17 @@ import {
 } from '@rezics/conversion/cross-media-entities';
 import type { NativeIdentity, SourceVocabularyBindings } from '@rezics/conversion/source-vocabulary';
 import { vndbCharacterBloodTypeSchemeUri, vndbCharacterBloodTypeTaxonomy } from '@rezics/conversion/vndb-vocabulary';
-import { commandKey, sourceDigest, sourceEnvelope } from '../../../packages/conversion/src/support.ts';
+import { commandKey, sourceDigest, sourceEnvelope } from '@rezics/conversion/support';
 import type { ImporterOptions } from './importer.ts';
-import type { CrossMediaPlan, CrossMediaPort } from './cross-media-seed.ts';
+import {
+  type CrossMediaPlan,
+  type CrossMediaPort,
+} from './showcase-contract.ts';
 import {
   showcaseDigest,
   showcaseVocabularyExternalId,
   type ShowcaseVocabularyRequirement,
-} from './showcase-manifest.ts';
+} from './showcase-contract.ts';
 import { captureShowcaseCommands, type ShowcaseJournal } from './showcase-publication.ts';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;

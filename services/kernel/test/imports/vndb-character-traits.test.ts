@@ -9,7 +9,6 @@ import {
   appearanceRoleSchemeUri,
   characterTraitConceptUri,
   characterTraitSchemeUri,
-  importVndbCharacterTraits,
   readVndbCharacterVocabularyBindings,
 } from '../../../importer/src/vndb-character-traits.ts';
 import { crossMediaAliases } from '../../../importer/src/cross-media-seed.ts';
@@ -17,6 +16,7 @@ import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { identitySupport } from './identity-fixture.ts';
 import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
+import { importVndbCharacterTraits } from '../../../importer/src/selected-import.ts';
 
 const globalContext = GLOBAL_CONTEXT;
 const authored = {

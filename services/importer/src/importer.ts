@@ -2,7 +2,7 @@ import type { Database } from 'bun:sqlite';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { validateSourceClassificationProjection, type SourceRecord } from '@rezics/conversion';
-import type { ConversionContext } from '../../../packages/conversion/src/support.ts';
+import type { ConversionContext } from '@rezics/conversion/support';
 import {
   FIELD_GROUPS,
   type BatchCommand,
