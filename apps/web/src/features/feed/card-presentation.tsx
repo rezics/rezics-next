@@ -136,6 +136,21 @@ export function FeedCardVisual({
         />
       </div>
     );
+  } else if ('card' in summary) {
+    // The installed Collection card supplies its own cover and owner-chosen presentation; nothing is looked up.
+    const cover = summary.card.cover;
+    const kind = summary.card.presentationKindSource === 'owner' ? summary.card.presentationKind : null;
+    visual = (
+      <div className="w-20 sm:w-24" data-collection-cover-source={summary.card.coverSource}>
+        <Cover
+          subject={{ id: summary.id, title, types: kind ? [kind] : [] }}
+          cover={cover ? { ...cover, variants: [...cover.variants] } : null}
+          size="fill"
+          src={coverSrc}
+          decorative
+        />
+      </div>
+    );
   } else return undefined;
   return href ? (
     <a href={href} aria-label={m.home_card_open({ title }, options)} className={feedCardLinkClassName}>

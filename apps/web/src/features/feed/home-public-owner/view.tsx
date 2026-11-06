@@ -2,10 +2,14 @@ import type { ReactNode } from 'react';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../../paraglide/messages.js';
 import type { Locale } from '../../../paraglide/runtime.js';
+import { collectionComparisonHref } from '../../../library/collection-comparison/model';
+import { CollectionPresentationSummary } from '../../../library/showcase-collection/presentation';
+import { accountHref } from '../../../subject/subject-href';
 import type { FeedItem } from '../../pages/home-feed-read';
 import { homeFeedDestination, homeFeedRealmDestination, homeFeedTitle } from '../../pages/home-feed-destination';
 
 type SpaceSummary = Extract<FeedItem['summary'], { address: string }>;
+type CollectionCard = Extract<FeedItem['summary'], { card: unknown }>['card'];
 
 function HomeSpaceCarrierContext({ item, summary, locale }: { item: FeedItem; summary: SpaceSummary; locale: string }) {
   const options = { locale: locale as Locale };
@@ -50,12 +54,116 @@ function HomeSpaceCarrierContext({ item, summary, locale }: { item: FeedItem; su
   );
 }
 
+/** Only a same-application `/@handle` curator destination becomes a link; anything else stays text. */
+function curatorHref(locale: string, destination: string | null): string | undefined {
+  const handle = destination?.startsWith('/@') ? destination.slice(2) : undefined;
+  return handle && /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(handle) ? accountHref(locale, handle) : undefined;
+}
+
+/** Native curator facts: an available curator names itself, and unavailable reasons stay unlabelled. */
+function HomeCollectionCurator({ curator, locale }: { curator: CollectionCard['curator']; locale: string }) {
+  const options = { locale: locale as Locale };
+  if (curator.state !== 'available')
+    return (
+      <p
+        className="text-muted-foreground"
+        data-home-curator-state="unavailable"
+        data-home-curator-reason={curator.reason}
+      >
+        {m.discovery_collection_curator_unavailable({}, options)}
+      </p>
+    );
+  const label = curator.label || m.discovery_unnamed_account({}, options);
+  const href = curatorHref(locale, curator.destination);
+  return (
+    <p className="text-muted-foreground" data-home-curator-state="available">
+      {m.discovery_collection_curator({}, options)}{' '}
+      {href ? (
+        <a href={href} className="inline-flex min-h-11 items-center text-primary underline underline-offset-4">
+          <bdi>{label}</bdi>
+        </a>
+      ) : (
+        <bdi>{label}</bdi>
+      )}
+    </p>
+  );
+}
+
+/** The admitted preview members link to their exact occurrence; empty, withheld and unavailable stay distinct. */
+function HomeCollectionPreview({
+  preview,
+  locale,
+  href,
+}: {
+  preview: CollectionCard['preview'];
+  locale: string;
+  href: string;
+}) {
+  const options = { locale: locale as Locale };
+  if (preview.state !== 'available')
+    return (
+      <p className="text-sm text-muted-foreground" data-home-collection-preview={preview.state}>
+        {preview.state === 'empty'
+          ? m.discovery_collection_empty({}, options)
+          : preview.state === 'withheld'
+            ? m.discovery_collection_withheld({}, options)
+            : m.discovery_collection_preview_unavailable({}, options)}
+      </p>
+    );
+  return (
+    <div className="space-y-2 rounded-lg bg-muted/40 p-3" data-home-collection-preview="available">
+      <p className="text-sm font-medium">{m.discovery_collection_preview({}, options)}</p>
+      <ul className="space-y-1" aria-label={m.discovery_collection_preview({}, options)}>
+        {preview.members.map((member) => {
+          const label = member.subject.label?.value ?? '';
+          return (
+            <li key={member.id} data-collection-member-id={member.id} className="min-w-0">
+              <a
+                lang={member.subject.label?.language}
+                href={collectionComparisonHref(member.subject.id, label, locale, href, member.id)}
+                className="inline-flex min-h-11 max-w-full items-center text-primary underline underline-offset-4 [overflow-wrap:anywhere]"
+              >
+                <bdi>{label || m.subject_value_unlabelled({}, options)}</bdi>
+              </a>
+            </li>
+          );
+        })}
+      </ul>
+      {preview.partial ? (
+        <p className="text-sm text-muted-foreground">{m.discovery_collection_partial({}, options)}</p>
+      ) : null}
+      {preview.truncated ? (
+        <p className="text-sm text-muted-foreground">{m.discovery_collection_truncated({}, options)}</p>
+      ) : null}
+    </div>
+  );
+}
+
+/** Reuses Library's public presentation and preview vocabulary for the installed Collection card. */
+function HomeCollectionContext({ card, locale, href }: { card: CollectionCard; locale: string; href: string }) {
+  const options = { locale: locale as Locale };
+  const kind = card.presentationKindSource === 'owner' ? card.presentationKind : null;
+  return (
+    <div className="min-w-0 space-y-2">
+      <HomeCollectionCurator curator={card.curator} locale={locale} />
+      {card.membershipKind === 'curated' ? (
+        <p className="text-sm text-muted-foreground">
+          {m.library_collection_item_count({ count: card.memberCount }, options)}
+        </p>
+      ) : null}
+      <CollectionPresentationSummary kind={kind} dynamic={card.membershipKind === 'dynamic'} locale={locale} />
+      <HomeCollectionPreview preview={card.preview} locale={locale} href={href} />
+    </div>
+  );
+}
+
 /** Only native page summaries: no target hydration, membership inference or private cache. */
 export function HomePublicOwnerContext({ item, locale }: { item: FeedItem; locale: string }) {
   const kind = item.destination.kind;
   if (kind !== 'collection' && kind !== 'space') return null;
   const options = { locale: locale as Locale };
-  if (!homeFeedDestination(item, locale)) return <p role="status">{m.home_owner_context_unavailable({}, options)}</p>;
+  const href = homeFeedDestination(item, locale);
+  if (!href) return <p role="status">{m.home_owner_context_unavailable({}, options)}</p>;
   const summary = item.summary;
   const description =
     kind === 'collection' && 'description' in summary
@@ -82,7 +190,12 @@ export function HomePublicOwnerContext({ item, locale }: { item: FeedItem; local
         </p>
       ) : null}
       {kind === 'collection' ? (
-        <p className="text-muted-foreground">{m.home_owner_curator_unavailable({}, options)}</p>
+        // Following Collection rows supply no curator or preview facts, so their curator stays unavailable.
+        'card' in summary ? (
+          <HomeCollectionContext card={summary.card} locale={locale} href={href} />
+        ) : (
+          <p className="text-muted-foreground">{m.home_owner_curator_unavailable({}, options)}</p>
+        )
       ) : 'address' in summary ? (
         <HomeSpaceCarrierContext item={item} summary={summary} locale={locale} />
       ) : null}
