@@ -86,9 +86,9 @@ test('selected Bangumi Game date is independently adopted, read at source precis
         { origin: runtime.origin },
         { providers: ['bangumi'] },
       );
-      const created = journal.acknowledgedCommands().find(
-        (entry) => entry.command.op === 'create' && entry.command.source.external_id === String(gameId),
-      );
+      const created = journal
+        .acknowledgedCommands()
+        .find((entry) => entry.command.op === 'create' && entry.command.source.external_id === String(gameId));
       const id = created?.subjectId;
       if (!id) throw new Error('Selected Bangumi Game has no acknowledged native identity');
       if (!result.readings.some((reading) => reading.externalId === String(gameId))) {
