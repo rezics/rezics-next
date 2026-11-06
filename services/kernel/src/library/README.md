@@ -133,8 +133,8 @@ without a bound Access adapter is unbound and also defers; an explicit deny stil
 before the owner transaction and does not admit a session id as a Collection.
 
 Architecture counters for this composition are recorded with the architecture check in
-[docs/architecture/README.md](../../../../docs/architecture/README.md); the Library rule 2/3 and cycle figures there
-are measured against base `a311990286`.
+[docs/architecture/README.md](../../../../docs/architecture/README.md); the Library rule 2/3, edge and cycle figures there
+are measured against integrated base `a0c2a25650`.
 
 ## Scope and implementation boundary
 

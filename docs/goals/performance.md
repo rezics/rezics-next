@@ -122,6 +122,11 @@ Journal date preparation stays before the owner transaction. Fewest tests: one d
 unbound deferral and catalogue/owner filter leaves; existing native identity and growth cases keep unchanged assertions. The split adds no query or extra statement; identity-native cost stays the
 existing producer declarations composed through `identityNative`.
 
+Decision: Library Source, member, owner-query, publication, presentation and Entry/progress admission are composed applications over
+typed capabilities; `composeLibraryDomain` installs the native adapters in ordinary composition. Against base `a0c2a25650` the
+architecture audit falls from 853 to 780 errors, the boundary baseline from 7,437 to 7,085 entries and Kernel value-cycle files
+from 345 to 323; the Library core and application load no foreign implementation.
+
 ## Kernel Access domain inversion
 
 Decision: Compact causal tests pin Access allow/deny, identity recovery with the original actor/request/deadline, and
