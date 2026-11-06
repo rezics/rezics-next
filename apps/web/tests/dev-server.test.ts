@@ -251,6 +251,30 @@ test('first-response and warm-up budgets start at the ready line, after a slow p
   await server.stop();
 }, 60_000);
 
+test('a focused serial slot starts the next helper only after the first stop', async () => {
+  const first = await startDevServer({ ...fake(), warmUpPaths: [], serial: true });
+  let secondStarted = false;
+  const second = startDevServer({ ...fake(), warmUpPaths: [], serial: true }).then((server) => {
+    secondStarted = true;
+    return server;
+  });
+  await Bun.sleep(80);
+  expect(secondStarted).toBe(false);
+  await first.stop();
+  const running = await second;
+  expect(secondStarted).toBe(true);
+  await running.stop();
+}, 60_000);
+
+test('signed-in-routes uses the shared starter for ready and /en', async () => {
+  const source = await Bun.file(join(import.meta.dir, 'signed-in-routes.test.ts')).text();
+  expect(source).toMatch(/import\s*\{[^}]*startDevServer[^}]*\}\s*from\s*['"]\.\/support\/dev-server\.ts['"]/);
+  expect(source).toContain('startDevServer(');
+  expect(source).toContain("firstPath: '/en'");
+  expect(source).toMatch(/warmUpPaths:\s*\[\]/);
+  expect(source).not.toMatch(/\bspawn\(/);
+});
+
 test('hydration and search SEO use the shared starter and preserve their startup settings and page assertions', async () => {
   for (const name of ['hydration', 'search-seo']) {
     const source = await Bun.file(join(import.meta.dir, `${name}.test.ts`)).text();

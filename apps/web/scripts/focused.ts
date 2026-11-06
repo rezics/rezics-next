@@ -23,6 +23,14 @@ export function admitExplicitHostTestCommand(command: string[]): string[] {
   return ['bun', 'test', '--path-ignore-patterns=node_modules/**', ...command.slice(2)];
 }
 
+/** One Worker graph at a time in a focused 6 GiB slot: Copies and signed-in-routes both start Vite. */
+export function admitSerialBunTestCommand(command: string[]): string[] {
+  if (command[0] !== 'bun' || command[1] !== 'test') return command;
+  if (command.some((argument) => argument === '--max-concurrency' || argument.startsWith('--max-concurrency=')))
+    return command;
+  return ['bun', 'test', '--max-concurrency=1', ...command.slice(2)];
+}
+
 export type FocusedRunnerOptions = {
   appDirectory?: string;
   env?: NodeJS.ProcessEnv;
@@ -121,12 +129,13 @@ export async function runFocusedCommand(command: string[], options: FocusedRunne
     { ...process.env, ...options.env },
   );
   if (routed !== null) return routed;
-  const admitted = admitExplicitHostTestCommand(command);
+  const admitted = admitSerialBunTestCommand(admitExplicitHostTestCommand(command));
   const stateDirectory = mkdtempSync(join(tmpdir(), 'rezics-web-focused-'));
   const childEnvironment: NodeJS.ProcessEnv = {
     ...process.env,
     ...options.env,
     REZICS_TEST_RUNTIME: '1',
+    REZICS_WEB_SERIAL_VITE: '1',
     WEB_TEST_STATE_DIR: stateDirectory,
   };
   const invocation = options.privateNetwork
