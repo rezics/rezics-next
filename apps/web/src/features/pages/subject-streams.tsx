@@ -3,13 +3,15 @@ import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { cn } from '@rezics/ui/utils';
 import { useLocation } from '@tanstack/react-router';
 import { m } from '../../paraglide/messages.js';
-import type { RelationDefinition } from '../../subject/relations';
 import type { PageDocument } from './render';
 
 export type SubjectStreams = {
   entries: { node: string; property: string; direction: 'forward' | 'inverse' }[];
   selected?: string;
 };
+
+/** The only relation labels a stream entry reads; the Subject's relation definitions satisfy this shape. */
+type StreamRelation = { label: string; forwardLabel?: string };
 
 /** Keep the original document for planning. Only its selected stream participates in rendering. */
 export function selectedStreamDocument(document: PageDocument, streams: SubjectStreams | undefined): PageDocument {
@@ -44,7 +46,7 @@ export function SubjectStreamDirectory({
   streams: SubjectStreams | undefined;
   document: PageDocument;
   locale: string;
-  relations?: Record<string, RelationDefinition> | undefined;
+  relations?: Record<string, StreamRelation> | undefined;
 }) {
   const location = useLocation();
   if (!streams || streams.entries.length < 2) return null;
