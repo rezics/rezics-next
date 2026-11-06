@@ -283,6 +283,7 @@ async function openDriver(): Promise<AccountLifecycleDriver> {
     });
     service = await createAuthService({
       database: authDb(),
+      clock,
       issuer,
       audience,
       secret,
