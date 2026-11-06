@@ -49,9 +49,6 @@ export default defineConfig((context) => {
       ...(nativeWebTls ? { https: { cert: nativeWebCertificate!, key: nativeWebKey! } } : {}),
       // Shared dependency stores can resolve package files outside the checkout's lexical node_modules path.
       fs: { allow: [workspaceRoot, dependencyRoot, ...fontDependencyRoots] },
-      warmup: {
-        ssrFiles: ['src/server.ts', 'src/session/routes.ts', 'src/session/website-scopes.ts'],
-      },
     },
     ...(process.env.REZICS_WALK_STACK_SLOT
       ? { cacheDir: resolve(workspaceRoot, '.temp/web-vite', process.env.REZICS_WALK_STACK_SLOT) }
