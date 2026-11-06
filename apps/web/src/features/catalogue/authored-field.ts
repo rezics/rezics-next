@@ -20,9 +20,16 @@ import {
 } from '../../subject/candidates';
 import { originalLanguage } from '../../subject/language';
 import { bestRank, isRecord } from '../pages/shared';
-import { synopsisVisit } from '../pages/subject-summary-reading/visit';
-import { synopsisChoices, synopsisReturnMatches, SUMMARY_PROPERTY } from '../pages/subject-summary-reading/model';
 import { readCorrectionActions, type ProposalResult, type StatementInput } from './statement-editor';
+import { authoredProperties } from './authored-properties';
+import {
+  authoredInspectionKind,
+  inspectSelectedSynopsisVisit,
+  inspectSelectedSynopsisRead,
+  selectedSynopsisStatement,
+} from './subject-editor';
+
+export { authoredProperties } from './authored-properties';
 
 // The native proposal schema accepts a generic statement; reuse the shared definition input for its parts.
 export type AuthoredStatement = StatementInput;
@@ -63,10 +70,6 @@ export type AuthoredTransport = {
     work?: CandidateWork,
   ) => Promise<AuthoredReview>;
 };
-
-export function authoredProperties(release: Release, type: string): string[] {
-  return (release.types[type]?.properties ?? []).filter((id) => release.properties[id]?.datatype === 'document');
-}
 
 /** A new authored work has its own licence and evidence; the current work is never used as an editable draft. */
 export function authoredStatement(
@@ -170,19 +173,24 @@ export async function readAuthoredField(
   locale: string,
   authorization?: string,
 ): Promise<AuthoredRead> {
-  const visit = synopsisVisit(address.via, address.id, locale);
-  if (visit.kind === 'invalid') return { ok: false, reason: 'invalid', inspection: 'invalid' };
-  const inspection = visit.kind === 'selected' ? visit.selection : undefined;
-  if (inspection && (inspection.realm || inspection.context !== candidateContext))
-    return { ok: false, reason: 'invalid', inspection: 'unsupported' };
-  if (inspection && address.property !== SUMMARY_PROPERTY)
-    return { ok: false, reason: 'invalid', inspection: 'invalid' };
+  const admitted = inspectSelectedSynopsisVisit(address.via, address.id, locale, address.property);
+  if (admitted.kind === 'invalid' || admitted.kind === 'unsupported')
+    return { ok: false, reason: 'invalid', inspection: admitted.kind };
+  const inspection = admitted.kind === 'selected' ? admitted.selection : undefined;
   try {
     // These reads are independent. Public selection never borrows the editor's bearer.
     const [current, active] = await Promise.all([
-      client
-        .subjects({ id: address.id })
-        .get(address.session ? { headers: { 'rezics-session-token': address.session } } : undefined),
+      client.subjects({ id: address.id }).get(
+        admitted.kind === 'selected'
+          ? {
+              query: { language: locale, selectedSynopsis: admitted.query },
+              ...(address.session ? { headers: { 'rezics-session-token': address.session } } : {}),
+              fetch: { redirect: 'manual', cache: 'no-store' },
+            }
+          : address.session
+            ? { headers: { 'rezics-session-token': address.session } }
+            : undefined,
+      ),
       client.definitions.active.get(),
     ]);
     if (current.status !== 200 || !current.data) return candidateFailure(current.status);
@@ -214,18 +222,16 @@ export async function readAuthoredField(
           statement.value.content.language === language,
       ) ?? null;
     if (inspection) {
-      const choices = synopsisChoices(current.data.subject, locale);
-      const exact =
-        choices.kind === 'ready'
-          ? choices.choices.find((choice) => synopsisReturnMatches(choice, inspection))
-          : undefined;
+      const exact = inspectSelectedSynopsisRead(inspection, current.data.selectedSynopsis);
+      const kind = authoredInspectionKind(exact);
+      if (kind) return { ok: false, reason: 'stale', inspection: kind };
+      statement = selectedSynopsisStatement(current.data, exact) ?? null;
       if (
-        !exact ||
+        !statement ||
         (inspection.release !== undefined && inspection.release !== active.data.digest) ||
         (inspection.source !== undefined && inspection.source !== String(Reflect.get(current.data.subject, 'revision')))
       )
         return { ok: false, reason: 'stale', inspection: 'changed' };
-      statement = exact.statement as Statement;
     }
     const session = new Headers(current.headers).get('rezics-session-token') ?? address.session;
     const [body, actions] = await Promise.all([
@@ -292,12 +298,8 @@ export async function readAuthoredReview(
   address: AuthoredAddress & { property: string; candidate: string; cursor?: string },
   locale: string,
 ): Promise<AuthoredReview> {
-  const visit = synopsisVisit(address.via, address.id, locale);
-  if (
-    visit.kind === 'invalid' ||
-    (visit.kind === 'selected' &&
-      (visit.selection.realm || visit.selection.context !== candidateContext || address.property !== SUMMARY_PROPERTY))
-  )
+  const admitted = inspectSelectedSynopsisVisit(address.via, address.id, locale, address.property);
+  if (admitted.kind === 'invalid' || admitted.kind === 'unsupported')
     return { comparison: candidateFailure(400), body: null };
   const [comparison, form] = await Promise.all([
     readCandidates(client, authorization, address.id, address.property, address.cursor, undefined, address.session),

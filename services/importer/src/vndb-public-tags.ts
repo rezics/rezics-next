@@ -11,22 +11,21 @@ import {
   vndbPublicTagScheme,
   vndbPublicTagTaxonomy,
   type VndbPublicTagCategory,
-} from '../../../packages/conversion/src/support.ts';
+} from '@rezics/conversion/support';
 import { converter_revision as entityRevision } from '@rezics/conversion/cross-media-entities';
 import { vndbTagsRatingEndpoint, vndbVocabularyRevision } from '@rezics/conversion/vndb-vocabulary';
 import { ImportTransportError } from './import-client.ts';
 import type { Owner } from './record-bindings.ts';
 import {
   emptyCrossMediaPlan,
-  seedCrossMedia,
   type CrossMediaGap,
   type CrossMediaMember,
   type CrossMediaPlan,
   type CrossMediaPort,
   type CrossMediaReading,
-  type CrossMediaSeedResult,
   type CrossMediaTables,
-} from './cross-media-seed.ts';
+} from './showcase-contract.ts';
+import type { seedCrossMedia, CrossMediaSeedResult } from './cross-media-seed.ts';
 import type { ImporterOptions } from './importer.ts';
 import type { VndbTagRatingSnapshot } from './showcase-vndb-tag-ratings.ts';
 import {
@@ -379,6 +378,8 @@ export type VndbPublicTagsResult = CrossMediaSeedResult & {
 
 /** Production operator: import admitted VNDB public tag associations through the existing seed/importer caller. */
 export async function importVndbPublicTags(input: {
+  seed: typeof seedCrossMedia;
+
   tables: CrossMediaTables;
   path: string;
   port: CrossMediaPort;
@@ -389,7 +390,7 @@ export async function importVndbPublicTags(input: {
 }): Promise<VndbPublicTagsResult> {
   const plan = await planVndbPublicTags(input.tables);
   const admitted = [...(input.admitted ?? plan.admitted)];
-  const result = await seedCrossMedia(plan, input.path, input.port, input.destination, {
+  const result = await input.seed(plan, input.path, input.port, input.destination, {
     vocabularyAdmission: vndbPublicTagVocabularyAdmission(input.bindings, admitted, input.ratings),
     providers: ['vndb'],
   });

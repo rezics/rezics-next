@@ -8,7 +8,6 @@ import {
   developmentStatusConceptUri,
   developmentStatusSchemeUri,
   developmentStatusTaxonomy,
-  importVndbReleaseFidelity,
   readVndbReleaseBindings,
 } from '../../../importer/src/vndb-release-fidelity.ts';
 import { CrossMediaDumpFiles, crossMediaAliases } from '../../../importer/src/cross-media-seed.ts';
@@ -16,6 +15,7 @@ import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { identitySupport } from './identity-fixture.ts';
 import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
+import { importVndbReleaseFidelity } from '../../../importer/src/selected-import.ts';
 
 const globalContext = GLOBAL_CONTEXT;
 

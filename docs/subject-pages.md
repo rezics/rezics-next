@@ -861,11 +861,13 @@ The overview's Sources entry also opens `/subjects/{id}/{slug}/sources`, a compa
 Composition view template. It uses the ordinary anonymous `GET /v1/subjects/{id}` with the existing language chain,
 current disclosure and one-hop merge handling. Stale identities redirect to the current subject and retain the
 query and fragment. Missing and hidden subjects use the same concealed not-found state. Denied, invalid, changed
-selection and unavailable responses remain failures; retry reads the same address again.
+selection and unavailable responses remain failures; retry reads the same address again. Unsupported and concealed-missing
+responses offer no Retry.
 Only an explicit keyboard Sources retry from the focused Retry button keeps focus on that surviving control or
 moves it to the current Sources heading when the control disappears; pointer retry performs the same read quietly.
 Decision: use the focused Retry click's zero detail to admit keyboard intent; moving away and back, Tab, window blur,
-navigation, locale or Context-reader changes retire that intent, and pending retries issue only one read.
+a later pointer press, navigation, locale or Context-reader changes retire that intent, and pending retries issue only
+one read.
 
 The page groups the currently disclosed selected facts by field, using emitted property labels and released Type
 labels with the existing locale fallback. It follows the overview's selected rank, summary-language and safe spoiler
@@ -2722,7 +2724,7 @@ Summary Retry owns an AbortSignal. Reader/session, Subject, Context/Realm, relea
 
 ### Exact selected-synopsis Sources contract
 
-Decision: the optional `selectedSynopsis` query on the existing Subject operation compares the original locator through Content admission and a final Semantic selected-slot pass. Its closed result is `matched` with one redacted fact, Context and release, or `changed`, `missing`, `unsupported`, or `unavailable`. Sources carries the original validated synopsis return intent through its loader and current-session refresh; deliberate general Sources visits remain independent. The native projection and mounted consumer use this contract together; integration acceptance verifies their combined behavior.
+Decision: the optional `selectedSynopsis` query on the existing Subject operation compares the original locator through Content admission and a final Semantic selected-slot pass. Its closed result is `matched` with one redacted fact, Context and release, or `changed`, `missing`, `unsupported`, or `unavailable`. Sources carries the original validated synopsis return intent through its loader and current-session refresh; the authored correction inspects the same query and creates no draft. Deliberate general Sources visits remain independent. The native projection and mounted consumer use this contract together; integration acceptance verifies their combined behavior.
 
 Decision: unsupported exact Context/Realm visits stop before Global resolution (native HTTP 409; the Web reader names the unsupported scope). Each mounted request owns a new attempt identity, including A/B/A refreshes. Active term-head and bounded slot probes preserve original support; the existing 256-related-target refusal now precedes Access preparation. The date story fixture supplies its Gregorian calendar explicitly, preserving the existing publication-date assertion. Broader native/browser acceptance runs after integration.
 

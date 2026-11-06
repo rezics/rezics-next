@@ -10,7 +10,7 @@ import {
 import { mapBangumiVocabulary, bangumiVocabularyRevision } from '@rezics/conversion/bangumi-vocabulary';
 import { mapVndbVocabulary, vndbVocabularyRevision } from '@rezics/conversion/vndb-vocabulary';
 import type { SourceVocabularyGap, SourceVocabularyRequest } from '@rezics/conversion';
-import { commandKey, sourceDigest, sourceEnvelope } from '../../../packages/conversion/src/support.ts';
+import { commandKey, sourceDigest, sourceEnvelope } from '@rezics/conversion/support';
 import {
   bangumiRecordUrl,
   converter_revision as entityRevision,

@@ -6,8 +6,8 @@ import {
   vndbPublicTagTaxonomy,
   type VndbPublicTagCategory,
 } from '@rezics/conversion/vndb-vocabulary';
-import type { CrossMediaGap } from './cross-media-seed.ts';
-import type { ShowcaseTagParentBinding } from './showcase-manifest.ts';
+import { type CrossMediaGap } from './showcase-contract.ts';
+import { type ShowcaseTagParentBinding } from './showcase-contract.ts';
 import type { ShowcaseTagSourceParent } from './showcase-tags.ts';
 
 export { vndbPublicTagParentCommand as showcaseTagParentCommand } from '@rezics/conversion/vndb-vocabulary';

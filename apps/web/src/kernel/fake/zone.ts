@@ -1,6 +1,14 @@
 import type { KernelRecording } from '../fake.ts';
 import type { FakeRoute } from '../fake-modules.ts';
 import {
+  composedZoneAlicePrivateFake as composedAlice,
+  composedZoneCollectionFake as composedCollection,
+  composedZoneEditorFake as composedEditor,
+  composedZoneEmptyFake as composedEmpty,
+  composedZoneMembersFake as composedMembers,
+  composedZonePrivateMountFake as composedPrivate,
+  composedZoneSparseFake as composedSparse,
+  composedZoneWithheldFake as composedWithheld,
   staticZoneGuideFake as staticGuide,
   staticZoneHomeFake as staticHome,
   staticZoneOwnerFake as staticOwnerHome,
@@ -21,12 +29,34 @@ const subjectId = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e01';
 const recordedSubjectId = recordedSubject.subject.id;
 const staticZoneId = staticHome.zone.id;
 const staticOwnerZoneId = staticOwnerHome.zone.id;
+const composedZoneId = composedMembers.zone.id;
+const composedPrivateZoneId = composedPrivate.zone.id;
+const composedSparseZoneId = composedSparse.zone.id;
+const composedEmptyZoneId = composedEmpty.zone.id;
+const composedCollectionZoneId = composedCollection.zone.id;
+const composedWithheldZoneId = composedWithheld.zone.id;
+const composedAliceZoneId = composedAlice.zone.id;
+const composedEditorZoneId = composedEditor.zone.id;
 const recoveringReads = new Map<string, number>();
 
 type ZoneTarget = { route: string };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function admittedZoneSubject(home: KernelRecording, subject: string): boolean {
+  if (subject === subjectId) return true;
+  if (!isRecord(home.reads)) return false;
+  return Object.values(home.reads).some((read) => {
+    if (!isRecord(read) || !isRecord(read.body)) return false;
+    const subjects = read.body.subjects;
+    const members = read.body.members;
+    return (
+      (Array.isArray(subjects) && subjects.some((row) => isRecord(row) && row.id === subject)) ||
+      (Array.isArray(members) && members.some((row) => isRecord(row) && row.subjectId === subject))
+    );
+  });
 }
 
 function homeDocument() {
@@ -74,12 +104,6 @@ function typeListReads(id: string, labels: Record<string, string>) {
       },
     },
   };
-}
-
-function admittedSubject(zone: string, subject: string): boolean {
-  if (zone === hiddenZoneId || zone === unavailableZoneId || zone === withinBudgetZoneId) return false;
-  if (zone === preparingZoneId || zone === recoveringZoneId || zone === revokedZoneId) return false;
-  return subject === subjectId || subject === recordedSubjectId;
 }
 
 function guideDocument() {
@@ -147,6 +171,7 @@ async function response(request: Request, match: RegExpExecArray | null): Promis
   if (id === unavailableZoneId) return problem(503, { 'cache-control': 'no-store', 'retry-after': '1' });
 
   const url = new URL(request.url);
+  const cursor = url.searchParams.get('cursor');
   let body: unknown;
   try {
     body = await request.json();
@@ -156,9 +181,22 @@ async function response(request: Request, match: RegExpExecArray | null): Promis
   const target = isRecord(body) ? body.target : undefined;
   if (!isRecord(target)) return { status: 400, code: 'invalid_request' };
   if (typeof target.subject === 'string') {
-    if (!admittedSubject(id, target.subject)) return problem(404, { 'cache-control': 'no-store' });
-    const home = id === staticZoneId ? staticHome : zoneResponse(id, { route: '' });
-    if (!isRecord(home.zone)) return problem(404, { 'cache-control': 'no-store' });
+    if (target.view !== undefined && target.view !== 'overview' && target.view !== 'details')
+      return problem(404, { 'cache-control': 'no-store' });
+    const requestedLanguages = isRecord(body) ? body.languages : undefined;
+    const home = await response(
+      new Request(request.url, {
+        method: 'POST',
+        headers: request.headers,
+        body: JSON.stringify({
+          target: { route: '' },
+          ...(Array.isArray(requestedLanguages) ? { languages: requestedLanguages } : {}),
+        }),
+      }),
+      match,
+    );
+    if (!home || home.status !== 200 || !('zone' in home) || !admittedZoneSubject(home, target.subject))
+      return problem(404, { 'cache-control': 'no-store' });
     return {
       ...subjectPage,
       status: 200,
@@ -168,6 +206,20 @@ async function response(request: Request, match: RegExpExecArray | null): Promis
     };
   }
   if (typeof target.route !== 'string') return problem(404, { 'cache-control': 'no-store' });
+  const actor = request.headers.get('authorization');
+  if (actor === 'Bearer suspended')
+    return {
+      status: 401,
+      type: 'https://rezics.com/problems/invalid_credentials',
+      title: 'Unauthorized',
+      code: 'invalid_credentials',
+      headers: { 'www-authenticate': 'Bearer error="invalid_token"', 'cache-control': 'no-store' },
+    };
+  if (
+    actor === 'Bearer banned' &&
+    (id === composedPrivateZoneId || id === composedAliceZoneId || id === staticOwnerZoneId)
+  )
+    return problem(404, { 'cache-control': 'no-store' });
   if (id === staticOwnerZoneId)
     return request.headers.has('authorization') && target.route === ''
       ? { status: 200, ...staticOwnerHome }
@@ -176,7 +228,31 @@ async function response(request: Request, match: RegExpExecArray | null): Promis
     const recording = target.route === '' ? staticHome : target.route === 'guide' ? staticGuide : undefined;
     return recording ? { status: 200, ...recording } : problem(404, { 'cache-control': 'no-store' });
   }
-  const cursor = url.searchParams.get('cursor');
+  if (id === composedZoneId) {
+    if (target.route !== '') return problem(404, { 'cache-control': 'no-store' });
+    if (cursor === 'stale-source') return { status: 409, code: 'stale_cursor' };
+    return { status: 200, ...composedMembers };
+  }
+  if (id === composedPrivateZoneId)
+    return (actor === 'Bearer owner' || actor === 'Bearer alice') && target.route === ''
+      ? { status: 200, ...composedPrivate }
+      : problem(404, { 'cache-control': 'no-store' });
+  if (id === composedAliceZoneId)
+    return actor === 'Bearer alice' && target.route === ''
+      ? { status: 200, ...composedAlice }
+      : problem(404, { 'cache-control': 'no-store' });
+  if (id === composedEditorZoneId)
+    return (actor === 'Bearer editor' || actor === 'Bearer alice' || actor === null) && target.route === ''
+      ? { status: 200, ...composedEditor }
+      : problem(404, { 'cache-control': 'no-store' });
+  if (id === composedWithheldZoneId)
+    return target.route === '' ? { status: 200, ...composedWithheld } : problem(404, { 'cache-control': 'no-store' });
+  if (id === composedSparseZoneId)
+    return target.route === '' ? { status: 200, ...composedSparse } : problem(404, { 'cache-control': 'no-store' });
+  if (id === composedEmptyZoneId)
+    return target.route === '' ? { status: 200, ...composedEmpty } : problem(404, { 'cache-control': 'no-store' });
+  if (id === composedCollectionZoneId)
+    return target.route === '' ? { status: 200, ...composedCollection } : problem(404, { 'cache-control': 'no-store' });
   if (id === recoveringZoneId) {
     const count = recoveringReads.get(id) ?? 0;
     recoveringReads.set(id, count + 1);

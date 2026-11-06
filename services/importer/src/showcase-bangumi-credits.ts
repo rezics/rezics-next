@@ -12,11 +12,12 @@ import type {
   SourceVocabularyBindings,
 } from '@rezics/conversion/source-vocabulary';
 import { converter_revision as entityRevision } from '@rezics/conversion/cross-media-entities';
-import { commandKey, sourceDigest, sourceEnvelope } from '../../../packages/conversion/src/support.ts';
+import { commandKey, sourceDigest, sourceEnvelope } from '@rezics/conversion/support';
 import type { SourceRecord } from '@rezics/conversion';
 import type { ReviewedSubjectRead } from './import-client.ts';
 import type { BangumiCreatorCreditDraft } from './bangumi-creator-credits.ts';
-import type { CrossMediaPlan, CrossMediaPort, CrossMediaSeedResult } from './cross-media-seed.ts';
+import { type CrossMediaPlan, type CrossMediaPort } from './showcase-contract.ts';
+import type { CrossMediaSeedResult } from './cross-media-seed.ts';
 import {
   showcaseDigest,
   showcaseLimits,
@@ -25,7 +26,7 @@ import {
   type ShowcaseManifest,
   type ShowcaseVocabularyRecord,
   type ShowcaseVocabularyRequirement,
-} from './showcase-manifest.ts';
+} from './showcase-contract.ts';
 import {
   captureShowcaseCommands,
   publishShowcase,

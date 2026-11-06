@@ -1,5 +1,5 @@
 import { mapSourceEnumeration, vndbRecordUrl } from '@rezics/conversion/cross-media-entities';
-import { sourceDigest } from '../../../packages/conversion/src/support.ts';
+import { sourceDigest } from '@rezics/conversion/support';
 import type { GraphEdgeDraft } from './cross-media-bindings.ts';
 
 export const vndbWorkRelationConverterRevision = 'vndb-work-relations@1';

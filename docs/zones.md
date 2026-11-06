@@ -56,6 +56,20 @@ ordinary related-subject links may leave the Zone. There are no custom domains o
 Decision: Zone Subject visits keep their localized Zone URL and render only after the current native `readPage`
 admits the exact subject and view; Global Subject paths remain canonical metadata destinations, and visible facts
 continue to come from the admitted Zone page.
+Decision: Routed Zone lists project native `readPage` slots onto the common TypeList/Members renderer, continue on
+the Zone URL, and keep Search TypeList on Global configured pages. Canonical Subject readers carry a bounded Zone
+visit return. Session, upload and download use the existing personal BFF driver on each request.
+Decision: The routed list, same-tab return and personal BFF session/media slices land with scoped tests only; the mounted served return and native page proof stay pending their own acceptance.
+Decision: Zone composition reaches Search page, visit-return and slot-admission helpers through existing public entries and the already-imported Zone reader files, not new manifest public entries.
+Decision: The public Zone shell type is the composition appearance, label and language vocabulary in the Zone reader; Web does not import kernel `contract.ts` for it.
+Decision: Web Zone page-request, owned-resource and configuration types live beside that shell; editor and reader share them instead of kernel `contract.ts`.
+Decision: Zone session/media binding prepares the current personal session on every served Zone BFF request and
+reuses the existing `/media` driver for upload intent, completion and download authorization; SessionMedia keeps
+those handlers, and PageStates keeps shared TypeList composition.
+Decision: A served Zone read retires in-flight continuation through the existing callback identity when the Zone
+revision or target changes; it does not keep another visit's cursor.
+Decision: Typed Zone page receiving withholds owner, mount and configuration keys from read bodies; subject
+`collections` and sourced `sources` reads stay, because those names are catalogue slots rather than Zone metadata.
 Configured routes are decoded once, relative, case-sensitive and canonical: no leading/trailing slash,
 empty segment, dot segment, query, fragment, encoded slash, backslash or URL. The empty string means home.
 Reserve the entire first segment `subjects`, including `subjects` itself, before page lookup. A configured

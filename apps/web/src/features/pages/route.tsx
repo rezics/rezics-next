@@ -93,6 +93,9 @@ export function RoutePage({
   personal,
   nonce,
   renderJsonLd = true,
+  currentHref,
+  listHref,
+  memberHref,
 }: {
   page: RoutePageData;
   locale: string;
@@ -102,6 +105,9 @@ export function RoutePage({
   personal?: ReactNode;
   nonce?: string;
   renderJsonLd?: boolean;
+  currentHref?: string;
+  listHref?: (node: string, cursor?: string) => string | undefined;
+  memberHref?: (subject: { id: string; label: string }) => string;
 }) {
   const jsonLd = routePageJsonLd(page, locale);
   return (
@@ -117,6 +123,9 @@ export function RoutePage({
           reads={page.reads}
           messages={messages}
           {...(link ? { link } : {})}
+          {...(currentHref !== undefined ? { currentHref } : {})}
+          {...(listHref !== undefined ? { listHref } : {})}
+          {...(memberHref !== undefined ? { memberHref } : {})}
         >
           <CompositionRender
             document={page.document}

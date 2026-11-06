@@ -3,10 +3,16 @@ import { useLocation, useRouter, notFound } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
-import type { ZonePublic } from '../../../../services/kernel/src/zones/contract.ts';
 import { SubjectFrame, subjectFrame, SubjectViewPage } from '../features/pages/subject-frame';
 import { SubjectPage, subjectPageTitle, subjectPageType, type SubjectPageData } from '../features/pages/subject';
 import { SubjectLink, subjectPageMessages, viewTabLabels } from '../features/pages/route-support';
+import {
+  RoutePage,
+  withSubjectVisitReturn,
+  type LinkProps,
+  type PageLink,
+  type RoutePageData,
+} from '../features/pages/showcase-work';
 import { SubjectHeaderActions } from '../features/pages/subject-reactions-view';
 import { useSubjectReactionReader } from '../features/pages/subject-reaction-reader';
 import { loadSubjectReactions } from '../features/pages/subject-reactions';
@@ -18,7 +24,7 @@ import type { SessionEnv } from '../session/client';
 import type { ReadCredentialMode } from '../kernel/credential';
 import { defaultReader, type Reader } from '../subject/reader';
 import { loadReader } from '../subject/load-reader';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import { NotFoundPage, StatusPage } from '../shell/shell';
 import { RouteState } from '../shell/route-state';
 import type { PagePaths } from '../shell/head';
@@ -29,7 +35,11 @@ import {
   type ZonePageInput,
   type ZonePageRouteOutcome,
 } from './zone-read';
-import { zoneAppearanceAttributes, zonePageDocument } from './appearance';
+import { zoneAppearanceAttributes, zonePageDocument, type ZonePublic } from './appearance';
+import { advanceZoneCallback, type ZoneCallbackIdentity } from './callback';
+import { zoneVisitFromRequest, zoneVisitHref, zoneVisitReturn, zoneVisitWithoutCursor, type ZoneVisit } from './visit';
+import type { ReceivedZonePage } from './receive';
+import { projectZoneSlots } from './slots';
 import { kernelClient } from '../kernel/client';
 import { m } from '../paraglide/messages.js';
 import { metaText } from '@rezics/ui/meta-line';
@@ -140,11 +150,18 @@ export function ZoneReadBoundary({
   children,
 }: {
   initial: ZonePageRouteOutcome;
-  request: Omit<ZonePageInput, 'cursor'>;
+  request: ZonePageInput;
   children: (page: Extract<ZonePageRouteOutcome, { kind: 'page' }>) => ReactNode;
 }) {
   const targetKey = JSON.stringify(request.target);
-  const requestKey = JSON.stringify([request.id, request.locale, targetKey, request.credentialMode ?? null]);
+  const callbackRef = useRef<ZoneCallbackIdentity | undefined>(undefined);
+  const callback = advanceZoneCallback(
+    callbackRef.current,
+    zoneVisitFromRequest(request.locale, request.id, request.target),
+    initial.kind === 'page' ? initial.page.zone.revision : '0',
+  );
+  callbackRef.current = callback;
+  const requestKey = JSON.stringify([callback.key, request.credentialMode ?? null, request.cursor ?? null]);
   const visitRef = useRef({ requestKey, initial, revision: 0 });
   if (visitRef.current.requestKey !== requestKey || visitRef.current.initial !== initial) {
     visitRef.current = {
@@ -307,6 +324,74 @@ export function ZonePageSurface({
   );
 }
 
+function ZoneMemberLink({ href, lang, className, children }: LinkProps) {
+  return (
+    <a href={href} lang={lang} className={className}>
+      {children}
+    </a>
+  );
+}
+
+export function zonePageHeading(page: ReceivedZonePage, visit: ZoneVisit): string {
+  if (visit.target.kind === 'subject') return zonePageTitle(page.zone, '', visit.locale);
+  return visit.target.route === ''
+    ? zonePageTitle(page.zone, '', visit.locale)
+    : zoneRouteHeading(visit.target.route, visit.locale);
+}
+
+export function zoneReturnTo(visit: ZoneVisit): string {
+  return zoneVisitHref(zoneVisitWithoutCursor(visit));
+}
+
+export function ZoneComposedPage({
+  page,
+  visit,
+  nonce,
+  link,
+}: {
+  page: ReceivedZonePage;
+  visit: ZoneVisit;
+  nonce?: string;
+  link?: PageLink;
+}) {
+  const slots = projectZoneSlots(page, visit);
+  const returnTo = zoneReturnTo(visit);
+  const memberLink: PageLink = (props) => {
+    const href = props.href.startsWith(`/${visit.locale}/subjects/`)
+      ? withSubjectVisitReturn(props.href, returnTo, visit.locale)
+      : props.href;
+    return <ZoneMemberLink {...props} href={href} />;
+  };
+  const memberHref = (subject: { id: string; label: string }) => slots.memberHref(subject);
+  const listHref =
+    visit.target.kind === 'route' ? (node: string, cursor?: string) => slots.listHref(node, cursor) : undefined;
+  const route = visit.target.kind === 'route' ? visit.target.route : '';
+  const document = page.document as CompositionDocument;
+  return (
+    <ZoneShell zone={page.zone} locale={visit.locale} route={route}>
+      <ZonePageSurface zone={page.zone} document={document}>
+        {(merged) => (
+          <RoutePage
+            page={{ ...page, route, document: merged, reads: slots.reads } as unknown as RoutePageData}
+            locale={visit.locale}
+            heading={zonePageHeading(page, visit)}
+            messages={subjectPageMessages(visit.locale)}
+            link={link ?? memberLink}
+            currentHref={slots.currentHref}
+            {...(listHref ? { listHref } : {})}
+            memberHref={memberHref}
+            renderJsonLd={false}
+            {...(nonce !== undefined ? { nonce } : {})}
+          />
+        )}
+      </ZonePageSurface>
+    </ZoneShell>
+  );
+}
+
+export type ZoneComposedPageProps = ComponentProps<typeof ZoneComposedPage>;
+export type ZonePageChildren = ReactNode;
+
 const subjectInputId = /^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const personalInput = (input: unknown) => {
   const allowedKeys = new Set(['id', 'subjectType', 'expectedReader', 'locale', 'overview']);
@@ -444,7 +529,14 @@ function ZoneSubjectPage({
     session: browserSession,
     enabled: Boolean(subjectId && view === 'overview'),
   });
-  const returnTo = useLocation().publicHref.split(/[?#]/, 1)[0] ?? '';
+  const publicHref = useLocation().publicHref.split(/[?#]/, 1)[0] ?? '';
+  const returnTo = zoneVisitReturn(publicHref, locale) ?? publicHref;
+  const subjectLink: PageLink = (props) => {
+    const href = props.href.startsWith(`/${locale}/subjects/`)
+      ? withSubjectVisitReturn(props.href, returnTo, locale)
+      : props.href;
+    return <SubjectLink {...props} href={href} />;
+  };
   const nonce = useRouter().options.ssr?.nonce;
   const subjectType = common?.overview ? subjectPageType(common.overview) : undefined;
 
@@ -562,7 +654,7 @@ function ZoneSubjectPage({
                 {...(type.label ? { typeLabel: type.label } : {})}
                 {...(type.ratio ? { ratio: type.ratio } : {})}
                 relations={relations}
-                link={SubjectLink}
+                link={subjectLink}
                 tabs={tabs}
                 tabLabels={tabLabels}
                 base={base}
@@ -585,14 +677,14 @@ function ZoneSubjectPage({
               {...(type.label ? { typeLabel: type.label } : {})}
               {...(type.ratio ? { ratio: type.ratio } : {})}
               relations={relations}
-              link={SubjectLink}
+              link={subjectLink}
               view={view}
               label={tabLabels.names[view]}
               frame={
                 <SubjectFrame
                   frame={frame}
                   locale={locale}
-                  link={SubjectLink}
+                  link={subjectLink}
                   reader={personal?.reader ?? defaultReader}
                   coverLabels={{
                     withheld: m.subject_cover_withheld(),

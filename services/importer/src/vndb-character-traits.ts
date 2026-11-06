@@ -12,15 +12,14 @@ import { vndbAppearanceRoleCodes, vndbAppearanceRoleSchemeUri } from '@rezics/co
 import type { Owner } from './record-bindings.ts';
 import {
   emptyCrossMediaPlan,
-  seedCrossMedia,
   type CrossMediaGap,
   type CrossMediaMember,
   type CrossMediaPlan,
   type CrossMediaPort,
   type CrossMediaReading,
-  type CrossMediaSeedResult,
   type CrossMediaTables,
-} from './cross-media-seed.ts';
+} from './showcase-contract.ts';
+import type { seedCrossMedia, CrossMediaSeedResult } from './cross-media-seed.ts';
 import type { ImporterOptions } from './importer.ts';
 import { VNDB_CHARACTER_APPEARANCE_COLUMNS, VNDB_CHARACTER_TRAIT_COLUMNS } from './vndb-tables.ts';
 
@@ -468,6 +467,8 @@ export type VndbCharacterTraitsResult = CrossMediaSeedResult & {
 
 /** Production operator: import admitted traits and qualified appearances through the existing seed caller. */
 export async function importVndbCharacterTraits(input: {
+  seed: typeof seedCrossMedia;
+
   tables: CrossMediaTables;
   path: string;
   port: CrossMediaPort;
@@ -479,7 +480,7 @@ export async function importVndbCharacterTraits(input: {
     input.tables,
     input.selectedWorkIds === undefined ? {} : { selectedWorkIds: input.selectedWorkIds },
   );
-  const result = await seedCrossMedia(plan, input.path, input.port, input.destination, {
+  const result = await input.seed(plan, input.path, input.port, input.destination, {
     vocabularyAdmission: vndbCharacterVocabularyAdmission(input.bindings, plan),
     recordConcurrency: 1,
   });

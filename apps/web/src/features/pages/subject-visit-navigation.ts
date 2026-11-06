@@ -1,4 +1,4 @@
-import { releaseVisitReturn } from '../catalogue/release-fidelity/navigation';
+import { releaseVisitReturn, zoneVisitReturn } from '../catalogue/release-fidelity/navigation';
 import { creditReturn } from '../catalogue/credit-inspection/navigation';
 import { realmReadingReturn } from '../../community/realm-reading-return';
 import {
@@ -706,6 +706,8 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
   if (/[\\\u0000-\u001f\u007f]/u.test(value)) return;
   const realmReading = realmReadingReturn(value, locale);
   if (realmReading) return realmReading;
+  const zoneReading = zoneVisitReturn(value, locale);
+  if (zoneReading) return zoneReading;
   const catalogueReturn = realmCatalogueReturnHref(value, locale);
   if (catalogueReturn) return catalogueReturn;
   if (!value.startsWith('/') || value.startsWith('//')) return;
@@ -1029,6 +1031,8 @@ export function connectionReturnHref(
   if (realm) url.searchParams.set('realm', realm);
   return `${url.pathname}${url.search}${window ? connectionWindowFragment(window) : '#connections'}`;
 }
+
+export { zoneVisitReturn };
 
 export function withSubjectVisitReturn(href: string, value: string, locale: string): string {
   const via = subjectVisitReturn(value, locale);

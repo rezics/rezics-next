@@ -309,6 +309,71 @@ describe('library-surfaces', () => {
 });
 
 describe('session-transport', () => {
+  test('shared media BFF reserves, uploads and completes with Alice cookies, and conceals the bytes from Bob and anonymous', async () => {
+    await login();
+    await driver.transport();
+    const reservation = await driver.media('alice', {
+      kind: 'reserve',
+      containerId: fixture.protected.threadId,
+      image: fixture.image,
+      key: crypto.randomUUID(),
+    });
+    expect(reservation.status).toBe(201);
+    const { media } = (await reservation.json()) as { media: { id: string; state: string } };
+    expect(media.state).toBe('reserved');
+    success(await driver.media('alice', { kind: 'upload', id: media.id, image: fixture.image }));
+    const read = await driver.media('alice', { kind: 'read', id: media.id });
+    success(read);
+    expect((await read.json()).media.state).toBe('available');
+    const href = `/media/${media.id}/original`;
+    const bytes = await driver.download('alice', href);
+    expect(bytes.status).toBe(200);
+    expect(new Uint8Array(await bytes.arrayBuffer())).toEqual(fixture.image.bytes);
+    await login('bob');
+    for (const persona of ['bob', 'anonymous'] as const) {
+      const refused = await driver.download(persona, href);
+      expect([401, 403, 404]).toContain(refused.status);
+      expect(refused.headers.get('content-type')).not.toContain('image/');
+      const reserve = await driver.media(persona, {
+        kind: 'reserve',
+        containerId: fixture.protected.threadId,
+        image: fixture.image,
+        key: crypto.randomUUID(),
+      });
+      expect([401, 403, 404]).toContain(reserve.status);
+      expect([401, 403, 404]).toContain(
+        (await driver.media(persona, { kind: 'upload', id: media.id, image: fixture.image })).status,
+      );
+    }
+    const requests = (await driver.transport()).requests.filter((request) => /media/.test(request.path));
+    expect(
+      requests.some(
+        (request) => request.method !== 'GET' && request.actorId === fixture.accounts.alice && request.authorized,
+      ),
+    ).toBe(true);
+    expect(requests.some((request) => request.actorId === fixture.accounts.bob && request.authorized)).toBe(false);
+  });
+
+  for (const retirement of ['revokeSession', 'suspend'] as const)
+    test(`${retirement} prevents completion and download of a previously reserved image through the shared BFF`, async () => {
+      await login();
+      const reservation = await driver.media('alice', {
+        kind: 'reserve',
+        containerId: fixture.protected.threadId,
+        image: fixture.image,
+        key: crypto.randomUUID(),
+      });
+      expect(reservation.status).toBe(201);
+      const { media } = (await reservation.json()) as { media: { id: string } };
+      success(await driver[retirement]('alice'));
+      // Keep the original browser cookies and token: the next request decides current authority.
+      expect([401, 403, 404]).toContain(
+        (await driver.media('alice', { kind: 'upload', id: media.id, image: fixture.image })).status,
+      );
+      expect([401, 403, 404]).toContain((await driver.download('alice', `/media/${media.id}/original`)).status);
+      expect((await driver.facts('alice')).media.some((item) => item.id === media.id && item.complete)).toBe(false);
+    });
+
   test('every personal BFF read and write carries Alice identity and current authority', async () => {
     await login();
     await driver.transport();
@@ -443,6 +508,19 @@ describe('session-transport', () => {
 });
 
 describe('auth-journeys', () => {
+  test('preferences and deletion visits use the served owners without submitting an irreversible action', async () => {
+    await login();
+    const preferences = await driver.visit('alice', { kind: 'preferences' });
+    useful(preferences);
+    expect(new URL(preferences.page.url).pathname).toBe('/en/settings');
+    expect(preferences.page.text).toMatch(/settings|preferences/i);
+    const deletion = await driver.visit('alice', { kind: 'deletion' });
+    success(deletion.response);
+    expect(new URL(deletion.page.url).origin).toBe(driver.origins.auth);
+    expect(new URL(deletion.page.url).pathname).toBe('/account/delete');
+    expect(deletion.page.text).toMatch(/delete|deletion/i);
+  });
+
   test('sign-up through the served Auth app returns to the requested web page with a new session', async () => {
     const result = await driver.auth('newcomer', 'sign-up', target('library'));
     useful(result);
@@ -481,7 +559,7 @@ describe('auth-journeys', () => {
     });
   });
 
-  test('step-up through the served Auth app returns to the web security setting with fresh authentication', async () => {
+  test('step-up resumes the native Auth security setting with fresh authentication', async () => {
     await login();
     await driver.ageAuthentication(601);
     const security: Target = { kind: 'security' };
@@ -490,7 +568,9 @@ describe('auth-journeys', () => {
     expect(blocked.page.security.stepUpRequired).toBe(true);
     expect((await driver.facts('alice')).securitySettingChanged).toBe(false);
     const stepped = await driver.auth('alice', 'step-up', security);
-    authReturn(stepped, fixture.accounts.alice);
+    success(stepped.response);
+    expect(new URL(stepped.page.url).origin).toBe(driver.origins.auth);
+    expect(stepped.session.accountId).toBe(fixture.accounts.alice);
     expect(new URL(stepped.page.url).pathname).toMatch(/security/);
     expect(stepped.session.freshAuthentication).toBe(true);
     const changed = await driver.act('alice', { kind: 'change-security-setting' });
@@ -503,7 +583,7 @@ describe('auth-journeys', () => {
     await personal();
     const result = await driver.auth('alice', 'sign-out', { kind: 'subject', subjectId: book() });
     authReturn(result, null);
-    expect(new URL(result.page.url).pathname).toContain(book());
+    expect(new URL(result.page.url).pathname).toBe('/');
     const page = await driver.visit('alice', { kind: 'subject', subjectId: book() });
     useful(page);
     expect(page.page.signedInAccountId).toBeNull();

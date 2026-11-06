@@ -12,7 +12,8 @@ import {
 } from '@rezics/conversion/cross-media-entities';
 import { CrossMediaDumpFiles, type CrossMediaPort } from '../src/cross-media-seed.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
-import { importVndbReleaseIdentifiers, planVndbReleaseIdentifiers } from '../src/vndb-release-identifiers.ts';
+import { planVndbReleaseIdentifiers } from '../src/vndb-release-identifiers.ts';
+import { importVndbReleaseIdentifiers } from '../src/selected-import.ts';
 
 const supported = '4580123456789';
 const changed = '4901234567894';

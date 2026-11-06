@@ -1,5 +1,5 @@
 import { checkBatchWrite, checkBatchWriteResult } from '@rezics/definitions/bulk';
-import { checkCoverIntent, rememberAccepted } from '../../../packages/conversion/src/support.ts';
+import { checkCoverIntent, rememberAccepted } from '@rezics/conversion/support';
 
 /**
  * Shared by every boundary that sees the same body: a record's journal, its public envelope and

@@ -48,7 +48,12 @@ import type {
   PublicFilterConsumerRefill,
 } from './public-filter-consumer-contract.ts';
 import { finishDiscoveryDisclosure } from './disclosure/discovery.ts';
+import { OwnerCurrentRestartRequired, revalidateOwnerCurrentSummaries } from './disclosure/owner-current.ts';
 import { openPublicFilterCoveragePage } from './public-filter-coverage-page.ts';
+import { admitTaggedWorkPlan, taggedWorkHitScanBound, taggedWorkRemainingHasConcept } from './tagged-work-plan.ts';
+import { proveCurrentKindCounts } from './type-facet.ts';
+import { kindWitnessCounts, selectCurrentPredicatePage } from './current-predicate.ts';
+import { projectKindDirectoryCounts } from './kind-count-proof.ts';
 
 const ready = () => new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
 const invalid = (pointer: string) =>
@@ -339,6 +344,20 @@ function executeDiscoverySearch(
     const directoryAfter: import('./cursor.ts').SearchSortValue[] = [];
     let directoryNextAfter: import('./cursor.ts').SearchSortValue[] | null = null;
     const kindDirectory = discoveryKindDirectory(registry);
+    const taggedWork =
+      admitted.kindCountLeaf === undefined ||
+      admitted.filter === undefined ||
+      !taggedWorkRemainingHasConcept(admitted.filter, admitted.kindCountLeaf)
+        ? undefined
+        : admitTaggedWorkPlan({
+            filter: admitted.filter,
+            kindCountLeaf: admitted.kindCountLeaf,
+            sort: admitted.sort,
+            limit: admitted.limit,
+            registeredKinds: new Set(kindDirectory.map((entry) => entry.kind)),
+          });
+    if (taggedWork?.execution === 'preparing') throw ready();
+    const taggedScanBound = taggedWorkHitScanBound(taggedWork, admitted.limit);
     const registryDigest = createHash('sha256')
       .update(
         canonicalize({
@@ -516,12 +535,21 @@ function executeDiscoverySearch(
           }
           if (!last || !exhausted) throw ready();
           const adapter = registry.getOwnerAdapter?.('collection');
-          if (!adapter || adapter.kind !== 'collection') throw ready();
+          if (!adapter || adapter.kind !== 'collection' || !registry.getOwnerAdapter) throw ready();
           const current = new Map<string, DiscoveryOwnerMetadataSummary<'collection'>>();
           for (let offset = 0; offset < identities.length; offset += 100) {
             const batch = identities.slice(offset, offset + 100);
             const summaries = await adapter.readCurrent(batch, currentContext);
             for (const [id, summary] of summaries) current.set(id, summary);
+          }
+          const revalidated = await revalidateOwnerCurrentSummaries(
+            registry as DiscoveryRegistry & DiscoveryOwnerRegistry,
+            [...current].map(([id, value]) => ({ candidate: id, kind: 'collection' as const, id, value })),
+            currentContext,
+          );
+          current.clear();
+          for (const entry of revalidated) {
+            if (entry) current.set(entry.id, entry.value as DiscoveryOwnerMetadataSummary<'collection'>);
           }
           const order = collectionDirectoryOrder(admitted.collectionDirectory);
           const paged = pageCollectionDirectory(
@@ -569,7 +597,7 @@ function executeDiscoverySearch(
           )
             throw ready();
           examined += window.examined;
-          if (examined > discoveryCandidateScanBound(admitted.limit)) throw ready();
+          if (examined > taggedScanBound) throw ready();
           const inSpace = new Set<string>();
           if (spacePopulation) {
             const subjects = result.hits.filter((candidate) => candidate.key.owner === 'semantic');
@@ -591,25 +619,22 @@ function executeDiscoverySearch(
             ...currentContext,
             ...(matchEvidencePlan ? { matchEvidencePlan } : {}),
           });
-          consumed = window.examined;
-          for (let index = 0; index < result.hits.length; index++) {
-            const candidate = result.hits[index]!;
-            const identity = `${candidate.key.owner}:${candidate.key.kind}:${candidate.key.id}`;
-            const hit =
-              seen.has(identity) || (spacePopulation && !inSpace.has(identity)) ? undefined : current.get(candidate);
-            if (!hit) continue;
-            seen.add(identity);
-            hits.push(hit);
-            witnesses.set(hit.key.kind, (witnesses.get(hit.key.kind) ?? 0) + 1);
-            if (hits.length === admitted.limit) {
-              consumed = window.positions[index]! + 1;
-              break;
-            }
-          }
+          const selected = selectCurrentPredicatePage(selectedCandidates, current, {
+            limit: admitted.limit - hits.length,
+            exhausted: window.exhausted,
+            seen,
+          });
+          hits.push(...selected.hits);
+          for (const [kind, count] of kindWitnessCounts(selected.witnesses))
+            witnesses.set(kind, (witnesses.get(kind) ?? 0) + count);
+          consumed =
+            selected.consumed === 0 || selected.consumed === result.hits.length
+              ? window.examined
+              : window.positions[selected.consumed - 1]! + 1;
           await coverage.consume(batch.execution, consumed);
           exhausted = consumed === window.examined && window.exhausted;
           if (exhausted || hits.length === admitted.limit) break;
-          const remaining = discoveryCandidateScanBound(admitted.limit) - examined;
+          const remaining = taggedScanBound - examined;
           if (remaining < 1) break;
           refill = {
             execution: batch.execution,
@@ -626,15 +651,20 @@ function executeDiscoverySearch(
           }
           throw ready();
         }
-        if (admitted.kindCountLeaf !== undefined) {
-          // Kind chips use a separate bounded pass over the exact disjunctive population.
-          // Only current, distinct canonical rows become positive lower-bound evidence.
-          witnesses.clear();
+        const continuation = request.cursor !== undefined || kindAfter !== '';
+        let kindWitnesses = continuation ? new Map<string, number>() : new Map(witnesses);
+        let kindExhausted = exhausted && !continuation;
+        let aggregateProof = false;
+        if (admitted.kindCountLeaf !== undefined && !continuation) {
+          // Whole-predicate kind counts need their own executed population. A disclosed
+          // hit sample cannot certify that total; failure leaves chips unavailable.
+          kindWitnesses = new Map();
+          kindExhausted = false;
           const countCoverage = openPublicFilterCoveragePage(config.consumer, nativeContext);
           let countQueried: PublicFilterQueriedObservation | undefined;
           let countFailed = false;
           try {
-            const countSize = Math.min(200, discoveryCandidateScanBound(admitted.limit));
+            const countSize = Math.min(200, taggedScanBound);
             const countSort = admitted.text ? 'relevance' : 'name';
             const countPlan = compileDiscoveryCapture(
               {
@@ -705,20 +735,29 @@ function executeDiscoverySearch(
               ...currentContext,
               ...(matchEvidencePlan ? { matchEvidencePlan } : {}),
             });
-            const distinct = new Map<string, Set<string>>();
+            const subjects: { id: string; type: string }[] = [];
             for (const candidate of selected) {
               const hit = current.get(candidate);
               if (!hit) continue;
-              const ids = distinct.get(hit.key.kind) ?? new Set<string>();
-              ids.add(hit.key.id);
-              distinct.set(hit.key.kind, ids);
+              subjects.push({ id: hit.key.id, type: hit.key.kind });
             }
-            for (const [kind, ids] of distinct) if (ids.size) witnesses.set(kind, ids.size);
+            const kindCounts = proveCurrentKindCounts({
+              subjects,
+              directory: kindDirectory.map((entry) => entry.kind),
+              complete: false,
+            });
+            for (const [kind, evidence] of kindCounts) if ('value' in evidence) kindWitnesses.set(kind, evidence.value);
+            kindExhausted = window.exhausted;
             await countCoverage.consume(countBatch.execution, window.examined);
             await countCoverage.finish();
+            aggregateProof = window.exhausted;
           } catch (error) {
             countFailed = true;
-            throw error;
+            if (error instanceof OwnerCurrentRestartRequired) throw new ProblemError('search_restart_required');
+            if (error instanceof ProblemError && error.code === 'search_restart_required') throw error;
+            kindWitnesses = new Map();
+            kindExhausted = false;
+            aggregateProof = false;
           } finally {
             await countCoverage.dispose();
             if (countQueried) {
@@ -737,15 +776,14 @@ function executeDiscoverySearch(
           if (kindAfter && !entries.some((entry) => entry.kind === kindAfter)) throw invalid('/kindPage/cursor');
           const remaining = entries.filter((entry) => entry.kind > kindAfter);
           const selected = remaining.slice(0, admitted.kindLimit);
-          // Current page rows are positive witnesses for the wider population after removing only
-          // the designated top-level kind conjunct. A positive lower bound survives hit and kind
-          // continuations; neither page length nor the engine's candidate total is a count.
-          const values = selected.map((entry) => ({
-            ...entry.metadata,
-            ...(!witnesses.get(entry.kind)
-              ? { count: { kind: entry.kind, unavailable: true as const } }
-              : { count: { kind: entry.kind, value: witnesses.get(entry.kind)!, exact: false as const } }),
-          }));
+          // Kind chips use this execution's current witnesses. Continuations stay
+          // unavailable; exact totals need exhausted aggregate proof.
+          const values = projectKindDirectoryCounts(registry, selected, {
+            continuation,
+            exhausted: kindExhausted,
+            aggregateProof,
+            witnesses: kindWitnesses,
+          });
           const observed = await config.asOf(queried);
           const projected: DiscoveryPage = {
             hits: boundMatchEvidencePage(
@@ -830,6 +868,7 @@ function executeDiscoverySearch(
       return await execute(...args);
     } catch (error) {
       if (error instanceof ProblemError) throw error;
+      if (error instanceof OwnerCurrentRestartRequired) throw new ProblemError('search_restart_required');
       if (error instanceof CollectionDiscoveryReadinessError) throw error;
       // Owner source/native decoder failures are readiness for the whole response, never absence.
       throw ready();

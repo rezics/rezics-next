@@ -157,7 +157,8 @@ a served-page binding marked pending does not become covered merely by linking a
   Everything without state — `session-transport` current session authority.  
   own state — `session-transport` upload/download and revocation.  
   mounted Zone — `session-transport` shared transport, routed-site binding pending.  
-  configured TypeList — `session-transport` shared media requests, slot binding pending.
+  configured TypeList — `session-transport` shared media BFF requests; Alice upload/completion and Bob/anonymous,
+  revoked and suspended refusal cases use the real personal binding. Delegated session fixture binding remains pending.
 - **Scenarios**: `specs/web-personal-outcomes.test.ts`: `session-transport` (parallel specification).
   Content owns `specs/content-media-outcomes.test.ts` and `specs/content-disclosure-outcomes.test.ts` native
   authorization/disclosure; accounts owns session lifecycle. Web is their served-page/BFF binding. Attachment publish,
@@ -176,12 +177,16 @@ a served-page binding marked pending does not become covered merely by linking a
   catalogue — `auth-journeys` entry and return navigation.  
   curated — `auth-journeys` guarded-action entry; per-route binding pending.  
   Everything without state — `auth-journeys` sign-in boundary.  
-  own state — `auth-journeys` security/preferences/deletion boundary.  
+  own state — `auth-journeys` native security, Web preferences and Auth deletion entry.
   mounted Zone — `auth-journeys` shared Auth origin; routed return binding pending.  
   configured TypeList — out of scope as an Auth renderer: this is catalogue presentation, with shared Auth entry navigation.
 - **Scenarios**: `specs/web-personal-outcomes.test.ts`: `auth-journeys` (parallel specification).
   Accounts owns `specs/account-lifecycle-outcomes.test.ts` and `specs/account-authorization-outcomes.test.ts`;
-  web/Auth pages bind those behaviours, with security/preferences/deletion page coverage pending where absent.
+  web/Auth pages bind those behaviours. The personal binding follows Web's existing account-menu link to Auth
+  security; step-up resumes that native page, preferences visit Web settings, and deletion visits Auth's deletion
+  page without applying deletion. First-party standing-consent review remains distinct from third-party approval.
+  Explicit delegated agent/principal acceptance needs the Accounts native delegation fixture binding; operator
+  sessions do not substitute for it.
 - **Acceptance command**: `bun test specs/web-personal-outcomes.test.ts` with `WEB_PERSONAL_DRIVER` configured
   to its native binding; pending parallel suite delivery.
 
@@ -252,10 +257,14 @@ a served-page binding marked pending does not become covered merely by linking a
   curated — out of scope for this suite: semantic's mounted Collection routing needs a native served-page binding.  
   Everything without state — out of scope as a public mount: private owner population cannot become public by routing.  
   own state — `library-surfaces` personal controls; authenticated mount binding pending under semantic/commerce authority.  
-  mounted Zone — out of scope for this suite: semantic's saved-scope/mount/union/routed-site acceptance needs a full served-page binding.  
-  configured TypeList — out of scope for this suite: search's page composition and semantic's Zone routing need served slot binding.
+  mounted Zone — routed `readPage` binding: native ordered members, overlap/alias uniqueness, sparse continuation, private-mount SSR isolation, same-tab Subject return, and current personal session/media on each BFF request.  
+  configured TypeList — Search keeps Global `/search/list` controls; Zone lists stay on the Zone reader.
 - **Scenarios**: Semantic owns Zone native acceptance and `specs/collection-source-outcomes.test.ts` source
   composition; search owns `specs/pages-outcomes.test.ts` configured page slots. Web's publication destination
   scenarios and personal `library-surfaces` cannot alone prove a routed Zone; no full binding is claimed here.
 - **Acceptance command**: `bun test specs/collection-source-outcomes.test.ts specs/pages-outcomes.test.ts` with
-  their native drivers for owner contracts; publication verifier above for destination cases. Routed web binding pending.
+  their native drivers for owner contracts; publication verifier above for destination cases. Routed Zone lists bind
+  native `readPage` slots, Zone continuation, private-mount SSR isolation and same-tab Subject return; Search TypeList
+  stays Global. This slice is pinned by scoped web and presentation tests; mounted native/page return stays pending.
+  Broader native collection-source/configured-page persona acceptance remains the owner suites.
+  Decision: existing scoped web and presentation tests pin this slice; no extra stories.

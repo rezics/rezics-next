@@ -12,14 +12,20 @@ import { subjectHref } from '../../subject/subject-href';
 import { admittedCatalogueWorkId } from '../feed/home-work-library/contract';
 import { HomeWorkLibraryAction, useHomeWorkLibraryEnabled } from '../feed/home-work-library/view';
 
-export const TypeListContext = createContext<{ target?: TypeListTarget; full?: string; cursor?: string }>({});
+export const TypeListContext = createContext<{
+  target?: TypeListTarget;
+  full?: string;
+  cursor?: string;
+  listHref?: (node: string, cursor?: string) => string | undefined;
+  memberHref?: (subject: { id: string; label: string }) => string;
+}>({});
 
 const controlClass = `${linkClass} ${linkColor} inline-flex min-h-[44px] min-w-[44px] max-w-full items-center rounded-sm px-2 py-2 text-start whitespace-normal [overflow-wrap:anywhere] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`;
 
 /** Render the native window and its supplied public comparison context without hydrating its targets. */
 export function TypeList(props: Record<string, unknown>) {
   const value = useContext(OverviewContext);
-  const { target, full, cursor } = useContext(TypeListContext);
+  const { target, full, cursor, listHref, memberHref } = useContext(TypeListContext);
   const homeLibraryEnabled = useHomeWorkLibraryEnabled();
   const id = String(props.id);
   const section = value?.sections.get(id);
@@ -31,8 +37,11 @@ export function TypeList(props: Record<string, unknown>) {
   const page = section?.ok ? nativeTypeListPage(section.read, section.body) : undefined;
   const items: Item[] = (page?.subjects ?? []).map((hit) => {
     const label = pageText(hit.labels, value.locale);
-    const workId = homeLibraryEnabled ? admittedCatalogueWorkId({ id: hit.id, summary: hit.summary }) : undefined;
-    const href = subjectHref({ id: hit.id, label: label.text }, value.locale).href;
+    const workId =
+      homeLibraryEnabled && !memberHref ? admittedCatalogueWorkId({ id: hit.id, summary: hit.summary }) : undefined;
+    const href =
+      (memberHref ?? value.memberHref)?.({ id: hit.id, label: label.text }) ??
+      subjectHref({ id: hit.id, label: label.text }, value.locale).href;
     return {
       id: hit.id,
       label,
@@ -49,8 +58,13 @@ export function TypeList(props: Record<string, unknown>) {
         : {}),
     };
   });
-  const href = target ? typeListHref(value.locale, target, id, full === id ? cursor : undefined) : undefined;
-  const next = page?.next && target ? typeListHref(value.locale, target, id, page.next) : undefined;
+  const slotHref = listHref ?? value.listHref;
+  const href =
+    slotHref?.(id, full === id ? cursor : undefined) ??
+    (target ? typeListHref(value.locale, target, id, full === id ? cursor : undefined) : undefined);
+  const next = page?.next
+    ? (slotHref?.(id, page.next) ?? (target ? typeListHref(value.locale, target, id, page.next) : undefined))
+    : undefined;
   return (
     <section data-slot="type-list" aria-labelledby={`${id}-title`} className="min-w-0 space-y-4">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
@@ -92,6 +106,13 @@ export function TypeList(props: Record<string, unknown>) {
               label={title.text}
               preview={full !== id}
               memberCatalogue={Object.fromEntries((page?.subjects ?? []).map((hit) => [hit.id, hit.catalogue]))}
+              {...(memberHref || value.memberHref
+                ? {
+                    itemVisit: (item) => ({
+                      href: (memberHref ?? value.memberHref)!({ id: item.id, label: item.label.text }),
+                    }),
+                  }
+                : {})}
             />
           ) : (
             <p role="status">{m.search_no_results({}, options)}</p>

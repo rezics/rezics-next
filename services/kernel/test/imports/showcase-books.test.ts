@@ -11,15 +11,12 @@ import {
   publishShowcase,
   ShowcaseJournal,
 } from '../../../importer/src/showcase-publication.ts';
-import {
-  importShowcaseBooks,
-  showcaseBookFamily,
-  showcaseBooksToCrossMediaPlan,
-} from '../../../importer/src/showcase-books.ts';
+import { showcaseBookFamily, showcaseBooksToCrossMediaPlan } from '../../../importer/src/showcase-books.ts';
 import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
 import { fixtureFetch } from './type-helpers.ts';
 import pinned from './showcase-books-source.json';
+import { importShowcaseBooks } from '../../../importer/src/selected-import.ts';
 
 const globalContext = '00000000-0000-8000-8000-000000000000';
 const origin = 'https://kernel.import.test';
@@ -257,6 +254,8 @@ test('pinned light-novel families publish a native graph with separate acceptanc
       expect.arrayContaining([
         expect.objectContaining({ path: '/subject-persons/2815/1466/position', reason: 'property_not_admitted' }),
         expect.objectContaining({ path: '/subject-persons/2815/1467/position', reason: 'property_not_admitted' }),
+        expect.objectContaining({ path: '/subject-persons/499/6023/position', reason: 'property_not_admitted' }),
+        expect.objectContaining({ path: '/subject-persons/499/5839/position', reason: 'property_not_admitted' }),
       ]),
     );
     expect(contentsOf(series, 'schema:publisher')).toContain(first.identities['person:128']!.id);

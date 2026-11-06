@@ -2014,6 +2014,7 @@
   "zone_unavailable_heading": "Cette page de zone est temporairement indisponible",
   "zone_unavailable_message": "Cette page de zone n’a pas pu être chargée. Réessayez dans un instant.",
   "zone_subject_return": "Retour à {name}",
+  "zone_return": "Retour à cette zone",
   "inbox_heading": "Notifications",
   "inbox_sign_in": "Connectez-vous pour consulter vos notifications.",
   "inbox_loading": "Chargement des notifications…",

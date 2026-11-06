@@ -863,6 +863,7 @@
         "apps/web/src/search/search-window/index.ts",
         "apps/web/src/search/release-window.ts",
         "apps/web/src/search/language-preferences.tsx",
+        "apps/web/src/search/condition-weight.tsx",
         "apps/web/src/features/pages/agent-reader-read/index.ts",
         "apps/web/src/features/pages/showcase-work/index.ts"
       ],
@@ -1133,6 +1134,7 @@
       "paths": ["packages/conversion/src/**"],
       "publicEntries": [
         "@rezics/conversion",
+        "@rezics/conversion/support",
         "@rezics/conversion/bangumi",
         "@rezics/conversion/bangumi-vocabulary",
         "@rezics/conversion/vndb",

@@ -19,12 +19,14 @@ import { subjectVisitHref } from '../../pages/source-concept-reading/navigation'
 import {
   boundedConceptWorksState,
   conceptWorksExactEmpty,
+  conceptWorksKindOptions,
   conceptWorksRequest,
   publicConceptWorksState,
+  receiveConceptWorksPage,
   type ConceptWorksSelection,
 } from './index';
 import { readPublicConceptWorks } from './actions';
-import { ConceptWeightRange } from './weight';
+import { ConceptWeightRange } from '../../../search/condition-weight';
 import type { DiscoveryRequest, DiscoveryState } from '../../../search/discovery';
 
 export type ConceptWorksRouteState = {
@@ -269,25 +271,21 @@ function ConceptWorksVisit({
           >
             <NativeSelectOption value="">{m.search_all_subject_types({}, options)}</NativeSelectOption>
             {read.works?.state === 'available' &&
-              read.works.types
-                .filter((type) => {
+              conceptWorksKindOptions(
+                read.works.types.filter((type) => {
                   const propertyId = route.property ?? read.requestedRole;
                   return (
                     !propertyId ||
                     read.works?.properties.find((entry) => entry.id === propertyId)?.types.includes(type.id)
                   );
-                })
-                .map((type) => (
-                  <NativeSelectOption key={type.id} value={type.id}>
-                    {(() => {
-                      const label = localizedLabel(type.labels, locale).text.trim() || type.id;
-                      const count = page?.kinds.values.find((entry) => entry.id === type.id)?.count;
-                      return count && 'value' in count
-                        ? `${label} (${new Intl.NumberFormat(locale).format(count.value)}${count.exact ? '' : '+'})`
-                        : label;
-                    })()}
-                  </NativeSelectOption>
-                ))}
+                }),
+                receiveConceptWorksPage(source).kinds,
+                locale,
+              ).map((type) => (
+                <NativeSelectOption key={type.id} value={type.id}>
+                  {type.label}
+                </NativeSelectOption>
+              ))}
           </NativeSelect>
         </Field>
         <Field>

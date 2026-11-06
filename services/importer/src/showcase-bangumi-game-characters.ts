@@ -1,5 +1,5 @@
 import type { SourceVocabularyBindings } from '@rezics/conversion';
-import type { CrossMediaPlan, CrossMediaPort } from './cross-media-seed.ts';
+import { type CrossMediaPlan, type CrossMediaPort } from './showcase-contract.ts';
 import {
   prepareShowcaseBangumiCharacterVocabulary,
   readShowcaseBangumiCharacterVocabulary,

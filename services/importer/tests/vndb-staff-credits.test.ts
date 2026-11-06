@@ -8,10 +8,10 @@ import type { BatchCommand } from '@rezics/definitions/bulk';
 import { converter_revision } from '@rezics/conversion/cross-media-entities';
 import type { CrossMediaPort } from '../src/cross-media-seed.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
+import { importVndbStaffCredits } from '../src/selected-import.ts';
 import {
   creditTypeConceptUri,
   creditTypeSchemeUri,
-  importVndbStaffCredits,
   planVndbStaffCredits,
   readCreditTypeBindings,
 } from '../src/vndb-staff-credits.ts';

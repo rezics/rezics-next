@@ -14,16 +14,15 @@ import {
   collectSelectedReleaseTitles,
   crossMediaAliases,
   emptyCrossMediaPlan,
-  seedCrossMedia,
   type CrossMediaGap,
   type CrossMediaMember,
   type CrossMediaPlan,
   type CrossMediaPort,
   type CrossMediaReading,
-  type CrossMediaSeedResult,
   type CrossMediaTableScanLimits,
   type CrossMediaTables,
-} from './cross-media-seed.ts';
+} from './showcase-contract.ts';
+import type { seedCrossMedia, CrossMediaSeedResult } from './cross-media-seed.ts';
 import type { ImporterOptions } from './importer.ts';
 import {
   planVndbReleasePlatforms,
@@ -37,7 +36,7 @@ import {
   vndbReleaseMediumTaxonomy,
   vndbReleasePlatformSchemeUri,
   vndbReleasePlatformTaxonomy,
-} from '../../../packages/conversion/src/support.ts';
+} from '@rezics/conversion/support';
 
 export const developmentStatusSchemeUri = 'https://vndb.org/development-status';
 export const developmentStatusTaxonomy = 'vndb.development-status';
@@ -834,6 +833,8 @@ export type VndbReleaseFidelityResult = CrossMediaSeedResult & {
 
 /** Production operator: import admitted VNDB releases through the existing seed/importer caller. */
 export async function importVndbReleaseFidelity(input: {
+  seed: typeof seedCrossMedia;
+
   tables: CrossMediaTables;
   path: string;
   port: CrossMediaPort;
@@ -891,7 +892,7 @@ export async function importVndbReleaseFidelity(input: {
       ...suppliedConcepts.filter((concept) => concept && !classificationTaxonomies.has(concept.taxonomy)),
     ].slice(0, sourceVocabularyLimits.concepts),
   };
-  const result = await seedCrossMedia(plan, input.path, input.port, input.destination, {
+  const result = await input.seed(plan, input.path, input.port, input.destination, {
     vocabularyAdmission: vndbReleaseVocabularyAdmission(bindings, plan.facts, new Map(), plan.releasePlatforms),
     recordConcurrency: 1,
   });

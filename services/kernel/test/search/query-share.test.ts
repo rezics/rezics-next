@@ -84,7 +84,7 @@ const search: SearchService = {
   async releaseGroups() {
     throw new Error('grouped release search is not used by this fixture');
   },
-  async savedCatalogueMembers() {
+  savedCatalogueMembers: async () => {
     throw new Error('saved membership is not used by this fixture');
   },
   async search(_principal, _request, _now, _release, context) {

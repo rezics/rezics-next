@@ -10,11 +10,18 @@ import { conceptWorksAdmission } from '../src/features/catalogue/source-concept-
 import {
   boundedConceptWorksState,
   conceptWorksExactEmpty,
+  conceptWorksKindOptions,
+  conceptWorksNativeKindLabels,
   conceptWorksRequest,
+  conceptWorksTypeLabel,
   readConceptWorksPage,
+  receiveConceptWorksPage,
 } from '../src/features/catalogue/concept-works';
 import type { DiscoveryState } from '../src/search/discovery';
-import { ConceptWeightRange } from '../src/features/catalogue/concept-works/weight';
+import { ConceptWeightRange } from '../src/search/condition-weight';
+import { DiscoveryResults } from '../src/search/discovery-results';
+import { discoveryExample } from '../src/kernel/fake/search-discovery';
+import { parseDiscoveryPage } from '../src/search/discovery';
 
 const conceptId = '00000000-0000-4000-8000-000000000041';
 const schemeId = '00000000-0000-4000-8000-000000000042';
@@ -75,6 +82,7 @@ test('the mounted weight control and committed request preserve the fixed tag, m
   expect(markup).toContain('name="gte"');
   expect(markup).toContain('value="2"');
   expect(markup).toContain('value="3"');
+  expect(markup).toContain('name="unit"');
 });
 
 function conceptLeaf(filter: FilterDocument): Extract<FilterDocument, { statement: unknown }> | undefined {
@@ -376,4 +384,46 @@ test('work-tag visits keep the supported original window and focus while the des
   expect(originatingConceptReturn(query.get('returnTo'), 'en')?.split('#')[0]).toBe(source.split('#')[0]);
   expect(JSON.stringify(request)).not.toContain('opaque/page');
   expect(JSON.stringify(request)).not.toContain('returnTo');
+});
+
+test('the mounted Concept list and type control receive native Search kind labels and counts', () => {
+  const recorded = structuredClone(discoveryExample);
+  const book = recorded.kinds.values.find((entry) => entry.id === 'schema:Book');
+  if (!book) throw new Error('Recorded discovery page must include schema:Book');
+  book.labels = { en: 'Bound volume' };
+  book.count = { kind: 'schema:Book', value: 2, exact: false };
+  recorded.kinds.values = recorded.kinds.values.map((entry) =>
+    entry.id === 'schema:Movie' || entry.id === 'schema:Person'
+      ? { ...entry, count: { kind: entry.id, unavailable: true as const } }
+      : entry,
+  );
+  const page = parseDiscoveryPage(recorded);
+  if (!page) throw new Error('Recorded tagged-work page must parse');
+  const received = receiveConceptWorksPage({ status: 'ready', page });
+  expect(
+    received.hits.some((hit) => hit.summary.kind === 'subject' && hit.summary.value.label?.value === 'Mira’s Atlas'),
+  ).toBe(true);
+  expect(conceptWorksNativeKindLabels(page, 'schema:Book', 'en')).toBe('Bound volume');
+  expect(conceptWorksTypeLabel({ id: 'schema:Book', labels: { en: 'Book' } }, received.kinds, 'en')).toBe(
+    'Bound volume (2+)',
+  );
+  expect(conceptWorksTypeLabel({ id: 'schema:Movie', labels: { en: 'Movie' } }, received.kinds, 'en')).toBe('Movie');
+  expect(
+    conceptWorksKindOptions(
+      [
+        { id: 'schema:Book', labels: { en: 'Book' } },
+        { id: 'schema:Movie', labels: { en: 'Movie' } },
+      ],
+      received.kinds,
+      'en',
+    ),
+  ).toEqual([
+    { id: 'schema:Book', label: 'Bound volume (2+)' },
+    { id: 'schema:Movie', label: 'Movie' },
+  ]);
+  const markup = renderToStaticMarkup(
+    createElement(DiscoveryResults, { state: { status: 'ready', page }, locale: 'en' }),
+  );
+  expect(markup).toContain('Mira’s Atlas');
+  expect(markup).toContain('Bound volume');
 });
