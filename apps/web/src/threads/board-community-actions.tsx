@@ -23,11 +23,12 @@ export function BoardStartThread({
   returnTo: string;
   preparedReturnTo?: string;
 }) {
-  const { state: session } = useSession();
+  const { state: session, subject } = useSession();
   const available =
     board.availability === 'available' && board.visibility !== 'taken_down' && board.visibility !== 'draft';
   if (!available) return null;
   if (session === 'unavailable' || session === 'unknown') return null;
+  if (session === 'signed-in' && !subject) return null;
   if (session === 'signed-out')
     return advice === 'sign-in' ? (
       <SignInPrompt returnTo={returnTo} label={m.board_sign_in_to_start()} compact />
