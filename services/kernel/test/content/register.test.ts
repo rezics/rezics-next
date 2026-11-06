@@ -28,7 +28,7 @@ import {
 } from '../../src/content/realm-subject-lifecycle.ts';
 import { runCommand } from '../../src/command/command.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
-import type { WorkClient } from '../../src/work/client.ts';
+import { createWorkClient } from '../../src/work/client.ts';
 import { composeWork } from '../../src/work/registry.ts';
 import { WORK_QUEUES } from '../../src/work/queues.ts';
 
@@ -88,7 +88,7 @@ async function composeRegistration(mode: 'empty' | 'full'): Promise<Registration
   const queues: Registration['queues'] = [];
   const schedules: Registration['schedules'] = [];
   const effects: Registration['effects'] = [];
-  const pool = new pg.Pool({ connectionString: databaseUrl, max: 1 });
+  const pool = new pg.Pool({ connectionString: databaseUrl, max: 4 });
   const registerWorkflow = DBOS.registerWorkflow.bind(DBOS);
   const registerStep = DBOS.registerStep.bind(DBOS);
   const dbos = DBOS as unknown as {
@@ -103,7 +103,19 @@ async function composeRegistration(mode: 'empty' | 'full'): Promise<Registration
     steps.push(config?.name ?? func.name);
     return registerStep(func, config);
   }) as typeof DBOS.registerStep;
+  let client: Awaited<ReturnType<typeof createWorkClient>> | undefined;
   try {
+    client = await createWorkClient(databaseUrl!, pool);
+    const registerQueue = client.registerQueue.bind(client);
+    const applySchedules = client.applySchedules.bind(client);
+    client.registerQueue = (async (name: string, parameters?: object) => {
+      queues.push({ name, parameters: parameters ?? {} });
+      return registerQueue(name, parameters);
+    }) as typeof client.registerQueue;
+    client.applySchedules = (async (items: Registration['schedules']) => {
+      schedules.push(...items);
+      return applySchedules(items);
+    }) as typeof client.applySchedules;
     await composeWork(
       [
         {
@@ -124,14 +136,7 @@ async function composeRegistration(mode: 'empty' | 'full'): Promise<Registration
       {
         databaseUrl: databaseUrl!,
         pool,
-        client: {
-          async registerQueue(name: string, parameters: object) {
-            queues.push({ name, parameters });
-          },
-          async applySchedules(items: Registration['schedules']) {
-            schedules.push(...items);
-          },
-        } as unknown as WorkClient,
+        client,
         env: workEnvironment(mode),
       },
     );
@@ -139,7 +144,11 @@ async function composeRegistration(mode: 'empty' | 'full'): Promise<Registration
   } finally {
     dbos.registerWorkflow = registerWorkflow;
     dbos.registerStep = registerStep;
-    await pool.end();
+    try {
+      await client?.close();
+    } finally {
+      await pool.end();
+    }
   }
 }
 
