@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
+import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { createServer, type AddressInfo } from 'node:net';
 import { acquireStackSlot } from './stack-lease.ts';
 import {
@@ -51,6 +53,33 @@ test('walk process environment does not inherit check-host cgroup placement', ()
   expect(env.KERNEL_CHECK_ON_REMOTE).toBeUndefined();
   expect(env.REZICS_WALK_STACK_SLOT).toBe('3');
   expect(cgroupArgs(env)).toEqual([]);
+});
+
+test('walk docker wrapper keeps attempt labels and omits the check-host cgroup', async () => {
+  const directory = await mkdtemp(`${import.meta.dir}/../.temp/walk-docker-`);
+  await writeFile(`${directory}/docker`, '#!/bin/sh\nprintf "%s\\n" "$@"\n');
+  await chmod(`${directory}/docker`, 0o755);
+  const wrapperDir = resolve(import.meta.dir, 'check-host');
+  const run = (env: NodeJS.ProcessEnv) =>
+    spawnSync(resolve(wrapperDir, 'docker'), ['run', '--name', 'walk-db', 'postgres'], {
+      encoding: 'utf8',
+      env: { PATH: `${wrapperDir}:${directory}:/usr/bin:/bin`, ...env },
+    });
+  try {
+    const walk = run({
+      REZICS_WALK_STACK_SLOT: '1',
+      GOAL_TASK_ID: '6a6ca25b-b24d-431b-bc8f-615cef277eda',
+      GOAL_ATTEMPT: '4',
+    });
+    expect(walk.status).toBe(0);
+    expect(walk.stdout).toContain('rezics.worker.attempt=6a6ca25b-b24d-431b-bc8f-615cef277eda/4');
+    expect(walk.stdout).not.toContain('--cgroup-parent=');
+    const check = run({ REZICS_CHECK_SLICE: 'rezics-check.slice' });
+    expect(check.status).toBe(0);
+    expect(check.stdout).toContain('--cgroup-parent=rezics-check.slice');
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test('walk admission skips a foreign listener and leaves it running after releasing its own slot', async () => {

@@ -256,8 +256,9 @@ brief lists native or browser acceptance.
 Admission skips slots whose application or infrastructure ports are already listening, including containers left by
 another interrupted task after its lease was released. It leaves those processes and containers running and queues
 when no slot has free ports; port collisions do not authorize stopping another task's stack.
-Walk stacks do not inherit check-host cgroup placement; OpenSearch and database run on the host's ordinary container
-slice. Worker checks still run on hosts a and b.
+Walk stacks do not inherit check-host cgroup placement; the worktree docker wrapper keeps worker attempt labels and
+omits `--cgroup-parent` when `REZICS_WALK_STACK_SLOT` is set, so OpenSearch and database run on the host's ordinary
+container slice. Worker checks still run on hosts a and b.
 Decision: walk readiness keeps a TCP listen check, a two-minute first-compile fetch, SIGKILL after ignored SIGTERM,
 and bounded docker kill then removal so a Vite SSR abort loop, a stuck worker, or a Dead OpenSearch container cannot
 replace a seeded product walk. Walk `start` waits for the walk signal rather than the first child exit.
