@@ -217,7 +217,8 @@ completed projection bytes are measured directly. Witness work is zero: Access d
   seek, and denial work for the three closed reasons (`resource`, `suspension`, `realm_ban`). The native temporal
   keys' `WITHOUT OVERLAPS` constraints and last-range `LIMIT 1` seeks bound each candidate/reason. The declaration
   also charges finite generated key/target/probe/decision work. Final assignment and live deadline evidence
-  reach the typed policy projection. No target grant, current denial or final scope decision is reused from preparation.
+  reach the typed policy projection; its 38 primitive fields are included in byte reservations. No target grant,
+  current denial or final scope decision is reused from preparation.
 
 Native cost/growth evidence remains separate from these declarations. Publishing a bound proves no native
 execution, cold-load or shared-suite pass; missing foreign operands remain explicitly unmeasured.
