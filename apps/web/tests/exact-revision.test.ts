@@ -299,6 +299,7 @@ let historyRequest = new Request('https://site.test/en/thread', { headers: { aut
 mock.module('@tanstack/react-start/server', () => ({
   getRequest: () => historyRequest,
   setResponseHeader: () => {},
+  setResponseStatus: () => {},
 }));
 let historyClient: ReturnType<typeof client>;
 mock.module('../src/kernel/client', () => ({ kernelClient: () => historyClient }));

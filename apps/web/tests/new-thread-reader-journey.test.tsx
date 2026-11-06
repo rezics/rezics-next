@@ -1,7 +1,7 @@
 import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { dirname } from 'node:path';
-import { act, StrictMode } from 'react';
+import { act, StrictMode, useState } from 'react';
 import { createKernelClient, type KernelClient } from '@rezics/client';
 import * as start from '../.storybook/react-start';
 import type { startThread } from '../src/threads/actions';
@@ -9,7 +9,7 @@ import type { NewThreadPageResult } from '../src/threads/new-thread-read';
 import type { ThreadCreationReaderAdmission } from '../src/threads/thread-creation-lifetime';
 import type { SessionEnv } from '../src/session/client';
 
-// UNRUN: this connected regression exercises the real QueryClient, admission adapter, reader preparation and composition.
+// Exercise the real QueryClient, admission adapter, reader preparation and composition.
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
@@ -168,6 +168,7 @@ async function mountCompositions(queryClient: import('@tanstack/react-query').Qu
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
     cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
     matchMedia: window.matchMedia.bind(window),
+    scrollTo: window.scrollTo.bind(window),
     createImageBitmap: async () => ({ width: 1, height: 1, close() {} }),
     IS_REACT_ACT_ENVIRONMENT: true,
   };
@@ -219,8 +220,10 @@ async function mountCompositions(queryClient: import('@tanstack/react-query').Qu
   const navigation: string[] = [];
   const navigate = spyOn(window.location, 'assign').mockImplementation((href) => navigation.push(String(href)));
 
-  let entries = initial;
+  let replaceEntries: (entries: Entry[]) => void;
   function ComposeRoute() {
+    const [entries, setEntries] = useState(initial);
+    replaceEntries = setEntries;
     return <CompositionHost entries={entries} />;
   }
   const rootRoute = router.createRootRoute({ component: router.Outlet });
@@ -253,8 +256,7 @@ async function mountCompositions(queryClient: import('@tanstack/react-query').Qu
     );
   };
   const setEntries = async (next: Entry[]) => {
-    entries = next;
-    await render();
+    await act(async () => replaceEntries(next));
   };
   const settle = async (ready: () => boolean) => {
     for (let index = 0; index < 180 && !ready(); index++)
