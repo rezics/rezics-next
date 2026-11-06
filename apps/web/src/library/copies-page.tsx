@@ -265,7 +265,7 @@ export function CopyForm({
           ? result.copy.id === copy.id
             ? { state: 'ready', copy: result.copy }
             : { state: 'unavailable' }
-          : { state: result.reason },
+          : { state: result.reason === 'closed' ? 'unavailable' : result.reason },
       );
     } catch {
       if (current('copy.get') && request === lookup.current) setReview({ state: 'unavailable' });
@@ -976,7 +976,7 @@ export function CopiesPage({
   page: CopiesPageData;
   failure?: string | undefined;
   originating?: CopiesOrigin | undefined;
-  windows?: CopiesWindowsControls;
+  windows?: CopiesWindowsControls | undefined;
   onRetryInventory?: (() => void) | undefined;
 }) {
   const [loaded, setLoaded] = useState({ page, generation: 0 });
