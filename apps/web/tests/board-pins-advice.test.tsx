@@ -125,9 +125,9 @@ test('the installed callable receives the admitted generation and current sessio
   expect(await readBoardPinAdviceRequest(adviceInput, sessionRequest(), sessionEnv(), client, true)).toEqual({
     state: 'unavailable',
   });
-  expect(await readBoardPinAdviceRequest(adviceInput, new Request('https://web.test'), sessionEnv(), client, true)).toEqual(
-    { state: 'denied' },
-  );
+  expect(
+    await readBoardPinAdviceRequest(adviceInput, new Request('https://web.test'), sessionEnv(), client, true),
+  ).toEqual({ state: 'denied' });
 });
 
 test('session mismatch is denied before transport and aborted advice is withheld', async () => {
@@ -138,9 +138,9 @@ test('session mismatch is denied before transport and aborted advice is withheld
       return Response.json(ready());
     },
   });
-  expect(
-    await readBoardPinAdviceRequest(adviceInput, sessionRequest(), sessionEnv(threadId), client, true),
-  ).toEqual({ state: 'denied' });
+  expect(await readBoardPinAdviceRequest(adviceInput, sessionRequest(), sessionEnv(threadId), client, true)).toEqual({
+    state: 'denied',
+  });
   expect(calls).toBe(0);
   const controller = new AbortController();
   controller.abort();
@@ -150,9 +150,9 @@ test('session mismatch is denied before transport and aborted advice is withheld
   expect(receiveBoardPinAdvice({ ...query(), signal: controller.signal }, 200, ready())).toEqual({
     state: 'unavailable',
   });
-  expect(await readBoardPinAdviceRequest(adviceInput, sessionRequest(controller.signal), sessionEnv(), client, true)).toEqual(
-    { state: 'unavailable' },
-  );
+  expect(
+    await readBoardPinAdviceRequest(adviceInput, sessionRequest(controller.signal), sessionEnv(), client, true),
+  ).toEqual({ state: 'unavailable' });
   expect(calls).toBe(0);
   const late = new AbortController();
   const lateClient = createKernelClient('https://kernel.test', {
@@ -162,7 +162,9 @@ test('session mismatch is denied before transport and aborted advice is withheld
       return Response.json(ready());
     },
   });
-  expect(await readBoardPinAdviceRequest(adviceInput, sessionRequest(late.signal), sessionEnv(), lateClient, true)).toEqual({
+  expect(
+    await readBoardPinAdviceRequest(adviceInput, sessionRequest(late.signal), sessionEnv(), lateClient, true),
+  ).toEqual({
     state: 'unavailable',
   });
   expect(calls).toBe(1);
