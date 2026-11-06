@@ -1892,8 +1892,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       const allowance = preparedMixed ? 600 : Math.min(600, 6 * pageSize + 3);
       const maxWindow = preparedMixed ? Math.min(200, allowance) : Math.min(200, 2 * pageSize + 1);
       const size = prefix?.size ?? (preparedMixed ? Math.min(200, allowance) : plan.size);
-      if (!Number.isInteger(size) || size < 1 || size > maxWindow)
-        throw new TypeError('Invalid retained refill size');
+      if (!Number.isInteger(size) || size < 1 || size > maxWindow) throw new TypeError('Invalid retained refill size');
       let after = 'purpose' in plan ? undefined : plan.after;
       let reused: RetainedWindow['raw'] = [];
       if (prefix) {

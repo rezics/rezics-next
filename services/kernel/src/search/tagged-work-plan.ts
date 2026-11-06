@@ -208,11 +208,7 @@ export function taggedWorkHitScanBound(plan: TaggedWorkPlan | undefined, limit: 
  */
 export const TAGGED_WORK_PREPARED_RAW_BOUND = 600;
 
-export function taggedWorkRawBound(
-  prepared: boolean,
-  plan: TaggedWorkPlan | undefined,
-  limit: number,
-): number {
+export function taggedWorkRawBound(prepared: boolean, plan: TaggedWorkPlan | undefined, limit: number): number {
   return prepared && plan !== undefined ? TAGGED_WORK_PREPARED_RAW_BOUND : taggedWorkHitScanBound(plan, limit);
 }
 
