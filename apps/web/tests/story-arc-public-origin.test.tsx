@@ -140,25 +140,25 @@ test('the mounted Subject, canonical route, correction session and existing read
   mock.module('@tanstack/react-start/server', () => start);
   mock.module('cloudflare:workers', () => ({ env: {} }));
   // Module mocks are process-wide under the combined runner; capture each real module to restore it on exit.
-  const realEditorial = await import('../src/features/catalogue/editorial-entry');
+  const realEditorial = { ...(await import('../src/features/catalogue/editorial-entry')) };
   mock.module('../src/features/catalogue/editorial-entry', () => ({
     EditorialEntry: ({ children }: { children: ReactNode }) =>
       Children.toArray(children).find((child) => isValidElement(child) && child.type === StoryArcProfileEntry) ?? null,
   }));
   const fixture = storyArcProfileFixture();
   const profileLoads: unknown[] = [];
-  const realProfileActions = await import('../src/features/catalogue/story-arc-profile-actions');
+  const realProfileActions = { ...(await import('../src/features/catalogue/story-arc-profile-actions')) };
   mock.module('../src/features/catalogue/story-arc-profile-actions', () => ({
     loadStoryArcProfile: async ({ data }: { data: { id?: string; work?: string } }) => {
       profileLoads.push(data);
       return fixture.transport.load(data);
     },
   }));
-  const realReaderActions = await import('../src/features/catalogue/story-arc-reader/actions');
+  const realReaderActions = { ...(await import('../src/features/catalogue/story-arc-reader/actions')) };
   mock.module('../src/features/catalogue/story-arc-reader/actions', () => ({
     loadArcReader: async () => ({ ok: false, reason: 'unavailable' }),
   }));
-  const originalKernel = await import('../src/kernel/client');
+  const originalKernel = { ...(await import('../src/kernel/client')) };
   mock.module('../src/kernel/client', () => ({ ...originalKernel, kernelClient: () => fixture.client }));
   const [
     { createRoot },
