@@ -568,7 +568,9 @@ function guestCatalogueReady(
 }
 
 function responseBytes(value: unknown): number {
-  return new TextEncoder().encode(JSON.stringify(value)).byteLength;
+  return new TextEncoder().encode(
+    JSON.stringify(value, (_key, item) => (typeof item === 'bigint' ? item.toString() : item)),
+  ).byteLength;
 }
 
 function identityAuthors(ids: readonly string[], summaries: ReadonlyMap<string, AccountSummaryValue>) {
@@ -1292,16 +1294,7 @@ export async function createContentReadingCardBatch(
           },
           anchors: finalAnchors,
         };
-        if (
-          responseBytes({
-            ...result,
-            anchors: finalAnchors.map((anchor) => ({
-              ...anchor,
-              position: anchor.position.toString(),
-            })),
-          }) > READING_CARD_ENVELOPE_BYTES
-        )
-          throw new ProblemError('content_too_large');
+        if (responseBytes(result) > READING_CARD_ENVELOPE_BYTES) throw new ProblemError('content_too_large');
         return result;
       })());
     },
