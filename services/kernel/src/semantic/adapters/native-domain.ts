@@ -10,6 +10,7 @@ import { createSemanticDomain, type SemanticDomain } from '../application/index.
 import { nativeContentLifecycle } from './content-lifecycle.ts';
 import { nativeFactStore } from './fact-store.ts';
 import { nativeHashing } from './hashing.ts';
+import { bindOrdinaryContentLifecycle } from './ports.ts';
 import { nativeRatingReview } from './rating-review.ts';
 import { nativeRouting } from './routing.ts';
 
@@ -39,13 +40,15 @@ export function createNativeSemanticDomain(
     contentLifecycle?: ContentLifecyclePort;
   } = {},
 ): NativeSemanticDomain {
+  const contentLifecycle = extras.contentLifecycle ?? nativeContentLifecycle();
+  bindOrdinaryContentLifecycle(contentLifecycle);
   return createSemanticDomain<Pool, NativeFactTransaction>({
     version: 1,
     identityEpoch: participants,
     libraryCustody: extras.libraryCustody ?? custodyFromParticipants(participants),
     searchCurrentness: extras.searchCurrentness ?? searchFromParticipants(participants),
     ratingReview: extras.ratingReview ?? nativeRatingReview(),
-    contentLifecycle: extras.contentLifecycle ?? nativeContentLifecycle(),
+    contentLifecycle,
     hashing: nativeHashing(),
     routing: nativeRouting(),
     facts: nativeFactStore(),

@@ -3,7 +3,7 @@ import type { Release } from '@rezics/definitions';
 import type { MediaImportRequest } from '@rezics/definitions/media-import';
 import type { Pool, PoolClient } from 'pg';
 import type { ContentCoverRef } from './contract/domain-ports.ts';
-import { contentLifecycleOf } from './adapters/content-lifecycle.ts';
+import { contentLifecycleOf } from './adapters/ports.ts';
 import { readFences, type SourceFenceTuple } from '../content/source-fences.ts';
 import { AccessUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';

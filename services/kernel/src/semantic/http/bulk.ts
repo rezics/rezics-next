@@ -15,7 +15,7 @@ import type { OpenAPIV3 } from 'openapi-types';
 import { GrantDeniedError } from '../../access/grant-commands.ts';
 import { CommandUnavailableError } from '../../command/command.ts';
 import { resourceAuthorization } from '../../access/resource-authorization.ts';
-import { contentLifecycleOf } from '../adapters/content-lifecycle.ts';
+import { contentLifecycleOf } from '../adapters/ports.ts';
 import { discardConnection, withConnection } from '../../database/pool.ts';
 import { customMethod } from '../../http/custom-method.ts';
 import {

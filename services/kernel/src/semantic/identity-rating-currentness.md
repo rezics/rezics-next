@@ -8,8 +8,9 @@ Semantic exposes `readIdentityRatingReview(pool, { requestedOriginalId, canonica
 
 Decision: rating-review keys 2 / locators 2 / operand 16,384 bytes live in the identity-core leaf
 `rating-review-bounds.ts`. Native Rating review errors bind through `nativeRatingReview` on `SemanticDomainPorts`;
-Content cover and imported-tuple routing bind through `nativeContentLifecycle`. Inward code does not import Rating
-or Content. Cost remains this document's operand and same-home COMMIT participant bounds.
+Content cover and imported-tuple routing bind through `nativeContentLifecycle`. Inward subject, summaries and bulk
+HTTP resolve that port through `adapters/ports.ts`; they do not import Rating or Content. Cost remains this
+document's operand and same-home COMMIT participant bounds.
 
 The version-1 operand freezes the exact ordered requested original and, when distinct, canonical terminal; their sorted source homes; sorted persisted `{ partition, group }` control locators; and strict serialized evidence. Evidence contains the classifier's comparable source-owner epochs and write states, source mapping epochs and owner epochs, dirty/captured/source revisions, immediate closure redirect, target, closure state, enrollment, generation, incarnation, export/install/registration transaction IDs, control-owner epochs and write states, pending job/epoch, published epoch, group generation and closure state, directory install/export/revision/owner evidence, native registration transaction, redirect state, and the exact source disclosure states. `comparableIdentityEvidence` continues to omit unrelated partition position. The reader double-collects released per-home snapshots and releases each connection. It reads at most two source IDs, two source homes and two persisted control locators, uses at most 24 bounded read statements and 24 evidence rows across both collections, and rejects a serialized operand over 16,384 UTF-8 bytes.
 

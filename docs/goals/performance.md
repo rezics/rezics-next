@@ -57,7 +57,9 @@ benchmark.
 
 Decision: Semantic domain composition is proved by a fake-port application load and one ordinary native identity
 epoch through the composed participants. Public ports are Library custody, Search currentness, Rating review,
-Content lifecycle including batch cover reads, hashing, routing and the fact store. Rating-review keys 2 / locators 2
+Content lifecycle including batch cover reads, hashing, routing and the fact store. Inward subject, summaries and
+bulk HTTP resolve Content lifecycle through `adapters/ports.ts`; composition binds the native cover adapter even
+when identity participants are absent. Rating-review keys 2 / locators 2
 / operand 16,384 bytes live in identity-core `rating-review-bounds.ts`. Observed counters remain item facts 512, those
 rating-review limits, identity page 100 originals, epoch segment 100 pages and frontier 8 keys / 2,048 bytes / 100
 step rows. Cost derivations stay on the existing identity-epoch and item growth contracts. Compact tests pin the

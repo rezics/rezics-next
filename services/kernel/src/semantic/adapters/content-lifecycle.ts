@@ -1,4 +1,3 @@
-import type { Pool } from 'pg';
 import type { PoolClient } from 'pg';
 import { memoizedValue } from '../../memoized.ts';
 import { checkMediaObject, checkMediaObjects, type CoverReference } from '../../content/cover-reference.ts';
@@ -9,7 +8,6 @@ import type {
   ContentLifecyclePort,
   ContentQueryClient,
 } from '../contract/domain-ports.ts';
-import { resolvedSemanticDomain } from './registry.ts';
 
 function fieldGroup(value: string): ContentImportedFieldGroup {
   return value === 'summary' || value === 'cover' ? value : 'facts';
@@ -56,8 +54,4 @@ export function nativeContentLifecycle(): ContentLifecyclePort {
       importedTupleRoute: tupleRoute,
     }),
   );
-}
-
-export function contentLifecycleOf(pool?: Pool): ContentLifecyclePort {
-  return resolvedSemanticDomain(pool)?.ports.contentLifecycle ?? nativeContentLifecycle();
 }

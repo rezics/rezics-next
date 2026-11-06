@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { composeSemanticDomain, composeSemanticIdentityParticipants } from '../../src/composition/semantic.ts';
+import { contentLifecycleOf } from '../../src/semantic/adapters/index.ts';
 import { stepLibraryIdentityEpoch } from '../../src/library/identity-epoch-participant.ts';
 import { createIdentityEpochParticipants } from '../../src/semantic/application/identity-epoch-participants.ts';
 import type { IdentityJobRef, IdentityStepProgress } from '../../src/semantic/contract/identity-values.ts';
@@ -171,6 +172,7 @@ test('workflow identifiers are stable per job and distinct per continuation segm
 test('ordinary composition binds the real Search and Library participants and stays unavailable without Search configuration', () => {
   expect(composeSemanticIdentityParticipants({ env: {} })).toBeNull();
   expect(composeSemanticDomain({ env: {} })).toBeNull();
+  expect(contentLifecycleOf().importedTupleRoute).toBeTypeOf('function');
   const routeKey = Buffer.alloc(32, 7).toString('base64url');
   const env = { OPENSEARCH_URL: 'http://127.0.0.1:9200', KERNEL_ROUTE_KEY: routeKey };
   const participants = composeSemanticIdentityParticipants({ env });
@@ -197,6 +199,15 @@ test('ordinary composition binds the real Search and Library participants and st
     'searchCurrentness',
     'version',
   ]);
+});
+
+test('inward subject and summary adapters do not value-import native Content lifecycle', () => {
+  const semantic = fileURLToPath(new URL('../../src/semantic/', import.meta.url));
+  const forbidden = /from ['"][^'"]*adapters\/content-lifecycle\.ts['"]/;
+  const violations = ['subject.ts', 'summaries.ts', 'http/bulk.ts'].filter((file) =>
+    forbidden.test(readFileSync(`${semantic}${file}`, 'utf8')),
+  );
+  expect(violations).toEqual([]);
 });
 
 test('contract, core and application sources import only their own layers, identity-core and Definitions', () => {

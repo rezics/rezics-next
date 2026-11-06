@@ -53,7 +53,7 @@ import {
   type AgentSelfSource as CandidateAgentSelfSource,
   type CandidateSource,
 } from './fences.ts';
-import { contentLifecycleOf } from './adapters/content-lifecycle.ts';
+import { contentLifecycleOf } from './adapters/ports.ts';
 import { resolvedSemanticDomain } from './adapters/registry.ts';
 import { factDataTypes, isRelationProperty, itemFacts, resolveItem, type FactRow, type Item } from './item.ts';
 import { SubjectInputError } from './item.ts';

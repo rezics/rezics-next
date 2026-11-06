@@ -28,7 +28,10 @@ admitted path.
 Decision: Semantic contract/core/application add no SQL, scan or extra statement. Public ports are Library custody,
 Search currentness, Rating review, Content lifecycle including batch cover reads, hashing, routing and the fact
 store. Native adapters are bound by ordinary `createKernel` / `server` / `worker` composition through
-`composeSemanticDomain` and `createSemanticWorkModule`. Rating-review keys 2 / locators 2 / operand 16,384 bytes live
+`composeSemanticDomain` and `createSemanticWorkModule`. Inward subject, summaries and bulk HTTP resolve Content
+lifecycle through `adapters/ports.ts` and the composed registry; they do not value-import the native cover adapter.
+`composeSemanticAdapters` binds that adapter even when identity participants are absent. Rating-review keys 2 /
+locators 2 / operand 16,384 bytes live
 in identity-core `rating-review-bounds.ts`. Observed counters remain item facts 512, those rating-review limits,
 identity page 100 originals, epoch segment 100 pages and frontier 8 keys / 2,048 bytes / 100 step rows. Compact
 fake-port and ordinary composition tests pin the domain; cost stays on the existing identity-epoch and item growth

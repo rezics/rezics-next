@@ -82,10 +82,12 @@ The syntax-tree architecture check enforces this at file boundaries, including w
 
 Decision: Semantic subject facts, item projection and canonical identity run through registered contract, core,
 application and adapter modules. Inward code uses Semantic-owned ports for Library custody, Search currentness,
-Rating review, Content lifecycle, hashing and routing; composition binds the native adapters. A fake-port
-application loads without those implementations. Native authority and opaque proofs keep their owners. Compact
-landing tests pin a fake-port domain and ordinary native composition; rating-review numeric bounds live in the
-literal-only identity-core leaf `rating-review-bounds.ts`. After wiring, kernel-semantic baseline rule 2/3 is
+Rating review, Content lifecycle, hashing and routing; composition binds the native adapters. Subject, summaries
+and bulk HTTP resolve Content lifecycle through `adapters/ports.ts` and the composed registry; they do not
+value-import `adapters/content-lifecycle.ts`, so native cover-reference stays out of that inward value graph.
+A fake-port application loads without those implementations. Native authority and opaque proofs keep their owners.
+Compact landing tests pin a fake-port domain and ordinary native composition; rating-review numeric bounds live in
+the literal-only identity-core leaf `rating-review-bounds.ts`. After wiring, kernel-semantic baseline rule 2/3 is
 361/383 (from 521/384); Kernel files in value cycles 398; largest value SCC 381.
 
 Decision: `config-check-runtime.ts` constructs check runners and reloads train settings from supplied dependencies; `createRuntime` keeps process, store and lifecycle ownership.

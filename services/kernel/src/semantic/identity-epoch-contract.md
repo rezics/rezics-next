@@ -679,9 +679,10 @@ Decision: ordinary `createKernel` / `server` / `worker` install those participan
 `composeSemanticIdentityParticipants` and `composeSemanticDomain` as `IdentityEpochParticipantPorts` on
 `SemanticDomainPorts.identityEpoch`. Library custody and Search currentness remain that version-1 pair; Rating
 review, Content lifecycle (batch cover reads and imported-tuple routing), hashing, routing and the fact store are
-the other installed adapters. Contract/core/application add no SQL. Cost stays on this document's identity-epoch
-derivations. Compact tests pin fake-port load and ordinary composition; native epoch growth remains later
-acceptance.
+the other installed adapters. Inward subject, summaries and bulk HTTP resolve Content lifecycle through
+`adapters/ports.ts`; they do not value-import the native cover adapter. Contract/core/application add no SQL. Cost
+stays on this document's identity-epoch derivations. Compact tests pin fake-port load and ordinary composition;
+native epoch growth remains later acceptance.
 
 ### Complete Library canonical coverage under the fixed participant
 

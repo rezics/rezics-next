@@ -7,6 +7,7 @@ import { readSearchConfig } from '../search/work.ts';
 import { createIdentityEpochParticipants } from '../semantic/application/identity-epoch-participants.ts';
 import type { IdentityEpochParticipantPorts } from '../semantic/contract/identity-epoch-ports.ts';
 import {
+  bindOrdinaryContentLifecycle,
   createNativeSemanticDomain,
   nativeContentLifecycle,
   nativeRatingReview,
@@ -34,10 +35,16 @@ export function composeSemanticIdentityParticipants(context: {
   });
 }
 
+/** Native Content cover and tuple routing, bound even when identity participants are unavailable. */
+export function composeSemanticAdapters(): void {
+  bindOrdinaryContentLifecycle(nativeContentLifecycle());
+}
+
 /** Ordinary process composition: identity participants plus Rating review and Content lifecycle adapters. */
 export function composeSemanticDomain(context: {
   readonly env: Readonly<Record<string, string | undefined>>;
 }): NativeSemanticDomain | null {
+  composeSemanticAdapters();
   const participants = composeSemanticIdentityParticipants(context);
   if (!participants) return null;
   return createNativeSemanticDomain(participants, {

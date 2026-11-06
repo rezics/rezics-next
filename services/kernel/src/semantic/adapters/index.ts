@@ -1,7 +1,7 @@
 export { nativeHashing } from './hashing.ts';
 export { nativeRouting } from './routing.ts';
 export { nativeFactStore } from './fact-store.ts';
-export { nativeContentLifecycle, contentLifecycleOf } from './content-lifecycle.ts';
+export { nativeContentLifecycle } from './content-lifecycle.ts';
 export { importedTupleRouteOf } from './imported-route.ts';
 export {
   nativeRatingReview,
@@ -17,4 +17,4 @@ export {
   defaultSemanticDomain,
   resolvedSemanticDomain,
 } from './registry.ts';
-export { hashingOf, routingOf } from './ports.ts';
+export { hashingOf, routingOf, contentLifecycleOf, bindOrdinaryContentLifecycle } from './ports.ts';
