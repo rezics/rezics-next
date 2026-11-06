@@ -4,6 +4,7 @@ import { fromPlainText } from '@rezics/document';
 import { readFile } from 'node:fs/promises';
 import { startNativeWebStack } from './stack';
 import { currentNativeLifecycle, NativeTestLifecycle, nativeProcessIsSame, inspectNativeProcess } from './lifecycle.ts';
+import { provisionCommunityPublication } from './publication-community-fixture.ts';
 import type { WebPublicationDriver, PublicationFixture, Persona } from '../../../../specs/web-publication-driver';
 
 const defaultPublicOrigin = 'https://rezics.example.test';
@@ -218,7 +219,11 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
   const directCredentials = new Map<Persona, Awaited<ReturnType<typeof stack.credentials>>>();
   let ownerReadInterrupted = false;
   let provisioned:
-    | { data: typeof import('../../../../specs/fixtures/web-publication.json'); fixture: PublicationFixture }
+    | {
+        data: typeof import('../../../../specs/fixtures/web-publication.json');
+        fixture: PublicationFixture;
+        sitemapNativeIds: Record<'subject' | 'collection' | 'realm' | 'space' | 'board' | 'thread', string[]>;
+      }
     | undefined;
   const feedMeasurements = new Map<string, { times: number[]; retries: number }>();
   // Only native setup/control requests retry. Served documents must retain their
@@ -626,6 +631,16 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
       'automated',
       ...Array.from({ length: 16 }, (_, index) => `sitemap-book-${String(index + 1).padStart(2, '0')}`),
     ];
+    const community = await provisionCommunityPublication({
+      kernel,
+      credentials: (persona) => stack.credentials(persona),
+      accountIdFromAuthorization,
+      publicOrigin,
+      locales: data.locales,
+      eligiblePerKind: data.discovery.eligiblePerKind,
+      verifiedHandle: data.routing.verifiedHandle,
+      subjectPath,
+    });
     const sitemap = {
       subject: {
         eligible: sitemapSubjects.flatMap((key) => localeUrls(key)),
@@ -633,12 +648,12 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
           data.locales.map((locale) => urlFor(key, locale)),
         ),
       },
-      collection: { eligible: [], excluded: [] },
-      realm: { eligible: [], excluded: [] },
-      space: { eligible: [], excluded: [] },
-      board: { eligible: [], excluded: [] },
-      thread: { eligible: [], excluded: [] },
+      ...community.sitemap,
     } as PublicationFixture['sitemap'];
+    const sitemapNativeIds = {
+      subject: sitemapSubjects.map((key) => created.get(key)!.id),
+      ...community.nativeIds,
+    };
     const fixture: PublicationFixture = {
       releaseDigest: activeBody.digest,
       publicOrigin,
@@ -648,8 +663,8 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
       qualifiedCredit: views.cast,
       staleBookZhHans: urlFor('book', 'zh-Hans').replace(/\/[^/]+$/, '/former-lantern-title'),
       canonicalBookZhHans: urlFor('book', 'zh-Hans'),
-      verifiedSubject: subjects.person,
-      verifiedProfile: new URL('/en/@lantern-verified', publicOrigin).href,
+      verifiedSubject: community.verifiedSubjectUrl,
+      verifiedProfile: community.verifiedProfileUrl,
       publicPage: subjects.book,
       personalRead: new URL('/v1/subjects/00000000-0000-4000-8000-000000000000', stack.kernelOrigin).href,
       bannedRead: new URL('/v1/subjects/00000000-0000-4000-8000-000000000000', stack.kernelOrigin).href,
@@ -661,7 +676,7 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
       searchZhHans: new URL('/zh-Hans/search?q=%E7%81%AF%E7%AC%BC%E6%A1%A3%E6%A1%88', publicOrigin).href,
       sitemap,
     };
-    provisioned = { data: structuredClone(data), fixture };
+    provisioned = { data: structuredClone(data), fixture, sitemapNativeIds };
     console.info(
       `web-publication-driver-growth: setup=${Math.round(performance.now() - factoryStarted)}ms provision=${Math.round(performance.now() - started)}ms peak-memory=${stack.peakMemoryBytes()}bytes fixture-subjects=${created.size}`,
     );
@@ -670,7 +685,7 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
 
   const settle = async () => {
     if (!provisioned) throw new Error('settle requires a provisioned publication fixture');
-    const { data, fixture } = provisioned;
+    const { data, sitemapNativeIds } = provisioned;
     const routes = [
       ['collection', '/v1/sitemap/collections'],
       ['realm', '/v1/sitemap/realms'],
@@ -680,16 +695,7 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
       ['subject', '/v1/subject-pages'],
     ] as const;
     const pending = new Map<string, Set<string>>(
-      routes.map(([kind, route]) => [
-        route,
-        new Set(
-          fixture.sitemap[kind].eligible.map(({ url }) => {
-            const id = new URL(url).pathname.split('/')[3];
-            if (!id) throw new Error(`Fixture sitemap URL lacks its created identity: ${url}`);
-            return decodeURIComponent(id);
-          }),
-        ),
-      ]),
+      routes.map(([kind, route]) => [route, new Set(sitemapNativeIds[kind])]),
     );
     const expected = new Map([...pending].map(([route, ids]) => [route, new Set(ids)]));
     let missingTitles = [...data.search.matchingBooks];

@@ -225,6 +225,11 @@ one in. A file's `lastmod` in the index is when that file last changed. Neither 
 
 Sitemaps are an inventory as of the last successful export. A page that becomes `noindex`, closed or removed
 answers its new status at once and leaves the sitemaps at the next export, within about a day.
+Decision: the publication fixture inventories 23 eligible public resources of each sitemap kind plus each kind's
+excluded privacy controls from created identities; Realm hosts omit Space addresses so realm URLs stay
+`/realms/{id}` and standalone Spaces occupy `/spaces/{address}`. Collection, Realm and Space lastmod stay omitted
+until those owners supply meaningful public-change times; the verified profile URL is the account's current handle
+after native requestVerification and approval.
 This inventory is not an ACL: an old shard or a failed export never authorizes an old profile, private member,
 withdrawn fact or media response. Retaining immutable historical shards is a separate artifact policy.
 

@@ -98,12 +98,20 @@ describe('native web publication driver host', () => {
           if (cursor !== null) query.set('cursor', cursor);
           const response = await fetch(`${kernelOrigin}/v1/sitemap/${kind}s?${query}`, { redirect: 'manual' });
           expect(response.status).toBe(200);
-          const page = (await response.json()) as { items: { id: string }[]; next: string | null };
-          page.items.forEach(({ id }) => published.add(id));
+          const page = (await response.json()) as {
+            items: { id: string; address?: string }[];
+            next: string | null;
+          };
+          for (const item of page.items) {
+            published.add(item.id);
+            if (item.address) published.add(item.address);
+          }
           cursor = page.next;
         } while (cursor !== null);
-        for (const { url } of fixture.sitemap[kind].eligible)
-          expect(published.has(new URL(url).pathname.split('/')[3]!)).toBe(true);
+        for (const { url } of fixture.sitemap[kind].eligible) {
+          const identity = decodeURIComponent(new URL(url).pathname.split('/')[3]!);
+          expect(published.has(identity)).toBe(true);
+        }
       }
       const response = await driver.request('/robots.txt');
       expect(response.status).toBe(200);
