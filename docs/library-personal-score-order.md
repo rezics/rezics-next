@@ -120,6 +120,10 @@ Research inspected: `legacy-final:apps/web/features/library/state.ts`; pinned Bo
 `internal/collections/infra/mysql_repo.go` (owner-specific collection rating). Preserve server ordering and the
 highest-score initial direction; do not import those architectures or their public/default privacy assumptions.
 
+Decision: native personal-score walks grant editor actions through Access `createGrantCommands` on Global Context
+with the bootstrapped governor bearer; Auth service `/signin` and `/token` stay on the service handler so the first
+governor grant returns 201.
+
 Acceptance is the seeded native and browser walk in `apps/web/tests/native/library-personal-score.host.test.ts`.
 Bound declarations read canonical Source cost leaves so Kernel can boot through the Collection Source import cycle.
 Global distribution reads admit the native aggregate shape; focused `--private-network` walks reach disposable

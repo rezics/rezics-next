@@ -14,6 +14,7 @@ import { Pool } from 'pg';
 import type { HttpResponse, Persona, Release, SemanticDriver } from '../../../../specs/semantic-driver.ts';
 import { accessClock, accessActionCatalogue, createAccess } from '../../src/access/index.ts';
 import { bootstrapGovernance, PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
+import { createGrantCommands, GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
 import { createNativeAccountBindings } from '../../src/access/native-account-bindings.ts';
 import { createWorkflowApprovals } from '../../src/access/workflow-approvals.ts';
@@ -453,10 +454,17 @@ async function startDriver(
     ]);
     const accounts = { editor, acceptor, steward, suspended } satisfies Record<Exclude<Persona, 'anonymous'>, Account>;
 
-    await setupSemantic(pool, bundledRelease);
-    await setupContent(pool);
-    await setupPresentation(pool);
-    await bootstrapGovernance(pool, governor.accountId);
+    const kernelPool = runtimePool;
+    await setupSemantic(kernelPool, bundledRelease);
+    await setupContent(kernelPool);
+    await setupPresentation(kernelPool);
+    await bootstrapGovernance(kernelPool, governor.accountId);
+    const grants = createGrantCommands({
+      pool: kernelPool,
+      access,
+      managementAction: 'access:grant',
+      ...(options.clock ? { clock: options.clock } : {}),
+    });
 
     const sessions = new Map<Exclude<Persona, 'anonymous'>, string>();
     async function send(
@@ -503,20 +511,28 @@ async function startDriver(
           ? PLATFORM_RESOURCE
           : { route: routeOf(resourceId), id: resourceId };
       if (resource.route === null) throw new Error(`Cannot grant an unroutable resource: ${resourceId}`);
-      const response = await send(
-        grantor,
-        'POST',
-        '/v1/grants',
-        {
-          resource,
-          subject: { kind: 'account', id: account.accountId },
-          actions,
-          valid: '(,)',
-        },
-        { 'Idempotency-Key': key() },
-      );
-      if (response.status !== 201)
-        throw new Error(`Grant administration failed: ${response.status}: ${JSON.stringify(response.body)}`);
+      const deadline = Date.now() + 10_000;
+      const actor = await access.authenticate(grantor.bearer, { pool: kernelPool, deadline });
+      if (actor.kind !== 'account') throw new Error('Grant administration failed: 401: grantor is not an account');
+      const missing = ['access:grant', ...actions].filter((action) => !actor.scopes.includes(action));
+      if (missing.length)
+        throw new Error(`Grant administration failed: 403: governor token missing scopes ${missing.join(', ')}`);
+      try {
+        await grants.create(
+          { pool: kernelPool, actor, deadline },
+          {
+            resource,
+            subject: { kind: 'account', id: account.accountId },
+            actions,
+            valid: '(,)',
+            key: randomUUID(),
+          },
+        );
+      } catch (error) {
+        if (error instanceof GrantDeniedError)
+          throw new Error(`Grant administration failed: 403: ${JSON.stringify({ code: 'forbidden' })}`);
+        throw error;
+      }
     }
 
     await grantAccount(accounts.editor, ['subject:create', 'statement:propose', 'context:create']);
@@ -536,8 +552,8 @@ async function startDriver(
       'subject:merge',
     ]);
 
-    const boundary = { pool, deadline: Date.now() + 10_000 };
-    await createSuspensionCommands({ pool, access, clock: options.clock ?? systemClock }).suspend(
+    const boundary = { pool: kernelPool, deadline: Date.now() + 10_000 };
+    await createSuspensionCommands({ pool: kernelPool, access, clock: options.clock ?? systemClock }).suspend(
       { ...boundary, actor: await access.authenticate(governor.bearer, boundary) },
       { accountId: accounts.suspended.accountId, key: randomUUID() },
     );

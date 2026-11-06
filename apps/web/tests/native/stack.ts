@@ -678,6 +678,10 @@ async function startStack(): Promise<
     })());
   try {
     reportStackProgress('Native web stack startup: registering kernel SQL modules');
+    const { testReceiptKeys } = await import('../../../../services/kernel/test/support/receipt-keys.ts');
+    process.env.KERNEL_RECEIPT_KEYS = [...testReceiptKeys().keys]
+      .map(([version, key]) => `${version}:${Buffer.from(key).toString('base64url')}`)
+      .join(',');
     // Match the kernel test preload before evaluating anything that imports SQL.
     await import(new URL('../../../../services/kernel/node_modules/reylo/src/register.js', import.meta.url).href);
     reportStackProgress('Native web stack startup: kernel SQL modules registered');
@@ -743,6 +747,8 @@ async function startStack(): Promise<
     // Keep the actual production host transport in this listener. In particular,
     // its account-operation routes must use the host's own configured native port.
     const authHandler = auth.host.handler.bind(auth.host);
+    const originalServiceHandler = auth.service.handler.bind(auth.service);
+    const nativeIssuancePaths = new Set(['/signin', '/signin/key', '/token', '/.well-known/jwks.json']);
     let pageOrigin: string | undefined;
     let signupHandler: ((request: Request) => Promise<Response>) | undefined;
     const pagePaths = new Set([
@@ -805,9 +811,11 @@ async function startStack(): Promise<
           }
         }
       }
-      const response = await authHandler(serviceRequest);
+      const response = nativeIssuancePaths.has(url.pathname)
+        ? await originalServiceHandler(serviceRequest)
+        : await authHandler(serviceRequest);
       if (
-        new URL(serviceRequest.url).pathname === '/token' &&
+        url.pathname === '/token' &&
         serviceRequest.headers.get('content-type') === 'application/json' &&
         response.ok
       ) {
