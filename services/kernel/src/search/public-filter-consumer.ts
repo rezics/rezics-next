@@ -164,7 +164,7 @@ export function compilePublicFilterConsumerCapture(
       if ('owner' in node) throw new TypeError('Public capture cannot contain owner predicates');
       if ('saved' in node) throw new TypeError('Public capture requires expanded saved filters');
     }
-    filterDocument = admitFilter(parsed, meaning.release, { saved: false, inverse: true });
+    filterDocument = admitFilter(parsed, meaning.release, { inverse: true });
   }
   if (copied.text !== undefined) validateText(copied.text);
   const filter =

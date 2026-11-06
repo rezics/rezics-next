@@ -540,9 +540,9 @@ describe('bounded native kind metadata and checked-hit witnesses', () => {
         { 'Idempotency-Key': JSON.stringify(crypto.randomUUID()) },
       );
       expect(created.status).toBe(201);
-      const subject: IndexedSubject = {
+      subjects.push({
         id: (created.body.subject as { id: string }).id,
-        type: n < 3 ? 'schema:Book' : 'kind:Kind1',
+        type: 'schema:Book',
         visibility: 'visible',
         redirect: null,
         securityRevision: 1,
@@ -550,9 +550,13 @@ describe('bounded native kind metadata and checked-hit witnesses', () => {
         aliases: [],
         descriptions: [],
         statements: [],
-      };
-      subjects.push(subject);
-      fake.put(subject);
+      });
+    }
+    subjects.sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
+    for (const [n, subject] of subjects.entries()) {
+      const typed: IndexedSubject = { ...subject, type: n < 3 ? 'schema:Book' : 'kind:Kind1' };
+      subjects[n] = typed;
+      fake.put(typed);
     }
     await installTemplates(native, prefix);
     templatesCreated = true;

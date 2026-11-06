@@ -10,8 +10,8 @@ import { validateKindCountEvidence } from './discovery-registry.ts';
  * Cost
  * - Touches: the current disclosed identities already selected by one executed predicate,
  *   plus the caller's exhaustion and final-observation bits. No engine, Source or census read.
- * - Bound: one pass over the visible kind directory (at most eight rows) and the witness map
- *   for those kinds. Work is independent of corpus size.
+ * - Bound: at most two unique current hits, one pass over the visible kind directory (at most
+ *   eight rows) and the witness map for those kinds. Work is independent of corpus size.
  * - Growth check: `test/search/kind-count-proof.test.ts` covers continuation, incomplete
  *   samples, exact exhausted populations and refused exact-zero inference.
  */
@@ -26,6 +26,9 @@ export type KindCountProof = Readonly<{
   witnesses: ReadonlyMap<string, number>;
 }>;
 
+/** Initial kind chips reuse at most two unique current hits; more disclosed rows stay an inexact sample. */
+export const KIND_COUNT_HIT_WITNESSES = 2;
+
 /** Catalogue kind chips never publish totals. Continuations stay unavailable; a sample is only a lower bound. */
 export function publicCatalogueKindCounts(
   types: Iterable<string>,
@@ -33,7 +36,12 @@ export function publicCatalogueKindCounts(
 ): Map<string, number> {
   if (options.continuation) return new Map();
   const witnesses = new Map<string, number>();
-  for (const type of types) witnesses.set(type, (witnesses.get(type) ?? 0) + 1);
+  let hits = 0;
+  for (const type of types) {
+    if (hits >= KIND_COUNT_HIT_WITNESSES) break;
+    witnesses.set(type, (witnesses.get(type) ?? 0) + 1);
+    hits++;
+  }
   const proof: KindCountProof = {
     continuation: false,
     exhausted: options.exhausted,

@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { createDiscoveryRegistry } from '../../src/search/discovery-registry.ts';
 import {
+  KIND_COUNT_HIT_WITNESSES,
   proveKindCount,
   projectKindDirectoryCounts,
   publicCatalogueKindCounts,
@@ -59,11 +60,9 @@ test('zero witnesses without aggregate proof cannot become an inferred empty tot
 });
 
 test('catalogue kind chips never publish an exact total from a disclosed sample or continuation', () => {
+  expect(KIND_COUNT_HIT_WITNESSES).toBe(2);
   expect(publicCatalogueKindCounts([book, book, 'schema:Recipe'], { continuation: false, exhausted: true })).toEqual(
-    new Map([
-      [book, 2],
-      ['schema:Recipe', 1],
-    ]),
+    new Map([[book, 2]]),
   );
   expect(publicCatalogueKindCounts([book], { continuation: true, exhausted: true }).size).toBe(0);
 });
