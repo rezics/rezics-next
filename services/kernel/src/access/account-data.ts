@@ -120,6 +120,8 @@ export async function readPublicAccountByHandle(
   if (claim.state !== 'active' && !forwards) return [];
   const row = await publicRead.run(client, { route: routeOf(claim.accountId)!, account_id: claim.accountId });
   if (!row || row.state === 'pending' || row.state === 'deleted') return [];
+  // An active claim names the account's current spelling only; a stale claim must not stand in for it.
+  if (claim.state === 'active' && row.handle !== handle) return [];
   if (forwards && (row.state !== 'active' || row.handle === null || row.handle === handle)) return [];
   return publicIdentityForAccount(client, row, forwards ? row.handle! : undefined);
 }

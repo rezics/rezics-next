@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
 import { createHash } from 'node:crypto';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { createPool } from '../../src/database/pool.ts';
@@ -19,9 +20,10 @@ import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(url);
+configureTestReceiptKeys(pool);
 const access = admittedAccess({ actions: LIFECYCLE_ACTIONS });
 const routeKey = new Uint8Array(32).fill(29);
-const kernel = createKernel({ pool, routeKey });
+const kernel = createKernel({ pool, routeKey, receiptKeys: testReceiptKeys() });
 const commands = createLifecycleCommands({ pool, access });
 const provisions = new Map<
   object,
@@ -234,4 +236,14 @@ test('fencing and deletion erase biography and links, and a deleted handle is un
       });
     } else expect(byHandle.body.accounts[0]).toMatchObject({ bio: null, links: [] });
   }
+});
+
+test('an active allocation for a previous spelling cannot stand in for the account current handle', async () => {
+  const id = await person('profile_claim_before');
+  await pool.query('UPDATE access.account SET handle=$3 WHERE route=$1 AND account_id=$2', [
+    routeOf(id),
+    id,
+    'profile_claim_after',
+  ]);
+  expect(await read('handle=profile_claim_before')).toEqual({ status: 200, body: { accounts: [], next: null } });
 });
