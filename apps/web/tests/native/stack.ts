@@ -178,12 +178,18 @@ async function disconnectTemplateSessions(databaseUrl: string): Promise<void> {
     statement_timeout: 5000,
   });
   try {
-    await admin.query(
-      `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()`,
-      [template],
+    const terminated = await settledWithin(
+      admin
+        .query(
+          `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()`,
+          [template],
+        )
+        .then(() => true as const),
+      8_000,
     );
+    if (terminated !== true) throw new Error('Disconnecting template sessions exceeded 8000ms');
   } finally {
-    await admin.end();
+    await settledWithin(admin.end().then(() => true), 1_000);
   }
 }
 
@@ -194,12 +200,15 @@ async function postgresConnectionWorks(url: string): Promise<Error | undefined> 
     max: 1,
   });
   try {
-    await probe.query('SELECT 1');
-    return undefined;
-  } catch (error) {
-    return error instanceof Error ? error : new Error(String(error));
+    try {
+      const ready = await settledWithin(probe.query('SELECT 1').then(() => true as const), 2_000);
+      if (ready !== true) return new Error('PostgreSQL probe exceeded 2000ms');
+      return undefined;
+    } catch (error) {
+      return error instanceof Error ? error : new Error(String(error));
+    }
   } finally {
-    await probe.end();
+    await settledWithin(probe.end().then(() => true), 500);
   }
 }
 
@@ -235,29 +244,27 @@ async function postgresReadinessError(
   );
 }
 
-/** Prefer published TCP; use the bind-mounted Unix socket when the private net namespace cannot reach it. */
+/** Private-network checks cannot reach published TCP; only the bind-mounted Unix socket is visible. */
 async function waitForOwnedPostgres(container: string, port: number, socketDirectory: string): Promise<string> {
-  const tcpUrl = ownedPostgresUrl(port, 'rezics');
   // libpq names the socket .s.PGSQL.<port>; the server listens on 5432, not the published TCP port.
   const socketUrl = ownedPostgresUrl(5432, 'rezics', socketDirectory);
   const deadline = Date.now() + 60_000;
   let lastError: Error | undefined;
+  let lastReport = 0;
   while (true) {
-    const tcpError = await postgresConnectionWorks(tcpUrl);
-    if (!tcpError) return tcpUrl;
-    lastError = tcpError;
     const socketError = await postgresConnectionWorks(socketUrl);
     if (!socketError) return socketUrl;
     lastError = socketError;
     const remaining = deadline - Date.now();
     if (remaining <= 0) throw await postgresReadinessError(container, socketDirectory, lastError);
-    const status = Bun.spawnSync([
-      'docker',
-      'inspect',
-      '-f',
-      '{{.State.Status}}',
-      container,
-    ])
+    const now = Date.now();
+    if (now - lastReport >= 10_000) {
+      lastReport = now;
+      reportStackProgress(
+        `Native web stack startup: waiting for PostgreSQL unix socket (published ${port}, ${socketError.message})`,
+      );
+    }
+    const status = Bun.spawnSync(['docker', 'inspect', '-f', '{{.State.Status}}', container])
       .stdout.toString()
       .trim();
     if (status !== '' && status !== 'running' && status !== 'created')
@@ -719,6 +726,7 @@ async function startStack(): Promise<
       await chmod(postgresSocketDirectory, 0o1777);
       postgresContainer = startPostgresContainer(undefined, { socketDirectory: postgresSocketDirectory });
       if (process.env.NATIVE_WEB_STACK_HOST === '1') process.send?.({ postgresContainer } satisfies HostReply);
+      reportStackProgress(`Native web stack startup: PostgreSQL container ${postgresContainer}`);
       const portResult = Bun.spawnSync(['docker', 'port', postgresContainer, '5432/tcp']);
       if (portResult.exitCode !== 0)
         throw new Error(`Could not get owned PostgreSQL port: ${portResult.stderr.toString()}`);
@@ -735,20 +743,33 @@ async function startStack(): Promise<
     // Give Reylo an owned cache and the migrated template for SQL analysis.
     runtimeDirectory = await mkdtemp(join(tmpdir(), 'native-kernel-runtime-'));
     const { writeReyloProject } = await import('../../../../services/kernel/scripts/check.ts');
-    // PostgreSQL cannot clone a template while Reylo is connected to it. The
-    // kernel runner also gives SQL analysis its own copy, separate from fixtures.
+    // PostgreSQL cannot clone a template while other sessions are connected to it.
+    reportStackProgress('Native web stack startup: disconnecting template sessions');
+    await disconnectTemplateSessions(process.env.DATABASE_URL!);
     const source = new URL(process.env.DATABASE_URL!);
     const template = decodeURIComponent(source.pathname.slice(1));
     const analysisDatabase = `native_web_analysis_${randomBytes(16).toString('hex')}`;
     const adminUrl = new URL(source);
     adminUrl.pathname = '/postgres';
-    const admin = new Pool({ connectionString: adminUrl.href, max: 1 });
+    const admin = new Pool({
+      connectionString: adminUrl.href,
+      max: 1,
+      connectionTimeoutMillis: 1500,
+      statement_timeout: 15_000,
+    });
     try {
       // Inform the supervisor before allocation, so even failed setup is cleaned.
       process.send?.({ analysisDatabase } satisfies HostReply);
-      await admin.query(`CREATE DATABASE "${analysisDatabase}" TEMPLATE "${template.replaceAll('"', '""')}"`);
+      const created = await settledWithin(
+        admin
+          .query(`CREATE DATABASE "${analysisDatabase}" TEMPLATE "${template.replaceAll('"', '""')}"`)
+          .then(() => true as const),
+        20_000,
+      );
+      if (created !== true) throw new Error('CREATE DATABASE for SQL analysis exceeded 20000ms');
     } finally {
-      await admin.end();
+      const ended = await settledWithin(admin.end().then(() => true as const), 1_000);
+      if (ended !== true) throw new Error('SQL analysis admin pool end exceeded 1000ms');
     }
     reportStackProgress('Native web stack startup: SQL analysis database cloned');
     source.pathname = `/${analysisDatabase}`;
@@ -760,6 +781,8 @@ async function startStack(): Promise<
     const { sharedAuth, closeOwnedSemanticAuth, advanceNativeAuthClock } =
       await import('../../../../services/kernel/test/semantic/outcome-auth.ts');
     closeAuth = closeOwnedSemanticAuth;
+    reportStackProgress('Native web stack startup: initializing semantic Auth');
+    const loadingOutcomeDriver = import('../../../../services/kernel/test/semantic/outcome-driver.ts');
     const auth = await sharedAuth(new URL(process.env.DATABASE_URL!), undefined, true);
     reportStackProgress('Native web stack startup: semantic Auth initialized');
     // Observe the harness's actual issuance, retaining its Auth cookie for the
@@ -843,7 +866,7 @@ async function startStack(): Promise<
       return response;
     };
     // The semantic harness reads DATABASE_URL during module evaluation.
-    const { createSemanticDriver } = await import('../../../../services/kernel/test/semantic/outcome-driver.ts');
+    const { createSemanticDriver } = await loadingOutcomeDriver;
     const { createKernel } = await import('../../../../services/kernel/src/http/kernel.ts');
     const commerce = process.env.NATIVE_WEB_COMMERCE === '1' ? readCommerceConfig(process.env) : null;
     const { readSearchConfig } = await import('../../../../services/kernel/src/search/work.ts');
@@ -1430,7 +1453,7 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
   const lifecycle = currentNativeLifecycle();
   if (!lifecycle) {
     const standalone = new NativeTestLifecycle('standalone native web stack');
-    const stack = await standalone.run('start native web stack', 360_000, () => startNativeWebStack(options), false);
+    const stack = await standalone.run('start native web stack', 600_000, () => startNativeWebStack(options), false);
     return {
       ...stack,
       async stop() {
