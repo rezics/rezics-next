@@ -137,4 +137,6 @@ test('a completed V4 export projects to installed Collection V1 and Entry/progre
   const already = projectArchiveForRecovery(bytes, 'collections');
   expect(projectArchiveForRecovery(already, 'collections')).toEqual(already);
   expect(new TextDecoder().decode(bytes)).toContain('"version":4');
+  const broken = new TextEncoder().encode('{not-json');
+  expect(projectArchiveForRecovery(broken, 'collections')).toEqual(broken);
 });
