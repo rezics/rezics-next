@@ -253,6 +253,11 @@ public Auth page-operation and management client identities because Web cannot d
 website bearers use the zero-scope `login` client and the confidential website OAuth code exchange; native `/signin`
 never authenticates `rezics-website`.
 
+Decision: this landing typechecks the written managed-account lifecycle, including OAuth website composition
+cdae0566525fbbd87398c5f23dcfc5f2e54bed05. Native journey acceptance remains unaccepted: check
+fe93067b-b74a-41fb-8f73-88d70dd89801 passed native-ready and developer-token, then organization creation returned
+HTTP503 `account_operation_denied`/`effect_status:not_applied` at `managed-accounts-seeded-walk.ts:556`.
+
 ## 3. Credentials, sessions and tokens
 
 After an operator opening, continuing to Web starts its ordinary sign-in renewal at the configured website origin;
